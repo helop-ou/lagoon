@@ -113,27 +113,41 @@ func drawWaves(_ cg: CGContext, _ size: CGSize) {
     }
 }
 
-/// Rounded play triangle, corners via thick round-join stroke over the fill.
-func drawPlayMark(_ cg: CGContext, _ size: CGSize, center: CGPoint, height: CGFloat) {
-    let h = height
-    let corner = h * 0.16
-    let path = CGMutablePath()
-    path.move(to: CGPoint(x: center.x - h * 0.34, y: center.y + h * 0.5))
-    path.addLine(to: CGPoint(x: center.x - h * 0.34, y: center.y - h * 0.5))
-    path.addLine(to: CGPoint(x: center.x + h * 0.52, y: center.y))
-    path.closeSubpath()
-    cg.setFillColor(NSColor.white.cgColor)
-    cg.setStrokeColor(NSColor.white.cgColor)
-    cg.setLineWidth(corner)
-    cg.setLineJoin(.round)
-    // Two passes: the shadow caster first, then a clean fill+stroke on top —
-    // one pass leaves the stroke's shadow smeared across the fill interior.
-    cg.setShadow(offset: CGSize(width: 0, height: -h * 0.05), blur: h * 0.22, color: NSColor.black.withAlphaComponent(0.35).cgColor)
-    cg.addPath(path)
-    cg.drawPath(using: .stroke)
+/// The lagoon itself, aerial view: a bright shallow pool sheltered by a
+/// pale sand crescent, open at the upper-trailing edge like a real inlet.
+func drawLagoonMark(_ cg: CGContext, _ size: CGSize, center: CGPoint, diameter: CGFloat) {
+    let radius = diameter / 2
+    let sand = rgb(0xF2_E3_BE)
+    let ringRadius = radius * 1.22
+    let ringWidth = diameter * 0.15
+
+    // Sandbar first so its shadow lands behind; the gap (~28°–80°) is the inlet.
+    cg.setShadow(offset: CGSize(width: 0, height: -diameter * 0.04), blur: diameter * 0.18, color: NSColor.black.withAlphaComponent(0.35).cgColor)
+    cg.setStrokeColor(sand.cgColor)
+    cg.setLineWidth(ringWidth)
+    cg.setLineCap(.round)
+    let ring = CGMutablePath()
+    ring.addArc(center: center, radius: ringRadius, startAngle: 1.4, endAngle: 0.5, clockwise: false)
+    cg.addPath(ring)
+    cg.strokePath()
     cg.setShadow(offset: .zero, blur: 0, color: nil)
-    cg.addPath(path)
-    cg.drawPath(using: .fillStroke)
+
+    // Shallow water: light center falling off to deeper teal at the rim.
+    cg.saveGState()
+    cg.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: diameter, height: diameter))
+    cg.clip()
+    let pool = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: [rgb(0xD8_F6_EE).cgColor, teal.cgColor, rgb(0x25_86_84).cgColor] as CFArray,
+        locations: [0, 0.6, 1]
+    )!
+    cg.drawRadialGradient(
+        pool,
+        startCenter: CGPoint(x: center.x - radius * 0.25, y: center.y + radius * 0.3), startRadius: 0,
+        endCenter: CGPoint(x: center.x, y: center.y), endRadius: radius * 1.05,
+        options: []
+    )
+    cg.restoreGState()
 }
 
 func drawWordmark(_ cg: CGContext, _ size: CGSize, fontSize: CGFloat, center: CGPoint) {
@@ -164,7 +178,7 @@ func middleLayer(_ w: Int, _ h: Int) -> Data {
 
 func frontLayer(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: false) { cg, size in
-        drawPlayMark(cg, size, center: CGPoint(x: size.width * 0.5, y: size.height * 0.56), height: size.height * 0.34)
+        drawLagoonMark(cg, size, center: CGPoint(x: size.width * 0.5, y: size.height * 0.58), diameter: size.height * 0.34)
     }
 }
 
@@ -172,7 +186,7 @@ func flatIcon(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: true) { cg, size in
         drawBackground(cg, size, glow: true)
         drawWaves(cg, size)
-        drawPlayMark(cg, size, center: CGPoint(x: size.width * 0.5, y: size.height * 0.56), height: size.height * 0.30)
+        drawLagoonMark(cg, size, center: CGPoint(x: size.width * 0.5, y: size.height * 0.58), diameter: size.height * 0.30)
     }
 }
 
