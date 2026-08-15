@@ -1,13 +1,14 @@
 {
   "images" : [
     {
+      "filename" : "appicon.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
     }
   ],
   "info" : {
-    "author" : "xcode",
+    "author" : "generate-artwork",
     "version" : 1
   }
 }
