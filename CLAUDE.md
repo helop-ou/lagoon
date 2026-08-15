@@ -11,6 +11,7 @@ external dependencies, no test target). Design language adapted from the
 - `docs/playback.md` — device profile, stream resolution, progress reporting; player gotchas
 - `docs/design-system.md` — tokens, focus strategy, hero/glow, image cache rules
 - `docs/roadmap.md` — MVP scope and planned features (seerr, subtitles, Top Shelf, …)
+- `docs/release.md` — TestFlight flow (`scripts/testflight.sh`), one-time ASC setup
 
 Quick rules that prevent regressions:
 
