@@ -14,6 +14,11 @@ external dependencies, no test target). Design language adapted from the
 
 Quick rules that prevent regressions:
 
+- Commits that implement a Jira ticket carry its key as a suffix so Jira's
+  development panel links them: `feat: add app icon and top shelf artwork (HEL-31)`.
+  Lagoon work lives under the Labs epic (HEL-15) on helop-ou.atlassian.net;
+  meta/chore commits without a ticket stay keyless.
+
 - Build: `xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build`
   (and the iOS Simulator destination — both must stay green).
 - Use design tokens (`Metrics`/`Motion`), not literals; brand colors
