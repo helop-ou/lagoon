@@ -32,9 +32,12 @@
 - **Mark played/unplayed & favorites** — `UserPlayedItems` / `UserFavoriteItems`
   endpoints, long-press context menus on cards.
 - **Live TV** if the server has it (guide, channels — big lift).
+- **Custom playback engine (mpv/FFmpeg) for true MKV direct play** (HEL-45) —
+  decided 2026-08-15, reversing the earlier non-goal: AVPlayer can never open
+  MKV, and Infuse/Neptune-parity direct play needs an in-app engine. Split
+  design: AVPlayer stays for mp4/HLS (best DoVi pipeline, only E-AC3 Atmos
+  path); mpv handles MKV/DTS/TrueHD. First external dependency — deliberate.
 
 ## Deliberate non-goals for now
 
-- Custom software video player (VLCKit-style) for formats the server can't
-  transcode — the server-side transcode path covers the long tail.
 - Offline downloads.
