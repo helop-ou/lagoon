@@ -114,6 +114,12 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     }
 }
 
+// Identity-based Hashable so items can be NavigationStack destinations.
+nonisolated extension MediaItem: Hashable {
+    static func == (lhs: MediaItem, rhs: MediaItem) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
 nonisolated struct ItemsPage: Decodable {
     let items: [MediaItem]
     let totalRecordCount: Int?
