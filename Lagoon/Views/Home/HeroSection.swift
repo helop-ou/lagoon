@@ -42,6 +42,7 @@ struct HeroSection: View {
                     Text(item.name ?? "")
                         .font(.title.bold())
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let overview = item.overview {
                         Text(overview)
                             .font(.callout)

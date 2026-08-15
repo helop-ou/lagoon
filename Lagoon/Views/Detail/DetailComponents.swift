@@ -56,6 +56,7 @@ struct DetailHeader<Buttons: View>: View {
                 Text(item.name ?? "")
                     .font(.largeTitle.bold())
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if !metaParts.isEmpty {
                     Text(metaParts.joined(separator: "  ·  "))
