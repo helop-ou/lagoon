@@ -123,9 +123,18 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func openPanel() {
         withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = true }
+        // defaultFocus is only honored when a fresh scene appears — for a
+        // mid-screen reveal tvOS leaves focus where it was, stranding the
+        // panel. Move it by hand once the reveal has settled.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard panelOpen else { return }
+            panelFocus = .tab(selectedTab)
+        }
     }
 
     private func closePanel() {
+        panelFocus = nil
         withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = false }
         pokeControls()
     }
@@ -238,6 +247,9 @@ struct CustomPlayerView<Surface: View>: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
+        #if os(tvOS)
+        .focusSection()
+        #endif
         .defaultFocus($panelFocus, .tab(selectedTab))
         #if os(iOS)
         .background(
