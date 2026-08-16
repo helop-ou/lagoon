@@ -123,10 +123,14 @@ struct CustomPlayerView<Surface: View>: View {
         withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = true }
         // defaultFocus is only honored when a fresh scene appears — for a
         // mid-screen reveal tvOS leaves focus where it was, stranding the
-        // panel. Move it by hand once the reveal has settled.
+        // panel. Claim focus immediately (an unfocused instant would send
+        // Menu straight to the cover's default dismissal) and again once
+        // the reveal has settled, in case the first assignment was too
+        // early to take.
+        focusedTab = selectedTab
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
-            guard panelOpen else { return }
+            guard panelOpen, focusedTab == nil else { return }
             focusedTab = selectedTab
         }
     }
@@ -243,10 +247,14 @@ struct CustomPlayerView<Surface: View>: View {
             Spacer()
         }
         .padding(.top, Metrics.railTopPadding)
-        #if os(tvOS)
-        .focusSection()
-        #endif
         .defaultFocus($focusedTab, selectedTab)
+        #if os(tvOS)
+        // Nearest handler to the focused tabs/rows — catches Menu even if
+        // the command never bubbles as far as the root's backstop.
+        .onExitCommand {
+            closePanel()
+        }
+        #endif
         #if os(iOS)
         .background(
             // Dim + tap-out on iOS; tvOS closes via Menu.
