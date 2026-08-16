@@ -7,6 +7,7 @@ struct SettingsView: View {
     // exercise mpv/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage("debug.mpvForMKV") private var mpvForMKV = false
+    @AppStorage("debug.lagoonEngine") private var lagoonEngine = false
 
     var body: some View {
         Form {
@@ -33,6 +34,7 @@ struct SettingsView: View {
             Section("Debug") {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)
                 Toggle("mpv engine for MKV (experimental)", isOn: $mpvForMKV)
+                Toggle("Lagoon engine A/B (HEL-48 M1)", isOn: $lagoonEngine)
             }
         }
         #if os(iOS)

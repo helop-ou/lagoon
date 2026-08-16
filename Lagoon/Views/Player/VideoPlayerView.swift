@@ -13,6 +13,7 @@ nonisolated struct PlayerItem: Identifiable {
 final class PlaybackController {
     private(set) var player: AVPlayer?
     private(set) var mpvEngine: MPVPlayerEngine?
+    private(set) var sampleBufferEngine: SampleBufferPlayerEngine?
     private(set) var playerInfo: PlayerItemInfo?
     private(set) var errorMessage: String?
     private(set) var didFinish = false
@@ -91,22 +92,43 @@ final class PlaybackController {
 
                 playerInfo = itemInfo(for: media, source: source, client: client)
 
-                let engine = MPVPlayerEngine()
-                engine.prepare(
-                    url: streamURL,
-                    startSeconds: resumeSeconds,
-                    initialAudioID: initialAudioID,
-                    initialSubtitleID: initialSubtitleID,
-                    externalSubtitles: sideloaded
-                )
-                engine.onFinished = { [weak self] in self?.didFinish = true }
-                engine.onError = { [weak self] message in
-                    guard let self else { return }
-                    self.mpvEngine?.shutdown()
-                    self.mpvEngine = nil
-                    self.errorMessage = message
+                // HEL-48 M1: A/B switch — the Lagoon sample-buffer engine
+                // takes files inside its codec envelope when the debug
+                // toggle is on; everything else stays on mpv.
+                if UserDefaults.standard.bool(forKey: "debug.lagoonEngine"),
+                   SampleBufferPlayerEngine.canPlay(source: source) {
+                    let engine = SampleBufferPlayerEngine()
+                    engine.prepare(
+                        url: streamURL,
+                        startSeconds: resumeSeconds,
+                        initialAudioOrdinal: initialAudioID
+                    )
+                    engine.onFinished = { [weak self] in self?.didFinish = true }
+                    engine.onError = { [weak self] message in
+                        guard let self else { return }
+                        self.sampleBufferEngine?.shutdown()
+                        self.sampleBufferEngine = nil
+                        self.errorMessage = message
+                    }
+                    sampleBufferEngine = engine
+                } else {
+                    let engine = MPVPlayerEngine()
+                    engine.prepare(
+                        url: streamURL,
+                        startSeconds: resumeSeconds,
+                        initialAudioID: initialAudioID,
+                        initialSubtitleID: initialSubtitleID,
+                        externalSubtitles: sideloaded
+                    )
+                    engine.onFinished = { [weak self] in self?.didFinish = true }
+                    engine.onError = { [weak self] message in
+                        guard let self else { return }
+                        self.mpvEngine?.shutdown()
+                        self.mpvEngine = nil
+                        self.errorMessage = message
+                    }
+                    mpvEngine = engine
                 }
-                mpvEngine = engine
 
                 try? await client.reportPlaybackStart(.init(
                     itemId: itemId,
@@ -156,26 +178,27 @@ final class PlaybackController {
         }
     }
 
+    // The active custom engine, whichever implementation is running.
+    private var customEngine: (any PlayerEngine)? {
+        if let mpvEngine { return mpvEngine }
+        if let sampleBufferEngine { return sampleBufferEngine }
+        return nil
+    }
+
     // Position/pause state read from whichever engine is active.
     private var currentSeconds: Double? {
         if let player {
             let seconds = player.currentTime().seconds
             return seconds.isFinite ? seconds : nil
         }
-        if let mpvEngine {
-            return mpvEngine.timePosition
-        }
-        return nil
+        return customEngine?.timePosition
     }
 
     private var currentlyPaused: Bool {
         if let player {
             return player.timeControlStatus != .playing
         }
-        if let mpvEngine {
-            return mpvEngine.isPaused
-        }
-        return true
+        return customEngine?.isPaused ?? true
     }
 
     private func startProgressLoop() {
@@ -208,13 +231,15 @@ final class PlaybackController {
         progressTask?.cancel()
         endObserverTask?.cancel()
         hudTask?.cancel()
-        guard let client, player != nil || mpvEngine != nil, !didReportStop else { return }
+        guard let client, player != nil || customEngine != nil, !didReportStop else { return }
         didReportStop = true
         let seconds = currentSeconds ?? 0
         player?.pause()
         player = nil
         mpvEngine?.shutdown()
         mpvEngine = nil
+        sampleBufferEngine?.shutdown()
+        sampleBufferEngine = nil
         try? await client.reportPlaybackStopped(.init(
             itemId: itemId,
             mediaSourceId: mediaSourceId,
@@ -359,7 +384,8 @@ final class PlaybackController {
         var negotiated = [
             "Method: \(method.rawValue)"
                 + (method == .transcode ? " (\(source.transcodingSubProtocol ?? "?"))" : "")
-                + (mpvEngine != nil ? " · mpv" : ""),
+                + (mpvEngine != nil ? " · mpv" : "")
+                + (sampleBufferEngine != nil ? " · lagoon" : ""),
         ]
         var sourceLine = "Source: \(source.container ?? "?")"
         if let bitrate = source.bitrate {
@@ -387,7 +413,7 @@ final class PlaybackController {
                 guard let self else { return }
                 if let playerItem {
                     self.hudLines = negotiated + (await Self.liveHUDLines(for: playerItem))
-                } else if let engine = self.mpvEngine {
+                } else if let engine = self.customEngine {
                     self.hudLines = negotiated + Self.liveHUDLines(for: engine)
                 } else {
                     return
@@ -396,12 +422,12 @@ final class PlaybackController {
         }
     }
 
-    private static func liveHUDLines(for engine: MPVPlayerEngine) -> [String] {
+    private static func liveHUDLines(for engine: any PlayerEngine) -> [String] {
         var lines: [String] = []
         if let size = engine.videoSize {
-            lines.append("Playing: \(Int(size.width))×\(Int(size.height)) · mpv")
+            lines.append("Playing: \(Int(size.width))×\(Int(size.height))")
         } else {
-            lines.append("Playing: not ready · \(engine.isBuffering ? "buffering" : "…") · mpv")
+            lines.append("Playing: not ready · \(engine.isBuffering ? "buffering" : "…")")
         }
         if engine.duration > 0 {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
@@ -466,17 +492,18 @@ struct VideoPlayerView: View {
                 // The player is gone on purpose: a dead AVPlayer swallows the
                 // Menu press and there's no way to back out.
                 errorOverlay(errorMessage)
+            } else if let engine = controller.sampleBufferEngine {
+                CustomPlayerView(
+                    engine: engine,
+                    info: fallbackInfo,
+                    onDismiss: { dismiss() }
+                ) {
+                    SampleBufferVideoSurface(engine: engine)
+                }
             } else if let engine = controller.mpvEngine {
                 CustomPlayerView(
                     engine: engine,
-                    info: controller.playerInfo ?? PlayerItemInfo(
-                        title: playerItem.media.railTitle,
-                        subtitle: playerItem.media.railSubtitle,
-                        overview: playerItem.media.overview,
-                        facts: [],
-                        videoSummary: nil,
-                        posterURL: nil
-                    ),
+                    info: fallbackInfo,
                     onDismiss: { dismiss() }
                 ) {
                     MPVVideoSurface(engine: engine)
@@ -507,6 +534,17 @@ struct VideoPlayerView: View {
         .onDisappear {
             Task { await controller.stop() }
         }
+    }
+
+    private var fallbackInfo: PlayerItemInfo {
+        controller.playerInfo ?? PlayerItemInfo(
+            title: playerItem.media.railTitle,
+            subtitle: playerItem.media.railSubtitle,
+            overview: playerItem.media.overview,
+            facts: [],
+            videoSummary: nil,
+            posterURL: nil
+        )
     }
 
     private var playbackHUD: some View {

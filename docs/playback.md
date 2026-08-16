@@ -127,6 +127,35 @@ CodecProfile conditions deliberately still apply), 4K AV1 software-decode
 performance on A15. TrueHD Atmos objects are lost by design (no tvOS app can
 bitstream them).
 
+## Lagoon sample-buffer engine (HEL-48 M1, experimental toggle)
+
+`Lagoon/Views/Player/SampleBuffer/` is the long-term engine: libavformat
+demux (FFmpeg modules imported straight from MPVKit's artifacts — no new
+dependency) into **compressed** CMSampleBuffers that
+`AVSampleBufferDisplayLayer` / `AVSampleBufferAudioRenderer` decode and
+render under an `AVSampleBufferRenderSynchronizer`. The system does decode,
+color management, and audio output — that's the whole architecture bet.
+
+- The key mechanic: Matroska stores h264/hevc mp4-style (avcC/hvcC
+  extradata + length-prefixed NALs), so demuxed packets wrap directly as
+  compressed sample buffers — no VTDecompressionSession, no shaders.
+  Audio likewise: CoreAudio decodes aac/ac3/eac3 packets handed to the
+  renderer (ac3/eac3 self-describing, aac needs its ASC as magic cookie).
+- **M1 envelope**: h264/hevc + aac/ac3/eac3, no subtitles. Settings →
+  Debug → "Lagoon engine A/B" routes eligible files here
+  (`SampleBufferPlayerEngine.canPlay`); everything else stays on mpv, so
+  the A/B toggle can never make a file unplayable.
+- Threading: demux loop on a serial queue feeding two locked sample-buffer
+  queues; renderer pumps drain them via `requestMediaDataWhenReady`; state
+  and transport live on the main actor. Seeks stop the clock, flush
+  renderers and queues, `av_seek_frame`, re-prime, then restart the
+  synchronizer at the target. Audio track switching = re-demux from the
+  current position with the new stream selected (others discarded inside
+  libavformat).
+- Roadmap: M2 Atmos (E-AC3 JOC survives because packets are never
+  decoded), M3 HDR/DoVi format descriptions, M4 DTS/TrueHD via libavcodec,
+  M5 subtitles, M6 parity hardening — then mpv gets deleted (HEL-48).
+
 ## Debug playback HUD
 
 Settings → Debug → Playback HUD: a top-left overlay in the player showing

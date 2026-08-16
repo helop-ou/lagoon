@@ -13,6 +13,7 @@ protocol PlayerEngine: AnyObject, Observable {
     var duration: Double { get }
     var isPaused: Bool { get }
     var isBuffering: Bool { get }
+    var videoSize: CGSize? { get }
     var audioTracks: [PlayerTrack] { get }
     var subtitleTracks: [PlayerTrack] { get }
 
