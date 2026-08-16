@@ -25,10 +25,8 @@ final class PlaybackController {
     private var endObserverTask: Task<Void, Never>?
     private var didReportStop = false
 
-    #if DEBUG
     private(set) var hudLines: [String] = []
     private var hudTask: Task<Void, Never>?
-    #endif
 
     func start(media: MediaItem, startFromBeginning: Bool, client: JellyfinClient) async {
         self.client = client
@@ -49,10 +47,10 @@ final class PlaybackController {
                 resumeSeconds = Ticks.seconds(ticks)
             }
 
-            #if DEBUG
             // HEL-45: route MKV direct play to the mpv engine while it's
             // experimental (debug.mpvForMKV also widens the device profile,
             // which is what makes the server grant direct play for mkv).
+            // Compiled into all builds so TestFlight can exercise it.
             let container = (source.container ?? "").lowercased()
             if UserDefaults.standard.bool(forKey: "debug.mpvForMKV"),
                method == .directPlay,
@@ -119,7 +117,6 @@ final class PlaybackController {
                 startHUD(source: source, method: method, playerItem: nil)
                 return
             }
-            #endif
 
             let playerItem = AVPlayerItem(url: streamURL)
             // Metadata must be complete before playback starts — mutating it
@@ -139,9 +136,7 @@ final class PlaybackController {
 
             player.play()
             observeEnd(of: playerItem)
-            #if DEBUG
             startHUD(source: source, method: method, playerItem: playerItem)
-            #endif
 
             try? await client.reportPlaybackStart(.init(
                 itemId: itemId,
@@ -209,9 +204,7 @@ final class PlaybackController {
     func stop() async {
         progressTask?.cancel()
         endObserverTask?.cancel()
-        #if DEBUG
         hudTask?.cancel()
-        #endif
         guard let client, player != nil || mpvEngine != nil, !didReportStop else { return }
         didReportStop = true
         let seconds = currentSeconds ?? 0
@@ -254,8 +247,8 @@ final class PlaybackController {
         return item
     }
 
-    #if DEBUG
-    // MARK: Playback HUD (DEBUG builds, Settings → Debug → Playback HUD)
+    // MARK: Playback HUD (Settings → Debug → Playback HUD; ships in all
+    // builds so TestFlight sessions can diagnose playback too)
 
     private func startHUD(source: MediaSource, method: PlayMethod, playerItem: AVPlayerItem?) {
         guard UserDefaults.standard.bool(forKey: "debug.playbackHUD") else { return }
@@ -353,7 +346,6 @@ final class PlaybackController {
     private static func mbps(_ bitsPerSecond: Int) -> String {
         String(format: "%.1f Mbps", Double(bitsPerSecond) / 1_000_000)
     }
-    #endif
 }
 
 struct VideoPlayerView: View {
@@ -387,11 +379,9 @@ struct VideoPlayerView: View {
                 LoadingView()
             }
 
-            #if DEBUG
             if !controller.hudLines.isEmpty {
                 playbackHUD
             }
-            #endif
         }
         .task {
             await controller.start(
@@ -415,7 +405,6 @@ struct VideoPlayerView: View {
         return [playerItem.media.episodeLabel, seriesName].compactMap(\.self).joined(separator: " · ")
     }
 
-    #if DEBUG
     private var playbackHUD: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(controller.hudLines.enumerated()), id: \.offset) { _, line in
@@ -430,7 +419,6 @@ struct VideoPlayerView: View {
         .padding(Metrics.screenGutter)
         .allowsHitTesting(false)
     }
-    #endif
 
     private func errorOverlay(_ message: String) -> some View {
         VStack(spacing: 20) {

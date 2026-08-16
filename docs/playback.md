@@ -72,7 +72,7 @@ and fMP4 init segments (full matrix in the HEL-32/HEL-33/HEL-34 comments):
   spatial-audio engagement needs AirPods / an Atmos receiver (HEL-32/HEL-33
   remaining scope).
 
-## mpv engine (HEL-45, experimental — DEBUG-only toggle)
+## mpv engine (HEL-45, experimental toggle)
 
 `Lagoon/Views/Player/MPV/` holds a second playback engine built on libmpv
 (MPVKit 1.0.0, mpv 0.41 — the project's only external dependency): true MKV
@@ -129,9 +129,12 @@ bitstream them).
 
 ## Debug playback HUD
 
-DEBUG builds get Settings → Debug → Playback HUD: a top-left overlay in the
-player showing the negotiated method/container/codecs/range/bitrate plus live
-`AVPlayerItem` stats refreshed every 2 s. The "Playing:" fourCC tells remux
+Settings → Debug → Playback HUD: a top-left overlay in the player showing
+the negotiated method/container/codecs/range/bitrate plus live
+`AVPlayerItem` stats refreshed every 2 s. The Debug section (HUD + mpv
+toggle) deliberately ships in **all** builds, TestFlight included — real
+Apple TV hardware only ever runs Release, and that's exactly where these
+switches are needed; both default off. The "Playing:" fourCC tells remux
 truth from re-encode — `dvh1` means Dolby Vision actually reached AVPlayer,
 `hvc1` plain HEVC. The overlay is hit-test-disabled and never focusable, so
 tvOS focus behavior is untouched. Backed by `UserDefaults` key
