@@ -14,7 +14,7 @@ enum Metrics {
     static let gridRowSpacing: CGFloat = 50
     static let railTopPadding: CGFloat = 40    // headroom for the system focus lift
     static let railBottomPadding: CGFloat = 80
-    static let scrubberHeight: CGFloat = 10    // matches the AVKit transport bar
+    static let scrubberHeight: CGFloat = 8     // thin bar, per the Infuse reference
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14

@@ -157,6 +157,7 @@ nonisolated struct MediaSource: Decodable, Identifiable {
     let transcodingSubProtocol: String?
     let runTimeTicks: Int64?
     let bitrate: Int?
+    let size: Int64?
     let eTag: String?
     // The server resolves the user's language preferences into these
     // default stream choices — no client-side preference logic needed.
@@ -180,6 +181,7 @@ nonisolated struct MediaStream: Decodable {
     let width: Int?
     let height: Int?
     let bitRate: Int?
+    let realFrameRate: Double?
 }
 
 nonisolated enum PlayMethod: String {

@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Full-screen custom player: an engine-agnostic transport and a tabbed
-/// Info · Audio · Subtitles panel over an injected video surface (HEL-35,
-/// Infuse-style). Talks only to `PlayerEngine` so the HEL-48 engine swap
-/// never touches this UI.
+/// Full-screen custom player styled after the Infuse reference shots on
+/// HEL-35: a "Swipe down for Info" hint, a bottom-left title block over a
+/// thin scrubber, and a swipe-down panel of centered pill tabs
+/// (Info · Video · Audio · Subtitles) above one floating material card.
+/// Talks only to `PlayerEngine` so the HEL-48 engine swap never touches it.
 ///
 /// tvOS focus invariants: the surface is focusable whenever the panel is
 /// closed (Menu would quit the app from an unfocusable screen). Remote
 /// grammar: play/pause toggles anywhere; on the surface left/right seek
-/// ±10 s and down opens the panel; in the panel left/right walk the tabs,
-/// down enters the track rows. Menu is handled once at the root — it
-/// closes the panel when open, otherwise exits the player.
+/// ±10 s and down opens the panel; in the panel left/right walk the tabs
+/// (selection follows focus), down enters the track rows. Menu is handled
+/// once at the root — it closes the panel when open, otherwise exits.
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     let info: PlayerItemInfo
@@ -19,12 +20,14 @@ struct CustomPlayerView<Surface: View>: View {
 
     private enum PanelTab: CaseIterable, Hashable {
         case info
+        case video
         case audio
         case subtitles
 
         var title: String {
             switch self {
             case .info: String(localized: "Info")
+            case .video: String(localized: "Video")
             case .audio: String(localized: "Audio")
             case .subtitles: String(localized: "Subtitles")
             }
@@ -39,7 +42,7 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var controlsVisible = true
     @State private var interactionToken = 0
     @State private var panelOpen = false
-    @State private var selectedTab: PanelTab = .audio
+    @State private var selectedTab: PanelTab = .info
     @FocusState private var panelFocus: PanelFocus?
 
     var body: some View {
@@ -143,7 +146,16 @@ struct CustomPlayerView<Surface: View>: View {
 
     private var transportOverlay: some View {
         VStack {
-            #if os(iOS)
+            #if os(tvOS)
+            VStack(spacing: 2) {
+                Text("Swipe down for Info")
+                    .font(.caption.weight(.semibold))
+                Image(systemName: "chevron.compact.down")
+                    .font(.title3.weight(.bold))
+            }
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.top, Metrics.railTopPadding)
+            #else
             HStack(spacing: 12) {
                 Button {
                     onDismiss()
@@ -168,31 +180,25 @@ struct CustomPlayerView<Surface: View>: View {
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(info.title)
-                        .font(.headline)
-                    if let subtitle = info.subtitle {
-                        Text(subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let subtitle = info.subtitle {
+                            Text(subtitle)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(info.title)
+                            .font(.title2.bold())
                     }
                     Spacer()
                     if engine.isPaused {
                         Image(systemName: "pause.fill")
-                            .font(.subheadline)
+                            .font(.headline)
                             .foregroundStyle(.secondary)
-                    } else {
-                        #if os(tvOS)
-                        Label("Details", systemImage: "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                        #endif
                     }
                 }
 
-                // Sized and weighted like AVKit's transport bar: a thick
-                // rounded track with a bright fill, times under each end.
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule()
@@ -228,25 +234,20 @@ struct CustomPlayerView<Surface: View>: View {
         .foregroundStyle(.white)
     }
 
-    // MARK: - Panel (Info · Audio · Subtitles)
+    // MARK: - Panel
 
     private static var subtitleOffID: String { "subtitle-off" }
 
     private var panel: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 20) {
-                tabBar
-                tabContent
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(Metrics.screenGutter)
-            .frame(maxWidth: 1100)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-            .padding(.top, Metrics.railTopPadding)
+        VStack(spacing: 24) {
+            tabBar
+
+            tabCard
+                .padding(.horizontal, Metrics.screenGutter)
 
             Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .padding(.top, Metrics.railTopPadding)
         #if os(tvOS)
         .focusSection()
         #endif
@@ -261,114 +262,156 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
+    // Centered pills; the selected one is filled white with black text
+    // (selection follows focus while moving along the row).
     private var tabBar: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 14) {
             ForEach(PanelTab.allCases, id: \.self) { tab in
-                VStack(spacing: 6) {
-                    Button {
-                        withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
-                    } label: {
-                        Text(tab.title)
-                            .fontWeight(selectedTab == tab ? .semibold : .regular)
-                    }
-                    .focused($panelFocus, equals: .tab(tab))
-
-                    Capsule()
-                        .fill(.white)
-                        .frame(width: 28, height: 3)
-                        .opacity(selectedTab == tab ? 1 : 0)
+                Button {
+                    withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
+                } label: {
+                    Text(tab.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(selectedTab == tab ? Color.black : Color.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(
+                            selectedTab == tab
+                                ? AnyShapeStyle(.white)
+                                : AnyShapeStyle(.ultraThinMaterial),
+                            in: Capsule()
+                        )
                 }
+                .buttonStyle(.plain)
+                .focused($panelFocus, equals: .tab(tab))
             }
         }
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
-    private var tabContent: some View {
-        switch selectedTab {
-        case .info:
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(info.title)
-                        .font(.title3.bold())
-                    if let subtitle = info.subtitle {
-                        Text(subtitle)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+    private var tabCard: some View {
+        Group {
+            switch selectedTab {
+            case .info: infoCard
+            case .video: videoCard
+            case .audio:
+                trackCard(rows: engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
+                    if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
+                        engine.selectAudioTrack(id: track.engineID)
                     }
                 }
-                if !info.facts.isEmpty {
-                    Text(info.facts.joined(separator: "   ·   "))
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+            case .subtitles:
+                trackCard(
+                    rows: [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
+                        + engine.subtitleTracks.map { ($0.id, $0.displayName, $0.isSelected) }
+                ) { rowID in
+                    if rowID == Self.subtitleOffID {
+                        engine.selectSubtitleTrack(id: nil)
+                    } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
+                        engine.selectSubtitleTrack(id: track.engineID)
+                    }
                 }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(24)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+        .foregroundStyle(.white)
+    }
+
+    private var infoCard: some View {
+        HStack(alignment: .top, spacing: 24) {
+            CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
+                image
+                    .resizable()
+                    .aspectRatio(2 / 3, contentMode: .fill)
+            } placeholder: {
+                Color.white.opacity(0.1)
+            }
+            .frame(width: 130, height: 195)
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(combinedTitle)
+                    .font(.headline)
                 if let overview = info.overview {
                     Text(overview)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .lineLimit(4)
+                        .lineLimit(3)
+                }
+                if !info.facts.isEmpty {
+                    Text(info.facts.joined(separator: "    "))
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
             }
+            Spacer(minLength: 0)
+        }
+    }
 
-        case .audio:
-            trackRows(
-                engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) },
-                emptyText: String(localized: "No audio tracks")
-            ) { rowID in
-                if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
-                    engine.selectAudioTrack(id: track.engineID)
-                }
-            }
+    private var combinedTitle: String {
+        if let subtitle = info.subtitle {
+            return "\(info.title) – \(subtitle)"
+        }
+        return info.title
+    }
 
-        case .subtitles:
-            trackRows(
-                [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
-                    + engine.subtitleTracks.map { ($0.id, $0.displayName, $0.isSelected) },
-                emptyText: nil
-            ) { rowID in
-                if rowID == Self.subtitleOffID {
-                    engine.selectSubtitleTrack(id: nil)
-                } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
-                    engine.selectSubtitleTrack(id: track.engineID)
-                }
+    private var videoCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("Track")
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark")
+                    .font(.caption.bold())
+                Text(info.videoSummary ?? String(localized: "Unknown video track"))
+                    .font(.callout)
             }
         }
     }
 
-    private func trackRows(
-        _ rows: [(id: String, name: String, selected: Bool)],
-        emptyText: String?,
+    private func trackCard(
+        rows: [(id: String, name: String, selected: Bool)],
         onSelect: @escaping (String) -> Void
     ) -> some View {
-        Group {
-            if rows.isEmpty, let emptyText {
-                Text(emptyText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(rows, id: \.id) { row in
-                            Button {
-                                onSelect(row.id)
-                            } label: {
-                                HStack {
-                                    Image(systemName: "checkmark")
-                                        .font(.caption.bold())
-                                        .opacity(row.selected ? 1 : 0)
-                                    Text(row.name)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 0)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            cardHeader("Tracks")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(rows, id: \.id) { row in
+                        Button {
+                            onSelect(row.id)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.bold())
+                                    .opacity(row.selected ? 1 : 0)
+                                Text(row.name)
+                                    .font(.callout)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
                             }
-                            .focused($panelFocus, equals: .row(row.id))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(
+                                panelFocus == .row(row.id) ? Color.white.opacity(0.15) : .clear,
+                                in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius)
+                            )
                         }
+                        .buttonStyle(.plain)
+                        .focused($panelFocus, equals: .row(row.id))
                     }
                 }
-                .frame(maxHeight: 380)
             }
+            .frame(maxHeight: 340)
         }
+    }
+
+    private func cardHeader(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .textCase(.uppercase)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.leading, 12)
     }
 
     private var progressFraction: CGFloat {

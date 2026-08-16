@@ -89,7 +89,7 @@ final class PlaybackController {
                     )
                 }
 
-                playerInfo = itemInfo(for: media, source: source)
+                playerInfo = itemInfo(for: media, source: source, client: client)
 
                 let engine = MPVPlayerEngine()
                 engine.prepare(
@@ -242,36 +242,104 @@ final class PlaybackController {
         return items
     }
 
-    private func itemInfo(for media: MediaItem, source: MediaSource) -> PlayerItemInfo {
-        var subtitle: String?
-        if media.type == .episode, let seriesName = media.seriesName {
-            subtitle = [media.episodeLabel, seriesName].compactMap(\.self).joined(separator: " · ")
-        }
-        var facts: [String] = []
-        if let container = source.container {
-            facts.append(container.uppercased())
-        }
+    // Builds the Infuse-style facts line: runtime, year, size, video, audio,
+    // bitrate, fps, genres, rating — skipping anything the server didn't know.
+    private func itemInfo(for media: MediaItem, source: MediaSource, client: JellyfinClient) -> PlayerItemInfo {
         let streams = source.mediaStreams ?? []
-        if let video = streams.first(where: { $0.type == "Video" }) {
+        let video = streams.first(where: { $0.type == "Video" })
+        let audioStreams = streams.filter { $0.type == "Audio" }
+        let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first
+
+        var facts: [String] = []
+        if let runtime = media.runtimeLabel { facts.append(runtime) }
+        if let year = media.productionYear { facts.append("\(year)") }
+        if let size = source.size {
+            facts.append(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+        }
+        if let videoToken = Self.videoToken(for: video) { facts.append(videoToken) }
+        if let audioToken = Self.audioToken(for: audio) { facts.append(audioToken) }
+        if let bitrate = source.bitrate {
+            facts.append(String(format: "%.1f Mbps", Double(bitrate) / 1_000_000))
+        }
+        if let fps = video?.realFrameRate {
+            facts.append("\(String(format: "%g", fps)) fps")
+        }
+        if let genres = media.genres, !genres.isEmpty {
+            facts.append(genres.prefix(3).joined(separator: ", "))
+        }
+        if let rating = media.officialRating { facts.append(rating) }
+
+        var videoSummary: String?
+        if let video {
             var parts: [String] = []
             if let codec = video.codec { parts.append(codec.uppercased()) }
-            if let range = video.videoRangeType { parts.append(range) }
+            if let width = video.width {
+                parts.append(Self.resolutionClass(width: width))
+            }
+            if let range = video.videoRangeType, range != "SDR" {
+                parts.append(Self.rangeLabel(range))
+            }
             if let width = video.width, let height = video.height { parts.append("\(width)×\(height)") }
-            if !parts.isEmpty { facts.append(parts.joined(separator: " · ")) }
+            if let fps = video.realFrameRate { parts.append("\(String(format: "%g", fps)) fps") }
+            videoSummary = parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
-        let audioStreams = streams.filter { $0.type == "Audio" }
-        if let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first {
-            var parts: [String] = []
-            if let codec = audio.codec { parts.append(codec.uppercased()) }
-            if let channels = audio.channels { parts.append("\(channels)ch") }
-            if !parts.isEmpty { facts.append(parts.joined(separator: " · ")) }
-        }
+
         return PlayerItemInfo(
-            title: media.name ?? "",
-            subtitle: subtitle,
+            title: media.railTitle,
+            subtitle: media.railSubtitle,
             overview: media.overview,
-            facts: facts
+            facts: facts,
+            videoSummary: videoSummary,
+            posterURL: client.imageURL(for: media, kind: .primary, maxWidth: 400)
         )
+    }
+
+    // "HEVC (4K DV)" — codec plus resolution class and dynamic range.
+    private static func videoToken(for video: MediaStream?) -> String? {
+        guard let video, let codec = video.codec else { return nil }
+        var qualifiers: [String] = []
+        if let width = video.width { qualifiers.append(resolutionClass(width: width)) }
+        if let range = video.videoRangeType, range != "SDR" { qualifiers.append(rangeLabel(range)) }
+        var token = codec.uppercased()
+        if !qualifiers.isEmpty {
+            token += " (\(qualifiers.joined(separator: " ")))"
+        }
+        return token
+    }
+
+    // "Dolby Digital+ 5.1" — marketing codec name plus channel layout.
+    private static func audioToken(for audio: MediaStream?) -> String? {
+        guard let audio, let codec = audio.codec else { return nil }
+        let name = switch codec.lowercased() {
+        case "eac3": "Dolby Digital+"
+        case "ac3": "Dolby Digital"
+        case "truehd": "Dolby TrueHD"
+        case "dts": "DTS"
+        default: codec.uppercased()
+        }
+        let layout: String? = switch audio.channels {
+        case 8: "7.1"
+        case 6: "5.1"
+        case 2: "2.0"
+        case 1: "1.0"
+        default: audio.channels.map { "\($0)ch" }
+        }
+        return [name, layout].compactMap(\.self).joined(separator: " ")
+    }
+
+    private static func resolutionClass(width: Int) -> String {
+        switch width {
+        case 3200...: "4K"
+        case 1800..<3200: "1080p"
+        case 1200..<1800: "720p"
+        default: "SD"
+        }
+    }
+
+    private static func rangeLabel(_ range: String) -> String {
+        if range.hasPrefix("DOVI") { return "DV" }
+        if range == "HDR10Plus" { return "HDR10+" }
+        return range
     }
 
     private func metadataItem(_ identifier: AVMetadataIdentifier, value: any NSCopying & NSObjectProtocol) -> AVMetadataItem {
@@ -402,10 +470,12 @@ struct VideoPlayerView: View {
                 CustomPlayerView(
                     engine: engine,
                     info: controller.playerInfo ?? PlayerItemInfo(
-                        title: playerItem.media.name ?? "",
-                        subtitle: episodeSubtitle,
+                        title: playerItem.media.railTitle,
+                        subtitle: playerItem.media.railSubtitle,
                         overview: playerItem.media.overview,
-                        facts: []
+                        facts: [],
+                        videoSummary: nil,
+                        posterURL: nil
                     ),
                     onDismiss: { dismiss() }
                 ) {
@@ -437,11 +507,6 @@ struct VideoPlayerView: View {
         .onDisappear {
             Task { await controller.stop() }
         }
-    }
-
-    private var episodeSubtitle: String? {
-        guard playerItem.media.type == .episode, let seriesName = playerItem.media.seriesName else { return nil }
-        return [playerItem.media.episodeLabel, seriesName].compactMap(\.self).joined(separator: " · ")
     }
 
     private var playbackHUD: some View {

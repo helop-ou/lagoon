@@ -42,11 +42,18 @@ nonisolated struct PlayerTrack: Identifiable, Equatable {
 /// Everything the player's Info tab and transport show about the item —
 /// assembled by the playback controller, engine-independent.
 nonisolated struct PlayerItemInfo {
+    /// Transport headline: the series for episodes, the item otherwise.
     let title: String
+    /// Small line above the headline, e.g. "S1 E1 · Freedom Day".
     let subtitle: String?
     let overview: String?
-    /// Compact technical tokens, e.g. ["MKV", "HEVC · HDR10 · 3840×1600"].
+    /// Infuse-style spaced tokens: runtime, year, size, "HEVC (4K DV)",
+    /// "Dolby Digital+ 5.1", bitrate, fps, genres, rating.
     let facts: [String]
+    /// The Video tab's single read-only line, e.g.
+    /// "HEVC · 4K DV · 3840×1600 · 23.976 fps".
+    let videoSummary: String?
+    let posterURL: URL?
 }
 
 /// A subtitle that lives outside the media file (Jellyfin external stream)
