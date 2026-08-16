@@ -13,6 +13,12 @@
    `JellyfinClient.streamURL`:
    - `SupportsDirectPlay` → `Videos/{id}/stream?static=true&mediaSourceId=…`
      (+ `api_key`, `deviceId`, `Tag`), PlayMethod `DirectPlay`.
+   - else `SupportsDirectStream` → `Videos/{id}/stream.{container}` with the
+     same static query, PlayMethod `DirectStream`. Same bytes, but the server
+     must proxy them (remote/.strm sources, static-bitrate limits); local
+     library files that pass the profile carry both flags and take the
+     DirectPlay branch. The container can arrive as an ffprobe list
+     ("mov,mp4,m4a") — take the first entry.
    - else the server-provided `TranscodingUrl` (arrives server-relative with
      its own query string — resolve against the server URL, don't rebuild
      it), PlayMethod `Transcode`.
@@ -24,9 +30,19 @@
 
 All of this is encoded in `DeviceProfile.native`
 (`Lagoon/Networking/DeviceProfile.swift`) and was verified against a real
-library on 2026-08-15 by probing PlaybackInfo responses, HLS playlists, and
-fMP4 init segments (full matrix in the HEL-32/HEL-33 comments):
+library on 2026-08-15/16 by probing PlaybackInfo responses, HLS playlists,
+and fMP4 init segments (full matrix in the HEL-32/HEL-33/HEL-34 comments):
 
+- **Direct play video is hevc, h264, mpeg4** — MPEG-4 Part 2 in mp4-family
+  containers plays natively (AVI-era rips stay transcodes: with mpeg4
+  advertised, `ContainerNotSupported` is the only reason the server cites,
+  and mpeg4 is deliberately absent from the HLS list so those re-encode to
+  hevc/h264 rather than risking mp4v in fMP4 segments). **AV1 is advertised
+  per device** via `VTIsHardwareDecodeSupported` — AVPlayer only does AV1 in
+  hardware (A17 Pro/M3 and later; no Apple TV as of tvOS 26). When present it
+  is appended *last* to the direct-play and HLS codec lists, so hevc stays
+  the transcode target and av1 merely enables stream copy, plus an av1
+  CodecProfile (SDR/HDR10/HLG/HDR10Plus).
 - **HLS segments are fMP4 (`Container: "mp4"`), never MPEG-TS.** Apple's HLS
   stack refuses HEVC (and all HDR/DoVi signalling) in TS — the old ts profile
   is why 4K HEVC MKVs came back as full H.264 SDR transcodes. With fMP4 the
@@ -55,6 +71,16 @@ fMP4 init segments (full matrix in the HEL-32/HEL-33 comments):
   HDR indicator can only be verified on real Apple TV 4K hardware, and
   spatial-audio engagement needs AirPods / an Atmos receiver (HEL-32/HEL-33
   remaining scope).
+
+## Debug playback HUD
+
+DEBUG builds get Settings → Debug → Playback HUD: a top-left overlay in the
+player showing the negotiated method/container/codecs/range/bitrate plus live
+`AVPlayerItem` stats refreshed every 2 s. The "Playing:" fourCC tells remux
+truth from re-encode — `dvh1` means Dolby Vision actually reached AVPlayer,
+`hvc1` plain HEVC. The overlay is hit-test-disabled and never focusable, so
+tvOS focus behavior is untouched. Backed by `UserDefaults` key
+`debug.playbackHUD`, checked once at playback start.
 
 ## Progress reporting
 
