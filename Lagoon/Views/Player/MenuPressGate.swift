@@ -29,9 +29,28 @@ struct MenuPressGate<Content: View>: UIViewControllerRepresentable {
 final class MenuGateHostingController<Content: View>: UIHostingController<Content> {
     var onMenu: (() -> Void)?
 
-    // The Siri Remote sends .menu; the simulator's hardware keyboard sends
-    // a keyboard press (type = 2000 + HID usage) whose UIKey is Escape —
-    // UIKit translates that to cancel/dismiss too, so both must be caught.
+    // Hardware finding (Jaagop's Apple TV): a real Siri Remote .menu press
+    // is consumed by UIKit's presentation-dismissal *gesture recognizer*
+    // before press delivery ever reaches the responder chain — the
+    // pressesBegan/Ended overrides below never see it (the simulator's
+    // keyboard Escape takes the responder path, which is why the sim
+    // passed). Our own recognizer inside the hierarchy preempts the
+    // system's, making the panel-open-vs-exit policy ours on hardware too.
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let recognizer = UITapGestureRecognizer(target: self, action: #selector(menuRecognized))
+        recognizer.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
+        view.addGestureRecognizer(recognizer)
+    }
+
+    @objc private func menuRecognized() {
+        onMenu?()
+    }
+
+    // The simulator's hardware keyboard sends a keyboard press (type =
+    // 2000 + HID usage) whose UIKey is Escape — no gesture recognizer
+    // matches it, so it arrives here via the responder chain; UIKit would
+    // translate it to cancel/dismiss, so it must be caught too.
     private func isMenuPress(_ presses: Set<UIPress>) -> Bool {
         presses.contains { $0.type == .menu || $0.key?.keyCode == .keyboardEscape }
     }

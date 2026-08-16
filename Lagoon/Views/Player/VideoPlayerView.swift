@@ -293,12 +293,15 @@ final class PlaybackController {
         }
     }
 
-    private static func liveHUDLines(for engine: any PlayerEngine) -> [String] {
+    private static func liveHUDLines(for engine: SampleBufferPlayerEngine) -> [String] {
         var lines: [String] = []
         if let size = engine.videoSize {
             lines.append("Playing: \(Int(size.width))×\(Int(size.height))")
         } else {
             lines.append("Playing: not ready · \(engine.isBuffering ? "buffering" : "…")")
+        }
+        if let audio = engine.audioDiagnostic {
+            lines.append("Track:   \(audio)")
         }
         if engine.duration > 0 {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
@@ -317,6 +320,7 @@ struct VideoPlayerView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var controller = PlaybackController()
+    @State private var panelOpen = false
 
     var body: some View {
         ZStack {
@@ -330,7 +334,8 @@ struct VideoPlayerView: View {
                 CustomPlayerView(
                     engine: engine,
                     info: fallbackInfo,
-                    onDismiss: { dismiss() }
+                    onDismiss: { dismiss() },
+                    onPanelToggle: { panelOpen = $0 }
                 ) {
                     SampleBufferVideoSurface(engine: engine)
                 }
@@ -338,7 +343,7 @@ struct VideoPlayerView: View {
                 LoadingView()
             }
 
-            if !controller.hudLines.isEmpty {
+            if !controller.hudLines.isEmpty, !panelOpen {
                 playbackHUD
             }
         }

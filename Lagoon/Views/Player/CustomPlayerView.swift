@@ -18,6 +18,9 @@ struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     let info: PlayerItemInfo
     let onDismiss: () -> Void
+    /// Lets the host react to the panel opening (the debug HUD hides so
+    /// it can't sit on top of the track card).
+    var onPanelToggle: ((Bool) -> Void)? = nil
     @ViewBuilder let surface: () -> Surface
 
     private enum PanelTab: CaseIterable, Hashable {
@@ -203,6 +206,7 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func openPanel() {
         withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = true }
+        onPanelToggle?(true)
         // defaultFocus is only honored when a fresh scene appears — for a
         // mid-screen reveal tvOS leaves focus where it was, stranding the
         // panel. Claim focus immediately (an unfocused instant would send
@@ -220,6 +224,7 @@ struct CustomPlayerView<Surface: View>: View {
     private func closePanel() {
         focusedTab = nil
         withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = false }
+        onPanelToggle?(false)
         pokeControls()
     }
 

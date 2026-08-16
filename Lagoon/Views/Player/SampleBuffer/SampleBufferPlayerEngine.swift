@@ -34,6 +34,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var currentSubtitleImages: [SubtitleImage] = []
     /// mpv convention (M6): positive delays the audio.
     private(set) var audioDelay: Double = 0
+    /// Debug-HUD line: what the demuxer actually sees on the selected
+    /// audio stream (codec, channels, FFmpeg's Atmos/JOC verdict) —
+    /// readable without opening the track panel.
+    private(set) var audioDiagnostic: String?
 
     @ObservationIgnored var onFinished: (() -> Void)?
     @ObservationIgnored var onError: ((String) -> Void)?
@@ -513,9 +517,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let streams = demuxer.audioStreams
         guard !streams.isEmpty else { return }
         let index = min(max(ordinal - 1, 0), streams.count - 1)
-        let streamIndex = streams[index].streamIndex
-        shared.withLock { $0.selectedAudioStreamIndex = streamIndex }
-        demuxer.selectAudio(streamIndex: streamIndex)
+        let stream = streams[index]
+        shared.withLock { $0.selectedAudioStreamIndex = stream.streamIndex }
+        demuxer.selectAudio(streamIndex: stream.streamIndex)
+
+        var diagnostic = "\(stream.codecName) · \(stream.channels)ch"
+        if stream.isAtmos {
+            diagnostic += " · Atmos (JOC) detected"
+        } else if stream.codecName == "eac3" {
+            diagnostic += " · no JOC"
+        }
+        Task { @MainActor in self.audioDiagnostic = diagnostic }
     }
 
     /// Copy with all timestamps shifted — how the audio-delay option

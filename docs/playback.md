@@ -162,12 +162,18 @@ reflects the new position immediately.
   tvOS 26** — arrows and play/pause reach SwiftUI, but UIKit's
   presentation controller consumes Menu and dismisses the cover directly,
   and `interactiveDismissDisabled` doesn't gate it (verified with
-  instrumented handlers). `MenuPressGate` hosts the player content in a
-  UIHostingController that intercepts the press at the responder-chain
-  level: panel open → close panel, else → explicit dismiss. It must catch
-  **both** `UIPress.PressType.menu` (Siri Remote) and a keyboard Escape
-  press (`key?.keyCode == .keyboardEscape`; the simulator's keyboard
-  sends type = 2000 + HID usage, never `.menu`).
+  instrumented handlers). `MenuPressGate` owns the policy: panel open →
+  close panel, else → explicit dismiss. **It needs BOTH interception
+  layers**: a real Siri Remote `.menu` press is eaten by UIKit's
+  dismissal *gesture recognizer* before press delivery reaches any
+  responder — only our own `UITapGestureRecognizer` with
+  `allowedPressTypes = [.menu]` inside the hierarchy preempts it (found
+  on hardware: responder-chain overrides alone let Menu kill the whole
+  player) — while the simulator's keyboard Escape arrives as a keyboard
+  press (type = 2000 + HID usage, never `.menu`) that no recognizer
+  matches, so the `pressesEnded` override must catch
+  `key?.keyCode == .keyboardEscape`. Sim-only testing exercises only the
+  second path; hardware exercises only the first.
 - `defaultFocus` is only honored when a fresh scene appears — any
   mid-screen reveal must assign its `@FocusState` programmatically
   (immediately, plus a settled retry) or focus strands.
