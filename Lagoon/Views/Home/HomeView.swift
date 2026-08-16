@@ -44,6 +44,7 @@ struct HomeView: View {
         .onAppear {
             Task { await viewModel.refreshProgress(client: session.client) }
         }
+        .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem) { item in
             VideoPlayerView(playerItem: item)
                 .preferredColorScheme(.dark)

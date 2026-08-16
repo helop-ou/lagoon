@@ -73,6 +73,7 @@ struct SeriesDetailView: View {
         .task(id: item.id) {
             await viewModel.load(client: session.client, seriesId: item.id)
         }
+        .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
             Task { await viewModel.refreshEpisodes(client: session.client, seriesId: item.id) }
         }) { player in

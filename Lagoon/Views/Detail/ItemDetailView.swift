@@ -28,6 +28,7 @@ struct ItemDetailView: View {
         .task(id: item.id) {
             detail = try? await session.client.item(id: item.id)
         }
+        .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
             Task { detail = try? await session.client.item(id: item.id) }
         }) { player in
