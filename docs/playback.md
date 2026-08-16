@@ -96,6 +96,12 @@ Mechanics (mirrors the MPVKit demo):
 - Options: `vo=gpu-next`, `gpu-api=vulkan`, `gpu-context=moltenvk`,
   `hwdec=videotoolbox`, `target-colorspace-hint=yes` (HDR → EDR; cannot be
   toggled at runtime), `keep-open=no` so EOF fires `MPV_EVENT_END_FILE`.
+  Initial `aid`/`sid` come from the MediaSource's
+  `DefaultAudioStreamIndex`/`DefaultSubtitleStreamIndex` — the server has
+  already applied the user's language preferences, so no mpv language
+  heuristics (`subs-match-os-language` is deliberately not set). The
+  Jellyfin stream index maps to mpv's per-type 1-based id by ordinal among
+  embedded streams of that type; a nil default subtitle means `sid=no`.
 - Threading: commands on the main actor (libmpv is thread-safe); the wakeup
   callback drains events on a private serial queue and hops state back via
   `Task { @MainActor }`. `MetalVideoLayer` swallows MoltenVK's 1×1
@@ -103,8 +109,17 @@ Mechanics (mirrors the MPVKit demo):
 - Resume is the `start` option (set pre-init), not a seek. Progress
   reporting is engine-agnostic in `PlaybackController` (`PlayMethod:
   DirectPlay`); positions come from the throttled `time-pos` observer.
-- `MPVPlayerView` honors the focus invariants: the surface is `.focusable()`,
-  play/pause toggles, left/right arrows seek ±10 s, Menu exits.
+- The UI is `CustomPlayerView`, which talks **only to the `PlayerEngine`
+  protocol** (HEL-48: the sample-buffer engine must slot in without touching
+  the UI; the video surface is injected). Focus invariants hold: the surface
+  is focusable while the track panel is closed, play/pause toggles,
+  left/right seek ±10 s, **down opens the track panel**, Menu exits — or
+  closes the panel when it's open (focus lives in the panel's buttons then).
+- **Track selection (HEL-35)** is instant and client-side on this path:
+  `track-list` read as JSON, switched via `aid`/`sid`. External SRT streams
+  are side-loaded on `FILE_LOADED` with `sub-add` (DeliveryUrl resolved +
+  `api_key` appended); if the server's default subtitle is external it gets
+  the `select` flag. Names are built from mpv's lang/title/codec facts.
 
 Known-unknowns for the hardware pass: EDR/HDR10 output quality, DoVi P5
 rendering via libplacebo (P7 MKVs still take the HDR10 remux — the hevc
