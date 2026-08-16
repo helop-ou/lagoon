@@ -34,16 +34,11 @@ struct CustomPlayerView<Surface: View>: View {
         }
     }
 
-    private enum PanelFocus: Hashable {
-        case tab(PanelTab)
-        case row(String)
-    }
-
     @State private var controlsVisible = true
     @State private var interactionToken = 0
     @State private var panelOpen = false
     @State private var selectedTab: PanelTab = .info
-    @FocusState private var panelFocus: PanelFocus?
+    @FocusState private var focusedTab: PanelTab?
 
     var body: some View {
         ZStack {
@@ -80,8 +75,8 @@ struct CustomPlayerView<Surface: View>: View {
             pokeControls()
         }
         #endif
-        .onChange(of: panelFocus) { _, focus in
-            if case .tab(let tab) = focus {
+        .onChange(of: focusedTab) { _, tab in
+            if let tab {
                 withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
             }
         }
@@ -132,12 +127,12 @@ struct CustomPlayerView<Surface: View>: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
             guard panelOpen else { return }
-            panelFocus = .tab(selectedTab)
+            focusedTab = selectedTab
         }
     }
 
     private func closePanel() {
-        panelFocus = nil
+        focusedTab = nil
         withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = false }
         pokeControls()
     }
@@ -251,7 +246,7 @@ struct CustomPlayerView<Surface: View>: View {
         #if os(tvOS)
         .focusSection()
         #endif
-        .defaultFocus($panelFocus, .tab(selectedTab))
+        .defaultFocus($focusedTab, selectedTab)
         #if os(iOS)
         .background(
             // Dim + tap-out on iOS; tvOS closes via Menu.
@@ -262,8 +257,9 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
-    // Centered pills; the selected one is filled white with black text
-    // (selection follows focus while moving along the row).
+    // Native buttons only: the system's focused lozenge IS the Infuse
+    // white-pill look — never draw custom focus chrome around it. The
+    // active tab keeps bold text once focus moves down into the card.
     private var tabBar: some View {
         HStack(spacing: 14) {
             ForEach(PanelTab.allCases, id: \.self) { tab in
@@ -271,19 +267,9 @@ struct CustomPlayerView<Surface: View>: View {
                     withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
                 } label: {
                     Text(tab.title)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(selectedTab == tab ? Color.black : Color.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
-                        .background(
-                            selectedTab == tab
-                                ? AnyShapeStyle(.white)
-                                : AnyShapeStyle(.ultraThinMaterial),
-                            in: Capsule()
-                        )
+                        .fontWeight(selectedTab == tab ? .bold : .regular)
                 }
-                .buttonStyle(.plain)
-                .focused($panelFocus, equals: .tab(tab))
+                .focused($focusedTab, equals: tab)
             }
         }
         .frame(maxWidth: .infinity)
@@ -386,19 +372,11 @@ struct CustomPlayerView<Surface: View>: View {
                                     .font(.caption.bold())
                                     .opacity(row.selected ? 1 : 0)
                                 Text(row.name)
-                                    .font(.callout)
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
                             }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(
-                                panelFocus == .row(row.id) ? Color.white.opacity(0.15) : .clear,
-                                in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius)
-                            )
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.plain)
-                        .focused($panelFocus, equals: .row(row.id))
                     }
                 }
             }
