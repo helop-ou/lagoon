@@ -232,6 +232,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     private func seek(to target: Double) {
         let clamped = max(0, duration > 0 ? min(target, duration - 1) : target)
+        // Optimistic: the playhead moves the instant the seek is asked
+        // for (HEL-39) — the engine will resume from exactly here.
+        timePosition = clamped
         isBuffering = true
         synchronizer.rate = 0
         videoRenderer?.flush()
@@ -265,7 +268,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private func observeTime(_ time: CMTime) {
         let seconds = time.seconds
         guard seconds.isFinite else { return }
-        if abs(seconds - timePosition) >= 0.25 {
+        // 0.1 s granularity so the animated scrubber has fresh targets to
+        // glide toward (HEL-39).
+        if abs(seconds - timePosition) >= 0.1 {
             timePosition = seconds
         }
         refreshSubtitles(at: seconds)
