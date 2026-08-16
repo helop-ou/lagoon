@@ -6,6 +6,36 @@ import Libavutil
 
 nonisolated private let avNoPTS = Int64.min // AV_NOPTS_VALUE
 nonisolated private let eac3AtmosProfile: Int32 = 30 // AV_PROFILE_EAC3_DDP_ATMOS
+// The media subtype Apple's own format descriptions show for E-AC3 JOC
+// tracks ("Enhanced AC-3 with JOC") — no public CoreAudio constant.
+nonisolated private let ec3JOCFormatID = AudioFormatID(0x6563_2B33) // 'ec+3'
+
+/// HEL-48 M2: Atmos signalling experiments, selectable from Settings →
+/// Debug so one TestFlight build covers every hypothesis. Read at open
+/// time — switching requires restarting playback.
+nonisolated enum AtmosSignallingVariant: Int, CaseIterable {
+    /// ec-3 subtype, coded channel count, Atmos layout tag, dec3 box.
+    case dec3 = 0
+    /// 'ec+3' subtype (what Apple's own JOC format descriptions carry).
+    case jocSubtype = 1
+    /// ec-3 with the 16-channel "16/JOC" presentation.
+    case sixteenChannels = 2
+    /// 'ec+3' + 16 channels, layout tag dropped in case it interferes.
+    case jocSubtype16NoTag = 3
+
+    static var current: AtmosSignallingVariant {
+        AtmosSignallingVariant(rawValue: UserDefaults.standard.integer(forKey: "debug.atmosVariant")) ?? .dec3
+    }
+
+    var label: String {
+        switch self {
+        case .dec3: "dec3 (baseline)"
+        case .jocSubtype: "ec+3 subtype"
+        case .sixteenChannels: "16-channel"
+        case .jocSubtype16NoTag: "ec+3 · 16ch · no tag"
+        }
+    }
+}
 
 /// Turns FFmpeg codec parameters and packets into the CoreMedia objects the
 /// AVSampleBuffer* renderers eat (HEL-48 M1).
@@ -105,11 +135,12 @@ nonisolated enum SampleBufferFactory {
     /// fallback durations). aac needs its AudioSpecificConfig as the magic
     /// cookie; ac3/eac3 are self-describing.
     static func audioFormatDescription(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> (CMFormatDescription, framesPerPacket: Int)? {
-        let formatID: AudioFormatID
+        var formatID: AudioFormatID
         let framesPerPacket: Int
         var cookie: Data?
         var atoms: [String: Data]?
         var layoutTag: AudioChannelLayoutTag?
+        var forcedChannels: UInt32?
         switch codecpar.pointee.codec_id {
         case AV_CODEC_ID_AAC:
             formatID = kAudioFormatMPEG4AAC
@@ -134,7 +165,19 @@ nonisolated enum SampleBufferFactory {
             cookie = dec3Payload(codecpar: codecpar, atmos: isAtmos)
             atoms = cookie.map { ["dec3": $0] }
             if isAtmos {
-                layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
+                switch AtmosSignallingVariant.current {
+                case .dec3:
+                    layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
+                case .jocSubtype:
+                    formatID = ec3JOCFormatID
+                    layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
+                case .sixteenChannels:
+                    layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
+                    forcedChannels = 16
+                case .jocSubtype16NoTag:
+                    formatID = ec3JOCFormatID
+                    forcedChannels = 16
+                }
             }
         case AV_CODEC_ID_MP3:
             formatID = kAudioFormatMPEGLayer3
@@ -150,7 +193,7 @@ nonisolated enum SampleBufferFactory {
             mBytesPerPacket: 0,
             mFramesPerPacket: UInt32(framesPerPacket),
             mBytesPerFrame: 0,
-            mChannelsPerFrame: UInt32(max(codecpar.pointee.ch_layout.nb_channels, 1)),
+            mChannelsPerFrame: forcedChannels ?? UInt32(max(codecpar.pointee.ch_layout.nb_channels, 1)),
             mBitsPerChannel: 0,
             mReserved: 0
         )
