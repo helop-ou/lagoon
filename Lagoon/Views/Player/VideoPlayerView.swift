@@ -311,6 +311,7 @@ struct VideoPlayerView: View {
                 playbackHUD
             }
         }
+        .interactiveDismissDisabled()
         .task {
             await controller.start(
                 media: playerItem.media,

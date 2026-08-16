@@ -198,10 +198,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
 
         // Ordinals are 1-based positions in the demuxed audio list — the
-        // same convention the server-default mapping uses.
+        // same convention the server-default mapping uses. (Single lock
+        // acquisition: nesting withLock deadlocks the non-recursive lock.)
         let initialOrdinal = shared.withLock { state -> Int in
             if state.selectedAudioOrdinal == 0 {
-                state.selectedAudioOrdinal = initialAudioOrdinalSnapshot() ?? 1
+                state.selectedAudioOrdinal = state.initialAudioOrdinal ?? 1
             }
             return state.selectedAudioOrdinal
         }
@@ -296,10 +297,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     nonisolated private func selectedAudioStreamIndex() -> Int32 {
         shared.withLock { $0.selectedAudioStreamIndex }
-    }
-
-    nonisolated private func initialAudioOrdinalSnapshot() -> Int? {
-        shared.withLock { $0.initialAudioOrdinal }
     }
 
     nonisolated private func videoDimensions() -> CGSize {

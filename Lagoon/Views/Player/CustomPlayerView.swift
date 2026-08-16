@@ -6,12 +6,14 @@ import SwiftUI
 /// (Info · Video · Audio · Subtitles) above one floating material card.
 /// Talks only to `PlayerEngine` so the HEL-48 engine swap never touches it.
 ///
-/// tvOS focus invariants: the surface is focusable whenever the panel is
-/// closed (Menu would quit the app from an unfocusable screen). Remote
-/// grammar: play/pause toggles anywhere; on the surface left/right seek
-/// ±10 s and down opens the panel; in the panel left/right walk the tabs
-/// (selection follows focus), down enters the track rows. Menu is handled
-/// once at the root — it closes the panel when open, otherwise exits.
+/// tvOS focus invariants: the surface is focusable at all times (Menu
+/// would quit the app from an unfocusable screen). Remote grammar:
+/// play/pause toggles anywhere; on the surface left/right seek ±10 s and
+/// down opens the panel; in the panel left/right walk the tabs (selection
+/// follows focus), down enters the track rows. Menu/Escape is intercepted
+/// at the UIKit press layer by `MenuPressGate` — panel open closes the
+/// panel, otherwise the player exits (SwiftUI's `onExitCommand` never
+/// fires inside a fullScreenCover on tvOS 26).
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     let info: PlayerItemInfo
@@ -41,6 +43,25 @@ struct CustomPlayerView<Surface: View>: View {
     @FocusState private var focusedTab: PanelTab?
 
     var body: some View {
+        #if os(tvOS)
+        // Menu never reaches SwiftUI inside a fullScreenCover on tvOS 26;
+        // the gate intercepts the press itself (see MenuPressGate).
+        MenuPressGate {
+            if panelOpen {
+                closePanel()
+            } else {
+                onDismiss()
+            }
+        } content: {
+            playerContent
+        }
+        .ignoresSafeArea()
+        #else
+        playerContent
+        #endif
+    }
+
+    private var playerContent: some View {
         ZStack {
             videoSurface
 
@@ -61,15 +82,6 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
-        // One place decides what Menu means, no matter where focus sits —
-        // panel open: close the panel; otherwise: leave the player.
-        .onExitCommand {
-            if panelOpen {
-                closePanel()
-            } else {
-                onDismiss()
-            }
-        }
         .onPlayPauseCommand {
             engine.togglePause()
             pokeControls()
@@ -258,13 +270,6 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .padding(.top, Metrics.railTopPadding)
         .defaultFocus($focusedTab, selectedTab)
-        #if os(tvOS)
-        // Nearest handler to the focused tabs/rows — catches Menu even if
-        // the command never bubbles as far as the root's backstop.
-        .onExitCommand {
-            closePanel()
-        }
-        #endif
         #if os(iOS)
         .background(
             // Dim + tap-out on iOS; tvOS closes via Menu.
@@ -379,6 +384,7 @@ struct CustomPlayerView<Surface: View>: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             cardHeader("Tracks")
+            // The card hugs short lists; only long ones scroll.
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(rows, id: \.id) { row in
@@ -398,7 +404,7 @@ struct CustomPlayerView<Surface: View>: View {
                     }
                 }
             }
-            .frame(maxHeight: 340)
+            .frame(maxHeight: min(CGFloat(rows.count) * 64 + 16, 340))
         }
     }
 
