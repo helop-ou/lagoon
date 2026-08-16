@@ -3,6 +3,10 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
 
+    #if DEBUG
+    @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
+    #endif
+
     var body: some View {
         Form {
             Section("Server") {
@@ -24,6 +28,12 @@ struct SettingsView: View {
                 LabeledContent("App", value: "Lagoon")
                 LabeledContent("Version", value: session.client.appVersion)
             }
+
+            #if DEBUG
+            Section("Debug") {
+                Toggle("Playback HUD", isOn: $showPlaybackHUD)
+            }
+            #endif
         }
         #if os(iOS)
         .navigationTitle("Settings")

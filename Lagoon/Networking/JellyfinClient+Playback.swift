@@ -46,19 +46,25 @@ extension JellyfinClient {
         )
     }
 
-    /// Resolves a media source to a playable URL, preferring direct play.
+    /// Resolves a media source to a playable URL, preferring direct play,
+    /// then direct stream, then the server-negotiated transcode.
     func streamURL(itemId: String, source: MediaSource) throws -> (url: URL, method: PlayMethod) {
         if source.supportsDirectPlay == true, let accessToken {
-            var query = [
-                URLQueryItem(name: "static", value: "true"),
-                URLQueryItem(name: "mediaSourceId", value: source.id),
-                URLQueryItem(name: "deviceId", value: deviceId),
-                URLQueryItem(name: "api_key", value: accessToken),
-            ]
-            if let eTag = source.eTag {
-                query.append(URLQueryItem(name: "Tag", value: eTag))
-            }
-            return (try url(path: "Videos/\(itemId)/stream", query: query), .directPlay)
+            return (
+                try url(path: "Videos/\(itemId)/stream", query: staticStreamQuery(source: source, accessToken: accessToken)),
+                .directPlay
+            )
+        }
+        // Direct stream: the bytes are playable as-is but must be served
+        // through the server (remote/.strm sources, static-bitrate limits).
+        // jellyfin-web requests stream.{container} with static=true here;
+        // the container can arrive as an ffprobe list ("mov,mp4,m4a").
+        if source.supportsDirectStream == true, let accessToken,
+           let container = source.container?.split(separator: ",").first {
+            return (
+                try url(path: "Videos/\(itemId)/stream.\(container)", query: staticStreamQuery(source: source, accessToken: accessToken)),
+                .directStream
+            )
         }
         if let transcodingUrl = source.transcodingUrl, let serverURL {
             // TranscodingUrl arrives server-relative, query string included.
@@ -68,6 +74,19 @@ extension JellyfinClient {
             return (url, .transcode)
         }
         throw JellyfinError.unplayable
+    }
+
+    private func staticStreamQuery(source: MediaSource, accessToken: String) -> [URLQueryItem] {
+        var query = [
+            URLQueryItem(name: "static", value: "true"),
+            URLQueryItem(name: "mediaSourceId", value: source.id),
+            URLQueryItem(name: "deviceId", value: deviceId),
+            URLQueryItem(name: "api_key", value: accessToken),
+        ]
+        if let eTag = source.eTag {
+            query.append(URLQueryItem(name: "Tag", value: eTag))
+        }
+        return query
     }
 
     func reportPlaybackStart(_ info: PlaybackStartInfo) async throws {

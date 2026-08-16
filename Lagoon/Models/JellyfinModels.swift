@@ -168,6 +168,12 @@ nonisolated struct MediaStream: Decodable {
     let language: String?
     let index: Int?
     let isDefault: Bool?
+    let profile: String?
+    let videoRangeType: String?
+    let channels: Int?
+    let width: Int?
+    let height: Int?
+    let bitRate: Int?
 }
 
 nonisolated enum PlayMethod: String {

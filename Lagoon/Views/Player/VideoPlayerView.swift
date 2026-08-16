@@ -24,6 +24,11 @@ final class PlaybackController {
     private var endObserverTask: Task<Void, Never>?
     private var didReportStop = false
 
+    #if DEBUG
+    private(set) var hudLines: [String] = []
+    private var hudTask: Task<Void, Never>?
+    #endif
+
     func start(media: MediaItem, startFromBeginning: Bool, client: JellyfinClient) async {
         self.client = client
         itemId = media.id
@@ -56,6 +61,9 @@ final class PlaybackController {
 
             player.play()
             observeEnd(of: playerItem)
+            #if DEBUG
+            startHUD(source: source, method: method, playerItem: playerItem)
+            #endif
 
             try? await client.reportPlaybackStart(.init(
                 itemId: itemId,
@@ -103,6 +111,9 @@ final class PlaybackController {
     func stop() async {
         progressTask?.cancel()
         endObserverTask?.cancel()
+        #if DEBUG
+        hudTask?.cancel()
+        #endif
         guard let player, let client, !didReportStop else { return }
         didReportStop = true
         let seconds = player.currentTime().seconds
@@ -142,6 +153,82 @@ final class PlaybackController {
         item.extendedLanguageTag = "und"
         return item
     }
+
+    #if DEBUG
+    // MARK: Playback HUD (DEBUG builds, Settings → Debug → Playback HUD)
+
+    private func startHUD(source: MediaSource, method: PlayMethod, playerItem: AVPlayerItem) {
+        guard UserDefaults.standard.bool(forKey: "debug.playbackHUD") else { return }
+
+        var negotiated = [
+            "Method: \(method.rawValue)"
+                + (method == .transcode ? " (\(source.transcodingSubProtocol ?? "?"))" : ""),
+        ]
+        var sourceLine = "Source: \(source.container ?? "?")"
+        if let bitrate = source.bitrate {
+            sourceLine += " · \(Self.mbps(bitrate))"
+        }
+        negotiated.append(sourceLine)
+        if let video = source.mediaStreams?.first(where: { $0.type == "Video" }) {
+            var line = "Video:  \(video.codec ?? "?")"
+            if let profile = video.profile { line += " \(profile.lowercased())" }
+            if let range = video.videoRangeType { line += " · \(range)" }
+            if let width = video.width, let height = video.height { line += " · \(width)×\(height)" }
+            negotiated.append(line)
+        }
+        let audioStreams = source.mediaStreams?.filter { $0.type == "Audio" } ?? []
+        if let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first {
+            var line = "Audio:  \(audio.codec ?? "?")"
+            if let channels = audio.channels { line += " · \(channels)ch" }
+            negotiated.append(line)
+        }
+
+        hudLines = negotiated
+        hudTask = Task { [weak self, weak playerItem] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, let playerItem else { return }
+                self.hudLines = negotiated + (await Self.liveHUDLines(for: playerItem))
+            }
+        }
+    }
+
+    private static func liveHUDLines(for item: AVPlayerItem) async -> [String] {
+        var lines: [String] = []
+        var delivered = ""
+        let size = item.presentationSize
+        if size != .zero {
+            delivered = "\(Int(size.width))×\(Int(size.height))"
+        }
+        // The delivered fourCC tells remux truth from re-encode: dvh1 means
+        // Dolby Vision actually survived to AVPlayer, hvc1 means plain HEVC.
+        for track in item.tracks where track.assetTrack?.mediaType == .video {
+            if let assetTrack = track.assetTrack,
+               let desc = try? await assetTrack.load(.formatDescriptions).first {
+                let sub = CMFormatDescriptionGetMediaSubType(desc)
+                let fourCC = String(
+                    format: "%c%c%c%c",
+                    (sub >> 24) & 0xFF, (sub >> 16) & 0xFF, (sub >> 8) & 0xFF, sub & 0xFF
+                )
+                delivered += delivered.isEmpty ? fourCC : " · \(fourCC)"
+            }
+        }
+        if !delivered.isEmpty {
+            lines.append("Playing: \(delivered)")
+        }
+        if let last = item.accessLog()?.events.last, last.indicatedBitrate > 0 {
+            lines.append("Bitrate: \(mbps(Int(last.indicatedBitrate)))")
+        }
+        if let errors = item.errorLog()?.events.count, errors > 0 {
+            lines.append("Errors: \(errors)")
+        }
+        return lines
+    }
+
+    private static func mbps(_ bitsPerSecond: Int) -> String {
+        String(format: "%.1f Mbps", Double(bitsPerSecond) / 1_000_000)
+    }
+    #endif
 }
 
 struct VideoPlayerView: View {
@@ -165,6 +252,12 @@ struct VideoPlayerView: View {
             } else {
                 LoadingView()
             }
+
+            #if DEBUG
+            if !controller.hudLines.isEmpty {
+                playbackHUD
+            }
+            #endif
         }
         .task {
             await controller.start(
@@ -182,6 +275,23 @@ struct VideoPlayerView: View {
             Task { await controller.stop() }
         }
     }
+
+    #if DEBUG
+    private var playbackHUD: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(controller.hudLines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+            }
+        }
+        .font(.caption.monospaced())
+        .foregroundStyle(.white.opacity(0.85))
+        .padding(12)
+        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(Metrics.screenGutter)
+        .allowsHitTesting(false)
+    }
+    #endif
 
     private func errorOverlay(_ message: String) -> some View {
         VStack(spacing: 20) {
