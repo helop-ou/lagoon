@@ -93,8 +93,17 @@ struct CustomPlayerView<Surface: View>: View {
         surface()
             .ignoresSafeArea()
         #if os(tvOS)
-            .focusable(!panelOpen)
+            // Always focusable: if the surface could resign focus, any
+            // instant with nothing focused would route Menu straight to the
+            // fullScreenCover's default dismissal (and melt the focus
+            // system with it — seen as a full app freeze). With the panel
+            // open, arrows just nudge focus into the panel instead.
+            .focusable()
             .onMoveCommand { direction in
+                if panelOpen {
+                    focusedTab = selectedTab
+                    return
+                }
                 switch direction {
                 case .left: engine.seek(by: -10)
                 case .right: engine.seek(by: 10)
@@ -105,6 +114,7 @@ struct CustomPlayerView<Surface: View>: View {
             }
         #endif
             .onTapGesture {
+                guard !panelOpen else { return }
                 #if os(tvOS)
                 engine.togglePause()
                 #else

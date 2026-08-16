@@ -58,10 +58,48 @@ nonisolated final class FFmpegDemuxer {
     private(set) var audioStreams: [DemuxedStream] = []
     private(set) var durationSeconds: Double = 0
 
+    // Written from the main actor at shutdown, polled by FFmpeg's interrupt
+    // callback from inside blocked network I/O — this is what guarantees a
+    // wedged open/read can't hang teardown.
+    private let interruptLock = NSLock()
+    nonisolated(unsafe) private var interruptedFlag = false
+
+    var isInterrupted: Bool {
+        interruptLock.lock()
+        defer { interruptLock.unlock() }
+        return interruptedFlag
+    }
+
+    func interrupt() {
+        interruptLock.lock()
+        interruptedFlag = true
+        interruptLock.unlock()
+    }
+
     func open(url: String) throws {
         avformat_network_init()
-        var ctx: UnsafeMutablePointer<AVFormatContext>?
-        var status = avformat_open_input(&ctx, url, nil, nil)
+        guard let allocated = avformat_alloc_context() else {
+            throw DemuxError.openFailed("out of memory")
+        }
+        allocated.pointee.interrupt_callback = AVIOInterruptCB(
+            callback: { opaque in
+                guard let opaque else { return 0 }
+                return Unmanaged<FFmpegDemuxer>.fromOpaque(opaque).takeUnretainedValue().isInterrupted ? 1 : 0
+            },
+            opaque: Unmanaged.passUnretained(self).toOpaque()
+        )
+
+        // Bound every network operation and survive transient drops — an
+        // unbounded connect was capable of wedging playback startup.
+        var options: OpaquePointer?
+        av_dict_set(&options, "rw_timeout", "15000000", 0) // 15 s per I/O op
+        av_dict_set(&options, "reconnect", "1", 0)
+        av_dict_set(&options, "reconnect_streamed", "1", 0)
+        av_dict_set(&options, "reconnect_delay_max", "2", 0)
+        defer { av_dict_free(&options) }
+
+        var ctx: UnsafeMutablePointer<AVFormatContext>? = allocated
+        var status = avformat_open_input(&ctx, url, nil, &options)
         guard status >= 0, let ctx else {
             throw DemuxError.openFailed(Self.errorText(status))
         }

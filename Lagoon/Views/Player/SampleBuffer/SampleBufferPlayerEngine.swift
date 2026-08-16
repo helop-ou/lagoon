@@ -126,6 +126,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func shutdown() {
         shared.withLock { $0.cancelled = true }
+        // Aborts any av_* call blocked inside network I/O so the demux
+        // loop can exit and close — without this a wedged open froze
+        // teardown (seen in Jaagop's first test).
+        demuxer.interrupt()
         if let timeObserver {
             synchronizer.removeTimeObserver(timeObserver)
             self.timeObserver = nil
