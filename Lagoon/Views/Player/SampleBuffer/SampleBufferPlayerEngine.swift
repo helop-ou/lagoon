@@ -88,6 +88,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard videoRenderer == nil, let url = pendingURL else { return }
 
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        // Declares real multichannel content so the system's spatial
+        // pipeline treats it as such on AirPods (M2).
+        try? AVAudioSession.sharedInstance().setSupportsMultichannelContent(true)
         try? AVAudioSession.sharedInstance().setActive(true)
 
         let video = displayLayer.sampleBufferRenderer

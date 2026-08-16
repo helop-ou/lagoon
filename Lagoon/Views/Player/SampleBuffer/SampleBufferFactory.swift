@@ -5,6 +5,7 @@ import Libavcodec
 import Libavutil
 
 nonisolated private let avNoPTS = Int64.min // AV_NOPTS_VALUE
+nonisolated private let eac3AtmosProfile: Int32 = 30 // AV_PROFILE_EAC3_DDP_ATMOS
 
 /// Turns FFmpeg codec parameters and packets into the CoreMedia objects the
 /// AVSampleBuffer* renderers eat (HEL-48 M1).
@@ -107,6 +108,7 @@ nonisolated enum SampleBufferFactory {
         let formatID: AudioFormatID
         let framesPerPacket: Int
         var cookie: Data?
+        var layoutTag: AudioChannelLayoutTag?
         switch codecpar.pointee.codec_id {
         case AV_CODEC_ID_AAC:
             formatID = kAudioFormatMPEG4AAC
@@ -120,6 +122,13 @@ nonisolated enum SampleBufferFactory {
         case AV_CODEC_ID_EAC3:
             formatID = kAudioFormatEnhancedAC3
             framesPerPacket = 1536
+            // M2 hardware finding: untagged E-AC3 decodes as plain
+            // multichannel ("Multichannel" in the AirPods menu, no Atmos).
+            // The JOC layer only engages when the channel layout declares
+            // Atmos — the tag matching Apple's own 16/JOC signalling.
+            if codecpar.pointee.profile == eac3AtmosProfile {
+                layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
+            }
         case AV_CODEC_ID_MP3:
             formatID = kAudioFormatMPEGLayer3
             framesPerPacket = 1152
@@ -139,32 +148,24 @@ nonisolated enum SampleBufferFactory {
             mReserved: 0
         )
 
+        var layout = AudioChannelLayout()
+        if let layoutTag {
+            layout.mChannelLayoutTag = layoutTag
+        }
         var description: CMFormatDescription?
-        let status: OSStatus
-        if let cookie {
-            status = cookie.withUnsafeBytes { bytes in
+        let status: OSStatus = withUnsafePointer(to: layout) { layoutPointer in
+            (cookie ?? Data()).withUnsafeBytes { bytes in
                 CMAudioFormatDescriptionCreate(
                     allocator: kCFAllocatorDefault,
                     asbd: &asbd,
-                    layoutSize: 0,
-                    layout: nil,
-                    magicCookieSize: cookie.count,
-                    magicCookie: bytes.baseAddress,
+                    layoutSize: layoutTag != nil ? MemoryLayout<AudioChannelLayout>.size : 0,
+                    layout: layoutTag != nil ? layoutPointer : nil,
+                    magicCookieSize: cookie?.count ?? 0,
+                    magicCookie: cookie != nil ? bytes.baseAddress : nil,
                     extensions: nil,
                     formatDescriptionOut: &description
                 )
             }
-        } else {
-            status = CMAudioFormatDescriptionCreate(
-                allocator: kCFAllocatorDefault,
-                asbd: &asbd,
-                layoutSize: 0,
-                layout: nil,
-                magicCookieSize: 0,
-                magicCookie: nil,
-                extensions: nil,
-                formatDescriptionOut: &description
-            )
         }
         guard status == noErr, let description else { return nil }
         return (description, framesPerPacket)
