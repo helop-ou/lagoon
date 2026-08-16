@@ -77,27 +77,47 @@ struct CustomPlayerView<Surface: View>: View {
 
             subtitleOverlay
 
-            if showsBuffering {
-                ProgressView()
-                    .tint(.white)
-                    .transition(.opacity)
+            // Every animation in here must be value-driven (.animation +
+            // value:), never withAnimation: the transaction doesn't
+            // survive the MenuPressGate hosting boundary, so withAnimation
+            // changes land instantly (found by Jaagop — the panel popped
+            // instead of sliding).
+            Group {
+                if showsBuffering {
+                    ProgressView()
+                        .tint(.white)
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: Motion.fast), value: showsBuffering)
 
-            if let feedback = seekFeedback {
-                seekIndicator(feedback)
+            Group {
+                if let feedback = seekFeedback {
+                    seekIndicator(feedback)
+                }
             }
+            .animation(.easeOut(duration: Motion.fast), value: seekFeedback)
 
             transportOverlay
                 .opacity((controlsVisible || engine.isPaused) && !panelOpen ? 1 : 0)
+                // Asymmetric: target-state-conditional animation — fast
+                // in, gentle out.
+                .animation(
+                    controlsVisible ? .easeOut(duration: Motion.fast) : .easeInOut(duration: Motion.slow),
+                    value: controlsVisible
+                )
                 .animation(.easeInOut(duration: Motion.fast), value: engine.isPaused)
                 .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
 
-            if panelOpen {
-                // The remote gesture is a swipe down, so the panel slides
-                // down with it (and back up on close) — no fade (HEL-39).
-                panel
-                    .transition(.move(edge: .top))
+            Group {
+                if panelOpen {
+                    // The remote gesture is a swipe down, so the panel
+                    // slides down with it (and back up on close).
+                    panel
+                        .transition(.move(edge: .top))
+                }
             }
+            .animation(.spring(duration: Motion.standard, bounce: 0.1), value: panelOpen)
         }
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
@@ -114,8 +134,7 @@ struct CustomPlayerView<Surface: View>: View {
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled, !panelOpen, !engine.isPaused else { return }
-            // Gentle out; pokeControls brings them back fast.
-            withAnimation(.easeInOut(duration: Motion.slow)) { controlsVisible = false }
+            controlsVisible = false
         }
         // The spinner only earns screen time when buffering persists —
         // instant local seeks used to flash it on every press (HEL-39).
@@ -123,16 +142,16 @@ struct CustomPlayerView<Surface: View>: View {
             if engine.isBuffering {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
-                withAnimation(.easeIn(duration: Motion.fast)) { showsBuffering = true }
+                showsBuffering = true
             } else {
-                withAnimation(.easeOut(duration: Motion.fast)) { showsBuffering = false }
+                showsBuffering = false
             }
         }
         .task(id: seekFeedback?.token) {
             guard seekFeedback != nil else { return }
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: Motion.fast)) { seekFeedback = nil }
+            seekFeedback = nil
         }
     }
 
@@ -189,7 +208,7 @@ struct CustomPlayerView<Surface: View>: View {
                 pokeControls()
                 #else
                 if controlsVisible {
-                    withAnimation(.easeInOut(duration: Motion.fast)) { controlsVisible = false }
+                    controlsVisible = false
                 } else {
                     pokeControls()
                 }
@@ -198,14 +217,12 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private func pokeControls() {
-        withAnimation(.easeOut(duration: Motion.fast)) { controlsVisible = true }
+        controlsVisible = true
         interactionToken += 1
     }
 
     private func showSeekFeedback(forward: Bool) {
-        withAnimation(.easeOut(duration: Motion.fast)) {
-            seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1)
-        }
+        seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1)
     }
 
     // MARK: - Subtitles (HEL-48 M5)
@@ -267,7 +284,7 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private func openPanel() {
-        withAnimation(.spring(duration: Motion.standard, bounce: 0.1)) { panelOpen = true }
+        panelOpen = true
         onPanelToggle?(true)
         // defaultFocus is only honored when a fresh scene appears — for a
         // mid-screen reveal tvOS leaves focus where it was, stranding the
@@ -285,7 +302,7 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func closePanel() {
         focusedTab = nil
-        withAnimation(.spring(duration: Motion.standard, bounce: 0)) { panelOpen = false }
+        panelOpen = false
         onPanelToggle?(false)
         pokeControls()
     }

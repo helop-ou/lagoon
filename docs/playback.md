@@ -190,6 +190,14 @@ reflects the new position immediately.
 - `defaultFocus` is only honored when a fresh scene appears — any
   mid-screen reveal must assign its `@FocusState` programmatically
   (immediately, plus a settled retry) or focus strands.
+- **`withAnimation` does not work inside the player** — the animation
+  transaction doesn't survive the `MenuPressGate` hosting boundary
+  (state lives outside the `UIHostingController`, updates cross via
+  `rootView` reassignment), so changes land instantly. Every player
+  animation must be value-driven: `.animation(_, value:)` declared in
+  the hosted tree (asymmetric timing via a target-state-conditional
+  animation argument; transitions via a `Group` wrapping the `if` with
+  the animation attached to the Group).
 - Never nest `SharedState.withLock` (non-recursive lock — nesting was the
   engine's first real deadlock). `sample <pid>` on the host names the
   exact stuck line when a queue wedges.
