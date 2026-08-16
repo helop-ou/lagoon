@@ -215,12 +215,17 @@ final class PlaybackController {
         }
         if !delivered.isEmpty {
             lines.append("Playing: \(delivered)")
+        } else {
+            lines.append("Playing: not ready · buffer \(item.isPlaybackBufferEmpty ? "empty" : "ok")")
         }
         if let last = item.accessLog()?.events.last, last.indicatedBitrate > 0 {
             lines.append("Bitrate: \(mbps(Int(last.indicatedBitrate)))")
         }
-        if let errors = item.errorLog()?.events.count, errors > 0 {
-            lines.append("Errors: \(errors)")
+        if let events = item.errorLog()?.events, let last = events.last {
+            lines.append("Errors:  \(events.count) · \(last.errorStatusCode) \(last.errorDomain)")
+            if let comment = last.errorComment {
+                lines.append("  \(String(comment.prefix(64)))")
+            }
         }
         return lines
     }
