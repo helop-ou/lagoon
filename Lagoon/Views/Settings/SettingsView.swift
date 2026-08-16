@@ -6,7 +6,6 @@ struct SettingsView: View {
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
-    @AppStorage("debug.atmosVariant") private var atmosVariant = 0
 
     var body: some View {
         Form {
@@ -32,14 +31,6 @@ struct SettingsView: View {
 
             Section("Debug") {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)
-                // HEL-48 M2 hardware experiments — read at playback start,
-                // so restart the video after switching. The HUD's Track
-                // line shows the active variant.
-                Picker("Atmos signalling", selection: $atmosVariant) {
-                    ForEach(AtmosSignallingVariant.allCases, id: \.rawValue) { variant in
-                        Text(variant.label).tag(variant.rawValue)
-                    }
-                }
             }
         }
         #if os(iOS)

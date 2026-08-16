@@ -523,7 +523,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
         var diagnostic = "\(stream.codecName) · \(stream.channels)ch"
         if stream.isAtmos {
-            diagnostic += " · Atmos (JOC) · sig: \(AtmosSignallingVariant.current.label)"
+            diagnostic += " · Atmos (JOC)"
         } else if stream.codecName == "eac3" {
             diagnostic += " · no JOC"
         }

@@ -62,6 +62,18 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   `AudioChannelLayout`. The E-AC3 (JOC/Atmos) path deliberately stays
   compressed passthrough. Platform limit stands: TrueHD Atmos objects
   are unpreservable — TrueHD plays as lossless multichannel LPCM.
+- **Atmos from E-AC3 JOC — the recipe** (M2, settled on real hardware
+  2026-08-17 after three failed attempts): when FFmpeg reports
+  `AV_PROFILE_EAC3_DDP_ATMOS`, the format description must use the
+  **`'ec+3'` media subtype** (Apple's "Enhanced AC-3 with JOC"; no
+  public constant) with **`mChannelsPerFrame = 16`** (the HLS
+  `CHANNELS="16/JOC"` presentation), plus the synthesized `dec3` box
+  (ETSI TS 102 366 Annex F) as magic cookie + extension atom. Things
+  that do NOT work: plain `ec-3` passthrough, an
+  `kAudioChannelLayoutTag_Atmos_9_1_6` channel layout (alone or
+  combined with `ec-3` + dec3) — those decode only the DD+ core and
+  report "Multichannel". Verified: Samsung soundbar Atmos handshake +
+  "Dolby Atmos" in the AirPods submenu.
   **Timing gotcha**: successive LPCM buffers anchor to the sample-exact
   end of the previous one (stamped at the stream's own sample rate) and
   re-anchor to container pts only on >50 ms jumps — Matroska stamps at
@@ -122,11 +134,11 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
   and re-demuxing from the current position on change. Lives in the
   Audio tab's OPTIONS column.
-- **Milestones outstanding** (HEL-48): hardware passes only — M2 Atmos
-  (E-AC3 JOC passes through compressed, so it may already survive), M3
-  HDR/DoVi tagging verification, M4 multichannel layouts. All engine
-  code milestones (M1–M6) landed as of 2026-08-17; M4–M6 sim pass
-  pending.
+- **Milestones outstanding** (HEL-48): all engine code milestones
+  (M1–M6) landed and **M2 Atmos is hardware-verified** (2026-08-17,
+  recipe above; direct play + subtitles also confirmed on hardware).
+  Still open: M3 HDR/DoVi indicator check on the TV, M4 multichannel
+  layout verification.
 
 ## Debug playback HUD
 

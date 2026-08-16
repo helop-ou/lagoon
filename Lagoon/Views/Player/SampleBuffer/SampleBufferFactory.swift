@@ -10,33 +10,6 @@ nonisolated private let eac3AtmosProfile: Int32 = 30 // AV_PROFILE_EAC3_DDP_ATMO
 // tracks ("Enhanced AC-3 with JOC") — no public CoreAudio constant.
 nonisolated private let ec3JOCFormatID = AudioFormatID(0x6563_2B33) // 'ec+3'
 
-/// HEL-48 M2: Atmos signalling experiments, selectable from Settings →
-/// Debug so one TestFlight build covers every hypothesis. Read at open
-/// time — switching requires restarting playback.
-nonisolated enum AtmosSignallingVariant: Int, CaseIterable {
-    /// ec-3 subtype, coded channel count, Atmos layout tag, dec3 box.
-    case dec3 = 0
-    /// 'ec+3' subtype (what Apple's own JOC format descriptions carry).
-    case jocSubtype = 1
-    /// ec-3 with the 16-channel "16/JOC" presentation.
-    case sixteenChannels = 2
-    /// 'ec+3' + 16 channels, layout tag dropped in case it interferes.
-    case jocSubtype16NoTag = 3
-
-    static var current: AtmosSignallingVariant {
-        AtmosSignallingVariant(rawValue: UserDefaults.standard.integer(forKey: "debug.atmosVariant")) ?? .dec3
-    }
-
-    var label: String {
-        switch self {
-        case .dec3: "dec3 (baseline)"
-        case .jocSubtype: "ec+3 subtype"
-        case .sixteenChannels: "16-channel"
-        case .jocSubtype16NoTag: "ec+3 · 16ch · no tag"
-        }
-    }
-}
-
 /// Turns FFmpeg codec parameters and packets into the CoreMedia objects the
 /// AVSampleBuffer* renderers eat (HEL-48 M1).
 ///
@@ -139,7 +112,6 @@ nonisolated enum SampleBufferFactory {
         let framesPerPacket: Int
         var cookie: Data?
         var atoms: [String: Data]?
-        var layoutTag: AudioChannelLayoutTag?
         var forcedChannels: UInt32?
         switch codecpar.pointee.codec_id {
         case AV_CODEC_ID_AAC:
@@ -154,30 +126,20 @@ nonisolated enum SampleBufferFactory {
         case AV_CODEC_ID_EAC3:
             formatID = kAudioFormatEnhancedAC3
             framesPerPacket = 1536
-            // M2 hardware findings, in order: untagged E-AC3 decodes as
-            // plain multichannel; an Atmos channel-layout tag alone still
-            // doesn't engage Atmos (A/B'd against Infuse on the same
-            // file). Apple's routing reads the EC3SpecificBox (dec3) an
-            // mp4 sample entry would carry — MKV has none, so synthesize
-            // it like FFmpeg's own mp4 muxer does, with the JOC extension
-            // flagged when FFmpeg detected the Atmos profile.
+            // M2, settled on hardware (2026-08-17) after three failed
+            // signalling attempts: what engages Atmos is the 'ec+3' media
+            // subtype plus the 16-channel "16/JOC" presentation — the
+            // exact shape of Apple's own JOC format descriptions. The
+            // dec3 box rides along as the codec config; an Atmos channel
+            // layout tag is NOT part of the recipe (with it, or with the
+            // plain ec-3 subtype, the system decodes only the DD+ core
+            // and reports "Multichannel").
             let isAtmos = codecpar.pointee.profile == eac3AtmosProfile
             cookie = dec3Payload(codecpar: codecpar, atmos: isAtmos)
             atoms = cookie.map { ["dec3": $0] }
             if isAtmos {
-                switch AtmosSignallingVariant.current {
-                case .dec3:
-                    layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
-                case .jocSubtype:
-                    formatID = ec3JOCFormatID
-                    layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
-                case .sixteenChannels:
-                    layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
-                    forcedChannels = 16
-                case .jocSubtype16NoTag:
-                    formatID = ec3JOCFormatID
-                    forcedChannels = 16
-                }
+                formatID = ec3JOCFormatID
+                forcedChannels = 16
             }
         case AV_CODEC_ID_MP3:
             formatID = kAudioFormatMPEGLayer3
@@ -198,10 +160,6 @@ nonisolated enum SampleBufferFactory {
             mReserved: 0
         )
 
-        var layout = AudioChannelLayout()
-        if let layoutTag {
-            layout.mChannelLayoutTag = layoutTag
-        }
         var extensions: CFDictionary?
         if let atoms {
             extensions = [
@@ -209,19 +167,17 @@ nonisolated enum SampleBufferFactory {
             ] as CFDictionary
         }
         var description: CMFormatDescription?
-        let status: OSStatus = withUnsafePointer(to: layout) { layoutPointer in
-            (cookie ?? Data()).withUnsafeBytes { bytes in
-                CMAudioFormatDescriptionCreate(
-                    allocator: kCFAllocatorDefault,
-                    asbd: &asbd,
-                    layoutSize: layoutTag != nil ? MemoryLayout<AudioChannelLayout>.size : 0,
-                    layout: layoutTag != nil ? layoutPointer : nil,
-                    magicCookieSize: cookie?.count ?? 0,
-                    magicCookie: cookie != nil ? bytes.baseAddress : nil,
-                    extensions: extensions,
-                    formatDescriptionOut: &description
-                )
-            }
+        let status: OSStatus = (cookie ?? Data()).withUnsafeBytes { bytes in
+            CMAudioFormatDescriptionCreate(
+                allocator: kCFAllocatorDefault,
+                asbd: &asbd,
+                layoutSize: 0,
+                layout: nil,
+                magicCookieSize: cookie?.count ?? 0,
+                magicCookie: cookie != nil ? bytes.baseAddress : nil,
+                extensions: extensions,
+                formatDescriptionOut: &description
+            )
         }
         guard status == noErr, let description else { return nil }
         return (description, framesPerPacket)
