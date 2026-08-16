@@ -35,8 +35,17 @@
 - **Custom playback engine (mpv/FFmpeg) for true MKV direct play** (HEL-45) —
   decided 2026-08-15, reversing the earlier non-goal: AVPlayer can never open
   MKV, and Infuse/Neptune-parity direct play needs an in-app engine. Split
-  design: AVPlayer stays for mp4/HLS (best DoVi pipeline, only E-AC3 Atmos
-  path); mpv handles MKV/DTS/TrueHD. First external dependency — deliberate.
+  design as the stepping stone: AVPlayer stays for mp4/HLS (best DoVi
+  pipeline, only E-AC3 Atmos path); mpv handles MKV/DTS/TrueHD. First
+  external dependency — deliberate. Foundation landed 2026-08-16 behind a
+  debug toggle; remaining: hardware pass, Release graduation.
+- **Unified custom player — sample-buffer engine for everything** (HEL-48) —
+  decided 2026-08-16: the end state is one player UI and one engine (the
+  Infuse architecture: libavformat demux → VideoToolbox → the
+  AVSampleBuffer* presentation APIs, so HDR/DoVi ride the system compositor
+  and compressed E-AC3 JOC keeps Atmos even from MKV). mpv is the interim
+  engine it eventually replaces; the HEL-35 player UI must target an engine
+  protocol so it survives the swap.
 
 ## Deliberate non-goals for now
 
