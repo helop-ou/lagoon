@@ -35,13 +35,14 @@ extension JellyfinClient {
 
     func playbackInfo(itemId: String) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
+        let profile = DeviceProfile.current
         return try await post(
             "Items/\(itemId)/PlaybackInfo",
             query: [URLQueryItem(name: "UserId", value: userId)],
             body: PlaybackInfoRequest(
-                deviceProfile: DeviceProfile.native,
+                deviceProfile: profile,
                 autoOpenLiveStream: true,
-                maxStreamingBitrate: DeviceProfile.native.maxStreamingBitrate
+                maxStreamingBitrate: profile.maxStreamingBitrate
             )
         )
     }

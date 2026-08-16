@@ -5,6 +5,7 @@ struct SettingsView: View {
 
     #if DEBUG
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
+    @AppStorage("debug.mpvForMKV") private var mpvForMKV = false
     #endif
 
     var body: some View {
@@ -32,6 +33,7 @@ struct SettingsView: View {
             #if DEBUG
             Section("Debug") {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)
+                Toggle("mpv engine for MKV (experimental)", isOn: $mpvForMKV)
             }
             #endif
         }

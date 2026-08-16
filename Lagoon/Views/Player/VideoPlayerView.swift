@@ -12,6 +12,7 @@ nonisolated struct PlayerItem: Identifiable {
 @Observable
 final class PlaybackController {
     private(set) var player: AVPlayer?
+    private(set) var mpvEngine: MPVPlayerEngine?
     private(set) var errorMessage: String?
     private(set) var didFinish = false
 
@@ -43,6 +44,44 @@ final class PlaybackController {
             let (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
             playMethod = method
 
+            var resumeSeconds: Double = 0
+            if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
+                resumeSeconds = Ticks.seconds(ticks)
+            }
+
+            #if DEBUG
+            // HEL-45: route MKV direct play to the mpv engine while it's
+            // experimental (debug.mpvForMKV also widens the device profile,
+            // which is what makes the server grant direct play for mkv).
+            let container = (source.container ?? "").lowercased()
+            if UserDefaults.standard.bool(forKey: "debug.mpvForMKV"),
+               method == .directPlay,
+               container.split(separator: ",").contains(where: { $0 == "mkv" || $0 == "webm" }) {
+                let engine = MPVPlayerEngine()
+                engine.prepare(url: streamURL, startSeconds: resumeSeconds)
+                engine.onFinished = { [weak self] in self?.didFinish = true }
+                engine.onError = { [weak self] message in
+                    guard let self else { return }
+                    self.mpvEngine?.shutdown()
+                    self.mpvEngine = nil
+                    self.errorMessage = message
+                }
+                mpvEngine = engine
+
+                try? await client.reportPlaybackStart(.init(
+                    itemId: itemId,
+                    mediaSourceId: mediaSourceId,
+                    playSessionId: playSessionId,
+                    positionTicks: Ticks.ticks(resumeSeconds),
+                    playMethod: playMethod.rawValue,
+                    canSeek: true
+                ))
+                startProgressLoop()
+                startHUD(source: source, method: method, playerItem: nil)
+                return
+            }
+            #endif
+
             let playerItem = AVPlayerItem(url: streamURL)
             // Metadata must be complete before playback starts — mutating it
             // after the player is active corrupts the info panel layout.
@@ -51,9 +90,9 @@ final class PlaybackController {
             let player = AVPlayer(playerItem: playerItem)
             self.player = player
 
-            if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
+            if resumeSeconds > 0 {
                 await player.seek(
-                    to: CMTime(seconds: Ticks.seconds(ticks), preferredTimescale: 600),
+                    to: CMTime(seconds: resumeSeconds, preferredTimescale: 600),
                     toleranceBefore: .zero,
                     toleranceAfter: CMTime(seconds: 5, preferredTimescale: 600)
                 )
@@ -80,19 +119,39 @@ final class PlaybackController {
         }
     }
 
+    // Position/pause state read from whichever engine is active.
+    private var currentSeconds: Double? {
+        if let player {
+            let seconds = player.currentTime().seconds
+            return seconds.isFinite ? seconds : nil
+        }
+        if let mpvEngine {
+            return mpvEngine.timePosition
+        }
+        return nil
+    }
+
+    private var currentlyPaused: Bool {
+        if let player {
+            return player.timeControlStatus != .playing
+        }
+        if let mpvEngine {
+            return mpvEngine.isPaused
+        }
+        return true
+    }
+
     private func startProgressLoop() {
         progressTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
-                guard let self, let player = self.player, let client = self.client else { return }
-                let seconds = player.currentTime().seconds
-                guard seconds.isFinite else { continue }
+                guard let self, let client = self.client, let seconds = self.currentSeconds else { return }
                 try? await client.reportPlaybackProgress(.init(
                     itemId: self.itemId,
                     mediaSourceId: self.mediaSourceId,
                     playSessionId: self.playSessionId,
                     positionTicks: Ticks.ticks(seconds),
-                    isPaused: player.timeControlStatus != .playing,
+                    isPaused: self.currentlyPaused,
                     playMethod: self.playMethod.rawValue
                 ))
             }
@@ -114,16 +173,18 @@ final class PlaybackController {
         #if DEBUG
         hudTask?.cancel()
         #endif
-        guard let player, let client, !didReportStop else { return }
+        guard let client, player != nil || mpvEngine != nil, !didReportStop else { return }
         didReportStop = true
-        let seconds = player.currentTime().seconds
-        player.pause()
-        self.player = nil
+        let seconds = currentSeconds ?? 0
+        player?.pause()
+        player = nil
+        mpvEngine?.shutdown()
+        mpvEngine = nil
         try? await client.reportPlaybackStopped(.init(
             itemId: itemId,
             mediaSourceId: mediaSourceId,
             playSessionId: playSessionId,
-            positionTicks: Ticks.ticks(seconds.isFinite ? seconds : 0)
+            positionTicks: Ticks.ticks(seconds)
         ))
     }
 
@@ -157,12 +218,13 @@ final class PlaybackController {
     #if DEBUG
     // MARK: Playback HUD (DEBUG builds, Settings → Debug → Playback HUD)
 
-    private func startHUD(source: MediaSource, method: PlayMethod, playerItem: AVPlayerItem) {
+    private func startHUD(source: MediaSource, method: PlayMethod, playerItem: AVPlayerItem?) {
         guard UserDefaults.standard.bool(forKey: "debug.playbackHUD") else { return }
 
         var negotiated = [
             "Method: \(method.rawValue)"
-                + (method == .transcode ? " (\(source.transcodingSubProtocol ?? "?"))" : ""),
+                + (method == .transcode ? " (\(source.transcodingSubProtocol ?? "?"))" : "")
+                + (mpvEngine != nil ? " · mpv" : ""),
         ]
         var sourceLine = "Source: \(source.container ?? "?")"
         if let bitrate = source.bitrate {
@@ -187,10 +249,29 @@ final class PlaybackController {
         hudTask = Task { [weak self, weak playerItem] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                guard let self, let playerItem else { return }
-                self.hudLines = negotiated + (await Self.liveHUDLines(for: playerItem))
+                guard let self else { return }
+                if let playerItem {
+                    self.hudLines = negotiated + (await Self.liveHUDLines(for: playerItem))
+                } else if let engine = self.mpvEngine {
+                    self.hudLines = negotiated + Self.liveHUDLines(for: engine)
+                } else {
+                    return
+                }
             }
         }
+    }
+
+    private static func liveHUDLines(for engine: MPVPlayerEngine) -> [String] {
+        var lines: [String] = []
+        if let size = engine.videoSize {
+            lines.append("Playing: \(Int(size.width))×\(Int(size.height)) · mpv")
+        } else {
+            lines.append("Playing: not ready · \(engine.isBuffering ? "buffering" : "…") · mpv")
+        }
+        if engine.duration > 0 {
+            lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
+        }
+        return lines
     }
 
     private static func liveHUDLines(for item: AVPlayerItem) async -> [String] {
@@ -247,13 +328,20 @@ struct VideoPlayerView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let player = controller.player {
-                VideoPlayer(player: player)
-                    .ignoresSafeArea()
-            } else if let errorMessage = controller.errorMessage {
+            if let errorMessage = controller.errorMessage {
                 // The player is gone on purpose: a dead AVPlayer swallows the
                 // Menu press and there's no way to back out.
                 errorOverlay(errorMessage)
+            } else if let engine = controller.mpvEngine {
+                MPVPlayerView(
+                    engine: engine,
+                    title: playerItem.media.name ?? "",
+                    subtitle: episodeSubtitle,
+                    onDismiss: { dismiss() }
+                )
+            } else if let player = controller.player {
+                VideoPlayer(player: player)
+                    .ignoresSafeArea()
             } else {
                 LoadingView()
             }
@@ -279,6 +367,11 @@ struct VideoPlayerView: View {
         .onDisappear {
             Task { await controller.stop() }
         }
+    }
+
+    private var episodeSubtitle: String? {
+        guard playerItem.media.type == .episode, let seriesName = playerItem.media.seriesName else { return nil }
+        return [playerItem.media.episodeLabel, seriesName].compactMap(\.self).joined(separator: " · ")
     }
 
     #if DEBUG

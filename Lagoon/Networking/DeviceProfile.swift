@@ -54,6 +54,39 @@ nonisolated enum DeviceProfile {
         let method: String
     }
 
+    /// The profile to negotiate with right now. MKV direct play is only real
+    /// when the mpv engine will do the playing (HEL-45), so the widened
+    /// profile rides the same debug toggle as the engine routing.
+    static var current: Profile {
+        #if DEBUG
+        UserDefaults.standard.bool(forKey: "debug.mpvForMKV") ? mpvExtended : native
+        #else
+        native
+        #endif
+    }
+
+    #if DEBUG
+    // Matroska handled by mpv/FFmpeg: software decode where VideoToolbox
+    // can't (vc1, vp9, av1 via dav1d), DTS/TrueHD decoded to multichannel
+    // LPCM. The hevc CodecProfile conditions still apply, so DoVi profile 7
+    // keeps falling back to the HDR10 remux for now.
+    static let mpvExtended = Profile(
+        maxStreamingBitrate: native.maxStreamingBitrate,
+        maxStaticBitrate: native.maxStaticBitrate,
+        directPlayProfiles: [
+            DirectPlayProfile(
+                container: "mkv,webm",
+                type: "Video",
+                videoCodec: "hevc,h264,mpeg4,vp9,av1,vc1",
+                audioCodec: "aac,mp3,ac3,eac3,flac,alac,dts,truehd,opus,vorbis"
+            ),
+        ] + native.directPlayProfiles,
+        transcodingProfiles: native.transcodingProfiles,
+        codecProfiles: native.codecProfiles,
+        subtitleProfiles: native.subtitleProfiles
+    )
+    #endif
+
     static let native: Profile = {
         // AV1 decode is hardware-only for AVPlayer (A17 Pro / M3 and later;
         // no Apple TV has it as of tvOS 26), so advertise it per device.
