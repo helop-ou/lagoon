@@ -108,6 +108,7 @@ nonisolated enum SampleBufferFactory {
         let formatID: AudioFormatID
         let framesPerPacket: Int
         var cookie: Data?
+        var atoms: [String: Data]?
         var layoutTag: AudioChannelLayoutTag?
         switch codecpar.pointee.codec_id {
         case AV_CODEC_ID_AAC:
@@ -122,11 +123,17 @@ nonisolated enum SampleBufferFactory {
         case AV_CODEC_ID_EAC3:
             formatID = kAudioFormatEnhancedAC3
             framesPerPacket = 1536
-            // M2 hardware finding: untagged E-AC3 decodes as plain
-            // multichannel ("Multichannel" in the AirPods menu, no Atmos).
-            // The JOC layer only engages when the channel layout declares
-            // Atmos — the tag matching Apple's own 16/JOC signalling.
-            if codecpar.pointee.profile == eac3AtmosProfile {
+            // M2 hardware findings, in order: untagged E-AC3 decodes as
+            // plain multichannel; an Atmos channel-layout tag alone still
+            // doesn't engage Atmos (A/B'd against Infuse on the same
+            // file). Apple's routing reads the EC3SpecificBox (dec3) an
+            // mp4 sample entry would carry — MKV has none, so synthesize
+            // it like FFmpeg's own mp4 muxer does, with the JOC extension
+            // flagged when FFmpeg detected the Atmos profile.
+            let isAtmos = codecpar.pointee.profile == eac3AtmosProfile
+            cookie = dec3Payload(codecpar: codecpar, atmos: isAtmos)
+            atoms = cookie.map { ["dec3": $0] }
+            if isAtmos {
                 layoutTag = kAudioChannelLayoutTag_Atmos_9_1_6
             }
         case AV_CODEC_ID_MP3:
@@ -152,6 +159,12 @@ nonisolated enum SampleBufferFactory {
         if let layoutTag {
             layout.mChannelLayoutTag = layoutTag
         }
+        var extensions: CFDictionary?
+        if let atoms {
+            extensions = [
+                kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms: atoms,
+            ] as CFDictionary
+        }
         var description: CMFormatDescription?
         let status: OSStatus = withUnsafePointer(to: layout) { layoutPointer in
             (cookie ?? Data()).withUnsafeBytes { bytes in
@@ -162,13 +175,96 @@ nonisolated enum SampleBufferFactory {
                     layout: layoutTag != nil ? layoutPointer : nil,
                     magicCookieSize: cookie?.count ?? 0,
                     magicCookie: cookie != nil ? bytes.baseAddress : nil,
-                    extensions: nil,
+                    extensions: extensions,
                     formatDescriptionOut: &description
                 )
             }
         }
         guard status == noErr, let description else { return nil }
         return (description, framesPerPacket)
+    }
+
+    /// EC3SpecificBox (dec3) payload per ETSI TS 102 366 Annex F —
+    /// synthesized from codec parameters the way FFmpeg's mp4 muxer does
+    /// when remuxing E-AC3 out of MKV. One independent substream; 7.1
+    /// adds the dependent-substream channel location for the back pair.
+    private static func dec3Payload(codecpar: UnsafeMutablePointer<AVCodecParameters>, atmos: Bool) -> Data? {
+        let fscod: UInt32 = switch codecpar.pointee.sample_rate {
+        case 44_100: 1
+        case 32_000: 2
+        default: 0 // 48 kHz
+        }
+        var acmod: UInt32 = 7 // 3/2 front/surround
+        var lfeon: UInt32 = 1
+        var dependentSubstreams: UInt32 = 0
+        var channelLocation: UInt32 = 0
+        switch codecpar.pointee.ch_layout.nb_channels {
+        case 1:
+            acmod = 1
+            lfeon = 0
+        case 2:
+            acmod = 2
+            lfeon = 0
+        case 6:
+            break // 5.1 defaults
+        case 8: // 7.1: 5.1 core + Lrs/Rrs in a dependent substream
+            dependentSubstreams = 1
+            channelLocation = 0b0_0000_0010
+        default:
+            break
+        }
+
+        var packer = BitPacker()
+        packer.append(UInt32(clamping: max(codecpar.pointee.bit_rate, 0) / 1000), bits: 13)
+        packer.append(0, bits: 3) // num_ind_sub - 1
+        packer.append(fscod, bits: 2)
+        packer.append(16, bits: 5) // bsid: E-AC3
+        packer.append(0, bits: 1) // reserved
+        packer.append(0, bits: 1) // asvc
+        packer.append(0, bits: 3) // bsmod
+        packer.append(acmod, bits: 3)
+        packer.append(lfeon, bits: 1)
+        packer.append(0, bits: 3) // reserved
+        packer.append(dependentSubstreams, bits: 4)
+        if dependentSubstreams > 0 {
+            packer.append(channelLocation, bits: 9)
+        } else {
+            packer.append(0, bits: 1) // reserved
+        }
+        if atmos {
+            packer.append(0, bits: 7) // reserved
+            packer.append(1, bits: 1) // flag_ec3_extension_type_a (JOC)
+            packer.append(16, bits: 8) // complexity_index_type_a (objects)
+        }
+        return packer.finish()
+    }
+
+    /// MSB-first bit packing for the dec3 payload.
+    private struct BitPacker {
+        private var bytes: [UInt8] = []
+        private var buffer: UInt32 = 0
+        private var bufferedBits = 0
+
+        mutating func append(_ value: UInt32, bits: Int) {
+            for offset in stride(from: bits - 1, through: 0, by: -1) {
+                buffer = (buffer << 1) | ((value >> UInt32(offset)) & 1)
+                bufferedBits += 1
+                if bufferedBits == 8 {
+                    bytes.append(UInt8(buffer & 0xFF))
+                    buffer = 0
+                    bufferedBits = 0
+                }
+            }
+        }
+
+        mutating func finish() -> Data {
+            if bufferedBits > 0 {
+                bytes.append(UInt8((buffer << (8 - bufferedBits)) & 0xFF))
+                buffer = 0
+                bufferedBits = 0
+            }
+            return Data(bytes)
+        }
     }
 
     /// Wraps one demuxed packet as a compressed CMSampleBuffer. Video keeps
