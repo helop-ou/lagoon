@@ -56,14 +56,25 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   the same convention the server's `DefaultAudioStreamIndex` maps to);
   switching re-demuxes from the current position with the new stream
   selected and the rest discarded inside libavformat.
+- **HDR/DoVi tagging** (M3): the video format description carries
+  colorimetry extensions (primaries/transfer/matrix/range/chroma siting
+  from codecpar) plus HDR10 static metadata (mdcv/clli payloads rebuilt
+  big-endian from FFmpeg side data) — that's what makes the display
+  pipeline engage HDR/EDR instead of rendering BT.2020+PQ as washed-out
+  SDR. Dolby Vision: profile 5 becomes a `dvh1` sample entry with a
+  `dvcC` atom (IPTPQc2 is unwatchable without the DoVi path), profile 8
+  stays `hvc1` plus supplementary `dvvC` (non-DoVi displays fall back to
+  the base layer's HDR10/HLG tags), dual-layer profiles 4/7 get no atom
+  and play as HDR10 from the base layer. Hardware verification pending
+  (the simulator has no HDR output; DoVi P5 may not decode in the sim at
+  all).
 - **Milestones outstanding** (HEL-48): M2 Atmos verification (E-AC3 JOC
   passes through compressed, so it may already survive — needs hardware),
-  M3 HDR/DoVi color tagging on the format descriptions (until then HDR
-  sources render without HDR signalling), M4 DTS/TrueHD decode via
-  libavcodec (until then the server transcodes their audio to E-AC3), M5
-  subtitles (none render today — the `SubtitleProfiles` vtt request and
-  `externalSubtitleURL` helper are ready for it), M6 stall/underrun
-  hardening and the master-variant pick.
+  M3 hardware verification of the HDR/DoVi tagging above, M4 DTS/TrueHD
+  decode via libavcodec (until then the server transcodes their audio to
+  E-AC3), M5 subtitles (none render today — the `SubtitleProfiles` vtt
+  request and `externalSubtitleURL` helper are ready for it), M6
+  stall/underrun hardening and the master-variant pick.
 
 ## Debug playback HUD
 
