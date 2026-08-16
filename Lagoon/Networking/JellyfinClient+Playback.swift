@@ -77,6 +77,19 @@ extension JellyfinClient {
         throw JellyfinError.unplayable
     }
 
+    /// Resolves an external subtitle stream's DeliveryUrl (server-relative,
+    /// not always carrying credentials) into a fetchable absolute URL.
+    func externalSubtitleURL(deliveryUrl: String?) -> URL? {
+        guard let deliveryUrl, let serverURL, let accessToken,
+              let url = URL(string: deliveryUrl, relativeTo: serverURL)?.absoluteURL else { return nil }
+        if url.query()?.contains("api_key") == true {
+            return url
+        }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "api_key", value: accessToken)]
+        return components.url ?? url
+    }
+
     private func staticStreamQuery(source: MediaSource, accessToken: String) -> [URLQueryItem] {
         var query = [
             URLQueryItem(name: "static", value: "true"),

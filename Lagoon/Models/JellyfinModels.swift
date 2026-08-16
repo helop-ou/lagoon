@@ -158,6 +158,10 @@ nonisolated struct MediaSource: Decodable, Identifiable {
     let runTimeTicks: Int64?
     let bitrate: Int?
     let eTag: String?
+    // The server resolves the user's language preferences into these
+    // default stream choices — no client-side preference logic needed.
+    let defaultAudioStreamIndex: Int?
+    let defaultSubtitleStreamIndex: Int?
     let mediaStreams: [MediaStream]?
 }
 
@@ -168,6 +172,8 @@ nonisolated struct MediaStream: Decodable {
     let language: String?
     let index: Int?
     let isDefault: Bool?
+    let isExternal: Bool?
+    let deliveryUrl: String?
     let profile: String?
     let videoRangeType: String?
     let channels: Int?

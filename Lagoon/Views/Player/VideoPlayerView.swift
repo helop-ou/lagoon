@@ -57,8 +57,47 @@ final class PlaybackController {
             if UserDefaults.standard.bool(forKey: "debug.mpvForMKV"),
                method == .directPlay,
                container.split(separator: ",").contains(where: { $0 == "mkv" || $0 == "webm" }) {
+                // Map the server's default stream choices (already filtered
+                // through the user's language preferences) onto mpv's
+                // per-type 1-based track ids: embedded streams keep their
+                // demux order, so the ordinal within the type is the id.
+                let streams = source.mediaStreams ?? []
+                let embeddedAudio = streams.filter { $0.type == "Audio" }
+                let embeddedSubtitles = streams.filter { $0.type == "Subtitle" && $0.isExternal != true }
+                let externalSubtitles = streams.filter { $0.type == "Subtitle" && $0.isExternal == true }
+
+                var initialAudioID: Int?
+                if let index = source.defaultAudioStreamIndex,
+                   let position = embeddedAudio.firstIndex(where: { $0.index == index }) {
+                    initialAudioID = position + 1
+                }
+                var initialSubtitleID: Int?
+                var defaultExternalIndex: Int?
+                if let index = source.defaultSubtitleStreamIndex {
+                    if let position = embeddedSubtitles.firstIndex(where: { $0.index == index }) {
+                        initialSubtitleID = position + 1
+                    } else if externalSubtitles.contains(where: { $0.index == index }) {
+                        defaultExternalIndex = index
+                    }
+                }
+                let sideloaded = externalSubtitles.compactMap { stream -> ExternalSubtitleTrack? in
+                    guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else { return nil }
+                    return ExternalSubtitleTrack(
+                        url: url,
+                        title: stream.displayTitle,
+                        language: stream.language,
+                        select: stream.index == defaultExternalIndex
+                    )
+                }
+
                 let engine = MPVPlayerEngine()
-                engine.prepare(url: streamURL, startSeconds: resumeSeconds)
+                engine.prepare(
+                    url: streamURL,
+                    startSeconds: resumeSeconds,
+                    initialAudioID: initialAudioID,
+                    initialSubtitleID: initialSubtitleID,
+                    externalSubtitles: sideloaded
+                )
                 engine.onFinished = { [weak self] in self?.didFinish = true }
                 engine.onError = { [weak self] message in
                     guard let self else { return }
@@ -333,12 +372,14 @@ struct VideoPlayerView: View {
                 // Menu press and there's no way to back out.
                 errorOverlay(errorMessage)
             } else if let engine = controller.mpvEngine {
-                MPVPlayerView(
+                CustomPlayerView(
                     engine: engine,
                     title: playerItem.media.name ?? "",
                     subtitle: episodeSubtitle,
                     onDismiss: { dismiss() }
-                )
+                ) {
+                    MPVVideoSurface(engine: engine)
+                }
             } else if let player = controller.player {
                 VideoPlayer(player: player)
                     .ignoresSafeArea()
