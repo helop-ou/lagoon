@@ -93,14 +93,24 @@ reflects the new position immediately.
 
 - The custom player UI (`CustomPlayerView`) talks **only to the
   `PlayerEngine` protocol** — engine internals must never leak into it.
-- Focus invariants: the video surface is focusable whenever the panel is
-  closed (Menu would quit the app from an unfocusable screen); Menu is
-  decided once — panel open closes the panel, otherwise the player exits,
-  with a handler on the panel itself as the nearest catch.
+- Focus invariants: the video surface is focusable at **all** times (Menu
+  would quit the app from an unfocusable screen).
+- **SwiftUI's `onExitCommand` never fires inside a fullScreenCover on
+  tvOS 26** — arrows and play/pause reach SwiftUI, but UIKit's
+  presentation controller consumes Menu and dismisses the cover directly,
+  and `interactiveDismissDisabled` doesn't gate it (verified with
+  instrumented handlers). `MenuPressGate` hosts the player content in a
+  UIHostingController that intercepts the press at the responder-chain
+  level: panel open → close panel, else → explicit dismiss. It must catch
+  **both** `UIPress.PressType.menu` (Siri Remote) and a keyboard Escape
+  press (`key?.keyCode == .keyboardEscape`; the simulator's keyboard
+  sends type = 2000 + HID usage, never `.menu`).
 - `defaultFocus` is only honored when a fresh scene appears — any
   mid-screen reveal must assign its `@FocusState` programmatically
-  (immediately, plus a settled retry) or focus strands and Menu falls
-  through to the fullScreenCover's default dismissal.
+  (immediately, plus a settled retry) or focus strands.
+- Never nest `SharedState.withLock` (non-recursive lock — nesting was the
+  engine's first real deadlock). `sample <pid>` on the host names the
+  exact stuck line when a queue wedges.
 - Native buttons only; never draw custom chrome tied to focus — the system
   lozenge is the design (see the Infuse reference on HEL-35).
 - On failure the engine is set to **nil** and replaced with an error
@@ -108,3 +118,8 @@ reflects the new position immediately.
   would swallow the Menu press and trap the user.
 - The loading state is `LoadingView` (focusable) for the same Menu-button
   reason as everywhere else.
+- tvOS does not restore focus to the presenting screen after the player
+  cover dismisses (custom focusable content inside) — every screen that
+  presents the player wraps in `.restoresFocusAfterPlayer(isPresented:)`
+  (`FocusRestoration.swift`: focus scope + `resetFocus` timed past the
+  dismissal transition).
