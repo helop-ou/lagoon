@@ -29,6 +29,12 @@ nonisolated final class AudioDecoder {
     private var pendingSamples = Data()
     private var pendingSampleCount = 0
     private var pendingStartSeconds: Double?
+    /// Sample-accurate end of everything emitted so far. Successive
+    /// buffers anchor here, NOT to container pts: Matroska stamps at 1 ms
+    /// precision while TrueHD frames are 0.83 ms, so trusting each pts
+    /// would jitter every buffer boundary by up to half a millisecond —
+    /// audible as steady clicking (found in the first 7.1 TrueHD sim pass).
+    private var continuationSeconds: Double?
 
     init?(codecpar: UnsafeMutablePointer<AVCodecParameters>, timeBase: AVRational) {
         guard let codec = avcodec_find_decoder(codecpar.pointee.codec_id),
@@ -94,6 +100,7 @@ nonisolated final class AudioDecoder {
         pendingSamples.removeAll(keepingCapacity: true)
         pendingSampleCount = 0
         pendingStartSeconds = nil
+        continuationSeconds = nil
     }
 
     /// End of stream: pull the decoder's remaining frames and the
@@ -118,18 +125,19 @@ nonisolated final class AudioDecoder {
             ? nil
             : Double(frame.pointee.pts) * Double(timeBase.num) / Double(max(timeBase.den, 1))
 
-        // A pts jump means a gap (or a seek landed mid-stream): emit what
-        // we have so the coalesced buffer's timing stays truthful.
-        if let start = pendingStartSeconds, let frameSeconds {
-            let expected = start + Double(pendingSampleCount) / Double(sampleRate)
-            if abs(frameSeconds - expected) > 0.05 {
-                emitPending(into: &buffers)
-            }
+        // A real pts jump means a gap (or a seek landed mid-stream): emit
+        // what we have and re-anchor to the container's clock. Anything
+        // within the tolerance is timestamp quantization, not a gap.
+        let expected = pendingStartSeconds.map { $0 + Double(pendingSampleCount) / Double(sampleRate) }
+            ?? continuationSeconds
+        if let frameSeconds, let expected, abs(frameSeconds - expected) > 0.05 {
+            emitPending(into: &buffers)
+            continuationSeconds = nil
         }
 
         guard let converted = convertFrame() else { return }
         if pendingStartSeconds == nil {
-            pendingStartSeconds = frameSeconds
+            pendingStartSeconds = continuationSeconds ?? frameSeconds
         }
         pendingSamples.append(converted.data)
         pendingSampleCount += converted.samples
@@ -184,12 +192,15 @@ nonisolated final class AudioDecoder {
             pendingSampleCount = 0
             pendingStartSeconds = nil
         }
-        guard pendingSampleCount > 0,
-              let buffer = makeSampleBuffer(
-                  data: pendingSamples,
-                  samples: pendingSampleCount,
-                  startSeconds: pendingStartSeconds
-              ) else { return }
+        guard pendingSampleCount > 0 else { return }
+        if let start = pendingStartSeconds {
+            continuationSeconds = start + Double(pendingSampleCount) / Double(sampleRate)
+        }
+        guard let buffer = makeSampleBuffer(
+            data: pendingSamples,
+            samples: pendingSampleCount,
+            startSeconds: pendingStartSeconds
+        ) else { return }
         buffers.append(buffer)
     }
 
@@ -215,9 +226,14 @@ nonisolated final class AudioDecoder {
             )
         }) == noErr else { return nil }
 
+        // Timescale = the stream's own rate, so consecutive buffers land
+        // exactly sample-adjacent (90 kHz can't represent 48 kHz sample
+        // boundaries — the rounding error alone is audible as clicks).
         var timing = CMSampleTimingInfo(
             duration: CMTime(value: 1, timescale: sampleRate),
-            presentationTimeStamp: startSeconds.map { CMTime(seconds: $0, preferredTimescale: 90_000) } ?? .invalid,
+            presentationTimeStamp: startSeconds.map {
+                CMTime(value: CMTimeValue(($0 * Double(sampleRate)).rounded()), timescale: sampleRate)
+            } ?? .invalid,
             decodeTimeStamp: .invalid
         )
         var sampleSize = Int(channels) * MemoryLayout<Float32>.size

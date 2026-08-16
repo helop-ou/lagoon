@@ -62,6 +62,11 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   `AudioChannelLayout`. The E-AC3 (JOC/Atmos) path deliberately stays
   compressed passthrough. Platform limit stands: TrueHD Atmos objects
   are unpreservable — TrueHD plays as lossless multichannel LPCM.
+  **Timing gotcha**: successive LPCM buffers anchor to the sample-exact
+  end of the previous one (stamped at the stream's own sample rate) and
+  re-anchor to container pts only on >50 ms jumps — Matroska stamps at
+  1 ms precision (TrueHD frames are 0.83 ms) and 90 kHz can't represent
+  48 kHz boundaries, and either mismatch renders as steady clicking.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
