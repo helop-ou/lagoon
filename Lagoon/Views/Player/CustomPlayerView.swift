@@ -1,25 +1,46 @@
 import SwiftUI
 
-/// Full-screen custom player: an engine-agnostic transport and track panel
-/// over an injected video surface (HEL-35). Talks only to `PlayerEngine`
-/// so the HEL-48 engine swap never touches this UI.
+/// Full-screen custom player: an engine-agnostic transport and a tabbed
+/// Info · Audio · Subtitles panel over an injected video surface (HEL-35,
+/// Infuse-style). Talks only to `PlayerEngine` so the HEL-48 engine swap
+/// never touches this UI.
 ///
-/// tvOS focus invariants: the surface is focusable whenever the track panel
-/// is closed (Menu would quit the app from an unfocusable screen);
-/// play/pause toggles, left/right seek ±10 s, down opens the track panel,
-/// Menu exits. With the panel open, focus lives in the panel's buttons and
-/// Menu closes the panel instead.
+/// tvOS focus invariants: the surface is focusable whenever the panel is
+/// closed (Menu would quit the app from an unfocusable screen). Remote
+/// grammar: play/pause toggles anywhere; on the surface left/right seek
+/// ±10 s and down opens the panel; in the panel left/right walk the tabs,
+/// down enters the track rows. Menu is handled once at the root — it
+/// closes the panel when open, otherwise exits the player.
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
-    let title: String
-    let subtitle: String?
+    let info: PlayerItemInfo
     let onDismiss: () -> Void
     @ViewBuilder let surface: () -> Surface
 
+    private enum PanelTab: CaseIterable, Hashable {
+        case info
+        case audio
+        case subtitles
+
+        var title: String {
+            switch self {
+            case .info: String(localized: "Info")
+            case .audio: String(localized: "Audio")
+            case .subtitles: String(localized: "Subtitles")
+            }
+        }
+    }
+
+    private enum PanelFocus: Hashable {
+        case tab(PanelTab)
+        case row(String)
+    }
+
     @State private var controlsVisible = true
     @State private var interactionToken = 0
-    @State private var showTrackPanel = false
-    @FocusState private var focusedTrackID: String?
+    @State private var panelOpen = false
+    @State private var selectedTab: PanelTab = .audio
+    @FocusState private var panelFocus: PanelFocus?
 
     var body: some View {
         ZStack {
@@ -31,19 +52,39 @@ struct CustomPlayerView<Surface: View>: View {
             }
 
             transportOverlay
-                .opacity((controlsVisible || engine.isPaused) && !showTrackPanel ? 1 : 0)
+                .opacity((controlsVisible || engine.isPaused) && !panelOpen ? 1 : 0)
                 .animation(.easeInOut(duration: Motion.fast), value: controlsVisible)
-                .animation(.easeInOut(duration: Motion.fast), value: showTrackPanel)
+                .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
 
-            if showTrackPanel {
-                trackPanel
+            if panelOpen {
+                panel
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .background(Color.black.ignoresSafeArea())
+        #if os(tvOS)
+        // One place decides what Menu means, no matter where focus sits —
+        // panel open: close the panel; otherwise: leave the player.
+        .onExitCommand {
+            if panelOpen {
+                closePanel()
+            } else {
+                onDismiss()
+            }
+        }
+        .onPlayPauseCommand {
+            engine.togglePause()
+            pokeControls()
+        }
+        #endif
+        .onChange(of: panelFocus) { _, focus in
+            if case .tab(let tab) = focus {
+                withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
+            }
+        }
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, !showTrackPanel, !engine.isPaused else { return }
+            guard !Task.isCancelled, !panelOpen, !engine.isPaused else { return }
             withAnimation { controlsVisible = false }
         }
     }
@@ -54,22 +95,15 @@ struct CustomPlayerView<Surface: View>: View {
         surface()
             .ignoresSafeArea()
         #if os(tvOS)
-            .focusable(!showTrackPanel)
-            .onPlayPauseCommand {
-                engine.togglePause()
-                pokeControls()
-            }
+            .focusable(!panelOpen)
             .onMoveCommand { direction in
                 switch direction {
                 case .left: engine.seek(by: -10)
                 case .right: engine.seek(by: 10)
-                case .down: openTrackPanel()
+                case .down: openPanel()
                 default: break
                 }
                 pokeControls()
-            }
-            .onExitCommand {
-                onDismiss()
             }
         #endif
             .onTapGesture {
@@ -87,17 +121,12 @@ struct CustomPlayerView<Surface: View>: View {
         interactionToken += 1
     }
 
-    private var hasTracks: Bool {
-        !engine.audioTracks.isEmpty || !engine.subtitleTracks.isEmpty
+    private func openPanel() {
+        withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = true }
     }
 
-    private func openTrackPanel() {
-        guard hasTracks else { return }
-        withAnimation(.easeInOut(duration: Motion.fast)) { showTrackPanel = true }
-    }
-
-    private func closeTrackPanel() {
-        withAnimation(.easeInOut(duration: Motion.fast)) { showTrackPanel = false }
+    private func closePanel() {
+        withAnimation(.easeInOut(duration: Motion.fast)) { panelOpen = false }
         pokeControls()
     }
 
@@ -113,12 +142,10 @@ struct CustomPlayerView<Surface: View>: View {
                     Image(systemName: "xmark")
                 }
                 Spacer()
-                if hasTracks {
-                    Button {
-                        openTrackPanel()
-                    } label: {
-                        Image(systemName: "captions.bubble")
-                    }
+                Button {
+                    openPanel()
+                } label: {
+                    Image(systemName: "info.circle")
                 }
                 Button {
                     engine.togglePause()
@@ -134,9 +161,9 @@ struct CustomPlayerView<Surface: View>: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(title)
+                    Text(info.title)
                         .font(.headline)
-                    if let subtitle {
+                    if let subtitle = info.subtitle {
                         Text(subtitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -146,26 +173,27 @@ struct CustomPlayerView<Surface: View>: View {
                         Image(systemName: "pause.fill")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                    } else if hasTracks {
+                    } else {
                         #if os(tvOS)
-                        Label("Audio & Subtitles", systemImage: "chevron.down")
+                        Label("Details", systemImage: "chevron.down")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
-                            .labelStyle(.titleAndIcon)
                         #endif
                     }
                 }
 
+                // Sized and weighted like AVKit's transport bar: a thick
+                // rounded track with a bright fill, times under each end.
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(.white.opacity(0.25))
+                            .fill(.white.opacity(0.3))
                         Capsule()
                             .fill(.white)
-                            .frame(width: proxy.size.width * progressFraction)
+                            .frame(width: max(proxy.size.width * progressFraction, Metrics.scrubberHeight))
                     }
                 }
-                .frame(height: Metrics.progressBarHeight)
+                .frame(height: Metrics.scrubberHeight)
 
                 HStack {
                     Text(Self.timestamp(engine.timePosition))
@@ -191,101 +219,144 @@ struct CustomPlayerView<Surface: View>: View {
         .foregroundStyle(.white)
     }
 
-    // MARK: - Track panel
+    // MARK: - Panel (Info · Audio · Subtitles)
 
     private static var subtitleOffID: String { "subtitle-off" }
 
-    private var trackPanel: some View {
+    private var panel: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: Metrics.screenGutter) {
-                if !engine.audioTracks.isEmpty {
-                    trackColumn(
-                        header: "Audio",
-                        rows: engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }
-                    ) { rowID in
-                        if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
-                            engine.selectAudioTrack(id: track.engineID)
-                        }
-                    }
-                }
-                if !engine.subtitleTracks.isEmpty {
-                    trackColumn(
-                        header: "Subtitles",
-                        rows: [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
-                            + engine.subtitleTracks.map { ($0.id, $0.displayName, $0.isSelected) }
-                    ) { rowID in
-                        if rowID == Self.subtitleOffID {
-                            engine.selectSubtitleTrack(id: nil)
-                        } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
-                            engine.selectSubtitleTrack(id: track.engineID)
-                        }
-                    }
-                }
+            VStack(spacing: 20) {
+                tabBar
+                tabContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(Metrics.screenGutter)
+            .frame(maxWidth: 1100)
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-            .padding(.horizontal, Metrics.screenGutter)
             .padding(.top, Metrics.railTopPadding)
 
             Spacer()
         }
-        .defaultFocus($focusedTrackID, initialPanelFocusID)
-        #if os(tvOS)
-        .onExitCommand {
-            closeTrackPanel()
-        }
-        #endif
+        .frame(maxWidth: .infinity)
+        .defaultFocus($panelFocus, .tab(selectedTab))
         #if os(iOS)
         .background(
             // Dim + tap-out on iOS; tvOS closes via Menu.
             Color.black.opacity(0.4)
                 .ignoresSafeArea()
-                .onTapGesture { closeTrackPanel() }
+                .onTapGesture { closePanel() }
         )
         #endif
     }
 
-    private var initialPanelFocusID: String? {
-        if let selected = engine.audioTracks.first(where: \.isSelected) {
-            return selected.id
-        }
-        return engine.subtitleTracks.first(where: \.isSelected)?.id ?? Self.subtitleOffID
-    }
-
-    private func trackColumn(
-        header: String,
-        rows: [(id: String, name: String, selected: Bool)],
-        onSelect: @escaping (String) -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(header)
-                .font(.caption.smallCaps())
-                .foregroundStyle(.secondary)
-                .padding(.leading, 8)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(rows, id: \.id) { row in
-                        Button {
-                            onSelect(row.id)
-                        } label: {
-                            HStack {
-                                Image(systemName: "checkmark")
-                                    .font(.caption.bold())
-                                    .opacity(row.selected ? 1 : 0)
-                                Text(row.name)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .focused($focusedTrackID, equals: row.id)
+    private var tabBar: some View {
+        HStack(spacing: 28) {
+            ForEach(PanelTab.allCases, id: \.self) { tab in
+                VStack(spacing: 6) {
+                    Button {
+                        withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
+                    } label: {
+                        Text(tab.title)
+                            .fontWeight(selectedTab == tab ? .semibold : .regular)
                     }
+                    .focused($panelFocus, equals: .tab(tab))
+
+                    Capsule()
+                        .fill(.white)
+                        .frame(width: 28, height: 3)
+                        .opacity(selectedTab == tab ? 1 : 0)
                 }
             }
-            .frame(maxHeight: 420)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        switch selectedTab {
+        case .info:
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(info.title)
+                        .font(.title3.bold())
+                    if let subtitle = info.subtitle {
+                        Text(subtitle)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !info.facts.isEmpty {
+                    Text(info.facts.joined(separator: "   ·   "))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if let overview = info.overview {
+                    Text(overview)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(4)
+                }
+            }
+
+        case .audio:
+            trackRows(
+                engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) },
+                emptyText: String(localized: "No audio tracks")
+            ) { rowID in
+                if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
+                    engine.selectAudioTrack(id: track.engineID)
+                }
+            }
+
+        case .subtitles:
+            trackRows(
+                [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
+                    + engine.subtitleTracks.map { ($0.id, $0.displayName, $0.isSelected) },
+                emptyText: nil
+            ) { rowID in
+                if rowID == Self.subtitleOffID {
+                    engine.selectSubtitleTrack(id: nil)
+                } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
+                    engine.selectSubtitleTrack(id: track.engineID)
+                }
+            }
+        }
+    }
+
+    private func trackRows(
+        _ rows: [(id: String, name: String, selected: Bool)],
+        emptyText: String?,
+        onSelect: @escaping (String) -> Void
+    ) -> some View {
+        Group {
+            if rows.isEmpty, let emptyText {
+                Text(emptyText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(rows, id: \.id) { row in
+                            Button {
+                                onSelect(row.id)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "checkmark")
+                                        .font(.caption.bold())
+                                        .opacity(row.selected ? 1 : 0)
+                                    Text(row.name)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .focused($panelFocus, equals: .row(row.id))
+                        }
+                    }
+                }
+                .frame(maxHeight: 380)
+            }
+        }
     }
 
     private var progressFraction: CGFloat {

@@ -13,6 +13,7 @@ nonisolated struct PlayerItem: Identifiable {
 final class PlaybackController {
     private(set) var player: AVPlayer?
     private(set) var mpvEngine: MPVPlayerEngine?
+    private(set) var playerInfo: PlayerItemInfo?
     private(set) var errorMessage: String?
     private(set) var didFinish = false
 
@@ -87,6 +88,8 @@ final class PlaybackController {
                         select: stream.index == defaultExternalIndex
                     )
                 }
+
+                playerInfo = itemInfo(for: media, source: source)
 
                 let engine = MPVPlayerEngine()
                 engine.prepare(
@@ -239,6 +242,38 @@ final class PlaybackController {
         return items
     }
 
+    private func itemInfo(for media: MediaItem, source: MediaSource) -> PlayerItemInfo {
+        var subtitle: String?
+        if media.type == .episode, let seriesName = media.seriesName {
+            subtitle = [media.episodeLabel, seriesName].compactMap(\.self).joined(separator: " · ")
+        }
+        var facts: [String] = []
+        if let container = source.container {
+            facts.append(container.uppercased())
+        }
+        let streams = source.mediaStreams ?? []
+        if let video = streams.first(where: { $0.type == "Video" }) {
+            var parts: [String] = []
+            if let codec = video.codec { parts.append(codec.uppercased()) }
+            if let range = video.videoRangeType { parts.append(range) }
+            if let width = video.width, let height = video.height { parts.append("\(width)×\(height)") }
+            if !parts.isEmpty { facts.append(parts.joined(separator: " · ")) }
+        }
+        let audioStreams = streams.filter { $0.type == "Audio" }
+        if let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first {
+            var parts: [String] = []
+            if let codec = audio.codec { parts.append(codec.uppercased()) }
+            if let channels = audio.channels { parts.append("\(channels)ch") }
+            if !parts.isEmpty { facts.append(parts.joined(separator: " · ")) }
+        }
+        return PlayerItemInfo(
+            title: media.name ?? "",
+            subtitle: subtitle,
+            overview: media.overview,
+            facts: facts
+        )
+    }
+
     private func metadataItem(_ identifier: AVMetadataIdentifier, value: any NSCopying & NSObjectProtocol) -> AVMetadataItem {
         let item = AVMutableMetadataItem()
         item.identifier = identifier
@@ -366,8 +401,12 @@ struct VideoPlayerView: View {
             } else if let engine = controller.mpvEngine {
                 CustomPlayerView(
                     engine: engine,
-                    title: playerItem.media.name ?? "",
-                    subtitle: episodeSubtitle,
+                    info: controller.playerInfo ?? PlayerItemInfo(
+                        title: playerItem.media.name ?? "",
+                        subtitle: episodeSubtitle,
+                        overview: playerItem.media.overview,
+                        facts: []
+                    ),
                     onDismiss: { dismiss() }
                 ) {
                     MPVVideoSurface(engine: engine)

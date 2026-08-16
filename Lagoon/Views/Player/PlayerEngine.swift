@@ -39,6 +39,16 @@ nonisolated struct PlayerTrack: Identifiable, Equatable {
     var id: String { "\(kind.rawValue)-\(engineID)" }
 }
 
+/// Everything the player's Info tab and transport show about the item —
+/// assembled by the playback controller, engine-independent.
+nonisolated struct PlayerItemInfo {
+    let title: String
+    let subtitle: String?
+    let overview: String?
+    /// Compact technical tokens, e.g. ["MKV", "HEVC · HDR10 · 3840×1600"].
+    let facts: [String]
+}
+
 /// A subtitle that lives outside the media file (Jellyfin external stream)
 /// for the engine to side-load at start.
 nonisolated struct ExternalSubtitleTrack {
