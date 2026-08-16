@@ -35,7 +35,7 @@ extension JellyfinClient {
 
     func playbackInfo(itemId: String) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
-        let profile = DeviceProfile.current
+        let profile = DeviceProfile.lagoon
         return try await post(
             "Items/\(itemId)/PlaybackInfo",
             query: [URLQueryItem(name: "UserId", value: userId)],

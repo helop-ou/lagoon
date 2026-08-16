@@ -68,6 +68,9 @@ nonisolated enum SampleBufferFactory {
         case AV_CODEC_ID_EAC3:
             formatID = kAudioFormatEnhancedAC3
             framesPerPacket = 1536
+        case AV_CODEC_ID_MP3:
+            formatID = kAudioFormatMPEGLayer3
+            framesPerPacket = 1152
         default:
             return nil
         }

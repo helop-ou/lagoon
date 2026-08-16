@@ -9,8 +9,12 @@ import Foundation
 /// The system does the decoding, color management, and audio output, which
 /// is the whole point of this architecture (see HEL-48).
 ///
-/// M1 coverage: h264/hevc video, aac/ac3/eac3 audio (`canPlay` gates
-/// routing; everything else stays on mpv). No subtitles yet.
+/// The app's only playback engine since 2026-08-16 (Jaagop's call: one
+/// player for everything). M1 envelope: h264/hevc video and
+/// aac/mp3/ac3/eac3 audio — `DeviceProfile.lagoon` advertises exactly
+/// this, so anything outside it arrives as an fMP4 HLS transcode that
+/// libavformat demuxes back into the same envelope. No subtitles yet (M5),
+/// no HDR color tagging yet (M3).
 ///
 /// Threading: state and transport commands live on the main actor; the
 /// demux loop runs on a dedicated serial queue, feeding two thread-safe
@@ -48,18 +52,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
-
-    /// Codecs the M1 pipeline can wrap. Files outside this envelope route
-    /// to mpv instead (see PlaybackController).
-    nonisolated static func canPlay(source: MediaSource) -> Bool {
-        let streams = source.mediaStreams ?? []
-        guard let video = streams.first(where: { $0.type == "Video" }),
-              let videoCodec = video.codec?.lowercased(),
-              ["h264", "hevc"].contains(videoCodec) else { return false }
-        let audioCodecs = streams.filter { $0.type == "Audio" }.compactMap { $0.codec?.lowercased() }
-        // Every audio track must be wrappable so the track picker stays honest.
-        return audioCodecs.allSatisfy { ["aac", "ac3", "eac3"].contains($0) }
-    }
 
     func prepare(url: URL, startSeconds: Double, initialAudioOrdinal: Int?) {
         pendingURL = url
