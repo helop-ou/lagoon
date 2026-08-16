@@ -13,6 +13,7 @@ nonisolated private let avNoPTS = Int64.min // AV_NOPTS_VALUE
 nonisolated private let avTimeBase = 1_000_000.0 // AV_TIME_BASE
 nonisolated private let seekBackwardFlag: Int32 = 1 // AVSEEK_FLAG_BACKWARD
 nonisolated private let keyPacketFlag: Int32 = 1 // AV_PKT_FLAG_KEY
+nonisolated private let avErrorEOF: Int32 = -541_478_725 // AVERROR_EOF = -MKTAG('E','O','F',' ')
 
 nonisolated enum DemuxError: LocalizedError {
     case openFailed(String)
@@ -56,6 +57,8 @@ nonisolated final class FFmpegDemuxer {
     private var videoStreamIndex: Int32 = -1
     private var videoTimeBase = AVRational(num: 1, den: 1)
     private var audioTimeBases: [Int32: AVRational] = [:]
+    private var selectedAudioStreamIndex: Int32 = -1
+    private var didDrainAtEOF = false
     // M4: codecs CoreAudio can't take compressed decode to LPCM here.
     private var audioDecoders: [Int32: AudioDecoder] = [:]
     private var subtitleDecoders: [Int32: SubtitleDecoder] = [:]
@@ -124,6 +127,23 @@ nonisolated final class FFmpegDemuxer {
         guard bestVideo >= 0, let stream = ctx.pointee.streams[Int(bestVideo)] else {
             throw DemuxError.openFailed("no video stream")
         }
+
+        // M6: in an HLS master every variant becomes a program. Restrict
+        // the working set to the chosen video's program — otherwise other
+        // variants' audio would duplicate the track list and libavformat
+        // would keep downloading their segments. Non-HLS files have no
+        // programs and pass everything through.
+        var programStreams: Set<Int32> = []
+        for programIndex in 0..<Int(ctx.pointee.nb_programs) {
+            guard let program = ctx.pointee.programs[programIndex] else { continue }
+            let members = (0..<Int(program.pointee.nb_stream_indexes)).map {
+                Int32(program.pointee.stream_index[$0])
+            }
+            if members.contains(bestVideo) {
+                programStreams = Set(members)
+                break
+            }
+        }
         let videoPar = stream.pointee.codecpar!
         guard let videoDescription = SampleBufferFactory.videoFormatDescription(codecpar: videoPar) else {
             throw DemuxError.unsupportedVideo(String(cString: avcodec_get_name(videoPar.pointee.codec_id)))
@@ -142,6 +162,10 @@ nonisolated final class FFmpegDemuxer {
 
         for index in 0..<Int(ctx.pointee.nb_streams) {
             guard let stream = ctx.pointee.streams[index], let par = stream.pointee.codecpar else { continue }
+            if !programStreams.isEmpty, !programStreams.contains(Int32(index)) {
+                stream.pointee.discard = AVDISCARD_ALL
+                continue
+            }
             switch par.pointee.codec_type {
             case AVMEDIA_TYPE_AUDIO:
                 // Passthrough codecs wrap compressed; everything else gets
@@ -204,6 +228,7 @@ nonisolated final class FFmpegDemuxer {
     /// libavformat so they never cost a packet copy.
     func selectAudio(streamIndex: Int32?) {
         guard let ctx = formatContext else { return }
+        selectedAudioStreamIndex = streamIndex ?? -1
         for stream in audioStreams {
             ctx.pointee.streams[Int(stream.streamIndex)]?.pointee.discard =
                 stream.streamIndex == streamIndex ? AVDISCARD_DEFAULT : AVDISCARD_ALL
@@ -223,6 +248,7 @@ nonisolated final class FFmpegDemuxer {
     func seek(toSeconds seconds: Double) {
         guard let ctx = formatContext else { return }
         av_seek_frame(ctx, -1, Int64(seconds * avTimeBase), seekBackwardFlag)
+        didDrainAtEOF = false
         for decoder in audioDecoders.values {
             decoder.flush()
         }
@@ -233,10 +259,34 @@ nonisolated final class FFmpegDemuxer {
 
     func readNext() -> ReadResult {
         guard let ctx = formatContext, let packet else { return .failed("demuxer not open") }
-        let status = av_read_frame(ctx, packet)
-        if status < 0 {
-            // AVERROR_EOF or read failure; both end the stream for M1.
+        var status = av_read_frame(ctx, packet)
+        // M6: only AVERROR_EOF means the stream ended. Anything else is a
+        // read failure — retry briefly (the avio reconnect options handle
+        // the socket; this covers errors that surface past them), then
+        // report it instead of silently ending playback mid-file.
+        var attempts = 0
+        while status < 0, status != avErrorEOF, !isInterrupted, attempts < 2 {
+            attempts += 1
+            Thread.sleep(forTimeInterval: 0.2 * Double(attempts))
+            status = av_read_frame(ctx, packet)
+        }
+        if status == avErrorEOF || isInterrupted {
+            // Hand the audio decoder's tail (coalesced partial buffer)
+            // to the renderer before declaring the end.
+            if !didDrainAtEOF {
+                didDrainAtEOF = true
+                if selectedAudioStreamIndex >= 0,
+                   let decoder = audioDecoders[selectedAudioStreamIndex] {
+                    let tail = decoder.drain()
+                    if !tail.isEmpty {
+                        return .audio(tail, streamIndex: selectedAudioStreamIndex)
+                    }
+                }
+            }
             return .endOfFile
+        }
+        if status < 0 {
+            return .failed(Self.errorText(status))
         }
         defer { av_packet_unref(packet) }
         let streamIndex = packet.pointee.stream_index

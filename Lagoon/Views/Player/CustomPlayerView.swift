@@ -363,12 +363,7 @@ struct CustomPlayerView<Surface: View>: View {
             switch selectedTab {
             case .info: infoCard
             case .video: videoCard
-            case .audio:
-                trackCard(rows: engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
-                    if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
-                        engine.selectAudioTrack(id: track.engineID)
-                    }
-                }
+            case .audio: audioCard
             case .subtitles:
                 trackCard(
                     rows: [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
@@ -424,6 +419,39 @@ struct CustomPlayerView<Surface: View>: View {
             return "\(info.title) – \(subtitle)"
         }
         return info.title
+    }
+
+    // Tracks column plus the Infuse-style OPTIONS column (audio delay,
+    // HEL-48 M6).
+    private var audioCard: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            trackCard(rows: engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
+                if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
+                    engine.selectAudioTrack(id: track.engineID)
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                cardHeader("Options")
+                HStack(spacing: 14) {
+                    Text("Audio Delay")
+                        .font(.callout)
+                    Spacer()
+                    Button {
+                        engine.setAudioDelay(engine.audioDelay - 0.1)
+                    } label: {
+                        Image(systemName: "minus")
+                    }
+                    Text(String(format: "%+.1f s", engine.audioDelay))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(engine.audioDelay == 0 ? .secondary : .primary)
+                    Button {
+                        engine.setAudioDelay(engine.audioDelay + 0.1)
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+        }
     }
 
     private var videoCard: some View {

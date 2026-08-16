@@ -96,6 +96,21 @@ nonisolated final class AudioDecoder {
         pendingStartSeconds = nil
     }
 
+    /// End of stream: pull the decoder's remaining frames and the
+    /// coalescing tail so the last fraction of a second isn't dropped.
+    /// Flushes afterwards, so a later seek can reuse the decoder.
+    func drain() -> [CMSampleBuffer] {
+        var buffers: [CMSampleBuffer] = []
+        avcodec_send_packet(codecContext, nil)
+        while avcodec_receive_frame(codecContext, frame) >= 0 {
+            accumulate(into: &buffers)
+            av_frame_unref(frame)
+        }
+        emitPending(into: &buffers)
+        avcodec_flush_buffers(codecContext)
+        return buffers
+    }
+
     // MARK: - Frame → coalesced LPCM
 
     private func accumulate(into buffers: inout [CMSampleBuffer]) {

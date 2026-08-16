@@ -21,12 +21,15 @@ protocol PlayerEngine: AnyObject, Observable {
     /// overlay. Empty/nil when no cue is active.
     var currentSubtitleText: String? { get }
     var currentSubtitleImages: [SubtitleImage] { get }
+    /// mpv convention (M6): positive delays the audio relative to video.
+    var audioDelay: Double { get }
 
     func togglePause()
     func seek(by seconds: Double)
     /// nil turns the stream off (subtitles); audio pickers shouldn't pass nil.
     func selectAudioTrack(id: Int?)
     func selectSubtitleTrack(id: Int?)
+    func setAudioDelay(_ seconds: Double)
 }
 
 /// One selectable track as the engine reports it. `engineID` is the

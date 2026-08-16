@@ -32,6 +32,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var subtitleTracks: [PlayerTrack] = []
     private(set) var currentSubtitleText: String?
     private(set) var currentSubtitleImages: [SubtitleImage] = []
+    /// mpv convention (M6): positive delays the audio.
+    private(set) var audioDelay: Double = 0
 
     @ObservationIgnored var onFinished: (() -> Void)?
     @ObservationIgnored var onError: ((String) -> Void)?
@@ -60,6 +62,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private let synchronizer = AVSampleBufferRenderSynchronizer()
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var didFinish = false
+    @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
@@ -144,6 +147,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         seek(to: timePosition)
     }
 
+    func setAudioDelay(_ seconds: Double) {
+        let clamped = ((max(-5, min(5, seconds))) * 1000).rounded() / 1000
+        guard clamped != audioDelay else { return }
+        audioDelay = clamped
+        shared.withLock { $0.audioDelaySeconds = clamped }
+        // Compressed buffers carry their stamps from the demuxer — the
+        // cheapest correct live apply is the audio-switch trick: re-demux
+        // from here so every new buffer is stamped with the new offset.
+        seek(to: timePosition)
+    }
+
     func selectSubtitleTrack(id: Int?) {
         let ordinal = id ?? 0
         externalLoadToken += 1
@@ -188,6 +202,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     func shutdown() {
+        stallRecoveryTask?.cancel()
         shared.withLock { $0.cancelled = true }
         // Aborts any av_* call blocked inside network I/O so the demux
         // loop can exit and close — without this a wedged open froze
@@ -252,6 +267,40 @@ final class SampleBufferPlayerEngine: PlayerEngine {
            videoQueue.count == 0 {
             didFinish = true
             onFinished?()
+        }
+        // M6 stall detection: the clock has caught up to everything the
+        // demuxer delivered and the queue is dry, but the file isn't over
+        // — the network fell behind. Hold the clock instead of freezing
+        // frames while it runs.
+        if !isBuffering, !isPaused, !didFinish, !videoQueue.isFinished,
+           videoQueue.count == 0,
+           duration <= 0 || seconds < duration - 1,
+           shared.withLock({ $0.videoBufferedTo }) - seconds < 0.2 {
+            beginStallRecovery()
+        }
+    }
+
+    /// Pause the synchronizer, then poll until the demuxer has rebuilt a
+    /// safe cushion and restart. (The periodic observer stops firing at
+    /// rate 0, so recovery needs its own loop.)
+    private func beginStallRecovery() {
+        isBuffering = true
+        synchronizer.rate = 0
+        stallRecoveryTask?.cancel()
+        stallRecoveryTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard let self else { return }
+                // A seek or shutdown owns the restart from here.
+                if self.shared.withLock({ $0.cancelled || $0.pendingSeekSeconds != nil }) { return }
+                if self.videoQueue.count >= 12 || self.videoQueue.isFinished {
+                    self.isBuffering = false
+                    if !self.isPaused {
+                        self.synchronizer.rate = 1
+                    }
+                    return
+                }
+            }
         }
     }
 
@@ -372,7 +421,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 appliedSubtitleStreamIndex = desiredSubtitle
             }
             if let target = shared.withLock({ state -> Double? in
-                defer { state.pendingSeekSeconds = nil }
+                defer {
+                    if let target = state.pendingSeekSeconds {
+                        // Everything buffered so far is being flushed.
+                        state.videoBufferedTo = target
+                        state.pendingSeekSeconds = nil
+                    }
+                }
                 return state.pendingSeekSeconds
             }) {
                 videoQueue.reset()
@@ -404,11 +459,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         switch demuxer.readNext() {
         case .video(let buffer):
             videoQueue.enqueue(buffer)
+            let seconds = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
+            if seconds.isFinite {
+                // Stall detection compares the clock against this.
+                shared.withLock { $0.videoBufferedTo = max($0.videoBufferedTo, seconds) }
+            }
             kickPumps()
         case .audio(let buffers, let streamIndex):
-            if streamIndex == selectedAudioStreamIndex() {
+            let (selected, delay) = shared.withLock { ($0.selectedAudioStreamIndex, $0.audioDelaySeconds) }
+            if streamIndex == selected {
                 for buffer in buffers {
-                    audioQueue.enqueue(buffer)
+                    audioQueue.enqueue(delay == 0 ? buffer : Self.retimed(buffer, by: delay))
                 }
                 kickPumps()
             }
@@ -454,8 +515,35 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         demuxer.selectAudio(streamIndex: streamIndex)
     }
 
-    nonisolated private func selectedAudioStreamIndex() -> Int32 {
-        shared.withLock { $0.selectedAudioStreamIndex }
+    /// Copy with all timestamps shifted — how the audio-delay option
+    /// lands on compressed passthrough and LPCM buffers alike.
+    nonisolated private static func retimed(_ buffer: CMSampleBuffer, by delay: Double) -> CMSampleBuffer {
+        var entryCount = 0
+        guard CMSampleBufferGetSampleTimingInfoArray(
+            buffer, entryCount: 0, arrayToFill: nil, entriesNeededOut: &entryCount
+        ) == noErr, entryCount > 0 else { return buffer }
+        var timings = [CMSampleTimingInfo](repeating: CMSampleTimingInfo(), count: entryCount)
+        guard CMSampleBufferGetSampleTimingInfoArray(
+            buffer, entryCount: entryCount, arrayToFill: &timings, entriesNeededOut: &entryCount
+        ) == noErr else { return buffer }
+        let offset = CMTime(seconds: delay, preferredTimescale: 90_000)
+        for index in timings.indices {
+            if timings[index].presentationTimeStamp.isValid {
+                timings[index].presentationTimeStamp = timings[index].presentationTimeStamp + offset
+            }
+            if timings[index].decodeTimeStamp.isValid {
+                timings[index].decodeTimeStamp = timings[index].decodeTimeStamp + offset
+            }
+        }
+        var retimed: CMSampleBuffer?
+        guard CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: buffer,
+            sampleTimingEntryCount: entryCount,
+            sampleTimingArray: &timings,
+            sampleBufferOut: &retimed
+        ) == noErr, let retimed else { return buffer }
+        return retimed
     }
 
     nonisolated private func videoDimensions() -> CGSize {
@@ -529,6 +617,9 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var initialSubtitleOrdinal: Int?
         var embeddedSubtitleStreamIndices: [Int32] = []
         var externalSubtitles: [ExternalSubtitleTrack] = []
+        /// Highest video pts the demuxer has delivered (M6 stall detection).
+        var videoBufferedTo: Double = 0
+        var audioDelaySeconds: Double = 0
     }
 
     private let lock = NSLock()
