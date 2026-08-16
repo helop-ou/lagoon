@@ -72,6 +72,46 @@ and fMP4 init segments (full matrix in the HEL-32/HEL-33/HEL-34 comments):
   spatial-audio engagement needs AirPods / an Atmos receiver (HEL-32/HEL-33
   remaining scope).
 
+## mpv engine (HEL-45, experimental — DEBUG-only toggle)
+
+`Lagoon/Views/Player/MPV/` holds a second playback engine built on libmpv
+(MPVKit 1.0.0, mpv 0.41 — the project's only external dependency): true MKV
+direct play where the server does zero work, DTS/TrueHD decoded to
+multichannel LPCM, vc1/vp9/av1 in software where VideoToolbox can't.
+
+**Split-engine design (deliberate):** AVPlayer keeps mp4/mov direct play and
+all HLS — it has the best Dolby Vision pipeline and the *only* Atmos path on
+tvOS (E-AC3 JOC). mpv gets what AVPlayer cannot open at all. Routing lives in
+`PlaybackController.start` and is gated on the Settings → Debug →
+"mpv engine for MKV" toggle (`debug.mpvForMKV`), which simultaneously widens
+the device profile (`DeviceProfile.current` → `mpvExtended`, adding an
+mkv/webm `DirectPlayProfile`) — the profile and the routing must ride the
+same switch or the server grants direct play the client then can't do.
+
+Mechanics (mirrors the MPVKit demo):
+
+- `MPVPlayerEngine` owns the mpv handle. `wid` = CAMetalLayer address, set
+  **before** `mpv_initialize` — hence `prepare(url:)` + `attachAndPlay(layer:)`
+  split, with the layer coming from `MPVVideoSurface`'s view controller.
+- Options: `vo=gpu-next`, `gpu-api=vulkan`, `gpu-context=moltenvk`,
+  `hwdec=videotoolbox`, `target-colorspace-hint=yes` (HDR → EDR; cannot be
+  toggled at runtime), `keep-open=no` so EOF fires `MPV_EVENT_END_FILE`.
+- Threading: commands on the main actor (libmpv is thread-safe); the wakeup
+  callback drains events on a private serial queue and hops state back via
+  `Task { @MainActor }`. `MetalVideoLayer` swallows MoltenVK's 1×1
+  drawableSize writes (mpv#13651).
+- Resume is the `start` option (set pre-init), not a seek. Progress
+  reporting is engine-agnostic in `PlaybackController` (`PlayMethod:
+  DirectPlay`); positions come from the throttled `time-pos` observer.
+- `MPVPlayerView` honors the focus invariants: the surface is `.focusable()`,
+  play/pause toggles, left/right arrows seek ±10 s, Menu exits.
+
+Known-unknowns for the hardware pass: EDR/HDR10 output quality, DoVi P5
+rendering via libplacebo (P7 MKVs still take the HDR10 remux — the hevc
+CodecProfile conditions deliberately still apply), 4K AV1 software-decode
+performance on A15. TrueHD Atmos objects are lost by design (no tvOS app can
+bitstream them).
+
 ## Debug playback HUD
 
 DEBUG builds get Settings → Debug → Playback HUD: a top-left overlay in the
