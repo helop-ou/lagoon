@@ -93,11 +93,14 @@ nonisolated enum DeviceProfile {
         ],
         codecProfiles: [
             // Video range types the pipeline can present. Dolby Vision
-            // profile 5 is DOVI, profile 8 the DOVIWith* fallbacks; dual-layer
-            // profile 7 (DOVIWithEL) is deliberately absent — the server
-            // transcodes those to the HDR10 base layer. (Until HEL-48 M3
-            // adds color tagging, HDR sources render without HDR
-            // signalling in the Lagoon engine.)
+            // profile 5 is DOVI, profile 8 the DOVIWith* fallbacks.
+            // Dual-layer profile 7 (DOVIWithEL / DOVIWithELHDR10Plus)
+            // direct-plays too: the base layer is plain HEVC Main 10
+            // HDR10(+), the enhancement-layer NALs are unspecified types
+            // the decoder ignores, and tvOS can't reconstruct dual-layer
+            // DoVi anyway — so BL-as-HDR10 is the ceiling whether we or
+            // the server strip the EL, and direct play skips the lossy
+            // server re-encode.
             CodecProfile(
                 type: "Video",
                 codec: "hevc",
@@ -111,7 +114,7 @@ nonisolated enum DeviceProfile {
                     ProfileCondition(
                         condition: "EqualsAny",
                         property: "VideoRangeType",
-                        value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG|DOVIWithSDR|HDR10Plus",
+                        value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG|DOVIWithSDR|DOVIWithEL|DOVIWithELHDR10Plus|HDR10Plus",
                         isRequired: false
                     ),
                     ProfileCondition(

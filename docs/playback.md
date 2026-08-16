@@ -101,9 +101,13 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   `dvcC` atom (IPTPQc2 is unwatchable without the DoVi path), profile 8
   stays `hvc1` plus supplementary `dvvC` (non-DoVi displays fall back to
   the base layer's HDR10/HLG tags), dual-layer profiles 4/7 get no atom
-  and play as HDR10 from the base layer. Hardware verification pending
-  (the simulator has no HDR output; DoVi P5 may not decode in the sim at
-  all).
+  and play as HDR10 from the base layer. Profile 7
+  (`DOVIWithEL`/`DOVIWithELHDR10Plus`) **direct-plays** on that basis:
+  the BL is plain Main 10 HDR10(+), the EL NALs are unspecified types
+  the decoder ignores, and tvOS can't reconstruct dual-layer DoVi anyway
+  — same presentation as the server's strip-to-HDR10 transcode without
+  the lossy re-encode. Hardware verification pending (the simulator has
+  no HDR output; DoVi P5 may not decode in the sim at all).
 - **Stall recovery** (M6): when the clock catches up to the last
   delivered video pts with a dry queue and the file isn't over, the
   engine holds the synchronizer (buffering spinner) and auto-resumes
