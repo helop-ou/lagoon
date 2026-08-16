@@ -3,10 +3,14 @@
 **One engine for everything** (Jaagop's call, 2026-08-16, HEL-48): all
 playback runs through the Lagoon sample-buffer engine. The AVPlayer and mpv
 players were removed the same day the decision was made — no split paths,
-no per-container routing. The MPVKit package stays **only** as the source
-of the FFmpeg xcframeworks the engine links (`import Libavformat` works
-straight from its artifacts); libmpv itself is unused dead weight in the
-bundle until the dependency is slimmed.
+no per-container routing. Since 2026-08-17 (M6) the FFmpeg libraries come
+from the local `Packages/LagoonFFmpeg` package, which pins the four
+Libav* static xcframeworks from MPVKit's 1.0.0 release (FFmpeg 8.1.2)
+plus the static libs FFmpeg's build references (gnutls/nettle/hogweed/gmp
+for TLS, dav1d, uavs3d, lcms2) — MPVKit itself, libmpv, MoltenVK, and
+libplacebo are no longer in the project. The archives are static: the app
+binary links only referenced objects, and the bundle embeds 11 framework
+shells instead of 27.
 
 ## Stream resolution
 
@@ -95,11 +99,25 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   and play as HDR10 from the base layer. Hardware verification pending
   (the simulator has no HDR output; DoVi P5 may not decode in the sim at
   all).
-- **Milestones outstanding** (HEL-48): M2 Atmos verification on hardware
+- **Stall recovery** (M6): when the clock catches up to the last
+  delivered video pts with a dry queue and the file isn't over, the
+  engine holds the synchronizer (buffering spinner) and auto-resumes
+  once ~12 buffers rebuild. `av_read_frame` distinguishes `AVERROR_EOF`
+  from read failures — transient errors retry briefly, persistent ones
+  surface as the error overlay instead of fake-finishing the file (which
+  would have moved the server resume point). At real EOF the audio
+  decoder drains its coalescing tail. In HLS masters the working set is
+  restricted to the chosen video's program, so other variants never
+  download segments or duplicate the track list.
+- **Audio delay** (M6): mpv convention, positive delays audio; applied
+  by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
+  and re-demuxing from the current position on change. Lives in the
+  Audio tab's OPTIONS column.
+- **Milestones outstanding** (HEL-48): hardware passes only — M2 Atmos
   (E-AC3 JOC passes through compressed, so it may already survive), M3
-  hardware verification of the HDR/DoVi tagging above, M6 stall/underrun
-  hardening, the master-variant pick, and MPVKit slimming. M4 (audio
-  decode) and M5 (subtitles) landed 2026-08-17 — sim pass pending.
+  HDR/DoVi tagging verification, M4 multichannel layouts. All engine
+  code milestones (M1–M6) landed as of 2026-08-17; M4–M6 sim pass
+  pending.
 
 ## Debug playback HUD
 

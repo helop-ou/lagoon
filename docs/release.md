@@ -43,10 +43,12 @@ it. Marketing version changes are deliberate and manual:
 - The ATS `NSAllowsArbitraryLoads` exception (HEL-42) does **not** block
   internal TestFlight — it only matters for external testing and App
   Review.
-- **"Upload Symbols Failed" warnings for every Lib*.framework are
-  expected and harmless.** MPVKit ships prebuilt binaries with no dSYMs
-  anywhere (verified against its release assets), so App Store Connect
+- **"Upload Symbols Failed" warnings for the Lib*.framework artifacts are
+  expected and harmless.** The mpvkit-built binaries ship with no dSYMs
+  anywhere (verified against the release assets), so App Store Connect
   can't symbolicate crash frames inside those libraries — the build still
   uploads and processes, and Lagoon's own code symbolicates normally from
-  the archive's dSYM. Don't chase these; most of the frameworks (and
-  their warnings) disappear with HEL-48 M6 dependency slimming.
+  the archive's dSYM. HEL-48 M6 slimming (2026-08-17) cut the set from
+  ~28 frameworks to the 11 the engine actually links
+  (`Packages/LagoonFFmpeg`); the rest of the warnings only go away if we
+  ever build FFmpeg ourselves with dSYMs kept.

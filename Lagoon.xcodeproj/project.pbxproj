@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4C41474F4F4E000000000012 /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* MPVKit */; };
+		4C41474F4F4E000000000012 /* LagoonFFmpeg in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* LagoonFFmpeg */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,7 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4C41474F4F4E000000000012 /* MPVKit in Frameworks */,
+				4C41474F4F4E000000000012 /* LagoonFFmpeg in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +70,7 @@
 			);
 			name = Lagoon;
 			packageProductDependencies = (
-				4C41474F4F4E000000000011 /* MPVKit */,
+				4C41474F4F4E000000000011 /* LagoonFFmpeg */,
 			);
 			productName = Lagoon;
 			productReference = 4C41474F4F4E000000000004 /* Lagoon.app */;
@@ -101,7 +101,7 @@
 			mainGroup = 4C41474F4F4E000000000002;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "MPVKit" */,
+				4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "Packages/LagoonFFmpeg" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4C41474F4F4E000000000003 /* Products */;
@@ -364,22 +364,17 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "MPVKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/mpvkit/MPVKit.git";
-			requirement = {
-				kind = exactVersion;
-				version = 1.0.0;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "Packages/LagoonFFmpeg" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LagoonFFmpeg;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4C41474F4F4E000000000011 /* MPVKit */ = {
+		4C41474F4F4E000000000011 /* LagoonFFmpeg */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "MPVKit" */;
-			productName = MPVKit;
+			productName = LagoonFFmpeg;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

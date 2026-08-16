@@ -2,11 +2,13 @@
 
 Jellyfin client for tvOS 26 + iOS 26 (one multiplatform target, SwiftUI, no
 test target). Design language adapted from a 2026 streaming-app redesign
-. **MPVKit is the only external
-dependency, kept solely for the FFmpeg xcframeworks** the Lagoon
-sample-buffer engine links (libmpv itself is unused since 2026-08-16 —
-one engine for everything, HEL-48); don't add other dependencies without
-the same level of deliberation.
+. **The only dependency is the
+local `Packages/LagoonFFmpeg` package** (HEL-48 M6): it pins exactly the
+FFmpeg static xcframeworks the Lagoon sample-buffer engine links —
+artifacts from MPVKit's 1.0.0 release (FFmpeg 8.1.2) plus their
+transitive static libs (gnutls stack, dav1d, uavs3d, lcms2) — with
+MPVKit/libmpv/MoltenVK/libplacebo out of the project entirely since
+2026-08-17. Don't add other dependencies without serious deliberation.
 
 **Full technical docs are in `docs/` — read the relevant file before working on an area:**
 
