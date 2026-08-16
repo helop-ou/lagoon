@@ -134,11 +134,12 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
   and re-demuxing from the current position on change. Lives in the
   Audio tab's OPTIONS column.
-- **Milestones outstanding** (HEL-48): all engine code milestones
-  (M1–M6) landed and **M2 Atmos is hardware-verified** (2026-08-17,
-  recipe above; direct play + subtitles also confirmed on hardware).
-  Still open: M3 HDR/DoVi indicator check on the TV, M4 multichannel
-  layout verification.
+- **HEL-48 closed 2026-08-17**: all engine milestones (M1–M6)
+  hardware-verified end-to-end — direct play, Atmos (recipe above),
+  HDR/DoVi presentation, DTS/TrueHD multichannel, subtitles, Menu/panel
+  policy. Accepted platform limits: TrueHD Atmos objects unpreservable
+  on tvOS; no subtitles during HLS transcode. Transport UX work
+  (scrubbing/trickplay/motion) continues on HEL-39.
 
 ## Debug playback HUD
 
