@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4C41474F4F4E000000000012 /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* MPVKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		4C41474F4F4E000000000004 /* Lagoon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lagoon.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C41474F4F4E000000000012 /* MPVKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = Lagoon;
 			packageProductDependencies = (
+				4C41474F4F4E000000000011 /* MPVKit */,
 			);
 			productName = Lagoon;
 			productReference = 4C41474F4F4E000000000004 /* Lagoon.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = 4C41474F4F4E000000000002;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "MPVKit" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4C41474F4F4E000000000003 /* Products */;
 			projectDirPath = "";
@@ -354,6 +363,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "MPVKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mpvkit/MPVKit.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4C41474F4F4E000000000011 /* MPVKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "MPVKit" */;
+			productName = MPVKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4C41474F4F4E000000000001 /* Project object */;
 }

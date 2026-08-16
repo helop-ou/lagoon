@@ -1,8 +1,10 @@
 # Lagoon — session notes
 
 Jellyfin client for tvOS 26 + iOS 26 (one multiplatform target, SwiftUI, no
-external dependencies, no test target). Design language adapted from the
-2026 streaming-app redesign.
+test target). Design language adapted from a 2026 streaming-app redesign
+. **MPVKit is the only external
+dependency** — a deliberate HEL-45 decision (pinned exact in the pbxproj);
+don't add others without the same level of deliberation.
 
 **Full technical docs are in `docs/` — read the relevant file before working on an area:**
 
@@ -33,6 +35,9 @@ Quick rules that prevent regressions:
   keep `.scrollClipDisabled()` + rail focus-lift padding intact.
 - Images go through `CachedAsyncImage` with an explicit `maxPixelSize` —
   never `AsyncImage`.
+- mpv/HDR debugging from Xcode: disable Metal API Validation in the scheme
+  (Run → Diagnostics) — MoltenVK trips validation on HDR surfaces and
+  crashes the debug session (MPVKit-documented; irrelevant outside Xcode).
 - **Verify UI changes visually in the simulator** before considering them
   done: build → `simctl install/launch` → drive focus with
   `osascript -e 'tell application "System Events" to key code …'`
