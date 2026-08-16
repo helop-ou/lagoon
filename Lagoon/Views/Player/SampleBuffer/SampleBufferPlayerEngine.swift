@@ -10,11 +10,13 @@ import Foundation
 /// is the whole point of this architecture (see HEL-48).
 ///
 /// The app's only playback engine since 2026-08-16 (Jaagop's call: one
-/// player for everything). M1 envelope: h264/hevc video and
-/// aac/mp3/ac3/eac3 audio — `DeviceProfile.lagoon` advertises exactly
-/// this, so anything outside it arrives as an fMP4 HLS transcode that
-/// libavformat demuxes back into the same envelope. No subtitles yet (M5),
-/// no HDR color tagging yet (M3).
+/// player for everything). Envelope: h264/hevc video passed through
+/// compressed; aac/mp3/ac3/eac3 audio passed through compressed and
+/// dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4);
+/// embedded + external subtitles as an overlay (M5) —
+/// `DeviceProfile.lagoon` advertises exactly this, so anything outside it
+/// arrives as an fMP4 HLS transcode that libavformat demuxes back into
+/// the same envelope.
 ///
 /// Threading: state and transport commands live on the main actor; the
 /// demux loop runs on a dedicated serial queue, feeding two thread-safe
@@ -27,7 +29,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var isBuffering = true
     private(set) var videoSize: CGSize?
     private(set) var audioTracks: [PlayerTrack] = []
-    let subtitleTracks: [PlayerTrack] = []
+    private(set) var subtitleTracks: [PlayerTrack] = []
+    private(set) var currentSubtitleText: String?
+    private(set) var currentSubtitleImages: [SubtitleImage] = []
 
     @ObservationIgnored var onFinished: (() -> Void)?
     @ObservationIgnored var onError: ((String) -> Void)?
@@ -43,6 +47,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     // Written on main, read on the demux loop (or vice versa) — all simple
     // value types behind one lock.
     @ObservationIgnored nonisolated private let shared = SharedState()
+    @ObservationIgnored nonisolated private let subtitleStore = SubtitleStore()
+
+    @ObservationIgnored private var externalSubtitles: [ExternalSubtitleTrack] = []
+    @ObservationIgnored private var embeddedSubtitleCount = 0
+    // Bumped on every subtitle selection change so a stale external
+    // download can't overwrite a newer choice's cues.
+    @ObservationIgnored private var externalLoadToken = 0
 
     @ObservationIgnored nonisolated(unsafe) private var videoRenderer: AVSampleBufferVideoRenderer?
     @ObservationIgnored nonisolated(unsafe) private var audioRenderer: AVSampleBufferAudioRenderer?
@@ -53,10 +64,21 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
 
-    func prepare(url: URL, startSeconds: Double, initialAudioOrdinal: Int?) {
+    func prepare(
+        url: URL,
+        startSeconds: Double,
+        initialAudioOrdinal: Int?,
+        initialSubtitleOrdinal: Int? = nil,
+        externalSubtitles: [ExternalSubtitleTrack] = []
+    ) {
         pendingURL = url
         pendingStartSeconds = startSeconds
-        shared.withLock { $0.initialAudioOrdinal = initialAudioOrdinal }
+        self.externalSubtitles = externalSubtitles
+        shared.withLock {
+            $0.initialAudioOrdinal = initialAudioOrdinal
+            $0.initialSubtitleOrdinal = initialSubtitleOrdinal
+            $0.externalSubtitles = externalSubtitles
+        }
     }
 
     func attach(displayLayer: AVSampleBufferDisplayLayer) {
@@ -79,8 +101,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             self?.pumpAudio()
         }
 
+        // 0.1 s so subtitle cues land on time; timePosition still only
+        // publishes on 0.25 s deltas.
         timeObserver = synchronizer.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             self?.observeTime(time)
@@ -121,7 +145,46 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     func selectSubtitleTrack(id: Int?) {
-        // M1 has no subtitle path yet (M5).
+        let ordinal = id ?? 0
+        externalLoadToken += 1
+        subtitleStore.removeAll()
+        currentSubtitleText = nil
+        currentSubtitleImages = []
+        subtitleTracks = subtitleTracks.map {
+            PlayerTrack(engineID: $0.engineID, kind: .subtitle, displayName: $0.displayName, isSelected: $0.engineID == ordinal)
+        }
+        if ordinal >= 1, ordinal <= embeddedSubtitleCount {
+            shared.withLock { state in
+                state.selectedSubtitleOrdinal = ordinal
+                state.selectedSubtitleStreamIndex = state.embeddedSubtitleStreamIndices[ordinal - 1]
+            }
+            // Re-demux from the previous keyframe so a line that is
+            // already on screen elsewhere appears immediately, not at the
+            // next cue.
+            seek(to: timePosition)
+        } else {
+            shared.withLock { state in
+                state.selectedSubtitleOrdinal = ordinal
+                state.selectedSubtitleStreamIndex = -1
+            }
+            if ordinal > embeddedSubtitleCount {
+                loadExternalSubtitle(ordinal: ordinal)
+            }
+        }
+    }
+
+    /// Fetches and parses a Jellyfin external subtitle (vtt/srt delivery).
+    private func loadExternalSubtitle(ordinal: Int) {
+        let index = ordinal - embeddedSubtitleCount - 1
+        guard externalSubtitles.indices.contains(index) else { return }
+        let url = externalSubtitles[index].url
+        let token = externalLoadToken
+        Task { [weak self] in
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+            let cues = await Task.detached { SubtitleParser.cues(from: data) }.value
+            guard let self, self.externalLoadToken == token else { return }
+            self.subtitleStore.replaceAll(cues)
+        }
     }
 
     func shutdown() {
@@ -153,7 +216,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioRenderer?.flush()
         videoQueue.reset()
         audioQueue.reset()
-        shared.withLock { $0.pendingSeekSeconds = clamped }
+        // Embedded cues re-arrive from the demuxer after the seek; leaving
+        // the old ones would duplicate them. External cue lists are
+        // complete and position-independent, so they stay.
+        let embeddedSubtitleActive = shared.withLock { state -> Bool in
+            state.pendingSeekSeconds = clamped
+            return state.selectedSubtitleStreamIndex >= 0
+        }
+        if embeddedSubtitleActive {
+            subtitleStore.removeAll()
+        }
+        currentSubtitleText = nil
+        currentSubtitleImages = []
     }
 
     /// Demux primed after open/seek — start (or reposition, if paused) at
@@ -172,6 +246,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         if abs(seconds - timePosition) >= 0.25 {
             timePosition = seconds
         }
+        refreshSubtitles(at: seconds)
         if !didFinish, duration > 0, seconds >= duration - 0.4,
            videoQueue.isFinished, audioQueue.isFinished,
            videoQueue.count == 0 {
@@ -180,10 +255,34 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
-    private func publishStreams(duration: Double, videoSize: CGSize, tracks: [PlayerTrack]) {
+    private func refreshSubtitles(at seconds: Double) {
+        let active = subtitleStore.active(at: seconds)
+        if active.text != currentSubtitleText {
+            currentSubtitleText = active.text
+        }
+        if active.images != currentSubtitleImages {
+            currentSubtitleImages = active.images
+        }
+    }
+
+    private func publishStreams(
+        duration: Double,
+        videoSize: CGSize,
+        tracks: [PlayerTrack],
+        subtitles: [PlayerTrack],
+        embeddedSubtitleCount: Int,
+        activeSubtitleOrdinal: Int
+    ) {
         self.duration = duration
         self.videoSize = videoSize
         audioTracks = tracks
+        subtitleTracks = subtitles
+        self.embeddedSubtitleCount = embeddedSubtitleCount
+        // An initially-selected external track (server default pointing at
+        // a sidecar file) starts its download once the counts are known.
+        if activeSubtitleOrdinal > embeddedSubtitleCount {
+            loadExternalSubtitle(ordinal: activeSubtitleOrdinal)
+        }
     }
 
     // MARK: - Demux loop (demux queue only)
@@ -219,11 +318,59 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 isSelected: offset + 1 == initialOrdinal
             )
         }
+
+        // Subtitle ordinal space: embedded streams in demux order, then
+        // the external tracks — the same layout the controller used to map
+        // the server's DefaultSubtitleStreamIndex.
+        let embeddedSubtitles = demuxer.subtitleStreams
+        let (externals, subtitleOrdinal) = shared.withLock { state -> ([ExternalSubtitleTrack], Int) in
+            state.embeddedSubtitleStreamIndices = embeddedSubtitles.map(\.streamIndex)
+            if state.selectedSubtitleOrdinal < 0 {
+                state.selectedSubtitleOrdinal = state.initialSubtitleOrdinal ?? 0
+            }
+            let ordinal = state.selectedSubtitleOrdinal
+            if ordinal >= 1, ordinal <= embeddedSubtitles.count {
+                state.selectedSubtitleStreamIndex = embeddedSubtitles[ordinal - 1].streamIndex
+            }
+            return (state.externalSubtitles, ordinal)
+        }
+        let subtitleTracks = embeddedSubtitles.enumerated().map { offset, stream in
+            PlayerTrack(
+                engineID: offset + 1,
+                kind: .subtitle,
+                displayName: Self.trackName(for: stream),
+                isSelected: offset + 1 == subtitleOrdinal
+            )
+        } + externals.enumerated().map { offset, track in
+            PlayerTrack(
+                engineID: embeddedSubtitles.count + offset + 1,
+                kind: .subtitle,
+                displayName: Self.externalTrackName(for: track),
+                isSelected: embeddedSubtitles.count + offset + 1 == subtitleOrdinal
+            )
+        }
         Task { @MainActor in
-            self.publishStreams(duration: demuxedDuration, videoSize: size, tracks: tracks)
+            self.publishStreams(
+                duration: demuxedDuration,
+                videoSize: size,
+                tracks: tracks,
+                subtitles: subtitleTracks,
+                embeddedSubtitleCount: embeddedSubtitles.count,
+                activeSubtitleOrdinal: subtitleOrdinal
+            )
         }
 
+        // The demuxer-side discard state the loop last applied; compared
+        // against the shared desired stream each pass so main-actor
+        // subtitle switches land without a queue hop.
+        var appliedSubtitleStreamIndex: Int32 = -1
+
         while !shared.withLock({ $0.cancelled }) {
+            let desiredSubtitle = shared.withLock { $0.selectedSubtitleStreamIndex }
+            if desiredSubtitle != appliedSubtitleStreamIndex {
+                demuxer.selectSubtitle(streamIndex: desiredSubtitle >= 0 ? desiredSubtitle : nil)
+                appliedSubtitleStreamIndex = desiredSubtitle
+            }
             if let target = shared.withLock({ state -> Double? in
                 defer { state.pendingSeekSeconds = nil }
                 return state.pendingSeekSeconds
@@ -258,10 +405,22 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         case .video(let buffer):
             videoQueue.enqueue(buffer)
             kickPumps()
-        case .audio(let buffer, let streamIndex):
+        case .audio(let buffers, let streamIndex):
             if streamIndex == selectedAudioStreamIndex() {
-                audioQueue.enqueue(buffer)
+                for buffer in buffers {
+                    audioQueue.enqueue(buffer)
+                }
                 kickPumps()
+            }
+        case .subtitle(let events, let streamIndex):
+            guard streamIndex == shared.withLock({ $0.selectedSubtitleStreamIndex }) else { break }
+            for event in events {
+                switch event {
+                case .cue(let cue):
+                    subtitleStore.add(cue)
+                case .clear(let seconds):
+                    subtitleStore.closeOpenCues(at: seconds)
+                }
             }
         case .skipped:
             break
@@ -322,6 +481,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         return name.isEmpty ? "Track \(stream.streamIndex)" : name
     }
 
+    nonisolated private static func externalTrackName(for track: ExternalSubtitleTrack) -> String {
+        track.title
+            ?? track.language.flatMap { Locale.current.localizedString(forLanguageCode: $0) }
+            ?? String(localized: "External")
+    }
+
     // MARK: - Renderer pumps (pump queue only)
 
     nonisolated private func kickPumps() {
@@ -357,6 +522,13 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var selectedAudioOrdinal = 0
         var selectedAudioStreamIndex: Int32 = -1
         var initialAudioOrdinal: Int?
+        /// -1 = not yet initialized (the demux loop applies the server
+        /// default on open); 0 = subtitles off.
+        var selectedSubtitleOrdinal = -1
+        var selectedSubtitleStreamIndex: Int32 = -1
+        var initialSubtitleOrdinal: Int?
+        var embeddedSubtitleStreamIndices: [Int32] = []
+        var externalSubtitles: [ExternalSubtitleTrack] = []
     }
 
     private let lock = NSLock()

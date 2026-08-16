@@ -16,6 +16,11 @@ protocol PlayerEngine: AnyObject, Observable {
     var videoSize: CGSize? { get }
     var audioTracks: [PlayerTrack] { get }
     var subtitleTracks: [PlayerTrack] { get }
+    /// The subtitle content on screen right now (M5): joined text lines
+    /// and/or decoded bitmap rects, rendered by the player UI as an
+    /// overlay. Empty/nil when no cue is active.
+    var currentSubtitleText: String? { get }
+    var currentSubtitleImages: [SubtitleImage] { get }
 
     func togglePause()
     func seek(by seconds: Double)

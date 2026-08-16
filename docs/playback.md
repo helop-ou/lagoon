@@ -13,10 +13,12 @@ bundle until the dependency is slimmed.
 `PlaybackController.start` runs the standard Jellyfin negotiation:
 
 1. `POST Items/{id}/PlaybackInfo?UserId=` with `DeviceProfile.lagoon` — a
-   capability profile mirroring exactly what the engine can wrap: h264/hevc
-   video with aac/mp3/ac3/eac3 audio in mkv/webm/mp4/m4v/mov, plus an fMP4
-   HLS transcoding profile whose output (hevc/h264 + eac3,ac3,aac) lands
-   back inside the same envelope. The server does the deciding.
+   capability profile mirroring exactly what the engine can play: h264/hevc
+   video with aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
+   vorbis (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov, embedded
+   text/PGS subtitles and external vtt (M5), plus an fMP4 HLS transcoding
+   profile whose output (hevc/h264 + eac3,ac3,aac) lands back inside the
+   same envelope. The server does the deciding.
 2. Pick the first `MediaSource` and resolve a URL via
    `JellyfinClient.streamURL`:
    - `SupportsDirectPlay` → `Videos/{id}/stream?static=true&mediaSourceId=…`
@@ -46,6 +48,31 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   decodes them. CoreAudio likewise decodes compressed aac/mp3/ac3/eac3
   handed to the audio renderer (ac3/eac3 self-describing; aac needs its
   AudioSpecificConfig as the magic cookie; mp3 is 1152 frames/packet).
+- **Audio decode** (M4): codecs CoreAudio won't take compressed
+  (DTS, TrueHD, FLAC, Opus, Vorbis — anything with an FFmpeg decoder)
+  go through `AudioDecoder`: libavcodec → swresample → interleaved
+  Float32 LPCM sample buffers, coalesced to ~2048-sample chunks because
+  TrueHD frames are 40 samples each. FFmpeg's native channel-bit order
+  matches CoreAudio's channel bitmap bit-for-bit on the first 18
+  positions, so a native layout mask maps straight across into the
+  `AudioChannelLayout`. The E-AC3 (JOC/Atmos) path deliberately stays
+  compressed passthrough. Platform limit stands: TrueHD Atmos objects
+  are unpreservable — TrueHD plays as lossless multichannel LPCM.
+- **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
+  renderers. Embedded streams decode via `avcodec_decode_subtitle2`
+  (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
+  everything past the 8th comma, `{\…}` override tags stripped — and
+  PGS/VobSub to paletted rects converted to CGImages, positioned on the
+  codec's graphics plane). External Jellyfin streams (vtt delivery)
+  download and parse into the same cue store. Every subtitle stream is
+  listed even if undecodable so per-type ordinals stay aligned with the
+  server's stream list; external tracks append after embedded ones and
+  the controller maps `DefaultSubtitleStreamIndex` into that combined
+  space. Selecting an embedded track re-demuxes from the current
+  position (same trick as audio switching) so the active line appears
+  immediately; PGS cues are open-ended and close on the next
+  composition event. Not covered: subtitles during HLS transcode (the
+  vtt-over-HLS playlist is not read).
 - **Threading**: the demux loop runs on a serial queue feeding two locked
   sample-buffer queues; renderer pumps drain them via
   `requestMediaDataWhenReady`; state and transport live on the main actor.
@@ -68,13 +95,11 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   and play as HDR10 from the base layer. Hardware verification pending
   (the simulator has no HDR output; DoVi P5 may not decode in the sim at
   all).
-- **Milestones outstanding** (HEL-48): M2 Atmos verification (E-AC3 JOC
-  passes through compressed, so it may already survive — needs hardware),
-  M3 hardware verification of the HDR/DoVi tagging above, M4 DTS/TrueHD
-  decode via libavcodec (until then the server transcodes their audio to
-  E-AC3), M5 subtitles (none render today — the `SubtitleProfiles` vtt
-  request and `externalSubtitleURL` helper are ready for it), M6
-  stall/underrun hardening and the master-variant pick.
+- **Milestones outstanding** (HEL-48): M2 Atmos verification on hardware
+  (E-AC3 JOC passes through compressed, so it may already survive), M3
+  hardware verification of the HDR/DoVi tagging above, M6 stall/underrun
+  hardening, the master-variant pick, and MPVKit slimming. M4 (audio
+  decode) and M5 (subtitles) landed 2026-08-17 — sim pass pending.
 
 ## Debug playback HUD
 

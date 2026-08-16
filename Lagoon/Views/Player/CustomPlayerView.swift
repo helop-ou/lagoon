@@ -65,6 +65,8 @@ struct CustomPlayerView<Surface: View>: View {
         ZStack {
             videoSurface
 
+            subtitleOverlay
+
             if engine.isBuffering {
                 ProgressView()
                     .tint(.white)
@@ -139,6 +141,64 @@ struct CustomPlayerView<Surface: View>: View {
     private func pokeControls() {
         controlsVisible = true
         interactionToken += 1
+    }
+
+    // MARK: - Subtitles (HEL-48 M5)
+
+    /// Bitmap cues (PGS/VobSub) land exactly where they compose on the
+    /// video plane; text cues sit bottom-center Infuse-style.
+    private var subtitleOverlay: some View {
+        GeometryReader { proxy in
+            let videoRect = displayedVideoRect(in: proxy.size)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                ForEach(Array(engine.currentSubtitleImages.enumerated()), id: \.offset) { _, cue in
+                    Image(decorative: cue.image, scale: 1)
+                        .resizable()
+                        .frame(
+                            width: videoRect.width * cue.rect.width,
+                            height: videoRect.height * cue.rect.height
+                        )
+                        .position(
+                            x: videoRect.minX + videoRect.width * cue.rect.midX,
+                            y: videoRect.minY + videoRect.height * cue.rect.midY
+                        )
+                }
+                if let text = engine.currentSubtitleText {
+                    VStack {
+                        Spacer()
+                        Text(text)
+                            .font(.title3.weight(.medium))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.9), radius: 3, y: 1)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 8)
+                            .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(.bottom, Metrics.screenGutter)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    /// Where the aspect-fit video actually sits inside the surface.
+    private func displayedVideoRect(in container: CGSize) -> CGRect {
+        guard let videoSize = engine.videoSize, videoSize.width > 0, videoSize.height > 0,
+              container.width > 0, container.height > 0 else {
+            return CGRect(origin: .zero, size: container)
+        }
+        let scale = min(container.width / videoSize.width, container.height / videoSize.height)
+        let size = CGSize(width: videoSize.width * scale, height: videoSize.height * scale)
+        return CGRect(
+            x: (container.width - size.width) / 2,
+            y: (container.height - size.height) / 2,
+            width: size.width,
+            height: size.height
+        )
     }
 
     private func openPanel() {

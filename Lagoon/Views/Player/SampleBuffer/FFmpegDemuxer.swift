@@ -33,7 +33,9 @@ nonisolated struct DemuxedStream {
     let language: String?
     let title: String?
     let channels: Int
-    let formatDescription: CMFormatDescription
+    /// nil only for subtitle streams — cues render as an overlay, not
+    /// through a sample-buffer renderer.
+    let formatDescription: CMFormatDescription?
     /// Fallback per-packet duration in seconds for audio packets that
     /// arrive without one (frames-per-packet / sample-rate).
     let fallbackPacketDuration: Double
@@ -42,7 +44,8 @@ nonisolated struct DemuxedStream {
 nonisolated final class FFmpegDemuxer {
     enum ReadResult {
         case video(CMSampleBuffer)
-        case audio(CMSampleBuffer, streamIndex: Int32)
+        case audio([CMSampleBuffer], streamIndex: Int32)
+        case subtitle([SubtitleEvent], streamIndex: Int32)
         case skipped
         case endOfFile
         case failed(String)
@@ -53,9 +56,13 @@ nonisolated final class FFmpegDemuxer {
     private var videoStreamIndex: Int32 = -1
     private var videoTimeBase = AVRational(num: 1, den: 1)
     private var audioTimeBases: [Int32: AVRational] = [:]
+    // M4: codecs CoreAudio can't take compressed decode to LPCM here.
+    private var audioDecoders: [Int32: AudioDecoder] = [:]
+    private var subtitleDecoders: [Int32: SubtitleDecoder] = [:]
 
     private(set) var videoStream: DemuxedStream?
     private(set) var audioStreams: [DemuxedStream] = []
+    private(set) var subtitleStreams: [DemuxedStream] = []
     private(set) var durationSeconds: Double = 0
 
     // Written from the main actor at shutdown, polled by FFmpeg's interrupt
@@ -137,10 +144,19 @@ nonisolated final class FFmpegDemuxer {
             guard let stream = ctx.pointee.streams[index], let par = stream.pointee.codecpar else { continue }
             switch par.pointee.codec_type {
             case AVMEDIA_TYPE_AUDIO:
-                // Streams whose codec we can't wrap yet stay out of the
-                // track list entirely — the engine's canPlay() gate should
-                // have kept those files on mpv anyway.
-                guard let (description, framesPerPacket) = SampleBufferFactory.audioFormatDescription(codecpar: par) else {
+                // Passthrough codecs wrap compressed; everything else gets
+                // a libavcodec → LPCM decoder (M4). Only codecs FFmpeg has
+                // no decoder for drop out of the track list.
+                var description: CMFormatDescription?
+                var fallbackDuration: Double = 0
+                if let (passthrough, framesPerPacket) = SampleBufferFactory.audioFormatDescription(codecpar: par) {
+                    description = passthrough
+                    fallbackDuration = Double(framesPerPacket) / Double(max(par.pointee.sample_rate, 1))
+                } else if let decoder = AudioDecoder(codecpar: par, timeBase: stream.pointee.time_base) {
+                    description = decoder.formatDescription
+                    audioDecoders[Int32(index)] = decoder
+                }
+                guard let description else {
                     stream.pointee.discard = AVDISCARD_ALL
                     continue
                 }
@@ -152,7 +168,25 @@ nonisolated final class FFmpegDemuxer {
                     title: Self.metadata(stream, key: "title"),
                     channels: Int(par.pointee.ch_layout.nb_channels),
                     formatDescription: description,
-                    fallbackPacketDuration: Double(framesPerPacket) / Double(max(par.pointee.sample_rate, 1))
+                    fallbackPacketDuration: fallbackDuration
+                ))
+            case AVMEDIA_TYPE_SUBTITLE:
+                // Every subtitle stream is listed even when undecodable so
+                // the engine's per-type ordinals stay aligned with the
+                // server's stream list (M5). Unselected streams stay
+                // discarded inside libavformat.
+                stream.pointee.discard = AVDISCARD_ALL
+                if let decoder = SubtitleDecoder(codecpar: par, timeBase: stream.pointee.time_base) {
+                    subtitleDecoders[Int32(index)] = decoder
+                }
+                subtitleStreams.append(DemuxedStream(
+                    streamIndex: Int32(index),
+                    codecName: String(cString: avcodec_get_name(par.pointee.codec_id)),
+                    language: Self.metadata(stream, key: "language"),
+                    title: Self.metadata(stream, key: "title"),
+                    channels: 0,
+                    formatDescription: nil,
+                    fallbackPacketDuration: 0
                 ))
             case AVMEDIA_TYPE_VIDEO:
                 if Int32(index) != bestVideo {
@@ -176,9 +210,25 @@ nonisolated final class FFmpegDemuxer {
         }
     }
 
+    /// Same discard dance for the chosen embedded subtitle stream (nil =
+    /// subtitles off / an external track is active).
+    func selectSubtitle(streamIndex: Int32?) {
+        guard let ctx = formatContext else { return }
+        for stream in subtitleStreams {
+            ctx.pointee.streams[Int(stream.streamIndex)]?.pointee.discard =
+                stream.streamIndex == streamIndex ? AVDISCARD_DEFAULT : AVDISCARD_ALL
+        }
+    }
+
     func seek(toSeconds seconds: Double) {
         guard let ctx = formatContext else { return }
         av_seek_frame(ctx, -1, Int64(seconds * avTimeBase), seekBackwardFlag)
+        for decoder in audioDecoders.values {
+            decoder.flush()
+        }
+        for decoder in subtitleDecoders.values {
+            decoder.flush()
+        }
     }
 
     func readNext() -> ReadResult {
@@ -191,10 +241,10 @@ nonisolated final class FFmpegDemuxer {
         defer { av_packet_unref(packet) }
         let streamIndex = packet.pointee.stream_index
 
-        if streamIndex == videoStreamIndex, let videoStream {
+        if streamIndex == videoStreamIndex, let description = videoStream?.formatDescription {
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,
-                formatDescription: videoStream.formatDescription,
+                formatDescription: description,
                 timeBase: videoTimeBase,
                 isVideo: true,
                 fallbackDuration: 0,
@@ -202,17 +252,26 @@ nonisolated final class FFmpegDemuxer {
             ) else { return .skipped }
             return .video(buffer)
         }
+        if let decoder = audioDecoders[streamIndex] {
+            let buffers = decoder.decode(packet: packet)
+            return buffers.isEmpty ? .skipped : .audio(buffers, streamIndex: streamIndex)
+        }
         if let audio = audioStreams.first(where: { $0.streamIndex == streamIndex }),
+           let description = audio.formatDescription,
            let timeBase = audioTimeBases[streamIndex] {
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,
-                formatDescription: audio.formatDescription,
+                formatDescription: description,
                 timeBase: timeBase,
                 isVideo: false,
                 fallbackDuration: audio.fallbackPacketDuration,
                 isKeyFrame: true
             ) else { return .skipped }
-            return .audio(buffer, streamIndex: streamIndex)
+            return .audio([buffer], streamIndex: streamIndex)
+        }
+        if let decoder = subtitleDecoders[streamIndex] {
+            let events = decoder.decode(packet: packet)
+            return events.isEmpty ? .skipped : .subtitle(events, streamIndex: streamIndex)
         }
         return .skipped
     }

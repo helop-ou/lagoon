@@ -2,10 +2,12 @@ import Foundation
 
 // Capability profile sent with PlaybackInfo so the server can decide between
 // direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
-// what the Lagoon sample-buffer engine can wrap: h264/hevc video with
-// aac/mp3/ac3/eac3 audio in any container libavformat demuxes, plus the
-// fMP4 HLS transcode fallback (whose hevc/h264 + eac3 output lands back
-// inside the same envelope).
+// what the Lagoon sample-buffer engine can play: h264/hevc video wrapped
+// compressed; aac/mp3/ac3/eac3 audio wrapped compressed plus
+// dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4); text and
+// PGS/VobSub subtitles embedded, vtt external (M5) — in any container
+// libavformat demuxes, plus the fMP4 HLS transcode fallback (whose
+// hevc/h264 + eac3 output lands back inside the same envelope).
 nonisolated enum DeviceProfile {
     struct Profile: Encodable {
         let maxStreamingBitrate: Int
@@ -63,7 +65,7 @@ nonisolated enum DeviceProfile {
                 container: "mkv,webm,mp4,m4v,mov",
                 type: "Video",
                 videoCodec: "hevc,h264",
-                audioCodec: "aac,mp3,ac3,eac3"
+                audioCodec: "aac,mp3,ac3,eac3,dts,truehd,flac,opus,vorbis"
             ),
             DirectPlayProfile(container: "mp3", type: "Audio"),
             DirectPlayProfile(container: "m4a,m4b", type: "Audio", audioCodec: "aac,alac"),
@@ -172,6 +174,18 @@ nonisolated enum DeviceProfile {
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
             SubtitleProfile(format: "vtt", method: "External"),
+            // Embedded formats the engine decodes itself (M5) — without
+            // these the server burns subtitles in, forcing a transcode.
+            SubtitleProfile(format: "subrip", method: "Embed"),
+            SubtitleProfile(format: "srt", method: "Embed"),
+            SubtitleProfile(format: "ass", method: "Embed"),
+            SubtitleProfile(format: "ssa", method: "Embed"),
+            SubtitleProfile(format: "mov_text", method: "Embed"),
+            SubtitleProfile(format: "webvtt", method: "Embed"),
+            SubtitleProfile(format: "vtt", method: "Embed"),
+            SubtitleProfile(format: "pgssub", method: "Embed"),
+            SubtitleProfile(format: "pgs", method: "Embed"),
+            SubtitleProfile(format: "dvdsub", method: "Embed"),
         ]
     )
 }

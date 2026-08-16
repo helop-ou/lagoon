@@ -59,11 +59,38 @@ final class PlaybackController {
                 initialAudioOrdinal = position + 1
             }
 
+            // Subtitles share the ordinal convention, with external
+            // (sidecar) streams appended after the embedded ones — the
+            // engine lists them in the same order (HEL-48 M5).
+            let allSubtitles = (source.mediaStreams ?? []).filter { $0.type == "Subtitle" }
+            let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
+            let externalTracks: [ExternalSubtitleTrack] = allSubtitles
+                .filter { $0.isExternal == true }
+                .compactMap { stream in
+                    guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else { return nil }
+                    return ExternalSubtitleTrack(
+                        url: url,
+                        title: stream.displayTitle,
+                        language: stream.language,
+                        select: stream.index == source.defaultSubtitleStreamIndex
+                    )
+                }
+            var initialSubtitleOrdinal: Int?
+            if let index = source.defaultSubtitleStreamIndex {
+                if let position = embeddedSubtitles.firstIndex(where: { $0.index == index }) {
+                    initialSubtitleOrdinal = position + 1
+                } else if let position = externalTracks.firstIndex(where: \.select) {
+                    initialSubtitleOrdinal = embeddedSubtitles.count + position + 1
+                }
+            }
+
             let engine = SampleBufferPlayerEngine()
             engine.prepare(
                 url: streamURL,
                 startSeconds: resumeSeconds,
-                initialAudioOrdinal: initialAudioOrdinal
+                initialAudioOrdinal: initialAudioOrdinal,
+                initialSubtitleOrdinal: initialSubtitleOrdinal,
+                externalSubtitles: externalTracks
             )
             engine.onFinished = { [weak self] in self?.didFinish = true }
             engine.onError = { [weak self] message in
