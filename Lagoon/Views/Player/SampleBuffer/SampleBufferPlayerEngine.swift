@@ -562,14 +562,40 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         var detail = stream.title
         if detail == nil {
-            var facts = stream.codecName.uppercased()
-            if stream.channels > 0 {
-                facts += " · \(stream.channels)ch"
+            var facts = Self.friendlyCodecName(stream.codecName)
+            if let layout = Self.channelLabel(stream.channels) {
+                facts += " \(layout)"
             }
             detail = facts
         }
-        let name = [language, detail].compactMap(\.self).joined(separator: " · ")
+        var name = [language, detail].compactMap(\.self).joined(separator: " · ")
+        // Whether a track carries Atmos is invisible from most mux titles —
+        // and it's the fact that decides which track lights the badge.
+        if stream.isAtmos, !name.localizedCaseInsensitiveContains("atmos") {
+            name += " · Atmos"
+        }
         return name.isEmpty ? "Track \(stream.streamIndex)" : name
+    }
+
+    nonisolated private static func friendlyCodecName(_ codecName: String) -> String {
+        switch codecName {
+        case "eac3": "Dolby Digital+"
+        case "ac3": "Dolby Digital"
+        case "truehd": "Dolby TrueHD"
+        case "dts": "DTS"
+        default: codecName.uppercased()
+        }
+    }
+
+    nonisolated private static func channelLabel(_ channels: Int) -> String? {
+        switch channels {
+        case 0: nil
+        case 1: "1.0"
+        case 2: "2.0"
+        case 6: "5.1"
+        case 8: "7.1"
+        default: "\(channels)ch"
+        }
     }
 
     nonisolated private static func externalTrackName(for track: ExternalSubtitleTrack) -> String {

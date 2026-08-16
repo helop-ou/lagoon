@@ -34,6 +34,9 @@ nonisolated struct DemuxedStream {
     let language: String?
     let title: String?
     let channels: Int
+    /// FFmpeg reported the Atmos profile (E-AC3 JOC / TrueHD Atmos) —
+    /// surfaces in track names so the JOC track is identifiable.
+    let isAtmos: Bool
     /// nil only for subtitle streams — cues render as an overlay, not
     /// through a sample-buffer renderer.
     let formatDescription: CMFormatDescription?
@@ -156,6 +159,7 @@ nonisolated final class FFmpegDemuxer {
             language: Self.metadata(stream, key: "language"),
             title: Self.metadata(stream, key: "title"),
             channels: 0,
+            isAtmos: false,
             formatDescription: videoDescription,
             fallbackPacketDuration: 0
         )
@@ -191,6 +195,10 @@ nonisolated final class FFmpegDemuxer {
                     language: Self.metadata(stream, key: "language"),
                     title: Self.metadata(stream, key: "title"),
                     channels: Int(par.pointee.ch_layout.nb_channels),
+                    // AV_PROFILE_EAC3_DDP_ATMOS and AV_PROFILE_TRUEHD_ATMOS
+                    // share the value 30.
+                    isAtmos: (par.pointee.codec_id == AV_CODEC_ID_EAC3 || par.pointee.codec_id == AV_CODEC_ID_TRUEHD)
+                        && par.pointee.profile == 30,
                     formatDescription: description,
                     fallbackPacketDuration: fallbackDuration
                 ))
@@ -209,6 +217,7 @@ nonisolated final class FFmpegDemuxer {
                     language: Self.metadata(stream, key: "language"),
                     title: Self.metadata(stream, key: "title"),
                     channels: 0,
+                    isAtmos: false,
                     formatDescription: nil,
                     fallbackPacketDuration: 0
                 ))

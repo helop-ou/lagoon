@@ -215,15 +215,19 @@ final class PlaybackController {
         return token
     }
 
-    // "Dolby Digital+ 5.1" — marketing codec name plus channel layout.
+    // "Dolby Digital+ Atmos 5.1" — marketing codec name, Atmos when the
+    // server's stream profile says so, channel layout.
     private static func audioToken(for audio: MediaStream?) -> String? {
         guard let audio, let codec = audio.codec else { return nil }
-        let name = switch codec.lowercased() {
+        var name = switch codec.lowercased() {
         case "eac3": "Dolby Digital+"
         case "ac3": "Dolby Digital"
         case "truehd": "Dolby TrueHD"
         case "dts": "DTS"
         default: codec.uppercased()
+        }
+        if audio.profile?.localizedCaseInsensitiveContains("atmos") == true {
+            name += " Atmos"
         }
         let layout: String? = switch audio.channels {
         case 8: "7.1"
