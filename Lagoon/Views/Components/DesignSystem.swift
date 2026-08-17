@@ -9,7 +9,7 @@ enum Metrics {
     static let cardSpacing: CGFloat = 40
     static let posterWidth: CGFloat = 260
     static let landscapeWidth: CGFloat = 360
-    static let heroHeight: CGFloat = 540
+    static let heroHeight: CGFloat = 620
     static let gridColumns = 5
     static let gridRowSpacing: CGFloat = 72
     /// Room under a poster for its title and year.
@@ -34,7 +34,7 @@ enum Metrics {
     static let cardSpacing: CGFloat = 14
     static let posterWidth: CGFloat = 140
     static let landscapeWidth: CGFloat = 240
-    static let heroHeight: CGFloat = 340
+    static let heroHeight: CGFloat = 380
     static let gridColumns = 3
     static let gridRowSpacing: CGFloat = 28
     static let posterCaptionHeight: CGFloat = 38

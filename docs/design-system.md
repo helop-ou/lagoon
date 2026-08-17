@@ -15,7 +15,7 @@ convention; iOS scales down via `#if os(tvOS)`.
 | `cardSpacing` | 40 | 14 |
 | `posterWidth` (2:3) | 260 | 140 |
 | `landscapeWidth` (16:9) | 360 | 240 |
-| `heroHeight` | 540 | 340 |
+| `heroHeight` | 620 | 380 |
 | `gridColumns` | 5 | 3 |
 | rail focus headroom | top 40 / bottom 80 | 6 / 10 |
 
