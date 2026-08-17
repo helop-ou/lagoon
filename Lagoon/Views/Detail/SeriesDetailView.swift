@@ -78,32 +78,42 @@ struct SeriesDetailView: View {
         }
     }
 
+    /// Season picker with the watched/favourite toggles alongside it. The
+    /// chips come **first** so focus lands on a season when the page opens:
+    /// with the toggles leading, arriving and pressing Select would have
+    /// marked the whole series — every episode — watched.
     @ViewBuilder
     private var seasonChips: some View {
-        // Marking a series watched marks every episode — the same toggle,
-        // one level up.
-        ItemActionRow(item: displayed) {
-            await viewModel.reloadUserData(client: session.client, seriesId: item.id)
-        }
-
-        if !viewModel.seasons.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(viewModel.seasons) { season in
-                        Button(season.name ?? "Season") {
-                            Task { await viewModel.selectSeason(season.id, client: session.client, seriesId: item.id) }
+        // Stacked rather than one row: a horizontal ScrollView is greedy, so
+        // sharing a row would pin the toggles to the far edge of a 16:9
+        // screen, a long way from the chips they sit with. There's no Play
+        // button here to pair them with either.
+        VStack(alignment: .leading, spacing: 8) {
+            if !viewModel.seasons.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(viewModel.seasons) { season in
+                            Button(season.name ?? "Season") {
+                                Task { await viewModel.selectSeason(season.id, client: session.client, seriesId: item.id) }
+                            }
+                            .buttonStyle(.glass)
+                            // Weight alone marks the selected season: a colored
+                            // label fought the focused lozenge, and `.primary`
+                            // under this screen's dark scheme is white — so the
+                            // selected chip went invisible when focused (HEL-50).
+                            .font(.callout.weight(season.id == viewModel.selectedSeasonId ? .bold : .regular))
                         }
-                        .buttonStyle(.glass)
-                        // Weight alone marks the selected season: a colored
-                        // label fought the focused lozenge, and `.primary`
-                        // under this screen's dark scheme is white — so the
-                        // selected chip went invisible when focused (HEL-50).
-                        .font(.callout.weight(season.id == viewModel.selectedSeasonId ? .bold : .regular))
                     }
+                    // Focused glass chips scale past their bounds — without this
+                    // the ScrollView clips them flat.
+                    .padding(.vertical, 16)
                 }
-                // Focused glass chips scale past their bounds — without this
-                // the ScrollView clips them flat.
-                .padding(.vertical, 16)
+            }
+
+            // Marking a series watched marks every episode — the same toggle,
+            // one level up.
+            ItemActionRow(item: displayed) {
+                await viewModel.reloadUserData(client: session.client, seriesId: item.id)
             }
         }
     }

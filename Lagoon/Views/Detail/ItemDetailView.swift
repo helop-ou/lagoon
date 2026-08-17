@@ -39,33 +39,65 @@ struct ItemDetailView: View {
 
     private var playButtons: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ItemActionRow(item: displayed) {
-                detail = try? await session.client.item(id: item.id)
-            }
-
-            HStack(spacing: 16) {
-                Button {
-                    playerItem = PlayerItem(media: displayed)
-                } label: {
-                    Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
-                }
-                .buttonStyle(.glass)
-
-                if resumeTicks != nil {
-                    Button {
-                        playerItem = PlayerItem(media: displayed, startFromBeginning: true)
-                    } label: {
-                        Label("From Beginning", systemImage: "arrow.counterclockwise")
-                    }
-                    .buttonStyle(.glass)
-                }
-            }
+            actions
 
             if let resumeTicks {
                 Text("Resume from \(Self.timestamp(resumeTicks))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        #if os(tvOS)
+        // One row, Play first. Stacked above the play buttons the toggles
+        // also took *first focus*, so arriving and pressing Select marked the
+        // film watched instead of playing it.
+        HStack(spacing: 16) {
+            playButton
+            fromBeginningButton
+            actionRow
+                .padding(.leading, 16)
+        }
+        #else
+        // Touch has no focus order to protect, and a phone has no room for
+        // one row, so the toggles sit above.
+        VStack(alignment: .leading, spacing: 12) {
+            actionRow
+            HStack(spacing: 16) {
+                playButton
+                fromBeginningButton
+            }
+        }
+        #endif
+    }
+
+    private var actionRow: some View {
+        ItemActionRow(item: displayed) {
+            detail = try? await session.client.item(id: item.id)
+        }
+    }
+
+    private var playButton: some View {
+        Button {
+            playerItem = PlayerItem(media: displayed)
+        } label: {
+            Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
+        }
+        .buttonStyle(.glass)
+    }
+
+    @ViewBuilder
+    private var fromBeginningButton: some View {
+        if resumeTicks != nil {
+            Button {
+                playerItem = PlayerItem(media: displayed, startFromBeginning: true)
+            } label: {
+                Label("From Beginning", systemImage: "arrow.counterclockwise")
+            }
+            .buttonStyle(.glass)
         }
     }
 
