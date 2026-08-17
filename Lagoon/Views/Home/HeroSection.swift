@@ -22,7 +22,16 @@ struct HeroSection: View {
                     // Negative gutter: the glow is meant to bleed past the
                     // hero panel rather than sit inside it.
                     .padding(-Metrics.screenGutter)
-                panel(for: current)
+
+                // The whole banner is the target (Jaagop): focus it, click
+                // it, and you get the detail page for whatever is on screen.
+                // A "See more" button inside it was a second thing to aim at
+                // for the one thing the banner already means.
+                NavigationLink(value: current) {
+                    panel(for: current)
+                }
+                .cardButtonStyle()
+                .accessibilityLabel(current.name ?? "")
             }
             .frame(height: Metrics.heroHeight)
             .padding(.horizontal, Metrics.screenGutter)
@@ -38,7 +47,7 @@ struct HeroSection: View {
 
             backdrop(for: item)
 
-            VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 VStack(alignment: .leading, spacing: Metrics.Space.m) {
                     TitleArtView(item: item, maxHeight: Metrics.heroLogoHeight)
                     if let overview = item.overview {
@@ -55,11 +64,6 @@ struct HeroSection: View {
                     insertion: .opacity.animation(.easeIn(duration: 0.3).delay(0.3)),
                     removal: .opacity.animation(.easeOut(duration: 0.2))
                 ))
-
-                NavigationLink(value: item) {
-                    Label("See more", systemImage: "info.circle")
-                }
-                .buttonStyle(.glass)
             }
             .frame(maxWidth: 640, alignment: .leading)
             .padding(.leading, Metrics.Space.section)

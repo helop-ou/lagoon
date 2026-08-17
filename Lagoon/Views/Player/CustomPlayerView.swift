@@ -67,6 +67,11 @@ struct CustomPlayerView<Surface: View>: View {
     private var panelMotion: Animation { .spring(duration: Motion.standard, bounce: 0.1) }
     /// Room a focused track row needs before its ScrollView clips it.
     private var rowFocusInset: CGFloat { 20 }
+    /// A track row at rest; the card sizes itself from this plus the gap.
+    private var trackRowHeight: CGFloat { 62 }
+    /// Taller than before, because the roomier gaps fit fewer rows on screen
+    /// and the panel has the vertical space to spare.
+    private var trackListMaxHeight: CGFloat { 460 }
     /// Far enough to carry the tabs and card clear of the top edge.
     private var panelSlideDistance: CGFloat { 720 }
 
@@ -97,12 +102,10 @@ struct CustomPlayerView<Surface: View>: View {
 
             subtitleOverlay
 
-            // MenuPressGate now forwards the transaction across its hosting
-            // boundary, so withAnimation works in here again — needed for
-            // transitions, which have no value to hang an .animation(_:value:)
-            // on at the moment of insertion. Value-driven modifiers stay where
-            // the change is a plain value (opacity, offset): they're immune to
-            // the boundary either way.
+            // Every animation in here is value-driven (.animation + value:).
+            // withAnimation doesn't survive the MenuPressGate hosting
+            // boundary, and neither do transitions — see the panel below and
+            // the write-up in docs/playback.md.
             Group {
                 if showsBuffering {
                     ProgressView()
@@ -916,7 +919,12 @@ struct CustomPlayerView<Surface: View>: View {
             // clips at its own edges, so the breathing room has to live
             // inside the scroll content and be given back outside it.
             ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                // Rows sat 2pt apart, which is fine at rest and wrong the
+                // moment one is focused: the lozenge is bigger than the row
+                // it grew from, so neighbours collided in a long list
+                // (Jaagop). The gap has to clear the lift, like the poster
+                // captions and the season chips.
+                VStack(alignment: .leading, spacing: Metrics.Space.m) {
                     ForEach(rows, id: \.id) { row in
                         Button {
                             onSelect(row.id)
@@ -938,7 +946,10 @@ struct CustomPlayerView<Surface: View>: View {
             }
             .padding(.horizontal, -rowFocusInset)
             .padding(.vertical, -rowFocusInset)
-            .frame(maxHeight: min(CGFloat(rows.count) * 64 + 16, 340))
+            // Hug a short list, scroll a long one. The per-row estimate has
+            // to include the gap or the card under-sizes itself and a list
+            // that would have fit ends up scrolling.
+            .frame(maxHeight: min(CGFloat(rows.count) * (trackRowHeight + Metrics.Space.m), trackListMaxHeight))
         }
     }
 

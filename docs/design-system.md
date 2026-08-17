@@ -130,9 +130,11 @@ chip), which has no lozenge to fight.
   image); legibility now comes from the same **leading wash** the detail pages
   use — darken only the column the text occupies and let the rest of the still
   be itself. Auto-advances every 7 s after pre-warming the next image and
-  palette; text transitions asymmetrically (in: 0.3 s delayed, out: 0.2 s)
-  while the CTA stays outside the transition. Dots: 8 pt capsules, 24 pt when
-  active.
+  palette; text transitions asymmetrically (in: 0.3 s delayed, out: 0.2 s).
+  **The whole banner is the link** — focus it, click it, get the detail page
+  for whatever is on screen. It carried a "See more" button until 2026-08-17,
+  which was a second thing to aim at for the one thing the banner already
+  meant. Dots: 8 pt capsules, 24 pt when active.
 - **Ambient glow** (`AmbientGlowView` + `ArtworkPalette`): three radial
   gradients at fixed unit points from the artwork's dominant colors, blurred
   120, bleeding 80 pt past the hero panel. Palette extraction is a pure-Swift
