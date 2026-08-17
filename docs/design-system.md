@@ -72,10 +72,10 @@ white pill the system then labels in white: invisible. The reference's own
 Play and Trailer are plain glass pills too, so prominence comes from
 position and order, never from a filled colour.
 
-**Focus drives nothing else.** The `.card` style's lift, parallax and specular *is* the
-  focus indication. The poster title reveal that used to live here is gone
-  with the overlay it revealed (HEL-51). Selection elsewhere is a **weight**
-  swap, not a border and not a color (see below).
+**Focus drives nothing else.** The `.card` style's lift, parallax and
+specular *is* the indication. The poster title reveal that used to live here
+went with the overlay it revealed (HEL-51). Selection elsewhere is a
+**weight** swap, not a border and not a color (see below).
 
 **Never set a foreground color on a focusable control or on any ancestor of
 one.** The focused lozenge picks its own label color to sit on the white
