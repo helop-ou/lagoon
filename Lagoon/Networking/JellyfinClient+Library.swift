@@ -127,6 +127,20 @@ extension JellyfinClient {
         return page.items
     }
 
+    /// The episode a Play press on a series page should start: the one in
+    /// progress if there is one, otherwise the next unwatched. Nil once the
+    /// series is fully watched — `Shows/NextUp` simply returns nothing.
+    func nextUpEpisode(seriesId: String) async throws -> MediaItem? {
+        let userId = try requireUserId()
+        let page: ItemsPage = try await get("Shows/NextUp", query: [
+            URLQueryItem(name: "userId", value: userId),
+            URLQueryItem(name: "seriesId", value: seriesId),
+            URLQueryItem(name: "Limit", value: "1"),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+        ])
+        return page.items.first
+    }
+
     func episodes(seriesId: String, seasonId: String?) async throws -> [MediaItem] {
         let userId = try requireUserId()
         var query = [

@@ -8,12 +8,17 @@ final class SeriesDetailViewModel {
     var selectedSeasonId: String?
     var episodes: [MediaItem] = []
     var isLoadingEpisodes = false
+    /// The episode Play starts: in progress if there is one, else the next
+    /// unwatched. Nil once the show is finished.
+    var upNext: MediaItem?
 
     func load(client: JellyfinClient, seriesId: String) async {
         async let detailTask = client.item(id: seriesId)
         async let seasonsTask = client.seasons(seriesId: seriesId)
+        async let upNextTask = client.nextUpEpisode(seriesId: seriesId)
         detail = try? await detailTask
         seasons = (try? await seasonsTask) ?? []
+        upNext = try? await upNextTask
         if selectedSeasonId == nil {
             selectedSeasonId = seasons.first?.id
         }
@@ -30,10 +35,14 @@ final class SeriesDetailViewModel {
         await loadEpisodes(client: client, seriesId: seriesId)
     }
 
-    /// After a watched/favourite toggle on the series itself — marking a
-    /// series played marks every episode, so the rail has to reload too.
+    /// After a watched/favourite toggle or a playback session: the show's own
+    /// flags, the episode rail, and *which episode is up next* can all have
+    /// moved — marking one watched advances it to the following one.
     func reloadUserData(client: JellyfinClient, seriesId: String) async {
-        detail = try? await client.item(id: seriesId)
+        async let detailTask = client.item(id: seriesId)
+        async let upNextTask = client.nextUpEpisode(seriesId: seriesId)
+        detail = try? await detailTask
+        upNext = try? await upNextTask
         await loadEpisodes(client: client, seriesId: seriesId)
     }
 
@@ -62,7 +71,7 @@ struct SeriesDetailView: View {
         DetailPageScaffold(
             backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920)
         ) {
-            DetailHeader(item: displayed) { seasonChips }
+            DetailHeader(item: displayed, upNext: viewModel.upNext) { actions }
             episodesSection
             CastStrip(people: displayed.people ?? [])
         }
@@ -71,23 +80,48 @@ struct SeriesDetailView: View {
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
-            Task { await viewModel.refreshEpisodes(client: session.client, seriesId: item.id) }
+            // Watching an episode moves the show on, so this reloads what's
+            // up next as well as the rail.
+            Task { await viewModel.reloadUserData(client: session.client, seriesId: item.id) }
         }) { player in
             VideoPlayerView(playerItem: player)
                 .preferredColorScheme(.dark)
         }
     }
 
-    /// Season picker with the watched/favourite toggles alongside it. The
-    /// chips come **first** so focus lands on a season when the page opens:
-    /// with the toggles leading, arriving and pressing Select would have
-    /// marked the whole series — every episode — watched.
+    /// Play the episode that's up next, then the toggles, then the season
+    /// picker. Play leads so it takes first focus — the same reason the movie
+    /// page orders it that way.
+    @ViewBuilder
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                if let episode = viewModel.upNext {
+                    Button {
+                        playerItem = PlayerItem(media: episode)
+                    } label: {
+                        Label(
+                            episode.playbackProgress == nil ? "Play" : "Resume",
+                            systemImage: "play.fill"
+                        )
+                    }
+                    .buttonStyle(.glass)
+                }
+
+                // The checkmark acts on that episode; the star favourites the
+                // show. Each control targets what it plausibly means next to
+                // a Play button that starts one specific episode.
+                ItemActionRow(item: displayed, playedItem: viewModel.upNext) {
+                    await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+                }
+            }
+
+            seasonChips
+        }
+    }
+
     @ViewBuilder
     private var seasonChips: some View {
-        // Stacked rather than one row: a horizontal ScrollView is greedy, so
-        // sharing a row would pin the toggles to the far edge of a 16:9
-        // screen, a long way from the chips they sit with. There's no Play
-        // button here to pair them with either.
         VStack(alignment: .leading, spacing: 8) {
             if !viewModel.seasons.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -114,12 +148,6 @@ struct SeriesDetailView: View {
                     .padding(.vertical, 16)
                 }
                 .padding(.horizontal, -Metrics.screenGutter)
-            }
-
-            // Marking a series watched marks every episode — the same toggle,
-            // one level up.
-            ItemActionRow(item: displayed) {
-                await viewModel.reloadUserData(client: session.client, seriesId: item.id)
             }
         }
     }

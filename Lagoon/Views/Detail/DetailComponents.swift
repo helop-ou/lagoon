@@ -81,11 +81,22 @@ struct DetailPageScaffold<Content: View>: View {
 /// screen gutter so title, badges, buttons and synopsis share one edge.
 struct DetailHeader<Buttons: View>: View {
     let item: MediaItem
+    /// On a series page, the episode a Play press would start. Its label and
+    /// synopsis take over from the show's, because what you're deciding about
+    /// is the next episode, not the premise of the series (Infuse does the
+    /// same). The title art stays the show's — that's the page's identity.
+    var upNext: MediaItem?
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             TitleArtView(item: item)
+
+            if let upNext, let label = upNext.episodeLabel {
+                Text([label, upNext.name].compactMap(\.self).joined(separator: "  ·  "))
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+            }
 
             // One spaced line, per the reference: runtime, year, a boxed
             // certification, then plain capability tokens. No capsules —
@@ -122,7 +133,7 @@ struct DetailHeader<Buttons: View>: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let overview = item.overview {
+            if let overview = upNext?.overview ?? item.overview {
                 Text(overview)
                     .font(.body)
                     .foregroundStyle(.secondary)
