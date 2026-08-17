@@ -6,8 +6,6 @@ import SwiftUI
 /// exactly where the words are.
 struct DetailBackdropView: View {
     let url: URL?
-    /// Rises as content scrolls over the artwork — see `DetailPageScaffold`.
-    var dim: Double = 0.12
 
     var body: some View {
         ZStack {
@@ -19,7 +17,7 @@ struct DetailBackdropView: View {
             }
             .animation(.easeInOut(duration: Motion.crossfade), value: url)
         }
-        .overlay(Color.black.opacity(dim))
+        .overlay(Color.black.opacity(0.12))
         // Leading wash: the info block is left-aligned, so that half needs a
         // dark bed while the other half stays vivid. This is what lets the
         // reference keep its artwork bright — a uniform scrim strong enough
@@ -49,18 +47,18 @@ struct DetailBackdropView: View {
 /// unreachable (Jaagop, 2026-08-17). As an inset, the first button *is* the
 /// first content item, so Up leaves the page the way tvOS expects.
 ///
-/// The dimming replaces the fixed scrim panel the first pass used: the
-/// reference keeps its artwork vivid and has no dark panel at all, which
-/// only works if the artwork gets out of the way once you scroll past it.
+/// The backdrop does **not** darken as you scroll. That was tried and cut
+/// (Jaagop, 2026-08-17: "not a big fan of the screen going black"): moving
+/// focus into a rail jumps further in one press than the ramp covered, so it
+/// read as a slam to black rather than a settle. The artwork simply stays as
+/// it is, and the rails below rely on their own artwork for contrast.
 struct DetailPageScaffold<Content: View>: View {
     let backdropURL: URL?
     @ViewBuilder let content: Content
 
-    @State private var scrolled: CGFloat = 0
-
     var body: some View {
         ZStack {
-            DetailBackdropView(url: backdropURL, dim: dim)
+            DetailBackdropView(url: backdropURL)
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 44) {
@@ -71,17 +69,7 @@ struct DetailPageScaffold<Content: View>: View {
             }
             .contentMargins(.top, Metrics.detailHeroSpace, for: .scrollContent)
             .scrollClipDisabled()
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { _, offset in
-                scrolled = offset
-            }
         }
-    }
-
-    private var dim: Double {
-        let progress = min(max(scrolled / Metrics.detailHeroSpace, 0), 1)
-        return 0.12 + progress * 0.68
     }
 }
 

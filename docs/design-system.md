@@ -83,8 +83,12 @@ chip), which has no lozenge to fight.
   (0.9 → clear by 68 %) rather than a uniform scrim, because the info block
   is left-aligned: that keeps the right of the still vivid, which a scrim
   strong enough for text over busy artwork would flatten. There is no dark
-  panel at all — instead `DetailPageScaffold` **dims the backdrop as content
-  scrolls over it** (0.12 → 0.80), so cast and related rails stay legible.
+  panel and **no scroll-linked dimming** — the latter was tried and cut
+  (Jaagop: "not a big fan of the screen going black"), because moving focus
+  into a rail jumps further in one press than any sensible ramp covers, so it
+  read as a slam to black. The rails stay legible on their own: the leading
+  wash covers the column the headings and names sit in, and the cards are
+  opaque artwork.
   The hero space is a **scroll content margin, not a spacer view**: as a
   spacer it was non-focusable content above the first button, which left
   focus unable to climb back out — Up from Play did nothing and the tab bar
