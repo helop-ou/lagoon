@@ -26,10 +26,11 @@ nonisolated final class AudioDecoder {
     // Decoders like TrueHD emit tiny frames (40 samples per access unit);
     // coalesce into ~2048-sample buffers so the renderer queue holds
     // seconds, not thousands of slivers.
-    // Mutable storage is filled by swresample in place, then transferred to
-    // CoreMedia at emit. TrueHD commonly yields 40-sample frames; avoiding a
-    // temporary Data allocation + append for every one matters far more than
-    // it would for codecs that already produce large frames.
+    // Mutable storage swresample fills in place and emit copies out of.
+    // TrueHD commonly yields 40-sample frames, so avoiding a temporary
+    // allocation + append for every one matters far more than it would for
+    // codecs that already produce large frames. The buffer is reused across
+    // emits: only its length is reset, never its allocation.
     private var pendingSamples = NSMutableData()
     private var pendingSampleCount = 0
     private var pendingStartSeconds: Double?
@@ -199,55 +200,52 @@ nonisolated final class AudioDecoder {
     }
 
     private func emitPending(into buffers: inout [CMSampleBuffer]) {
-        guard pendingSampleCount > 0 else { return }
-        // Hand this allocation to CoreMedia and begin filling a fresh one;
-        // the audio renderer can now consume the old bytes without a copy.
-        let emittedSamples = pendingSamples
-        pendingSamples = NSMutableData(
-            capacity: 2048 * Int(channels) * MemoryLayout<Float32>.size
-        ) ?? NSMutableData()
         defer {
+            // Length only — NSMutableData keeps the allocation, so the
+            // steady state costs no allocation per emitted buffer.
+            pendingSamples.length = 0
             pendingSampleCount = 0
             pendingStartSeconds = nil
         }
+        guard pendingSampleCount > 0 else { return }
         if let start = pendingStartSeconds {
             continuationSeconds = start + Double(pendingSampleCount) / Double(sampleRate)
         }
         guard let buffer = makeSampleBuffer(
-            data: emittedSamples,
+            data: pendingSamples,
             samples: pendingSampleCount,
             startSeconds: pendingStartSeconds
         ) else { return }
         buffers.append(buffer)
     }
 
+    /// The LPCM payload is copied into a CoreMedia-owned block rather than
+    /// handed over zero-copy. HEL-58 tried the handoff (this buffer behind a
+    /// CMBlockBufferCustomBlockSource) and it leaked the entire decoded
+    /// stream — ~2.3 MB/s on TrueHD 7.1, which walked the app into the 2 GB
+    /// per-process limit and got it jetsam-killed mid-playback. The copy that
+    /// bought is 1.5 MB/s on the demux queue, ~0.03% of a core. The video
+    /// path keeps its zero-copy AVBufferRef handoff: that one is both far
+    /// larger (8.65 MB/s on a 4K remux) and measured leak-free.
     private func makeSampleBuffer(data: NSMutableData, samples: Int, startSeconds: Double?) -> CMSampleBuffer? {
-        let retainedData = Unmanaged.passRetained(data)
-        var blockSource = CMBlockBufferCustomBlockSource(
-            version: UInt32(kCMBlockBufferCustomBlockSourceVersion),
-            AllocateBlock: nil,
-            FreeBlock: { refCon, _, _ in
-                guard let refCon else { return }
-                Unmanaged<NSMutableData>.fromOpaque(refCon).release()
-            },
-            refCon: retainedData.toOpaque()
-        )
         var blockBuffer: CMBlockBuffer?
-        let blockStatus = CMBlockBufferCreateWithMemoryBlock(
+        guard CMBlockBufferCreateWithMemoryBlock(
             allocator: kCFAllocatorDefault,
-            memoryBlock: data.mutableBytes,
+            memoryBlock: nil,
             blockLength: data.length,
-            blockAllocator: kCFAllocatorNull,
-            customBlockSource: &blockSource,
+            blockAllocator: kCFAllocatorDefault,
+            customBlockSource: nil,
             offsetToData: 0,
             dataLength: data.length,
             flags: 0,
             blockBufferOut: &blockBuffer
-        )
-        guard blockStatus == noErr, let blockBuffer else {
-            retainedData.release()
-            return nil
-        }
+        ) == noErr, let blockBuffer else { return nil }
+        guard CMBlockBufferReplaceDataBytes(
+            with: data.bytes,
+            blockBuffer: blockBuffer,
+            offsetIntoDestination: 0,
+            dataLength: data.length
+        ) == noErr else { return nil }
 
         // Timescale = the stream's own rate, so consecutive buffers land
         // exactly sample-adjacent (90 kHz can't represent 48 kHz sample

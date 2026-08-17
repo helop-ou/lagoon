@@ -63,9 +63,11 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   go through `AudioDecoder`: libavcodec → swresample → interleaved
   Float32 LPCM sample buffers, coalesced to ~2048-sample chunks because
   TrueHD frames are 40 samples each. swresample writes directly into the
-  growable coalescing allocation; when full, that allocation is transferred
-  to CoreMedia and retained by the block buffer, avoiding a temporary `Data`
-  allocation, append copy, and final block-buffer copy for every chunk.
+  growable coalescing allocation, which is reused across chunks, so the
+  per-decoded-frame temporary allocation and append copy are both gone; the
+  chunk itself is then copied into a CoreMedia-owned block at emit (see
+  "Do not make the LPCM emit zero-copy" below — the handoff that avoided
+  this copy leaked the decoded stream).
   FFmpeg's native channel-bit order
   matches CoreAudio's channel bitmap bit-for-bit on the first 18
   positions, so a native layout mask maps straight across into the
@@ -177,11 +179,28 @@ The renderer feed is kept cheap under high-bitrate load: packet wakeups are
 coalesced onto a user-interactive serial pump, and the app-side sample FIFO is
 head-indexed/amortized O(1) rather than shifting its whole Swift array for every
 frame. The demuxer blocks on condition-driven video/audio high-water marks and
-resumes at lower thresholds instead of polling queue counts, while compressed
-payloads retain FFmpeg's existing backing buffer and decoded LPCM storage is
-handed directly to CoreMedia. These optimizations reduce Lagoon's packet-copying,
-allocation, scheduling, and ARC overhead; AVFoundation's hardware decoder remains
-responsible for codec decode.
+resumes at lower thresholds instead of polling queue counts, and compressed
+payloads retain FFmpeg's existing backing buffer (`av_buffer_ref` behind a
+`CMBlockBufferCustomBlockSource`) instead of being copied per packet. Decoded
+LPCM coalesces into a reused `NSMutableData` that swresample fills in place,
+then **is copied** into a CoreMedia-owned block at emit. These optimizations
+reduce Lagoon's packet-copying, allocation, scheduling, and ARC overhead;
+AVFoundation's hardware decoder remains responsible for codec decode.
+
+**Do not make the LPCM emit zero-copy.** HEL-58 originally handed that
+`NSMutableData` to CoreMedia behind a custom block source, and the free
+callback never ran: the app leaked the entire decoded audio stream —
+~2.2 MB/s on TrueHD 7.1 — and jetsam killed it for `per-process-limit` at
+2100 MB partway through a movie, with a `JetsamEvent` report rather than a
+crash trace. The copy that bought back is 1.5 MB/s on the demux queue,
+roughly 0.03% of a core, and cannot reach the render path: a matched pair of
+6.5-minute 4K/TrueHD runs measured 2 dropped frames out of ~9300 either way,
+0 stalls, with footprint going 131 → 113 MB fixed versus 225 → 1003 MB
+leaking. The compressed video handoff uses the same block-source pattern and
+is measured leak-free, so the pattern itself is fine — only the LPCM use of
+it regressed. It was isolated by playing one file twice and switching only
+the audio track (TrueHD vs AC-3), which holds the video path constant; that
+is the fastest way to attribute a playback leak to audio or video.
 
 Player exit is deliberately two-phase (HEL-57). The main actor cancels the
 clock/observer and interrupts FFmpeg, then renderer stop/flush, queued sample
