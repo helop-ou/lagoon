@@ -1,37 +1,62 @@
 import SwiftUI
 
 // Focus strategy: no custom scaling anywhere — cards rely on the system
-// `.card` lift/parallax. Focus only drives the title reveal.
+// `.card` lift/parallax, and that is now the *only* thing focus does here.
 
 /// 2:3 poster card that navigates to the item's detail page.
+///
+/// The title sits **under** the artwork, not over it (Jaagop, 2026-08-17):
+/// a scrim and a headline across the bottom third covers the part of a poster
+/// its designer cared most about, and a poster is already a title card. Below
+/// it, the name and the year — the two things a poster doesn't reliably tell
+/// you — in the Infuse arrangement.
 struct PosterCard: View {
     let item: MediaItem
     @Environment(SessionStore.self) private var session
-    @FocusState private var isFocused: Bool
 
     var body: some View {
-        NavigationLink(value: item) {
-            ZStack(alignment: .bottom) {
-                CachedAsyncImage(
-                    url: session.client.imageURL(for: item, kind: .primary, maxWidth: Int(Metrics.posterWidth * 1.5)),
-                    maxPixelSize: Int(Metrics.posterHeight)
-                ) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    placeholderLabel
+        VStack(alignment: .leading, spacing: Metrics.Space.s) {
+            NavigationLink(value: item) {
+                ZStack(alignment: .bottom) {
+                    CachedAsyncImage(
+                        url: session.client.imageURL(for: item, kind: .primary, maxWidth: Int(Metrics.posterWidth * 1.5)),
+                        maxPixelSize: Int(Metrics.posterHeight)
+                    ) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        placeholderLabel
+                    }
+                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                    .clipped()
+
+                    progressBar
                 }
                 .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-                .clipped()
-
-                titleScrim
-                progressBar
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
-            .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            .cardButtonStyle()
+            .accessibilityLabel(item.name ?? "Item")
+
+            caption
         }
-        .focused($isFocused)
-        .cardButtonStyle()
-        .accessibilityLabel(item.name ?? "Item")
+        .frame(width: Metrics.posterWidth)
+    }
+
+    /// Fixed height so a one-line title and a two-line one still leave every
+    /// row of a grid aligned.
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+            Text(item.name ?? "")
+                .font(.caption.weight(.medium))
+                .lineLimit(1)
+            if let year = item.productionYear {
+                Text(String(year))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight, alignment: .topLeading)
     }
 
     private var placeholderLabel: some View {
@@ -43,32 +68,6 @@ struct PosterCard: View {
                 .multilineTextAlignment(.center)
                 .padding(Metrics.Space.m)
         }
-    }
-
-    private var titleScrim: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: [.black.opacity(0.85), .black.opacity(0.4), .clear],
-                startPoint: .bottom,
-                endPoint: .top
-            )
-            .frame(height: Metrics.posterHeight * 0.4)
-
-            Text(item.name ?? "")
-                .font(.callout.bold())
-                .lineLimit(2)
-                .padding(Metrics.Space.m)
-        }
-        .opacity(titleVisible ? 1 : 0)
-        .animation(.easeInOut(duration: 0.25), value: titleVisible)
-    }
-
-    private var titleVisible: Bool {
-        #if os(tvOS)
-        isFocused
-        #else
-        true
-        #endif
     }
 
     @ViewBuilder

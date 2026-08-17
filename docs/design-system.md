@@ -16,7 +16,7 @@ convention; iOS scales down via `#if os(tvOS)`.
 | `posterWidth` (2:3) | 260 | 140 |
 | `landscapeWidth` (16:9) | 360 | 240 |
 | `heroHeight` | 540 | 340 |
-| `gridColumns` | 6 | 3 |
+| `gridColumns` | 5 | 3 |
 | rail focus headroom | top 40 / bottom 80 | 6 / 10 |
 
 Shared radii: card 12, card artwork 10, badge 6, hero panel 32, progress bar
@@ -70,11 +70,12 @@ on iOS). Buttons use `.glass` — **everywhere, including primary actions**.
 (Jaagop's call: "simple and white like Infuse"), so a prominent button is a
 white pill the system then labels in white: invisible. The reference's own
 Play and Trailer are plain glass pills too, so prominence comes from
-position and order, never from a filled colour. Focus drives only:
+position and order, never from a filled colour.
 
-- the title reveal on poster cards (`opacity`, 0.25 s ease),
-- nothing else — selection elsewhere is a **weight** swap, not a border and
-  not a color (see below).
+**Focus drives nothing else.** The `.card` style's lift, parallax and specular *is* the
+  focus indication. The poster title reveal that used to live here is gone
+  with the overlay it revealed (HEL-51). Selection elsewhere is a **weight**
+  swap, not a border and not a color (see below).
 
 **Never set a foreground color on a focusable control or on any ancestor of
 one.** The focused lozenge picks its own label color to sit on the white
@@ -103,9 +104,19 @@ chip), which has no lozenge to fight.
   check: the tell is a straight vertical edge where a capsule end should be.
 - **Cards**: `PosterCard` (260×390, navigates), `LandscapeCard` (360×202,
   plays directly — used for Continue Watching / Next Up), `EpisodeCard`
-  (320×180). All share the bottom scrim gradient
-  (`.black.opacity(0.85) → clear`) and the teal `ItemProgressBar`, hidden at
-  ≥95 % watched.
+  (320×180). All carry the teal `ItemProgressBar`, hidden at ≥95 % watched.
+- **A poster's title goes *under* the artwork, never over it** (Jaagop,
+  2026-08-17): a scrim and a headline across the bottom third cover the part
+  of a poster its designer cared most about, and a poster is already a title
+  card. `PosterCard` shows the name over the year beneath the art, in a
+  fixed-height caption so grid rows stay aligned whatever the title length.
+  The landscape and episode cards still overlay, because a still is not a
+  title card and the episode label is the only thing identifying it — worth
+  revisiting together.
+- **Library grid**: 5 columns on tvOS, not 6. The cards are fixed width, so a
+  flexible column can't widen a gap without room to grow into — dropping a
+  column is what actually buys the spacing, and the caption under each poster
+  needs the vertical room too.
 - **Hero** (`HeroSection`): a *contained* rounded panel (r32, `.thinMaterial`),
   not a full-bleed banner. The backdrop is trailing-aligned and **masked**
   (clear→white over the leading 35 %) so it dissolves into the material —

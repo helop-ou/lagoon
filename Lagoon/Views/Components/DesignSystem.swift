@@ -10,8 +10,10 @@ enum Metrics {
     static let posterWidth: CGFloat = 260
     static let landscapeWidth: CGFloat = 360
     static let heroHeight: CGFloat = 540
-    static let gridColumns = 6
-    static let gridRowSpacing: CGFloat = 50
+    static let gridColumns = 5
+    static let gridRowSpacing: CGFloat = 72
+    /// Room under a poster for its title and year.
+    static let posterCaptionHeight: CGFloat = 58
     static let railTopPadding: CGFloat = 40    // headroom for the system focus lift
     static let railBottomPadding: CGFloat = 80
     static let scrubberHeight: CGFloat = 8     // thin bar, per the Infuse reference
@@ -32,7 +34,8 @@ enum Metrics {
     static let landscapeWidth: CGFloat = 240
     static let heroHeight: CGFloat = 340
     static let gridColumns = 3
-    static let gridRowSpacing: CGFloat = 20
+    static let gridRowSpacing: CGFloat = 28
+    static let posterCaptionHeight: CGFloat = 38
     static let railTopPadding: CGFloat = 6
     static let railBottomPadding: CGFloat = 10
     static let scrubberHeight: CGFloat = 8     // matches the AVKit transport bar
