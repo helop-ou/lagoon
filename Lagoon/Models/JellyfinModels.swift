@@ -82,6 +82,9 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let parentBackdropImageTags: [String]?
     let seriesPrimaryImageTag: String?
     let mediaSources: [MediaSource]?
+    /// Cast and crew — only the single-item endpoint returns these, so rails
+    /// hand the detail page an item with an empty list until it re-fetches.
+    let people: [Person]?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyCodingKey.self)
@@ -111,6 +114,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         parentBackdropImageTags = try c.decodeIfPresent([String].self, forKey: "parentBackdropImageTags")
         seriesPrimaryImageTag = try c.decodeIfPresent(String.self, forKey: "seriesPrimaryImageTag")
         mediaSources = try? c.decodeIfPresent([MediaSource].self, forKey: "mediaSources")
+        people = try? c.decodeIfPresent([Person].self, forKey: "people")
     }
 }
 
@@ -166,6 +170,27 @@ nonisolated struct MediaSource: Decodable, Identifiable {
     let mediaStreams: [MediaStream]?
 }
 
+/// A cast or crew credit as the item endpoint reports it (HEL-46). Headshots
+/// live at `Items/{person.id}/Images/Primary`, gated on `primaryImageTag`.
+nonisolated struct Person: Decodable, Identifiable {
+    let id: String
+    let name: String?
+    /// The character for actors; nil for crew.
+    let role: String?
+    /// "Actor", "Director", "Writer", …
+    let type: String?
+    let primaryImageTag: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        id = try c.decode(String.self, forKey: "id")
+        name = try c.decodeIfPresent(String.self, forKey: "name")
+        role = try c.decodeIfPresent(String.self, forKey: "role")
+        type = try c.decodeIfPresent(String.self, forKey: "type")
+        primaryImageTag = try c.decodeIfPresent(String.self, forKey: "primaryImageTag")
+    }
+}
+
 nonisolated struct MediaStream: Decodable {
     let type: String?
     let codec: String?
@@ -217,6 +242,71 @@ nonisolated struct TrickplayTileInfo: Decodable {
         tileHeight = try c.decodeIfPresent(Int.self, forKey: "tileHeight") ?? 0
         thumbnailCount = try c.decodeIfPresent(Int.self, forKey: "thumbnailCount") ?? 0
         interval = try c.decodeIfPresent(Int.self, forKey: "interval") ?? 0
+    }
+}
+
+/// The vocabulary for describing a stream's quality, in one place: the
+/// player's Info facts and the detail page's badge row must agree on what
+/// counts as 4K or Dolby Vision (HEL-46).
+nonisolated enum MediaQuality {
+    static func resolutionClass(width: Int) -> String {
+        switch width {
+        case 3200...: "4K"
+        case 1800..<3200: "1080p"
+        case 1200..<1800: "720p"
+        default: "SD"
+        }
+    }
+
+    /// Compact form for the player's facts line ("HEVC (4K DV)").
+    static func rangeLabel(_ range: String) -> String {
+        if range.hasPrefix("DOVI") { return "DV" }
+        if range == "HDR10Plus" { return "HDR10+" }
+        return range
+    }
+
+    /// Spelled-out form for the detail page's badges.
+    static func rangeBadge(_ range: String) -> String? {
+        if range.hasPrefix("DOVI") { return "Dolby Vision" }
+        switch range {
+        case "HDR10Plus": return "HDR10+"
+        case "HDR10", "HLG", "HDR": return range
+        default: return nil
+        }
+    }
+}
+
+extension MediaSource {
+    /// Infuse-style capability badges — resolution, dynamic range, and the
+    /// best audio the file carries. Empty when the server told us nothing.
+    var qualityBadges: [String] {
+        let streams = mediaStreams ?? []
+        var badges: [String] = []
+
+        if let video = streams.first(where: { $0.type == "Video" }) {
+            if let width = video.width {
+                badges.append(MediaQuality.resolutionClass(width: width))
+            }
+            if let range = video.videoRangeType, range != "SDR",
+               let badge = MediaQuality.rangeBadge(range) {
+                badges.append(badge)
+            }
+        }
+
+        // The best audio in the file, not the default track: a badge row is a
+        // claim about what the item *can* do.
+        let audio = streams.filter { $0.type == "Audio" }
+        if audio.contains(where: { $0.profile?.localizedCaseInsensitiveContains("atmos") == true }) {
+            badges.append("Dolby Atmos")
+        } else if audio.contains(where: { $0.codec?.lowercased() == "truehd" }) {
+            badges.append("Dolby TrueHD")
+        } else if audio.contains(where: { ($0.codec?.lowercased()).map { $0 == "dts" } == true }) {
+            badges.append("DTS")
+        } else if audio.contains(where: { $0.codec?.lowercased() == "eac3" }) {
+            badges.append("Dolby Digital+")
+        }
+
+        return badges
     }
 }
 

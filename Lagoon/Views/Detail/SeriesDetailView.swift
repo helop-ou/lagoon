@@ -57,15 +57,20 @@ struct SeriesDetailView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    DetailHeader(
-                        item: displayed,
-                        posterURL: session.client.imageURL(for: displayed, kind: .primary, maxWidth: 540)
-                    ) {
-                        seasonChips
-                    }
+                    Color.clear
+                        .frame(height: Metrics.detailHeroSpace)
+                    DetailScrimFade()
 
-                    episodesSection
-                        .padding(.bottom, 80)
+                    VStack(alignment: .leading, spacing: 44) {
+                        DetailHeader(item: displayed) { seasonChips }
+                        episodesSection
+                        CastStrip(people: displayed.people ?? [])
+                    }
+                    .padding(.bottom, 80)
+                    // Full width, or the scrim only spans the widest child
+                    // and the backdrop bleeds through at the margins.
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(DetailContentScrim())
                 }
             }
             .scrollClipDisabled()

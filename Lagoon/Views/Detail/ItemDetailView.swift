@@ -6,6 +6,7 @@ struct ItemDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @State private var detail: MediaItem?
+    @State private var similar: [MediaItem] = []
     @State private var playerItem: PlayerItem?
 
     private var displayed: MediaItem { detail ?? item }
@@ -15,18 +16,30 @@ struct ItemDetailView: View {
             DetailBackdropView(url: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920))
 
             ScrollView(showsIndicators: false) {
-                DetailHeader(
-                    item: displayed,
-                    posterURL: session.client.imageURL(for: displayed, kind: .primary, maxWidth: 540)
-                ) {
-                    playButtons
+                VStack(alignment: .leading, spacing: 0) {
+                    // Nothing but backdrop up here: the artwork gets the top
+                    // of the screen, then fades out just above the title.
+                    Color.clear
+                        .frame(height: Metrics.detailHeroSpace)
+                    DetailScrimFade()
+
+                    VStack(alignment: .leading, spacing: 44) {
+                        DetailHeader(item: displayed) { playButtons }
+                        CastStrip(people: displayed.people ?? [])
+                        MediaRail(title: String(localized: "More Like This"), items: similar)
+                    }
+                    .padding(.bottom, 80)
+                    // Full width, or the scrim only spans the widest child
+                    // and the backdrop bleeds through at the margins.
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(DetailContentScrim())
                 }
-                .padding(.bottom, 80)
             }
             .scrollClipDisabled()
         }
         .task(id: item.id) {
             detail = try? await session.client.item(id: item.id)
+            similar = (try? await session.client.similarItems(itemId: item.id)) ?? []
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {

@@ -79,6 +79,18 @@ extension JellyfinClient {
         ])
     }
 
+    /// "More Like This" on the detail page (HEL-46). The server does the
+    /// picking; an empty list just hides the rail.
+    func similarItems(itemId: String, limit: Int = 12) async throws -> [MediaItem] {
+        let userId = try requireUserId()
+        let page: ItemsPage = try await get("Items/\(itemId)/Similar", query: [
+            URLQueryItem(name: "userId", value: userId),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+        ])
+        return page.items
+    }
+
     func seasons(seriesId: String) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Shows/\(seriesId)/Seasons", query: [
@@ -159,5 +171,16 @@ extension JellyfinClient {
             query.append(URLQueryItem(name: "tag", value: tag))
         }
         return try? url(path: "Items/\(itemId)/Images/\(type)", query: query)
+    }
+
+    /// Cast headshot. People are items too, so this is the same image route
+    /// with the credit's own id (HEL-46).
+    func personImageURL(for person: Person, maxWidth: Int) -> URL? {
+        guard serverURL != nil, let tag = person.primaryImageTag else { return nil }
+        return try? url(path: "Items/\(person.id)/Images/Primary", query: [
+            URLQueryItem(name: "maxWidth", value: String(maxWidth)),
+            URLQueryItem(name: "quality", value: "90"),
+            URLQueryItem(name: "tag", value: tag),
+        ])
     }
 }

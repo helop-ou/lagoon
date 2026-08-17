@@ -15,6 +15,13 @@ enum Metrics {
     static let railTopPadding: CGFloat = 40    // headroom for the system focus lift
     static let railBottomPadding: CGFloat = 80
     static let scrubberHeight: CGFloat = 8     // thin bar, per the Infuse reference
+    /// Backdrop left uncovered above the detail page's info block, so the
+    /// artwork is the first thing on screen (HEL-46).
+    static let detailHeroSpace: CGFloat = 250
+    /// Band where the backdrop fades out before the info block starts.
+    static let detailScrimFade: CGFloat = 220
+    static let castPortraitSize: CGFloat = 130
+    static let castCount = 8
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
@@ -26,6 +33,10 @@ enum Metrics {
     static let railTopPadding: CGFloat = 6
     static let railBottomPadding: CGFloat = 10
     static let scrubberHeight: CGFloat = 8     // matches the AVKit transport bar
+    static let detailHeroSpace: CGFloat = 90
+    static let detailScrimFade: CGFloat = 110
+    static let castPortraitSize: CGFloat = 72
+    // No castCount on iOS: the strip scrolls there, so it shows everyone.
     #endif
 
     static var posterHeight: CGFloat { (posterWidth * 3 / 2).rounded() }

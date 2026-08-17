@@ -257,19 +257,14 @@ final class PlaybackController {
         return [name, layout].compactMap(\.self).joined(separator: " ")
     }
 
+    // Shared with the detail page's badge row so the two can't disagree
+    // about what 4K or Dolby Vision means (see MediaQuality).
     private static func resolutionClass(width: Int) -> String {
-        switch width {
-        case 3200...: "4K"
-        case 1800..<3200: "1080p"
-        case 1200..<1800: "720p"
-        default: "SD"
-        }
+        MediaQuality.resolutionClass(width: width)
     }
 
     private static func rangeLabel(_ range: String) -> String {
-        if range.hasPrefix("DOVI") { return "DV" }
-        if range == "HDR10Plus" { return "HDR10+" }
-        return range
+        MediaQuality.rangeLabel(range)
     }
 
     // MARK: Playback HUD (Settings → Debug → Playback HUD; ships in all
