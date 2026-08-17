@@ -63,6 +63,13 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var trickplay: TrickplayLoader?
     @FocusState private var focusedTab: PanelTab?
 
+    /// Slide the panel in on, and back out with, the swipe that summons it.
+    private var panelMotion: Animation { .spring(duration: Motion.standard, bounce: 0.1) }
+    /// Room a focused track row needs before its ScrollView clips it.
+    private var rowFocusInset: CGFloat { 20 }
+    /// Far enough to carry the tabs and card clear of the top edge.
+    private var panelSlideDistance: CGFloat { 720 }
+
     var body: some View {
         #if os(tvOS)
         // Menu never reaches SwiftUI inside a fullScreenCover on tvOS 26;
@@ -90,11 +97,12 @@ struct CustomPlayerView<Surface: View>: View {
 
             subtitleOverlay
 
-            // Every animation in here must be value-driven (.animation +
-            // value:), never withAnimation: the transaction doesn't
-            // survive the MenuPressGate hosting boundary, so withAnimation
-            // changes land instantly (found by Jaagop — the panel popped
-            // instead of sliding).
+            // MenuPressGate now forwards the transaction across its hosting
+            // boundary, so withAnimation works in here again — needed for
+            // transitions, which have no value to hang an .animation(_:value:)
+            // on at the moment of insertion. Value-driven modifiers stay where
+            // the change is a plain value (opacity, offset): they're immune to
+            // the boundary either way.
             Group {
                 if showsBuffering {
                     ProgressView()
@@ -132,15 +140,19 @@ struct CustomPlayerView<Surface: View>: View {
                 .animation(.easeInOut(duration: Motion.fast), value: engine.isPaused)
                 .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
 
-            Group {
-                if panelOpen {
-                    // The remote gesture is a swipe down, so the panel
-                    // slides down with it (and back up on close).
-                    panel
-                        .transition(.move(edge: .top))
-                }
-            }
-            .animation(.spring(duration: Motion.standard, bounce: 0.1), value: panelOpen)
+            // The panel stays mounted and slides out of frame rather than
+            // being inserted. A *transition* needs an animation transaction
+            // at the moment of insertion, and none survives MenuPressGate's
+            // rootView reassignment — tried twice, including forwarding
+            // context.transaction, and frame capture showed it still popping
+            // between two frames 0.04 s apart. A plain value change does
+            // survive, so the slide is an offset. Disabled while closed so
+            // its buttons stay out of the focus engine's reach.
+            panel
+                .offset(y: panelOpen ? 0 : -panelSlideDistance)
+                .opacity(panelOpen ? 1 : 0)
+                .disabled(!panelOpen)
+                .animation(panelMotion, value: panelOpen)
         }
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
@@ -768,8 +780,12 @@ struct CustomPlayerView<Surface: View>: View {
                 Button {
                     withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
                 } label: {
+                    // Always bold (Jaagop, 2026-08-17). Selection follows
+                    // focus here, so the lozenge already says which tab is
+                    // active — a weight swap on top of it just made the
+                    // unfocused tabs look faded.
                     Text(tab.title)
-                        .fontWeight(selectedTab == tab ? .bold : .regular)
+                        .fontWeight(.bold)
                 }
                 .focused($focusedTab, equals: tab)
             }
@@ -895,6 +911,10 @@ struct CustomPlayerView<Surface: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             cardHeader("Tracks")
             // The card hugs short lists; only long ones scroll.
+            // Same clipping rule as every other focusable scroller: the
+            // focused row grows past its resting frame, and a ScrollView
+            // clips at its own edges, so the breathing room has to live
+            // inside the scroll content and be given back outside it.
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(rows, id: \.id) { row in
@@ -913,7 +933,11 @@ struct CustomPlayerView<Surface: View>: View {
                         }
                     }
                 }
+                .padding(.horizontal, rowFocusInset)
+                .padding(.vertical, rowFocusInset)
             }
+            .padding(.horizontal, -rowFocusInset)
+            .padding(.vertical, -rowFocusInset)
             .frame(maxHeight: min(CGFloat(rows.count) * 64 + 16, 340))
         }
     }

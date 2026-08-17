@@ -21,6 +21,12 @@ struct MenuPressGate<Content: View>: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: MenuGateHostingController<Content>, context: Context) {
+        // Forwarding `context.transaction` around this assignment was tried
+        // (2026-08-17) and does **not** make transitions inside the hosted
+        // tree animate — frame-by-frame capture showed the panel still
+        // appearing whole between two frames 0.04 s apart. Insertions across
+        // this boundary can't animate; animate a value instead, as
+        // CustomPlayerView's panel does.
         controller.rootView = content()
         controller.onMenu = onMenu
     }

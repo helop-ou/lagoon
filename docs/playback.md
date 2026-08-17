@@ -225,14 +225,25 @@ reflects the new position immediately.
 - `defaultFocus` is only honored when a fresh scene appears — any
   mid-screen reveal must assign its `@FocusState` programmatically
   (immediately, plus a settled retry) or focus strands.
-- **`withAnimation` does not work inside the player** — the animation
-  transaction doesn't survive the `MenuPressGate` hosting boundary
-  (state lives outside the `UIHostingController`, updates cross via
-  `rootView` reassignment), so changes land instantly. Every player
-  animation must be value-driven: `.animation(_, value:)` declared in
-  the hosted tree (asymmetric timing via a target-state-conditional
-  animation argument; transitions via a `Group` wrapping the `if` with
-  the animation attached to the Group).
+- **Nothing that *appears* inside the player can animate — animate values
+  instead.** The animation transaction doesn't survive the `MenuPressGate`
+  hosting boundary (state lives outside the `UIHostingController`, updates
+  cross via `rootView` reassignment), so `withAnimation` lands instantly.
+  Value-driven `.animation(_, value:)` in the hosted tree *does* work, which
+  covers opacity, offset, and asymmetric timing via a target-state-conditional
+  animation argument.
+  **Transitions are the trap**: `.transition()` on a conditionally-inserted
+  view has no value to hang an animation on at the moment of insertion, so it
+  never runs no matter how it's wrapped. Two fixes were tried and *both
+  failed* — `.animation(_, value:)` on a `Group` around the `if` (2026-08-17,
+  believed fixed but wasn't), and forwarding `context.transaction` around the
+  `rootView` assignment. Frame-by-frame capture settled it: the panel still
+  appeared whole between two frames 0.04 s apart. The panel now stays mounted
+  permanently and slides via `.offset` + `.opacity`, `.disabled(!panelOpen)`
+  keeping its buttons out of the focus engine while closed.
+  **Verify animations by recording, not screenshots**: `simctl io recordVideo`
+  then step frames out with `AVAssetImageGenerator` — a screenshot lands after
+  a 0.4 s animation has finished and tells you nothing.
 - Never nest `SharedState.withLock` (non-recursive lock — nesting was the
   engine's first real deadlock). `sample <pid>` on the host names the
   exact stuck line when a queue wedges.
