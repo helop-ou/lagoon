@@ -104,10 +104,16 @@ struct SeriesDetailView: View {
                             .font(.callout.weight(season.id == viewModel.selectedSeasonId ? .bold : .regular))
                         }
                     }
-                    // Focused glass chips scale past their bounds — without this
-                    // the ScrollView clips them flat.
+                    // Focused glass chips scale past their bounds, and a
+                    // ScrollView clips at its own edges: the gutter has to live
+                    // *inside* the scroll content so the first chip has room to
+                    // grow into, exactly as the episode rail below does. Without
+                    // the escape below, the scroll view starts at the gutter and
+                    // slices the focused chip's leading end flat.
+                    .padding(.horizontal, Metrics.screenGutter)
                     .padding(.vertical, 16)
                 }
+                .padding(.horizontal, -Metrics.screenGutter)
             }
 
             // Marking a series watched marks every episode — the same toggle,

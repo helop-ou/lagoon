@@ -59,6 +59,14 @@ chip), which has no lozenge to fight.
 - **Rails** (`MediaRail`): `.headline` title + `LazyHStack` at `cardSpacing`,
   gutter padding, asymmetric top/bottom padding for focus lift; the page
   ScrollView carries `.scrollClipDisabled()`.
+- **Any horizontal ScrollView of focusable things** puts the gutter *inside*
+  the scroll content, never on the ScrollView itself — a ScrollView clips at
+  its own edges, and the focused lozenge is bigger than the resting frame, so
+  a leading item gets its rounded end sliced flat. If the row sits inside an
+  already-padded container (the season chips live in `DetailHeader`'s gutter),
+  escape it with a matching negative padding on the ScrollView so the clip
+  boundary lands at the screen edge. Zoom in on a *focused* leading item to
+  check: the tell is a straight vertical edge where a capsule end should be.
 - **Cards**: `PosterCard` (260×390, navigates), `LandscapeCard` (360×202,
   plays directly — used for Continue Watching / Next Up), `EpisodeCard`
   (320×180). All share the bottom scrim gradient
