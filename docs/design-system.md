@@ -122,8 +122,11 @@ chip), which has no lozenge to fight.
   flexible column can't widen a gap without room to grow into — dropping a
   column is what actually buys the spacing, and the caption under each poster
   needs the vertical room too.
-- **Hero** (`HeroSection`): a *contained* rounded panel (r32), not a
-  full-bleed banner, with the backdrop filling **all** of it. The title is the
+- **Hero** (`HeroSection`): a *contained* rounded panel, not a full-bleed
+  banner, with the backdrop filling **all** of it. It sets **no `clipShape`
+  of its own** — the `.card` button style draws its plate at the system's
+  corner radius, and a competing r32 clip left the plate's corners peeking
+  out behind the panel's as a double edge when focused. The title is the
   item's own logo art via `TitleArtView` at `heroLogoHeight`, matching the
   detail pages. The mask that used to fade the artwork's leading third into
   flat material is gone (Jaagop: it read as a grey wash over a third of the

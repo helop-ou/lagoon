@@ -69,7 +69,6 @@ struct HeroSection: View {
             .padding(.leading, Metrics.Space.section)
         }
         .frame(height: Metrics.heroHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
         .overlay(alignment: .bottomLeading) {
             dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
         }
