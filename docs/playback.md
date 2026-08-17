@@ -175,6 +175,16 @@ decoder pressure from starvation without a screen recording. Capture those
 with the Instruments **Points of Interest** template on real Apple TV hardware;
 the signposts intentionally ship in Release/TestFlight.
 
+Memory is sampled alongside them: the HUD carries a `Memory:` line (footprint
+plus remaining headroom from `os_proc_available_memory()`, which reads 0 in the
+simulator and reports real headroom on device), and the progress loop emits a
+`Playback Memory` signpost every 10 s with both figures and the playback
+position. Watch the footprint's *slope*, not its absolute value — a leak is a
+straight line that never plateaus, and it is the one playback failure that
+leaves no crash trace, because jetsam writes a `JetsamEvent` report instead.
+Anything above roughly 0.2 MB/s sustained over a few minutes needs explaining;
+see the note under the renderer feed below for the one that shipped.
+
 The renderer feed is kept cheap under high-bitrate load: packet wakeups are
 coalesced onto a user-interactive serial pump, and the app-side sample FIFO is
 head-indexed/amortized O(1) rather than shifting its whole Swift array for every

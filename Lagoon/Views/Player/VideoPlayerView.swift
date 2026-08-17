@@ -144,6 +144,20 @@ final class PlaybackController {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self, let client = self.client, let engine = self.engine else { return }
+                // Rides the progress loop because it needs no extra timer and
+                // 10 s is ample to see a leak's slope (HEL-58 shipped one that
+                // climbed ~2.3 MB/s into the per-process limit).
+                let memory = MemorySnapshot.current()
+                os_signpost(
+                    .event,
+                    log: PlaybackPerformance.log,
+                    name: "Playback Memory",
+                    signpostID: self.performanceSignpostID,
+                    "footprintMB=%{public}.1f availableMB=%{public}.1f position=%{public}.3f",
+                    memory.footprintMB,
+                    memory.availableMB,
+                    engine.timePosition
+                )
                 try? await client.reportPlaybackProgress(.init(
                     itemId: self.itemId,
                     mediaSourceId: self.mediaSourceId,
@@ -369,6 +383,12 @@ final class PlaybackController {
         }
         let depths = engine.queueDepths
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount)")
+        let memory = MemorySnapshot.current()
+        var memoryLine = String(format: "Memory:  %.0f MB", memory.footprintMB)
+        if memory.availableBytes > 0 {
+            memoryLine += String(format: " · %.0f MB free", memory.availableMB)
+        }
+        lines.append(memoryLine)
         if let metrics = engine.videoPerformance {
             lines.append(
                 "Frames:  \(metrics.droppedFrames) dropped / \(metrics.totalFrames)"
