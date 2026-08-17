@@ -37,14 +37,10 @@ struct HeroSection: View {
             Color.clear.background(.thinMaterial)
 
             backdrop(for: item)
-                .frame(maxWidth: .infinity, alignment: .trailing)
 
             VStack(alignment: .leading, spacing: Metrics.Space.xl) {
                 VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    Text(item.name ?? "")
-                        .font(.title.bold())
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    TitleArtView(item: item, maxHeight: Metrics.heroLogoHeight)
                     if let overview = item.overview {
                         Text(overview)
                             .font(.callout)
@@ -84,18 +80,24 @@ struct HeroSection: View {
         } placeholder: {
             Color.clear
         }
-        .frame(width: Metrics.heroHeight * 16 / 9 * 1.3, height: Metrics.heroHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .mask {
+        // The artwork now runs the full width of the panel. What used to be
+        // here was a *mask* fading its leading third into flat material, which
+        // read as a grey wash over a third of the image (Jaagop). What's left
+        // is the detail page's answer instead: darken only the column the
+        // text occupies, and let the rest of the still be itself.
+        .overlay(
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .white, location: 0.35),
+                    .init(color: .black.opacity(0.85), location: 0),
+                    .init(color: .black.opacity(0.55), location: 0.35),
+                    .init(color: .clear, location: 0.72),
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
-        }
+        )
         .animation(.easeInOut(duration: Motion.crossfade), value: item.id)
     }
 

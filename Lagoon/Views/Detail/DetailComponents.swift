@@ -179,6 +179,8 @@ struct DetailHeader<Buttons: View>: View {
 /// stacked one looking like the same design.
 struct TitleArtView: View {
     let item: MediaItem
+    /// The hero wants a smaller box than a detail page does.
+    var maxHeight: CGFloat = Metrics.logoMaxHeight
 
     @Environment(SessionStore.self) private var session
 
@@ -193,7 +195,7 @@ struct TitleArtView: View {
                 // logo's full height would leave a hole on every load.
                 titleText
             }
-            .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: Metrics.logoMaxHeight, alignment: .leading)
+            .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: maxHeight, alignment: .leading)
         } else {
             titleText
         }

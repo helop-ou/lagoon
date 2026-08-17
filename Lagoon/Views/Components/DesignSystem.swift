@@ -27,6 +27,8 @@ enum Metrics {
     /// wide wordmark and a stacked one reading as the same design.
     static let logoMaxWidth: CGFloat = 620
     static let logoMaxHeight: CGFloat = 150
+    /// Shorter than a detail page's: the hero pairs it with a synopsis.
+    static let heroLogoHeight: CGFloat = 110
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
@@ -44,6 +46,7 @@ enum Metrics {
     // No castCount on iOS: the strip scrolls there, so it shows everyone.
     static let logoMaxWidth: CGFloat = 240
     static let logoMaxHeight: CGFloat = 70
+    static let heroLogoHeight: CGFloat = 54
     #endif
 
     /// The spacing scale (HEL-51). Every gap and inset *inside* a screen

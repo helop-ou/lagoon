@@ -122,10 +122,14 @@ chip), which has no lozenge to fight.
   flexible column can't widen a gap without room to grow into — dropping a
   column is what actually buys the spacing, and the caption under each poster
   needs the vertical room too.
-- **Hero** (`HeroSection`): a *contained* rounded panel (r32, `.thinMaterial`),
-  not a full-bleed banner. The backdrop is trailing-aligned and **masked**
-  (clear→white over the leading 35 %) so it dissolves into the material —
-  no scrim. Auto-advances every 7 s after pre-warming the next image and
+- **Hero** (`HeroSection`): a *contained* rounded panel (r32), not a
+  full-bleed banner, with the backdrop filling **all** of it. The title is the
+  item's own logo art via `TitleArtView` at `heroLogoHeight`, matching the
+  detail pages. The mask that used to fade the artwork's leading third into
+  flat material is gone (Jaagop: it read as a grey wash over a third of the
+  image); legibility now comes from the same **leading wash** the detail pages
+  use — darken only the column the text occupies and let the rest of the still
+  be itself. Auto-advances every 7 s after pre-warming the next image and
   palette; text transitions asymmetrically (in: 0.3 s delayed, out: 0.2 s)
   while the CTA stays outside the transition. Dots: 8 pt capsules, 24 pt when
   active.
