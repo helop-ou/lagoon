@@ -47,7 +47,7 @@ struct SignInView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.glass)
                     .disabled(username.isEmpty || isSigningIn)
 
                     if let errorMessage {

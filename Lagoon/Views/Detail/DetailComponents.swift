@@ -6,6 +6,8 @@ import SwiftUI
 /// exactly where the words are.
 struct DetailBackdropView: View {
     let url: URL?
+    /// Rises as content scrolls over the artwork — see `DetailPageScaffold`.
+    var dim: Double = 0.12
 
     var body: some View {
         ZStack {
@@ -17,7 +19,7 @@ struct DetailBackdropView: View {
             }
             .animation(.easeInOut(duration: Motion.crossfade), value: url)
         }
-        .overlay(Color.black.opacity(0.12))
+        .overlay(Color.black.opacity(dim))
         // Leading wash: the info block is left-aligned, so that half needs a
         // dark bed while the other half stays vivid. This is what lets the
         // reference keep its artwork bright — a uniform scrim strong enough
@@ -37,31 +39,49 @@ struct DetailBackdropView: View {
     }
 }
 
-/// The band where the backdrop hands over to the content. It sits *above*
-/// the info block rather than behind it: a fade that overlaps the title
-/// leaves the title on whatever the artwork happens to be, which is a
-/// coin toss on bright backdrops (Gilmore Girls' white-brick still was the
-/// case that proved it).
-struct DetailScrimFade: View {
+/// The shell both detail pages sit in: full-bleed backdrop, content inset
+/// below it, and the backdrop darkening as that content rises over it.
+///
+/// The hero space is a **scroll content margin, not a spacer view**. As a
+/// spacer it was non-focusable content sitting above the first button, which
+/// left the focus engine no way back out — Up from Play did nothing, the
+/// scroll never returned to the top, and the tab bar stayed off-screen and
+/// unreachable (Jaagop, 2026-08-17). As an inset, the first button *is* the
+/// first content item, so Up leaves the page the way tvOS expects.
+///
+/// The dimming replaces the fixed scrim panel the first pass used: the
+/// reference keeps its artwork vivid and has no dark panel at all, which
+/// only works if the artwork gets out of the way once you scroll past it.
+struct DetailPageScaffold<Content: View>: View {
+    let backdropURL: URL?
+    @ViewBuilder let content: Content
+
+    @State private var scrolled: CGFloat = 0
+
     var body: some View {
-        LinearGradient(
-            colors: [.clear, .black.opacity(0.6), .black.opacity(Self.floor)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .frame(height: Metrics.detailScrimFade)
+        ZStack {
+            DetailBackdropView(url: backdropURL, dim: dim)
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 44) {
+                    content
+                }
+                .padding(.bottom, 80)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .contentMargins(.top, Metrics.detailHeroSpace, for: .scrollContent)
+            .scrollClipDisabled()
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                scrolled = offset
+            }
+        }
     }
 
-    /// Not fully opaque: the rails below the fold keep a hint of the
-    /// backdrop, the way the reference does.
-    static let floor: Double = 0.78
-}
-
-/// What the content itself sits on, once the fade has done its work.
-struct DetailContentScrim: View {
-    var body: some View {
-        Color.black.opacity(DetailScrimFade.floor)
-            .ignoresSafeArea(edges: .bottom)
+    private var dim: Double {
+        let progress = min(max(scrolled / Metrics.detailHeroSpace, 0), 1)
+        return 0.12 + progress * 0.68
     }
 }
 

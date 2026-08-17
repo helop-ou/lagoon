@@ -52,28 +52,12 @@ struct SeriesDetailView: View {
     private var displayed: MediaItem { viewModel.detail ?? item }
 
     var body: some View {
-        ZStack {
-            DetailBackdropView(url: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920))
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Color.clear
-                        .frame(height: Metrics.detailHeroSpace)
-                    DetailScrimFade()
-
-                    VStack(alignment: .leading, spacing: 44) {
-                        DetailHeader(item: displayed) { seasonChips }
-                        episodesSection
-                        CastStrip(people: displayed.people ?? [])
-                    }
-                    .padding(.bottom, 80)
-                    // Full width, or the scrim only spans the widest child
-                    // and the backdrop bleeds through at the margins.
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(DetailContentScrim())
-                }
-            }
-            .scrollClipDisabled()
+        DetailPageScaffold(
+            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920)
+        ) {
+            DetailHeader(item: displayed) { seasonChips }
+            episodesSection
+            CastStrip(people: displayed.people ?? [])
         }
         .task(id: item.id) {
             await viewModel.load(client: session.client, seriesId: item.id)

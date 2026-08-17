@@ -38,7 +38,7 @@ struct ServerConnectView: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.glass)
                 .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || isConnecting)
 
                 if let errorMessage {

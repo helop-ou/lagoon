@@ -12,30 +12,12 @@ struct ItemDetailView: View {
     private var displayed: MediaItem { detail ?? item }
 
     var body: some View {
-        ZStack {
-            DetailBackdropView(url: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920))
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Nothing but backdrop up here: the artwork gets the top
-                    // of the screen, then fades out just above the title.
-                    Color.clear
-                        .frame(height: Metrics.detailHeroSpace)
-                    DetailScrimFade()
-
-                    VStack(alignment: .leading, spacing: 44) {
-                        DetailHeader(item: displayed) { playButtons }
-                        CastStrip(people: displayed.people ?? [])
-                        MediaRail(title: String(localized: "More Like This"), items: similar)
-                    }
-                    .padding(.bottom, 80)
-                    // Full width, or the scrim only spans the widest child
-                    // and the backdrop bleeds through at the margins.
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(DetailContentScrim())
-                }
-            }
-            .scrollClipDisabled()
+        DetailPageScaffold(
+            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920)
+        ) {
+            DetailHeader(item: displayed) { playButtons }
+            CastStrip(people: displayed.people ?? [])
+            MediaRail(title: String(localized: "More Like This"), items: similar)
         }
         .task(id: item.id) {
             detail = try? await session.client.item(id: item.id)
@@ -63,7 +45,7 @@ struct ItemDetailView: View {
                 } label: {
                     Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.glass)
 
                 if resumeTicks != nil {
                     Button {

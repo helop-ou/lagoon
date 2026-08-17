@@ -31,8 +31,12 @@ is locked dark at the `WindowGroup` root.
 
 **No custom focus scaling anywhere.** Cards rely on the system `.card` button
 style (lift/parallax/specular) via the `cardButtonStyle()` helper (`.plain`
-on iOS). Buttons use `.glassProminent` for the one primary action per screen
-and `.glass` for everything else. Focus drives only:
+on iOS). Buttons use `.glass` — **everywhere, including primary actions**.
+`.glassProminent` fills with the app's accent, and the accent is white
+(Jaagop's call: "simple and white like Infuse"), so a prominent button is a
+white pill the system then labels in white: invisible. The reference's own
+Play and Trailer are plain glass pills too, so prominence comes from
+position and order, never from a filled colour. Focus drives only:
 
 - the title reveal on poster cards (`opacity`, 0.25 s ease),
 - nothing else — selection elsewhere is a **weight** swap, not a border and
@@ -75,18 +79,18 @@ chip), which has no lozenge to fight.
   memoized per URL in `ArtworkPaletteCache`.
 - **Detail pages** (HEL-46, built against Jaagop's Infuse reference — the
   earlier poster-left composition is gone): the backdrop **is** the artwork,
-  full-bleed and barely dimmed (0.12). Legibility comes from a **leading
-  wash** (0.9 → clear by 68 %) rather than a uniform scrim, because the info
-  block is left-aligned: that keeps the right half of the still vivid, which
-  a scrim strong enough for text over busy artwork would flatten.
-  `detailHeroSpace` is left bare, `DetailScrimFade` then takes it down, and
-  the block sits on `DetailContentScrim` (0.78 — not opaque, so the rails
-  keep a hint of backdrop). The fade sits *above* the block, never behind
-  it: behind it the title lands on whatever the artwork happens to be. The
-  block must be `.frame(maxWidth: .infinity)` or the scrim spans only its
-  widest child and the backdrop bleeds through at the margins. Order: title
-  art, facts line, genres, ★ rating, synopsis (3 lines, ≤1000 pt), actions,
-  then cast and related rails.
+  full-bleed and barely dimmed. Legibility comes from a **leading wash**
+  (0.9 → clear by 68 %) rather than a uniform scrim, because the info block
+  is left-aligned: that keeps the right of the still vivid, which a scrim
+  strong enough for text over busy artwork would flatten. There is no dark
+  panel at all — instead `DetailPageScaffold` **dims the backdrop as content
+  scrolls over it** (0.12 → 0.80), so cast and related rails stay legible.
+  The hero space is a **scroll content margin, not a spacer view**: as a
+  spacer it was non-focusable content above the first button, which left
+  focus unable to climb back out — Up from Play did nothing and the tab bar
+  stayed off-screen and unreachable. Order: title art, facts line, genres,
+  ★ rating, synopsis, actions, then cast and related rails, sized so the
+  cast heading is already on the first screen.
 - **Facts line**: one spaced row — runtime, year, a *boxed* certification
   (r4 outline), then plain capability tokens from `MediaSource.qualityTokens`
   ("4K  DV  TrueHD 7.1  Atmos"): resolution, dynamic range, the best audio in
