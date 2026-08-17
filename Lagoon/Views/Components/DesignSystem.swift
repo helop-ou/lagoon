@@ -29,10 +29,15 @@ enum Metrics {
     static let logoMaxHeight: CGFloat = 150
     /// Shorter than a detail page's: the hero pairs it with a synopsis.
     static let heroLogoHeight: CGFloat = 110
+    /// The hero's text column. Bounded on tvOS so it doesn't run under the
+    /// artwork; on a phone there is no room to bound it, so it takes what it
+    /// is given.
+    static let heroTextWidth: CGFloat = 640
+    static let heroTextInset: CGFloat = 56
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
-    static let posterWidth: CGFloat = 140
+    static let posterWidth: CGFloat = 105
     static let landscapeWidth: CGFloat = 240
     static let heroHeight: CGFloat = 380
     static let gridColumns = 3
@@ -47,6 +52,8 @@ enum Metrics {
     static let logoMaxWidth: CGFloat = 240
     static let logoMaxHeight: CGFloat = 70
     static let heroLogoHeight: CGFloat = 54
+    static let heroTextWidth: CGFloat = .infinity
+    static let heroTextInset: CGFloat = 20
     #endif
 
     /// The spacing scale (HEL-51). Every gap and inset *inside* a screen
@@ -79,6 +86,19 @@ enum Metrics {
         static let xl: CGFloat = 24
         static let xxl: CGFloat = 40
         static let section: CGFloat = 56
+    }
+
+    /// Columns for a poster grid. tvOS has exactly one screen size, so a
+    /// fixed count is the right call there and keeps the approved 5-column
+    /// rhythm. iOS spans SE to Pro Max, where a fixed count is what made
+    /// cards wider than their columns and cut the first and last off the
+    /// screen (HEL-41) — so the count follows the width instead.
+    static var posterGridColumns: [GridItem] {
+        #if os(tvOS)
+        Array(repeating: GridItem(.flexible(), spacing: cardSpacing), count: gridColumns)
+        #else
+        [GridItem(.adaptive(minimum: posterWidth), spacing: cardSpacing)]
+        #endif
     }
 
     static var posterHeight: CGFloat { (posterWidth * 3 / 2).rounded() }

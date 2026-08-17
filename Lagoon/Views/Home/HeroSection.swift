@@ -17,21 +17,8 @@ struct HeroSection: View {
 
     var body: some View {
         if let current {
-            ZStack {
-                AmbientGlowView(palette: palette)
-                    // Negative gutter: the glow is meant to bleed past the
-                    // hero panel rather than sit inside it.
-                    .padding(-Metrics.screenGutter)
-
-                // The whole banner is the target (Jaagop): focus it, click
-                // it, and you get the detail page for whatever is on screen.
-                // A "See more" button inside it was a second thing to aim at
-                // for the one thing the banner already means.
-                NavigationLink(value: current) {
-                    panel(for: current)
-                }
-                .cardButtonStyle()
-                .accessibilityLabel(current.name ?? "")
+            GeometryReader { proxy in
+                heroBody(for: current, width: proxy.size.width)
             }
             .frame(height: Metrics.heroHeight)
             .padding(.horizontal, Metrics.screenGutter)
@@ -41,7 +28,26 @@ struct HeroSection: View {
         }
     }
 
-    private func panel(for item: MediaItem) -> some View {
+    private func heroBody(for current: MediaItem, width: CGFloat) -> some View {
+        ZStack {
+            AmbientGlowView(palette: palette)
+                // Negative gutter: the glow is meant to bleed past the
+                // hero panel rather than sit inside it.
+                .padding(-Metrics.screenGutter)
+
+            // The whole banner is the target (Jaagop): focus it, click it,
+            // and you get the detail page for whatever is on screen. A
+            // "See more" button inside it was a second thing to aim at for
+            // the one thing the banner already means.
+            NavigationLink(value: current) {
+                panel(for: current, width: width)
+            }
+            .cardButtonStyle()
+            .accessibilityLabel(current.name ?? "")
+        }
+    }
+
+    private func panel(for item: MediaItem, width: CGFloat) -> some View {
         ZStack(alignment: .leading) {
             Color.clear.background(.thinMaterial)
 
@@ -72,13 +78,39 @@ struct HeroSection: View {
                     removal: .opacity.animation(.easeOut(duration: 0.2))
                 ))
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.leading, Metrics.Space.section)
+            // Bounded by the width actually available, not by a constant.
+            // The card button style proposes an *unbounded* width to its
+            // label, so the panel grew past the screen and a `.infinity` text
+            // column grew with it — which is why the synopsis kept running
+            // off the right edge on a phone however the padding was arranged
+            // (HEL-41). tvOS lands on its usual 640 because that's the
+            // smaller of the two.
+            .frame(maxWidth: max(0, min(Metrics.heroTextWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
+            .padding(.leading, Metrics.heroTextInset)
         }
         .frame(height: Metrics.heroHeight)
         .overlay(alignment: .bottomLeading) {
             dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
         }
+    }
+
+    /// tvOS darkens only the left column the text occupies and leaves the
+    /// rest of the still vivid. On a phone the text spans the full width, so
+    /// the wash has to as well — it just never gets as heavy on the right.
+    private static var washStops: [Gradient.Stop] {
+        #if os(tvOS)
+        [
+            .init(color: .black.opacity(0.85), location: 0),
+            .init(color: .black.opacity(0.55), location: 0.35),
+            .init(color: .clear, location: 0.72),
+        ]
+        #else
+        [
+            .init(color: .black.opacity(0.8), location: 0),
+            .init(color: .black.opacity(0.6), location: 0.5),
+            .init(color: .black.opacity(0.45), location: 1),
+        ]
+        #endif
     }
 
     private func backdrop(for item: MediaItem) -> some View {
@@ -99,11 +131,7 @@ struct HeroSection: View {
         // text occupies, and let the rest of the still be itself.
         .overlay(
             LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.85), location: 0),
-                    .init(color: .black.opacity(0.55), location: 0.35),
-                    .init(color: .clear, location: 0.72),
-                ],
+                stops: Self.washStops,
                 startPoint: .leading,
                 endPoint: .trailing
             )

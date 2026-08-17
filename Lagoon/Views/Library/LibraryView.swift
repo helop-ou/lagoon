@@ -39,9 +39,7 @@ struct LibraryView: View {
     @Environment(SessionStore.self) private var session
     @State private var viewModel = LibraryViewModel()
 
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: Metrics.cardSpacing), count: Metrics.gridColumns)
-    }
+    private var columns: [GridItem] { Metrics.posterGridColumns }
 
     var body: some View {
         ZStack {

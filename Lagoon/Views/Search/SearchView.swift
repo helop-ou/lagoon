@@ -40,9 +40,7 @@ struct SearchView: View {
     @State private var viewModel = SearchViewModel()
     @State private var query = ""
 
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: Metrics.cardSpacing), count: Metrics.gridColumns)
-    }
+    private var columns: [GridItem] { Metrics.posterGridColumns }
 
     var body: some View {
         ZStack {
