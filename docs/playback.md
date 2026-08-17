@@ -149,6 +149,23 @@ refreshed every 2 s. Ships in **all** builds, TestFlight included — real
 Apple TV hardware only ever runs Release; defaults off
 (`debug.playbackHUD`, read once at playback start).
 
+HEL-56 adds two live diagnostic lines to that HUD: renderer queue depths +
+stall count, and AVFoundation's total/dropped/corrupted frame counters. The
+same build emits `PlaybackPerformance` signposts for controller startup,
+playback cushion readiness, stalls, dismissal-critical main-actor work, renderer
+teardown, demux close, and the stopped-report request. Capture those with the
+Instruments **Points of Interest** template on real Apple TV hardware; the
+signposts intentionally ship in Release/TestFlight.
+
+Player exit is deliberately two-phase (HEL-57). The main actor cancels the
+clock/observer and interrupts FFmpeg, then renderer stop/flush, queued sample
+release, and renderer removal are serialized on the existing pump queue.
+FFmpeg codec/decoder wrappers are released by `FFmpegDemuxer.close()` on the
+demux queue. This prevents dismissal from paying for hundreds of queued
+media-buffer releases or C decoder destruction. `Sessions/Playing/Stopped`
+still reports exactly once from the controller after the engine position is
+captured; network reporting never gates UI dismissal.
+
 ## Progress reporting
 
 Positions are ticks (see jellyfin-api.md). Three report points, all fire-

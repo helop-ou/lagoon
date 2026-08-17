@@ -2,6 +2,7 @@ import AVFAudio
 import AVFoundation
 import CoreMedia
 import Foundation
+import OSLog
 
 /// HEL-48 M1: the Lagoon playback engine — libavformat demux into
 /// compressed CMSampleBuffers rendered by AVSampleBufferDisplayLayer /
@@ -38,6 +39,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// audio stream (codec, channels, FFmpeg's Atmos/JOC verdict) —
     /// readable without opening the track panel.
     private(set) var audioDiagnostic: String?
+    private(set) var videoPerformance: VideoPerformanceSnapshot?
+    private(set) var stallCount = 0
+
+    var queueDepths: (video: Int, audio: Int) {
+        (videoQueue.count, audioQueue.count)
+    }
 
     @ObservationIgnored var onFinished: (() -> Void)?
     @ObservationIgnored var onError: ((String) -> Void)?
@@ -49,6 +56,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let audioQueue = SampleBufferQueue()
     @ObservationIgnored nonisolated private let demuxQueue = DispatchQueue(label: "ee.helop.lagoon.demux", qos: .userInitiated)
     @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInitiated)
+    @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     // Written on main, read on the demux loop (or vice versa) — all simple
     // value types behind one lock.
@@ -63,10 +71,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     @ObservationIgnored nonisolated(unsafe) private var videoRenderer: AVSampleBufferVideoRenderer?
     @ObservationIgnored nonisolated(unsafe) private var audioRenderer: AVSampleBufferAudioRenderer?
-    @ObservationIgnored private let synchronizer = AVSampleBufferRenderSynchronizer()
+    @ObservationIgnored nonisolated private let synchronizer = AVSampleBufferRenderSynchronizer()
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var didFinish = false
     @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
+    @ObservationIgnored private var stallSignpostActive = false
+    @ObservationIgnored private var shutdownRequested = false
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
@@ -90,6 +100,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func attach(displayLayer: AVSampleBufferDisplayLayer) {
         guard videoRenderer == nil, let url = pendingURL else { return }
+
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Renderer Attach",
+            signpostID: performanceSignpostID
+        )
 
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         // Declares real multichannel content so the system's spatial
@@ -117,7 +134,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
-            self?.observeTime(time)
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                self.observeTime(time)
+            }
         }
 
         shared.withLock { $0.pendingSeekSeconds = max(pendingStartSeconds, 0) }
@@ -209,7 +229,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     func shutdown() {
+        guard !shutdownRequested else { return }
+        shutdownRequested = true
         stallRecoveryTask?.cancel()
+        if stallSignpostActive {
+            stallSignpostActive = false
+            os_signpost(
+                .end,
+                log: PlaybackPerformance.log,
+                name: "Playback Stall",
+                signpostID: performanceSignpostID,
+                "outcome=shutdown"
+            )
+        }
         shared.withLock { $0.cancelled = true }
         // Aborts any av_* call blocked inside network I/O so the demux
         // loop can exit and close — without this a wedged open froze
@@ -220,12 +252,83 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             self.timeObserver = nil
         }
         synchronizer.rate = 0
-        videoRenderer?.stopRequestingMediaData()
-        audioRenderer?.stopRequestingMediaData()
-        videoRenderer?.flush()
-        audioRenderer?.flush()
+
+        let depths = queueDepths
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Renderer Teardown",
+            signpostID: performanceSignpostID,
+            "videoQueued=%{public}d audioQueued=%{public}d",
+            depths.video,
+            depths.audio
+        )
+
+        // requestMediaDataWhenReady and every enqueue already run on this
+        // serial queue. Teardown belongs on the same queue: it removes a
+        // race with an in-flight pump and, critically for HEL-57, keeps
+        // renderer flushes and hundreds of CMSampleBuffer releases off the
+        // main actor while the presenting screen animates back in.
+        pumpQueue.async { [self] in
+            finishRendererShutdown()
+        }
+    }
+
+    func refreshVideoPerformanceMetrics() {
+        guard !shutdownRequested, let renderer = videoRenderer else { return }
+        renderer.loadVideoPerformanceMetrics { [weak self] metrics in
+            guard let metrics else { return }
+            let snapshot = VideoPerformanceSnapshot(
+                totalFrames: metrics.totalNumberOfFrames,
+                droppedFrames: metrics.numberOfDroppedFrames,
+                corruptedFrames: metrics.numberOfCorruptedFrames
+            )
+            Task { @MainActor [weak self, snapshot] in
+                guard let self, !self.shutdownRequested else { return }
+                self.videoPerformance = snapshot
+            }
+        }
+    }
+
+    nonisolated private func finishRendererShutdown() {
+        // Nil first so any kickPumps block already queued behind this one
+        // becomes a no-op instead of enqueueing after the flush.
+        let video = videoRenderer
+        let audio = audioRenderer
+        videoRenderer = nil
+        audioRenderer = nil
+
+        video?.stopRequestingMediaData()
+        audio?.stopRequestingMediaData()
+        video?.flush()
+        audio?.flush()
         videoQueue.reset()
         audioQueue.reset()
+
+        // The synchronizer otherwise retains both renderers until the
+        // main-actor engine dies. Removing them asynchronously lets their
+        // decoder resources retire without hitching the returning UI.
+        let removals = DispatchGroup()
+        if let video {
+            removals.enter()
+            synchronizer.removeRenderer(video, at: CMTime(seconds: -1, preferredTimescale: 1)) { _ in
+                removals.leave()
+            }
+        }
+        if let audio {
+            removals.enter()
+            synchronizer.removeRenderer(audio, at: CMTime(seconds: -1, preferredTimescale: 1)) { _ in
+                removals.leave()
+            }
+        }
+        removals.notify(queue: pumpQueue) { [performanceSignpostID] in
+            os_signpost(
+                .end,
+                log: PlaybackPerformance.log,
+                name: "Renderer Teardown",
+                signpostID: performanceSignpostID
+            )
+        }
     }
 
     // MARK: - Seeking
@@ -263,6 +366,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         isBuffering = false
         synchronizer.setRate(isPaused ? 0 : 1, time: time)
         kickPumps()
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Playback Cushion Ready",
+            signpostID: performanceSignpostID,
+            "position=%{public}.3f",
+            seconds
+        )
     }
 
     private func observeTime(_ time: CMTime) {
@@ -298,6 +409,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private func beginStallRecovery() {
         isBuffering = true
         synchronizer.rate = 0
+        stallCount += 1
+        if !stallSignpostActive {
+            stallSignpostActive = true
+            os_signpost(
+                .begin,
+                log: PlaybackPerformance.log,
+                name: "Playback Stall",
+                signpostID: performanceSignpostID,
+                "position=%{public}.3f count=%{public}d",
+                timePosition,
+                stallCount
+            )
+        }
         stallRecoveryTask?.cancel()
         stallRecoveryTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -307,6 +431,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 if self.shared.withLock({ $0.cancelled || $0.pendingSeekSeconds != nil }) { return }
                 if self.videoQueue.count >= 12 || self.videoQueue.isFinished {
                     self.isBuffering = false
+                    if self.stallSignpostActive {
+                        self.stallSignpostActive = false
+                        os_signpost(
+                            .end,
+                            log: PlaybackPerformance.log,
+                            name: "Playback Stall",
+                            signpostID: self.performanceSignpostID,
+                            "outcome=recovered videoQueued=%{public}d",
+                            self.videoQueue.count
+                        )
+                    }
                     if !self.isPaused {
                         self.synchronizer.rate = 1
                     }
@@ -463,7 +598,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
             step()
         }
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Demux Close",
+            signpostID: performanceSignpostID
+        )
         demuxer.close()
+        os_signpost(
+            .end,
+            log: PlaybackPerformance.log,
+            name: "Demux Close",
+            signpostID: performanceSignpostID
+        )
     }
 
     /// One av_read_frame worth of work; routes to the queues.
@@ -532,7 +679,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         } else if stream.codecName == "eac3" {
             diagnostic += " · no JOC"
         }
-        Task { @MainActor in self.audioDiagnostic = diagnostic }
+        let publishedDiagnostic = diagnostic
+        Task { @MainActor in self.audioDiagnostic = publishedDiagnostic }
     }
 
     /// Copy with all timestamps shifted — how the audio-delay option

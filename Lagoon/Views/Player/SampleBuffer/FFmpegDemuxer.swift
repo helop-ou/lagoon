@@ -342,6 +342,16 @@ nonisolated final class FFmpegDemuxer {
         if formatContext != nil {
             avformat_close_input(&formatContext)
         }
+
+        // These wrappers free AVCodecContext/SWR resources in deinit.
+        // close() runs on the demux queue; clearing them here prevents that
+        // C teardown from being deferred until the main-actor engine is
+        // released after dismissal (HEL-57).
+        audioDecoders.removeAll(keepingCapacity: false)
+        subtitleDecoders.removeAll(keepingCapacity: false)
+        audioStreams.removeAll(keepingCapacity: false)
+        subtitleStreams.removeAll(keepingCapacity: false)
+        videoStream = nil
     }
 
     private static func metadata(_ stream: UnsafeMutablePointer<AVStream>, key: String) -> String? {

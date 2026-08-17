@@ -1,4 +1,5 @@
 import Observation
+import OSLog
 import SwiftUI
 
 /// Identifiable wrapper so `fullScreenCover(item:)` can present playback.
@@ -27,8 +28,25 @@ final class PlaybackController {
     private var playMethod: PlayMethod = .directPlay
     private var progressTask: Task<Void, Never>?
     private var didReportStop = false
+    @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     func start(media: MediaItem, startFromBeginning: Bool, client: JellyfinClient) async {
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Playback Controller Start",
+            signpostID: performanceSignpostID,
+            "item=%{public}s",
+            media.id
+        )
+        defer {
+            os_signpost(
+                .end,
+                log: PlaybackPerformance.log,
+                name: "Playback Controller Start",
+                signpostID: performanceSignpostID
+            )
+        }
         self.client = client
         itemId = media.id
         do {
@@ -144,14 +162,43 @@ final class PlaybackController {
         guard let client, let engine, !didReportStop else { return }
         didReportStop = true
         let seconds = engine.timePosition
+
+        // Keep the dismissal-critical main-actor phase measurable and tiny.
+        // The engine now serializes renderer flushing and queued-buffer
+        // release on its existing pump queue (HEL-57).
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Dismiss Main Actor Cleanup",
+            signpostID: performanceSignpostID
+        )
         engine.shutdown()
         self.engine = nil
+        os_signpost(
+            .end,
+            log: PlaybackPerformance.log,
+            name: "Dismiss Main Actor Cleanup",
+            signpostID: performanceSignpostID
+        )
+
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Playback Stopped Report",
+            signpostID: performanceSignpostID
+        )
         try? await client.reportPlaybackStopped(.init(
             itemId: itemId,
             mediaSourceId: mediaSourceId,
             playSessionId: playSessionId,
             positionTicks: Ticks.ticks(seconds)
         ))
+        os_signpost(
+            .end,
+            log: PlaybackPerformance.log,
+            name: "Playback Stopped Report",
+            signpostID: performanceSignpostID
+        )
     }
 
     // Builds the Infuse-style facts line: runtime, year, size, video, audio,
@@ -301,6 +348,7 @@ final class PlaybackController {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, let engine = self.engine else { return }
+                engine.refreshVideoPerformanceMetrics()
                 self.hudLines = negotiated + Self.liveHUDLines(for: engine)
             }
         }
@@ -318,6 +366,14 @@ final class PlaybackController {
         }
         if engine.duration > 0 {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
+        }
+        let depths = engine.queueDepths
+        lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount)")
+        if let metrics = engine.videoPerformance {
+            lines.append(
+                "Frames:  \(metrics.droppedFrames) dropped / \(metrics.totalFrames)"
+                    + (metrics.corruptedFrames > 0 ? " · \(metrics.corruptedFrames) corrupt" : "")
+            )
         }
         return lines
     }
