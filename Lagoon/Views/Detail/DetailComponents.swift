@@ -135,7 +135,7 @@ struct DetailHeader<Buttons: View>: View {
 
             if let overview = upNext?.overview ?? item.overview {
                 Text(overview)
-                    .font(.body)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
                     .frame(maxWidth: 1000, alignment: .leading)

@@ -841,7 +841,7 @@ struct CustomPlayerView<Surface: View>: View {
                     .font(.headline)
                 if let overview = info.overview {
                     Text(overview)
-                        .font(.subheadline)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }

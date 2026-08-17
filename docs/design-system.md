@@ -49,12 +49,31 @@ single value, is what made spacing feel off.
 
 ### Type
 
-Text uses the **semantic styles** (`.callout`, `.headline`, `.caption`…) so it
-scales and stays consistent. `.system(size:)` appears nowhere in a screen: the
-only legitimate escapes are SF Symbols used as artwork and display type that
-is effectively a logo, and those are named in `Typography` (`glyph`,
-`largeGlyph`, `wordmark`, `quickConnectCode`). Adding a raw size to a view is
-the smell — it means a new one-off is being invented.
+Text uses the **semantic styles** so it scales and stays consistent, and each
+one has a job:
+
+| style | job |
+|---|---|
+| `largeTitle` | a screen's own name — the sign-in header, a detail page's title when there's no logo art |
+| `title2` | the player's title block over the video, the largest thing in the player |
+| `title3` | section headings inside a screen — "Episodes", an empty state's line |
+| `headline` | rail titles and card headers |
+| `callout` | **the workhorse**: synopses, metadata lines, track names, button labels |
+| `footnote` | card titles on artwork, the player's facts line |
+| `caption` | a poster's title, secondary labels |
+| `caption2` | a poster's year, cast roles, the smallest supporting text |
+
+`.system(size:)` appears nowhere in a screen. The only legitimate escapes are
+SF Symbols used as artwork and display type that is effectively a logo, and
+those are named in `Typography` (`glyph`, `largeGlyph`, `wordmark`,
+`quickConnectCode`). Adding a raw size to a view is the smell — it means a new
+one-off is being invented. Symbols sized with a semantic style (a small
+placeholder glyph at `.title`) are fine and aren't part of this table.
+
+**One role, one style.** The audit's actual finding wasn't the rarely-used
+styles — it was that a *synopsis* was set three different ways: `.body` on the
+detail page, `.callout` in the hero, `.subheadline` in the player's info card.
+Same content, three sizes, no reason. All three are `.callout` now.
 
 Brand colors — **only** for branding (wordmark, progress fills, onboarding
 wash): `.lagoonTeal` `#4AD1C7`, `.lagoonDeep` `#082E44`. Everything else uses
