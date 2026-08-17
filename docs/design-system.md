@@ -73,21 +73,33 @@ chip), which has no lozenge to fight.
   4-bit RGB histogram ranked by `count × (saturation+0.05) × (brightness+0.1)`
   (the floors stop letterbox bars from winning), sampled at 64×64 off-main,
   memoized per URL in `ArtworkPaletteCache`.
-- **Detail pages** (HEL-46, Infuse-derived — the poster-left reference app
-  composition is gone): the backdrop **is** the artwork, full-bleed and only
-  25 % dimmed. `detailHeroSpace` of it is left bare, then `DetailScrimFade`
-  takes it to near-black, and the info block starts below that on a solid
-  `DetailContentScrim`. The fade sits *above* the block, never behind it —
-  behind it the title lands on whatever the artwork happens to be, which is
-  a coin toss on bright backdrops. The block itself must be
-  `.frame(maxWidth: .infinity)` or the scrim spans only its widest child and
-  the backdrop bleeds through at the margins. Order: title, tagline,
-  metadata (year · runtime · rating · ★ · genres), capability badges,
-  actions, synopsis (4 lines, ≤1000 pt), then cast and related rails.
-- **Quality badges**: outlined capsules from `MediaSource.qualityBadges` —
-  resolution, dynamic range, best audio in the file. The vocabulary lives in
-  `MediaQuality` so the player's facts line and the detail badges can't
-  disagree about what counts as 4K.
+- **Detail pages** (HEL-46, built against Jaagop's Infuse reference — the
+  earlier poster-left composition is gone): the backdrop **is** the artwork,
+  full-bleed and barely dimmed (0.12). Legibility comes from a **leading
+  wash** (0.9 → clear by 68 %) rather than a uniform scrim, because the info
+  block is left-aligned: that keeps the right half of the still vivid, which
+  a scrim strong enough for text over busy artwork would flatten.
+  `detailHeroSpace` is left bare, `DetailScrimFade` then takes it down, and
+  the block sits on `DetailContentScrim` (0.78 — not opaque, so the rails
+  keep a hint of backdrop). The fade sits *above* the block, never behind
+  it: behind it the title lands on whatever the artwork happens to be. The
+  block must be `.frame(maxWidth: .infinity)` or the scrim spans only its
+  widest child and the backdrop bleeds through at the margins. Order: title
+  art, facts line, genres, ★ rating, synopsis (3 lines, ≤1000 pt), actions,
+  then cast and related rails.
+- **Facts line**: one spaced row — runtime, year, a *boxed* certification
+  (r4 outline), then plain capability tokens from `MediaSource.qualityTokens`
+  ("4K  DV  TrueHD 7.1  Atmos"): resolution, dynamic range, the best audio in
+  the file, Atmos when present. Plain text, not capsules — outlined chips
+  read far louder than the facts deserve. The vocabulary lives in
+  `MediaQuality` so the player's facts line and the detail row can't disagree
+  about what counts as 4K.
+- **Title art** (`TitleArtView`): Jellyfin has a `Logo` — the title's own
+  wordmark — for practically every film, and it is the title treatment on
+  detail pages, with type as the fallback. Logos are transparent PNGs at
+  wildly varying aspect ratios, so they get a box to fit inside
+  (`logoMaxWidth` × `logoMaxHeight`) rather than a fixed frame; height is
+  what makes a wide wordmark and a stacked one read as one design.
 - **Cast** (`CastStrip`): circular portraits, name over role. A fixed
   non-focusable row on tvOS — there is no person screen to navigate to, and
   a rail you can focus but not act on is worse than a short honest one — and

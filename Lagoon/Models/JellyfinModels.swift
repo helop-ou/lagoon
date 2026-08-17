@@ -265,48 +265,76 @@ nonisolated enum MediaQuality {
         return range
     }
 
-    /// Spelled-out form for the detail page's badges.
-    static func rangeBadge(_ range: String) -> String? {
-        if range.hasPrefix("DOVI") { return "Dolby Vision" }
-        switch range {
-        case "HDR10Plus": return "HDR10+"
-        case "HDR10", "HLG", "HDR": return range
-        default: return nil
+    /// Marketing name for an audio codec, as the detail page spells it.
+    static func audioName(_ codec: String) -> String {
+        switch codec.lowercased() {
+        case "truehd": "TrueHD"
+        case "eac3": "Dolby Digital+"
+        case "ac3": "Dolby Digital"
+        case "dts": "DTS"
+        case "aac": "AAC"
+        case "flac": "FLAC"
+        default: codec.uppercased()
+        }
+    }
+
+    static func channelLayout(_ channels: Int) -> String? {
+        switch channels {
+        case 8: "7.1"
+        case 6: "5.1"
+        case 2: "2.0"
+        case 1: "1.0"
+        default: nil
         }
     }
 }
 
 extension MediaSource {
-    /// Infuse-style capability badges — resolution, dynamic range, and the
-    /// best audio the file carries. Empty when the server told us nothing.
-    var qualityBadges: [String] {
+    /// The capability line from the HEL-46 reference: plain tokens, spaced —
+    /// "4K   DV   TrueHD 7.1   Atmos" — describing the best the file can do,
+    /// not the track that happens to be selected. Empty when the server told
+    /// us nothing.
+    var qualityTokens: [String] {
         let streams = mediaStreams ?? []
-        var badges: [String] = []
+        var tokens: [String] = []
 
         if let video = streams.first(where: { $0.type == "Video" }) {
             if let width = video.width {
-                badges.append(MediaQuality.resolutionClass(width: width))
+                tokens.append(MediaQuality.resolutionClass(width: width))
             }
-            if let range = video.videoRangeType, range != "SDR",
-               let badge = MediaQuality.rangeBadge(range) {
-                badges.append(badge)
+            if let range = video.videoRangeType, range != "SDR" {
+                tokens.append(MediaQuality.rangeLabel(range))
             }
         }
 
-        // The best audio in the file, not the default track: a badge row is a
-        // claim about what the item *can* do.
         let audio = streams.filter { $0.type == "Audio" }
+        // Rank by what a viewer would call "best": lossless over lossy, more
+        // channels over fewer.
+        let best = audio.max { lhs, rhs in
+            (Self.audioRank(lhs), lhs.channels ?? 0) < (Self.audioRank(rhs), rhs.channels ?? 0)
+        }
+        if let best, let codec = best.codec {
+            var name = MediaQuality.audioName(codec)
+            if let channels = best.channels, let layout = MediaQuality.channelLayout(channels) {
+                name += " \(layout)"
+            }
+            tokens.append(name)
+        }
         if audio.contains(where: { $0.profile?.localizedCaseInsensitiveContains("atmos") == true }) {
-            badges.append("Dolby Atmos")
-        } else if audio.contains(where: { $0.codec?.lowercased() == "truehd" }) {
-            badges.append("Dolby TrueHD")
-        } else if audio.contains(where: { ($0.codec?.lowercased()).map { $0 == "dts" } == true }) {
-            badges.append("DTS")
-        } else if audio.contains(where: { $0.codec?.lowercased() == "eac3" }) {
-            badges.append("Dolby Digital+")
+            tokens.append("Atmos")
         }
 
-        return badges
+        return tokens
+    }
+
+    private static func audioRank(_ stream: MediaStream) -> Int {
+        switch stream.codec?.lowercased() {
+        case "truehd": 4
+        case "dts": 3
+        case "eac3": 2
+        case "ac3": 1
+        default: 0
+        }
     }
 }
 

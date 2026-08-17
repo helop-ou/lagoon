@@ -17,7 +17,22 @@ struct DetailBackdropView: View {
             }
             .animation(.easeInOut(duration: Motion.crossfade), value: url)
         }
-        .overlay(Color.black.opacity(0.25))
+        .overlay(Color.black.opacity(0.12))
+        // Leading wash: the info block is left-aligned, so that half needs a
+        // dark bed while the other half stays vivid. This is what lets the
+        // reference keep its artwork bright — a uniform scrim strong enough
+        // for text over a busy still flattens the whole image.
+        .overlay(
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.9), location: 0),
+                    .init(color: .black.opacity(0.7), location: 0.3),
+                    .init(color: .clear, location: 0.68),
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
         .ignoresSafeArea()
     }
 }
@@ -37,7 +52,9 @@ struct DetailScrimFade: View {
         .frame(height: Metrics.detailScrimFade)
     }
 
-    static let floor: Double = 0.93
+    /// Not fully opaque: the rails below the fold keep a hint of the
+    /// backdrop, the way the reference does.
+    static let floor: Double = 0.78
 }
 
 /// What the content itself sits on, once the fade has done its work.
@@ -59,83 +76,115 @@ struct DetailHeader<Buttons: View>: View {
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(item.name ?? "")
-                .font(.largeTitle.bold())
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 16) {
+            TitleArtView(item: item)
 
-            if let tagline = item.taglines?.first, !tagline.isEmpty {
-                Text(tagline)
-                    .font(.callout.italic())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            // One spaced line, per the reference: runtime, year, a boxed
+            // certification, then plain capability tokens. No capsules —
+            // the outlined chips this replaced read as much louder than the
+            // facts deserve.
+            HStack(spacing: 18) {
+                ForEach(factTokens, id: \.self) { token in
+                    Text(token)
+                }
+                if let official = item.officialRating {
+                    Text(official)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
+                        )
+                }
+                ForEach(qualityTokens, id: \.self) { token in
+                    Text(token)
+                }
             }
+            .font(.callout)
 
-            if !metaParts.isEmpty {
-                Text(metaParts.joined(separator: "  ·  "))
+            if let genres = item.genres, !genres.isEmpty {
+                Text(genres.prefix(3).joined(separator: ", "))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            if !badges.isEmpty {
-                HStack(spacing: 10) {
-                    ForEach(badges, id: \.self) { badge in
-                        Text(badge)
-                            .font(.caption2.weight(.semibold))
-                            .textCase(.uppercase)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .overlay(
-                                Capsule().strokeBorder(.white.opacity(0.35), lineWidth: 1)
-                            )
-                    }
-                }
+            if let rating = item.communityRating {
+                Text(String(format: "★ %.1f", rating))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-
-            buttons
 
             if let overview = item.overview {
                 Text(overview)
                     .font(.body)
                     .foregroundStyle(.secondary)
-                    .lineLimit(4)
+                    .lineLimit(3)
                     .frame(maxWidth: 1000, alignment: .leading)
             }
+
+            buttons
+                .padding(.top, 6)
         }
         .padding(.horizontal, Metrics.screenGutter)
     }
 
-    private var metaParts: [String] {
+    /// Runtime first, then year — the reference's order.
+    private var factTokens: [String] {
         var parts: [String] = []
         if let episodeLabel = item.episodeLabel {
             parts.append(episodeLabel)
         }
-        if let year = item.productionYear {
-            parts.append(String(year))
-        }
         if let runtime = item.runtimeLabel {
             parts.append(runtime)
         }
+        if let year = item.productionYear {
+            parts.append(String(year))
+        }
         if let status = item.status, item.type == .series {
             parts.append(status)
-        }
-        if let official = item.officialRating {
-            parts.append(official)
-        }
-        if let rating = item.communityRating {
-            parts.append(String(format: "★ %.1f", rating))
-        }
-        if let genres = item.genres, !genres.isEmpty {
-            parts.append(genres.prefix(3).joined(separator: ", "))
         }
         return parts
     }
 
     /// Only the single-item fetch carries MediaSources, so this is empty
-    /// until the detail page's own request lands — the row simply appears.
-    private var badges: [String] {
-        item.mediaSources?.first?.qualityBadges ?? []
+    /// until the detail page's own request lands — the tokens simply appear.
+    private var qualityTokens: [String] {
+        item.mediaSources?.first?.qualityTokens ?? []
+    }
+}
+
+/// The title, as its own artwork when the server has a logo for it and as
+/// type when it doesn't. Logos are transparent PNGs at wildly varying
+/// aspect ratios, so this is a box they fit inside rather than a fixed
+/// frame — the height is the constraint that keeps a wide wordmark and a
+/// stacked one looking like the same design.
+struct TitleArtView: View {
+    let item: MediaItem
+
+    @Environment(SessionStore.self) private var session
+
+    var body: some View {
+        if let url = session.client.imageURL(for: item, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)) {
+            CachedAsyncImage(url: url, maxPixelSize: Int(Metrics.logoMaxWidth * 2)) { image in
+                image
+                    .resizable()
+                    .scaledToFit()
+            } placeholder: {
+                // Type, not a grey box: a placeholder that reserves the
+                // logo's full height would leave a hole on every load.
+                titleText
+            }
+            .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: Metrics.logoMaxHeight, alignment: .leading)
+        } else {
+            titleText
+        }
+    }
+
+    private var titleText: some View {
+        Text(item.name ?? "")
+            .font(.largeTitle.bold())
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -148,14 +197,17 @@ struct CastStrip: View {
 
     @Environment(SessionStore.self) private var session
 
+    /// Actors first, then crew — the server returns them roughly in that
+    /// order already, so this only drops the ones with no headshot, which
+    /// would otherwise be a row of grey circles.
     private var cast: [Person] {
-        people.filter { $0.type == "Actor" && $0.primaryImageTag != nil }
+        people.filter { $0.primaryImageTag != nil }
     }
 
     var body: some View {
         if !cast.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Cast")
+                Text("Cast and Crew")
                     .font(.headline)
                     .padding(.leading, Metrics.screenGutter)
 
@@ -188,6 +240,11 @@ struct CastStrip: View {
         }
     }
 
+    private func credit(for person: Person) -> String? {
+        if let role = person.role, !role.isEmpty { return role }
+        return person.type
+    }
+
     private func castMember(_ person: Person) -> some View {
         VStack(spacing: 10) {
             CachedAsyncImage(
@@ -213,8 +270,10 @@ struct CastStrip: View {
                     .font(.caption.weight(.semibold))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                if let role = person.role, !role.isEmpty {
-                    Text(role)
+                // Character for actors; the credit itself for crew, so a
+                // director doesn't sit there with a blank line under them.
+                if let credit = credit(for: person) {
+                    Text(credit)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

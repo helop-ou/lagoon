@@ -119,6 +119,9 @@ nonisolated enum ItemImageKind {
     case primary
     case backdrop
     case thumb
+    /// The title's own artwork — a transparent PNG wordmark. Jellyfin has
+    /// one for practically every film (HEL-46 reference shot).
+    case logo
 }
 
 extension JellyfinClient {
@@ -148,6 +151,14 @@ extension JellyfinClient {
             } else if let parentId = item.parentBackdropItemId, let parentTag = item.parentBackdropImageTags?.first {
                 itemId = parentId
                 tag = parentTag
+            } else {
+                return nil
+            }
+        case .logo:
+            // Episodes and seasons inherit the series' wordmark.
+            if let logoTag = item.imageTags?["Logo"] {
+                type = "Logo"
+                tag = logoTag
             } else {
                 return nil
             }

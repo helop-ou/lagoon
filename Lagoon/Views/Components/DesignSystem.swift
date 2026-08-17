@@ -22,6 +22,10 @@ enum Metrics {
     static let detailScrimFade: CGFloat = 220
     static let castPortraitSize: CGFloat = 130
     static let castCount = 8
+    /// Box the title's logo artwork fits inside — height is what keeps a
+    /// wide wordmark and a stacked one reading as the same design.
+    static let logoMaxWidth: CGFloat = 620
+    static let logoMaxHeight: CGFloat = 150
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
@@ -37,6 +41,8 @@ enum Metrics {
     static let detailScrimFade: CGFloat = 110
     static let castPortraitSize: CGFloat = 72
     // No castCount on iOS: the strip scrolls there, so it shows everyone.
+    static let logoMaxWidth: CGFloat = 240
+    static let logoMaxHeight: CGFloat = 70
     #endif
 
     static var posterHeight: CGFloat { (posterWidth * 3 / 2).rounded() }
