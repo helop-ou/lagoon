@@ -45,7 +45,14 @@ struct HeroSection: View {
         ZStack(alignment: .leading) {
             Color.clear.background(.thinMaterial)
 
+            // Identity per item, so a slide change is an insertion the
+            // crossfade can animate. Without the `.id`, SwiftUI keeps one
+            // image view and swaps its contents — nothing animatable happens
+            // and the picture just cuts, which is what `Motion.crossfade`
+            // below was silently failing to do (Jaagop).
             backdrop(for: item)
+                .id(item.id)
+                .transition(.opacity)
 
             VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 VStack(alignment: .leading, spacing: Metrics.Space.m) {
@@ -101,7 +108,6 @@ struct HeroSection: View {
                 endPoint: .trailing
             )
         )
-        .animation(.easeInOut(duration: Motion.crossfade), value: item.id)
     }
 
     @ViewBuilder
@@ -137,7 +143,7 @@ struct HeroSection: View {
             }
             try? await Task.sleep(for: .milliseconds(600))
             if Task.isCancelled { return }
-            withAnimation(.easeInOut(duration: Motion.slow)) {
+            withAnimation(.easeInOut(duration: Motion.crossfade)) {
                 index = next
             }
             await updatePalette()
