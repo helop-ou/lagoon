@@ -39,6 +39,10 @@ struct ItemDetailView: View {
 
     private var playButtons: some View {
         VStack(alignment: .leading, spacing: 12) {
+            ItemActionRow(item: displayed) {
+                detail = try? await session.client.item(id: item.id)
+            }
+
             HStack(spacing: 16) {
                 Button {
                     playerItem = PlayerItem(media: displayed)

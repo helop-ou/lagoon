@@ -91,6 +91,34 @@ extension JellyfinClient {
         return page.items
     }
 
+    // MARK: - User data (HEL-40)
+
+    /// Marks an item played, or clears it. Clearing also puts a finished item
+    /// *back* on Continue Watching, and marking played is how an item leaves
+    /// it — Jellyfin has no separate "dismiss" for the resume rail.
+    ///
+    /// Both flags are POST-to-set, DELETE-to-clear on the same path, which is
+    /// why this reads as a toggle rather than a pair of verbs.
+    func setPlayed(_ played: Bool, itemId: String) async throws {
+        let userId = try requireUserId()
+        let path = "Users/\(userId)/PlayedItems/\(itemId)"
+        if played {
+            try await postVoid(path)
+        } else {
+            try await deleteVoid(path)
+        }
+    }
+
+    func setFavorite(_ favorite: Bool, itemId: String) async throws {
+        let userId = try requireUserId()
+        let path = "Users/\(userId)/FavoriteItems/\(itemId)"
+        if favorite {
+            try await postVoid(path)
+        } else {
+            try await deleteVoid(path)
+        }
+    }
+
     func seasons(seriesId: String) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Shows/\(seriesId)/Seasons", query: [

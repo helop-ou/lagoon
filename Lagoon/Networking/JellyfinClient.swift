@@ -137,6 +137,10 @@ final class JellyfinClient {
         _ = try await data(for: request(for: url(path: path, query: query), method: "POST", body: Self.encoder.encode(body)))
     }
 
+    func deleteVoid(_ path: String, query: [URLQueryItem] = []) async throws {
+        _ = try await data(for: request(for: url(path: path, query: query), method: "DELETE"))
+    }
+
     private func request(for url: URL, method: String, body: Data? = nil) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method

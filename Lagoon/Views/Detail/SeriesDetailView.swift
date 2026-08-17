@@ -30,6 +30,13 @@ final class SeriesDetailViewModel {
         await loadEpisodes(client: client, seriesId: seriesId)
     }
 
+    /// After a watched/favourite toggle on the series itself — marking a
+    /// series played marks every episode, so the rail has to reload too.
+    func reloadUserData(client: JellyfinClient, seriesId: String) async {
+        detail = try? await client.item(id: seriesId)
+        await loadEpisodes(client: client, seriesId: seriesId)
+    }
+
     private func loadEpisodes(client: JellyfinClient, seriesId: String) async {
         guard let selectedSeasonId else { return }
         isLoadingEpisodes = true
@@ -73,6 +80,12 @@ struct SeriesDetailView: View {
 
     @ViewBuilder
     private var seasonChips: some View {
+        // Marking a series watched marks every episode — the same toggle,
+        // one level up.
+        ItemActionRow(item: displayed) {
+            await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+        }
+
         if !viewModel.seasons.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
