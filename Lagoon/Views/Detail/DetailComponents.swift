@@ -57,18 +57,28 @@ struct DetailPageScaffold<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        ZStack {
-            DetailBackdropView(url: backdropURL)
+        GeometryReader { proxy in
+            ZStack {
+                DetailBackdropView(url: backdropURL)
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                    content
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                        content
+                    }
+                    .padding(.bottom, Metrics.screenGutter)
+                    // A horizontal rail reports its content's ideal width
+                    // while it is loading. Without a concrete viewport, the
+                    // enclosing vertical ScrollView accepted that width and
+                    // centered a phone-sized page inside a ~1,300pt layout,
+                    // putting the detail actions off-screen (HEL-41). The
+                    // rails still scroll on their own axis; only the page is
+                    // pinned to the screen it belongs to.
+                    .frame(width: proxy.size.width, alignment: .leading)
                 }
-                .padding(.bottom, Metrics.screenGutter)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentMargins(.top, Metrics.detailHeroSpace, for: .scrollContent)
+                .scrollClipDisabled()
             }
-            .contentMargins(.top, Metrics.detailHeroSpace, for: .scrollContent)
-            .scrollClipDisabled()
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
 }
