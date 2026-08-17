@@ -15,7 +15,10 @@ struct PosterCard: View {
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.s) {
+        // The gap has to clear the focus lift, not just look right at rest:
+        // `.card` scales the poster about a tenth, so a 390pt one grows ~20pt
+        // past its resting bottom edge and lands on the title (Jaagop).
+        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
             NavigationLink(value: item) {
                 ZStack(alignment: .bottom) {
                     CachedAsyncImage(

@@ -110,6 +110,11 @@ chip), which has no lozenge to fight.
   of a poster its designer cared most about, and a poster is already a title
   card. `PosterCard` shows the name over the year beneath the art, in a
   fixed-height caption so grid rows stay aligned whatever the title length.
+  The gap above that caption has to clear the **focus lift**, not merely look
+  right at rest: `.card` scales the poster about a tenth, so a 390 pt one
+  grows ~20 pt past its resting bottom edge and lands on the title. Same
+  family as the ScrollView rule above — a focused card is bigger than the one
+  you laid out.
   The landscape and episode cards still overlay, because a still is not a
   title card and the episode label is the only thing identifying it — worth
   revisiting together.
