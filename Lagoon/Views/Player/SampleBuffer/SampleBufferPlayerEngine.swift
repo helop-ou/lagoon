@@ -285,6 +285,28 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             )
             Task { @MainActor [weak self, snapshot] in
                 guard let self, !self.shutdownRequested else { return }
+                let previous = self.videoPerformance
+                let droppedDelta = max(snapshot.droppedFrames - (previous?.droppedFrames ?? 0), 0)
+                let corruptedDelta = max(snapshot.corruptedFrames - (previous?.corruptedFrames ?? 0), 0)
+                if droppedDelta > 0 || corruptedDelta > 0 {
+                    let depths = self.queueDepths
+                    os_signpost(
+                        .event,
+                        log: PlaybackPerformance.log,
+                        name: "Video Frame Loss",
+                        signpostID: self.performanceSignpostID,
+                        "droppedDelta=%{public}d droppedTotal=%{public}d corruptedDelta=%{public}d corruptedTotal=%{public}d frames=%{public}d position=%{public}.3f videoQueued=%{public}d audioQueued=%{public}d stalls=%{public}d",
+                        droppedDelta,
+                        snapshot.droppedFrames,
+                        corruptedDelta,
+                        snapshot.corruptedFrames,
+                        snapshot.totalFrames,
+                        self.timePosition,
+                        depths.video,
+                        depths.audio,
+                        self.stallCount
+                    )
+                }
                 self.videoPerformance = snapshot
             }
         }

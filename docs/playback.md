@@ -153,9 +153,12 @@ HEL-56 adds two live diagnostic lines to that HUD: renderer queue depths +
 stall count, and AVFoundation's total/dropped/corrupted frame counters. The
 same build emits `PlaybackPerformance` signposts for controller startup,
 playback cushion readiness, stalls, dismissal-critical main-actor work, renderer
-teardown, demux close, and the stopped-report request. Capture those with the
-Instruments **Points of Interest** template on real Apple TV hardware; the
-signposts intentionally ship in Release/TestFlight.
+teardown, demux close, the stopped-report request, and every increase in the
+dropped/corrupted-frame counters. Frame-loss events include the delta, playback
+position, queue depths, and stall count so a hardware trace can distinguish
+decoder pressure from starvation without a screen recording. Capture those
+with the Instruments **Points of Interest** template on real Apple TV hardware;
+the signposts intentionally ship in Release/TestFlight.
 
 Player exit is deliberately two-phase (HEL-57). The main actor cancels the
 clock/observer and interrupts FFmpeg, then renderer stop/flush, queued sample
