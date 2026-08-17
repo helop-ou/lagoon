@@ -36,7 +36,7 @@ struct ItemActionRow: View {
     private var isFavorite: Bool { favorite ?? favoriteItem.userData?.isFavorite ?? false }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: Metrics.Space.l) {
             toggle(
                 on: isPlayed,
                 symbol: "checkmark",

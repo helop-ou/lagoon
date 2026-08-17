@@ -41,7 +41,7 @@ struct PosterCard: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(12)
+                .padding(Metrics.Space.m)
         }
     }
 
@@ -57,7 +57,7 @@ struct PosterCard: View {
             Text(item.name ?? "")
                 .font(.callout.bold())
                 .lineLimit(2)
-                .padding(12)
+                .padding(Metrics.Space.m)
         }
         .opacity(titleVisible ? 1 : 0)
         .animation(.easeInOut(duration: 0.25), value: titleVisible)
@@ -103,7 +103,7 @@ struct LandscapeCard: View {
                     .frame(height: Metrics.landscapeHeight * 0.55)
                     .frame(maxWidth: .infinity, alignment: .bottom)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
                     Text(item.railTitle)
                         .font(.footnote.bold())
                         .lineLimit(1)
@@ -114,7 +114,7 @@ struct LandscapeCard: View {
                             .lineLimit(1)
                     }
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, Metrics.Space.m)
                 .padding(.bottom, item.playbackProgress == nil ? 12 : 22)
 
                 if let progress = item.playbackProgress {
@@ -144,8 +144,8 @@ struct ItemProgressBar: View {
         }
         .frame(height: Metrics.progressBarHeight)
         .clipShape(Capsule())
-        .padding(.horizontal, 14)
-        .padding(.bottom, 8)
+        .padding(.horizontal, Metrics.Space.m)
+        .padding(.bottom, Metrics.Space.s)
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 }

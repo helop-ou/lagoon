@@ -61,10 +61,10 @@ struct DetailPageScaffold<Content: View>: View {
             DetailBackdropView(url: backdropURL)
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 44) {
+                VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                     content
                 }
-                .padding(.bottom, 80)
+                .padding(.bottom, Metrics.screenGutter)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .contentMargins(.top, Metrics.detailHeroSpace, for: .scrollContent)
@@ -89,7 +89,7 @@ struct DetailHeader<Buttons: View>: View {
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
             TitleArtView(item: item)
 
             if let upNext, let label = upNext.episodeLabel {
@@ -102,14 +102,14 @@ struct DetailHeader<Buttons: View>: View {
             // certification, then plain capability tokens. No capsules —
             // the outlined chips this replaced read as much louder than the
             // facts deserve.
-            HStack(spacing: 18) {
+            HStack(spacing: Metrics.Space.l) {
                 ForEach(factTokens, id: \.self) { token in
                     Text(token)
                 }
                 if let official = item.officialRating {
                     Text(official)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 1)
+                        .padding(.horizontal, Metrics.Space.s)
+                        .padding(.vertical, Metrics.Space.hair)
                         .overlay(
                             RoundedRectangle(cornerRadius: 4)
                                 .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
@@ -142,7 +142,7 @@ struct DetailHeader<Buttons: View>: View {
             }
 
             buttons
-                .padding(.top, 6)
+                .padding(.top, Metrics.Space.xs)
         }
         .padding(.horizontal, Metrics.screenGutter)
     }
@@ -240,7 +240,7 @@ struct CastStrip: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, Metrics.screenGutter)
-                .padding(.top, 20)
+                .padding(.top, Metrics.Space.l)
                 #else
                 // Touch scrolls without needing focus, so the phone shows
                 // the whole cast rather than the four that would fit — and
@@ -252,7 +252,7 @@ struct CastStrip: View {
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.top, 20)
+                    .padding(.top, Metrics.Space.l)
                 }
                 #endif
             }
@@ -265,7 +265,7 @@ struct CastStrip: View {
     }
 
     private func castMember(_ person: Person) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: Metrics.Space.s) {
             CachedAsyncImage(
                 url: session.client.personImageURL(for: person, maxWidth: Int(Metrics.castPortraitSize * 2)),
                 maxPixelSize: Int(Metrics.castPortraitSize * 2)
@@ -282,7 +282,7 @@ struct CastStrip: View {
             .frame(width: Metrics.castPortraitSize, height: Metrics.castPortraitSize)
             .clipShape(Circle())
 
-            VStack(spacing: 2) {
+            VStack(spacing: Metrics.Space.hair) {
                 // Two lines for the name: at eight across there is width to
                 // spare, and "Elijah Isaiah…" reads worse than a wrap.
                 Text(person.name ?? "")

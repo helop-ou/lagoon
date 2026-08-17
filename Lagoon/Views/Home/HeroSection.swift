@@ -19,7 +19,9 @@ struct HeroSection: View {
         if let current {
             ZStack {
                 AmbientGlowView(palette: palette)
-                    .padding(-80)
+                    // Negative gutter: the glow is meant to bleed past the
+                    // hero panel rather than sit inside it.
+                    .padding(-Metrics.screenGutter)
                 panel(for: current)
             }
             .frame(height: Metrics.heroHeight)
@@ -37,8 +39,8 @@ struct HeroSection: View {
             backdrop(for: item)
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
-            VStack(alignment: .leading, spacing: 30) {
-                VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+                VStack(alignment: .leading, spacing: Metrics.Space.m) {
                     Text(item.name ?? "")
                         .font(.title.bold())
                         .lineLimit(2)
@@ -64,12 +66,12 @@ struct HeroSection: View {
                 .buttonStyle(.glass)
             }
             .frame(maxWidth: 640, alignment: .leading)
-            .padding(.leading, 56)
+            .padding(.leading, Metrics.Space.section)
         }
         .frame(height: Metrics.heroHeight)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
         .overlay(alignment: .bottomLeading) {
-            dots.padding(.leading, 56).padding(.bottom, 24)
+            dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
         }
     }
 
@@ -100,7 +102,7 @@ struct HeroSection: View {
     @ViewBuilder
     private var dots: some View {
         if items.count > 1 {
-            HStack(spacing: 10) {
+            HStack(spacing: Metrics.Space.s) {
                 ForEach(items.indices, id: \.self) { dot in
                     Capsule()
                         .fill(dot == index ? Color.white : Color.white.opacity(0.35))

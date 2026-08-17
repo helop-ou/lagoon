@@ -216,7 +216,7 @@ struct CustomPlayerView<Surface: View>: View {
         HStack {
             if feedback.forward { Spacer() }
             Image(systemName: feedback.forward ? "goforward.10" : "gobackward.10")
-                .font(.system(size: 48, weight: .semibold))
+                .font(Typography.glyph.weight(.semibold))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.6), radius: 6)
             if !feedback.forward { Spacer() }
@@ -416,8 +416,8 @@ struct CustomPlayerView<Surface: View>: View {
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.9), radius: 3, y: 1)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, Metrics.Space.l)
+                            .padding(.vertical, Metrics.Space.s)
                             .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
                             .padding(.bottom, Metrics.screenGutter)
                     }
@@ -474,7 +474,7 @@ struct CustomPlayerView<Surface: View>: View {
     private var transportOverlay: some View {
         VStack {
             #if os(tvOS)
-            VStack(spacing: 2) {
+            VStack(spacing: Metrics.Space.hair) {
                 Text("Swipe down for Info")
                     .font(.caption.weight(.semibold))
                 Image(systemName: "chevron.compact.down")
@@ -486,7 +486,7 @@ struct CustomPlayerView<Surface: View>: View {
             .opacity(isScrubbing ? 0 : 1)
             .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
             #else
-            HStack(spacing: 12) {
+            HStack(spacing: Metrics.Space.m) {
                 Button {
                     onDismiss()
                 } label: {
@@ -510,9 +510,9 @@ struct CustomPlayerView<Surface: View>: View {
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
                         if let subtitle = info.subtitle {
                             Text(subtitle)
                                 .font(.callout)
@@ -633,7 +633,7 @@ struct CustomPlayerView<Surface: View>: View {
     private func scrubChip(in width: CGFloat) -> some View {
         Group {
             if let target = scrubTarget {
-                VStack(spacing: 8) {
+                VStack(spacing: Metrics.Space.s) {
                     trickplayFrame
                     Text(Self.timestamp(target))
                         .font(.callout.monospacedDigit().weight(.semibold))
@@ -643,8 +643,8 @@ struct CustomPlayerView<Surface: View>: View {
                         Text(name)
                             .font(.caption)
                             .lineLimit(1)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, Metrics.Space.s)
+                            .padding(.vertical, Metrics.Space.xs)
                             .background(.black.opacity(0.7), in: Capsule())
                     }
                 }
@@ -751,7 +751,7 @@ struct CustomPlayerView<Surface: View>: View {
     private static var subtitleOffID: String { "subtitle-off" }
 
     private var panel: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: Metrics.Space.xl) {
             tabBar
 
             tabCard
@@ -775,7 +775,7 @@ struct CustomPlayerView<Surface: View>: View {
     // white-pill look — never draw custom focus chrome around it. The
     // active tab keeps bold text once focus moves down into the card.
     private var tabBar: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Metrics.Space.m) {
             ForEach(PanelTab.allCases, id: \.self) { tab in
                 Button {
                     withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
@@ -813,7 +813,7 @@ struct CustomPlayerView<Surface: View>: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(24)
+        .padding(Metrics.Space.xl)
         // No foreground style here: every track row and the audio-delay
         // steppers are native buttons, and the focused lozenge sets its own
         // label color. Forcing white made their text vanish exactly when
@@ -822,7 +822,7 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private var infoCard: some View {
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: Metrics.Space.xl) {
             CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
                 image
                     .resizable()
@@ -833,7 +833,7 @@ struct CustomPlayerView<Surface: View>: View {
             .frame(width: 130, height: 195)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Metrics.Space.s) {
                 Text(combinedTitle)
                     .font(.headline)
                 if let overview = info.overview {
@@ -862,15 +862,15 @@ struct CustomPlayerView<Surface: View>: View {
     // Tracks column plus the Infuse-style OPTIONS column (audio delay,
     // HEL-48 M6).
     private var audioCard: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
             trackCard(rows: engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
                 if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
                     engine.selectAudioTrack(id: track.engineID)
                 }
             }
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 cardHeader("Options")
-                HStack(spacing: 14) {
+                HStack(spacing: Metrics.Space.m) {
                     Text("Audio Delay")
                         .font(.callout)
                     Spacer()
@@ -893,9 +893,9 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private var videoCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Track")
-            HStack(spacing: 10) {
+            HStack(spacing: Metrics.Space.s) {
                 Image(systemName: "checkmark")
                     .font(.caption.bold())
                 Text(info.videoSummary ?? String(localized: "Unknown video track"))
@@ -908,7 +908,7 @@ struct CustomPlayerView<Surface: View>: View {
         rows: [(id: String, name: String, selected: Bool)],
         onSelect: @escaping (String) -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Tracks")
             // The card hugs short lists; only long ones scroll.
             // Same clipping rule as every other focusable scroller: the
@@ -916,12 +916,12 @@ struct CustomPlayerView<Surface: View>: View {
             // clips at its own edges, so the breathing room has to live
             // inside the scroll content and be given back outside it.
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
                     ForEach(rows, id: \.id) { row in
                         Button {
                             onSelect(row.id)
                         } label: {
-                            HStack(spacing: 10) {
+                            HStack(spacing: Metrics.Space.s) {
                                 Image(systemName: "checkmark")
                                     .font(.caption.bold())
                                     .opacity(row.selected ? 1 : 0)
@@ -947,7 +947,7 @@ struct CustomPlayerView<Surface: View>: View {
             .textCase(.uppercase)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
-            .padding(.leading, 12)
+            .padding(.leading, Metrics.Space.m)
     }
 
     private var progressFraction: CGFloat {

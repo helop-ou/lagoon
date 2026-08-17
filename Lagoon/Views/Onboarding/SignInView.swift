@@ -17,13 +17,13 @@ struct SignInView: View {
             BrandBackgroundGradient()
 
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: Metrics.Space.l) {
                     Text("Sign In")
                         .font(.largeTitle.bold())
                     Text(session.serverName ?? "Jellyfin")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                        .padding(.bottom, 20)
+                        .padding(.bottom, Metrics.Space.l)
 
                     TextField("Username", text: $username)
                         .textContentType(.username)
@@ -59,7 +59,7 @@ struct SignInView: View {
 
                     if quickConnectAvailable {
                         quickConnectSection
-                            .padding(.top, 20)
+                            .padding(.top, Metrics.Space.l)
                     }
 
                     Button("Change Server") {
@@ -67,12 +67,12 @@ struct SignInView: View {
                         Task { await session.forgetServer() }
                     }
                     .buttonStyle(.glass)
-                    .padding(.top, 30)
+                    .padding(.top, Metrics.Space.xl)
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Metrics.screenGutter)
-                .padding(.vertical, 60)
+                .padding(.vertical, Metrics.Space.section)
             }
         }
         .task {
@@ -84,14 +84,14 @@ struct SignInView: View {
     }
 
     private var quickConnectSection: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: Metrics.Space.m) {
             Text("or")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
 
             if let quickConnectCode {
                 Text(quickConnectCode)
-                    .font(.system(size: 42, weight: .bold, design: .monospaced))
+                    .font(Typography.quickConnectCode)
                     .tracking(6)
                 Text("Enter this code under Quick Connect in any signed-in Jellyfin app.")
                     .font(.callout)

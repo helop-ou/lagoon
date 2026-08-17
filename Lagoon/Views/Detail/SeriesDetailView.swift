@@ -104,8 +104,8 @@ struct SeriesDetailView: View {
     /// page orders it that way.
     @ViewBuilder
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            HStack(spacing: Metrics.Space.l) {
                 if let episode = subject {
                     Button {
                         playerItem = PlayerItem(media: episode)
@@ -132,10 +132,10 @@ struct SeriesDetailView: View {
 
     @ViewBuilder
     private var seasonChips: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.Space.s) {
             if !viewModel.seasons.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: Metrics.Space.m) {
                         ForEach(viewModel.seasons) { season in
                             Button(season.name ?? "Season") {
                                 Task { await viewModel.selectSeason(season.id, client: session.client, seriesId: item.id) }
@@ -155,7 +155,7 @@ struct SeriesDetailView: View {
                     // the escape below, the scroll view starts at the gutter and
                     // slices the focused chip's leading end flat.
                     .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, Metrics.Space.l)
                 }
                 .padding(.horizontal, -Metrics.screenGutter)
             }
@@ -221,7 +221,7 @@ struct EpisodeCard: View {
                     .frame(height: cardHeight * 0.55)
                     .frame(maxWidth: .infinity, alignment: .bottom)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
                     if let label = episode.episodeLabel {
                         Text(label)
                             .font(.caption2.weight(.bold))
@@ -231,7 +231,7 @@ struct EpisodeCard: View {
                         .font(.footnote.bold())
                         .lineLimit(1)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, Metrics.Space.m)
                 .padding(.bottom, episode.playbackProgress == nil ? 10 : 20)
 
                 if let progress = episode.playbackProgress {

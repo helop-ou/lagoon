@@ -17,9 +17,9 @@ struct ErrorStateView: View {
     let retry: () -> Void
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Metrics.Space.l) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 48))
+                .font(Typography.glyph)
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(.callout)

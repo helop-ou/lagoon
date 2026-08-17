@@ -66,7 +66,7 @@ struct LibraryView: View {
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.vertical, 36)
+                    .padding(.vertical, Metrics.Space.xxl)
                 }
                 .scrollClipDisabled()
             }

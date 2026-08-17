@@ -43,6 +43,38 @@ enum Metrics {
     static let logoMaxHeight: CGFloat = 70
     #endif
 
+    /// The spacing scale (HEL-51). Every gap and inset *inside* a screen
+    /// picks a step from here; the structural values above (gutter, card
+    /// sizes, hero height) stay separate because they answer to the 10-foot
+    /// safe zone rather than to rhythm.
+    ///
+    /// Roughly ×1.5 after `s`, which is what makes adjacent steps read as
+    /// different rather than as a mistake. The same values on both platforms
+    /// for now: internal rhythm doesn't need to shrink the way structure
+    /// does, and giving iOS its own scale is HEL-41's call, not a change to
+    /// make blind.
+    ///
+    /// | step | pt | for |
+    /// |---|---|---|
+    /// | `hair` | 2 | a label sitting on its value |
+    /// | `xs` | 4 | inside a control |
+    /// | `s` | 8 | between tight siblings |
+    /// | `m` | 12 | the default gap |
+    /// | `l` | 16 | between groups |
+    /// | `xl` | 24 | card padding, form rows |
+    /// | `xxl` | 40 | between sections |
+    /// | `section` | 56 | between major blocks |
+    enum Space {
+        static let hair: CGFloat = 2
+        static let xs: CGFloat = 4
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+        static let xl: CGFloat = 24
+        static let xxl: CGFloat = 40
+        static let section: CGFloat = 56
+    }
+
     static var posterHeight: CGFloat { (posterWidth * 3 / 2).rounded() }
     static var landscapeHeight: CGFloat { (landscapeWidth * 9 / 16).rounded() }
 
@@ -51,6 +83,26 @@ enum Metrics {
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
     static let progressBarHeight: CGFloat = 6
+}
+
+/// The only sanctioned escapes from the Dynamic Type scale (HEL-51).
+///
+/// Everything that is *text* uses a semantic style — `.callout`, `.headline`,
+/// `.caption` — so it scales and stays consistent. Two things legitimately
+/// don't: SF Symbols used as artwork (an empty state's glyph is a picture,
+/// not a sentence) and display type that is effectively a logo. Naming them
+/// here keeps `.system(size:)` out of the screens, where each new call site
+/// would otherwise invent its own size.
+enum Typography {
+    /// Big SF Symbol standing in for artwork — empty and error states.
+    static let glyph: Font = .system(size: 48)
+    /// The same idea where it carries a whole screen.
+    static let largeGlyph: Font = .system(size: 56)
+    /// The Lagoon wordmark on the connect screen.
+    static let wordmark: Font = .system(size: 52, weight: .bold)
+    /// Quick Connect's code: monospaced so the digits don't jitter as it
+    /// polls, and large enough to read across a room.
+    static let quickConnectCode: Font = .system(size: 42, weight: .bold, design: .monospaced)
 }
 
 enum Motion {

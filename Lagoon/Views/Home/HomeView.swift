@@ -19,8 +19,8 @@ struct HomeView: View {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         HeroSection(items: viewModel.heroItems)
-                            .padding(.top, 8)
-                            .padding(.bottom, 28)
+                            .padding(.top, Metrics.Space.s)
+                            .padding(.bottom, Metrics.Space.xl)
 
                         MediaRail(title: "Continue Watching", items: viewModel.resume, style: .landscape) { item in
                             playerItem = PlayerItem(media: item)

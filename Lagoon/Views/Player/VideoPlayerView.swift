@@ -390,14 +390,14 @@ struct VideoPlayerView: View {
     }
 
     private var playbackHUD: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
             ForEach(Array(controller.hudLines.enumerated()), id: \.offset) { _, line in
                 Text(line)
             }
         }
         .font(.caption.monospaced())
         .foregroundStyle(.white.opacity(0.85))
-        .padding(12)
+        .padding(Metrics.Space.m)
         .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(Metrics.screenGutter)
@@ -405,9 +405,9 @@ struct VideoPlayerView: View {
     }
 
     private func errorOverlay(_ message: String) -> some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Metrics.Space.l) {
             Image(systemName: "play.slash")
-                .font(.system(size: 56))
+                .font(Typography.largeGlyph)
                 .foregroundStyle(.secondary)
             Text(message)
                 .font(.callout)

@@ -11,14 +11,14 @@ struct ServerConnectView: View {
         ZStack {
             BrandBackgroundGradient()
 
-            VStack(spacing: 20) {
+            VStack(spacing: Metrics.Space.l) {
                 Text("Lagoon")
-                    .font(.system(size: 52, weight: .bold))
+                    .font(Typography.wordmark)
                     .foregroundStyle(Color.lagoonTeal)
                 Text("Connect to your Jellyfin server")
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, Metrics.Space.l)
 
                 TextField("Server address", text: $address, prompt: Text("192.168.1.100:8096 or https://jellyfin.example.com"))
                     .textContentType(.URL)

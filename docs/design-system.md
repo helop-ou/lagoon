@@ -22,6 +22,40 @@ convention; iOS scales down via `#if os(tvOS)`.
 Shared radii: card 12, card artwork 10, badge 6, hero panel 32, progress bar
 6 pt capsule. `Motion`: fast 0.2 / standard 0.4 / slow 0.6 / crossfade 0.8.
 
+### Spacing scale (`Metrics.Space`, HEL-51)
+
+Every gap and inset *inside* a screen picks a step. The structural values in
+the table above stay separate — they answer to the 10-foot safe zone, not to
+rhythm — and the scale is the same on both platforms, because internal rhythm
+doesn't need to shrink the way structure does (giving iOS its own is HEL-41's
+call).
+
+| step | pt | for |
+|---|---|---|
+| `hair` | 2 | a label sitting on its value |
+| `xs` | 4 | inside a control |
+| `s` | 8 | between tight siblings |
+| `m` | 12 | the default gap |
+| `l` | 16 | between groups |
+| `xl` | 24 | card padding, form rows |
+| `xxl` | 40 | between sections |
+| `section` | 56 | between major blocks |
+
+Roughly ×1.5 after `s`, which is what makes adjacent steps read as different
+rather than as a mistake. Before this existed there were **22 distinct
+spacing values** across the views and 71 literals bypassing the tokens, with
+no rule for when 10 versus 12 versus 14 applied — that arbitrariness, not any
+single value, is what made spacing feel off.
+
+### Type
+
+Text uses the **semantic styles** (`.callout`, `.headline`, `.caption`…) so it
+scales and stays consistent. `.system(size:)` appears nowhere in a screen: the
+only legitimate escapes are SF Symbols used as artwork and display type that
+is effectively a logo, and those are named in `Typography` (`glyph`,
+`largeGlyph`, `wordmark`, `quickConnectCode`). Adding a raw size to a view is
+the smell — it means a new one-off is being invented.
+
 Brand colors — **only** for branding (wordmark, progress fills, onboarding
 wash): `.lagoonTeal` `#4AD1C7`, `.lagoonDeep` `#082E44`. Everything else uses
 `.primary`/`.secondary`/`.tertiary`, `.fill.tertiary`, and materials. The app

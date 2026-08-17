@@ -38,7 +38,7 @@ struct ItemDetailView: View {
     }
 
     private var playButtons: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
             actions
 
             if let resumeTicks {
@@ -55,18 +55,18 @@ struct ItemDetailView: View {
         // One row, Play first. Stacked above the play buttons the toggles
         // also took *first focus*, so arriving and pressing Select marked the
         // film watched instead of playing it.
-        HStack(spacing: 16) {
+        HStack(spacing: Metrics.Space.l) {
             playButton
             fromBeginningButton
             actionRow
-                .padding(.leading, 16)
+                .padding(.leading, Metrics.Space.l)
         }
         #else
         // Touch has no focus order to protect, and a phone has no room for
         // one row, so the toggles sit above.
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
             actionRow
-            HStack(spacing: 16) {
+            HStack(spacing: Metrics.Space.l) {
                 playButton
                 fromBeginningButton
             }

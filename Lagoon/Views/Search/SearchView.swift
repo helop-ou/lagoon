@@ -51,7 +51,7 @@ struct SearchView: View {
             ScrollView(showsIndicators: false) {
                 if viewModel.results.isEmpty {
                     emptyState
-                        .padding(.top, 120)
+                        .padding(.top, Metrics.Space.section * 2)
                 } else {
                     LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(viewModel.results) { item in
@@ -59,7 +59,7 @@ struct SearchView: View {
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.vertical, 36)
+                    .padding(.vertical, Metrics.Space.xxl)
                 }
             }
             .scrollClipDisabled()
@@ -74,9 +74,9 @@ struct SearchView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: Metrics.Space.l) {
             Image(systemName: viewModel.hasSearched ? "questionmark.circle" : "magnifyingglass")
-                .font(.system(size: 56))
+                .font(Typography.largeGlyph)
                 .foregroundStyle(.tertiary)
             Text(viewModel.hasSearched ? "No results" : "Search your library")
                 .font(.title3.bold())
