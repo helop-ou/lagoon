@@ -52,6 +52,47 @@ nonisolated struct PlayerTrack: Identifiable, Equatable {
     var id: String { "\(kind.rawValue)-\(engineID)" }
 }
 
+/// A chapter mark on the transport (HEL-39 slice 3).
+nonisolated struct PlayerChapter: Identifiable, Equatable {
+    /// Position in the chapter list, which is also its display number.
+    let id: Int
+    let name: String?
+    let start: Double
+}
+
+/// Everything the transport needs to pull trickplay preview frames: the
+/// sheet URLs already resolved (tokens included), plus the grid inside each
+/// sheet. Positions map to tiles through `tile(at:)`.
+nonisolated struct TrickplaySource: Equatable {
+    let sheetURLs: [URL]
+    /// One thumbnail's pixel size as the server declared it.
+    let tileSize: CGSize
+    let columns: Int
+    let rows: Int
+    /// Seconds between thumbnails (the wire value is milliseconds).
+    let interval: Double
+    let thumbnailCount: Int
+
+    var tilesPerSheet: Int { columns * rows }
+
+    /// Which sheet and cell a position lands in, or nil if it falls outside
+    /// what the server generated.
+    func tile(at seconds: Double) -> TrickplayTile? {
+        guard interval > 0, tilesPerSheet > 0, thumbnailCount > 0 else { return nil }
+        let index = min(max(Int(seconds / interval), 0), thumbnailCount - 1)
+        let sheet = index / tilesPerSheet
+        guard sheetURLs.indices.contains(sheet) else { return nil }
+        let cell = index % tilesPerSheet
+        return TrickplayTile(sheet: sheet, column: cell % columns, row: cell / columns)
+    }
+}
+
+nonisolated struct TrickplayTile: Equatable {
+    let sheet: Int
+    let column: Int
+    let row: Int
+}
+
 /// Everything the player's Info tab and transport show about the item —
 /// assembled by the playback controller, engine-independent.
 nonisolated struct PlayerItemInfo {
@@ -67,6 +108,12 @@ nonisolated struct PlayerItemInfo {
     /// "HEVC · 4K DV · 3840×1600 · 23.976 fps".
     let videoSummary: String?
     let posterURL: URL?
+    /// Empty whenever the server has no chapters for the item — the ticks
+    /// and chapter jumps simply don't appear (HEL-39 slice 3).
+    var chapters: [PlayerChapter] = []
+    /// nil when the server hasn't generated trickplay tiles; the scrub chip
+    /// then shows the timestamp alone.
+    var trickplay: TrickplaySource?
 }
 
 /// A subtitle that lives outside the media file (Jellyfin external stream)

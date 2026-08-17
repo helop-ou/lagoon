@@ -184,6 +184,42 @@ nonisolated struct MediaStream: Decodable {
     let realFrameRate: Double?
 }
 
+/// A chapter marker (HEL-39 slice 3). Both list and single-item responses
+/// carry these; servers that never scanned chapters just send an empty list.
+nonisolated struct ChapterInfo: Decodable {
+    let startPositionTicks: Int64
+    let name: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        startPositionTicks = try c.decodeIfPresent(Int64.self, forKey: "startPositionTicks") ?? 0
+        name = try c.decodeIfPresent(String.self, forKey: "name")
+    }
+}
+
+/// One trickplay resolution's tile-sheet geometry (Jellyfin 10.9+). Each
+/// sheet is a `tileWidth × tileHeight` grid of `width × height` thumbnails,
+/// `interval` **milliseconds** apart, served from
+/// `Videos/{id}/Trickplay/{width}/{sheet}.jpg`.
+nonisolated struct TrickplayTileInfo: Decodable {
+    let width: Int
+    let height: Int
+    let tileWidth: Int
+    let tileHeight: Int
+    let thumbnailCount: Int
+    let interval: Int
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        width = try c.decodeIfPresent(Int.self, forKey: "width") ?? 0
+        height = try c.decodeIfPresent(Int.self, forKey: "height") ?? 0
+        tileWidth = try c.decodeIfPresent(Int.self, forKey: "tileWidth") ?? 0
+        tileHeight = try c.decodeIfPresent(Int.self, forKey: "tileHeight") ?? 0
+        thumbnailCount = try c.decodeIfPresent(Int.self, forKey: "thumbnailCount") ?? 0
+        interval = try c.decodeIfPresent(Int.self, forKey: "interval") ?? 0
+    }
+}
+
 nonisolated enum PlayMethod: String {
     case directPlay = "DirectPlay"
     case directStream = "DirectStream"

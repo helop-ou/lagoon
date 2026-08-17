@@ -32,6 +32,10 @@ final class PlaybackController {
         self.client = client
         itemId = media.id
         do {
+            // Chapters and trickplay ride alongside the negotiation rather
+            // than after it — neither is in PlaybackInfo, and waiting for a
+            // second round trip would delay the first frame (HEL-39).
+            async let extras = client.playbackExtras(itemId: media.id)
             let info = try await client.playbackInfo(itemId: media.id)
             guard info.errorCode == nil, let source = info.mediaSources.first else {
                 throw JellyfinError.unplayable
@@ -47,7 +51,7 @@ final class PlaybackController {
                 resumeSeconds = Ticks.seconds(ticks)
             }
 
-            playerInfo = itemInfo(for: media, source: source, client: client)
+            playerInfo = itemInfo(for: media, source: source, client: client, extras: await extras)
 
             // The server's default audio choice (user language preferences
             // applied server-side) maps to the demuxer's per-type 1-based
@@ -152,7 +156,12 @@ final class PlaybackController {
 
     // Builds the Infuse-style facts line: runtime, year, size, video, audio,
     // bitrate, fps, genres, rating — skipping anything the server didn't know.
-    private func itemInfo(for media: MediaItem, source: MediaSource, client: JellyfinClient) -> PlayerItemInfo {
+    private func itemInfo(
+        for media: MediaItem,
+        source: MediaSource,
+        client: JellyfinClient,
+        extras: JellyfinClient.PlaybackExtras
+    ) -> PlayerItemInfo {
         let streams = source.mediaStreams ?? []
         let video = streams.first(where: { $0.type == "Video" })
         let audioStreams = streams.filter { $0.type == "Audio" }
@@ -192,13 +201,22 @@ final class PlaybackController {
             videoSummary = parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
 
+        // Kept whole, opening chapter included: it's a jump target even
+        // though the transport draws no tick at 0:00.
+        let chapters = extras.chapters
+            .enumerated()
+            .map { PlayerChapter(id: $0.offset, name: $0.element.name, start: Ticks.seconds($0.element.startPositionTicks)) }
+            .sorted { $0.start < $1.start }
+
         return PlayerItemInfo(
             title: media.railTitle,
             subtitle: media.railSubtitle,
             overview: media.overview,
             facts: facts,
             videoSummary: videoSummary,
-            posterURL: client.imageURL(for: media, kind: .primary, maxWidth: 400)
+            posterURL: client.imageURL(for: media, kind: .primary, maxWidth: 400),
+            chapters: chapters,
+            trickplay: client.trickplaySource(itemId: media.id, mediaSourceId: source.id, extras: extras)
         )
     }
 

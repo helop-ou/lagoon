@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 // Stream resolution and progress reporting.
@@ -101,6 +102,83 @@ extension JellyfinClient {
             query.append(URLQueryItem(name: "Tag", value: eTag))
         }
         return query
+    }
+
+    // MARK: - Transport extras (HEL-39 slice 3)
+
+    /// Chapters and trickplay geometry, as the item endpoint reports them.
+    nonisolated struct PlaybackExtras: Decodable {
+        let chapters: [ChapterInfo]
+        /// Keyed by media source id, then by resolution width — verbatim,
+        /// since the decoder's PascalCase strategy leaves dictionary keys
+        /// alone (only `CodingKey`s are converted).
+        let trickplay: [String: [String: TrickplayTileInfo]]
+
+        static let none = PlaybackExtras(chapters: [], trickplay: [:])
+
+        init(chapters: [ChapterInfo], trickplay: [String: [String: TrickplayTileInfo]]) {
+            self.chapters = chapters
+            self.trickplay = trickplay
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: AnyCodingKey.self)
+            chapters = (try? c.decodeIfPresent([ChapterInfo].self, forKey: "chapters")) ?? []
+            trickplay = (try? c.decodeIfPresent([String: [String: TrickplayTileInfo]].self, forKey: "trickplay")) ?? [:]
+        }
+    }
+
+    /// Fetched separately from `playbackInfo` (which carries neither) and
+    /// from the item the caller already holds: playback starts from rails
+    /// too, and their list requests don't ask for these fields. Never
+    /// throws — both features are garnish, and a server that hasn't
+    /// generated them must simply go without.
+    func playbackExtras(itemId: String) async -> PlaybackExtras {
+        guard let userId else { return .none }
+        return (try? await get("Users/\(userId)/Items/\(itemId)")) ?? .none
+    }
+
+    /// Resolves the trickplay tiles for a media source into everything the
+    /// transport needs, or nil when the server has none for it.
+    func trickplaySource(itemId: String, mediaSourceId: String, extras: PlaybackExtras) -> TrickplaySource? {
+        // Match the source's own tiles; fall back to the only entry when the
+        // keys disagree (transcodes report a different source id than the
+        // file the tiles were generated from).
+        let byWidth = extras.trickplay.first { $0.key.caseInsensitiveCompare(mediaSourceId) == .orderedSame }?.value
+            ?? (extras.trickplay.count == 1 ? extras.trickplay.first?.value : nil)
+        // Highest resolution the server generated; the decode caps the sheet
+        // size anyway, so a big one costs quality, not memory.
+        guard let info = byWidth?.values.max(by: { $0.width < $1.width }),
+              info.width > 0, info.height > 0,
+              info.tileWidth > 0, info.tileHeight > 0,
+              info.thumbnailCount > 0, info.interval > 0 else { return nil }
+
+        let perSheet = info.tileWidth * info.tileHeight
+        let sheetCount = (info.thumbnailCount + perSheet - 1) / perSheet
+        let urls = (0..<sheetCount).compactMap { index in
+            trickplaySheetURL(itemId: itemId, width: info.width, index: index)
+        }
+        guard urls.count == sheetCount else { return nil }
+
+        return TrickplaySource(
+            sheetURLs: urls,
+            tileSize: CGSize(width: info.width, height: info.height),
+            columns: info.tileWidth,
+            rows: info.tileHeight,
+            interval: Double(info.interval) / 1000,
+            thumbnailCount: info.thumbnailCount
+        )
+    }
+
+    /// Unlike `Items/…/Images/…`, the trickplay route is authenticated — it
+    /// 401s without credentials, and the image loader sends no headers, so
+    /// the token rides in the query the way stream URLs do.
+    private func trickplaySheetURL(itemId: String, width: Int, index: Int) -> URL? {
+        guard let accessToken else { return nil }
+        return try? url(
+            path: "Videos/\(itemId)/Trickplay/\(width)/\(index).jpg",
+            query: [URLQueryItem(name: "api_key", value: accessToken)]
+        )
     }
 
     func reportPlaybackStart(_ info: PlaybackStartInfo) async throws {

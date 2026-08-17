@@ -177,10 +177,30 @@ reflects the new position immediately.
   resumes playback, the native tvOS grammar. Menu cancels back to the live
   position, so it now outranks close-the-panel in `MenuPressGate`'s policy.
   Sustained walking accelerates 10 → 30 → 60 s, and the run resets after
-  600 ms of quiet. Up/down are deliberately dead mid-scrub (opening the
-  panel would strand the virtual playhead behind it). iOS instead drags the
-  bar directly and seeks on release only — seeking per drag update would
-  flush the renderers and re-demux on every frame of the gesture.
+  600 ms of quiet. Mid-scrub, up/down hop chapters (slice 3) — everywhere
+  else down still opens the panel, which is why the hop is scoped to scrub
+  mode: opening the panel mid-scrub would strand the virtual playhead
+  behind it. Backwards hops land on the current chapter's start first, the
+  way track skip-back does. iOS instead drags the bar directly and seeks on
+  release only — seeking per drag update would flush the renderers and
+  re-demux on every frame of the gesture.
+- **Trickplay** (slice 3, Jellyfin 10.9+): `BaseItemDto.Trickplay` is
+  `[mediaSourceId: [width: TrickplayInfo]]`, and its `Interval` is
+  **milliseconds**. Sheets come from `Videos/{id}/Trickplay/{width}/{n}.jpg`
+  — one sprite sheet per `TileWidth × TileHeight` grid of thumbnails, so
+  the default 10×10 at 10 s covers ~16 minutes each. Two gotchas: unlike
+  `Items/…/Images/…` this route **401s without credentials**, so the URL
+  carries `api_key` the way stream URLs do; and a sheet is ~23 MB decoded,
+  which is why `TrickplayLoader` holds its own two rather than going
+  through `ImageCache` (one scrub would evict every poster). Tile crops are
+  derived from the *decoded* sheet's size, never the declared numbers — the
+  decode caps sheets at 3200 px, and the last sheet of a film is only
+  partially filled, so its height isn't `rows` tiles.
+- Chapters and trickplay are fetched by the player itself
+  (`playbackExtras`, concurrent with the PlaybackInfo negotiation), not
+  taken from the `MediaItem` it was handed: playback starts from rails too,
+  and their list requests don't carry those fields. Both degrade to
+  nothing — no ticks, no preview — on servers that never generated them.
 - A faded-out overlay **still hit-tests**: the transport gates
   `allowsHitTesting` on its own visibility, or the invisible iOS scrubber
   swallows drags meant for the video. tvOS keeps the whole transport

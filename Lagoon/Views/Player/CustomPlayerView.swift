@@ -59,6 +59,8 @@ struct CustomPlayerView<Surface: View>: View {
     /// what the step size accelerates on. Expires with `scrubStepToken`.
     @State private var scrubRunLength = 0
     @State private var scrubStepToken = 0
+    /// Only exists when the server generated trickplay tiles (slice 3).
+    @State private var trickplay: TrickplayLoader?
     @FocusState private var focusedTab: PanelTab?
 
     var body: some View {
@@ -178,6 +180,16 @@ struct CustomPlayerView<Surface: View>: View {
             guard !Task.isCancelled else { return }
             seekFeedback = nil
         }
+        .task {
+            if trickplay == nil, let source = info.trickplay {
+                trickplay = TrickplayLoader(source: source)
+            }
+        }
+        // Frames follow the virtual playhead, not playback: the loader
+        // no-ops until the target crosses into the next thumbnail.
+        .onChange(of: scrubTarget) { _, target in
+            if let target { trickplay?.update(to: target) }
+        }
         // A pause in the input ends the acceleration run, so the next
         // press starts back at a 10 s step.
         .task(id: scrubStepToken) {
@@ -230,10 +242,15 @@ struct CustomPlayerView<Surface: View>: View {
                 case .right:
                     engine.seek(by: 10)
                     showSeekFeedback(forward: true)
+                // Mid-scrub, up/down hop chapters (HEL-39 slice 3). Down
+                // keeps the panel everywhere else — opening it mid-scrub
+                // would strand a virtual playhead behind it.
+                case .up where isScrubbing:
+                    jumpChapter(direction: 1)
+                case .down where isScrubbing:
+                    jumpChapter(direction: -1)
                 case .down:
-                    // Up/down are dead while scrubbing: opening the panel
-                    // would strand a virtual playhead behind it.
-                    if !isScrubbing { openPanel() }
+                    openPanel()
                 default:
                     break
                 }
@@ -323,6 +340,31 @@ struct CustomPlayerView<Surface: View>: View {
     private func endScrub() {
         scrubTarget = nil
         scrubRunLength = 0
+        // The loader deliberately keeps its last frame: the chip fades out
+        // showing the picture you committed to, and a later scrub in the
+        // same neighbourhood opens on it instead of a placeholder.
+    }
+
+    /// Chapter hop while scrubbing (HEL-39 slice 3). Backwards lands on the
+    /// current chapter's start first, the way track skip-back does, so a
+    /// second press is what reaches the previous one.
+    private func jumpChapter(direction: Int) {
+        let origin = scrubTarget ?? engine.timePosition
+        let target = direction > 0
+            ? info.chapters.first { $0.start > origin + 0.5 }
+            : info.chapters.last { $0.start < origin - 3 }
+        guard let target else { return }
+        scrubTarget = min(max(target.start, 0), engine.duration)
+        // A hop isn't part of a walking run — the next arrow press should
+        // step 10 s, not 60.
+        scrubRunLength = 0
+        scrubStepToken += 1
+    }
+
+    /// The chapter the scrub playhead is sitting in, for the chip's caption.
+    private var scrubChapter: PlayerChapter? {
+        guard let target = scrubTarget else { return nil }
+        return info.chapters.last { $0.start <= target }
     }
 
     /// Where the playhead knob sits: the virtual position while scrubbing,
@@ -508,8 +550,9 @@ struct CustomPlayerView<Surface: View>: View {
         .foregroundStyle(.white)
     }
 
-    /// The bar: a live-position fill, the playhead knob (which detaches
-    /// into the virtual playhead while scrubbing), and the time pill.
+    /// The bar: a live-position fill, chapter ticks, the playhead knob
+    /// (which detaches into the virtual playhead while scrubbing), and the
+    /// scrub chip above it.
     private var scrubber: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
@@ -523,9 +566,10 @@ struct CustomPlayerView<Surface: View>: View {
                     // instead of ticking (HEL-39); big deltas (seeks)
                     // become a quick slide to the target.
                     .animation(scrubMotion, value: fillFraction)
+                chapterTicks(in: width)
                 knob(in: width)
             }
-            .overlay(alignment: .topLeading) { timePill(in: width) }
+            .overlay(alignment: .bottomLeading) { scrubChip(in: width) }
             #if os(iOS)
             // A 8pt bar is an unusable touch target on its own.
             .contentShape(Rectangle().inset(by: -16))
@@ -555,25 +599,94 @@ struct CustomPlayerView<Surface: View>: View {
             .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
     }
 
+    /// Chapter boundaries, drawn over the fill so they read on both halves
+    /// of the bar. Nothing at 0:00 — a tick under the playhead is noise.
     @ViewBuilder
-    private func timePill(in width: CGFloat) -> some View {
+    private func chapterTicks(in width: CGFloat) -> some View {
+        if engine.duration > 0 {
+            ForEach(info.chapters.filter { $0.start > 1 && $0.start < engine.duration }) { chapter in
+                Capsule()
+                    .fill(.black.opacity(0.55))
+                    .frame(width: 2)
+                    .offset(x: width * CGFloat(chapter.start / engine.duration))
+            }
+        }
+    }
+
+    /// What floats above the playhead while scrubbing: the trickplay frame
+    /// when the server has tiles, the timestamp always, and the chapter it
+    /// lands in when the item has chapters. Anchored bottom-left so the
+    /// chip's height never has to be known — it grows upward off the bar.
+    @ViewBuilder
+    private func scrubChip(in width: CGFloat) -> some View {
         Group {
             if let target = scrubTarget {
-                Text(Self.timestamp(target))
-                    .font(.callout.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: ScrubMetrics.pillWidth, height: ScrubMetrics.pillHeight)
-                    .background(.black.opacity(0.7), in: Capsule())
-                    .offset(
-                        x: min(max(width * knobFraction - ScrubMetrics.pillWidth / 2, 0), max(width - ScrubMetrics.pillWidth, 0)),
-                        y: -(ScrubMetrics.pillHeight + 14)
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
-                    .animation(scrubMotion, value: knobFraction)
+                VStack(spacing: 8) {
+                    trickplayFrame
+                    Text(Self.timestamp(target))
+                        .font(.callout.monospacedDigit().weight(.semibold))
+                        .frame(width: ScrubMetrics.pillWidth, height: ScrubMetrics.pillHeight)
+                        .background(.black.opacity(0.7), in: Capsule())
+                    if let name = scrubChapter?.name {
+                        Text(name)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.7), in: Capsule())
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(width: chipWidth)
+                .offset(
+                    x: min(max(width * knobFraction - chipWidth / 2, 0), max(width - chipWidth, 0)),
+                    y: -(Metrics.scrubberHeight + 14)
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
+                .animation(scrubMotion, value: knobFraction)
             }
         }
         .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
         .allowsHitTesting(false)
+    }
+
+    /// The preview image, or its empty frame while the sheet downloads —
+    /// reserving the space keeps the chip from resizing under the caption
+    /// when the picture lands.
+    @ViewBuilder
+    private var trickplayFrame: some View {
+        if let size = previewSize {
+            Group {
+                if let image = trickplay?.frame {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Color.black.opacity(0.7)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Metrics.cardArtRadius)
+                    .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.5), radius: 8, y: 3)
+            .animation(.easeOut(duration: Motion.fast), value: trickplay?.frame == nil)
+        }
+    }
+
+    /// Preview size at the chip's width, in the tiles' own aspect ratio (not
+    /// every library is 16:9).
+    private var previewSize: CGSize? {
+        guard trickplay?.isUnavailable != true,
+              let source = info.trickplay, source.tileSize.width > 0, source.tileSize.height > 0 else { return nil }
+        let width = ScrubMetrics.previewWidth
+        return CGSize(width: width, height: (width * source.tileSize.height / source.tileSize.width).rounded())
+    }
+
+    private var chipWidth: CGFloat {
+        max(previewSize?.width ?? 0, ScrubMetrics.pillWidth)
     }
 
     /// Scrub steps snap over; while live the knob must glide on exactly the
@@ -837,10 +950,14 @@ private enum ScrubMetrics {
     static let knobOverhang: CGFloat = 12
     static let pillWidth: CGFloat = 150
     static let pillHeight: CGFloat = 52
+    /// Matches the 320 px tiles Jellyfin generates by default, so the
+    /// preview is shown at its native resolution rather than upscaled.
+    static let previewWidth: CGFloat = 320
     #else
     static let knobWidth: CGFloat = 14
     static let knobOverhang: CGFloat = 6
     static let pillWidth: CGFloat = 88
     static let pillHeight: CGFloat = 34
+    static let previewWidth: CGFloat = 160
     #endif
 }
