@@ -62,13 +62,23 @@ struct ItemDetailView: View {
                 .padding(.leading, Metrics.Space.l)
         }
         #else
-        // Touch has no focus order to protect, and a phone has no room for
-        // one row, so the toggles sit above.
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            actionRow
+        // Lead with the primary action on touch too. Most items fit all
+        // controls on one line; a resumed item with the longer From Beginning
+        // label falls back cleanly without putting watched/favourite first.
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: Metrics.Space.l) {
                 playButton
                 fromBeginningButton
+                actionRow
+                    .padding(.leading, Metrics.Space.s)
+            }
+
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                HStack(spacing: Metrics.Space.l) {
+                    playButton
+                    fromBeginningButton
+                }
+                actionRow
             }
         }
         #endif

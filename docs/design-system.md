@@ -165,16 +165,16 @@ chip), which has no lozenge to fight.
   memoized per URL in `ArtworkPaletteCache`.
 - **Detail pages** (HEL-46, built against Jaagop's Infuse reference — the
   earlier poster-left composition is gone): the backdrop **is** the artwork,
-  full-bleed and barely dimmed. Legibility comes from a **leading wash**
-  (0.9 → clear by 68 %) rather than a uniform scrim, because the info block
-  is left-aligned: that keeps the right of the still vivid, which a scrim
-  strong enough for text over busy artwork would flatten. There is no dark
-  panel and **no scroll-linked dimming** — the latter was tried and cut
+  full-bleed. On tvOS legibility comes from a **leading wash** (0.9 → clear by
+  68 %) rather than a uniform scrim, because the info block is left-aligned:
+  that keeps the right of the still vivid, which a scrim strong enough for
+  text over busy artwork would flatten. There is no dark panel and **no
+  scroll-linked dimming** — the latter was tried and cut
   (Jaagop: "not a big fan of the screen going black"), because moving focus
   into a rail jumps further in one press than any sensible ramp covers, so it
-  read as a slam to black. The rails stay legible on their own: the leading
-  wash covers the column the headings and names sit in, and the cards are
-  opaque artwork.
+  read as a slam to black. The tvOS rails stay legible on their own: the
+  leading wash covers the column the headings and names sit in, and the cards
+  are opaque artwork. iOS uses the static vertical treatment described below.
   The hero space is a **scroll content margin, not a spacer view**: as a
   spacer it was non-focusable content above the first button, which left
   focus unable to climb back out — Up from Play did nothing and the tab bar
@@ -190,13 +190,21 @@ chip), which has no lozenge to fight.
   leaves the rail — having browsed to E5, moving up to Play should start E5
   rather than snapping back — but it is cleared on a season change, since
   those episodes are gone. iOS has no focus, so it simply shows what's next.
-- **Facts line**: one spaced row — runtime, year, a *boxed* certification
-  (r4 outline), then plain capability tokens from `MediaSource.qualityTokens`
-  ("4K  DV  TrueHD 7.1  Atmos"): resolution, dynamic range, the best audio in
-  the file, Atmos when present. Plain text, not capsules — outlined chips
-  read far louder than the facts deserve. The vocabulary lives in
-  `MediaQuality` so the player's facts line and the detail row can't disagree
-  about what counts as 4K.
+- **Phone detail composition** (HEL-41): iOS keeps the same full-bleed artwork,
+  but a top-to-bottom wash moves from photographic at the title to near-black
+  before the rails. A horizontal wash cannot protect full-width phone text,
+  and leaving the still equally vivid behind cast and episodes made the whole
+  page read as wallpaper. Header and section spacing are tighter, Play leads
+  the touch actions, cast captions are phone-sized, and the final rail gets
+  enough bottom runway to clear the floating tab bar.
+- **Facts line**: on tvOS this is one spaced row — runtime, year, a *boxed*
+  certification (r4 outline), then plain capability tokens from
+  `MediaSource.qualityTokens` ("4K  DV  TrueHD 7.1  Atmos"). iOS splits identity
+  facts and playback capabilities into two compact rows so a value never
+  breaks internally ("1 h 56" / "min" or "TrueHD" / "7.1"). Plain text, not
+  capsules — outlined chips read far louder than the facts deserve. The
+  vocabulary lives in `MediaQuality` so the player's facts line and the detail
+  row can't disagree about what counts as 4K.
 - **Title art** (`TitleArtView`): Jellyfin has a `Logo` — the title's own
   wordmark — for practically every film, and it is the title treatment on
   detail pages, with type as the fallback. Logos are transparent PNGs at

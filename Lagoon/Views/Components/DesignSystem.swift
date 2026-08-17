@@ -21,7 +21,11 @@ enum Metrics {
     /// spacer (see DetailPageScaffold). The reference starts its title about
     /// a third of the way down.
     static let detailHeroSpace: CGFloat = 210
+    static let detailHeaderSpacing: CGFloat = 16
+    static let detailSectionSpacing: CGFloat = 40
+    static let detailBottomPadding: CGFloat = 80
     static let castPortraitSize: CGFloat = 130
+    static let castCaptionWidth: CGFloat = 180
     static let castCount = 8
     /// Box the title's logo artwork fits inside — height is what keeps a
     /// wide wordmark and a stacked one reading as the same design.
@@ -47,7 +51,13 @@ enum Metrics {
     static let railBottomPadding: CGFloat = 10
     static let scrubberHeight: CGFloat = 8     // matches the AVKit transport bar
     static let detailHeroSpace: CGFloat = 100
+    static let detailHeaderSpacing: CGFloat = 12
+    static let detailSectionSpacing: CGFloat = 32
+    /// The liquid tab bar floats over scroll content. The final rail needs
+    /// enough runway to clear it rather than finishing underneath it.
+    static let detailBottomPadding: CGFloat = 110
     static let castPortraitSize: CGFloat = 72
+    static let castCaptionWidth: CGFloat = 104
     // No castCount on iOS: the strip scrolls there, so it shows everyone.
     static let logoMaxWidth: CGFloat = 240
     static let logoMaxHeight: CGFloat = 70

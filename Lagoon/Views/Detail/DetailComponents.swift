@@ -17,12 +17,17 @@ struct DetailBackdropView: View {
             }
             .animation(.easeInOut(duration: Motion.crossfade), value: url)
         }
-        .overlay(Color.black.opacity(0.12))
-        // Leading wash: the info block is left-aligned, so that half needs a
-        // dark bed while the other half stays vivid. This is what lets the
-        // reference keep its artwork bright — a uniform scrim strong enough
-        // for text over a busy still flattens the whole image.
-        .overlay(
+        .overlay(readabilityWash)
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var readabilityWash: some View {
+        #if os(tvOS)
+        // The 10-foot layout only occupies the leading half, so keep the
+        // rest of the still vivid.
+        ZStack {
+            Color.black.opacity(0.12)
             LinearGradient(
                 stops: [
                     .init(color: .black.opacity(0.9), location: 0),
@@ -32,8 +37,27 @@ struct DetailBackdropView: View {
                 startPoint: .leading,
                 endPoint: .trailing
             )
-        )
-        .ignoresSafeArea()
+        }
+        #else
+        // A phone's content spans the whole screen. A leading-only wash left
+        // half the metadata over bare artwork and the lower sections over a
+        // bright still. Keep the top recognisably photographic, then settle
+        // into a near-black reading surface before the rails begin.
+        ZStack {
+            Color.black.opacity(0.28)
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.08), location: 0),
+                    .init(color: .black.opacity(0.42), location: 0.28),
+                    .init(color: .black.opacity(0.82), location: 0.55),
+                    .init(color: .black.opacity(0.96), location: 0.76),
+                    .init(color: .black, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        #endif
     }
 }
 
@@ -62,10 +86,10 @@ struct DetailPageScaffold<Content: View>: View {
                 DetailBackdropView(url: backdropURL)
 
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                    VStack(alignment: .leading, spacing: Metrics.detailSectionSpacing) {
                         content
                     }
-                    .padding(.bottom, Metrics.screenGutter)
+                    .padding(.bottom, Metrics.detailBottomPadding)
                     // A horizontal rail reports its content's ideal width
                     // while it is loading. Without a concrete viewport, the
                     // enclosing vertical ScrollView accepted that width and
@@ -99,7 +123,7 @@ struct DetailHeader<Buttons: View>: View {
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+        VStack(alignment: .leading, spacing: Metrics.detailHeaderSpacing) {
             TitleArtView(item: item)
 
             if let upNext, let label = upNext.episodeLabel {
@@ -108,40 +132,8 @@ struct DetailHeader<Buttons: View>: View {
                     .lineLimit(1)
             }
 
-            // One spaced line, per the reference: runtime, year, a boxed
-            // certification, then plain capability tokens. No capsules —
-            // the outlined chips this replaced read as much louder than the
-            // facts deserve.
-            HStack(spacing: Metrics.Space.l) {
-                ForEach(factTokens, id: \.self) { token in
-                    Text(token)
-                }
-                if let official = item.officialRating {
-                    Text(official)
-                        .padding(.horizontal, Metrics.Space.s)
-                        .padding(.vertical, Metrics.Space.hair)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 4)
-                                .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
-                        )
-                }
-                ForEach(qualityTokens, id: \.self) { token in
-                    Text(token)
-                }
-            }
-            .font(.callout)
-
-            if let genres = item.genres, !genres.isEmpty {
-                Text(genres.prefix(3).joined(separator: ", "))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let rating = item.communityRating {
-                Text(String(format: "★ %.1f", rating))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
+            facts
+            supportingFacts
 
             if let overview = upNext?.overview ?? item.overview {
                 Text(overview)
@@ -179,6 +171,102 @@ struct DetailHeader<Buttons: View>: View {
     /// until the detail page's own request lands — the tokens simply appear.
     private var qualityTokens: [String] {
         item.mediaSources?.first?.qualityTokens ?? []
+    }
+
+    @ViewBuilder
+    private var facts: some View {
+        #if os(tvOS)
+        // One spaced line at 10 feet: runtime, year, certification, then
+        // playback capabilities.
+        HStack(spacing: Metrics.Space.l) {
+            primaryFactViews
+            qualityFactViews
+        }
+        .font(.callout)
+        #else
+        // Runtime/year/rating and playback capabilities are different kinds
+        // of information. Separate rows let every token stay intact instead
+        // of producing "1 h 56" / "min" and "TrueHD" / "7.1" fragments.
+        VStack(alignment: .leading, spacing: Metrics.Space.s) {
+            if !factTokens.isEmpty || item.officialRating != nil {
+                HStack(spacing: Metrics.Space.m) {
+                    primaryFactViews
+                }
+            }
+            if !qualityTokens.isEmpty {
+                HStack(spacing: Metrics.Space.m) {
+                    qualityFactViews
+                }
+            }
+        }
+        .font(.callout)
+        #endif
+    }
+
+    @ViewBuilder
+    private var primaryFactViews: some View {
+        ForEach(factTokens, id: \.self) { token in
+            Text(token)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        if let official = item.officialRating {
+            Text(official)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, Metrics.Space.s)
+                .padding(.vertical, Metrics.Space.hair)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var qualityFactViews: some View {
+        ForEach(qualityTokens, id: \.self) { token in
+            Text(token)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    @ViewBuilder
+    private var supportingFacts: some View {
+        #if os(tvOS)
+        if let genres = item.genres, !genres.isEmpty {
+            genreText(genres)
+        }
+        if let rating = item.communityRating {
+            communityRatingText(rating)
+        }
+        #else
+        if item.genres?.isEmpty == false || item.communityRating != nil {
+            HStack(spacing: Metrics.Space.l) {
+                if let genres = item.genres, !genres.isEmpty {
+                    genreText(genres)
+                }
+                if let rating = item.communityRating {
+                    communityRatingText(rating)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+        #endif
+    }
+
+    private func genreText(_ genres: [String]) -> some View {
+        Text(genres.prefix(3).joined(separator: ", "))
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
+    private func communityRatingText(_ rating: Double) -> some View {
+        Text(String(format: "★ %.1f", rating))
+            .font(.callout)
+            .foregroundStyle(.secondary)
     }
 }
 
@@ -310,7 +398,7 @@ struct CastStrip: View {
                         .lineLimit(1)
                 }
             }
-            .frame(width: Metrics.castPortraitSize + 50)
+            .frame(width: Metrics.castCaptionWidth)
         }
     }
 }
