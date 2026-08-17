@@ -278,28 +278,50 @@ nonisolated enum SampleBufferFactory {
         fallbackDuration: Double,
         isKeyFrame: Bool
     ) -> CMSampleBuffer? {
-        guard let data = packet.pointee.data else { return nil }
         let size = Int(packet.pointee.size)
         guard size > 0 else { return nil }
 
+        // av_read_frame normally hands us a reference-counted AVPacket.
+        // Clone that reference and let the CMBlockBuffer release it when
+        // AVFoundation has finished decoding the sample. This keeps the
+        // compressed payload in FFmpeg's original allocation instead of
+        // allocating and copying every packet once more on the demux queue.
+        // av_packet_clone also safely falls back to copying if a demuxer
+        // ever produces a non-reference-counted packet.
+        guard let clonedPacket = av_packet_clone(packet) else { return nil }
+        var retainedPacket: UnsafeMutablePointer<AVPacket>? = clonedPacket
+        guard let retainedData = clonedPacket.pointee.data else {
+            av_packet_free(&retainedPacket)
+            return nil
+        }
+        var blockSource = CMBlockBufferCustomBlockSource(
+            version: UInt32(kCMBlockBufferCustomBlockSourceVersion),
+            AllocateBlock: nil,
+            FreeBlock: { refCon, _, _ in
+                guard let refCon else { return }
+                var packet: UnsafeMutablePointer<AVPacket>? = refCon.assumingMemoryBound(to: AVPacket.self)
+                av_packet_free(&packet)
+            },
+            refCon: UnsafeMutableRawPointer(clonedPacket)
+        )
         var blockBuffer: CMBlockBuffer?
-        guard CMBlockBufferCreateWithMemoryBlock(
+        let blockStatus = CMBlockBufferCreateWithMemoryBlock(
             allocator: kCFAllocatorDefault,
-            memoryBlock: nil,
+            memoryBlock: retainedData,
             blockLength: size,
-            blockAllocator: kCFAllocatorDefault,
-            customBlockSource: nil,
+            blockAllocator: kCFAllocatorNull,
+            customBlockSource: &blockSource,
             offsetToData: 0,
             dataLength: size,
             flags: 0,
             blockBufferOut: &blockBuffer
-        ) == noErr, let blockBuffer else { return nil }
-        guard CMBlockBufferReplaceDataBytes(
-            with: data,
-            blockBuffer: blockBuffer,
-            offsetIntoDestination: 0,
-            dataLength: size
-        ) == noErr else { return nil }
+        )
+        guard blockStatus == noErr, let blockBuffer else {
+            // Ownership transfers to CoreMedia only after successful
+            // creation; balance the clone on the failure path.
+            av_packet_free(&retainedPacket)
+            return nil
+        }
 
         let secondsPerUnit = Double(timeBase.num) / Double(max(timeBase.den, 1))
         func time(_ value: Int64) -> CMTime {

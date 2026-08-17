@@ -55,7 +55,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let videoQueue = SampleBufferQueue()
     @ObservationIgnored nonisolated private let audioQueue = SampleBufferQueue()
     @ObservationIgnored nonisolated private let demuxQueue = DispatchQueue(label: "ee.helop.lagoon.demux", qos: .userInitiated)
-    @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInitiated)
+    @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInteractive)
+    @ObservationIgnored nonisolated private let pumpKickState = PumpKickState()
     @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     // Written on main, read on the demux loop (or vice versa) — all simple
@@ -794,9 +795,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     // MARK: - Renderer pumps (pump queue only)
 
     nonisolated private func kickPumps() {
+        guard pumpKickState.request() else { return }
         pumpQueue.async { [weak self] in
-            self?.pumpVideo()
-            self?.pumpAudio()
+            guard let self else { return }
+            repeat {
+                self.pumpVideo()
+                self.pumpAudio()
+            } while self.pumpKickState.completeCycle()
         }
     }
 
@@ -851,13 +856,17 @@ nonisolated private final class SharedState: @unchecked Sendable {
 /// Thread-safe FIFO of ready-to-enqueue sample buffers.
 nonisolated final class SampleBufferQueue: @unchecked Sendable {
     private let lock = NSLock()
-    private var buffers: [CMSampleBuffer] = []
+    // A head-indexed buffer avoids Array.removeFirst() shifting every
+    // retained sample on every renderer dequeue. Consumed slots are nilled
+    // immediately, then compacted in batches to keep memory bounded.
+    private var buffers: [CMSampleBuffer?] = []
+    private var head = 0
     private var finished = false
 
     var count: Int {
         lock.lock()
         defer { lock.unlock() }
-        return buffers.count
+        return buffers.count - head
     }
 
     var isFinished: Bool {
@@ -875,7 +884,15 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
     func dequeue() -> CMSampleBuffer? {
         lock.lock()
         defer { lock.unlock() }
-        return buffers.isEmpty ? nil : buffers.removeFirst()
+        guard head < buffers.count else { return nil }
+        let buffer = buffers[head]
+        buffers[head] = nil
+        head += 1
+        if head >= 64, head * 2 >= buffers.count {
+            buffers.removeFirst(head)
+            head = 0
+        }
+        return buffer
     }
 
     func markFinished() {
@@ -887,7 +904,41 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
     func reset() {
         lock.lock()
         buffers.removeAll()
+        head = 0
         finished = false
         lock.unlock()
+    }
+}
+
+/// Coalesces the per-packet wakeups sent to the serial renderer queue.
+/// Without it a fast demux pass can enqueue hundreds of pump blocks that
+/// mostly discover an already-full AVFoundation renderer.
+nonisolated private final class PumpKickState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var scheduled = false
+    private var requestedAgain = false
+
+    /// Returns true only for the request that must schedule the worker.
+    func request() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if scheduled {
+            requestedAgain = true
+            return false
+        }
+        scheduled = true
+        return true
+    }
+
+    /// Returns true when work arrived during the completed pump cycle.
+    func completeCycle() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if requestedAgain {
+            requestedAgain = false
+            return true
+        }
+        scheduled = false
+        return false
     }
 }

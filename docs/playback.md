@@ -52,6 +52,9 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   decodes them. CoreAudio likewise decodes compressed aac/mp3/ac3/eac3
   handed to the audio renderer (ac3/eac3 self-describing; aac needs its
   AudioSpecificConfig as the magic cookie; mp3 is 1152 frames/packet).
+  The CoreMedia block retains an `av_packet_clone` reference to FFmpeg's
+  original payload and releases it after decode, avoiding a second
+  allocation and full payload copy for every compressed packet.
 - **Audio decode** (M4): codecs CoreAudio won't take compressed
   (DTS, TrueHD, FLAC, Opus, Vorbis — anything with an FFmpeg decoder)
   go through `AudioDecoder`: libavcodec → swresample → interleaved
@@ -159,6 +162,12 @@ position, queue depths, and stall count so a hardware trace can distinguish
 decoder pressure from starvation without a screen recording. Capture those
 with the Instruments **Points of Interest** template on real Apple TV hardware;
 the signposts intentionally ship in Release/TestFlight.
+
+The renderer feed is kept cheap under high-bitrate load: packet wakeups are
+coalesced onto a user-interactive serial pump, and the app-side sample FIFO is
+head-indexed/amortized O(1) rather than shifting its whole Swift array for every
+frame. These optimizations reduce Lagoon's packet-copying, scheduling, and ARC
+overhead; AVFoundation's hardware decoder remains responsible for codec decode.
 
 Player exit is deliberately two-phase (HEL-57). The main actor cancels the
 clock/observer and interrupts FFmpeg, then renderer stop/flush, queued sample
