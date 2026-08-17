@@ -35,7 +35,20 @@ on iOS). Buttons use `.glassProminent` for the one primary action per screen
 and `.glass` for everything else. Focus drives only:
 
 - the title reveal on poster cards (`opacity`, 0.25 s ease),
-- nothing else — selection elsewhere is a weight/color swap, not a border.
+- nothing else — selection elsewhere is a **weight** swap, not a border and
+  not a color (see below).
+
+**Never set a foreground color on a focusable control or on any ancestor of
+one.** The focused lozenge picks its own label color to sit on the white
+pill; an explicit `.foregroundStyle` propagates into the label, wins, and the
+text disappears at exactly the moment it matters. This has bitten twice
+(HEL-50): `.foregroundStyle(.white)` on the player's panel card, which
+wrapped every track row, and `.primary`-vs-`.secondary` selection coloring on
+the series season chips — `.primary` is white under this app's dark scheme,
+so the *selected* chip was the invisible one. Express selection through
+content (bold weight, a checkmark), and let hardcoded white stay where it
+belongs: non-focusable text over video (transport title, timestamps, scrub
+chip), which has no lozenge to fight.
 
 ## Components
 

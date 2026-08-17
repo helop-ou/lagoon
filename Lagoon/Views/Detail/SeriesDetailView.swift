@@ -92,8 +92,11 @@ struct SeriesDetailView: View {
                             Task { await viewModel.selectSeason(season.id, client: session.client, seriesId: item.id) }
                         }
                         .buttonStyle(.glass)
+                        // Weight alone marks the selected season: a colored
+                        // label fought the focused lozenge, and `.primary`
+                        // under this screen's dark scheme is white — so the
+                        // selected chip went invisible when focused (HEL-50).
                         .font(.callout.weight(season.id == viewModel.selectedSeasonId ? .bold : .regular))
-                        .foregroundStyle(season.id == viewModel.selectedSeasonId ? .primary : .secondary)
                     }
                 }
                 // Focused glass chips scale past their bounds — without this

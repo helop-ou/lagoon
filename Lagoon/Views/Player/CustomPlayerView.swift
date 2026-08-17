@@ -798,8 +798,11 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
+        // No foreground style here: every track row and the audio-delay
+        // steppers are native buttons, and the focused lozenge sets its own
+        // label color. Forcing white made their text vanish exactly when
+        // focused (HEL-50). The material card carries the contrast instead.
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-        .foregroundStyle(.white)
     }
 
     private var infoCard: some View {
