@@ -171,6 +171,21 @@ reflects the new position immediately.
   `PlayerEngine` protocol** — engine internals must never leak into it.
 - Focus invariants: the video surface is focusable at **all** times (Menu
   would quit the app from an unfocusable screen).
+- **Scrub grammar** (HEL-39 slice 2): while *playing*, tvOS arrows are
+  ±10 s seeks; while *paused* they walk a virtual playhead (`scrubTarget`)
+  that only lands when Select or Play/Pause commits it — and committing
+  resumes playback, the native tvOS grammar. Menu cancels back to the live
+  position, so it now outranks close-the-panel in `MenuPressGate`'s policy.
+  Sustained walking accelerates 10 → 30 → 60 s, and the run resets after
+  600 ms of quiet. Up/down are deliberately dead mid-scrub (opening the
+  panel would strand the virtual playhead behind it). iOS instead drags the
+  bar directly and seeks on release only — seeking per drag update would
+  flush the renderers and re-demux on every frame of the gesture.
+- A faded-out overlay **still hit-tests**: the transport gates
+  `allowsHitTesting` on its own visibility, or the invisible iOS scrubber
+  swallows drags meant for the video. tvOS keeps the whole transport
+  non-hit-testable — Select goes to the focused surface, and anything else
+  down there steals it.
 - **SwiftUI's `onExitCommand` never fires inside a fullScreenCover on
   tvOS 26** — arrows and play/pause reach SwiftUI, but UIKit's
   presentation controller consumes Menu and dismisses the cover directly,

@@ -26,6 +26,10 @@ protocol PlayerEngine: AnyObject, Observable {
 
     func togglePause()
     func seek(by seconds: Double)
+    /// Absolute seek, clamped by the engine. Both seeks are optimistic:
+    /// `timePosition` lands on the target the instant they're called, so
+    /// the transport can commit a scrub without waiting for the demuxer.
+    func seek(to seconds: Double)
     /// nil turns the stream off (subtitles); audio pickers shouldn't pass nil.
     func selectAudioTrack(id: Int?)
     func selectSubtitleTrack(id: Int?)

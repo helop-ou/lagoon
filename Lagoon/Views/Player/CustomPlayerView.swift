@@ -8,12 +8,14 @@ import SwiftUI
 ///
 /// tvOS focus invariants: the surface is focusable at all times (Menu
 /// would quit the app from an unfocusable screen). Remote grammar:
-/// play/pause toggles anywhere; on the surface left/right seek ±10 s and
+/// play/pause toggles anywhere; on the surface left/right seek ±10 s while
+/// playing and walk the scrub playhead while paused (HEL-39 slice 2), and
 /// down opens the panel; in the panel left/right walk the tabs (selection
 /// follows focus), down enters the track rows. Menu/Escape is intercepted
-/// at the UIKit press layer by `MenuPressGate` — panel open closes the
-/// panel, otherwise the player exits (SwiftUI's `onExitCommand` never
-/// fires inside a fullScreenCover on tvOS 26).
+/// at the UIKit press layer by `MenuPressGate` — scrubbing cancels back to
+/// the live position, else panel open closes the panel, otherwise the
+/// player exits (SwiftUI's `onExitCommand` never fires inside a
+/// fullScreenCover on tvOS 26).
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     let info: PlayerItemInfo
@@ -50,6 +52,13 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var selectedTab: PanelTab = .info
     @State private var seekFeedback: SeekFeedback?
     @State private var showsBuffering = false
+    /// The virtual playhead's position while scrubbing; nil when the
+    /// transport is live (HEL-39 slice 2).
+    @State private var scrubTarget: Double?
+    /// How many scrub steps this run of uninterrupted input has taken —
+    /// what the step size accelerates on. Expires with `scrubStepToken`.
+    @State private var scrubRunLength = 0
+    @State private var scrubStepToken = 0
     @FocusState private var focusedTab: PanelTab?
 
     var body: some View {
@@ -57,7 +66,9 @@ struct CustomPlayerView<Surface: View>: View {
         // Menu never reaches SwiftUI inside a fullScreenCover on tvOS 26;
         // the gate intercepts the press itself (see MenuPressGate).
         MenuPressGate {
-            if panelOpen {
+            if isScrubbing {
+                cancelScrub()
+            } else if panelOpen {
                 closePanel()
             } else {
                 onDismiss()
@@ -99,7 +110,17 @@ struct CustomPlayerView<Surface: View>: View {
             .animation(.easeOut(duration: Motion.fast), value: seekFeedback)
 
             transportOverlay
-                .opacity((controlsVisible || engine.isPaused) && !panelOpen ? 1 : 0)
+                .opacity(transportVisible ? 1 : 0)
+                // A faded-out overlay still hit-tests: without this the
+                // invisible iOS scrubber would swallow drags meant for the
+                // video (and the button row taps). tvOS is never touched —
+                // Select goes to the focused surface — so nothing down
+                // there may take a press at all.
+                #if os(tvOS)
+                .allowsHitTesting(false)
+                #else
+                .allowsHitTesting(transportVisible)
+                #endif
                 // Asymmetric: target-state-conditional animation — fast
                 // in, gentle out.
                 .animation(
@@ -122,8 +143,12 @@ struct CustomPlayerView<Surface: View>: View {
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
         .onPlayPauseCommand {
-            engine.togglePause()
-            pokeControls()
+            if let target = scrubTarget {
+                commitScrub(to: target, resume: true)
+            } else {
+                engine.togglePause()
+                pokeControls()
+            }
         }
         #endif
         .onChange(of: focusedTab) { _, tab in
@@ -152,6 +177,14 @@ struct CustomPlayerView<Surface: View>: View {
             try? await Task.sleep(for: .milliseconds(700))
             guard !Task.isCancelled else { return }
             seekFeedback = nil
+        }
+        // A pause in the input ends the acceleration run, so the next
+        // press starts back at a 10 s step.
+        .task(id: scrubStepToken) {
+            guard scrubRunLength > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            scrubRunLength = 0
         }
     }
 
@@ -187,6 +220,10 @@ struct CustomPlayerView<Surface: View>: View {
                     return
                 }
                 switch direction {
+                case .left where canScrub:
+                    stepScrub(direction: -1)
+                case .right where canScrub:
+                    stepScrub(direction: 1)
                 case .left:
                     engine.seek(by: -10)
                     showSeekFeedback(forward: false)
@@ -194,7 +231,9 @@ struct CustomPlayerView<Surface: View>: View {
                     engine.seek(by: 10)
                     showSeekFeedback(forward: true)
                 case .down:
-                    openPanel()
+                    // Up/down are dead while scrubbing: opening the panel
+                    // would strand a virtual playhead behind it.
+                    if !isScrubbing { openPanel() }
                 default:
                     break
                 }
@@ -204,8 +243,14 @@ struct CustomPlayerView<Surface: View>: View {
             .onTapGesture {
                 guard !panelOpen else { return }
                 #if os(tvOS)
-                engine.togglePause()
-                pokeControls()
+                // Select commits a scrub and plays on from there — the
+                // native tvOS grammar; otherwise it's play/pause.
+                if let target = scrubTarget {
+                    commitScrub(to: target, resume: true)
+                } else {
+                    engine.togglePause()
+                    pokeControls()
+                }
                 #else
                 if controlsVisible {
                     controlsVisible = false
@@ -223,6 +268,69 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func showSeekFeedback(forward: Bool) {
         seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1)
+    }
+
+    // MARK: - Scrub mode (HEL-39 slice 2)
+
+    private var isScrubbing: Bool { scrubTarget != nil }
+
+    private var transportVisible: Bool {
+        (controlsVisible || engine.isPaused) && !panelOpen
+    }
+
+    /// The pause-then-walk grammar needs a known duration to walk along;
+    /// without one the arrows stay ±10 s seeks.
+    private var canScrub: Bool {
+        engine.isPaused && engine.duration > 0
+    }
+
+    /// Walks the virtual playhead one step. Sustained input accelerates
+    /// (10 s → 30 s → 60 s) so crossing a feature-length film isn't fifty
+    /// presses; the run expires after a beat of no input, so a deliberate
+    /// single press is always a 10 s step.
+    private func stepScrub(direction: Double) {
+        let origin = scrubTarget ?? engine.timePosition
+        let step: Double = switch scrubRunLength {
+        case ..<4: 10
+        case 4..<10: 30
+        default: 60
+        }
+        let limit = engine.duration > 0 ? engine.duration : origin + step
+        scrubTarget = min(max(origin + direction * step, 0), limit)
+        scrubRunLength += 1
+        scrubStepToken += 1
+    }
+
+    /// Lands the virtual playhead. `resume` is the tvOS grammar (Select/Play
+    /// scrubs *and* plays on); touch drags keep the current play state.
+    private func commitScrub(to target: Double, resume: Bool) {
+        endScrub()
+        // Resume before seeking: the engine re-anchors the synchronizer
+        // when the seek primes, so unpausing afterwards fights that
+        // hand-off.
+        if resume, engine.isPaused {
+            engine.togglePause()
+        }
+        engine.seek(to: target)
+        pokeControls()
+    }
+
+    private func cancelScrub() {
+        endScrub()
+        pokeControls()
+    }
+
+    private func endScrub() {
+        scrubTarget = nil
+        scrubRunLength = 0
+    }
+
+    /// Where the playhead knob sits: the virtual position while scrubbing,
+    /// the engine's otherwise.
+    private var knobFraction: CGFloat {
+        guard engine.duration > 0 else { return 0 }
+        let seconds = scrubTarget ?? engine.timePosition
+        return CGFloat(min(max(seconds / engine.duration, 0), 1))
     }
 
     // MARK: - Subtitles (HEL-48 M5)
@@ -320,6 +428,9 @@ struct CustomPlayerView<Surface: View>: View {
             }
             .foregroundStyle(.white.opacity(0.9))
             .padding(.top, Metrics.railTopPadding)
+            // Down is dead while scrubbing — don't advertise it.
+            .opacity(isScrubbing ? 0 : 1)
+            .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
             #else
             HStack(spacing: 12) {
                 Button {
@@ -363,21 +474,13 @@ struct CustomPlayerView<Surface: View>: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                // Scrubbing hands this space to the time pill (and, from
+                // slice 3, the trickplay frame).
+                .opacity(isScrubbing ? 0 : 1)
+                .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
+                .allowsHitTesting(false)
 
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(.white.opacity(0.3))
-                        Capsule()
-                            .fill(.white)
-                            .frame(width: max(proxy.size.width * progressFraction, Metrics.scrubberHeight))
-                    }
-                    // Glides between the engine's 0.1 s position updates
-                    // instead of ticking (HEL-39); big deltas (seeks)
-                    // become a quick slide to the target.
-                    .animation(.linear(duration: 0.25), value: progressFraction)
-                }
-                .frame(height: Metrics.scrubberHeight)
+                scrubber
 
                 HStack {
                     Text(Self.timestamp(engine.timePosition))
@@ -386,6 +489,7 @@ struct CustomPlayerView<Surface: View>: View {
                 }
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
             }
             .padding(Metrics.screenGutter)
             .background(
@@ -395,13 +499,127 @@ struct CustomPlayerView<Surface: View>: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
+                // Taps in the gutter belong to the surface underneath —
+                // as do the title and time rows above. On iOS the bar
+                // between them is the one thing here that takes a touch.
+                .allowsHitTesting(false)
             )
-            // Info-only: never intercept taps meant for the surface. The
-            // iOS button row above stays interactive.
-            .allowsHitTesting(false)
         }
         .foregroundStyle(.white)
     }
+
+    /// The bar: a live-position fill, the playhead knob (which detaches
+    /// into the virtual playhead while scrubbing), and the time pill.
+    private var scrubber: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.3))
+                Capsule()
+                    .fill(.white)
+                    .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
+                    // Glides between the engine's 0.1 s position updates
+                    // instead of ticking (HEL-39); big deltas (seeks)
+                    // become a quick slide to the target.
+                    .animation(scrubMotion, value: fillFraction)
+                knob(in: width)
+            }
+            .overlay(alignment: .topLeading) { timePill(in: width) }
+            #if os(iOS)
+            // A 8pt bar is an unusable touch target on its own.
+            .contentShape(Rectangle().inset(by: -16))
+            .gesture(scrubDrag(in: width))
+            #endif
+        }
+        .frame(height: Metrics.scrubberHeight)
+    }
+
+    @ViewBuilder
+    private func knob(in width: CGFloat) -> some View {
+        // tvOS only draws a knob while scrubbing — the rest of the time the
+        // fill edge is the playhead, per the Infuse reference. Touch always
+        // shows one: it's the drag affordance.
+        #if os(tvOS)
+        let visible = isScrubbing
+        #else
+        let visible = true
+        #endif
+        Capsule()
+            .fill(.white)
+            .shadow(color: .black.opacity(0.5), radius: 4)
+            .frame(width: ScrubMetrics.knobWidth, height: Metrics.scrubberHeight + ScrubMetrics.knobOverhang)
+            .offset(x: min(max(width * knobFraction - ScrubMetrics.knobWidth / 2, 0), max(width - ScrubMetrics.knobWidth, 0)))
+            .opacity(visible ? 1 : 0)
+            .animation(scrubMotion, value: knobFraction)
+            .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
+    }
+
+    @ViewBuilder
+    private func timePill(in width: CGFloat) -> some View {
+        Group {
+            if let target = scrubTarget {
+                Text(Self.timestamp(target))
+                    .font(.callout.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: ScrubMetrics.pillWidth, height: ScrubMetrics.pillHeight)
+                    .background(.black.opacity(0.7), in: Capsule())
+                    .offset(
+                        x: min(max(width * knobFraction - ScrubMetrics.pillWidth / 2, 0), max(width - ScrubMetrics.pillWidth, 0)),
+                        y: -(ScrubMetrics.pillHeight + 14)
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
+                    .animation(scrubMotion, value: knobFraction)
+            }
+        }
+        .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
+        .allowsHitTesting(false)
+    }
+
+    /// Scrub steps snap over; while live the knob must glide on exactly the
+    /// fill's curve, or the two drift apart between position updates.
+    private var scrubMotion: Animation {
+        isScrubbing ? .easeOut(duration: Motion.fast) : .linear(duration: 0.25)
+    }
+
+    /// How much of the bar is filled. Touch drags the fill along with the
+    /// thumb — direct manipulation, and release always commits. The remote
+    /// leaves it at the frozen live position instead, so while the knob
+    /// walks ahead the fill still shows where Menu would cancel back to.
+    private var fillFraction: CGFloat {
+        #if os(tvOS)
+        progressFraction
+        #else
+        isScrubbing ? knobFraction : progressFraction
+        #endif
+    }
+
+    #if os(iOS)
+    /// Touch grammar: a tap on the bar is a seek, a drag is a scrub —
+    /// both land the same way and neither changes the play state. Only
+    /// the release seeks; every intermediate position would flush the
+    /// engine's queues and re-demux.
+    private func scrubDrag(in width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard let seconds = scrubSeconds(at: value.location.x, in: width) else { return }
+                scrubTarget = seconds
+                pokeControls()
+            }
+            .onEnded { value in
+                guard let seconds = scrubSeconds(at: value.location.x, in: width) else {
+                    cancelScrub()
+                    return
+                }
+                commitScrub(to: seconds, resume: false)
+            }
+    }
+
+    private func scrubSeconds(at x: CGFloat, in width: CGFloat) -> Double? {
+        guard width > 0, engine.duration > 0 else { return nil }
+        return Double(min(max(x / width, 0), 1)) * engine.duration
+    }
+    #endif
 
     // MARK: - Panel
 
@@ -608,4 +826,21 @@ struct CustomPlayerView<Surface: View>: View {
         }
         return String(format: "%d:%02d", minutes, secs)
     }
+}
+
+/// Scrub-bar geometry. Lives outside `CustomPlayerView` because the view is
+/// generic over its surface, and generics can't hold static storage. The
+/// pill has a fixed width so the edge clamping is exact.
+private enum ScrubMetrics {
+    #if os(tvOS)
+    static let knobWidth: CGFloat = 8
+    static let knobOverhang: CGFloat = 12
+    static let pillWidth: CGFloat = 150
+    static let pillHeight: CGFloat = 52
+    #else
+    static let knobWidth: CGFloat = 14
+    static let knobOverhang: CGFloat = 6
+    static let pillWidth: CGFloat = 88
+    static let pillHeight: CGFloat = 34
+    #endif
 }
