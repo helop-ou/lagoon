@@ -24,6 +24,7 @@ enum Metrics {
     static let detailHeaderSpacing: CGFloat = 16
     static let detailSectionSpacing: CGFloat = 40
     static let detailBottomPadding: CGFloat = 80
+    static let detailActionSpacing: CGFloat = 16
     static let castPortraitSize: CGFloat = 130
     static let castCaptionWidth: CGFloat = 180
     static let castCount = 8
@@ -56,6 +57,9 @@ enum Metrics {
     /// The liquid tab bar floats over scroll content. The final rail needs
     /// enough runway to clear it rather than finishing underneath it.
     static let detailBottomPadding: CGFloat = 110
+    /// Glass circles carry their own generous touch frame on iOS; additional
+    /// HStack spacing makes the visible controls look disconnected.
+    static let detailActionSpacing: CGFloat = 0
     static let castPortraitSize: CGFloat = 72
     static let castCaptionWidth: CGFloat = 104
     // No castCount on iOS: the strip scrolls there, so it shows everyone.

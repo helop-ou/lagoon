@@ -194,9 +194,10 @@ chip), which has no lozenge to fight.
   but a top-to-bottom wash moves from photographic at the title to near-black
   before the rails. A horizontal wash cannot protect full-width phone text,
   and leaving the still equally vivid behind cast and episodes made the whole
-  page read as wallpaper. Header and section spacing are tighter, Play leads
-  the touch actions, cast captions are phone-sized, and the final rail gets
-  enough bottom runway to clear the floating tab bar.
+  page read as wallpaper. Header and section spacing are tighter, title art is
+  centered in the full-width phone column, Play leads a compact touch-action
+  group, cast captions are phone-sized, and the final rail gets enough bottom
+  runway to clear the floating tab bar.
 - **Facts line**: on tvOS this is one spaced row — runtime, year, a *boxed*
   certification (r4 outline), then plain capability tokens from
   `MediaSource.qualityTokens` ("4K  DV  TrueHD 7.1  Atmos"). iOS splits identity

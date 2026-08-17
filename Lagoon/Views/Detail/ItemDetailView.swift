@@ -66,11 +66,10 @@ struct ItemDetailView: View {
         // controls on one line; a resumed item with the longer From Beginning
         // label falls back cleanly without putting watched/favourite first.
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: Metrics.Space.l) {
+            HStack(spacing: Metrics.detailActionSpacing) {
                 playButton
                 fromBeginningButton
                 actionRow
-                    .padding(.leading, Metrics.Space.s)
             }
 
             VStack(alignment: .leading, spacing: Metrics.Space.m) {

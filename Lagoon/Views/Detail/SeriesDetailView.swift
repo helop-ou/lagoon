@@ -105,7 +105,7 @@ struct SeriesDetailView: View {
     @ViewBuilder
     private var actions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            HStack(spacing: Metrics.Space.l) {
+            HStack(spacing: Metrics.detailActionSpacing) {
                 if let episode = subject {
                     Button {
                         playerItem = PlayerItem(media: episode)

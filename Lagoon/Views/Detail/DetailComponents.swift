@@ -124,7 +124,14 @@ struct DetailHeader<Buttons: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.detailHeaderSpacing) {
+            #if os(tvOS)
             TitleArtView(item: item)
+            #else
+            // The phone has one full-width information column, rather than
+            // tvOS's leading column beside the artwork.
+            TitleArtView(item: item)
+                .frame(maxWidth: .infinity, alignment: .center)
+            #endif
 
             if let upNext, let label = upNext.episodeLabel {
                 Text([label, upNext.name].compactMap(\.self).joined(separator: "  ·  "))
