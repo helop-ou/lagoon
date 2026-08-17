@@ -64,20 +64,30 @@ struct SeriesDetailView: View {
     @Environment(SessionStore.self) private var session
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
+    /// The episode the rail last put focus on. Deliberately *not* cleared
+    /// when focus leaves the rail: having browsed to E5, moving up to Play
+    /// should start E5, not snap back to whatever was up next.
+    @State private var highlighted: MediaItem?
 
     private var displayed: MediaItem { viewModel.detail ?? item }
+
+    /// What the header describes and the buttons act on: the episode you're
+    /// looking at, or the one that would play if you haven't looked yet.
+    private var subject: MediaItem? { highlighted ?? viewModel.upNext }
 
     var body: some View {
         DetailPageScaffold(
             backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920)
         ) {
-            DetailHeader(item: displayed, upNext: viewModel.upNext) { actions }
+            DetailHeader(item: displayed, upNext: subject) { actions }
             episodesSection
             CastStrip(people: displayed.people ?? [])
         }
         .task(id: item.id) {
             await viewModel.load(client: session.client, seriesId: item.id)
         }
+        // The highlight belongs to the season it came from.
+        .onChange(of: viewModel.selectedSeasonId) { _, _ in highlighted = nil }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
             // Watching an episode moves the show on, so this reloads what's
@@ -96,7 +106,7 @@ struct SeriesDetailView: View {
     private var actions: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 16) {
-                if let episode = viewModel.upNext {
+                if let episode = subject {
                     Button {
                         playerItem = PlayerItem(media: episode)
                     } label: {
@@ -111,7 +121,7 @@ struct SeriesDetailView: View {
                 // The checkmark acts on that episode; the star favourites the
                 // show. Each control targets what it plausibly means next to
                 // a Play button that starts one specific episode.
-                ItemActionRow(item: displayed, playedItem: viewModel.upNext) {
+                ItemActionRow(item: displayed, playedItem: subject) {
                     await viewModel.reloadUserData(client: session.client, seriesId: item.id)
                 }
             }
@@ -164,6 +174,8 @@ struct SeriesDetailView: View {
                 LazyHStack(spacing: Metrics.cardSpacing) {
                     ForEach(viewModel.episodes) { episode in
                         EpisodeCard(episode: episode) {
+                            highlighted = episode
+                        } action: {
                             playerItem = PlayerItem(media: episode)
                         }
                     }
@@ -180,8 +192,13 @@ struct SeriesDetailView: View {
 
 struct EpisodeCard: View {
     let episode: MediaItem
+    /// Fires as focus arrives, so the series header can describe whatever
+    /// episode you're looking at (HEL-46).
+    var onFocus: (() -> Void)?
     let action: () -> Void
+
     @Environment(SessionStore.self) private var session
+    @FocusState private var isFocused: Bool
 
     private var cardWidth: CGFloat { Metrics.landscapeWidth * 0.89 }
     private var cardHeight: CGFloat { (cardWidth * 9 / 16).rounded() }
@@ -224,7 +241,11 @@ struct EpisodeCard: View {
             .frame(width: cardWidth, height: cardHeight)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
         }
+        .focused($isFocused)
         .cardButtonStyle()
         .accessibilityLabel(episode.name ?? "Episode")
+        .onChange(of: isFocused) { _, focused in
+            if focused { onFocus?() }
+        }
     }
 }

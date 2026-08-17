@@ -103,6 +103,15 @@ chip), which has no lozenge to fight.
   stayed off-screen and unreachable. Order: title art, facts line, genres,
   ★ rating, synopsis, actions, then cast and related rails, sized so the
   cast heading is already on the first screen.
+- **Series pages describe an episode, not the show** (Infuse behaviour): the
+  header's label and synopsis come from whichever episode the rail has focus
+  on, falling back to `Shows/NextUp?seriesId=` — the in-progress episode, or
+  the next unwatched. Play, Resume and the watched toggle all act on that
+  same subject, so the page always answers "what happens if I press Play".
+  The title art stays the show's. The highlight is **not** cleared when focus
+  leaves the rail — having browsed to E5, moving up to Play should start E5
+  rather than snapping back — but it is cleared on a season change, since
+  those episodes are gone. iOS has no focus, so it simply shows what's next.
 - **Facts line**: one spaced row — runtime, year, a *boxed* certification
   (r4 outline), then plain capability tokens from `MediaSource.qualityTokens`
   ("4K  DV  TrueHD 7.1  Atmos"): resolution, dynamic range, the best audio in
