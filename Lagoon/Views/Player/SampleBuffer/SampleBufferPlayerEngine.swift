@@ -244,6 +244,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             )
         }
         shared.withLock { $0.cancelled = true }
+        // The demux loop may be asleep on queue backpressure while paused
+        // or while AVFoundation's internal queues are full. Wake it so it
+        // can observe cancellation and close immediately.
+        videoQueue.interruptWaits()
+        audioQueue.interruptWaits()
         // Aborts any av_* call blocked inside network I/O so the demux
         // loop can exit and close — without this a wedged open froze
         // teardown (seen in Jaagop's first test).
@@ -615,8 +620,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 Thread.sleep(forTimeInterval: 0.1)
                 continue
             }
-            if videoQueue.count > 90, audioQueue.count > 180 {
-                Thread.sleep(forTimeInterval: 0.03)
+            // Bound each stream independently. The old conjunction let one
+            // queue grow without limit whenever the other happened to stay
+            // below its cap, and polled every 30 ms while both were full.
+            // Waiting for the renderer's dequeue signal removes that polling
+            // and resumes at a low-water mark so demuxing happens in useful
+            // batches instead of one packet per wakeup.
+            if videoQueue.count >= 90 {
+                videoQueue.waitUntilBelow(72)
+                continue
+            }
+            if audioQueue.count >= 180 {
+                audioQueue.waitUntilBelow(144)
                 continue
             }
             step()
@@ -855,35 +870,36 @@ nonisolated private final class SharedState: @unchecked Sendable {
 
 /// Thread-safe FIFO of ready-to-enqueue sample buffers.
 nonisolated final class SampleBufferQueue: @unchecked Sendable {
-    private let lock = NSLock()
+    private let condition = NSCondition()
     // A head-indexed buffer avoids Array.removeFirst() shifting every
     // retained sample on every renderer dequeue. Consumed slots are nilled
     // immediately, then compacted in batches to keep memory bounded.
     private var buffers: [CMSampleBuffer?] = []
     private var head = 0
     private var finished = false
+    private var waitsInterrupted = false
 
     var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
+        condition.lock()
+        defer { condition.unlock() }
         return buffers.count - head
     }
 
     var isFinished: Bool {
-        lock.lock()
-        defer { lock.unlock() }
+        condition.lock()
+        defer { condition.unlock() }
         return finished
     }
 
     func enqueue(_ buffer: CMSampleBuffer) {
-        lock.lock()
+        condition.lock()
         buffers.append(buffer)
-        lock.unlock()
+        condition.unlock()
     }
 
     func dequeue() -> CMSampleBuffer? {
-        lock.lock()
-        defer { lock.unlock() }
+        condition.lock()
+        defer { condition.unlock() }
         guard head < buffers.count else { return nil }
         let buffer = buffers[head]
         buffers[head] = nil
@@ -892,21 +908,41 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
             buffers.removeFirst(head)
             head = 0
         }
+        condition.signal()
         return buffer
     }
 
     func markFinished() {
-        lock.lock()
+        condition.lock()
         finished = true
-        lock.unlock()
+        condition.broadcast()
+        condition.unlock()
     }
 
     func reset() {
-        lock.lock()
+        condition.lock()
         buffers.removeAll()
         head = 0
         finished = false
-        lock.unlock()
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    /// Blocks the producer without polling until the consumer has drained
+    /// a useful amount of work, EOF/reset occurs, or shutdown interrupts it.
+    func waitUntilBelow(_ targetCount: Int) {
+        condition.lock()
+        while buffers.count - head >= targetCount, !finished, !waitsInterrupted {
+            condition.wait()
+        }
+        condition.unlock()
+    }
+
+    func interruptWaits() {
+        condition.lock()
+        waitsInterrupted = true
+        condition.broadcast()
+        condition.unlock()
     }
 }
 

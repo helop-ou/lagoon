@@ -26,7 +26,11 @@ nonisolated final class AudioDecoder {
     // Decoders like TrueHD emit tiny frames (40 samples per access unit);
     // coalesce into ~2048-sample buffers so the renderer queue holds
     // seconds, not thousands of slivers.
-    private var pendingSamples = Data()
+    // Mutable storage is filled by swresample in place, then transferred to
+    // CoreMedia at emit. TrueHD commonly yields 40-sample frames; avoiding a
+    // temporary Data allocation + append for every one matters far more than
+    // it would for codecs that already produce large frames.
+    private var pendingSamples = NSMutableData()
     private var pendingSampleCount = 0
     private var pendingStartSeconds: Double?
     /// Sample-accurate end of everything emitted so far. Successive
@@ -73,6 +77,9 @@ nonisolated final class AudioDecoder {
         sampleRate = rate
         channels = channelCount
         formatDescription = description
+        pendingSamples = NSMutableData(
+            capacity: 2048 * Int(channelCount) * MemoryLayout<Float32>.size
+        ) ?? NSMutableData()
     }
 
     deinit {
@@ -97,7 +104,7 @@ nonisolated final class AudioDecoder {
 
     func flush() {
         avcodec_flush_buffers(codecContext)
-        pendingSamples.removeAll(keepingCapacity: true)
+        pendingSamples.length = 0
         pendingSampleCount = 0
         pendingStartSeconds = nil
         continuationSeconds = nil
@@ -135,19 +142,20 @@ nonisolated final class AudioDecoder {
             continuationSeconds = nil
         }
 
-        guard let converted = convertFrame() else { return }
+        guard let convertedSamples = appendConvertedFrame() else { return }
         if pendingStartSeconds == nil {
             pendingStartSeconds = continuationSeconds ?? frameSeconds
         }
-        pendingSamples.append(converted.data)
-        pendingSampleCount += converted.samples
+        pendingSampleCount += convertedSamples
 
         if pendingSampleCount >= 2048 {
             emitPending(into: &buffers)
         }
     }
 
-    private func convertFrame() -> (data: Data, samples: Int)? {
+    /// Converts directly into the coalescing buffer. This removes the old
+    /// per-decoded-frame temporary Data allocation and its append copy.
+    private func appendConvertedFrame() -> Int? {
         let inputFormat = AVSampleFormat(rawValue: frame.pointee.format)
         if resampler == nil || resamplerInputFormat != inputFormat {
             if resampler != nil {
@@ -172,59 +180,74 @@ nonisolated final class AudioDecoder {
         let inSamples = Int(frame.pointee.nb_samples)
         let capacity = inSamples + 256
         let bytesPerFrame = Int(channels) * MemoryLayout<Float32>.size
-        var output = Data(count: capacity * bytesPerFrame)
-        let convertedSamples = output.withUnsafeMutableBytes { raw -> Int32 in
-            var outPointer = raw.baseAddress?.assumingMemoryBound(to: UInt8.self)
-            let inPointers = UnsafeMutableRawPointer(frame.pointee.extended_data)?
-                .assumingMemoryBound(to: UnsafePointer<UInt8>?.self)
-            return withUnsafeMutablePointer(to: &outPointer) { outArray in
-                swr_convert(resampler, outArray, Int32(capacity), inPointers, Int32(inSamples))
-            }
+        let previousLength = pendingSamples.length
+        pendingSamples.length = previousLength + capacity * bytesPerFrame
+        var outPointer: UnsafeMutablePointer<UInt8>? = pendingSamples.mutableBytes
+            .advanced(by: previousLength)
+            .assumingMemoryBound(to: UInt8.self)
+        let inPointers = UnsafeMutableRawPointer(frame.pointee.extended_data)?
+            .assumingMemoryBound(to: UnsafePointer<UInt8>?.self)
+        let convertedSamples = withUnsafeMutablePointer(to: &outPointer) { outArray in
+            swr_convert(resampler, outArray, Int32(capacity), inPointers, Int32(inSamples))
         }
-        guard convertedSamples > 0 else { return nil }
-        output.removeSubrange((Int(convertedSamples) * bytesPerFrame)...)
-        return (output, Int(convertedSamples))
+        guard convertedSamples > 0 else {
+            pendingSamples.length = previousLength
+            return nil
+        }
+        pendingSamples.length = previousLength + Int(convertedSamples) * bytesPerFrame
+        return Int(convertedSamples)
     }
 
     private func emitPending(into buffers: inout [CMSampleBuffer]) {
+        guard pendingSampleCount > 0 else { return }
+        // Hand this allocation to CoreMedia and begin filling a fresh one;
+        // the audio renderer can now consume the old bytes without a copy.
+        let emittedSamples = pendingSamples
+        pendingSamples = NSMutableData(
+            capacity: 2048 * Int(channels) * MemoryLayout<Float32>.size
+        ) ?? NSMutableData()
         defer {
-            pendingSamples.removeAll(keepingCapacity: true)
             pendingSampleCount = 0
             pendingStartSeconds = nil
         }
-        guard pendingSampleCount > 0 else { return }
         if let start = pendingStartSeconds {
             continuationSeconds = start + Double(pendingSampleCount) / Double(sampleRate)
         }
         guard let buffer = makeSampleBuffer(
-            data: pendingSamples,
+            data: emittedSamples,
             samples: pendingSampleCount,
             startSeconds: pendingStartSeconds
         ) else { return }
         buffers.append(buffer)
     }
 
-    private func makeSampleBuffer(data: Data, samples: Int, startSeconds: Double?) -> CMSampleBuffer? {
+    private func makeSampleBuffer(data: NSMutableData, samples: Int, startSeconds: Double?) -> CMSampleBuffer? {
+        let retainedData = Unmanaged.passRetained(data)
+        var blockSource = CMBlockBufferCustomBlockSource(
+            version: UInt32(kCMBlockBufferCustomBlockSourceVersion),
+            AllocateBlock: nil,
+            FreeBlock: { refCon, _, _ in
+                guard let refCon else { return }
+                Unmanaged<NSMutableData>.fromOpaque(refCon).release()
+            },
+            refCon: retainedData.toOpaque()
+        )
         var blockBuffer: CMBlockBuffer?
-        guard CMBlockBufferCreateWithMemoryBlock(
+        let blockStatus = CMBlockBufferCreateWithMemoryBlock(
             allocator: kCFAllocatorDefault,
-            memoryBlock: nil,
-            blockLength: data.count,
-            blockAllocator: kCFAllocatorDefault,
-            customBlockSource: nil,
+            memoryBlock: data.mutableBytes,
+            blockLength: data.length,
+            blockAllocator: kCFAllocatorNull,
+            customBlockSource: &blockSource,
             offsetToData: 0,
-            dataLength: data.count,
+            dataLength: data.length,
             flags: 0,
             blockBufferOut: &blockBuffer
-        ) == noErr, let blockBuffer else { return nil }
-        guard data.withUnsafeBytes({ raw in
-            CMBlockBufferReplaceDataBytes(
-                with: raw.baseAddress!,
-                blockBuffer: blockBuffer,
-                offsetIntoDestination: 0,
-                dataLength: data.count
-            )
-        }) == noErr else { return nil }
+        )
+        guard blockStatus == noErr, let blockBuffer else {
+            retainedData.release()
+            return nil
+        }
 
         // Timescale = the stream's own rate, so consecutive buffers land
         // exactly sample-adjacent (90 kHz can't represent 48 kHz sample

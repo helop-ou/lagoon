@@ -281,17 +281,19 @@ nonisolated enum SampleBufferFactory {
         let size = Int(packet.pointee.size)
         guard size > 0 else { return nil }
 
-        // av_read_frame normally hands us a reference-counted AVPacket.
-        // Clone that reference and let the CMBlockBuffer release it when
-        // AVFoundation has finished decoding the sample. This keeps the
-        // compressed payload in FFmpeg's original allocation instead of
-        // allocating and copying every packet once more on the demux queue.
-        // av_packet_clone also safely falls back to copying if a demuxer
-        // ever produces a non-reference-counted packet.
-        guard let clonedPacket = av_packet_clone(packet) else { return nil }
-        var retainedPacket: UnsafeMutablePointer<AVPacket>? = clonedPacket
-        guard let retainedData = clonedPacket.pointee.data else {
-            av_packet_free(&retainedPacket)
+        // Keep only a reference to FFmpeg's underlying payload allocation.
+        // Cloning the whole AVPacket is already zero-copy for its main data,
+        // but still allocates a packet object and copies all packet side data
+        // for every frame. CoreMedia needs the bytes and their lifetime, not
+        // that metadata, so an AVBufferRef is the narrowest ownership token.
+        if packet.pointee.buf == nil, av_packet_make_refcounted(packet) < 0 {
+            return nil
+        }
+        guard let packetBuffer = packet.pointee.buf,
+              let retainedBuffer = av_buffer_ref(packetBuffer) else { return nil }
+        var ownedBuffer: UnsafeMutablePointer<AVBufferRef>? = retainedBuffer
+        guard let retainedData = packet.pointee.data else {
+            av_buffer_unref(&ownedBuffer)
             return nil
         }
         var blockSource = CMBlockBufferCustomBlockSource(
@@ -299,10 +301,10 @@ nonisolated enum SampleBufferFactory {
             AllocateBlock: nil,
             FreeBlock: { refCon, _, _ in
                 guard let refCon else { return }
-                var packet: UnsafeMutablePointer<AVPacket>? = refCon.assumingMemoryBound(to: AVPacket.self)
-                av_packet_free(&packet)
+                var buffer: UnsafeMutablePointer<AVBufferRef>? = refCon.assumingMemoryBound(to: AVBufferRef.self)
+                av_buffer_unref(&buffer)
             },
-            refCon: UnsafeMutableRawPointer(clonedPacket)
+            refCon: UnsafeMutableRawPointer(retainedBuffer)
         )
         var blockBuffer: CMBlockBuffer?
         let blockStatus = CMBlockBufferCreateWithMemoryBlock(
@@ -317,19 +319,28 @@ nonisolated enum SampleBufferFactory {
             blockBufferOut: &blockBuffer
         )
         guard blockStatus == noErr, let blockBuffer else {
-            // Ownership transfers to CoreMedia only after successful
-            // creation; balance the clone on the failure path.
-            av_packet_free(&retainedPacket)
+            // Ownership transfers to CoreMedia only after successful block
+            // creation; balance the reference on the failure path.
+            av_buffer_unref(&ownedBuffer)
             return nil
         }
 
-        let secondsPerUnit = Double(timeBase.num) / Double(max(timeBase.den, 1))
+        let timeScale = max(timeBase.den, 1)
         func time(_ value: Int64) -> CMTime {
-            value == avNoPTS ? .invalid : CMTime(seconds: Double(value) * secondsPerUnit, preferredTimescale: 90_000)
+            guard value != avNoPTS else { return .invalid }
+            let scaled = value.multipliedReportingOverflow(by: Int64(timeBase.num))
+            if !scaled.overflow {
+                return CMTime(value: scaled.partialValue, timescale: timeScale)
+            }
+            // Media timestamps should never approach Int64 overflow in a
+            // real file, but preserve the old floating-point fallback for a
+            // malformed/extreme stream instead of rejecting the sample.
+            let seconds = Double(value) * Double(timeBase.num) / Double(timeScale)
+            return CMTime(seconds: seconds, preferredTimescale: 90_000)
         }
         let presentation = packet.pointee.pts != avNoPTS ? time(packet.pointee.pts) : time(packet.pointee.dts)
         let duration: CMTime = if packet.pointee.duration > 0 {
-            CMTime(seconds: Double(packet.pointee.duration) * secondsPerUnit, preferredTimescale: 90_000)
+            time(packet.pointee.duration)
         } else if fallbackDuration > 0 {
             CMTime(seconds: fallbackDuration, preferredTimescale: 90_000)
         } else {

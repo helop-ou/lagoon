@@ -52,14 +52,21 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   decodes them. CoreAudio likewise decodes compressed aac/mp3/ac3/eac3
   handed to the audio renderer (ac3/eac3 self-describing; aac needs its
   AudioSpecificConfig as the magic cookie; mp3 is 1152 frames/packet).
-  The CoreMedia block retains an `av_packet_clone` reference to FFmpeg's
-  original payload and releases it after decode, avoiding a second
-  allocation and full payload copy for every compressed packet.
+  The CoreMedia block retains the packet's underlying `AVBufferRef` with
+  `av_buffer_ref` and releases that reference after decode, avoiding both a
+  packet-structure clone and a second allocation/full payload copy for every
+  compressed packet. Packet pts/dts/duration are converted to `CMTime` in the
+  stream's exact rational time base rather than round-tripping through
+  floating point and a fixed 90 kHz scale.
 - **Audio decode** (M4): codecs CoreAudio won't take compressed
   (DTS, TrueHD, FLAC, Opus, Vorbis — anything with an FFmpeg decoder)
   go through `AudioDecoder`: libavcodec → swresample → interleaved
   Float32 LPCM sample buffers, coalesced to ~2048-sample chunks because
-  TrueHD frames are 40 samples each. FFmpeg's native channel-bit order
+  TrueHD frames are 40 samples each. swresample writes directly into the
+  growable coalescing allocation; when full, that allocation is transferred
+  to CoreMedia and retained by the block buffer, avoiding a temporary `Data`
+  allocation, append copy, and final block-buffer copy for every chunk.
+  FFmpeg's native channel-bit order
   matches CoreAudio's channel bitmap bit-for-bit on the first 18
   positions, so a native layout mask maps straight across into the
   `AudioChannelLayout`. The E-AC3 (JOC/Atmos) path deliberately stays
@@ -97,9 +104,12 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   immediately; PGS cues are open-ended and close on the next
   composition event. Not covered: subtitles during HLS transcode (the
   vtt-over-HLS playlist is not read).
-- **Threading**: the demux loop runs on a serial queue feeding two locked
-  sample-buffer queues; renderer pumps drain them via
+- **Threading**: the demux loop runs on a serial queue feeding two
+  condition-protected sample-buffer queues; renderer pumps drain them via
   `requestMediaDataWhenReady`; state and transport live on the main actor.
+  Independent video/audio high-water marks apply hysteretic backpressure and
+  wake the producer when consumers cross their low-water marks, so a full
+  queue blocks without polling or arbitrary sleeps.
 - **Seeks** stop the clock, flush renderers and queues, `av_seek_frame`,
   re-prime (~12 video buffers), then restart the synchronizer at the
   target. Resume is the same path with the start position.
@@ -166,8 +176,12 @@ the signposts intentionally ship in Release/TestFlight.
 The renderer feed is kept cheap under high-bitrate load: packet wakeups are
 coalesced onto a user-interactive serial pump, and the app-side sample FIFO is
 head-indexed/amortized O(1) rather than shifting its whole Swift array for every
-frame. These optimizations reduce Lagoon's packet-copying, scheduling, and ARC
-overhead; AVFoundation's hardware decoder remains responsible for codec decode.
+frame. The demuxer blocks on condition-driven video/audio high-water marks and
+resumes at lower thresholds instead of polling queue counts, while compressed
+payloads retain FFmpeg's existing backing buffer and decoded LPCM storage is
+handed directly to CoreMedia. These optimizations reduce Lagoon's packet-copying,
+allocation, scheduling, and ARC overhead; AVFoundation's hardware decoder remains
+responsible for codec decode.
 
 Player exit is deliberately two-phase (HEL-57). The main actor cancels the
 clock/observer and interrupts FFmpeg, then renderer stop/flush, queued sample
