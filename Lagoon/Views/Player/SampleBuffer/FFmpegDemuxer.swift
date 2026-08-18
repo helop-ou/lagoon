@@ -92,6 +92,9 @@ nonisolated final class FFmpegDemuxer {
     private(set) var audioStreams: [DemuxedStream] = []
     private(set) var subtitleStreams: [DemuxedStream] = []
     private(set) var durationSeconds: Double = 0
+    /// The video stream's best-guess frame rate (display matching wants
+    /// it); 0 when FFmpeg can't tell.
+    private(set) var videoFrameRate: Double = 0
 
     // Written from the main actor at shutdown, polled by FFmpeg's interrupt
     // callback from inside blocked network I/O — this is what guarantees a
@@ -175,6 +178,10 @@ nonisolated final class FFmpegDemuxer {
         }
         videoStreamIndex = bestVideo
         videoTimeBase = stream.pointee.time_base
+        let guessedRate = av_guess_frame_rate(ctx, stream, nil)
+        if guessedRate.num > 0, guessedRate.den > 0 {
+            videoFrameRate = Double(guessedRate.num) / Double(guessedRate.den)
+        }
         if stripEnhancementLayer,
            videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
            let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),

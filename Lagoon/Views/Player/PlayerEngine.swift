@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import Observation
 
@@ -23,6 +24,11 @@ protocol PlayerEngine: AnyObject, Observable {
     var currentSubtitleImages: [SubtitleImage] { get }
     /// mpv convention (M6): positive delays the audio relative to video.
     var audioDelay: Double { get }
+    /// What the display should be asked to match (tvOS Match Content,
+    /// HEL-64): the video's fully tagged format description — colorimetry,
+    /// HDR10 metadata, DoVi atoms — plus its frame rate. nil until the
+    /// demuxer knows, and when the frame rate is unknowable.
+    var displayMatchRequest: DisplayMatchRequest? { get }
 
     func togglePause()
     func seek(by seconds: Double)
@@ -34,6 +40,23 @@ protocol PlayerEngine: AnyObject, Observable {
     func selectAudioTrack(id: Int?)
     func selectSubtitleTrack(id: Int?)
     func setAudioDelay(_ seconds: Double)
+}
+
+/// What the physical display should be switched to for the current video
+/// (HEL-64): tvOS Match Content wants the tagged format description (it
+/// derives dynamic range and resolution from it) and the frame rate.
+/// Without this request the display stays at its idle mode — typically
+/// 60 Hz in whatever range it happens to be in — and the compositor
+/// cadence-converts and tone-maps every full-4K HDR frame forever, which
+/// is the standing suspect for the 2160p-only frame drops on hardware.
+nonisolated struct DisplayMatchRequest: Equatable {
+    let formatDescription: CMFormatDescription
+    let frameRate: Float
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.frameRate == rhs.frameRate
+            && CMFormatDescriptionEqual(lhs.formatDescription, otherFormatDescription: rhs.formatDescription)
+    }
 }
 
 /// One selectable track as the engine reports it. `engineID` is the

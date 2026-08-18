@@ -180,6 +180,31 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   on tvOS; no subtitles during HLS transcode. Transport UX work
   (scrubbing/trickplay/motion) continues on HEL-39.
 
+## Display mode matching (tvOS, HEL-64)
+
+The custom player must do by hand what AVPlayerViewController does
+automatically: ask the display to match the content. The engine publishes
+a `DisplayMatchRequest` (the video's tagged `CMFormatDescription` plus
+frame rate) once the demuxer knows the stream; `VideoPlayerView` applies
+it to the key window's `AVDisplayManager.preferredDisplayCriteria`
+(`DisplayModeMatcher`) and clears it on exit. Two gates sit above the
+request: the Debug switch `debug.matchContent` (default **on**; off holds
+an A/B still) and the user's tvOS Settings → Video and Audio → Match
+Content options — criteria are silently ignored without those, so the
+HUD's `Display:` line shows both the requested rate and whether system
+matching is enabled.
+
+Why this landed on HEL-64: without a mode switch the display idles at
+60 Hz in whatever range the UI runs, and the compositor cadence-converts
+and tone-maps every video frame. That per-pixel cost is the standing
+suspect for the hardware drops that hit full 3840×2160 HDR10 titles
+(Resident Evil 2002, Snowden) while a 3840×1600 letterbox encode with the
+same codec, range, and bitrate class (Tomorrow War) plays clean — the
+comparison that also exonerated decode throughput, Dolby Vision, bitrate,
+and the audio path for those titles. Hardware verification pending; the
+simulator has no display modes (`system match off` there, criteria are a
+no-op).
+
 ## Debug playback HUD
 
 Settings → Debug → Playback HUD: a top-left overlay in the player showing

@@ -44,6 +44,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Frame-loss bench progress/result for the HUD (HEL-64); nil unless
     /// Settings → Debug → Frame-loss bench is on.
     private(set) var benchStatus: String?
+    /// The display-matching request for this video (HEL-64) — published
+    /// once the demuxer knows the stream; the player view owns applying it.
+    private(set) var displayMatchRequest: DisplayMatchRequest?
 
     var queueDepths: (video: Int, audio: Int) {
         (videoQueue.count, audioQueue.count)
@@ -594,6 +597,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private func publishStreams(
         duration: Double,
         videoSize: CGSize,
+        displayMatch: DisplayMatchRequest?,
         tracks: [PlayerTrack],
         subtitles: [PlayerTrack],
         embeddedSubtitleCount: Int,
@@ -601,6 +605,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     ) {
         self.duration = duration
         self.videoSize = videoSize
+        displayMatchRequest = displayMatch
         audioTracks = tracks
         subtitleTracks = subtitles
         self.embeddedSubtitleCount = embeddedSubtitleCount
@@ -636,6 +641,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let streams = demuxer.audioStreams
         let demuxedDuration = demuxer.durationSeconds
         let size = videoDimensions()
+        // Without a known rate there is no meaningful mode to request.
+        let displayMatch: DisplayMatchRequest? = if demuxer.videoFrameRate > 0,
+            let description = demuxer.videoStream?.formatDescription {
+            DisplayMatchRequest(formatDescription: description, frameRate: Float(demuxer.videoFrameRate))
+        } else {
+            nil
+        }
         let tracks = streams.enumerated().map { offset, stream in
             PlayerTrack(
                 engineID: offset + 1,
@@ -679,6 +691,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             self.publishStreams(
                 duration: demuxedDuration,
                 videoSize: size,
+                displayMatch: displayMatch,
                 tracks: tracks,
                 subtitles: subtitleTracks,
                 embeddedSubtitleCount: embeddedSubtitles.count,

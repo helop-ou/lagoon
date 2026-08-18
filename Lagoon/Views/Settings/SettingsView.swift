@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
+    @AppStorage("debug.matchContent") private var matchContent = true
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
 
@@ -98,6 +99,13 @@ struct SettingsView: View {
                 }
                 row("Strip DoVi Enhancement Layer", value: stripDoviEL ? "On" : "Off") {
                     stripDoviEL.toggle()
+                }
+                // On by default: matching frame rate + dynamic range is
+                // correct player behavior, and the system's own Match
+                // Content settings gate it anyway. Off here holds an A/B
+                // still (HEL-64).
+                row("Match Content Display Mode", value: matchContent ? "On" : "Off") {
+                    matchContent.toggle()
                 }
 
                 // Only worth offering once there is somewhere to switch to;
@@ -217,6 +225,7 @@ struct SettingsView: View {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)
                 Toggle("Frame-Loss Bench", isOn: $frameLossBench)
                 Toggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
+                Toggle("Match Content Display Mode", isOn: $matchContent)
             }
         }
     }

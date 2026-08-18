@@ -542,6 +542,17 @@ final class PlaybackController {
         if let strip = engine.enhancementLayerStripInfo {
             lines.append("EL strip: \(strip)")
         }
+        #if os(tvOS)
+        // Both halves of the gate: what the player requested and whether
+        // the system's Match Content setting will honor it.
+        if let request = engine.displayMatchRequest {
+            lines.append(String(
+                format: "Display: request %.3f Hz · system match %@",
+                request.frameRate,
+                DisplayModeMatcher.systemMatchingEnabled ? "on" : "off"
+            ))
+        }
+        #endif
         if let bench = engine.benchStatus {
             lines.append("Bench:   \(bench)")
         }
@@ -572,6 +583,7 @@ struct VideoPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var controller = PlaybackController()
     @State private var panelOpen = false
+    @AppStorage("debug.matchContent") private var matchContent = true
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Back was pressed on the Up Next card. Outlives the card itself,
     /// because the episode still has its credits to run and the end of the
@@ -641,9 +653,24 @@ struct VideoPlayerView: View {
                 dismiss()
             }
         }
+        .onChange(of: controller.engine?.displayMatchRequest) { _, request in
+            applyDisplayMatch(request)
+        }
         .onDisappear {
+            applyDisplayMatch(nil)
             Task { await controller.stop() }
         }
+    }
+
+    /// tvOS Match Content (HEL-64): ask the display for the video's own
+    /// frame rate and dynamic range instead of letting the compositor
+    /// cadence-convert and tone-map every full-4K frame. Behind a Debug
+    /// switch (default on) so hardware A/Bs can hold it still; the
+    /// system's own Match Content settings gate it beneath that.
+    private func applyDisplayMatch(_ request: DisplayMatchRequest?) {
+        #if os(tvOS)
+        DisplayModeMatcher.apply(matchContent ? request : nil)
+        #endif
     }
 
     /// The next episode starts with a clean slate: a "no" belongs to the
