@@ -91,6 +91,15 @@ white pill the system then labels in white: invisible. The reference's own
 Play and Trailer are plain glass pills too, so prominence comes from
 position and order, never from a filled colour.
 
+Revisited for **iOS specifically** on 2026-08-18 (HEL-50) and confirmed
+uniform, because the two platforms hold the rule for different reasons and
+only one of them is forced. On tvOS it is a hard constraint: the accent is
+white, so a prominent fill at rest is indistinguishable from the focused
+lozenge and the page reads as having two focused controls. On touch there is
+no lozenge to collide with, so there it is purely Jaagop's call — and the
+call is the same, one design language across both. Don't reopen it per
+platform; `.glassProminent` stays unused app-wide.
+
 **Focus drives nothing else.** The `.card` style's lift, parallax and
 specular *is* the indication. The poster title reveal that used to live here
 went with the overlay it revealed (HEL-51). Selection elsewhere is a
@@ -107,6 +116,17 @@ so the *selected* chip was the invisible one. Express selection through
 content (bold weight, a checkmark), and let hardcoded white stay where it
 belongs: non-focusable text over video (transport title, timestamps, scrub
 chip), which has no lozenge to fight.
+
+**The prohibition is about the lozenge, not about focus.** It binds the
+styles that *paint* one — `.glass` and the bare default `Button` — and there
+`.secondary` inside a label is as wrong as `.white`, because it resolves to a
+low-contrast grey on the white pill. It does **not** bind `.card`, whose
+whole indication is lift, parallax and specular: label colours survive focus
+untouched. So the poster caption, the landscape and episode card overlays and
+the hero synopsis all keep `.secondary` inside their labels, correctly — a
+full audit on 2026-08-18 (HEL-50) checked all 37 foreground overrides in the
+app and every one is either non-focusable decoration or `.card` content.
+Don't "fix" those.
 
 ## Components
 
