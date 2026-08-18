@@ -91,6 +91,20 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   re-anchor to container pts only on >50 ms jumps — Matroska stamps at
   1 ms precision (TrueHD frames are 0.83 ms) and 90 kHz can't represent
   48 kHz boundaries, and either mismatch renders as steady clicking.
+- **Passthrough audio timing** (HEL-64): the same clicking mechanism hit
+  the *compressed* path. An AAC frame is 1024 samples — 21.33 ms, not
+  representable in Matroska's 1 ms stamps — so container pts jitter up to
+  ~1.7 ms (measured deltas 21/22/23 ms, ~47 packets/s), each one a
+  discontinuity the renderer renders as crackle; EAC3 (1536 samples =
+  exactly 32 ms) was immune, which is why only AAC titles crackled on
+  hardware. `PassthroughAudioTimeline` now chains pts sample-exactly from
+  one container anchor, re-anchoring on gaps beyond **half a packet** —
+  tight enough that one *missing* packet re-anchors instead of being
+  smoothed into a permanent A/V offset (the LPCM path's 50 ms tolerance
+  would swallow that for every passthrough codec). Wrong frames-per-packet
+  assumptions degrade to container stamps, never to drift. The HUD's
+  `aGaps` counter (audio timestamp discontinuities at enqueue) is the live
+  check: it must read 0 during untouched playback.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
@@ -135,6 +149,16 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   — same presentation as the server's strip-to-HDR10 transcode without
   the lossy re-encode. Hardware verification pending (the simulator has
   no HDR output; DoVi P5 may not decode in the sim at all).
+  **EL strip experiment** (HEL-64, Settings → Debug → Strip DoVi
+  Enhancement Layer, default off): P7's "ignored" EL/RPU NALs (unspec
+  types 63/62) are not free — on Snowden they are 14.5% of an 86 Mbps
+  bitstream (~11 Mbps, ~4 units per frame) of parse-and-skip work for the
+  hardware decoder. The toggle drops them from each packet before wrapping
+  (`HEVCEnhancementLayerFilter`; malformed payloads pass through
+  untouched, stripped packets lose zero-copy). Whether that parsing costs
+  frames on real hardware is exactly the A/B this exists for; the HUD's
+  `EL strip:` line proves the gate engaged — never trust an experiment
+  whose engagement wasn't verified.
 - **Stall recovery** (M6): when the clock catches up to the last
   delivered video pts with a dry queue and the file isn't over, the
   engine holds the synchronizer (buffering spinner) and auto-resumes
@@ -174,6 +198,41 @@ position, queue depths, and stall count so a hardware trace can distinguish
 decoder pressure from starvation without a screen recording. Capture those
 with the Instruments **Points of Interest** template on real Apple TV hardware;
 the signposts intentionally ship in Release/TestFlight.
+
+## Frame-loss bench (HEL-64)
+
+Measuring frame loss casually produces false positives — HEL-64 retracted
+two "fixes" measured across different scenes, positions, and sampling
+rates before landing the rule: **compare only the same scene over the same
+media-time window, untouched**. Content alone varies loss 3× within one
+file. (Also: taking a simulator screenshot forces a render capture and
+drops frames — never screenshot during a measurement window.)
+
+Settings → Debug → Frame-Loss Bench encodes that rule in the app: after
+every playback start or seek it warms up 10 s of *media time*, measures a
+60 s window, then freezes the result into the HUD's `Bench:` line and a
+`Bench Result` signpost (dropped/frames/percent, stalls, `aGaps`,
+min queue depth, window start). Touching the transport re-arms it from the
+new position — "seek to the scene, hands off, read the number" is the
+whole protocol, identical in the simulator and on hardware. Windows are
+keyed on position, not wall time, so stalls stretch the run without
+diluting the denominator; stalls are reported in the result, not
+discarded.
+
+`scripts/framedrop-bench.sh` automates repeated runs in the simulator:
+seeds a resume point via the Jellyfin API, launches playback through the
+`lagoon://play/{id}` deep link, waits out the window hands-off, and reads
+`Bench Result` back — note the simulator has its own log store
+(`xcrun simctl spawn <udid> log show`), the host's `log show` sees
+nothing. `--set key=bool` flips app defaults between A/B configs. On real
+hardware, read the same number off the HUD's Bench line instead.
+
+The bench, the passthrough timeline, and the EL NAL filter are covered by
+the `LagoonTests` unit target (`xcodebuild test -scheme Lagoon
+-destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'`)
+— the first tests in the project, added because this ticket's regressions
+(timestamp jitter, bitstream mangling, measurement discipline) are all
+pure logic that a simulator pass can't pin down.
 
 Memory is sampled alongside them: the HUD carries a `Memory:` line (footprint
 plus remaining headroom from `os_proc_available_memory()`, which reads 0 in the

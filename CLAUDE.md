@@ -28,6 +28,14 @@ Quick rules that prevent regressions:
 
 - Build: `xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build`
   (and the iOS Simulator destination — both must stay green).
+- Tests: `xcodebuild test -scheme Lagoon -destination 'platform=tvOS
+  Simulator,name=Apple TV 4K (3rd generation)'` — LagoonTests covers the
+  engine's pure logic (audio timeline, NAL filter, bench). Keep it green;
+  add tests there when engine logic is pure enough to pin down.
+- Never trust a casual frame-loss comparison: same scene, same media-time
+  window, simulator untouched, 3+ runs (HEL-64 retracted two fixes that
+  ignored this). Use Settings → Debug → Frame-Loss Bench and
+  `scripts/framedrop-bench.sh`; see docs/playback.md.
 - Use design tokens (`Metrics`/`Motion`), not literals; brand colors
   (`.lagoonTeal`/`.lagoonDeep`) only for branding — system semantics elsewhere.
 - `@Observable` + `@MainActor` default isolation; model types are
