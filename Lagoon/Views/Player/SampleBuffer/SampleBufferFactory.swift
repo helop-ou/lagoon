@@ -79,7 +79,7 @@ nonisolated enum SampleBufferFactory {
         // enhancement layer isn't fed, so the base layer plays as HDR10
         // via the tags above.
         if codecpar.pointee.codec_id == AV_CODEC_ID_HEVC,
-           let dovi: AVDOVIDecoderConfigurationRecord = sideData(codecpar, type: AV_PKT_DATA_DOVI_CONF) {
+           let dovi = doviConfiguration(codecpar: codecpar) {
             switch dovi.dv_profile {
             case 5:
                 codecType = kCMVideoCodecType_DolbyVisionHEVC
@@ -277,11 +277,22 @@ nonisolated enum SampleBufferFactory {
         isVideo: Bool,
         fallbackDuration: Double,
         isKeyFrame: Bool,
-        timingOverride: CMSampleTimingInfo? = nil
+        timingOverride: CMSampleTimingInfo? = nil,
+        payloadOverride: Data? = nil
     ) -> CMSampleBuffer? {
-        let size = Int(packet.pointee.size)
-        guard size > 0,
-              let blockBuffer = referencingBlockBuffer(packet: packet, size: size) else { return nil }
+        let size: Int
+        let blockBuffer: CMBlockBuffer?
+        if let payloadOverride {
+            // A rewritten payload (the DoVi EL strip, HEL-64) no longer
+            // aliases FFmpeg's allocation, so it is copied into a
+            // CoreMedia-owned block instead of retained.
+            size = payloadOverride.count
+            blockBuffer = copiedBlockBuffer(payloadOverride)
+        } else {
+            size = Int(packet.pointee.size)
+            blockBuffer = referencingBlockBuffer(packet: packet, size: size)
+        }
+        guard size > 0, let blockBuffer else { return nil }
 
         let timeScale = max(timeBase.den, 1)
         func time(_ value: Int64) -> CMTime {
@@ -363,6 +374,34 @@ nonisolated enum SampleBufferFactory {
             set(kCMSampleAttachmentKey_IsDependedOnByOthers, !disposable)
         }
         return sampleBuffer
+    }
+
+    /// The payload copied into a CoreMedia-owned block (same shape as
+    /// `AudioDecoder.makeSampleBuffer` uses for LPCM — see the leak note
+    /// there before ever "optimizing" this into a handoff).
+    private static func copiedBlockBuffer(_ data: Data) -> CMBlockBuffer? {
+        var blockBuffer: CMBlockBuffer?
+        guard CMBlockBufferCreateWithMemoryBlock(
+            allocator: kCFAllocatorDefault,
+            memoryBlock: nil,
+            blockLength: data.count,
+            blockAllocator: kCFAllocatorDefault,
+            customBlockSource: nil,
+            offsetToData: 0,
+            dataLength: data.count,
+            flags: 0,
+            blockBufferOut: &blockBuffer
+        ) == noErr, let blockBuffer else { return nil }
+        let copied = data.withUnsafeBytes { bytes -> OSStatus in
+            guard let baseAddress = bytes.baseAddress else { return OSStatus(kCMBlockBufferBadPointerParameterErr) }
+            return CMBlockBufferReplaceDataBytes(
+                with: baseAddress,
+                blockBuffer: blockBuffer,
+                offsetIntoDestination: 0,
+                dataLength: data.count
+            )
+        }
+        return copied == noErr ? blockBuffer : nil
     }
 
     /// The zero-copy path: retain FFmpeg's payload allocation and hand
@@ -465,6 +504,13 @@ nonisolated enum SampleBufferFactory {
         case AVCHROMA_LOC_BOTTOM: kCMFormatDescriptionChromaLocation_Bottom
         default: nil
         }
+    }
+
+    /// The stream's Dolby Vision configuration, when the container carries
+    /// one — the demuxer uses it to decide whether the enhancement-layer
+    /// strip experiment applies (HEL-64).
+    static func doviConfiguration(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> AVDOVIDecoderConfigurationRecord? {
+        sideData(codecpar, type: AV_PKT_DATA_DOVI_CONF)
     }
 
     /// Reads one typed side-data entry off the codec parameters (FFmpeg

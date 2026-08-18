@@ -41,9 +41,27 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var audioDiagnostic: String?
     private(set) var videoPerformance: VideoPerformanceSnapshot?
     private(set) var stallCount = 0
+    /// Frame-loss bench progress/result for the HUD (HEL-64); nil unless
+    /// Settings → Debug → Frame-loss bench is on.
+    private(set) var benchStatus: String?
 
     var queueDepths: (video: Int, audio: Int) {
         (videoQueue.count, audioQueue.count)
+    }
+
+    /// Timestamp discontinuities in the audio feed — the measurable form
+    /// of "the audio crackles" (HEL-64). Should read 0 during untouched
+    /// playback; steady growth means the renderer is being handed a
+    /// misaligned timeline.
+    var audioTimingGapCount: Int {
+        audioContinuity.gapCount
+    }
+
+    /// Proof the DoVi enhancement-layer strip experiment engaged, for the
+    /// HUD — nil when the toggle is off or the stream has no EL.
+    var enhancementLayerStripInfo: String? {
+        guard let stats = demuxer.enhancementLayerStripStats else { return nil }
+        return String(format: "%d pkts · %.1f MB removed", stats.units, Double(stats.bytes) / 1_000_000)
     }
 
     @ObservationIgnored var onFinished: (() -> Void)?
@@ -58,6 +76,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInteractive)
     @ObservationIgnored nonisolated private let pumpKickState = PumpKickState()
     @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
+    @ObservationIgnored nonisolated private let audioContinuity = AudioContinuityMonitor()
+    @ObservationIgnored private var bench: FrameLossBench?
+    @ObservationIgnored private var benchEnabled = false
+    @ObservationIgnored private var benchTickCount = 0
 
     // Written on main, read on the demux loop (or vice versa) — all simple
     // value types behind one lock.
@@ -101,6 +123,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func attach(displayLayer: AVSampleBufferDisplayLayer) {
         guard videoRenderer == nil, let url = pendingURL else { return }
+
+        // Debug switches, read once per playback like the HUD's: the strip
+        // experiment must not change mid-A/B, and the bench arms in
+        // beginPlayback.
+        demuxer.stripEnhancementLayer = UserDefaults.standard.bool(forKey: "debug.stripDoviEL")
+        benchEnabled = UserDefaults.standard.bool(forKey: "debug.frameLossBench")
 
         os_signpost(
             .event,
@@ -158,6 +186,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             synchronizer.rate = 1
             isPaused = false
         }
+        // Touching the transport ends a controlled measurement window;
+        // the bench re-arms from wherever playback continues.
+        rearmBench(at: timePosition)
     }
 
     func seek(by seconds: Double) {
@@ -294,6 +325,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 let previous = self.videoPerformance
                 let droppedDelta = max(snapshot.droppedFrames - (previous?.droppedFrames ?? 0), 0)
                 let corruptedDelta = max(snapshot.corruptedFrames - (previous?.corruptedFrames ?? 0), 0)
+                self.feedBench(snapshot)
                 if droppedDelta > 0 || corruptedDelta > 0 {
                     let depths = self.queueDepths
                     os_signpost(
@@ -372,6 +404,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioRenderer?.flush()
         videoQueue.reset()
         audioQueue.reset()
+        // The pts chain restarts at the target; the first buffer after a
+        // flush must not read as a discontinuity.
+        audioContinuity.reset()
         // Embedded cues re-arrive from the demuxer after the seek; leaving
         // the old ones would duplicate them. External cue lists are
         // complete and position-independent, so they stay.
@@ -394,6 +429,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         isBuffering = false
         synchronizer.setRate(isPaused ? 0 : 1, time: time)
         kickPumps()
+        rearmBench(at: seconds)
         os_signpost(
             .event,
             log: PlaybackPerformance.log,
@@ -428,6 +464,72 @@ final class SampleBufferPlayerEngine: PlayerEngine {
            duration <= 0 || seconds < duration - 1,
            shared.withLock({ $0.videoBufferedTo }) - seconds < 0.2 {
             beginStallRecovery()
+        }
+        // Bench sampling piggybacks on this observer at ~1 Hz — the same
+        // async metrics load the HUD uses, just driven while a window runs.
+        if bench != nil {
+            benchTickCount += 1
+            if benchTickCount >= 10 {
+                benchTickCount = 0
+                refreshVideoPerformanceMetrics()
+            }
+        }
+    }
+
+    // MARK: - Frame-loss bench (HEL-64)
+
+    /// (Re)start the controlled measurement window from `position` —
+    /// called at playback start and whenever the transport is touched,
+    /// because a window that survives a seek or pause is not a
+    /// controlled measurement.
+    private func rearmBench(at position: Double) {
+        guard benchEnabled else { return }
+        if bench == nil {
+            bench = FrameLossBench(at: position)
+        } else {
+            bench?.rearm(at: position)
+        }
+        benchStatus = String(format: "arming @%.0fs", position)
+    }
+
+    private func feedBench(_ snapshot: VideoPerformanceSnapshot) {
+        guard bench != nil else { return }
+        let sample = FrameLossBench.Sample(
+            position: timePosition,
+            totalFrames: snapshot.totalFrames,
+            droppedFrames: snapshot.droppedFrames,
+            corruptedFrames: snapshot.corruptedFrames,
+            stalls: stallCount,
+            audioGaps: audioContinuity.gapCount,
+            videoQueueDepth: videoQueue.count
+        )
+        if let result = bench!.record(sample) {
+            benchStatus = String(
+                format: "%.2f%% (%d/%d) · stalls %d · aGaps %d · minQ %d · @%.0f+%.0fs",
+                result.lossPercent, result.dropped, result.frames,
+                result.stalls, result.audioGaps, result.minVideoQueue,
+                result.startPosition, result.windowSeconds
+            )
+            os_signpost(
+                .event,
+                log: PlaybackPerformance.log,
+                name: "Bench Result",
+                signpostID: performanceSignpostID,
+                "dropped=%{public}d frames=%{public}d percent=%{public}.3f corrupted=%{public}d stalls=%{public}d audioGaps=%{public}d minVideoQueue=%{public}d start=%{public}.2f window=%{public}.2f",
+                result.dropped,
+                result.frames,
+                result.lossPercent,
+                result.corrupted,
+                result.stalls,
+                result.audioGaps,
+                result.minVideoQueue,
+                result.startPosition,
+                result.windowSeconds
+            )
+        } else if case .warming(let measureFrom) = bench!.phase {
+            benchStatus = String(format: "warming · measures @%.0fs", measureFrom)
+        } else if case .measuring(let since) = bench!.phase {
+            benchStatus = String(format: "measuring %.0f/%.0fs", timePosition - since, bench!.windowSeconds)
         }
     }
 
@@ -666,6 +768,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             let (selected, delay) = shared.withLock { ($0.selectedAudioStreamIndex, $0.audioDelaySeconds) }
             if streamIndex == selected {
                 for buffer in buffers {
+                    // Watched pre-delay: the delay shifts every stamp
+                    // uniformly, so continuity is the same either side.
+                    audioContinuity.observe(buffer)
                     audioQueue.enqueue(delay == 0 ? buffer : Self.retimed(buffer, by: delay))
                 }
                 kickPumps()
@@ -865,6 +970,43 @@ nonisolated private final class SharedState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return body(&state)
+    }
+}
+
+/// Counts timestamp discontinuities in the audio buffers handed to the
+/// renderer — the measurable form of "the audio crackles" (HEL-64). Each
+/// buffer is expected to start exactly where the previous one ended; a
+/// mismatch beyond 1 ms is the renderer being told to leave a gap or
+/// overlap in the decoded stream. Written on the demux queue, read from
+/// the main actor for the HUD and bench.
+nonisolated private final class AudioContinuityMonitor: @unchecked Sendable {
+    private let lock = NSLock()
+    private var expectedNext: CMTime?
+    private var gaps = 0
+
+    var gapCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return gaps
+    }
+
+    /// Seek/flush: the next buffer starts a new chain, not a gap.
+    func reset() {
+        lock.lock()
+        expectedNext = nil
+        lock.unlock()
+    }
+
+    func observe(_ buffer: CMSampleBuffer) {
+        let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+        guard pts.isValid else { return }
+        let duration = CMSampleBufferGetDuration(buffer)
+        lock.lock()
+        if let expectedNext, abs(CMTimeSubtract(pts, expectedNext).seconds) > 0.001 {
+            gaps += 1
+        }
+        expectedNext = duration.isValid ? CMTimeAdd(pts, duration) : nil
+        lock.unlock()
     }
 }
 

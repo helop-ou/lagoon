@@ -70,6 +70,24 @@ nonisolated final class FFmpegDemuxer {
     // turns every quantization mismatch into an audible discontinuity.
     private var passthroughTimelines: [Int32: PassthroughAudioTimeline] = [:]
 
+    /// HEL-64 hardware experiment (Settings → Debug): set before `open`.
+    /// Only arms when the stream really is single-track DoVi with an
+    /// enhancement layer present.
+    var stripEnhancementLayer = false
+    /// Non-nil = stripping armed; demux-queue use only.
+    private var videoNALLengthSize: Int?
+    // Written per-packet on the demux queue, read by the HUD from the main
+    // actor — proof the experiment engaged (the retraction lesson: verify
+    // the gate before trusting the A/B).
+    private let stripStatsLock = NSLock()
+    nonisolated(unsafe) private var stripStats: (units: Int, bytes: Int64)?
+
+    var enhancementLayerStripStats: (units: Int, bytes: Int64)? {
+        stripStatsLock.lock()
+        defer { stripStatsLock.unlock() }
+        return stripStats
+    }
+
     private(set) var videoStream: DemuxedStream?
     private(set) var audioStreams: [DemuxedStream] = []
     private(set) var subtitleStreams: [DemuxedStream] = []
@@ -157,6 +175,19 @@ nonisolated final class FFmpegDemuxer {
         }
         videoStreamIndex = bestVideo
         videoTimeBase = stream.pointee.time_base
+        if stripEnhancementLayer,
+           videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
+           let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),
+           dovi.el_present_flag != 0,
+           let extradata = videoPar.pointee.extradata, videoPar.pointee.extradata_size > 0,
+           let lengthSize = HEVCEnhancementLayerFilter.nalLengthSize(
+               hvcc: Data(bytes: extradata, count: Int(videoPar.pointee.extradata_size))
+           ) {
+            videoNALLengthSize = lengthSize
+            stripStatsLock.lock()
+            stripStats = (0, 0)
+            stripStatsLock.unlock()
+        }
         videoStream = DemuxedStream(
             streamIndex: bestVideo,
             codecName: String(cString: avcodec_get_name(videoPar.pointee.codec_id)),
@@ -312,13 +343,29 @@ nonisolated final class FFmpegDemuxer {
         let streamIndex = packet.pointee.stream_index
 
         if streamIndex == videoStreamIndex, let description = videoStream?.formatDescription {
+            var strippedPayload: Data?
+            if let lengthSize = videoNALLengthSize, let data = packet.pointee.data {
+                strippedPayload = HEVCEnhancementLayerFilter.strippingEnhancementLayer(
+                    from: UnsafeRawBufferPointer(start: data, count: Int(packet.pointee.size)),
+                    lengthSize: lengthSize
+                )
+                if let strippedPayload {
+                    stripStatsLock.lock()
+                    var stats = stripStats ?? (0, 0)
+                    stats.units += 1
+                    stats.bytes += Int64(Int(packet.pointee.size) - strippedPayload.count)
+                    stripStats = stats
+                    stripStatsLock.unlock()
+                }
+            }
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,
                 formatDescription: description,
                 timeBase: videoTimeBase,
                 isVideo: true,
                 fallbackDuration: 0,
-                isKeyFrame: packet.pointee.flags & keyPacketFlag != 0
+                isKeyFrame: packet.pointee.flags & keyPacketFlag != 0,
+                payloadOverride: strippedPayload
             ) else { return .skipped }
             return .video(buffer)
         }

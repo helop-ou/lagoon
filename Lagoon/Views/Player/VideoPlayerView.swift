@@ -538,7 +538,13 @@ final class PlaybackController {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
         }
         let depths = engine.queueDepths
-        lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount)")
+        lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
+        if let strip = engine.enhancementLayerStripInfo {
+            lines.append("EL strip: \(strip)")
+        }
+        if let bench = engine.benchStatus {
+            lines.append("Bench:   \(bench)")
+        }
         let memory = MemorySnapshot.current()
         var memoryLine = String(format: "Memory:  %.0f MB", memory.footprintMB)
         if memory.availableBytes > 0 {

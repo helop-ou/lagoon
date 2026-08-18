@@ -6,6 +6,8 @@ struct SettingsView: View {
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
+    @AppStorage("debug.frameLossBench") private var frameLossBench = false
+    @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
 
@@ -87,6 +89,15 @@ struct SettingsView: View {
                 }
                 row("Playback HUD", value: showPlaybackHUD ? "On" : "Off") {
                     showPlaybackHUD.toggle()
+                }
+                // Both HEL-64 diagnostics: the bench freezes a controlled
+                // frame-loss number into the HUD, the strip is the DoVi P7
+                // enhancement-layer A/B for real hardware.
+                row("Frame-Loss Bench", value: frameLossBench ? "On" : "Off") {
+                    frameLossBench.toggle()
+                }
+                row("Strip DoVi Enhancement Layer", value: stripDoviEL ? "On" : "Off") {
+                    stripDoviEL.toggle()
                 }
 
                 // Only worth offering once there is somewhere to switch to;
@@ -204,6 +215,8 @@ struct SettingsView: View {
 
             Section("Debug") {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)
+                Toggle("Frame-Loss Bench", isOn: $frameLossBench)
+                Toggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
             }
         }
     }
