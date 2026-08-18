@@ -65,6 +65,10 @@ nonisolated final class FFmpegDemuxer {
     // M4: codecs CoreAudio can't take compressed decode to LPCM here.
     private var audioDecoders: [Int32: AudioDecoder] = [:]
     private var subtitleDecoders: [Int32: SubtitleDecoder] = [:]
+    // HEL-64: sample-exact pts chains for compressed passthrough audio —
+    // container timestamps are quantized (Matroska: 1 ms) and the renderer
+    // turns every quantization mismatch into an audible discontinuity.
+    private var passthroughTimelines: [Int32: PassthroughAudioTimeline] = [:]
 
     private(set) var videoStream: DemuxedStream?
     private(set) var audioStreams: [DemuxedStream] = []
@@ -180,6 +184,10 @@ nonisolated final class FFmpegDemuxer {
                 if let (passthrough, framesPerPacket) = SampleBufferFactory.audioFormatDescription(codecpar: par) {
                     description = passthrough
                     fallbackDuration = Double(framesPerPacket) / Double(max(par.pointee.sample_rate, 1))
+                    passthroughTimelines[Int32(index)] = PassthroughAudioTimeline(
+                        sampleRate: par.pointee.sample_rate,
+                        framesPerPacket: framesPerPacket
+                    )
                 } else if let decoder = AudioDecoder(codecpar: par, timeBase: stream.pointee.time_base) {
                     description = decoder.formatDescription
                     audioDecoders[Int32(index)] = decoder
@@ -261,6 +269,9 @@ nonisolated final class FFmpegDemuxer {
         for decoder in audioDecoders.values {
             decoder.flush()
         }
+        for index in passthroughTimelines.keys {
+            passthroughTimelines[index]?.reset()
+        }
         for decoder in subtitleDecoders.values {
             decoder.flush()
         }
@@ -318,13 +329,21 @@ nonisolated final class FFmpegDemuxer {
         if let audio = audioStreams.first(where: { $0.streamIndex == streamIndex }),
            let description = audio.formatDescription,
            let timeBase = audioTimeBases[streamIndex] {
+            // Sample-exact pts for passthrough audio (HEL-64) — the
+            // container's quantized stamp only anchors the chain.
+            let ptsValue = packet.pointee.pts != avNoPTS ? packet.pointee.pts : packet.pointee.dts
+            let containerSeconds: Double? = ptsValue == avNoPTS
+                ? nil
+                : Double(ptsValue) * Double(timeBase.num) / Double(max(timeBase.den, 1))
+            let timing = passthroughTimelines[streamIndex]?.timing(containerSeconds: containerSeconds)
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,
                 formatDescription: description,
                 timeBase: timeBase,
                 isVideo: false,
                 fallbackDuration: audio.fallbackPacketDuration,
-                isKeyFrame: true
+                isKeyFrame: true,
+                timingOverride: timing
             ) else { return .skipped }
             return .audio([buffer], streamIndex: streamIndex)
         }

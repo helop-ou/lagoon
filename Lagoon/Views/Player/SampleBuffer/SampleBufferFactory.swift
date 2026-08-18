@@ -276,54 +276,12 @@ nonisolated enum SampleBufferFactory {
         timeBase: AVRational,
         isVideo: Bool,
         fallbackDuration: Double,
-        isKeyFrame: Bool
+        isKeyFrame: Bool,
+        timingOverride: CMSampleTimingInfo? = nil
     ) -> CMSampleBuffer? {
         let size = Int(packet.pointee.size)
-        guard size > 0 else { return nil }
-
-        // Keep only a reference to FFmpeg's underlying payload allocation.
-        // Cloning the whole AVPacket is already zero-copy for its main data,
-        // but still allocates a packet object and copies all packet side data
-        // for every frame. CoreMedia needs the bytes and their lifetime, not
-        // that metadata, so an AVBufferRef is the narrowest ownership token.
-        if packet.pointee.buf == nil, av_packet_make_refcounted(packet) < 0 {
-            return nil
-        }
-        guard let packetBuffer = packet.pointee.buf,
-              let retainedBuffer = av_buffer_ref(packetBuffer) else { return nil }
-        var ownedBuffer: UnsafeMutablePointer<AVBufferRef>? = retainedBuffer
-        guard let retainedData = packet.pointee.data else {
-            av_buffer_unref(&ownedBuffer)
-            return nil
-        }
-        var blockSource = CMBlockBufferCustomBlockSource(
-            version: UInt32(kCMBlockBufferCustomBlockSourceVersion),
-            AllocateBlock: nil,
-            FreeBlock: { refCon, _, _ in
-                guard let refCon else { return }
-                var buffer: UnsafeMutablePointer<AVBufferRef>? = refCon.assumingMemoryBound(to: AVBufferRef.self)
-                av_buffer_unref(&buffer)
-            },
-            refCon: UnsafeMutableRawPointer(retainedBuffer)
-        )
-        var blockBuffer: CMBlockBuffer?
-        let blockStatus = CMBlockBufferCreateWithMemoryBlock(
-            allocator: kCFAllocatorDefault,
-            memoryBlock: retainedData,
-            blockLength: size,
-            blockAllocator: kCFAllocatorNull,
-            customBlockSource: &blockSource,
-            offsetToData: 0,
-            dataLength: size,
-            flags: 0,
-            blockBufferOut: &blockBuffer
-        )
-        guard blockStatus == noErr, let blockBuffer else {
-            // Ownership transfers to CoreMedia only after successful block
-            // creation; balance the reference on the failure path.
-            av_buffer_unref(&ownedBuffer)
-            return nil
-        }
+        guard size > 0,
+              let blockBuffer = referencingBlockBuffer(packet: packet, size: size) else { return nil }
 
         let timeScale = max(timeBase.den, 1)
         func time(_ value: Int64) -> CMTime {
@@ -338,19 +296,24 @@ nonisolated enum SampleBufferFactory {
             let seconds = Double(value) * Double(timeBase.num) / Double(timeScale)
             return CMTime(seconds: seconds, preferredTimescale: 90_000)
         }
-        let presentation = packet.pointee.pts != avNoPTS ? time(packet.pointee.pts) : time(packet.pointee.dts)
-        let duration: CMTime = if packet.pointee.duration > 0 {
-            time(packet.pointee.duration)
-        } else if fallbackDuration > 0 {
-            CMTime(seconds: fallbackDuration, preferredTimescale: 90_000)
+        var timing: CMSampleTimingInfo
+        if let timingOverride {
+            timing = timingOverride
         } else {
-            .invalid
+            let presentation = packet.pointee.pts != avNoPTS ? time(packet.pointee.pts) : time(packet.pointee.dts)
+            let duration: CMTime = if packet.pointee.duration > 0 {
+                time(packet.pointee.duration)
+            } else if fallbackDuration > 0 {
+                CMTime(seconds: fallbackDuration, preferredTimescale: 90_000)
+            } else {
+                .invalid
+            }
+            timing = CMSampleTimingInfo(
+                duration: duration,
+                presentationTimeStamp: presentation,
+                decodeTimeStamp: isVideo ? time(packet.pointee.dts) : .invalid
+            )
         }
-        var timing = CMSampleTimingInfo(
-            duration: duration,
-            presentationTimeStamp: presentation,
-            decodeTimeStamp: isVideo ? time(packet.pointee.dts) : .invalid
-        )
 
         var sampleSize = size
         var sampleBuffer: CMSampleBuffer?
@@ -400,6 +363,59 @@ nonisolated enum SampleBufferFactory {
             set(kCMSampleAttachmentKey_IsDependedOnByOthers, !disposable)
         }
         return sampleBuffer
+    }
+
+    /// The zero-copy path: retain FFmpeg's payload allocation and hand
+    /// CoreMedia a block that releases it after decode.
+    private static func referencingBlockBuffer(
+        packet: UnsafeMutablePointer<AVPacket>,
+        size: Int
+    ) -> CMBlockBuffer? {
+        guard size > 0 else { return nil }
+        // Keep only a reference to FFmpeg's underlying payload allocation.
+        // Cloning the whole AVPacket is already zero-copy for its main data,
+        // but still allocates a packet object and copies all packet side data
+        // for every frame. CoreMedia needs the bytes and their lifetime, not
+        // that metadata, so an AVBufferRef is the narrowest ownership token.
+        if packet.pointee.buf == nil, av_packet_make_refcounted(packet) < 0 {
+            return nil
+        }
+        guard let packetBuffer = packet.pointee.buf,
+              let retainedBuffer = av_buffer_ref(packetBuffer) else { return nil }
+        var ownedBuffer: UnsafeMutablePointer<AVBufferRef>? = retainedBuffer
+        guard let retainedData = packet.pointee.data else {
+            av_buffer_unref(&ownedBuffer)
+            return nil
+        }
+        var blockSource = CMBlockBufferCustomBlockSource(
+            version: UInt32(kCMBlockBufferCustomBlockSourceVersion),
+            AllocateBlock: nil,
+            FreeBlock: { refCon, _, _ in
+                guard let refCon else { return }
+                var buffer: UnsafeMutablePointer<AVBufferRef>? = refCon.assumingMemoryBound(to: AVBufferRef.self)
+                av_buffer_unref(&buffer)
+            },
+            refCon: UnsafeMutableRawPointer(retainedBuffer)
+        )
+        var blockBuffer: CMBlockBuffer?
+        let blockStatus = CMBlockBufferCreateWithMemoryBlock(
+            allocator: kCFAllocatorDefault,
+            memoryBlock: retainedData,
+            blockLength: size,
+            blockAllocator: kCFAllocatorNull,
+            customBlockSource: &blockSource,
+            offsetToData: 0,
+            dataLength: size,
+            flags: 0,
+            blockBufferOut: &blockBuffer
+        )
+        guard blockStatus == noErr, let blockBuffer else {
+            // Ownership transfers to CoreMedia only after successful block
+            // creation; balance the reference on the failure path.
+            av_buffer_unref(&ownedBuffer)
+            return nil
+        }
+        return blockBuffer
     }
 
     // MARK: - HDR / Dolby Vision tagging (HEL-48 M3)
