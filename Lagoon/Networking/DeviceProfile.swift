@@ -2,8 +2,9 @@ import Foundation
 
 // Capability profile sent with PlaybackInfo so the server can decide between
 // direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
-// what the Lagoon sample-buffer engine can play: h264/hevc video wrapped
-// compressed; aac/mp3/ac3/eac3 audio wrapped compressed plus
+// what the Lagoon sample-buffer engine can play: h264 stays compressed while
+// hevc is hardware-decoded ahead inside the engine; aac/mp3/ac3/eac3 audio
+// stays compressed plus
 // dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4); text and
 // PGS/VobSub subtitles embedded, vtt external (M5) — in any container
 // libavformat demuxes, plus the fMP4 HLS transcode fallback (whose

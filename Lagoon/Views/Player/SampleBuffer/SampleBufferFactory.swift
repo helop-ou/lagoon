@@ -15,10 +15,10 @@ nonisolated private let ec3JOCFormatID = AudioFormatID(0x6563_2B33) // 'ec+3'
 ///
 /// The trick that makes the whole architecture cheap: Matroska stores
 /// h264/hevc exactly like mp4 (avcC/hvcC extradata, length-prefixed NALs),
-/// so demuxed packets can be wrapped as compressed CMSampleBuffers and the
-/// display layer decodes them itself — no VTDecompressionSession needed.
-/// Same for aac/ac3/eac3 audio: CoreAudio decodes the compressed packets
-/// handed to AVSampleBufferAudioRenderer.
+/// so demuxed packets can be wrapped as compressed CMSampleBuffers without a
+/// payload copy. The display layer decodes H.264; Lagoon's VideoToolbox stage
+/// decodes HEVC ahead. Same for aac/ac3/eac3 audio: CoreAudio decodes the
+/// compressed packets handed to AVSampleBufferAudioRenderer.
 nonisolated enum SampleBufferFactory {
     static func videoFormatDescription(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> CMFormatDescription? {
         var codecType: CMVideoCodecType
@@ -70,6 +70,11 @@ nonisolated enum SampleBufferFactory {
         if let contentLight = contentLightLevel(codecpar) {
             extensions[kCMFormatDescriptionExtension_ContentLightLevelInfo] = contentLight
         }
+        if let ambient = ambientViewingEnvironment(codecpar) {
+            // Apple TN3145 requires custom sample-buffer playback to carry
+            // `amve` through to presentation for correct HDR adaptation.
+            extensions[kCMFormatDescriptionExtension_AmbientViewingEnvironment] = ambient
+        }
 
         // Dolby Vision, single-layer profiles only. Profile 5 (IPTPQc2) is
         // meaningless without the DoVi decode path, so the sample entry
@@ -109,23 +114,19 @@ nonisolated enum SampleBufferFactory {
     /// cookie; ac3/eac3 are self-describing.
     static func audioFormatDescription(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> (CMFormatDescription, framesPerPacket: Int)? {
         var formatID: AudioFormatID
-        let framesPerPacket: Int
         var cookie: Data?
         var atoms: [String: Data]?
         var forcedChannels: UInt32?
         switch codecpar.pointee.codec_id {
         case AV_CODEC_ID_AAC:
             formatID = kAudioFormatMPEG4AAC
-            framesPerPacket = 1024
             if let extradata = codecpar.pointee.extradata, codecpar.pointee.extradata_size > 0 {
                 cookie = Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size))
             }
         case AV_CODEC_ID_AC3:
             formatID = kAudioFormatAC3
-            framesPerPacket = 1536
         case AV_CODEC_ID_EAC3:
             formatID = kAudioFormatEnhancedAC3
-            framesPerPacket = 1536
             // M2, settled on hardware (2026-08-17) after three failed
             // signalling attempts: what engages Atmos is the 'ec+3' media
             // subtype plus the 16-channel "16/JOC" presentation — the
@@ -143,10 +144,15 @@ nonisolated enum SampleBufferFactory {
             }
         case AV_CODEC_ID_MP3:
             formatID = kAudioFormatMPEGLayer3
-            framesPerPacket = 1152
         default:
             return nil
         }
+
+        guard let framesPerPacket = audioFramesPerPacket(
+            codecID: codecpar.pointee.codec_id,
+            sampleRate: codecpar.pointee.sample_rate,
+            declaredFrameSize: codecpar.pointee.frame_size
+        ) else { return nil }
 
         var asbd = AudioStreamBasicDescription(
             mSampleRate: Float64(codecpar.pointee.sample_rate),
@@ -181,6 +187,29 @@ nonisolated enum SampleBufferFactory {
         }
         guard status == noErr, let description else { return nil }
         return (description, framesPerPacket)
+    }
+
+    /// Prefer FFmpeg's parsed frame size (including 960-sample AAC), then
+    /// fall back to the codec's packet cadence when the container omitted it.
+    static func audioFramesPerPacket(
+        codecID: AVCodecID,
+        sampleRate: Int32,
+        declaredFrameSize: Int32
+    ) -> Int? {
+        if declaredFrameSize > 0 {
+            return Int(declaredFrameSize)
+        }
+        switch codecID {
+        case AV_CODEC_ID_AAC:
+            return 1024
+        case AV_CODEC_ID_AC3, AV_CODEC_ID_EAC3:
+            return 1536
+        case AV_CODEC_ID_MP3:
+            // MPEG-2/2.5 Layer III carries 576 samples; MPEG-1 carries 1152.
+            return sampleRate > 0 && sampleRate <= 24_000 ? 576 : 1152
+        default:
+            return nil
+        }
     }
 
     /// EC3SpecificBox (dec3) payload per ETSI TS 102 366 Annex F —
@@ -267,8 +296,8 @@ nonisolated enum SampleBufferFactory {
     }
 
     /// Wraps one demuxed packet as a compressed CMSampleBuffer. Video keeps
-    /// decode timestamps (packets arrive in decode order; the layer
-    /// reorders B-frames from the timing info) and marks non-keyframes
+    /// decode timestamps (packets arrive in decode order; the downstream
+    /// decoder uses them for B-frame dependencies) and marks non-keyframes
     /// NotSync so post-seek behavior is correct.
     static func sampleBuffer(
         packet: UnsafeMutablePointer<AVPacket>,
@@ -570,6 +599,32 @@ nonisolated enum SampleBufferFactory {
         var payload = Data(capacity: 4)
         append(UInt16(clamping: metadata.MaxCLL), to: &payload)
         append(UInt16(clamping: metadata.MaxFALL), to: &payload)
+        return payload
+    }
+
+    /// The 8-byte big-endian `amve` / H.274 payload Apple uses for ambient
+    /// HDR adaptation: illuminance at 1/10000 lux, then CIE x/y at 1/50000.
+    private static func ambientViewingEnvironment(
+        _ codecpar: UnsafeMutablePointer<AVCodecParameters>
+    ) -> Data? {
+        guard let metadata: AVAmbientViewingEnvironment = sideData(
+            codecpar,
+            type: AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT
+        ) else { return nil }
+        return ambientViewingEnvironmentPayload(metadata)
+    }
+
+    static func ambientViewingEnvironmentPayload(
+        _ metadata: AVAmbientViewingEnvironment
+    ) -> Data? {
+        guard metadata.ambient_illuminance.num > 0,
+              metadata.ambient_illuminance.den > 0,
+              metadata.ambient_light_x.den > 0,
+              metadata.ambient_light_y.den > 0 else { return nil }
+        var payload = Data(capacity: 8)
+        append(UInt32(clamping: rescale(metadata.ambient_illuminance, by: 10_000)), to: &payload)
+        append(UInt16(clamping: rescale(metadata.ambient_light_x, by: 50_000)), to: &payload)
+        append(UInt16(clamping: rescale(metadata.ambient_light_y, by: 50_000)), to: &payload)
         return payload
     }
 

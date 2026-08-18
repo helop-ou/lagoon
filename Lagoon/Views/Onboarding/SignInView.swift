@@ -10,6 +10,7 @@ struct SignInView: View {
 
     @State private var quickConnectAvailable = false
     @State private var quickConnectCode: String?
+    @State private var isStartingQuickConnect = false
     @State private var pollTask: Task<Void, Never>?
 
     var body: some View {
@@ -99,16 +100,27 @@ struct SignInView: View {
                     .multilineTextAlignment(.center)
                 ProgressView()
             } else {
-                Button("Sign in with Quick Connect") {
+                Button {
                     startQuickConnect()
+                } label: {
+                    if isStartingQuickConnect {
+                        ProgressView()
+                    } else {
+                        Text("Sign in with Quick Connect")
+                    }
                 }
                 .buttonStyle(.glass)
+                .disabled(isStartingQuickConnect)
             }
         }
     }
 
     private func signIn() {
         guard !isSigningIn, !username.isEmpty else { return }
+        pollTask?.cancel()
+        pollTask = nil
+        quickConnectCode = nil
+        isStartingQuickConnect = false
         isSigningIn = true
         errorMessage = nil
         Task {
@@ -122,11 +134,19 @@ struct SignInView: View {
     }
 
     private func startQuickConnect() {
+        guard pollTask == nil, !isStartingQuickConnect else { return }
+        isStartingQuickConnect = true
         errorMessage = nil
         pollTask = Task {
+            defer {
+                isStartingQuickConnect = false
+                pollTask = nil
+            }
             do {
                 let quickConnect = try await session.startQuickConnect()
+                try Task.checkCancellation()
                 quickConnectCode = quickConnect.code
+                isStartingQuickConnect = false
                 while !Task.isCancelled {
                     try await Task.sleep(for: .seconds(2))
                     if try await session.pollQuickConnect(secret: quickConnect.secret) {
@@ -134,6 +154,7 @@ struct SignInView: View {
                     }
                 }
             } catch is CancellationError {
+                quickConnectCode = nil
             } catch {
                 errorMessage = "Quick Connect expired — try again."
                 quickConnectCode = nil

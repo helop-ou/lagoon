@@ -8,6 +8,7 @@ import SwiftUI
 /// account can be resumed, and whenever Settings asks for it.
 struct AccountPickerView: View {
     @Environment(SessionStore.self) private var session
+    @State private var errorMessage: String?
 
     /// The server line only earns its place when accounts actually span more
     /// than one server; on the common single-server setup it is noise under
@@ -39,6 +40,14 @@ struct AccountPickerView: View {
                 .scrollClipDisabled()
             }
         }
+        .alert("Couldn't Forget User", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "The saved credential could not be removed.")
+        }
     }
 
     private func accountButton(_ account: StoredAccount) -> some View {
@@ -63,7 +72,11 @@ struct AccountPickerView: View {
         .cardButtonStyle()
         .contextMenu {
             Button(role: .destructive) {
-                session.remove(account)
+                do {
+                    try session.remove(account)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
             } label: {
                 Label("Forget This User", systemImage: "person.crop.circle.badge.minus")
             }

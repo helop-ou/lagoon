@@ -50,7 +50,7 @@ final class SessionStore {
             deviceId = stored
         } else {
             deviceId = UUID().uuidString
-            KeychainStore.set(deviceId, for: KeychainKey.deviceId)
+            try? KeychainStore.set(deviceId, for: KeychainKey.deviceId)
         }
         client = JellyfinClient(deviceId: deviceId)
         restore()
@@ -139,15 +139,28 @@ final class SessionStore {
     }
 
     /// Forgets an account from the picker, token and all.
-    func remove(_ account: StoredAccount) {
-        KeychainStore.delete(account.keychainAccount)
+    func remove(_ account: StoredAccount) throws {
+        try KeychainStore.delete(account.keychainAccount)
+        let removedActiveAccount = activeAccount?.id == account.id
         defaults.removeObject(forKey: "libraries.\(account.id)")
         save(accounts: accounts.filter { $0.id != account.id })
-        if activeAccount?.id == account.id {
+        if removedActiveAccount {
+            TopShelfStore.clear()
+            client.clearSession()
             activeAccount = nil
+            serverName = nil
+            userName = nil
             defaults.removeObject(forKey: DefaultsKey.activeAccountId)
+            defaults.removeObject(forKey: DefaultsKey.serverURL)
+            defaults.removeObject(forKey: DefaultsKey.serverName)
         }
-        if accounts.isEmpty { phase = .needsServer }
+        if accounts.isEmpty {
+            TopShelfStore.clear()
+            client.clearSession()
+            phase = .needsServer
+        } else if removedActiveAccount {
+            phase = .choosingAccount
+        }
     }
 
     /// Libraries last seen for the active account, so the tab bar can draw
@@ -196,11 +209,20 @@ final class SessionStore {
             userId: userId,
             userName: defaults.string(forKey: DefaultsKey.legacyUserName)
         )
-        KeychainStore.set(token, for: account.keychainAccount)
+        do {
+            try KeychainStore.set(token, for: account.keychainAccount)
+            guard KeychainStore.string(for: account.keychainAccount) == token else {
+                throw KeychainStore.StoreError.verificationFailed
+            }
+        } catch {
+            // The old slot remains the source of truth. Never turn a failed
+            // migration into a silent sign-out.
+            return
+        }
         save(accounts: [account])
         defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
 
-        KeychainStore.delete(KeychainKey.legacyAccessToken)
+        try? KeychainStore.delete(KeychainKey.legacyAccessToken)
         defaults.removeObject(forKey: DefaultsKey.legacyUserId)
         defaults.removeObject(forKey: DefaultsKey.legacyUserName)
     }
@@ -256,7 +278,7 @@ final class SessionStore {
 
     func signIn(username: String, password: String) async throws {
         let result = try await client.authenticateByName(username: username, password: password)
-        completeSignIn(with: result)
+        try completeSignIn(with: result)
     }
 
     func quickConnectAvailable() async -> Bool {
@@ -273,11 +295,11 @@ final class SessionStore {
         let state = try await client.quickConnectState(secret: secret)
         guard state.authenticated else { return false }
         let result = try await client.authenticateWithQuickConnect(secret: secret)
-        completeSignIn(with: result)
+        try completeSignIn(with: result)
         return true
     }
 
-    private func completeSignIn(with result: AuthenticationResult) {
+    private func completeSignIn(with result: AuthenticationResult) throws {
         guard let url = client.serverURL else { return }
         let account = StoredAccount(
             serverURL: url,
@@ -285,7 +307,10 @@ final class SessionStore {
             userId: result.user.id,
             userName: result.user.name
         )
-        KeychainStore.set(result.accessToken, for: account.keychainAccount)
+        try KeychainStore.set(result.accessToken, for: account.keychainAccount)
+        guard KeychainStore.string(for: account.keychainAccount) == result.accessToken else {
+            throw KeychainStore.StoreError.verificationFailed
+        }
         // Re-signing in as someone already remembered refreshes that entry
         // rather than duplicating them.
         save(accounts: accounts.filter { $0.id != account.id } + [account])
@@ -307,7 +332,7 @@ final class SessionStore {
         TopShelfStore.clear()
         client.clearSession()
         if let account = activeAccount {
-            KeychainStore.delete(account.keychainAccount)
+            try? KeychainStore.delete(account.keychainAccount)
             save(accounts: accounts.filter { $0.id != account.id })
         }
         activeAccount = nil

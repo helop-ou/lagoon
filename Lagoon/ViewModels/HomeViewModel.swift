@@ -43,30 +43,30 @@ final class HomeViewModel {
             let libraries = try await client.userViews()
                 .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
 
-            async let resumeItems = client.resumeItems()
-            async let nextUpItems = client.nextUp()
+            async let resumeItems = try? client.resumeItems()
+            async let nextUpItems = try? client.nextUp()
             // Never fatal to the screen: a server that dislikes the filter
             // should cost you the rail, not the whole of Home.
             async let favoriteItems = try? client.favorites()
 
             var rails: [LibraryRail] = []
-            try await withThrowingTaskGroup(of: (Int, LibraryRail).self) { group in
+            await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
                 for (index, library) in libraries.enumerated() {
                     group.addTask {
-                        let items = try await client.latest(parentId: library.id)
+                        guard let items = try? await client.latest(parentId: library.id) else { return nil }
                         let title = "Recently Added" + (library.name.map { " in \($0)" } ?? "")
                         return (index, LibraryRail(id: library.id, title: title, items: items))
                     }
                 }
                 var collected: [(Int, LibraryRail)] = []
-                for try await entry in group {
-                    collected.append(entry)
+                for await entry in group {
+                    if let entry { collected.append(entry) }
                 }
                 rails = collected.sorted { $0.0 < $1.0 }.map(\.1)
             }
 
-            resume = try await resumeItems
-            nextUp = try await nextUpItems
+            resume = await resumeItems ?? []
+            nextUp = await nextUpItems ?? []
             favorites = await favoriteItems ?? []
             latestRails = rails
             TopShelfStore.publish(resume, client: client)
@@ -120,14 +120,15 @@ final class HomeViewModel {
             .filter { !Self.nativelyCoveredSections.contains($0.section) }
         guard !sections.isEmpty else { return [] }
 
-        return await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
+        return await withTaskGroup(of: (order: Int, catalogueIndex: Int, rail: LibraryRail)?.self) { group in
             for (index, section) in sections.enumerated() {
                 group.addTask {
                     let items = await client.homeSectionItems(section.section)
                     guard !items.isEmpty else { return nil }
                     return (
-                        section.orderIndex ?? index,
-                        LibraryRail(
+                        order: section.orderIndex ?? index,
+                        catalogueIndex: index,
+                        rail: LibraryRail(
                             id: "plugin-" + section.section,
                             title: section.displayText ?? section.section,
                             items: items,
@@ -138,13 +139,17 @@ final class HomeViewModel {
                     )
                 }
             }
-            var collected: [(Int, LibraryRail)] = []
+            var collected: [(order: Int, catalogueIndex: Int, rail: LibraryRail)] = []
             for await entry in group {
                 if let entry { collected.append(entry) }
             }
             // The plugin reports the same OrderIndex for every section on a
             // default install, so ties fall back to the catalogue's order.
-            return collected.sorted { $0.0 < $1.0 }.map(\.1)
+            return collected.sorted {
+                $0.order == $1.order
+                    ? $0.catalogueIndex < $1.catalogueIndex
+                    : $0.order < $1.order
+            }.map(\.rail)
         }
     }
 }

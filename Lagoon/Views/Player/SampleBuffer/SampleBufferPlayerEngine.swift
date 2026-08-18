@@ -1,18 +1,20 @@
 import AVFAudio
 import AVFoundation
 import CoreMedia
+import CoreVideo
 import Foundation
 import OSLog
 
 /// HEL-48 M1: the Lagoon playback engine — libavformat demux into
-/// compressed CMSampleBuffers rendered by AVSampleBufferDisplayLayer /
+/// CMSampleBuffers rendered by AVSampleBufferDisplayLayer /
 /// AVSampleBufferAudioRenderer under an AVSampleBufferRenderSynchronizer.
-/// The system does the decoding, color management, and audio output, which
-/// is the whole point of this architecture (see HEL-48).
+/// VideoToolbox and AVFoundation perform the codec work, color management,
+/// presentation, and audio output (see HEL-48).
 ///
 /// The app's only playback engine since 2026-08-16 (Jaagop's call: one
-/// player for everything). Envelope: h264/hevc video passed through
-/// compressed; aac/mp3/ac3/eac3 audio passed through compressed and
+/// player for everything). Envelope: h264 video passed through compressed;
+/// HEVC is hardware-decoded ahead with VideoToolbox; aac/mp3/ac3/eac3 audio
+/// passed through compressed and
 /// dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4);
 /// embedded + external subtitles as an overlay (M5) —
 /// `DeviceProfile.lagoon` advertises exactly this, so anything outside it
@@ -88,6 +90,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let pumpKickState = PumpKickState()
     @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
     @ObservationIgnored nonisolated private let audioContinuity = AudioContinuityMonitor()
+    @ObservationIgnored nonisolated(unsafe) private var videoDecoder: VideoToolboxDecoder?
     @ObservationIgnored private var bench: FrameLossBench?
     @ObservationIgnored private var benchEnabled = false
     @ObservationIgnored private var benchTickCount = 0
@@ -107,10 +110,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated(unsafe) private var audioRenderer: AVSampleBufferAudioRenderer?
     @ObservationIgnored nonisolated private let synchronizer = AVSampleBufferRenderSynchronizer()
     @ObservationIgnored private var timeObserver: Any?
+    @ObservationIgnored private var finishObserver: Any?
     @ObservationIgnored private var didFinish = false
     @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
     @ObservationIgnored private var stallSignpostActive = false
     @ObservationIgnored private var shutdownRequested = false
+    @ObservationIgnored private var rendererNotificationTokens: [NSObjectProtocol] = []
+    @ObservationIgnored private var rendererRecoveryInProgress = false
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
@@ -161,6 +167,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioRenderer = audio
         synchronizer.addRenderer(video)
         synchronizer.addRenderer(audio)
+        observeVideoRenderer(video)
 
         video.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
             self?.pumpVideo()
@@ -181,10 +188,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
         }
 
-        shared.withLock { $0.pendingSeekSeconds = max(pendingStartSeconds, 0) }
+        shared.withLock {
+            $0.pendingSeekSeconds = max(pendingStartSeconds, 0)
+            $0.playbackGeneration += 1
+        }
         let startURL = url
+        let recommendedPixelBufferAttributes = video.recommendedPixelBufferAttributes
         demuxQueue.async { [weak self] in
-            self?.runDemuxLoop(url: startURL)
+            self?.runDemuxLoop(
+                url: startURL,
+                recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+            )
         }
     }
 
@@ -275,6 +289,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func shutdown() {
         guard !shutdownRequested else { return }
         shutdownRequested = true
+        for token in rendererNotificationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        rendererNotificationTokens.removeAll()
         stallRecoveryTask?.cancel()
         if stallSignpostActive {
             stallSignpostActive = false
@@ -300,6 +318,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             synchronizer.removeTimeObserver(timeObserver)
             self.timeObserver = nil
         }
+        removeFinishObserver()
         synchronizer.rate = 0
 
         let depths = queueDepths
@@ -412,12 +431,24 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Optimistic: the playhead moves the instant the seek is asked
         // for (HEL-39) — the engine will resume from exactly here.
         timePosition = clamped
+        didFinish = false
+        removeFinishObserver()
         isBuffering = true
         synchronizer.rate = 0
-        videoRenderer?.flush()
-        audioRenderer?.flush()
-        videoQueue.reset()
-        audioQueue.reset()
+        shared.withLock {
+            $0.pendingSeekSeconds = clamped
+            $0.playbackGeneration += 1
+        }
+        // Enqueue, flush, and queue reset share the pump queue. This makes
+        // Apple's post-flush keyframe rule deterministic: an in-flight old
+        // sample cannot race in after the flush.
+        pumpQueue.sync { [self] in
+            videoRenderer?.flush()
+            audioRenderer?.flush()
+            videoQueue.reset()
+            audioQueue.reset()
+            shared.withLock { $0.firstEnqueuedVideoPTS = nil }
+        }
         // The pts chain restarts at the target; the first buffer after a
         // flush must not read as a discontinuity.
         audioContinuity.reset()
@@ -425,7 +456,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // the old ones would duplicate them. External cue lists are
         // complete and position-independent, so they stay.
         let embeddedSubtitleActive = shared.withLock { state -> Bool in
-            state.pendingSeekSeconds = clamped
             return state.selectedSubtitleStreamIndex >= 0
         }
         if embeddedSubtitleActive {
@@ -437,24 +467,138 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// Demux primed after open/seek — start (or reposition, if paused) at
     /// the target position.
-    private func beginPlayback(at seconds: Double) {
+    private func beginPlayback(at seconds: Double, firstVideoPTS: CMTime?) {
         // High-precision anchor: at a display matched to the content rate
         // every frame has one vsync of slack, and a coarse (600/s) anchor
         // already spends up to 1.7 ms of it before playback begins.
-        let time = CMTime(seconds: seconds, preferredTimescale: 240_000)
-        timePosition = seconds
+        let time = PlaybackClockAnchor.mediaTime(
+            targetSeconds: seconds,
+            firstVideoPTS: firstVideoPTS
+        )
+        timePosition = time.seconds
         isBuffering = false
-        synchronizer.setRate(isPaused ? 0 : 1, time: time)
+        if isPaused {
+            synchronizer.setRate(0, time: time)
+        } else {
+            // Apple's recommended custom-playback start: bind media time to
+            // a near-future host time so queued renderers reach the first
+            // presentation deadline together instead of starting late.
+            let hostTime = CMTimeAdd(
+                CMClockGetTime(CMClockGetHostTimeClock()),
+                CMTime(seconds: 0.1, preferredTimescale: 1_000_000_000)
+            )
+            synchronizer.setRate(1, time: time, atHostTime: hostTime)
+        }
         kickPumps()
-        rearmBench(at: seconds)
+        rearmBench(at: time.seconds)
         os_signpost(
             .event,
             log: PlaybackPerformance.log,
             name: "Playback Cushion Ready",
             signpostID: performanceSignpostID,
             "position=%{public}.3f",
-            seconds
+            time.seconds
         )
+    }
+
+    /// EOF is a renderer-timeline event, not a queue-depth heuristic. The
+    /// demuxer can finish while AVFoundation still owns buffered media; a
+    /// boundary observer lets those samples present before advancing.
+    private func armFinishBoundary(at seconds: Double, generation: Int) {
+        guard !shutdownRequested, !didFinish, seconds.isFinite else { return }
+        let isCurrent = shared.withLock { !$0.cancelled && $0.playbackGeneration == generation }
+        guard isCurrent else { return }
+        removeFinishObserver()
+        if timePosition >= seconds {
+            finishPlayback(generation: generation)
+            return
+        }
+        let boundary = CMTime(seconds: seconds, preferredTimescale: 240_000)
+        finishObserver = synchronizer.addBoundaryTimeObserver(
+            forTimes: [NSValue(time: boundary)],
+            queue: .main
+        ) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.finishPlayback(generation: generation)
+            }
+        }
+    }
+
+    private func finishPlayback(generation: Int) {
+        let isCurrent = shared.withLock { !$0.cancelled && $0.playbackGeneration == generation }
+        guard isCurrent, !didFinish else { return }
+        didFinish = true
+        removeFinishObserver()
+        onFinished?()
+    }
+
+    private func removeFinishObserver() {
+        guard let finishObserver else { return }
+        synchronizer.removeTimeObserver(finishObserver)
+        self.finishObserver = nil
+    }
+
+    // MARK: - Renderer recovery
+
+    private func observeVideoRenderer(_ renderer: AVSampleBufferVideoRenderer) {
+        let center = NotificationCenter.default
+        rendererNotificationTokens.append(center.addObserver(
+            forName: AVSampleBufferVideoRenderer.requiresFlushToResumeDecodingDidChangeNotification,
+            object: renderer,
+            queue: .main
+        ) { [weak self, weak renderer] _ in
+            guard let self, let renderer else { return }
+            MainActor.assumeIsolated {
+                self.recoverVideoRendererIfRequired(renderer)
+            }
+        })
+        rendererNotificationTokens.append(center.addObserver(
+            forName: AVSampleBufferVideoRenderer.didFailToDecodeNotification,
+            object: renderer,
+            queue: .main
+        ) { [weak self, weak renderer] notification in
+            guard let self, let renderer else { return }
+            MainActor.assumeIsolated {
+                self.handleVideoRendererFailure(renderer, notification: notification)
+            }
+        })
+    }
+
+    private func recoverVideoRendererIfRequired(_ renderer: AVSampleBufferVideoRenderer) {
+        guard !shutdownRequested,
+              renderer === videoRenderer,
+              renderer.requiresFlushToResumeDecoding,
+              !rendererRecoveryInProgress else { return }
+        rendererRecoveryInProgress = true
+        let recoveryPosition = timePosition
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Renderer Recovery",
+            signpostID: performanceSignpostID,
+            "position=%{public}.3f reason=requiresFlush",
+            recoveryPosition
+        )
+        seek(to: recoveryPosition)
+        rendererRecoveryInProgress = false
+    }
+
+    private func handleVideoRendererFailure(
+        _ renderer: AVSampleBufferVideoRenderer,
+        notification: Notification
+    ) {
+        guard !shutdownRequested, renderer === videoRenderer else { return }
+        if renderer.requiresFlushToResumeDecoding {
+            recoverVideoRendererIfRequired(renderer)
+            return
+        }
+        let notificationError = notification.userInfo?[
+            AVSampleBufferVideoRenderer.didFailToDecodeNotificationErrorKey
+        ] as? Error
+        let detail = notificationError?.localizedDescription
+            ?? renderer.error?.localizedDescription
+            ?? "unknown renderer error"
+        onError?("Playback failed in the Lagoon video renderer (\(detail)).")
     }
 
     private func observeTime(_ time: CMTime) {
@@ -466,12 +610,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             timePosition = seconds
         }
         refreshSubtitles(at: seconds)
-        if !didFinish, duration > 0, seconds >= duration - 0.4,
-           videoQueue.isFinished, audioQueue.isFinished,
-           videoQueue.count == 0 {
-            didFinish = true
-            onFinished?()
-        }
         // M6 stall detection: the clock has caught up to everything the
         // demuxer delivered and the queue is dry, but the file isn't over
         // — the network fell behind. Hold the clock instead of freezing
@@ -535,6 +673,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // out of reach for a headless harness (HEL-64). Carries the
             // gate states so a remote run is self-describing.
             var gates = "vtime=\"\(videoTimingDiagnostic ?? "container")\""
+            gates += " droppable=\"\(demuxer.markDroppableFrames ? "on" : "off")\""
+            if let stats = demuxer.enhancementLayerStripStats {
+                gates += " elStrip=\"on \(stats.units) units \(stats.bytes) bytes\""
+            } else {
+                gates += " elStrip=\"off\""
+            }
+            gates += " hud=\"\(UserDefaults.standard.bool(forKey: "debug.playbackHUD") ? "on" : "off")\""
             #if os(tvOS)
             gates += " display=\"\(DisplayModeMatcher.statusDescription)\""
             #endif
@@ -654,7 +799,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     // MARK: - Demux loop (demux queue only)
 
-    nonisolated private func runDemuxLoop(url: URL) {
+    nonisolated private func runDemuxLoop(
+        url: URL,
+        recommendedPixelBufferAttributes: CVPixelBufferAttributes
+    ) {
         do {
             try demuxer.open(url: url.absoluteString)
         } catch {
@@ -662,7 +810,26 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             Task { @MainActor in self.onError?(message) }
             return
         }
-
+        if demuxer.videoStream?.codecName == "hevc",
+           let description = demuxer.videoStream?.formatDescription {
+            do {
+                videoDecoder = try VideoToolboxDecoder(
+                    formatDescription: description,
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
+                    reportedReorderDepth: demuxer.videoStream?.videoReorderDepth ?? 0,
+                    outputHandler: { [weak self] buffer in
+                        self?.acceptDecodedVideo(buffer)
+                    },
+                    errorHandler: { [weak self] error in
+                        self?.failVideoDecode(error)
+                    }
+                )
+            } catch {
+                failVideoDecode(error)
+                demuxer.close()
+                return
+            }
+        }
         // Ordinals are 1-based positions in the demuxed audio list — the
         // same convention the server-default mapping uses. (Single lock
         // acquisition: nesting withLock deadlocks the non-recursive lock.)
@@ -728,7 +895,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 duration: demuxedDuration,
                 videoSize: size,
                 displayMatch: displayMatch,
-                videoTiming: demuxer.videoGridDescription.map { "grid \($0)" },
+                videoTiming: demuxer.videoGridDescription.map {
+                    videoDecoder == nil
+                        ? "grid \($0)"
+                        : "grid \($0) · VideoToolbox HW · reorder \(videoDecoder?.reorderDepth ?? 0)"
+                },
                 tracks: tracks,
                 subtitles: subtitleTracks,
                 embeddedSubtitleCount: embeddedSubtitles.count,
@@ -740,6 +911,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // against the shared desired stream each pass so main-actor
         // subtitle switches land without a queue hop.
         var appliedSubtitleStreamIndex: Int32 = -1
+        // Opening at zero is already positioned correctly. Every later
+        // request—including a seek back to exactly zero—must reposition so
+        // the first compressed sample after Apple's renderer flush is a
+        // clean random-access point.
+        var hasPrimedPlayback = false
 
         while !shared.withLock({ $0.cancelled }) {
             let desiredSubtitle = shared.withLock { $0.selectedSubtitleStreamIndex }
@@ -752,17 +928,35 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     if let target = state.pendingSeekSeconds {
                         // Everything buffered so far is being flushed.
                         state.videoBufferedTo = target
+                        state.mediaEndSeconds = target
                         state.pendingSeekSeconds = nil
                     }
                 }
                 return state.pendingSeekSeconds
             }) {
+                if hasPrimedPlayback || target > 0 {
+                    do {
+                        try demuxer.seek(toSeconds: target)
+                    } catch {
+                        let message = (error as? DemuxError)?.errorDescription
+                            ?? "The stream could not seek to that position."
+                        shared.withLock { $0.cancelled = true }
+                        videoQueue.markFinished()
+                        audioQueue.markFinished()
+                        Task { @MainActor in self.onError?(message) }
+                        break
+                    }
+                }
+                do {
+                    try videoDecoder?.reset()
+                } catch {
+                    failVideoDecode(error)
+                    break
+                }
                 videoQueue.reset()
                 audioQueue.reset()
                 applyAudioSelection(ordinal: shared.withLock { $0.selectedAudioOrdinal })
-                if target > 0.5 {
-                    demuxer.seek(toSeconds: target)
-                }
+                hasPrimedPlayback = true
                 primeAndStart(at: target)
                 continue
             }
@@ -778,8 +972,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // Waiting for the renderer's dequeue signal removes that polling
             // and resumes at a low-water mark so demuxing happens in useful
             // batches instead of one packet per wakeup.
-            if videoQueue.count >= 90 {
-                videoQueue.waitUntilBelow(72)
+            // Decoded 4K surfaces are expensive, so keep this bounded. The
+            // previous 8–12-frame hysteresis left just 0.33–0.50 s at
+            // 23.976 fps and repeatedly emptied on Snowden's 86–91 Mbps
+            // stream. Six more surfaces provide 0.50–0.75 s without
+            // returning to the old unbounded decoded-buffer behavior.
+            let videoHighWater = videoDecoder == nil ? 90 : 18
+            if videoQueue.count >= videoHighWater {
+                videoQueue.waitUntilBelow(videoDecoder == nil ? 72 : 12)
                 continue
             }
             if audioQueue.count >= 180 {
@@ -794,6 +994,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             name: "Demux Close",
             signpostID: performanceSignpostID
         )
+        videoDecoder?.invalidate()
+        videoDecoder = nil
         demuxer.close()
         os_signpost(
             .end,
@@ -807,13 +1009,22 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     nonisolated private func step() {
         switch demuxer.readNext() {
         case .video(let buffer):
-            videoQueue.enqueue(buffer)
+            recordMediaEnd(buffer)
+            if let videoDecoder {
+                do {
+                    try videoDecoder.decode(buffer)
+                } catch {
+                    failVideoDecode(error)
+                }
+            } else {
+                videoQueue.enqueue(buffer)
+                kickPumps()
+            }
             let seconds = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
             if seconds.isFinite {
                 // Stall detection compares the clock against this.
                 shared.withLock { $0.videoBufferedTo = max($0.videoBufferedTo, seconds) }
             }
-            kickPumps()
         case .audio(let buffers, let streamIndex):
             let (selected, delay) = shared.withLock { ($0.selectedAudioStreamIndex, $0.audioDelaySeconds) }
             if streamIndex == selected {
@@ -821,7 +1032,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     // Watched pre-delay: the delay shifts every stamp
                     // uniformly, so continuity is the same either side.
                     audioContinuity.observe(buffer)
-                    audioQueue.enqueue(delay == 0 ? buffer : Self.retimed(buffer, by: delay))
+                    let output = delay == 0 ? buffer : Self.retimed(buffer, by: delay)
+                    recordMediaEnd(output)
+                    audioQueue.enqueue(output)
                 }
                 kickPumps()
             }
@@ -838,8 +1051,23 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         case .skipped:
             break
         case .endOfFile:
+            do {
+                try videoDecoder?.finish()
+            } catch {
+                failVideoDecode(error)
+                return
+            }
             videoQueue.markFinished()
             audioQueue.markFinished()
+            let (sampledEnd, generation) = shared.withLock { ($0.mediaEndSeconds, $0.playbackGeneration) }
+            if let end = PlaybackEndBoundary.endTime(
+                sampledEnd: sampledEnd,
+                declaredDuration: demuxer.durationSeconds
+            ) {
+                Task { @MainActor in
+                    self.armFinishBoundary(at: end, generation: generation)
+                }
+            }
         case .failed(let message):
             videoQueue.markFinished()
             audioQueue.markFinished()
@@ -848,14 +1076,74 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
+    nonisolated private func acceptDecodedVideo(_ buffer: CMSampleBuffer) {
+        let shouldDrop = shared.withLock { $0.cancelled || $0.pendingSeekSeconds != nil }
+        guard !shouldDrop else { return }
+        videoQueue.enqueue(buffer)
+        kickPumps()
+    }
+
+    nonisolated private func recordMediaEnd(_ buffer: CMSampleBuffer) {
+        let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+        guard pts.isValid, pts.seconds.isFinite else { return }
+        let sampleDuration = CMSampleBufferGetDuration(buffer)
+        let end = sampleDuration.isValid && sampleDuration.seconds.isFinite
+            ? CMTimeAdd(pts, sampleDuration).seconds
+            : pts.seconds
+        guard end.isFinite else { return }
+        shared.withLock { $0.mediaEndSeconds = max($0.mediaEndSeconds, end) }
+    }
+
+    nonisolated private func failVideoDecode(_ error: Error) {
+        let wasAlreadyCancelled = shared.withLock { state -> Bool in
+            let previous = state.cancelled
+            state.cancelled = true
+            return previous
+        }
+        guard !wasAlreadyCancelled else { return }
+        videoQueue.markFinished()
+        audioQueue.markFinished()
+        videoQueue.interruptWaits()
+        audioQueue.interruptWaits()
+        demuxer.interrupt()
+        let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        Task { @MainActor in
+            self.onError?("Playback failed in the Lagoon engine (\(detail)).")
+        }
+    }
+
     /// Fill the queues enough that playback can start cleanly, then hand
     /// control back to the main actor to run the clock.
     nonisolated private func primeAndStart(at target: Double) {
+        let generation = shared.withLock { $0.playbackGeneration }
         while videoQueue.count < 12, !videoQueue.isFinished, !shared.withLock({ $0.cancelled }) {
             if shared.withLock({ $0.pendingSeekSeconds != nil }) { return }
             step()
         }
-        Task { @MainActor in self.beginPlayback(at: target) }
+        // Run after any already-scheduled pump blocks. If the renderer can
+        // accept data, this records the real first enqueued video PTS for the
+        // host-clock anchor; otherwise the target remains the safe fallback.
+        pumpQueue.async { [weak self] in
+            guard let self else { return }
+            let isCurrentGeneration = self.shared.withLock {
+                !$0.cancelled
+                    && $0.pendingSeekSeconds == nil
+                    && $0.playbackGeneration == generation
+            }
+            guard isCurrentGeneration else { return }
+            self.pumpVideo()
+            self.pumpAudio()
+            let firstVideoPTS = self.shared.withLock { $0.firstEnqueuedVideoPTS }
+            Task { @MainActor in
+                let isStillCurrent = self.shared.withLock {
+                    !$0.cancelled
+                        && $0.pendingSeekSeconds == nil
+                        && $0.playbackGeneration == generation
+                }
+                guard isStillCurrent else { return }
+                self.beginPlayback(at: target, firstVideoPTS: firstVideoPTS)
+            }
+        }
     }
 
     nonisolated private func applyAudioSelection(ordinal: Int) {
@@ -978,6 +1266,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     nonisolated private func pumpVideo() {
         guard let renderer = videoRenderer else { return }
         while renderer.isReadyForMoreMediaData, let buffer = videoQueue.dequeue() {
+            let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+            if pts.isValid {
+                shared.withLock { state in
+                    if state.firstEnqueuedVideoPTS == nil {
+                        state.firstEnqueuedVideoPTS = pts
+                    }
+                }
+            }
             renderer.enqueue(buffer)
         }
     }
@@ -998,6 +1294,8 @@ nonisolated private final class SharedState: @unchecked Sendable {
     struct State {
         var cancelled = false
         var pendingSeekSeconds: Double?
+        /// Invalidates an already-primed start when a newer seek is issued.
+        var playbackGeneration = 0
         var selectedAudioOrdinal = 0
         var selectedAudioStreamIndex: Int32 = -1
         var initialAudioOrdinal: Int?
@@ -1010,7 +1308,12 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var externalSubtitles: [ExternalSubtitleTrack] = []
         /// Highest video pts the demuxer has delivered (M6 stall detection).
         var videoBufferedTo: Double = 0
+        /// Furthest presentation end observed across audio and video. EOF
+        /// uses this as the renderer boundary even without container duration.
+        var mediaEndSeconds: Double = 0
         var audioDelaySeconds: Double = 0
+        /// First sample actually accepted by the renderer after attach/flush.
+        var firstEnqueuedVideoPTS: CMTime?
     }
 
     private let lock = NSLock()
@@ -1020,6 +1323,35 @@ nonisolated private final class SharedState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return body(&state)
+    }
+}
+
+/// Chooses the media-time side of Apple's host-clock playback anchor. A seek
+/// may enqueue pre-target reference frames, so only advance to the first
+/// enqueued PTS when it is at or beyond the requested position.
+nonisolated enum PlaybackClockAnchor {
+    static func mediaTime(targetSeconds: Double, firstVideoPTS: CMTime?) -> CMTime {
+        let target = CMTime(seconds: max(targetSeconds, 0), preferredTimescale: 240_000)
+        guard let firstVideoPTS,
+              firstVideoPTS.isValid,
+              firstVideoPTS.seconds.isFinite,
+              CMTimeCompare(firstVideoPTS, target) >= 0 else { return target }
+        return firstVideoPTS
+    }
+}
+
+/// Resolves EOF against media actually observed. A container duration is a
+/// fallback only: it can be absent for a finite stream or outlive a truncated
+/// input, while the last sample end is the renderer's real timeline boundary.
+nonisolated enum PlaybackEndBoundary {
+    static func endTime(sampledEnd: Double, declaredDuration: Double) -> Double? {
+        if sampledEnd.isFinite, sampledEnd > 0 {
+            return sampledEnd
+        }
+        if declaredDuration.isFinite, declaredDuration >= 0 {
+            return declaredDuration
+        }
+        return nil
     }
 }
 

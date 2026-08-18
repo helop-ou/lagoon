@@ -5,6 +5,8 @@ struct MainTabView: View {
     @Environment(DeepLinkRouter.self) private var deepLinks
     @State private var libraries: [LibraryTab] = []
     @State private var playerItem: PlayerItem?
+    @State private var deepLinkError: String?
+    @State private var deepLinkRetry = 0
 
     var body: some View {
         TabView {
@@ -40,6 +42,13 @@ struct MainTabView: View {
         .task {
             await loadLibraries()
         }
+        // Headless hardware harness: resolve a named library item through
+        // the app's existing signed-in client, then present the same player
+        // path a user selection would. There is intentionally no Settings
+        // UI for this launch-only diagnostic hook.
+        .task {
+            await launchBenchItemIfRequested()
+        }
         // Presented from the TabView rather than a screen, so a Top Shelf
         // selection resumes playback whichever tab happens to be showing.
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
@@ -50,15 +59,34 @@ struct MainTabView: View {
         // Runs once the session exists: on a cold launch the request is
         // made before there is a client to fetch with, so it waits here
         // instead of being dropped.
-        .task(id: deepLinks.pendingItemID) {
+        .task(id: "\(deepLinks.pendingItemID ?? ""):\(deepLinkRetry)") {
             guard let id = deepLinks.pendingItemID else { return }
-            // Clear *after* the fetch, never before: this task is keyed on
-            // `pendingItemID`, so nilling it first cancels the very request
-            // it is waiting on and the link silently does nothing (the
-            // fetch died with -999 the first time round).
-            defer { deepLinks.pendingItemID = nil }
-            guard let item = try? await session.client.item(id: id) else { return }
-            playerItem = PlayerItem(media: item)
+            do {
+                let item = try await session.client.item(id: id)
+                guard !Task.isCancelled, deepLinks.pendingItemID == id else { return }
+                playerItem = PlayerItem(media: item)
+                deepLinks.pendingItemID = nil
+                deepLinkError = nil
+            } catch is CancellationError {
+            } catch {
+                guard deepLinks.pendingItemID == id else { return }
+                deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
+            }
+        }
+        .alert("Couldn't Open Item", isPresented: Binding(
+            get: { deepLinkError != nil },
+            set: { if !$0 { deepLinkError = nil } }
+        )) {
+            Button("Try Again") {
+                deepLinkError = nil
+                deepLinkRetry += 1
+            }
+            Button("Cancel", role: .cancel) {
+                deepLinkError = nil
+                deepLinks.pendingItemID = nil
+            }
+        } message: {
+            Text(deepLinkError ?? "The item couldn't be loaded.")
         }
     }
 
@@ -94,6 +122,74 @@ struct MainTabView: View {
             try? await Task.sleep(for: delay)
             delay = min(delay * 2, .seconds(30))
         }
+    }
+
+    private func launchBenchItemIfRequested() async {
+        let regressionRun = UserDefaults.standard.bool(forKey: "debug.playerRegression")
+        guard (UserDefaults.standard.bool(forKey: "debug.frameLossBench") || regressionRun),
+              deepLinks.pendingItemID == nil,
+              let term = UserDefaults.standard.string(forKey: "debug.benchSearchTerm")?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              !term.isEmpty else { return }
+
+        let requestedSeries = UserDefaults.standard.string(forKey: "debug.regressionSeriesName")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if regressionRun,
+           UserDefaults.standard.bool(forKey: "debug.regressionFindSkippableEpisode"),
+           let requestedSeries,
+           !requestedSeries.isEmpty {
+            guard let seriesPage = try? await session.client.items(
+                includeTypes: [.series],
+                searchTerm: requestedSeries,
+                limit: 20
+            ),
+            let series = seriesPage.items.first(where: {
+                $0.name?.compare(
+                    requestedSeries,
+                    options: [.caseInsensitive, .diacriticInsensitive]
+                ) == .orderedSame
+            }),
+            let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
+                print("RegressionResolve failed series=\"\(requestedSeries)\"")
+                return
+            }
+            for episode in episodes {
+                let segments = await session.client.mediaSegments(itemId: episode.id)
+                if segments.contains(where: { $0.kind.isSkippable }) {
+                    print("RegressionResolve skippable series=\"\(requestedSeries)\" title=\"\(episode.name ?? "?")\" id=\(episode.id)")
+                    playerItem = PlayerItem(media: episode, startFromBeginning: true)
+                    return
+                }
+            }
+            print("RegressionResolve no skippable episode series=\"\(requestedSeries)\"")
+            return
+        }
+
+        guard let page = try? await session.client.items(
+            includeTypes: regressionRun ? [.movie, .episode] : [.movie],
+            searchTerm: term,
+            limit: regressionRun ? 100 : 20
+        ) else {
+            print("BenchResolve failed term=\"\(term)\"")
+            return
+        }
+        let requestedYear = UserDefaults.standard.integer(forKey: "debug.benchProductionYear")
+        let candidates = page.items.filter {
+            $0.name?.compare(term, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+                && (requestedSeries?.isEmpty != false
+                    || $0.seriesName?.compare(
+                        requestedSeries!,
+                        options: [.caseInsensitive, .diacriticInsensitive]
+                    ) == .orderedSame)
+        }
+        let item = candidates.first(where: { requestedYear <= 0 || $0.productionYear == requestedYear })
+            ?? candidates.first
+        guard let item else {
+            print("BenchResolve no exact match term=\"\(term)\" year=\(requestedYear)")
+            return
+        }
+        print("BenchResolve title=\"\(item.name ?? term)\" year=\(item.productionYear ?? 0) id=\(item.id)")
+        playerItem = PlayerItem(media: item, startFromBeginning: regressionRun)
     }
 
     private func icon(for library: LibraryTab) -> String {

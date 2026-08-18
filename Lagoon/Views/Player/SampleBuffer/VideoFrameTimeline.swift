@@ -1,18 +1,17 @@
 import CoreMedia
 
-/// Rewrites container timestamps on video packets into an exact frame
-/// grid (HEL-64) — the video half of the PassthroughAudioTimeline fix.
+/// Rewrites container timestamps on video packets onto an exact frame
+/// grid (HEL-64), removing mux quantization before decode and scheduling.
 ///
 /// Matroska stamps video packets at 1 ms precision, but a 23.976 fps
 /// frame lasts 1001/24000 s = 41.708 ms — unrepresentable in whole
 /// milliseconds — so every pts reaches the renderer up to ~0.5 ms (and
 /// measured muxes a further ms) off the true frame grid. At 60 Hz output
 /// the 16.7 ms vsync bins swallow that. On a display *matched* to the
-/// content rate there is exactly one vsync per frame and zero slack: a
-/// frame whose stamp rounded past its deadline misses its only vsync and
-/// is dropped. Measured on hardware: 10% steady loss on a 4K HDR10 title
-/// with full queues, zero stalls, and the display correctly switched —
-/// this file is the answer to that number.
+/// content rate there is exactly one vsync per frame and little scheduling
+/// slack. Hardware A/Bs later proved this quantization was not the cause of
+/// HEL-64's 10% loss, but retaining exact stamps avoids adding timing jitter
+/// to either the compressed H.264 or decoded HEVC presentation path.
 ///
 /// Video needs a different chaining shape than audio: packets arrive in
 /// decode order, so presentation stamps step backwards and forwards by

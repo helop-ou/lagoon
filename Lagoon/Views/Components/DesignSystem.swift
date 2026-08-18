@@ -162,8 +162,8 @@ enum Motion {
 // Brand colors are only for genuine branding: progress fills, the wordmark,
 // selection markers. Everything else uses system semantic styles.
 extension Color {
-    static let lagoonTeal = Color(red: 74 / 255, green: 209 / 255, blue: 199 / 255)
-    static let lagoonDeep = Color(red: 8 / 255, green: 46 / 255, blue: 68 / 255)
+    nonisolated static let lagoonTeal = Color(red: 74 / 255, green: 209 / 255, blue: 199 / 255)
+    nonisolated static let lagoonDeep = Color(red: 8 / 255, green: 46 / 255, blue: 68 / 255)
 }
 
 extension View {

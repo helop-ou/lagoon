@@ -1,7 +1,7 @@
 # Lagoon — session notes
 
-Jellyfin client for tvOS 26 + iOS 26 (one multiplatform target, SwiftUI, no
-test target). Design language adapted from a 2026 streaming-app redesign
+Jellyfin client for tvOS 26 + iOS 26 (one multiplatform app target, SwiftUI,
+with unit and tvOS UI test targets). Design language adapted from a 2026 streaming-app redesign
 . **The only dependency is the
 local `Packages/LagoonFFmpeg` package** (HEL-48 M6): it pins exactly the
 FFmpeg static xcframeworks the Lagoon sample-buffer engine links —

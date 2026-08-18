@@ -17,11 +17,13 @@ nonisolated private let avErrorEOF: Int32 = -541_478_725 // AVERROR_EOF = -MKTAG
 
 nonisolated enum DemuxError: LocalizedError {
     case openFailed(String)
+    case seekFailed(String)
     case unsupportedVideo(String)
 
     var errorDescription: String? {
         switch self {
         case .openFailed(let detail): "The stream could not be opened (\(detail))."
+        case .seekFailed(let detail): "The stream could not seek to that position (\(detail))."
         case .unsupportedVideo(let codec): "The Lagoon engine can't decode \(codec) yet."
         }
     }
@@ -43,6 +45,9 @@ nonisolated struct DemuxedStream {
     /// Fallback per-packet duration in seconds for audio packets that
     /// arrive without one (frames-per-packet / sample-rate).
     let fallbackPacketDuration: Double
+    /// Video codec reorder lookahead reported by libavformat. Zero for
+    /// audio/subtitle streams and video formats without reordered frames.
+    let videoReorderDepth: Int
 }
 
 nonisolated final class FFmpegDemuxer {
@@ -69,9 +74,9 @@ nonisolated final class FFmpegDemuxer {
     // container timestamps are quantized (Matroska: 1 ms) and the renderer
     // turns every quantization mismatch into an audible discontinuity.
     private var passthroughTimelines: [Int32: PassthroughAudioTimeline] = [:]
-    // HEL-64: the video half of the same fix. On a display matched to the
-    // content rate, a quantized video pts misses its only vsync — 10%
-    // steady loss measured on hardware with full queues and zero stalls.
+    // HEL-64: remove Matroska's millisecond quantization from video PTS.
+    // This was not the root cause of the measured 10% HEVC frame loss, but
+    // keeps both compressed and decoded presentation timing sample-exact.
     private var videoTimeline: VideoFrameTimeline?
 
     /// HEL-64 hardware experiment (Settings → Debug): set before `open`.
@@ -152,6 +157,13 @@ nonisolated final class FFmpegDemuxer {
             throw DemuxError.openFailed(Self.errorText(status))
         }
         formatContext = ctx
+        var completedOpen = false
+        defer {
+            // Once avformat_open_input succeeds, every later throw owns the
+            // context. The demux loop's close path only runs after a complete
+            // open, so partial stream/codec setup is cleaned up here.
+            if !completedOpen { close() }
+        }
         status = avformat_find_stream_info(ctx, nil)
         guard status >= 0 else {
             throw DemuxError.openFailed(Self.errorText(status))
@@ -217,7 +229,8 @@ nonisolated final class FFmpegDemuxer {
             channels: 0,
             isAtmos: false,
             formatDescription: videoDescription,
-            fallbackPacketDuration: 0
+            fallbackPacketDuration: 0,
+            videoReorderDepth: Int(videoPar.pointee.video_delay)
         )
 
         for index in 0..<Int(ctx.pointee.nb_streams) {
@@ -260,7 +273,8 @@ nonisolated final class FFmpegDemuxer {
                     isAtmos: (par.pointee.codec_id == AV_CODEC_ID_EAC3 || par.pointee.codec_id == AV_CODEC_ID_TRUEHD)
                         && par.pointee.profile == 30,
                     formatDescription: description,
-                    fallbackPacketDuration: fallbackDuration
+                    fallbackPacketDuration: fallbackDuration,
+                    videoReorderDepth: 0
                 ))
             case AVMEDIA_TYPE_SUBTITLE:
                 // Every subtitle stream is listed even when undecodable so
@@ -279,7 +293,8 @@ nonisolated final class FFmpegDemuxer {
                     channels: 0,
                     isAtmos: false,
                     formatDescription: nil,
-                    fallbackPacketDuration: 0
+                    fallbackPacketDuration: 0,
+                    videoReorderDepth: 0
                 ))
             case AVMEDIA_TYPE_VIDEO:
                 if Int32(index) != bestVideo {
@@ -290,7 +305,11 @@ nonisolated final class FFmpegDemuxer {
             }
         }
 
-        packet = av_packet_alloc()
+        guard let packet = av_packet_alloc() else {
+            throw DemuxError.openFailed("out of memory")
+        }
+        self.packet = packet
+        completedOpen = true
     }
 
     /// Demux only the chosen audio stream; the rest are discarded inside
@@ -314,9 +333,12 @@ nonisolated final class FFmpegDemuxer {
         }
     }
 
-    func seek(toSeconds seconds: Double) {
-        guard let ctx = formatContext else { return }
-        av_seek_frame(ctx, -1, Int64(seconds * avTimeBase), seekBackwardFlag)
+    func seek(toSeconds seconds: Double) throws {
+        guard let ctx = formatContext else {
+            throw DemuxError.seekFailed("demuxer not open")
+        }
+        let status = av_seek_frame(ctx, -1, Int64(seconds * avTimeBase), seekBackwardFlag)
+        try Self.validateSeekStatus(status)
         didDrainAtEOF = false
         for decoder in audioDecoders.values {
             decoder.flush()
@@ -327,6 +349,12 @@ nonisolated final class FFmpegDemuxer {
         videoTimeline?.reset()
         for decoder in subtitleDecoders.values {
             decoder.flush()
+        }
+    }
+
+    static func validateSeekStatus(_ status: Int32) throws {
+        guard status >= 0 else {
+            throw DemuxError.seekFailed(errorText(status))
         }
     }
 

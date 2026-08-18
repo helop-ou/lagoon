@@ -40,11 +40,12 @@ it. Marketing version changes are deliberate and manual:
   blocking each build in TestFlight.
 - All icon slots are filled (HEL-31), including the 1280×768 App Store
   stack that upload validation requires.
-- The ATS `NSAllowsArbitraryLoads` exception (HEL-42) does **not** block
-  internal TestFlight — it only matters for external testing and App
-  Review.
+- ATS enables `NSAllowsLocalNetworking` so home-LAN Jellyfin servers remain
+  reachable. The app does not enable the broad `NSAllowsArbitraryLoads`
+  exception.
 - **"Upload Symbols Failed" warnings for the Lib*.framework artifacts are
-  expected and harmless.** The mpvkit-built binaries ship with no dSYMs
+  expected and harmless.** The FFmpeg binary artifacts originally sourced
+  from MPVKit's release ship with no dSYMs
   anywhere (verified against the release assets), so App Store Connect
   can't symbolicate crash frames inside those libraries — the build still
   uploads and processes, and Lagoon's own code symbolicates normally from

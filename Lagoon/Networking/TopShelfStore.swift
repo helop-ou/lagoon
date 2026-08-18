@@ -1,4 +1,7 @@
 import Foundation
+#if os(tvOS)
+import TVServices
+#endif
 
 /// Publishes a Continue Watching snapshot for the Top Shelf extension
 /// (HEL-37).
@@ -41,6 +44,9 @@ enum TopShelfStore {
             )
         }
         defaults.set(try? JSONEncoder().encode(payload), forKey: itemsKey)
+        #if os(tvOS)
+        TVTopShelfContentProvider.topShelfContentDidChange()
+        #endif
     }
 
     /// Signing out or switching account has to wipe this. The Top Shelf sits
@@ -50,5 +56,8 @@ enum TopShelfStore {
     /// reachable.
     static func clear() {
         UserDefaults(suiteName: appGroupID)?.removeObject(forKey: itemsKey)
+        #if os(tvOS)
+        TVTopShelfContentProvider.topShelfContentDidChange()
+        #endif
     }
 }

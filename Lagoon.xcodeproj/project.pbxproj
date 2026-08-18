@@ -27,6 +27,13 @@
 			remoteGlobalIDString = 4C41474F4F4E000000000006;
 			remoteInfo = Lagoon;
 		};
+		4C41474F4F4E000000000040 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4C41474F4F4E000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4C41474F4F4E000000000006;
+			remoteInfo = Lagoon;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -50,6 +57,7 @@
 		4C41474F4F4E000000000025 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4C41474F4F4E000000000026 /* LagoonTopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LagoonTopShelf.entitlements; sourceTree = "<group>"; };
 		4C41474F4F4E000000000030 /* LagoonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LagoonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C41474F4F4E000000000041 /* LagoonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LagoonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -61,6 +69,11 @@
 		4C41474F4F4E000000000031 /* LagoonTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LagoonTests;
+			sourceTree = "<group>";
+		};
+		4C41474F4F4E000000000042 /* LagoonUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LagoonUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -81,6 +94,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4C41474F4F4E000000000043 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -89,6 +109,7 @@
 			children = (
 				4C41474F4F4E000000000005 /* Lagoon */,
 				4C41474F4F4E000000000031 /* LagoonTests */,
+				4C41474F4F4E000000000042 /* LagoonUITests */,
 				4C41474F4F4E000000000027 /* LagoonTopShelf */,
 				4C41474F4F4E000000000003 /* Products */,
 			);
@@ -100,6 +121,7 @@
 				4C41474F4F4E000000000004 /* Lagoon.app */,
 				4C41474F4F4E000000000024 /* LagoonTopShelf.appex */,
 				4C41474F4F4E000000000030 /* LagoonTests.xctest */,
+				4C41474F4F4E000000000041 /* LagoonUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -177,6 +199,26 @@
 			productReference = 4C41474F4F4E000000000030 /* LagoonTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		4C41474F4F4E000000000044 /* LagoonUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4C41474F4F4E000000000049 /* Build configuration list for PBXNativeTarget "LagoonUITests" */;
+			buildPhases = (
+				4C41474F4F4E000000000045 /* Sources */,
+				4C41474F4F4E000000000043 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4C41474F4F4E000000000046 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				4C41474F4F4E000000000042 /* LagoonUITests */,
+			);
+			name = LagoonUITests;
+			productName = LagoonUITests;
+			productReference = 4C41474F4F4E000000000041 /* LagoonUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -191,6 +233,9 @@
 						CreatedOnToolsVersion = 26.6;
 					};
 					4C41474F4F4E000000000032 = {
+						TestTargetID = 4C41474F4F4E000000000006;
+					};
+					4C41474F4F4E000000000044 = {
 						TestTargetID = 4C41474F4F4E000000000006;
 					};
 				};
@@ -214,6 +259,7 @@
 			targets = (
 				4C41474F4F4E000000000006 /* Lagoon */,
 				4C41474F4F4E000000000032 /* LagoonTests */,
+				4C41474F4F4E000000000044 /* LagoonUITests */,
 				4C41474F4F4E000000000020 /* LagoonTopShelf */,
 			);
 		};
@@ -252,6 +298,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4C41474F4F4E000000000045 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -267,6 +320,11 @@
 			isa = PBXTargetDependency;
 			target = 4C41474F4F4E000000000006 /* Lagoon */;
 			targetProxy = 4C41474F4F4E000000000036 /* PBXContainerItemProxy */;
+		};
+		4C41474F4F4E000000000046 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4C41474F4F4E000000000006 /* Lagoon */;
+			targetProxy = 4C41474F4F4E000000000040 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -580,6 +638,47 @@
 			};
 			name = Release;
 		};
+		4C41474F4F4E000000000047 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9GLTW5844P;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = Lagoon;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		4C41474F4F4E000000000048 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9GLTW5844P;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TEST_TARGET_NAME = Lagoon;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -615,6 +714,15 @@
 			buildConfigurations = (
 				4C41474F4F4E000000000038 /* Debug */,
 				4C41474F4F4E000000000039 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4C41474F4F4E000000000049 /* Build configuration list for PBXNativeTarget "LagoonUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4C41474F4F4E000000000047 /* Debug */,
+				4C41474F4F4E000000000048 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

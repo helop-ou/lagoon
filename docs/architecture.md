@@ -21,7 +21,7 @@ Lagoon/
     Library/               Paged poster grid
     Detail/                Movie/episode + series detail
     Search/                Debounced library search
-    Player/                AVKit playback + progress reporting
+    Player/                Unified sample-buffer playback + progress reporting
     Settings/
 ```
 
@@ -100,6 +100,11 @@ its own `NavigationStack`; `MediaItem` is the navigation value
 Playback is presented as `fullScreenCover(item:)` from whichever screen
 started it; dismissal triggers a re-fetch so resume state stays fresh
 (HomeView refreshes its progress rails in `onAppear`).
+
+There is one playback path: `SampleBufferPlayerEngine` demuxes with FFmpeg,
+uses VideoToolbox as an internal HEVC decode stage, and presents video/audio
+through AVFoundation sample-buffer renderers under one synchronizer. AVPlayer
+and AVKit are not alternate playback engines. See [playback.md](playback.md).
 
 ## tvOS invariants (violating these regresses real bugs)
 

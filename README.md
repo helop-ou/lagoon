@@ -3,8 +3,8 @@
 A native Jellyfin client for Apple TV (and iPhone/iPad), in the spirit of
 Infuse: sign in to your server and your library becomes a fast, focused,
 10-foot experience — hero spotlight with artwork-tinted ambient glow,
-Continue Watching and Next Up rails, poster grids, and native AVPlayer
-playback with resume and progress sync. No external dependencies.
+Continue Watching and Next Up rails, poster grids, and a unified native
+sample-buffer player with resume and progress sync.
 
 ## Features
 
@@ -29,7 +29,10 @@ xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
 xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
 ```
 
-One multiplatform target, deployment target tvOS/iOS 26.0, no packages.
+The app is one multiplatform target with tvOS/iOS 26.0 deployment targets,
+plus tvOS Top Shelf and test targets. `Packages/LagoonFFmpeg` is the single
+local package dependency and pins the FFmpeg libraries used by the custom
+sample-buffer player.
 
 To try it without a home server, connect to the public Jellyfin demo:
 `demo.jellyfin.org/stable`, user `demo`, empty password.

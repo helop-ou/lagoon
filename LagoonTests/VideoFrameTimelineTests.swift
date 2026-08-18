@@ -2,10 +2,9 @@ import CoreMedia
 import Testing
 @testable import Lagoon
 
-/// The video half of the HEL-64 timestamp fix: on a display matched to
-/// the content rate a quantized pts misses its only vsync, so every
-/// stamp must land exactly on the frame grid — including through B-frame
-/// reordering, where stamps arrive out of presentation order.
+/// HEL-64's video timestamp normalizer: every quantized container PTS lands
+/// exactly on the frame grid, including through B-frame reordering where
+/// stamps arrive out of presentation order.
 struct VideoFrameTimelineTests {
     private let period = 1001.0 / 24_000
 

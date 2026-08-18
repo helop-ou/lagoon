@@ -4,6 +4,20 @@ import Security
 /// Minimal keychain wrapper for the access token and device identity —
 /// the pieces that shouldn't live in UserDefaults.
 nonisolated enum KeychainStore {
+    enum StoreError: LocalizedError {
+        case operationFailed(String, OSStatus)
+        case verificationFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .operationFailed(let operation, let status):
+                "The keychain could not \(operation) credentials (\(status))."
+            case .verificationFailed:
+                "The keychain did not preserve the saved credential."
+            }
+        }
+    }
+
     private static let service = "ee.helop.lagoon"
 
     static func string(for account: String) -> String? {
@@ -20,7 +34,7 @@ nonisolated enum KeychainStore {
         return String(data: data, encoding: .utf8)
     }
 
-    static func set(_ value: String, for account: String) {
+    static func set(_ value: String, for account: String) throws {
         let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -32,16 +46,24 @@ nonisolated enum KeychainStore {
             var attributes = query
             attributes[kSecValueData as String] = data
             attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(attributes as CFDictionary, nil)
+            let addStatus = SecItemAdd(attributes as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw StoreError.operationFailed("save", addStatus)
+            }
+        } else if status != errSecSuccess {
+            throw StoreError.operationFailed("update", status)
         }
     }
 
-    static func delete(_ account: String) {
+    static func delete(_ account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw StoreError.operationFailed("delete", status)
+        }
     }
 }

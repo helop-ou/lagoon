@@ -33,6 +33,8 @@ final class PlaybackController {
     private var playMethod: PlayMethod = .directPlay
     private var progressTask: Task<Void, Never>?
     private var didReportStop = false
+    private var playbackSessionActive = false
+    private var lastKnownPosition: Double = 0
     private var nextUpTask: Task<Void, Never>?
     /// Guards the hand-off: `didFinish` and an expiring countdown can both
     /// arrive at the end of a file, and advancing twice would skip an
@@ -104,13 +106,30 @@ final class PlaybackController {
             if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
                 resumeSeconds = Ticks.seconds(ticks)
             }
+            if UserDefaults.standard.bool(forKey: "debug.frameLossBench") {
+                let pinnedStart = UserDefaults.standard.double(forKey: "debug.benchStartSeconds")
+                if pinnedStart > 0 {
+                    resumeSeconds = pinnedStart
+                }
+            }
+
+            let resolvedExtras = await extras
+            let resolvedSegments = await segments
+            // Launch-only UI regression hook: enter the first real intro or
+            // recap so XCTest can exercise the actual CustomPlayerView
+            // countdown and seek. Normal launches never read this path.
+            if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
+               UserDefaults.standard.bool(forKey: "debug.regressionStartAtFirstSkippable"),
+               let segment = resolvedSegments.first(where: { $0.kind.isSkippable }) {
+                resumeSeconds = segment.start + min(max((segment.end - segment.start) / 4, 0.1), 1)
+            }
 
             playerInfo = itemInfo(
                 for: media,
                 source: source,
                 client: client,
-                extras: await extras,
-                segments: await segments
+                extras: resolvedExtras,
+                segments: resolvedSegments
             )
 
             // The server's default audio choice (user language preferences
@@ -187,13 +206,13 @@ final class PlaybackController {
                 externalSubtitles: externalTracks
             )
             engine.onFinished = { [weak self] in self?.didFinish = true }
-            engine.onError = { [weak self] message in
-                guard let self else { return }
-                self.engine?.shutdown()
-                self.engine = nil
-                self.errorMessage = message
+            engine.onError = { [weak self, weak engine] message in
+                guard let self, let engine, self.engine === engine else { return }
+                self.handleEngineError(message, engine: engine)
             }
             self.engine = engine
+            lastKnownPosition = resumeSeconds
+            playbackSessionActive = true
 
             try? await client.reportPlaybackStart(.init(
                 itemId: itemId,
@@ -297,6 +316,7 @@ final class PlaybackController {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self, let client = self.client, let engine = self.engine else { return }
+                self.lastKnownPosition = engine.timePosition
                 // Rides the progress loop because it needs no extra timer and
                 // 10 s is ample to see a leak's slope (HEL-58 shipped one that
                 // climbed ~2.3 MB/s into the per-process limit).
@@ -327,9 +347,8 @@ final class PlaybackController {
         progressTask?.cancel()
         hudTask?.cancel()
         nextUpTask?.cancel()
-        guard let client, let engine, !didReportStop else { return }
-        didReportStop = true
-        let seconds = engine.timePosition
+        let seconds = engine?.timePosition ?? lastKnownPosition
+        lastKnownPosition = seconds
 
         // Keep the dismissal-critical main-actor phase measurable and tiny.
         // The engine now serializes renderer flushing and queued-buffer
@@ -340,8 +359,10 @@ final class PlaybackController {
             name: "Dismiss Main Actor Cleanup",
             signpostID: performanceSignpostID
         )
-        engine.shutdown()
-        self.engine = nil
+        if let engine {
+            engine.shutdown()
+            self.engine = nil
+        }
         os_signpost(
             .end,
             log: PlaybackPerformance.log,
@@ -349,6 +370,26 @@ final class PlaybackController {
             signpostID: performanceSignpostID
         )
 
+        await reportPlaybackStoppedIfNeeded(at: seconds)
+    }
+
+    private func handleEngineError(_ message: String, engine: SampleBufferPlayerEngine) {
+        let seconds = engine.timePosition
+        lastKnownPosition = seconds
+        engine.shutdown()
+        self.engine = nil
+        errorMessage = message
+        // onDisappear may race this task; reportPlaybackStoppedIfNeeded marks
+        // ownership before awaiting, so exactly one path finalizes Jellyfin.
+        Task { [weak self] in
+            await self?.reportPlaybackStoppedIfNeeded(at: seconds)
+        }
+    }
+
+    private func reportPlaybackStoppedIfNeeded(at seconds: Double) async {
+        guard let client, playbackSessionActive, !didReportStop else { return }
+        didReportStop = true
+        playbackSessionActive = false
         os_signpost(
             .begin,
             log: PlaybackPerformance.log,

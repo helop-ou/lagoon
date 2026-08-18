@@ -40,18 +40,22 @@ shells instead of 27.
 
 ## The engine (`Lagoon/Views/Player/SampleBuffer/`)
 
-libavformat demux → **compressed** `CMSampleBuffer`s →
-`AVSampleBufferDisplayLayer` + `AVSampleBufferAudioRenderer` under an
-`AVSampleBufferRenderSynchronizer`. The system does decode, color
-management, and audio output — the Infuse architecture (HEL-48), which is
-why nothing here touches VideoToolbox sessions or shaders directly.
+libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +
+`AVSampleBufferAudioRenderer` under one `AVSampleBufferRenderSynchronizer`.
+This is the app's only player. H.264 and supported audio codecs stay
+compressed; HEVC is decoded ahead by a hardware-only VideoToolbox session;
+unsupported compressed audio is decoded to LPCM by libavcodec. AVFoundation
+still owns color management, presentation, synchronization, and audio output.
 
-- **Why packets pass through untouched**: Matroska stores h264/hevc
+- **Why compressed packets stay zero-copy**: Matroska stores h264/hevc
   mp4-style (avcC/hvcC extradata + length-prefixed NALs), so demuxed
-  packets wrap directly as compressed sample buffers and the display layer
-  decodes them. CoreAudio likewise decodes compressed aac/mp3/ac3/eac3
+  packets wrap directly as compressed sample buffers. The display layer
+  decodes H.264; the in-engine VideoToolbox stage decodes HEVC. CoreAudio
+  likewise decodes compressed aac/mp3/ac3/eac3
   handed to the audio renderer (ac3/eac3 self-describing; aac needs its
-  AudioSpecificConfig as the magic cookie; mp3 is 1152 frames/packet).
+  AudioSpecificConfig as the magic cookie; audio packet cadence prefers
+  FFmpeg's parsed `frame_size`, with codec fallbacks including 576-frame
+  MPEG-2/2.5 Layer III at 24 kHz and below).
   The CoreMedia block retains the packet's underlying `AVBufferRef` with
   `av_buffer_ref` and releases that reference after decode, avoiding both a
   packet-structure clone and a second allocation/full payload copy for every
@@ -105,14 +109,12 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   assumptions degrade to container stamps, never to drift. The HUD's
   `aGaps` counter (audio timestamp discontinuities at enqueue) is the live
   check: it must read 0 during untouched playback.
-- **Video frame-grid timing** (HEL-64): the video half of the same bug,
-  and the expensive one. Matroska quantizes video pts to 1 ms while a
-  23.976 fps frame lasts 41.708 ms; at 60 Hz output the 16.7 ms vsync
-  bins hide the jitter, but on a display *matched* to the content rate
-  there is one vsync per frame and zero slack — a stamp rounded past its
-  deadline misses its only vsync and the frame drops. Measured on real
-  hardware: **10% steady loss** on a 4K HDR10 title with full queues,
-  zero stalls, zero audio gaps, and the display correctly switched.
+- **Video frame-grid timing** (HEL-64): Matroska quantizes video PTS to 1 ms
+  while a 23.976 fps frame lasts 41.708 ms. `VideoFrameTimeline` removes
+  that jitter before the frame reaches either video path. Hardware A/Bs
+  proved it was not the cause of the 10% loss—the failing title dropped at
+  the same rate with exact and untouched container stamps—so this remains
+  a scheduling-accuracy invariant, not the frame-loss fix.
   `VideoFrameTimeline` snaps each pts to the nearest whole-frame step
   from the previous snapped stamp (signed steps — packets arrive in
   decode order, so B-frame reordering walks backwards), exact integer
@@ -120,6 +122,44 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   tolerance (VFR, broken mux) pass through untouched and re-anchor.
   Decode stamps stay the container's — they only order the decode. The
   HUD's `Vtime: grid N/D` line is the gate check.
+- **HEVC decode-ahead and presentation order** (HEL-64): the frame loss was
+  isolated to handing compressed full-raster 4K Main10 samples directly to
+  the sample-buffer renderer. `VideoToolboxDecoder` now hardware-decodes
+  HEVC ahead *inside the same Lagoon engine*, wraps its IOSurface-backed
+  10-bit-capable pixel buffers as ready image sample buffers, and feeds the
+  existing renderer/synchronizer. The VideoToolbox pool reconciles the
+  renderer's tvOS 26 `recommendedPixelBufferAttributes` with Lagoon's
+  IOSurface + Metal requirements; pixel format remains unconstrained so
+  VideoToolbox preserves native bit depth and color attachments. Per-frame
+  HDR/Dolby Vision display metadata propagates normally, with ambient viewing
+  environment metadata explicitly restored on decoded output as a fallback.
+  Decoder callbacks cannot be treated as a presentation-order contract: a
+  bounded PTS queue keeps at least six frames (or the larger FFmpeg-reported
+  codec delay, capped at 16) and emits strict display order. Seek recreates
+  the decoder and discards the old callback generation; EOF explicitly
+  finishes delayed frames before waiting. A seek-preroll
+  `kVTVideoDecoderReferenceMissingErr` is scoped to that failed access unit:
+  Lagoon drops that frame and lets the valid session recover at the next
+  reference picture instead of aborting the entire player. The
+  rendered-frame queue uses an
+  18-frame high / 12-frame low watermark: a bounded 0.50–0.75 s cushion at
+  23.976 fps for high-bitrate input jitter without unbounded 4K surfaces.
+  On Apple TV 4K (3rd generation),
+  the original 4K HDR10 failure went from ~10% loss to **0 / 1462 dropped**;
+  the 4K HDR10 control remained **0 / 1439**, both with zero stalls and zero
+  audio gaps. Snowden's documented 610 s stress scene exposed a separate
+  input-starvation limit: with the old 12/8 watermark, three hardware runs
+  lost 1.25–1.65% with 3–11 stalls and `minQ=0`. The bounded 18/12 cushion's
+  immediate same-scene rerun was **0 / 1438**, zero stalls, `minQ=10`.
+  Final normal-viewer confirmation (debug HUD off) repeated at
+  **0 / 1462** and **0 / 1438**, with zero stalls/audio gaps and
+  `minQ=9/11`. With the live SwiftUI HUD enabled the same build measured
+  5 / 1445 and 4 / 1438 despite a healthy queue; the diagnostic overlay's
+  compositing is measurement interference, not viewer-mode frame loss.
+  Sustained repeated 91 Mbps pulls later slowed even format probing from a
+  few seconds to 20–40 s and again emptied the queue; no finite sub-second
+  decoded-frame cushion can turn an upstream feed running below real time
+  into uninterrupted playback, so those cases correctly enter buffering.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
@@ -141,9 +181,14 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   Independent video/audio high-water marks apply hysteretic backpressure and
   wake the producer when consumers cross their low-water marks, so a full
   queue blocks without polling or arbitrary sleeps.
-- **Seeks** stop the clock, flush renderers and queues, `av_seek_frame`,
-  re-prime (~12 video buffers), then restart the synchronizer at the
-  target. Resume is the same path with the start position.
+- **Seeks and clock starts** stop the clock, serialize renderer flushes with
+  enqueueing, reset queues, `av_seek_frame`, then re-prime (~12 video
+  buffers). Playback binds the first presentable media time to a near-future
+  host-clock time with `setRate(_:time:atHostTime:)`, so audio and video start
+  on one deadline. A generation token prevents an older priming callback from
+  restarting after a newer seek. The engine observes
+  `requiresFlushToResumeDecoding` and performs this same clean seek/flush
+  recovery when AVFoundation requests it. Resume uses the same path.
 - **Audio tracks**: listed from the demuxer (per-type 1-based ordinals —
   the same convention the server's `DefaultAudioStreamIndex` maps to);
   switching re-demuxes from the current position with the new stream
@@ -151,9 +196,12 @@ why nothing here touches VideoToolbox sessions or shaders directly.
 - **HDR/DoVi tagging** (M3): the video format description carries
   colorimetry extensions (primaries/transfer/matrix/range/chroma siting
   from codecpar) plus HDR10 static metadata (mdcv/clli payloads rebuilt
-  big-endian from FFmpeg side data) — that's what makes the display
-  pipeline engage HDR/EDR instead of rendering BT.2020+PQ as washed-out
-  SDR. Dolby Vision: profile 5 becomes a `dvh1` sample entry with a
+  big-endian from FFmpeg side data). H.274 ambient viewing environment side
+  data is serialized into Apple's 8-byte `amve` format-description extension
+  and, after HEVC decode-ahead, a propagating sample attachment. Those tags
+  make the display pipeline engage and adapt HDR/EDR instead of rendering
+  BT.2020+PQ as washed-out SDR. Dolby Vision: profile 5 becomes a `dvh1`
+  sample entry with a
   `dvcC` atom (IPTPQc2 is unwatchable without the DoVi path), profile 8
   stays `hvc1` plus supplementary `dvvC` (non-DoVi displays fall back to
   the base layer's HDR10/HLG tags), dual-layer profiles 4/7 get no atom
@@ -170,10 +218,12 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   bitstream (~11 Mbps, ~4 units per frame) of parse-and-skip work for the
   hardware decoder. The toggle drops them from each packet before wrapping
   (`HEVCEnhancementLayerFilter`; malformed payloads pass through
-  untouched, stripped packets lose zero-copy). Whether that parsing costs
-  frames on real hardware is exactly the A/B this exists for; the HUD's
-  `EL strip:` line proves the gate engaged — never trust an experiment
-  whose engagement wasn't verified.
+  untouched, stripped packets lose zero-copy). A same-scene hardware sample
+  with stripping enabled was worse (3.14%, 13 stalls), not better; source
+  throughput degraded across the repeated 91 Mbps pulls, so this is not a
+  clean causal comparison and the experiment remains default-off. The HUD
+  and benchmark stdout report `EL strip` state and removed units/bytes so
+  future controlled A/Bs can prove the gate engaged.
 - **Stall recovery** (M6): when the clock catches up to the last
   delivered video pts with a dry queue and the file isn't over, the
   engine holds the synchronizer (buffering spinner) and auto-resumes
@@ -184,6 +234,10 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   decoder drains its coalescing tail. In HLS masters the working set is
   restricted to the chosen video's program, so other variants never
   download segments or duplicate the track list.
+  Completion is armed at the last observed audio/video sample end through
+  the render synchronizer's boundary observer. It therefore waits for
+  AVFoundation's internal queues and also completes streams whose container
+  duration is unknown; it is not inferred early from app queue depth.
 - **Audio delay** (M6): mpv convention, positive delays audio; applied
   by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
   and re-demuxing from the current position on change. Lives in the
@@ -224,9 +278,10 @@ suspect for the hardware drops that hit full 3840×2160 HDR10 titles
 (Resident Evil 2002, Snowden) while a 3840×1600 letterbox encode with the
 same codec, range, and bitrate class (Tomorrow War) plays clean — the
 comparison that also exonerated decode throughput, Dolby Vision, bitrate,
-and the audio path for those titles. Hardware verification pending; the
-simulator has no display modes (`system match off` there, criteria are a
-no-op).
+and the audio path for those titles. Hardware verification now covers both
+the original 4K HDR10 failure and Snowden's 610 s stress scene at zero loss
+in normal viewer mode. The simulator still has no display modes (`system
+match off` there, criteria are a no-op).
 
 ## Debug playback HUD
 
@@ -246,6 +301,12 @@ position, queue depths, and stall count so a hardware trace can distinguish
 decoder pressure from starvation without a screen recording. Capture those
 with the Instruments **Points of Interest** template on real Apple TV hardware;
 the signposts intentionally ship in Release/TestFlight.
+
+The HUD is itself a SwiftUI layer composited over video. On Snowden's
+full-raster 4K stress scene, two otherwise clean hardware windows measured
+4–5 presentation drops with the HUD on and zero in two HUD-off repeats.
+Use its live values for diagnosis, but use console/signpost output with
+`debug.playbackHUD=false` for the final viewer-mode frame-loss verdict.
 
 **Frame droppability is opt-in metadata** (HEL-64, the end of the
 4e2ad5f saga): CMSampleBuffer.h — "A frame is considered droppable if
@@ -290,6 +351,16 @@ seeds a resume point via the Jellyfin API, launches playback through the
 (`xcrun simctl spawn <udid> log show`), the host's `log show` sees
 nothing. `--set key=bool` flips app defaults between A/B configs. On real
 hardware, read the same number off the HUD's Bench line instead.
+
+For scripted device A/Bs, pass `-debug.benchStartSeconds <seconds>` at
+launch alongside `-debug.frameLossBench YES`. This pins the engine start
+locally so the previous run's Jellyfin progress report cannot advance the
+next run into a different scene. The override is ignored unless the bench is
+enabled and has no Settings UI; it is diagnostic launch state, not a playback
+preference. A device harness that does not already know the item ID can also
+pass `-debug.benchSearchTerm <exact title>` and, when titles collide,
+`-debug.benchProductionYear <year>`. Lagoon resolves the item through its
+existing signed-in Jellyfin client and enters the normal player path.
 
 The bench, the passthrough timeline, and the EL NAL filter are covered by
 the `LagoonTests` unit target (`xcodebuild test -scheme Lagoon
@@ -422,6 +493,8 @@ reflects the new position immediately.
     so it extends the existing priority chains instead — Select commits a
     scrub, else skips, else toggles pause; Menu cancels a scrub, else waves
     off a pending auto-skip, else closes the panel, else exits.
+    On iOS the visible pill handles a direct tap because there is no remote
+    Select gesture to route through the video surface.
   - `handledSegmentIDs` marks a segment before seeking. Without that, landing
     near the segment end puts the playhead back inside it and re-arms the
     whole thing.

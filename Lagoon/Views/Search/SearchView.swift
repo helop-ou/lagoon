@@ -6,12 +6,14 @@ final class SearchViewModel {
     var results: [MediaItem] = []
     var isSearching = false
     var hasSearched = false
+    var errorMessage: String?
 
     @ObservationIgnored private var searchTask: Task<Void, Never>?
 
     func search(_ query: String, client: JellyfinClient) {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespaces)
+        errorMessage = nil
         guard !trimmed.isEmpty else {
             results = []
             hasSearched = false
@@ -19,18 +21,28 @@ final class SearchViewModel {
             return
         }
         searchTask = Task {
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            isSearching = true
-            let page = try? await client.items(
-                includeTypes: [.movie, .series],
-                searchTerm: trimmed,
-                limit: 60
-            )
-            guard !Task.isCancelled else { return }
-            results = page?.items ?? []
-            hasSearched = true
-            isSearching = false
+            do {
+                try await Task.sleep(for: .milliseconds(400))
+                try Task.checkCancellation()
+                isSearching = true
+                let page = try await client.items(
+                    includeTypes: [.movie, .series],
+                    searchTerm: trimmed,
+                    limit: 60
+                )
+                try Task.checkCancellation()
+                results = page.items
+                hasSearched = true
+                isSearching = false
+            } catch is CancellationError {
+                // A newer query owns all visible state.
+            } catch {
+                guard !Task.isCancelled else { return }
+                results = []
+                hasSearched = true
+                isSearching = false
+                errorMessage = "Couldn't search your library."
+            }
         }
     }
 }
@@ -47,7 +59,12 @@ struct SearchView: View {
             Color.black.ignoresSafeArea()
 
             ScrollView(showsIndicators: false) {
-                if viewModel.results.isEmpty {
+                if let errorMessage = viewModel.errorMessage {
+                    ErrorStateView(message: errorMessage) {
+                        viewModel.search(query, client: session.client)
+                    }
+                    .padding(.top, Metrics.Space.section * 2)
+                } else if viewModel.results.isEmpty {
                     emptyState
                         .padding(.top, Metrics.Space.section * 2)
                 } else {

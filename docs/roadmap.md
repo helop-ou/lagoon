@@ -8,8 +8,9 @@
   Recently Added per library
 - Dynamic library tabs (Movies / Shows), paged 6-column poster grids
 - Movie/episode and series detail pages (seasons, episode rail)
-- Native AVPlayer playback: direct play or server-decided HLS transcode,
-  resume, progress reporting round-trip
+- Playback: direct play or server-decided HLS transcode, resume, and progress
+  reporting round-trip (originally AVPlayer; now superseded by the single
+  Lagoon sample-buffer engine documented below)
 - Debounced search, settings (sign out / change server)
 - iOS builds from the same target with scaled-down metrics
 
@@ -34,12 +35,12 @@
 - **Live TV** if the server has it (guide, channels — big lift).
 - **Unified custom player — sample-buffer engine for everything** (HEL-48) —
   decided 2026-08-16 and made total the same day: the Lagoon engine
-  (libavformat demux → compressed sample buffers → the AVSampleBuffer*
+  (libavformat demux → codec-specific decode stages → the AVSampleBuffer*
   presentation APIs) is the app's **only** player; the AVPlayer and mpv
-  (HEL-45) paths were removed rather than maintained in parallel. Remaining
-  milestones: M2 Atmos hardware verification, M3 HDR/DoVi color tagging,
-  M4 DTS/TrueHD decode, M5 subtitles, M6 hardening + dependency slimming
-  (MPVKit is kept only for its FFmpeg xcframeworks).
+  (HEL-45) paths were removed rather than maintained in parallel. M2 Atmos,
+  M3 HDR/DoVi color tagging, M4 DTS/TrueHD decode, M5 subtitles, and M6
+  hardening + dependency slimming are delivered; MPVKit is kept only as the
+  source of the pinned FFmpeg xcframeworks.
 
 ## Deliberate non-goals for now
 

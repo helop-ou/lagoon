@@ -49,6 +49,12 @@ struct CustomPlayerView<Surface: View>: View {
         }
     }
 
+    private enum PlayerFocus: Hashable {
+        case surface
+        case tab(PanelTab)
+        case track(String)
+    }
+
     private struct SeekFeedback: Equatable {
         let forward: Bool
         let token: Int
@@ -86,7 +92,7 @@ struct CustomPlayerView<Surface: View>: View {
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
-    @FocusState private var focusedTab: PanelTab?
+    @FocusState private var playerFocus: PlayerFocus?
 
     /// Slide the panel in on, and back out with, the swipe that summons it.
     private var panelMotion: Animation { .spring(duration: Motion.standard, bounce: 0.1) }
@@ -196,6 +202,7 @@ struct CustomPlayerView<Surface: View>: View {
                 .opacity(panelOpen ? 1 : 0)
                 .disabled(!panelOpen)
                 .animation(panelMotion, value: panelOpen)
+
         }
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
@@ -208,8 +215,8 @@ struct CustomPlayerView<Surface: View>: View {
             }
         }
         #endif
-        .onChange(of: focusedTab) { _, tab in
-            if let tab {
+        .onChange(of: playerFocus) { _, focus in
+            if case .tab(let tab) = focus {
                 withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
             }
         }
@@ -320,15 +327,42 @@ struct CustomPlayerView<Surface: View>: View {
         surface()
             .ignoresSafeArea()
         #if os(tvOS)
-            // Always focusable: if the surface could resign focus, any
-            // instant with nothing focused would route Menu straight to the
-            // fullScreenCover's default dismissal (and melt the focus
-            // system with it — seen as a full app freeze). With the panel
-            // open, arrows just nudge focus into the panel instead.
+            // The surface owns focus during playback. It stays eligible
+            // during the panel animation so there is never a focusless
+            // full-screen cover; `onMoveCommand` bridges any first command
+            // that arrives before a tab has accepted focus.
             .focusable()
+            .focused($playerFocus, equals: .surface)
+            // The regression suite reads state from the surface that owns
+            // focus. A separate invisible accessibility element stole arrow
+            // focus on the first hardware run and therefore tested the
+            // probe, not the player.
+            .accessibilityIdentifier(
+                UserDefaults.standard.bool(forKey: "debug.playerRegression")
+                    ? "player.regression.state"
+                    : ""
+            )
+            .accessibilityValue(
+                UserDefaults.standard.bool(forKey: "debug.playerRegression")
+                    ? regressionAccessibilityValue
+                    : ""
+            )
             .onMoveCommand { direction in
                 if panelOpen {
-                    focusedTab = selectedTab
+                    // tvOS can retain the full-screen surface until the
+                    // sliding tabs fully enter its focus region. Do not eat
+                    // that first command: move the selection and focus to
+                    // the tab the command was trying to reach.
+                    if direction == .left || direction == .right,
+                       let index = PanelTab.allCases.firstIndex(of: selectedTab) {
+                        let delta = direction == .right ? 1 : -1
+                        let targetIndex = min(max(index + delta, 0), PanelTab.allCases.count - 1)
+                        let target = PanelTab.allCases[targetIndex]
+                        selectedTab = target
+                        playerFocus = .tab(target)
+                    } else {
+                        playerFocus = .tab(selectedTab)
+                    }
                     return
                 }
                 switch direction {
@@ -538,6 +572,7 @@ struct CustomPlayerView<Surface: View>: View {
                     Text(segment.kind.skipTitle)
                         .font(.callout.weight(.semibold))
                 }
+                .accessibilityIdentifier("player.skip")
                 .foregroundStyle(.black)
                 .frame(width: SkipMetrics.width, height: SkipMetrics.height)
                 .background(alignment: .leading) {
@@ -566,7 +601,16 @@ struct CustomPlayerView<Surface: View>: View {
             }
         }
         .animation(.easeOut(duration: Motion.fast), value: activeSegment?.id)
+        #if os(tvOS)
         .allowsHitTesting(false)
+        #else
+        .onTapGesture {
+            if let segment = activeSegment, skipMode != .instant {
+                skip(segment)
+            }
+        }
+        .accessibilityAddTraits(.isButton)
+        #endif
     }
 
     // MARK: - Up Next (HEL-66)
@@ -728,6 +772,7 @@ struct CustomPlayerView<Surface: View>: View {
                 ForEach(Array(engine.currentSubtitleImages.enumerated()), id: \.offset) { _, cue in
                     Image(decorative: cue.image, scale: 1)
                         .resizable()
+                        .accessibilityIdentifier("player.subtitle.image")
                         .frame(
                             width: videoRect.width * cue.rect.width,
                             height: videoRect.height * cue.rect.height
@@ -749,6 +794,7 @@ struct CustomPlayerView<Surface: View>: View {
                             .padding(.vertical, Metrics.Space.s)
                             .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
                             .padding(.bottom, Metrics.screenGutter)
+                            .accessibilityIdentifier("player.subtitle.text")
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -779,23 +825,28 @@ struct CustomPlayerView<Surface: View>: View {
         onPanelToggle?(true)
         // defaultFocus is only honored when a fresh scene appears — for a
         // mid-screen reveal tvOS leaves focus where it was, stranding the
-        // panel. Claim focus immediately (an unfocused instant would send
-        // Menu straight to the cover's default dismissal) and again once
-        // the reveal has settled, in case the first assignment was too
-        // early to take.
-        focusedTab = selectedTab
+        // panel. The panel is mounted but disabled while closed, so a focus
+        // assignment in the same update that enables it can be rejected by
+        // the focus engine even though the FocusState retains the requested
+        // value. Claim after the reveal begins, once SwiftUI has applied
+        // `panelOpen` and removed the panel's disabled focus environment.
+        playerFocus = .surface
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard panelOpen, focusedTab == nil else { return }
-            focusedTab = selectedTab
+            try? await Task.sleep(for: .milliseconds(450))
+            guard panelOpen else { return }
+            playerFocus = .tab(selectedTab)
         }
     }
 
     private func closePanel() {
-        focusedTab = nil
         panelOpen = false
         onPanelToggle?(false)
         pokeControls()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !panelOpen else { return }
+            playerFocus = .surface
+        }
     }
 
     // MARK: - Transport
@@ -985,6 +1036,7 @@ struct CustomPlayerView<Surface: View>: View {
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
                 .animation(scrubMotion, value: knobFraction)
+                .accessibilityIdentifier("player.scrub.chip")
             }
         }
         .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
@@ -1014,6 +1066,7 @@ struct CustomPlayerView<Surface: View>: View {
             )
             .shadow(color: .black.opacity(0.5), radius: 8, y: 3)
             .animation(.easeOut(duration: Motion.fast), value: trickplay?.frame == nil)
+            .accessibilityIdentifier("player.scrub.preview")
         }
     }
 
@@ -1107,7 +1160,7 @@ struct CustomPlayerView<Surface: View>: View {
             Spacer()
         }
         .padding(.top, Metrics.railTopPadding)
-        .defaultFocus($focusedTab, selectedTab)
+        .defaultFocus($playerFocus, .tab(selectedTab))
         #if os(iOS)
         .background(
             // Dim + tap-out on iOS; tvOS closes via Menu.
@@ -1134,7 +1187,8 @@ struct CustomPlayerView<Surface: View>: View {
                     Text(tab.title)
                         .fontWeight(.bold)
                 }
-                .focused($focusedTab, equals: tab)
+                .focused($playerFocus, equals: .tab(tab))
+                .accessibilityIdentifier("player.tab.\(String(describing: tab))")
             }
         }
         .frame(maxWidth: .infinity)
@@ -1283,6 +1337,8 @@ struct CustomPlayerView<Surface: View>: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .focused($playerFocus, equals: .track(row.id))
+                        .accessibilityIdentifier("player.track.\(row.id)")
                     }
                 }
                 .padding(.horizontal, rowFocusInset)
@@ -1303,6 +1359,45 @@ struct CustomPlayerView<Surface: View>: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.leading, Metrics.Space.m)
+    }
+
+    /// A one-pixel, launch-gated accessibility probe for the physical-device
+    /// UI suite. It observes the same view state the viewer sees; it does not
+    /// call player actions or replace the Siri Remote interaction path.
+    private var regressionAccessibilityValue: String {
+        let selectedAudio = engine.audioTracks.first(where: \.isSelected)?.engineID ?? 0
+        let selectedSubtitle = engine.subtitleTracks.first(where: \.isSelected)?.engineID ?? 0
+        let skippable = info.segments.first(where: { $0.kind.isSkippable })
+        let skippableStart: Double = skippable?.start ?? -1
+        let skippableEnd: Double = skippable?.end ?? -1
+        let focusDescription: String = switch playerFocus {
+        case .surface: "surface"
+        case .tab(let tab): "tab-\(String(describing: tab))"
+        case .track(let id): "track-\(id)"
+        case nil: "none"
+        }
+        return [
+            "ready=\(engine.duration > 0 ? 1 : 0)",
+            String(format: "time=%.1f", engine.timePosition),
+            String(format: "duration=%.1f", engine.duration),
+            "paused=\(engine.isPaused ? 1 : 0)",
+            "buffering=\(engine.isBuffering ? 1 : 0)",
+            "scrubbing=\(isScrubbing ? 1 : 0)",
+            "panel=\(panelOpen ? 1 : 0)",
+            "tab=\(String(describing: selectedTab))",
+            "focus=\(focusDescription)",
+            "audio=\(selectedAudio)",
+            "audioCount=\(engine.audioTracks.count)",
+            "subtitle=\(selectedSubtitle)",
+            "subtitleCount=\(engine.subtitleTracks.count)",
+            "subtitleVisible=\((engine.currentSubtitleText != nil || !engine.currentSubtitleImages.isEmpty) ? 1 : 0)",
+            "chapters=\(info.chapters.count)",
+            "trickplay=\(info.trickplay == nil ? 0 : 1)",
+            "trickplayFrame=\(trickplay?.frame == nil ? 0 : 1)",
+            "segments=\(info.segments.count)",
+            String(format: "skippableStart=%.1f", skippableStart),
+            String(format: "skippableEnd=%.1f", skippableEnd),
+        ].joined(separator: " ")
     }
 
     private var progressFraction: CGFloat {
