@@ -128,6 +128,23 @@ full audit on 2026-08-18 (HEL-50) checked all 37 foreground overrides in the
 app and every one is either non-focusable decoration or `.card` content.
 Don't "fix" those.
 
+**A tvOS `Form` row needs an explicit control style, or the same bug comes
+back by another route (HEL-62).** The rule above is about foreground
+overrides; this one isn't. A *default-styled* `Button` or `Toggle` inside a
+tvOS `Form` does not flip its title colour under the focused white lozenge,
+so the label renders white-on-white and vanishes — with no
+`.foregroundStyle` anywhere near it. Oddly the row's trailing *value* flips
+correctly, which is what makes it look like a colour bug rather than a
+styling one.
+
+Giving the control a real style restores the flip: `Settings` uses
+`.buttonStyle(.glass)` plus `.listRowBackground(.clear)` on tvOS (the clear
+background stops the pill sitting inside the row's own plate and reading as
+two stacked buttons). `Toggle` has no `.button` style on tvOS at all, so the
+one switch became a native button that states itself with a checkmark —
+content, not chrome, same as everywhere else. iOS keeps plain `Form` rows,
+which behave.
+
 ## Components
 
 - **Rails** (`MediaRail`): `.headline` title + `LazyHStack` at `cardSpacing`,
