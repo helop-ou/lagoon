@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
-    @State private var libraries: [MediaItem] = []
+    @State private var libraries: [LibraryTab] = []
 
     var body: some View {
         TabView {
@@ -50,10 +50,23 @@ struct MainTabView: View {
     /// So: never assign on failure, and keep retrying with backoff until the
     /// server answers.
     private func loadLibraries() async {
+        // Draw last session's tabs straight away; the fetch reconciles a
+        // moment later. Without this the bar visibly pops from three tabs
+        // to five on every cold start (HEL-61).
+        if libraries.isEmpty {
+            libraries = session.cachedLibraries()
+        }
         var delay = Duration.seconds(2)
         while !Task.isCancelled {
             if let views = try? await session.client.userViews() {
-                libraries = views.filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
+                // Assigning only on success is what distinguishes an empty
+                // library from a failed fetch: an empty result here really
+                // is empty, and clears the cache with it.
+                let tabs = views
+                    .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
+                    .map(LibraryTab.init)
+                libraries = tabs
+                session.cacheLibraries(tabs)
                 return
             }
             try? await Task.sleep(for: delay)
@@ -61,7 +74,7 @@ struct MainTabView: View {
         }
     }
 
-    private func icon(for library: MediaItem) -> String {
+    private func icon(for library: LibraryTab) -> String {
         library.collectionType == "tvshows" ? "tv" : "film"
     }
 }

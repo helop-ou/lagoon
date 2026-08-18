@@ -138,12 +138,33 @@ final class SessionStore {
     /// Forgets an account from the picker, token and all.
     func remove(_ account: StoredAccount) {
         KeychainStore.delete(account.keychainAccount)
+        defaults.removeObject(forKey: "libraries.\(account.id)")
         save(accounts: accounts.filter { $0.id != account.id })
         if activeAccount?.id == account.id {
             activeAccount = nil
             defaults.removeObject(forKey: DefaultsKey.activeAccountId)
         }
         if accounts.isEmpty { phase = .needsServer }
+    }
+
+    /// Libraries last seen for the active account, so the tab bar can draw
+    /// at launch instead of popping in when the fetch lands (HEL-61).
+    ///
+    /// Keyed by account on purpose: servers have different libraries, and
+    /// showing the previous account's tabs for a moment after a switch would
+    /// be worse than showing none.
+    func cachedLibraries() -> [LibraryTab] {
+        guard let key = libraryCacheKey, let data = defaults.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([LibraryTab].self, from: data)) ?? []
+    }
+
+    func cacheLibraries(_ libraries: [LibraryTab]) {
+        guard let key = libraryCacheKey else { return }
+        defaults.set(try? JSONEncoder().encode(libraries), forKey: key)
+    }
+
+    private var libraryCacheKey: String? {
+        activeAccount.map { "libraries.\($0.id)" }
     }
 
     private func loadAccounts() -> [StoredAccount] {

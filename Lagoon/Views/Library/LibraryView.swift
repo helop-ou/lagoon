@@ -14,7 +14,7 @@ final class LibraryViewModel {
         totalCount.map { items.count < $0 } ?? true
     }
 
-    func loadMore(client: JellyfinClient, library: MediaItem) async {
+    func loadMore(client: JellyfinClient, library: LibraryTab) async {
         guard !isLoading, hasMore else { return }
         isLoading = true
         errorMessage = nil
@@ -35,7 +35,7 @@ final class LibraryViewModel {
 }
 
 struct LibraryView: View {
-    let library: MediaItem
+    let library: LibraryTab
     @Environment(SessionStore.self) private var session
     @State private var viewModel = LibraryViewModel()
 
