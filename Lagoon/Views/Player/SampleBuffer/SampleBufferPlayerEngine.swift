@@ -309,10 +309,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private func loadExternalSubtitle(ordinal: Int) {
         let index = ordinal - embeddedSubtitleCount - 1
         guard externalSubtitles.indices.contains(index) else { return }
-        let url = externalSubtitles[index].url
+        let track = externalSubtitles[index]
         let token = externalLoadToken
         Task { [weak self] in
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
+            let data: Data
+            if let preloadedData = track.preloadedData {
+                data = preloadedData
+            } else {
+                guard let response = try? await URLSession.shared.data(from: track.url) else { return }
+                data = response.0
+            }
             let cues = await Task.detached { SubtitleParser.cues(from: data) }.value
             guard let self, self.externalLoadToken == token else { return }
             self.subtitleStore.replaceAll(cues)

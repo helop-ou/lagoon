@@ -1370,15 +1370,16 @@ struct CustomPlayerView<Surface: View>: View {
                         Label(subtitleSearch.selectedLanguageTitle, systemImage: "globe")
                             .lineLimit(1)
                     }
+                    .disabled(subtitleSearch.phase.isBusy)
                     .focused($playerFocus, equals: .track("subtitle-search-language"))
                     .accessibilityIdentifier("player.subtitleSearch.language")
 
                     Button {
-                        Task { await subtitleSearch.search() }
+                        subtitleSearch.startSearch()
                     } label: {
                         Label("Search subtitles…", systemImage: "magnifyingglass")
                     }
-                    .disabled(subtitleSearch.phase == .searching)
+                    .disabled(subtitleSearch.phase.isBusy)
                     .focused($playerFocus, equals: .track("subtitle-search"))
                     .accessibilityIdentifier("player.subtitleSearch")
                 }
@@ -1387,10 +1388,10 @@ struct CustomPlayerView<Surface: View>: View {
 
                 if !subtitleSearch.results.isEmpty {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                        LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
                             ForEach(subtitleSearch.results) { result in
                                 Button {
-                                    Task { await subtitleSearch.download(result) }
+                                    subtitleSearch.startDownload(result)
                                 } label: {
                                     HStack(spacing: Metrics.Space.m) {
                                         VStack(alignment: .leading, spacing: Metrics.Space.xs) {
@@ -1410,6 +1411,7 @@ struct CustomPlayerView<Surface: View>: View {
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
+                                .disabled(subtitleSearch.phase.isBusy)
                                 .focused($playerFocus, equals: .track("subtitle-result-\(result.id)"))
                                 .accessibilityIdentifier("player.subtitleResult.\(result.id)")
                             }

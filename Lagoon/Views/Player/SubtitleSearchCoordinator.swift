@@ -10,6 +10,120 @@ nonisolated enum SubtitleSearchPhase: Equatable {
     case downloading(String)
     case downloadFailed(String)
     case downloaded
+
+    var isBusy: Bool {
+        switch self {
+        case .searching, .downloading:
+            true
+        default:
+            false
+        }
+    }
+
+    var isDownloading: Bool {
+        if case .downloading = self { true } else { false }
+    }
+}
+
+nonisolated enum SubtitleDownloadError: LocalizedError {
+    case notAvailable
+    case unsupportedFile
+
+    var errorDescription: String? {
+        switch self {
+        case .notAvailable:
+            "Jellyfin did not make this subtitle available. The provider may have failed; try another result."
+        case .unsupportedFile:
+            "The subtitle provider returned a file Lagoon couldn't read. Try another result."
+        }
+    }
+}
+
+nonisolated struct SubtitleStreamSignature: Hashable {
+    let index: Int?
+    let deliveryURL: String?
+
+    init(_ stream: MediaStream) {
+        index = stream.index
+        deliveryURL = stream.deliveryUrl
+    }
+}
+
+/// Jellyfin queues its library refresh after accepting a remote-subtitle
+/// download. Poll PlaybackInfo until that refresh exposes the new sidecar
+/// rather than interpreting the first stale response as an unplayable file.
+@MainActor
+struct DownloadedSubtitlePoller {
+    nonisolated static let defaultRefreshDelays: [Duration] = [
+        .zero,
+        .milliseconds(250),
+        .milliseconds(500),
+        .seconds(1),
+        .seconds(2),
+    ]
+
+    let refreshDelays: [Duration]
+
+    init(refreshDelays: [Duration] = Self.defaultRefreshDelays) {
+        self.refreshDelays = refreshDelays
+    }
+
+    func waitForStream(
+        mediaSourceID: String,
+        existingSignatures: Set<SubtitleStreamSignature>,
+        requestedLanguage: String?,
+        fetchPlaybackInfo: () async throws -> PlaybackInfoResponse
+    ) async throws -> MediaStream {
+        var receivedPlaybackInfo = false
+        var lastError: Error?
+
+        for delay in refreshDelays {
+            try Task.checkCancellation()
+            try await Task.sleep(for: delay)
+            do {
+                let playbackInfo = try await fetchPlaybackInfo()
+                receivedPlaybackInfo = true
+                if let stream = Self.newStream(
+                    in: playbackInfo,
+                    mediaSourceID: mediaSourceID,
+                    existingSignatures: existingSignatures,
+                    requestedLanguage: requestedLanguage
+                ) {
+                    return stream
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+            }
+        }
+
+        if !receivedPlaybackInfo, let lastError { throw lastError }
+        throw SubtitleDownloadError.notAvailable
+    }
+
+    static func newStream(
+        in playbackInfo: PlaybackInfoResponse,
+        mediaSourceID: String,
+        existingSignatures: Set<SubtitleStreamSignature>,
+        requestedLanguage: String?
+    ) -> MediaStream? {
+        let exactSource = playbackInfo.mediaSources.first { $0.id == mediaSourceID }
+        guard let source = exactSource ?? (playbackInfo.mediaSources.count == 1 ? playbackInfo.mediaSources.first : nil) else {
+            return nil
+        }
+        let candidates = (source.mediaStreams ?? []).filter {
+            $0.type == "Subtitle"
+                && $0.isExternal == true
+                && $0.deliveryUrl != nil
+                && !existingSignatures.contains(SubtitleStreamSignature($0))
+        }
+        let normalizedLanguage = requestedLanguage.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+        return candidates.first {
+            normalizedLanguage == nil
+                || SubtitlePreferencesStore.normalizedLanguage($0.language ?? "") == normalizedLanguage
+        } ?? candidates.first
+    }
 }
 
 /// Host-side service for the player's subtitle tab. Search/download stays
@@ -21,20 +135,19 @@ final class SubtitleSearchCoordinator {
     private(set) var phase: SubtitleSearchPhase = .idle
     private(set) var results: [RemoteSubtitleInfo] = []
     private(set) var preferredLanguages: [String] = []
+    private(set) var languageChoices: [String] = []
     private(set) var selectedLanguage: String?
 
     @ObservationIgnored private var client: JellyfinClient?
     @ObservationIgnored private weak var engine: (any PlayerEngine)?
     @ObservationIgnored private var itemID = ""
     @ObservationIgnored private var mediaSourceID = ""
-    @ObservationIgnored private var existingSignatures: Set<StreamSignature> = []
+    @ObservationIgnored private var existingSignatures: Set<SubtitleStreamSignature> = []
     @ObservationIgnored private var onTrackAdded: ((MediaStream) -> Void)?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var downloadTask: Task<Void, Never>?
     @ObservationIgnored private var searchGeneration = 0
-
-    var languageChoices: [String] {
-        SubtitlePreferencesStore.deduplicated(preferredLanguages + SubtitlePreferencesStore.allLanguageChoices)
-    }
+    @ObservationIgnored private var downloadGeneration = 0
 
     var selectedLanguageTitle: String {
         selectedLanguage.map(SubtitlePreferencesStore.displayName)
@@ -58,15 +171,14 @@ final class SubtitleSearchCoordinator {
         self.itemID = itemID
         self.mediaSourceID = mediaSourceID
         self.preferredLanguages = preferredLanguages
+        languageChoices = Self.makeLanguageChoices(preferredLanguages: preferredLanguages)
         self.onTrackAdded = onTrackAdded
         selectedLanguage = nil
         results = []
         phase = .idle
-        existingSignatures = Set(streams.filter { $0.type == "Subtitle" }.map(StreamSignature.init))
+        existingSignatures = Set(streams.filter { $0.type == "Subtitle" }.map(SubtitleStreamSignature.init))
         if missingMode == .automaticSearch, !hasSuitableLocalTrack {
-            searchTask = Task { [weak self] in
-                await self?.search()
-            }
+            startSearch()
         }
     }
 
@@ -80,96 +192,136 @@ final class SubtitleSearchCoordinator {
         selectedLanguage = options[next]
     }
 
-    func search() async {
-        guard let client else { return }
+    func startSearch() {
+        guard let client, !phase.isDownloading else { return }
+        searchTask?.cancel()
         searchGeneration &+= 1
         let generation = searchGeneration
         phase = .searching
         results = []
         let requested = selectedLanguage.map { [$0] } ?? preferredLanguages
         let languages = requested.isEmpty ? SubtitlePreferencesStore.systemCaptionLanguages : requested
-        var merged: [RemoteSubtitleInfo] = []
-        var seen: Set<String> = []
-        do {
-            for language in languages {
-                try Task.checkCancellation()
-                let code = JellyfinSubtitleLanguageCode.threeLetter(for: language)
-                let matches = try await client.searchRemoteSubtitles(itemId: itemID, language: code)
-                guard generation == searchGeneration else { return }
-                for match in matches where seen.insert(match.id).inserted {
-                    merged.append(match)
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            var merged: [RemoteSubtitleInfo] = []
+            var seen: Set<String> = []
+            do {
+                for language in languages {
+                    try Task.checkCancellation()
+                    let code = JellyfinSubtitleLanguageCode.threeLetter(for: language)
+                    let matches = try await client.searchRemoteSubtitles(itemId: itemID, language: code)
+                    guard generation == searchGeneration else { return }
+                    for match in matches where seen.insert(match.id).inserted {
+                        merged.append(match)
+                    }
                 }
+                guard generation == searchGeneration else { return }
+                results = merged
+                phase = merged.isEmpty ? .noResults : .idle
+            } catch is CancellationError {
+                if generation == searchGeneration { phase = .idle }
+            } catch JellyfinError.server(status: 404) {
+                if generation == searchGeneration { phase = .noProvider }
+            } catch {
+                if generation == searchGeneration { phase = .failed(error.localizedDescription) }
             }
-            guard generation == searchGeneration else { return }
-            results = merged
-            phase = merged.isEmpty ? .noResults : .idle
-        } catch is CancellationError {
-            phase = .idle
-        } catch JellyfinError.server(status: 404) {
-            phase = .noProvider
-        } catch {
-            phase = .failed(error.localizedDescription)
         }
     }
 
-    func download(_ result: RemoteSubtitleInfo) async {
-        guard let client, let engine else { return }
+    func startDownload(_ result: RemoteSubtitleInfo) {
+        guard let client, let engine, !phase.isBusy else { return }
+        downloadGeneration &+= 1
+        let generation = downloadGeneration
         phase = .downloading(result.id)
-        do {
-            try await client.downloadRemoteSubtitle(itemId: itemID, subtitleId: result.id)
-            let playbackInfo = try await client.playbackInfo(itemId: itemID)
-            guard let source = playbackInfo.mediaSources.first(where: { $0.id == mediaSourceID })
-                    ?? playbackInfo.mediaSources.first else {
-                throw JellyfinError.unplayable
+        downloadTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await client.downloadRemoteSubtitle(itemId: itemID, subtitleId: result.id)
+                let requestedLanguage = SubtitlePreferencesStore.normalizedLanguage(
+                    result.threeLetterISOLanguageName ?? selectedLanguage ?? ""
+                )
+                var attachedStream: MediaStream?
+                let track: ExternalSubtitleTrack
+                do {
+                    let stream = try await DownloadedSubtitlePoller().waitForStream(
+                        mediaSourceID: mediaSourceID,
+                        existingSignatures: existingSignatures,
+                        requestedLanguage: requestedLanguage
+                    ) {
+                        try await client.playbackInfo(itemId: self.itemID)
+                    }
+                    guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else {
+                        throw SubtitleDownloadError.notAvailable
+                    }
+                    attachedStream = stream
+                    track = ExternalSubtitleTrack(
+                        url: url,
+                        title: stream.displayTitle ?? result.name,
+                        language: stream.language ?? result.threeLetterISOLanguageName,
+                        select: true,
+                        isForced: stream.isForced == true || result.isForced == true,
+                        isHearingImpaired: stream.isHearingImpaired == true || result.hearingImpaired == true,
+                        isDownloaded: true
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // The POST endpoint can return success before a queued
+                    // refresh exposes the sidecar (and even when server-side
+                    // saving failed). Validate the provider file before the
+                    // engine advertises it as selected.
+                    let file: (url: URL, data: Data)
+                    do {
+                        file = try await client.remoteSubtitleFile(subtitleId: result.id)
+                    } catch {
+                        throw SubtitleDownloadError.notAvailable
+                    }
+                    let hasCues = await Task.detached {
+                        !SubtitleParser.cues(from: file.data).isEmpty
+                    }.value
+                    guard hasCues else { throw SubtitleDownloadError.unsupportedFile }
+                    track = ExternalSubtitleTrack(
+                        url: file.url,
+                        preloadedData: file.data,
+                        title: result.name,
+                        language: result.threeLetterISOLanguageName,
+                        select: true,
+                        isForced: result.isForced == true,
+                        isHearingImpaired: result.hearingImpaired == true,
+                        isDownloaded: true
+                    )
+                }
+                try Task.checkCancellation()
+                guard generation == downloadGeneration else { return }
+                if let attachedStream {
+                    existingSignatures.insert(SubtitleStreamSignature(attachedStream))
+                }
+                engine.addExternalSubtitle(track)
+                if let attachedStream { onTrackAdded?(attachedStream) }
+                phase = .downloaded
+            } catch is CancellationError {
+                if generation == downloadGeneration { phase = .idle }
+            } catch {
+                if generation == downloadGeneration { phase = .downloadFailed(error.localizedDescription) }
             }
-            let externalStreams = (source.mediaStreams ?? []).filter {
-                $0.type == "Subtitle" && $0.isExternal == true
-            }
-            let requestedLanguage = SubtitlePreferencesStore.normalizedLanguage(
-                result.threeLetterISOLanguageName ?? selectedLanguage ?? ""
-            )
-            let stream = externalStreams.first {
-                !existingSignatures.contains(StreamSignature($0))
-                    && (requestedLanguage == nil
-                        || SubtitlePreferencesStore.normalizedLanguage($0.language ?? "") == requestedLanguage)
-            } ?? externalStreams.first {
-                !existingSignatures.contains(StreamSignature($0))
-            }
-            guard let stream,
-                  let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else {
-                throw JellyfinError.unplayable
-            }
-            existingSignatures.insert(StreamSignature(stream))
-            engine.addExternalSubtitle(ExternalSubtitleTrack(
-                url: url,
-                title: stream.displayTitle ?? result.name,
-                language: stream.language ?? result.threeLetterISOLanguageName,
-                select: true,
-                isForced: stream.isForced == true || result.isForced == true,
-                isHearingImpaired: stream.isHearingImpaired == true || result.hearingImpaired == true,
-                isDownloaded: true
-            ))
-            onTrackAdded?(stream)
-            phase = .downloaded
-        } catch {
-            phase = .downloadFailed(error.localizedDescription)
         }
     }
 
     func cancel() {
         searchTask?.cancel()
         searchTask = nil
+        downloadTask?.cancel()
+        downloadTask = nil
         searchGeneration &+= 1
+        downloadGeneration &+= 1
     }
 
-    private struct StreamSignature: Hashable {
-        let index: Int?
-        let deliveryURL: String?
-
-        init(_ stream: MediaStream) {
-            index = stream.index
-            deliveryURL = stream.deliveryUrl
-        }
+    static func makeLanguageChoices(preferredLanguages: [String]) -> [String] {
+        // Settings retains the exhaustive language catalogue. Inside active
+        // playback, keep this list deliberately compact and stable.
+        SubtitlePreferencesStore.deduplicated(
+            preferredLanguages + SubtitlePreferencesStore.commonLanguageChoices
+        )
     }
 }
 

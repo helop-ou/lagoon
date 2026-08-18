@@ -59,6 +59,82 @@ struct PlayerSystemIntegrationTests {
         #expect(result.isHashMatch == true)
     }
 
+    @Test @MainActor func inPlayerLanguageChoicesStayCompactAndPreferenceOrdered() {
+        let choices = SubtitleSearchCoordinator.makeLanguageChoices(
+            preferredLanguages: ["is-IS", "en-US", "is"]
+        )
+        #expect(choices.prefix(2) == ["is", "en"])
+        #expect(Set(choices).count == choices.count)
+        #expect(choices.count <= SubtitlePreferencesStore.commonLanguageChoices.count + 2)
+        #expect(choices.count < SubtitlePreferencesStore.allLanguageChoices.count)
+    }
+
+    @Test @MainActor func downloadedSubtitleWaitsForRefreshAndMatchesRequestedLanguage() async throws {
+        let stale = try playbackInfo(#"""
+        { "MediaSources": [{
+          "Id": "source-1",
+          "MediaStreams": [
+            { "Type": "Subtitle", "Index": 2, "Language": "eng", "IsExternal": true,
+              "DeliveryUrl": "/Videos/item/Subtitles/2/0/Stream.vtt" }
+          ]
+        }]}
+        """#)
+        let refreshed = try playbackInfo(#"""
+        { "MediaSources": [{
+          "Id": "source-1",
+          "MediaStreams": [
+            { "Type": "Subtitle", "Index": 2, "Language": "eng", "IsExternal": true,
+              "DeliveryUrl": "/Videos/item/Subtitles/2/0/Stream.vtt" },
+            { "Type": "Subtitle", "Index": 3, "Language": "fra", "IsExternal": true,
+              "DeliveryUrl": "/Videos/item/Subtitles/3/0/Stream.vtt" },
+            { "Type": "Subtitle", "Index": 4, "Language": "eng", "IsExternal": true,
+              "DeliveryUrl": "/Videos/item/Subtitles/4/0/Stream.vtt" }
+          ]
+        }]}
+        """#)
+        let existingStream = try #require(stale.mediaSources.first?.mediaStreams?.first)
+        var fetchCount = 0
+        let poller = DownloadedSubtitlePoller(refreshDelays: [.zero, .zero])
+
+        let stream = try await poller.waitForStream(
+            mediaSourceID: "source-1",
+            existingSignatures: [SubtitleStreamSignature(existingStream)],
+            requestedLanguage: "eng"
+        ) {
+            fetchCount += 1
+            return fetchCount == 1 ? stale : refreshed
+        }
+
+        #expect(fetchCount == 2)
+        #expect(stream.index == 4)
+        #expect(stream.language == "eng")
+    }
+
+    @Test @MainActor func downloadedSubtitleTimeoutHasSubtitleSpecificError() async throws {
+        let stale = try playbackInfo(#"""
+        { "MediaSources": [{ "Id": "source-1", "MediaStreams": [] }] }
+        """#)
+        let poller = DownloadedSubtitlePoller(refreshDelays: [.zero])
+
+        do {
+            _ = try await poller.waitForStream(
+                mediaSourceID: "source-1",
+                existingSignatures: [],
+                requestedLanguage: "eng"
+            ) { stale }
+            Issue.record("Expected the subtitle refresh to time out")
+        } catch let error as SubtitleDownloadError {
+            #expect(error.errorDescription?.contains("subtitle") == true)
+            #expect(error.errorDescription?.contains("device") == false)
+        }
+    }
+
+    @Test func remoteSubtitleFallbackAcceptsTextCuesAndRejectsOtherFiles() {
+        let srt = Data("1\n00:00:01,000 --> 00:00:03,000\nFallback works\n".utf8)
+        #expect(SubtitleParser.cues(from: srt).count == 1)
+        #expect(SubtitleParser.cues(from: Data("not a subtitle".utf8)).isEmpty)
+    }
+
     @Test @MainActor func preferencesStayScopedToTheirServerAccount() {
         let suiteName = "PlayerSystemIntegrationTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -97,6 +173,7 @@ struct PlayerSystemIntegrationTests {
         let engine = SampleBufferPlayerEngine()
         engine.addExternalSubtitle(ExternalSubtitleTrack(
             url: URL(string: "https://example.invalid/subtitle.vtt")!,
+            preloadedData: Data("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n".utf8),
             title: "English SDH",
             language: "eng",
             select: true,
@@ -107,5 +184,9 @@ struct PlayerSystemIntegrationTests {
         #expect(engine.subtitleTracks[0].isSelected)
         #expect(engine.subtitleTracks[0].source == .downloaded)
         #expect(engine.subtitleTracks[0].isHearingImpaired)
+    }
+
+    private func playbackInfo(_ json: String) throws -> PlaybackInfoResponse {
+        try JellyfinClient.decoder.decode(PlaybackInfoResponse.self, from: Data(json.utf8))
     }
 }

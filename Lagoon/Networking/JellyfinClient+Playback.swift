@@ -113,6 +113,16 @@ extension JellyfinClient {
         try await postVoid("Items/\(itemId)/RemoteSearch/Subtitles/\(subtitleId)")
     }
 
+    /// Fetches the provider result itself. This is a live-playback fallback
+    /// for servers that accept the save request but fail to expose the new
+    /// sidecar during their queued library refresh.
+    func remoteSubtitleFile(subtitleId: String) async throws -> (url: URL, data: Data) {
+        guard let accessToken else { throw JellyfinError.notConfigured }
+        let path = "Providers/Subtitles/Subtitles/\(subtitleId)"
+        let query = [URLQueryItem(name: "api_key", value: accessToken)]
+        return (try url(path: path, query: query), try await getData(path, query: query))
+    }
+
     private func staticStreamQuery(source: MediaSource, accessToken: String) -> [URLQueryItem] {
         var query = [
             URLQueryItem(name: "static", value: "true"),

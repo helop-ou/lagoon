@@ -241,6 +241,9 @@ nonisolated struct NextUpEpisode: Equatable {
 /// for the engine to side-load at start.
 nonisolated struct ExternalSubtitleTrack {
     let url: URL
+    /// Provider downloads can be played even while Jellyfin's asynchronous
+    /// library refresh has not produced a persistent DeliveryUrl yet.
+    let preloadedData: Data?
     let title: String?
     let language: String?
     /// Jellyfin's default-subtitle choice pointed at this external stream.
@@ -251,6 +254,7 @@ nonisolated struct ExternalSubtitleTrack {
 
     init(
         url: URL,
+        preloadedData: Data? = nil,
         title: String?,
         language: String?,
         select: Bool,
@@ -259,6 +263,7 @@ nonisolated struct ExternalSubtitleTrack {
         isDownloaded: Bool = false
     ) {
         self.url = url
+        self.preloadedData = preloadedData
         self.title = title
         self.language = language
         self.select = select

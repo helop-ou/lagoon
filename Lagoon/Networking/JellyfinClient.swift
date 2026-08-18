@@ -121,6 +121,10 @@ final class JellyfinClient {
         try await send(request(for: url(path: path, query: query), method: "GET"))
     }
 
+    func getData(_ path: String, query: [URLQueryItem] = []) async throws -> Data {
+        try await data(for: request(for: url(path: path, query: query), method: "GET"))
+    }
+
     func post<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         try await send(request(for: url(path: path, query: query), method: "POST"))
     }
