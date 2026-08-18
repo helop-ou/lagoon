@@ -36,8 +36,28 @@ struct MainTabView: View {
             }
         }
         .task {
-            libraries = (try? await session.client.userViews())?
-                .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") } ?? []
+            await loadLibraries()
+        }
+    }
+
+    /// Tabs are the app's *navigation*, not a content rail, so a transient
+    /// failure must never collapse them (HEL-61). This used to be a one-shot
+    /// `try?` assigning `[]`, which meant a single unlucky request at launch
+    /// removed Movies and Shows for the rest of the session — and it failed
+    /// in exactly the situation where recovery is likely: a server slow to
+    /// wake, or a TV rejoining wi-fi as the app foregrounds.
+    ///
+    /// So: never assign on failure, and keep retrying with backoff until the
+    /// server answers.
+    private func loadLibraries() async {
+        var delay = Duration.seconds(2)
+        while !Task.isCancelled {
+            if let views = try? await session.client.userViews() {
+                libraries = views.filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
+                return
+            }
+            try? await Task.sleep(for: delay)
+            delay = min(delay * 2, .seconds(30))
         }
     }
 
