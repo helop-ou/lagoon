@@ -107,6 +107,9 @@ final class SessionStore {
     /// credentials. Every Jellyfin call is user-scoped, so Continue
     /// Watching and the rest follow on their own.
     func switchTo(_ account: StoredAccount) {
+        // The shelf still shows the outgoing user's viewing until Home
+        // refreshes; on a TV anyone in the room can read it (HEL-37).
+        TopShelfStore.clear()
         client.clearSession()
         guard !activate(account) else { return }
         // The account outlived its token. Send them to sign-in for *that*
@@ -301,6 +304,7 @@ final class SessionStore {
     /// Any other remembered account survives, and the picker takes over.
     func signOut() async {
         try? await client.logout()
+        TopShelfStore.clear()
         client.clearSession()
         if let account = activeAccount {
             KeychainStore.delete(account.keychainAccount)

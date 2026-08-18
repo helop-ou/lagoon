@@ -2,7 +2,9 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(DeepLinkRouter.self) private var deepLinks
     @State private var libraries: [LibraryTab] = []
+    @State private var playerItem: PlayerItem?
 
     var body: some View {
         TabView {
@@ -37,6 +39,26 @@ struct MainTabView: View {
         }
         .task {
             await loadLibraries()
+        }
+        // Presented from the TabView rather than a screen, so a Top Shelf
+        // selection resumes playback whichever tab happens to be showing.
+        .restoresFocusAfterPlayer(isPresented: playerItem != nil)
+        .fullScreenCover(item: $playerItem) { item in
+            VideoPlayerView(playerItem: item)
+                .preferredColorScheme(.dark)
+        }
+        // Runs once the session exists: on a cold launch the request is
+        // made before there is a client to fetch with, so it waits here
+        // instead of being dropped.
+        .task(id: deepLinks.pendingItemID) {
+            guard let id = deepLinks.pendingItemID else { return }
+            // Clear *after* the fetch, never before: this task is keyed on
+            // `pendingItemID`, so nilling it first cancels the very request
+            // it is waiting on and the link silently does nothing (the
+            // fetch died with -999 the first time round).
+            defer { deepLinks.pendingItemID = nil }
+            guard let item = try? await session.client.item(id: id) else { return }
+            playerItem = PlayerItem(media: item)
         }
     }
 

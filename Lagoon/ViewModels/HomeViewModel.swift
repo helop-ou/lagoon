@@ -69,6 +69,7 @@ final class HomeViewModel {
             nextUp = try await nextUpItems
             favorites = await favoriteItems ?? []
             latestRails = rails
+            TopShelfStore.publish(resume, client: client)
             pluginRails = await loadPluginRails(client: client)
             heroItems = Array(
                 rails.flatMap(\.items)
@@ -102,6 +103,7 @@ final class HomeViewModel {
             nextUp = refreshed.nextUp
         }
         favorites = await favoriteItems ?? favorites
+        TopShelfStore.publish(resume, client: client)
     }
 
     /// Fetches whatever the Home Screen Sections plugin adds beyond Lagoon's

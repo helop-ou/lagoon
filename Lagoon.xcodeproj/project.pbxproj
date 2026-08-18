@@ -7,10 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C41474F4F4E000000000022 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000021 /* ContentProvider.swift */; };
+		4C41474F4F4E000000000023 /* LagoonTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000024 /* LagoonTopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4C41474F4F4E000000000012 /* LagoonFFmpeg in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* LagoonFFmpeg */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4C41474F4F4E000000000024 /* LagoonTopShelf.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LagoonTopShelf.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C41474F4F4E000000000021 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentProvider.swift; sourceTree = "<group>"; };
+		4C41474F4F4E000000000025 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4C41474F4F4E000000000026 /* LagoonTopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LagoonTopShelf.entitlements; sourceTree = "<group>"; };
 		4C41474F4F4E000000000004 /* Lagoon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lagoon.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -38,6 +44,7 @@
 			isa = PBXGroup;
 			children = (
 				4C41474F4F4E000000000005 /* Lagoon */,
+				4C41474F4F4E000000000027 /* LagoonTopShelf */,
 				4C41474F4F4E000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -46,13 +53,53 @@
 			isa = PBXGroup;
 			children = (
 				4C41474F4F4E000000000004 /* Lagoon.app */,
+				4C41474F4F4E000000000024 /* LagoonTopShelf.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
+		4C41474F4F4E000000000027 /* LagoonTopShelf */ = {
+			isa = PBXGroup;
+			children = (
+				4C41474F4F4E000000000021 /* ContentProvider.swift */,
+				4C41474F4F4E000000000025 /* Info.plist */,
+				4C41474F4F4E000000000026 /* LagoonTopShelf.entitlements */,
+			);
+			path = LagoonTopShelf;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		4C41474F4F4E000000000028 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				4C41474F4F4E000000000023 /* LagoonTopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXNativeTarget section */
+		4C41474F4F4E000000000020 /* LagoonTopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4C41474F4F4E00000000002A /* Build configuration list for PBXNativeTarget "LagoonTopShelf" */;
+			buildPhases = (
+				4C41474F4F4E000000000029 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LagoonTopShelf;
+			productName = LagoonTopShelf;
+			productReference = 4C41474F4F4E000000000024 /* LagoonTopShelf.appex */;
+			productType = "com.apple.product-type.tv-app-extension";
+		};
 		4C41474F4F4E000000000006 /* Lagoon */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4C41474F4F4E00000000000D /* Build configuration list for PBXNativeTarget "Lagoon" */;
@@ -60,10 +107,12 @@
 				4C41474F4F4E000000000007 /* Sources */,
 				4C41474F4F4E000000000008 /* Frameworks */,
 				4C41474F4F4E000000000009 /* Resources */,
+				4C41474F4F4E000000000028 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				4C41474F4F4E00000000002B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4C41474F4F4E000000000005 /* Lagoon */,
@@ -109,6 +158,7 @@
 			projectRoot = "";
 			targets = (
 				4C41474F4F4E000000000006 /* Lagoon */,
+				4C41474F4F4E000000000020 /* LagoonTopShelf */,
 			);
 		};
 /* End PBXProject section */
@@ -124,6 +174,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4C41474F4F4E000000000029 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C41474F4F4E000000000022 /* ContentProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4C41474F4F4E000000000007 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -132,6 +190,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4C41474F4F4E00000000002B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilters = (
+				tvos,
+			);
+			target = 4C41474F4F4E000000000020 /* LagoonTopShelf */;
+			targetProxy = 4C41474F4F4E00000000002C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		4C41474F4F4E00000000002C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4C41474F4F4E000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4C41474F4F4E000000000020;
+			remoteInfo = LagoonTopShelf;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin XCBuildConfiguration section */
 		4C41474F4F4E00000000000B /* Debug */ = {
@@ -261,6 +340,7 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]" = "App Icon & Top Shelf Image";
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]" = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Lagoon.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9GLTW5844P;
@@ -305,6 +385,7 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvos*]" = "App Icon & Top Shelf Image";
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=appletvsimulator*]" = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Lagoon.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 9GLTW5844P;
@@ -341,6 +422,59 @@
 			};
 			name = Release;
 		};
+		4C41474F4F4E00000000002D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LagoonTopShelf/LagoonTopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9GLTW5844P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LagoonTopShelf/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Lagoon Top Shelf";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.topshelf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		4C41474F4F4E00000000002E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = LagoonTopShelf/LagoonTopShelf.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 9GLTW5844P;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = LagoonTopShelf/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Lagoon Top Shelf";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.topshelf;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -358,6 +492,15 @@
 			buildConfigurations = (
 				4C41474F4F4E00000000000E /* Debug */,
 				4C41474F4F4E00000000000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4C41474F4F4E00000000002A /* Build configuration list for PBXNativeTarget "LagoonTopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4C41474F4F4E00000000002D /* Debug */,
+				4C41474F4F4E00000000002E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
