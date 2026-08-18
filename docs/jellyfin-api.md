@@ -69,6 +69,39 @@ servers are commonly plain http on `:8096`. The trade-off is deliberate and
 matches Infuse/Swiftfin behavior; revisit if the app ever ships to the App
 Store (scope to `NSAllowsLocalNetworking` + declared domains instead).
 
+## Home Screen Sections plugin (HEL-47)
+
+Optional server plugin; a server without it 404s the whole route and Home
+falls back to Lagoon's own rails.
+
+- `GET HomeScreen/Sections?userId=` — the section **catalogue**.
+- `GET HomeScreen/Section/{sectionKey}?userId=` — that section's items,
+  shaped as an ordinary `ItemsPage`.
+
+**The catalogue is not a layout, and this is the whole difficulty.** Probed
+against a real install (2026-08-18): it returns all 28 section types the
+plugin knows — Books, Music, Jellyseerr rows included — for a
+movies-and-TV-only library, with `OrderIndex` 999 and `Limit` 1 on every
+one. It does *not* narrow to what the admin enabled, and the enabled set is
+not readable anywhere: `HomeScreen/UserSettings`, `HomeScreen/Settings`,
+`HomeScreen/Config` and `HomeScreen/Users/{id}/Settings` all 404, and core
+`DisplayPreferences/usersettings` carries no `homesection*` keys.
+
+So a client cannot honour the server's intended layout, and rendering the
+catalogue wholesale is actively wrong: the same server offers
+`ContinueWatching`, `NextUp` **and** `ContinueWatchingNextUp`, plus
+`LatestMovies` alongside `RecentlyAddedMovies` — Home would show the same
+films three times. `HomeViewModel.nativelyCoveredSections` therefore drops
+every section Lagoon already draws and appends only the remainder.
+
+Consequence worth knowing before testing: on a plain movies/TV server this
+feature correctly renders **nothing**, because every non-empty section is
+one Lagoon already has. It earns its keep on servers with Jellyseerr
+requests, My List, Discover or custom collection sections.
+
+Cost is low enough to fetch eagerly: all 28 sections resolve in ~1.8 s
+concurrently, empties answering in ~0.1 s each.
+
 ## Testing without a home server
 
 The public demo (`https://demo.jellyfin.org/stable`, user `demo`, empty

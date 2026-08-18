@@ -47,6 +47,16 @@ struct HomeView: View {
                         ForEach(viewModel.latestRails) { rail in
                             MediaRail(title: rail.title, items: rail.items, onUserDataChange: refreshUserData)
                         }
+                        // Whatever the server's Home Screen Sections plugin
+                        // adds on top (HEL-47) — nothing at all without it.
+                        ForEach(viewModel.pluginRails) { rail in
+                            MediaRail(
+                                title: rail.title,
+                                items: rail.items,
+                                style: rail.style,
+                                onUserDataChange: refreshUserData
+                            )
+                        }
 
                         Color.clear.frame(height: 60)
                     }

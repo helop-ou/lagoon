@@ -59,6 +59,9 @@ struct CustomPlayerView<Surface: View>: View {
     /// what the step size accelerates on. Expires with `scrubStepToken`.
     @State private var scrubRunLength = 0
     @State private var scrubStepToken = 0
+    /// Whether the last scrub input was a chapter hop rather than a step —
+    /// they get different self-commit windows (see the task below).
+    @State private var scrubHopped = false
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
     @FocusState private var focusedTab: PanelTab?
@@ -215,7 +218,7 @@ struct CustomPlayerView<Surface: View>: View {
             try? await Task.sleep(for: ScrubMetrics.runExpiry)
             guard !Task.isCancelled else { return }
             scrubRunLength = 0
-            try? await Task.sleep(for: ScrubMetrics.selfCommit)
+            try? await Task.sleep(for: scrubHopped ? ScrubMetrics.chapterSelfCommit : ScrubMetrics.selfCommit)
             guard !Task.isCancelled, let target = scrubTarget else { return }
             // Landing on the timeout keeps whatever the play state was;
             // only an explicit Select/Play means "go here *and* play on".
@@ -349,6 +352,7 @@ struct CustomPlayerView<Surface: View>: View {
         let limit = engine.duration > 0 ? engine.duration : origin + step
         scrubTarget = min(max(origin + direction * step, 0), limit)
         scrubRunLength += 1
+        scrubHopped = false
         scrubStepToken += 1
     }
 
@@ -375,6 +379,7 @@ struct CustomPlayerView<Surface: View>: View {
     private func endScrub() {
         scrubTarget = nil
         scrubRunLength = 0
+        scrubHopped = false
         // The loader deliberately keeps its last frame: the chip fades out
         // showing the picture you committed to, and a later scrub in the
         // same neighbourhood opens on it instead of a placeholder.
@@ -393,6 +398,7 @@ struct CustomPlayerView<Surface: View>: View {
         // A hop isn't part of a walking run — the next arrow press should
         // step 10 s, not 60.
         scrubRunLength = 0
+        scrubHopped = true
         scrubStepToken += 1
     }
 
@@ -1029,6 +1035,12 @@ private enum ScrubMetrics {
     /// playback (HEL-55) — tune it on hardware, not in the simulator: too
     /// short and a preview can't be read, too long and a nudge feels stuck.
     static let selfCommit: Duration = .milliseconds(600)
+    /// A chapter hop waits longer than a step before landing. Found on
+    /// hardware (HEL-55, 2026-08-18): a hop is a *survey* gesture — you are
+    /// reading where chapter 13 starts — where an arrow step is a nudge, and
+    /// sharing the step's window turned browsing past the next chapter into
+    /// a race against the timer.
+    static let chapterSelfCommit: Duration = .milliseconds(2000)
 
     #if os(tvOS)
     static let knobWidth: CGFloat = 8
