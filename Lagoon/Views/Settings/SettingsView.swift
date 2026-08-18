@@ -63,7 +63,7 @@ struct SettingsView: View {
                 }
             }
 
-            Text("Lagoon \(session.client.appVersion)")
+            Text("Lagoon \(Bundle.main.displayVersion)")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.top, Metrics.Space.s)
@@ -180,7 +180,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("App", value: "Lagoon")
-                LabeledContent("Version", value: session.client.appVersion)
+                LabeledContent("Version", value: Bundle.main.displayVersion)
             }
 
             Section("Debug") {
@@ -189,4 +189,24 @@ struct SettingsView: View {
         }
     }
     #endif
+}
+
+private extension Bundle {
+    /// Marketing version with the build in brackets — "0.1 (13)".
+    ///
+    /// Deliberately separate from `JellyfinClient.appVersion`, which stays
+    /// the marketing version alone: that one goes in the auth header and the
+    /// server records it as the client version, so its format is not ours to
+    /// decorate.
+    ///
+    /// The build is dropped when it adds nothing — absent, or identical to
+    /// the marketing version, where "0.1 (0.1)" would just be noise.
+    var displayVersion: String {
+        let short = object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1"
+        guard let build = object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+              !build.isEmpty, build != short else {
+            return short
+        }
+        return "\(short) (\(build))"
+    }
 }
