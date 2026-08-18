@@ -366,15 +366,32 @@ nonisolated enum SampleBufferFactory {
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sampleBuffer else { return nil }
 
-        if isVideo, !isKeyFrame,
+        // Frame dependencies, spelled out for the renderer (HEL-64).
+        //
+        // `NotSync` alone is not enough. Without `IsDependedOnByOthers` the
+        // renderer has no way to know which frames are safe to discard, and
+        // an unmarked frame is treated as *droppable* — so reference frames
+        // get thrown away under the slightest pressure and everything that
+        // referenced them degrades too. ffmpeg already knows the answer:
+        // `AV_PKT_FLAG_DISPOSABLE` marks exactly the frames nothing else
+        // references (typically non-reference B-frames).
+        if isVideo,
            let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true),
            CFArrayGetCount(attachments) > 0 {
             let dictionary = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
-            CFDictionarySetValue(
-                dictionary,
-                Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque(),
-                Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
-            )
+            func set(_ key: CFString, _ value: Bool) {
+                CFDictionarySetValue(
+                    dictionary,
+                    Unmanaged.passUnretained(key).toOpaque(),
+                    Unmanaged.passUnretained(value ? kCFBooleanTrue : kCFBooleanFalse).toOpaque()
+                )
+            }
+            let disposable = (packet.pointee.flags & AV_PKT_FLAG_DISPOSABLE) != 0
+            if !isKeyFrame {
+                set(kCMSampleAttachmentKey_NotSync, true)
+            }
+            set(kCMSampleAttachmentKey_DependsOnOthers, !isKeyFrame)
+            set(kCMSampleAttachmentKey_IsDependedOnByOthers, !disposable)
         }
         return sampleBuffer
     }
