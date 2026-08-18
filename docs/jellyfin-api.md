@@ -79,6 +79,28 @@ way official clients do: episode primary → series poster
 `kind: .thumb` prefers episode stills (their Primary slot), then `Thumb`,
 then backdrops.
 
+## Remote subtitles (HEL-49)
+
+Lagoon uses Jellyfin's provider-agnostic remote-subtitle routes; no client
+code knows whether a result came from OpenSubtitles or another plugin.
+
+| Purpose | Endpoint | Notes |
+|---|---|---|
+| Search | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}` | language is ISO 639-2; Apple/BCP-47 preferences are normalized and converted to three-letter form |
+| Download | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | only runs after an explicit viewer action; result IDs remain one encoded path component |
+
+Preferred languages are searched in order and each provider's returned
+ranking is retained. Empty results, absent-provider 404s, transport failures,
+and download failures are distinct UI states. Automatic mode searches when
+no suitable local track exists but never downloads silently.
+
+After a successful download Lagoon requests PlaybackInfo again, locates the
+new external subtitle stream, resolves its `DeliveryUrl` with authentication,
+and inserts it into the active sample-buffer engine. Playback position,
+renderers, selected audio, and the Now Playing session are not rebuilt.
+Forced and hearing-impaired metadata from both the result and refreshed
+stream is preserved.
+
 ## App Transport Security (HEL-42)
 
 `LagoonInfo.plist` declares **`NSAllowsLocalNetworking` only** — the blanket

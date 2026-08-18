@@ -20,5 +20,10 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: Motion.standard), value: session.phase)
         .environment(session)
+        #if DEBUG
+        .task {
+            await session.bootstrapPublicDemoForRegressionIfRequested()
+        }
+        #endif
     }
 }

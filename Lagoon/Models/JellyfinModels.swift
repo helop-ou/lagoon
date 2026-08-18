@@ -199,6 +199,8 @@ nonisolated struct MediaStream: Decodable {
     let index: Int?
     let isDefault: Bool?
     let isExternal: Bool?
+    let isForced: Bool?
+    let isHearingImpaired: Bool?
     let deliveryUrl: String?
     let profile: String?
     let videoRangeType: String?
@@ -207,6 +209,26 @@ nonisolated struct MediaStream: Decodable {
     let height: Int?
     let bitRate: Int?
     let realFrameRate: Double?
+}
+
+/// A result returned by Jellyfin's configured subtitle providers. Field
+/// names mirror RemoteSubtitleInfo so Lagoon remains provider-agnostic.
+nonisolated struct RemoteSubtitleInfo: Decodable, Identifiable, Equatable {
+    let id: String
+    let name: String?
+    let threeLetterISOLanguageName: String?
+    let providerName: String?
+    let format: String?
+    let author: String?
+    let comment: String?
+    let communityRating: Double?
+    let downloadCount: Int?
+    let isHashMatch: Bool?
+    let hearingImpaired: Bool?
+    let isForced: Bool?
+    let machineTranslated: Bool?
+    let aiTranslated: Bool?
+    let frameRate: Double?
 }
 
 /// A chapter marker (HEL-39 slice 3). Both list and single-item responses

@@ -1,3 +1,4 @@
+import MediaAccessibility
 import SwiftUI
 
 /// Full-screen custom player styled after the Infuse reference shots on
@@ -31,6 +32,11 @@ struct CustomPlayerView<Surface: View>: View {
     /// file still has its last seconds to run, and whoever handles the end
     /// of it must not autoplay over a "no".
     var onCancelNextUp: (() -> Void)? = nil
+    var isPictureInPicturePossible = false
+    var isPictureInPictureActive = false
+    var onTogglePictureInPicture: (() -> Void)? = nil
+    var subtitleStyle: SubtitleRenderStyle = .fallback
+    var subtitleSearch: SubtitleSearchCoordinator? = nil
     @ViewBuilder let surface: () -> Surface
 
     private enum PanelTab: CaseIterable, Hashable {
@@ -69,6 +75,9 @@ struct CustomPlayerView<Surface: View>: View {
     /// The virtual playhead's position while scrubbing; nil when the
     /// transport is live (HEL-39 slice 2).
     @State private var scrubTarget: Double?
+    /// Debug-only regression evidence for the most recent explicit/self
+    /// commit; harmless in normal builds and omitted from the visible UI.
+    @State private var lastCommittedScrubTarget: Double = -1
     /// How many scrub steps this run of uninterrupted input has taken —
     /// what the step size accelerates on. Expires with `scrubStepToken`.
     @State private var scrubRunLength = 0
@@ -251,6 +260,12 @@ struct CustomPlayerView<Surface: View>: View {
         // no-ops until the target crosses into the next thumbnail.
         .onChange(of: scrubTarget) { _, target in
             if let target { trickplay?.update(to: target) }
+        }
+        .onChange(of: engine.currentSubtitleText, initial: true) { _, text in
+            reportDisplayedCaption(text)
+        }
+        .onDisappear {
+            reportDisplayedCaption(nil)
         }
         // Arms whenever the playhead crosses into a skippable segment.
         // Keyed on the segment id, so it fires once per segment rather than
@@ -436,6 +451,13 @@ struct CustomPlayerView<Surface: View>: View {
         seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1)
     }
 
+    /// Custom renderers must tell Media Accessibility which caption text is
+    /// currently onscreen; an empty array explicitly clears the report.
+    private func reportDisplayedCaption(_ text: String?) {
+        let strings: NSArray = text.map { [$0] } ?? []
+        MACaptionAppearanceDidDisplayCaptions(strings)
+    }
+
     // MARK: - Scrub mode (HEL-39 slice 2)
 
     private var isScrubbing: Bool { scrubTarget != nil }
@@ -477,6 +499,7 @@ struct CustomPlayerView<Surface: View>: View {
     /// explicit commit — Select/Play scrubs *and* plays on. Touch drags and
     /// the self-commit timeout keep whatever the play state already was.
     private func commitScrub(to target: Double, resume: Bool) {
+        lastCommittedScrubTarget = target
         endScrub()
         // Resume before seeking: the engine re-anchors the synchronizer
         // when the seek primes, so unpausing afterwards fights that
@@ -786,14 +809,17 @@ struct CustomPlayerView<Surface: View>: View {
                     VStack {
                         Spacer()
                         Text(text)
-                            .font(.title3.weight(.medium))
+                            .font(subtitleStyle.font)
                             .multilineTextAlignment(.center)
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.9), radius: 3, y: 1)
+                            .foregroundStyle(subtitleStyle.foregroundColor)
+                            .subtitleEdge(subtitleStyle.edgeStyle, color: subtitleStyle.edgeColor)
                             .padding(.horizontal, Metrics.Space.l)
                             .padding(.vertical, Metrics.Space.s)
-                            .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
-                            .padding(.bottom, Metrics.screenGutter)
+                            .background(
+                                subtitleStyle.backgroundColor.opacity(subtitleStyle.backgroundOpacity),
+                                in: RoundedRectangle(cornerRadius: 10)
+                            )
+                            .padding(.bottom, subtitleStyle.bottomPadding)
                             .accessibilityIdentifier("player.subtitle.text")
                     }
                     .frame(maxWidth: .infinity)
@@ -1200,17 +1226,7 @@ struct CustomPlayerView<Surface: View>: View {
             case .info: infoCard
             case .video: videoCard
             case .audio: audioCard
-            case .subtitles:
-                trackCard(
-                    rows: [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
-                        + engine.subtitleTracks.map { ($0.id, $0.displayName, $0.isSelected) }
-                ) { rowID in
-                    if rowID == Self.subtitleOffID {
-                        engine.selectSubtitleTrack(id: nil)
-                    } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
-                        engine.selectSubtitleTrack(id: track.engineID)
-                    }
-                }
+            case .subtitles: subtitleCard
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1248,8 +1264,27 @@ struct CustomPlayerView<Surface: View>: View {
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+
+                if let onTogglePictureInPicture {
+                    Button(action: onTogglePictureInPicture) {
+                        Label(
+                            isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
+                            systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
+                    .focused($playerFocus, equals: .track("picture-in-picture"))
+                    .accessibilityIdentifier("player.pictureInPicture")
+                    .padding(.top, Metrics.Space.s)
+                }
             }
             Spacer(minLength: 0)
+            #if os(iOS)
+            AirPlayRoutePicker()
+                .frame(width: 44, height: 44)
+                .accessibilityLabel("AirPlay")
+            #endif
         }
     }
 
@@ -1303,6 +1338,148 @@ struct CustomPlayerView<Surface: View>: View {
                     .font(.callout)
             }
         }
+    }
+
+    private var subtitleCard: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            trackCard(
+                rows: [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
+                    + engine.subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
+            ) { rowID in
+                if rowID == Self.subtitleOffID {
+                    engine.selectSubtitleTrack(id: nil)
+                } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
+                    engine.selectSubtitleTrack(id: track.engineID)
+                }
+            }
+
+            if let subtitleSearch {
+                Divider()
+                cardHeader("Find Subtitles")
+                HStack(spacing: Metrics.Space.m) {
+                    Menu {
+                        Button("Preferred Languages") {
+                            subtitleSearch.selectLanguage(nil)
+                        }
+                        ForEach(subtitleSearch.languageChoices, id: \.self) { language in
+                            Button(SubtitlePreferencesStore.displayName(for: language)) {
+                                subtitleSearch.selectLanguage(language)
+                            }
+                        }
+                    } label: {
+                        Label(subtitleSearch.selectedLanguageTitle, systemImage: "globe")
+                            .lineLimit(1)
+                    }
+                    .focused($playerFocus, equals: .track("subtitle-search-language"))
+                    .accessibilityIdentifier("player.subtitleSearch.language")
+
+                    Button {
+                        Task { await subtitleSearch.search() }
+                    } label: {
+                        Label("Search subtitles…", systemImage: "magnifyingglass")
+                    }
+                    .disabled(subtitleSearch.phase == .searching)
+                    .focused($playerFocus, equals: .track("subtitle-search"))
+                    .accessibilityIdentifier("player.subtitleSearch")
+                }
+
+                subtitleSearchStatus(subtitleSearch)
+
+                if !subtitleSearch.results.isEmpty {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                            ForEach(subtitleSearch.results) { result in
+                                Button {
+                                    Task { await subtitleSearch.download(result) }
+                                } label: {
+                                    HStack(spacing: Metrics.Space.m) {
+                                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                                            Text(result.name ?? String(localized: "Subtitle"))
+                                                .lineLimit(1)
+                                            Text(subtitleResultDetails(result))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer(minLength: 0)
+                                        if subtitleSearch.phase == .downloading(result.id) {
+                                            ProgressView()
+                                        } else {
+                                            Image(systemName: "arrow.down.circle")
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .focused($playerFocus, equals: .track("subtitle-result-\(result.id)"))
+                                .accessibilityIdentifier("player.subtitleResult.\(result.id)")
+                            }
+                        }
+                        .padding(.horizontal, rowFocusInset)
+                        .padding(.vertical, rowFocusInset)
+                    }
+                    .padding(.horizontal, -rowFocusInset)
+                    .padding(.vertical, -rowFocusInset)
+                    .frame(maxHeight: 280)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func subtitleSearchStatus(_ search: SubtitleSearchCoordinator) -> some View {
+        switch search.phase {
+        case .idle:
+            EmptyView()
+        case .searching:
+            HStack {
+                ProgressView()
+                Text("Searching configured providers…")
+                    .foregroundStyle(.secondary)
+            }
+        case .noProvider:
+            Label("No subtitle provider is available on this server.", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        case .noResults:
+            Text("No matching subtitles were found.")
+                .foregroundStyle(.secondary)
+        case .failed(let message):
+            Label("Search failed: \(message)", systemImage: "wifi.exclamationmark")
+                .foregroundStyle(.secondary)
+        case .downloading:
+            EmptyView()
+        case .downloadFailed(let message):
+            Label("Download failed: \(message)", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        case .downloaded:
+            Label("Downloaded and selected", systemImage: "checkmark.circle")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func subtitleTrackName(_ track: PlayerTrack) -> String {
+        var labels = [track.displayName]
+        if track.source == .downloaded {
+            labels.append(String(localized: "Downloaded"))
+        } else if track.source == .external {
+            labels.append(String(localized: "External"))
+        }
+        if track.isForced { labels.append(String(localized: "Forced")) }
+        if track.isHearingImpaired { labels.append(String(localized: "SDH")) }
+        return labels.joined(separator: " · ")
+    }
+
+    private func subtitleResultDetails(_ result: RemoteSubtitleInfo) -> String {
+        var details: [String] = []
+        if let language = result.threeLetterISOLanguageName {
+            details.append(SubtitlePreferencesStore.displayName(for: language))
+        }
+        if let provider = result.providerName { details.append(provider) }
+        if let format = result.format { details.append(format.uppercased()) }
+        if result.isForced == true { details.append(String(localized: "Forced")) }
+        if result.hearingImpaired == true { details.append(String(localized: "SDH")) }
+        if let rating = result.communityRating { details.append(String(format: "★ %.1f", rating)) }
+        if let downloads = result.downloadCount { details.append("↓ \(downloads)") }
+        return details.joined(separator: " · ")
     }
 
     private func trackCard(
@@ -1383,6 +1560,7 @@ struct CustomPlayerView<Surface: View>: View {
             "paused=\(engine.isPaused ? 1 : 0)",
             "buffering=\(engine.isBuffering ? 1 : 0)",
             "scrubbing=\(isScrubbing ? 1 : 0)",
+            String(format: "lastScrub=%.1f", lastCommittedScrubTarget),
             "panel=\(panelOpen ? 1 : 0)",
             "tab=\(String(describing: selectedTab))",
             "focus=\(focusDescription)",

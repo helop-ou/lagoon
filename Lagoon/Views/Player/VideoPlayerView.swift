@@ -1,6 +1,8 @@
+import MediaAccessibility
 import Observation
 import OSLog
 import SwiftUI
+import UIKit
 
 /// Identifiable wrapper so `fullScreenCover(item:)` can present playback.
 nonisolated struct PlayerItem: Identifiable {
@@ -12,11 +14,14 @@ nonisolated struct PlayerItem: Identifiable {
 /// Negotiates the stream with Jellyfin, runs the Lagoon engine (the app's
 /// only player since HEL-48 went all-in), and owns progress reporting.
 @Observable
+@MainActor
 final class PlaybackController {
     private(set) var engine: SampleBufferPlayerEngine?
     private(set) var playerInfo: PlayerItemInfo?
     private(set) var errorMessage: String?
     private(set) var didFinish = false
+    private(set) var isExternalPlaybackRouteActive = false
+    let subtitleSearch = SubtitleSearchCoordinator()
 
     /// The episode queued behind this one, resolved once at start so the Up
     /// Next card can appear the instant the credits do (HEL-66). Nil for
@@ -48,6 +53,10 @@ final class PlaybackController {
     /// embedded list; subtitles are embedded first, then external.
     private var audioStreams: [MediaStream] = []
     private var orderedSubtitleStreams: [MediaStream] = []
+    private var preferredSubtitleLanguages: [String] = []
+    private var missingSubtitleMode: MissingSubtitleMode = .ask
+    @ObservationIgnored private let audioSession = PlaybackAudioSession()
+    @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
 
     /// A track choice described by what it *is* rather than where it sat.
     ///
@@ -67,7 +76,13 @@ final class PlaybackController {
     }
     @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
-    func start(media: MediaItem, startFromBeginning: Bool, client: JellyfinClient) async {
+    func start(
+        media: MediaItem,
+        startFromBeginning: Bool,
+        client: JellyfinClient,
+        preferredSubtitleLanguages: [String] = [],
+        missingSubtitleMode: MissingSubtitleMode = .ask
+    ) async {
         os_signpost(
             .begin,
             log: PlaybackPerformance.log,
@@ -86,6 +101,10 @@ final class PlaybackController {
         }
         self.client = client
         itemId = media.id
+        self.preferredSubtitleLanguages = preferredSubtitleLanguages.isEmpty
+            ? SubtitlePreferencesStore.systemCaptionLanguages
+            : preferredSubtitleLanguages
+        self.missingSubtitleMode = missingSubtitleMode
         do {
             // Chapters and trickplay ride alongside the negotiation rather
             // than after it — neither is in PlaybackInfo, and waiting for a
@@ -169,7 +188,9 @@ final class PlaybackController {
                         url: url,
                         title: stream.displayTitle,
                         language: stream.language,
-                        select: stream.index == source.defaultSubtitleStreamIndex
+                        select: stream.index == source.defaultSubtitleStreamIndex,
+                        isForced: stream.isForced == true,
+                        isHearingImpaired: stream.isHearingImpaired == true
                     ))
                 }
             let externalTracks = externalPairs.map(\.track)
@@ -193,9 +214,26 @@ final class PlaybackController {
                 ) {
                     initialSubtitleOrdinal = carried
                 }
+            } else {
+                initialSubtitleOrdinal = Self.systemDefaultSubtitleOrdinal(
+                    current: initialSubtitleOrdinal,
+                    subtitles: orderedSubtitles,
+                    selectedAudioLanguage: initialAudioOrdinal.flatMap { ordinal in
+                        embeddedAudio.indices.contains(ordinal - 1)
+                            ? embeddedAudio[ordinal - 1].language
+                            : nil
+                    },
+                    preferredLanguages: self.preferredSubtitleLanguages
+                )
             }
             audioStreams = embeddedAudio
             orderedSubtitleStreams = orderedSubtitles
+
+            configureSystemMediaCallbacks()
+            try audioSession.activate { [weak self] in
+                guard let engine = self?.engine else { return false }
+                return !engine.isPaused
+            }
 
             let engine = SampleBufferPlayerEngine()
             engine.prepare(
@@ -203,6 +241,8 @@ final class PlaybackController {
                 startSeconds: resumeSeconds,
                 initialAudioOrdinal: initialAudioOrdinal,
                 initialSubtitleOrdinal: initialSubtitleOrdinal,
+                audioTrackMetadata: embeddedAudio.map(Self.trackMetadata),
+                embeddedSubtitleMetadata: embeddedSubtitles.map(Self.trackMetadata),
                 externalSubtitles: externalTracks
             )
             engine.onFinished = { [weak self] in self?.didFinish = true }
@@ -210,7 +250,40 @@ final class PlaybackController {
                 guard let self, let engine, self.engine === engine else { return }
                 self.handleEngineError(message, engine: engine)
             }
+            engine.onTrackSelectionChanged = { [weak self, weak engine] in
+                self?.nowPlaying.updateLanguageOptions()
+                if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag {
+                    // Apple's caption contract asks custom selectors to
+                    // feed explicit language choices back to the system's
+                    // ordered caption-language preference stack.
+                    _ = MACaptionAppearanceAddSelectedLanguage(.user, language as CFString)
+                }
+            }
             self.engine = engine
+            guard let playerInfo else { throw JellyfinError.unplayable }
+            nowPlaying.activate(info: playerInfo, itemID: itemId, engine: engine)
+            let preferredSet = Set(self.preferredSubtitleLanguages.compactMap(
+                SubtitlePreferencesStore.normalizedLanguage
+            ))
+            let hasSuitableLocalTrack = orderedSubtitles.contains {
+                guard let language = $0.language.flatMap(SubtitlePreferencesStore.normalizedLanguage) else {
+                    return false
+                }
+                return preferredSet.contains(language)
+            }
+            subtitleSearch.configure(
+                client: client,
+                engine: engine,
+                itemID: itemId,
+                mediaSourceID: mediaSourceId,
+                streams: orderedSubtitles,
+                preferredLanguages: self.preferredSubtitleLanguages,
+                missingMode: missingSubtitleMode,
+                hasSuitableLocalTrack: hasSuitableLocalTrack
+            ) { [weak self] stream in
+                self?.orderedSubtitleStreams.append(stream)
+                self?.nowPlaying.updateLanguageOptions()
+            }
             lastKnownPosition = resumeSeconds
             playbackSessionActive = true
 
@@ -226,8 +299,94 @@ final class PlaybackController {
             startHUD(source: source, method: method)
             resolveNextUp(after: media, client: client)
         } catch {
+            nowPlaying.stop()
+            audioSession.deactivate()
             engine = nil
-            errorMessage = (error as? JellyfinError)?.errorDescription ?? "Playback failed."
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private nonisolated static func trackMetadata(_ stream: MediaStream) -> PlayerTrackMetadata {
+        PlayerTrackMetadata(
+            languageTag: stream.language,
+            isForced: stream.isForced == true,
+            isHearingImpaired: stream.isHearingImpaired == true
+        )
+    }
+
+    /// Seeds a first playback from the system's caption policy without
+    /// overriding an explicit in-player choice carried from the last
+    /// episode. Jellyfin's own default remains authoritative when present,
+    /// except for Forced Only, whose meaning is unambiguous.
+    private static func systemDefaultSubtitleOrdinal(
+        current: Int?,
+        subtitles: [MediaStream],
+        selectedAudioLanguage: String?,
+        preferredLanguages: [String]
+    ) -> Int? {
+        let displayType: MACaptionAppearanceDisplayType = UIAccessibility.isClosedCaptioningEnabled
+            ? .alwaysOn
+            : MACaptionAppearanceGetDisplayType(.user)
+        let preferred = SubtitlePreferencesStore.deduplicated(preferredLanguages)
+
+        func best(requireForced: Bool) -> Int? {
+            let candidates = subtitles.enumerated().filter { _, stream in
+                !requireForced || stream.isForced == true
+            }
+            for language in preferred {
+                if let match = candidates.first(where: { _, stream in
+                    SubtitlePreferencesStore.normalizedLanguage(stream.language ?? "") == language
+                        && stream.isHearingImpaired == true
+                }) {
+                    return match.offset + 1
+                }
+                if let match = candidates.first(where: { _, stream in
+                    SubtitlePreferencesStore.normalizedLanguage(stream.language ?? "") == language
+                }) {
+                    return match.offset + 1
+                }
+            }
+            if let match = candidates.first(where: { $0.element.isHearingImpaired == true }) {
+                return match.offset + 1
+            }
+            return candidates.first.map { $0.offset + 1 }
+        }
+
+        switch displayType {
+        case .forcedOnly:
+            return best(requireForced: true) ?? 0
+        case .alwaysOn:
+            return current ?? best(requireForced: false) ?? 0
+        case .automatic:
+            if let current { return current }
+            if let forced = best(requireForced: true) { return forced }
+            let audio = selectedAudioLanguage.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+            if let primary = preferred.first, let audio, audio != primary {
+                return best(requireForced: false)
+            }
+            return 0
+        @unknown default:
+            return current
+        }
+    }
+
+    private func configureSystemMediaCallbacks() {
+        audioSession.onPauseRequested = { [weak self] in
+            self?.engine?.pause()
+            self?.nowPlaying.updateTimeline()
+        }
+        audioSession.onResumeRequested = { [weak self] in
+            self?.engine?.play()
+            self?.nowPlaying.updateTimeline()
+        }
+        audioSession.onRouteAvailabilityChanged = { [weak self] active in
+            self?.isExternalPlaybackRouteActive = active
+        }
+        audioSession.onError = { [weak self] error in
+            guard let self, self.engine != nil else { return }
+            self.engine?.pause()
+            self.errorMessage = error.localizedDescription
+            self.nowPlaying.updateTimeline()
         }
     }
 
@@ -267,7 +426,13 @@ final class PlaybackController {
         playerInfo = nil
         // Resume rather than restart: `episodeAfter` walks the series in
         // order, so the next one along can carry a position of its own.
-        await start(media: next, startFromBeginning: false, client: client)
+        await start(
+            media: next,
+            startFromBeginning: false,
+            client: client,
+            preferredSubtitleLanguages: preferredSubtitleLanguages,
+            missingSubtitleMode: missingSubtitleMode
+        )
     }
 
     /// Reads the live selection back off the engine before it is torn down.
@@ -317,6 +482,7 @@ final class PlaybackController {
                 try? await Task.sleep(for: .seconds(10))
                 guard let self, let client = self.client, let engine = self.engine else { return }
                 self.lastKnownPosition = engine.timePosition
+                self.nowPlaying.updateTimeline()
                 // Rides the progress loop because it needs no extra timer and
                 // 10 s is ample to see a leak's slope (HEL-58 shipped one that
                 // climbed ~2.3 MB/s into the per-process limit).
@@ -347,6 +513,7 @@ final class PlaybackController {
         progressTask?.cancel()
         hudTask?.cancel()
         nextUpTask?.cancel()
+        subtitleSearch.cancel()
         let seconds = engine?.timePosition ?? lastKnownPosition
         lastKnownPosition = seconds
 
@@ -363,6 +530,8 @@ final class PlaybackController {
             engine.shutdown()
             self.engine = nil
         }
+        nowPlaying.stop()
+        audioSession.deactivate()
         os_signpost(
             .end,
             log: PlaybackPerformance.log,
@@ -378,6 +547,8 @@ final class PlaybackController {
         lastKnownPosition = seconds
         engine.shutdown()
         self.engine = nil
+        nowPlaying.stop()
+        audioSession.deactivate()
         errorMessage = message
         // onDisappear may race this task; reportPlaybackStoppedIfNeeded marks
         // ownership before awaiting, so exactly one path finalizes Jellyfin.
@@ -632,6 +803,8 @@ struct VideoPlayerView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
     @State private var controller = PlaybackController()
+    @State private var pictureInPicture = SampleBufferPictureInPicture()
+    @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var panelOpen = false
     @AppStorage("debug.matchContent") private var matchContent = true
     @Environment(\.scenePhase) private var scenePhase
@@ -669,9 +842,16 @@ struct VideoPlayerView: View {
                     onPanelToggle: { panelOpen = $0 },
                     nextUp: nextUpEpisode,
                     onPlayNext: { advance() },
-                    onCancelNextUp: { autoplayCancelled = true }
+                    onCancelNextUp: { autoplayCancelled = true },
+                    isPictureInPicturePossible: pictureInPicture.isPossible,
+                    isPictureInPictureActive: pictureInPicture.isActive,
+                    onTogglePictureInPicture: { pictureInPicture.toggle() },
+                    subtitleStyle: subtitlePreferences.renderStyle,
+                    subtitleSearch: controller.subtitleSearch
                 ) {
-                    SampleBufferVideoSurface(engine: engine)
+                    SampleBufferVideoSurface(engine: engine) { displayLayer in
+                        pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
+                    }
                 }
             } else {
                 LoadingView()
@@ -683,10 +863,13 @@ struct VideoPlayerView: View {
         }
         .interactiveDismissDisabled()
         .task {
+            subtitlePreferences.configure(accountID: session.activeAccount?.id)
             await controller.start(
                 media: playerItem.media,
                 startFromBeginning: playerItem.startFromBeginning,
-                client: session.client
+                client: session.client,
+                preferredSubtitleLanguages: subtitlePreferences.preferredLanguages,
+                missingSubtitleMode: subtitlePreferences.values.missingMode
             )
         }
         .onChange(of: controller.didFinish) { _, finished in
@@ -707,6 +890,12 @@ struct VideoPlayerView: View {
         .onChange(of: controller.engine?.displayMatchRequest) { _, request in
             applyDisplayMatch(request)
         }
+        .onChange(of: controller.engine?.isPaused) { _, _ in
+            pictureInPicture.invalidatePlaybackState()
+        }
+        .onChange(of: controller.engine?.duration) { _, _ in
+            pictureInPicture.invalidatePlaybackState()
+        }
         // Live so an A/B can flip mid-playback (expect the TV's mode
         // switch flash) and so the HUD's app on/off always tells the
         // truth about what is applied.
@@ -718,9 +907,20 @@ struct VideoPlayerView: View {
         // returning re-requests it (HEL-64).
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .background, .inactive:
+            case .background:
+                applyDisplayMatch(nil)
+                if !pictureInPicture.isActive,
+                   !pictureInPicture.isTransitioning,
+                   !controller.isExternalPlaybackRouteActive {
+                    controller.engine?.pause()
+                }
+            case .inactive:
+                // Control Center, route pickers, permission alerts, and the
+                // first phase of automatic PiP all make a scene inactive.
+                // None means the user asked playback to stop.
                 applyDisplayMatch(nil)
             case .active:
+                subtitlePreferences.refreshSystemAppearance()
                 applyDisplayMatch(controller.engine?.displayMatchRequest)
             @unknown default:
                 break
@@ -737,6 +937,7 @@ struct VideoPlayerView: View {
         }
         .onDisappear {
             applyDisplayMatch(nil)
+            pictureInPicture.detach()
             Task { await controller.stop() }
         }
     }

@@ -36,7 +36,13 @@ extension JellyfinClient {
 
     func playbackInfo(itemId: String) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
+        #if DEBUG && targetEnvironment(simulator)
+        let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
+            ? DeviceProfile.simulatorRegression
+            : DeviceProfile.lagoon
+        #else
         let profile = DeviceProfile.lagoon
+        #endif
         return try await post(
             "Items/\(itemId)/PlaybackInfo",
             query: [URLQueryItem(name: "UserId", value: userId)],
@@ -89,6 +95,22 @@ extension JellyfinClient {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "api_key", value: accessToken)]
         return components.url ?? url
+    }
+
+    // MARK: - Remote subtitles (HEL-49)
+
+    /// Searches every subtitle provider configured on the Jellyfin server.
+    /// Jellyfin expects an ISO language identifier and preserves provider
+    /// ranking in the returned array.
+    func searchRemoteSubtitles(itemId: String, language: String) async throws -> [RemoteSubtitleInfo] {
+        try await get("Items/\(itemId)/RemoteSearch/Subtitles/\(language)")
+    }
+
+    /// Asks Jellyfin to download and attach a result. The file belongs to
+    /// the server/library after this point; Lagoon then refreshes
+    /// PlaybackInfo to obtain the authoritative stream index and URL.
+    func downloadRemoteSubtitle(itemId: String, subtitleId: String) async throws {
+        try await postVoid("Items/\(itemId)/RemoteSearch/Subtitles/\(subtitleId)")
     }
 
     private func staticStreamQuery(source: MediaSource, accessToken: String) -> [URLQueryItem] {

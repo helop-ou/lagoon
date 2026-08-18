@@ -6,10 +6,20 @@ import UIKit
 /// hands it to the engine once the view exists (mirrors MPVVideoSurface).
 struct SampleBufferVideoSurface: UIViewRepresentable {
     let engine: SampleBufferPlayerEngine
+    var onDisplayLayerReady: ((AVSampleBufferDisplayLayer) -> Void)?
+
+    init(
+        engine: SampleBufferPlayerEngine,
+        onDisplayLayerReady: ((AVSampleBufferDisplayLayer) -> Void)? = nil
+    ) {
+        self.engine = engine
+        self.onDisplayLayerReady = onDisplayLayerReady
+    }
 
     func makeUIView(context: Context) -> SampleBufferVideoView {
         let view = SampleBufferVideoView()
         engine.attach(displayLayer: view.displayLayer)
+        onDisplayLayerReady?(view.displayLayer)
         return view
     }
 

@@ -1,4 +1,3 @@
-import AVFAudio
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -79,6 +78,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     @ObservationIgnored var onFinished: (() -> Void)?
     @ObservationIgnored var onError: ((String) -> Void)?
+    @ObservationIgnored var onTrackSelectionChanged: (() -> Void)?
 
     // MARK: Cross-thread state
 
@@ -126,6 +126,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         startSeconds: Double,
         initialAudioOrdinal: Int?,
         initialSubtitleOrdinal: Int? = nil,
+        audioTrackMetadata: [PlayerTrackMetadata] = [],
+        embeddedSubtitleMetadata: [PlayerTrackMetadata] = [],
         externalSubtitles: [ExternalSubtitleTrack] = []
     ) {
         pendingURL = url
@@ -134,6 +136,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         shared.withLock {
             $0.initialAudioOrdinal = initialAudioOrdinal
             $0.initialSubtitleOrdinal = initialSubtitleOrdinal
+            $0.audioTrackMetadata = audioTrackMetadata
+            $0.embeddedSubtitleMetadata = embeddedSubtitleMetadata
             $0.externalSubtitles = externalSubtitles
         }
     }
@@ -154,12 +158,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             name: "Renderer Attach",
             signpostID: performanceSignpostID
         )
-
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-        // Declares real multichannel content so the system's spatial
-        // pipeline treats it as such on AirPods (M2).
-        try? AVAudioSession.sharedInstance().setSupportsMultichannelContent(true)
-        try? AVAudioSession.sharedInstance().setActive(true)
 
         let video = displayLayer.sampleBufferRenderer
         let audio = AVSampleBufferAudioRenderer()
@@ -204,17 +202,32 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     // MARK: - Transport (PlayerEngine)
 
-    func togglePause() {
-        if synchronizer.rate > 0 {
-            synchronizer.rate = 0
-            isPaused = true
-        } else {
+    func play() {
+        guard isPaused || synchronizer.rate == 0 else { return }
+        isPaused = false
+        // A buffering engine resumes when its queue gate is satisfied;
+        // forcing rate 1 here would run its timebase ahead of the samples.
+        if !isBuffering {
             synchronizer.rate = 1
-            isPaused = false
+        }
+        rearmBench(at: timePosition)
+    }
+
+    func pause() {
+        guard !isPaused || synchronizer.rate > 0 else { return }
+        synchronizer.rate = 0
+        isPaused = true
+        rearmBench(at: timePosition)
+    }
+
+    func togglePause() {
+        if isPaused {
+            play()
+        } else {
+            pause()
         }
         // Touching the transport ends a controlled measurement window;
         // the bench re-arms from wherever playback continues.
-        rearmBench(at: timePosition)
     }
 
     func seek(by seconds: Double) {
@@ -225,8 +238,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard let id, id - 1 < audioTracks.count else { return }
         shared.withLock { $0.selectedAudioOrdinal = id }
         audioTracks = audioTracks.map {
-            PlayerTrack(engineID: $0.engineID, kind: .audio, displayName: $0.displayName, isSelected: $0.engineID == id)
+            PlayerTrack(
+                engineID: $0.engineID,
+                kind: .audio,
+                displayName: $0.displayName,
+                isSelected: $0.engineID == id,
+                languageTag: $0.languageTag,
+                isForced: $0.isForced,
+                isHearingImpaired: $0.isHearingImpaired,
+                source: $0.source
+            )
         }
+        onTrackSelectionChanged?()
         // Cleanest gapless-ish switch in M1: re-run the demux from the
         // current position with the new stream selected.
         seek(to: timePosition)
@@ -250,8 +273,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         currentSubtitleText = nil
         currentSubtitleImages = []
         subtitleTracks = subtitleTracks.map {
-            PlayerTrack(engineID: $0.engineID, kind: .subtitle, displayName: $0.displayName, isSelected: $0.engineID == ordinal)
+            PlayerTrack(
+                engineID: $0.engineID,
+                kind: .subtitle,
+                displayName: $0.displayName,
+                isSelected: $0.engineID == ordinal,
+                languageTag: $0.languageTag,
+                isForced: $0.isForced,
+                isHearingImpaired: $0.isHearingImpaired,
+                source: $0.source
+            )
         }
+        onTrackSelectionChanged?()
         if ordinal >= 1, ordinal <= embeddedSubtitleCount {
             shared.withLock { state in
                 state.selectedSubtitleOrdinal = ordinal
@@ -284,6 +317,35 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             guard let self, self.externalLoadToken == token else { return }
             self.subtitleStore.replaceAll(cues)
         }
+    }
+
+    func addExternalSubtitle(_ track: ExternalSubtitleTrack) {
+        guard !shutdownRequested else { return }
+        externalSubtitles.append(track)
+        shared.withLock { $0.externalSubtitles = externalSubtitles }
+        let ordinal = embeddedSubtitleCount + externalSubtitles.count
+        subtitleTracks = subtitleTracks.map {
+            PlayerTrack(
+                engineID: $0.engineID,
+                kind: .subtitle,
+                displayName: $0.displayName,
+                isSelected: false,
+                languageTag: $0.languageTag,
+                isForced: $0.isForced,
+                isHearingImpaired: $0.isHearingImpaired,
+                source: $0.source
+            )
+        } + [PlayerTrack(
+            engineID: ordinal,
+            kind: .subtitle,
+            displayName: Self.externalTrackName(for: track),
+            isSelected: true,
+            languageTag: track.language,
+            isForced: track.isForced,
+            isHearingImpaired: track.isHearingImpaired,
+            source: track.isDownloaded ? .downloaded : .external
+        )]
+        selectSubtitleTrack(id: ordinal)
     }
 
     func shutdown() {
@@ -842,6 +904,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         applyAudioSelection(ordinal: initialOrdinal)
 
         let streams = demuxer.audioStreams
+        let audioMetadata = shared.withLock { $0.audioTrackMetadata }
         let demuxedDuration = demuxer.durationSeconds
         let size = videoDimensions()
         // Without a known rate there is no meaningful mode to request.
@@ -852,11 +915,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             nil
         }
         let tracks = streams.enumerated().map { offset, stream in
-            PlayerTrack(
+            let metadata = audioMetadata.indices.contains(offset) ? audioMetadata[offset] : nil
+            return PlayerTrack(
                 engineID: offset + 1,
                 kind: .audio,
                 displayName: Self.trackName(for: stream),
-                isSelected: offset + 1 == initialOrdinal
+                isSelected: offset + 1 == initialOrdinal,
+                languageTag: metadata?.languageTag ?? stream.language,
+                isForced: metadata?.isForced ?? false,
+                isHearingImpaired: metadata?.isHearingImpaired ?? false
             )
         }
 
@@ -864,7 +931,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // the external tracks — the same layout the controller used to map
         // the server's DefaultSubtitleStreamIndex.
         let embeddedSubtitles = demuxer.subtitleStreams
-        let (externals, subtitleOrdinal) = shared.withLock { state -> ([ExternalSubtitleTrack], Int) in
+        let (externals, subtitleMetadata, subtitleOrdinal) = shared.withLock { state -> ([ExternalSubtitleTrack], [PlayerTrackMetadata], Int) in
             state.embeddedSubtitleStreamIndices = embeddedSubtitles.map(\.streamIndex)
             if state.selectedSubtitleOrdinal < 0 {
                 state.selectedSubtitleOrdinal = state.initialSubtitleOrdinal ?? 0
@@ -873,21 +940,29 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             if ordinal >= 1, ordinal <= embeddedSubtitles.count {
                 state.selectedSubtitleStreamIndex = embeddedSubtitles[ordinal - 1].streamIndex
             }
-            return (state.externalSubtitles, ordinal)
+            return (state.externalSubtitles, state.embeddedSubtitleMetadata, ordinal)
         }
         let subtitleTracks = embeddedSubtitles.enumerated().map { offset, stream in
-            PlayerTrack(
+            let metadata = subtitleMetadata.indices.contains(offset) ? subtitleMetadata[offset] : nil
+            return PlayerTrack(
                 engineID: offset + 1,
                 kind: .subtitle,
                 displayName: Self.trackName(for: stream),
-                isSelected: offset + 1 == subtitleOrdinal
+                isSelected: offset + 1 == subtitleOrdinal,
+                languageTag: metadata?.languageTag ?? stream.language,
+                isForced: metadata?.isForced ?? false,
+                isHearingImpaired: metadata?.isHearingImpaired ?? false
             )
         } + externals.enumerated().map { offset, track in
             PlayerTrack(
                 engineID: embeddedSubtitles.count + offset + 1,
                 kind: .subtitle,
                 displayName: Self.externalTrackName(for: track),
-                isSelected: embeddedSubtitles.count + offset + 1 == subtitleOrdinal
+                isSelected: embeddedSubtitles.count + offset + 1 == subtitleOrdinal,
+                languageTag: track.language,
+                isForced: track.isForced,
+                isHearingImpaired: track.isHearingImpaired,
+                source: track.isDownloaded ? .downloaded : .external
             )
         }
         Task { @MainActor in
@@ -1304,6 +1379,8 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var selectedSubtitleOrdinal = -1
         var selectedSubtitleStreamIndex: Int32 = -1
         var initialSubtitleOrdinal: Int?
+        var audioTrackMetadata: [PlayerTrackMetadata] = []
+        var embeddedSubtitleMetadata: [PlayerTrackMetadata] = []
         var embeddedSubtitleStreamIndices: [Int32] = []
         var externalSubtitles: [ExternalSubtitleTrack] = []
         /// Highest video pts the demuxer has delivered (M6 stall detection).

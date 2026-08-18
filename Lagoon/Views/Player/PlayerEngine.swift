@@ -30,6 +30,11 @@ protocol PlayerEngine: AnyObject, Observable {
     /// demuxer knows, and when the frame rate is unknowable.
     var displayMatchRequest: DisplayMatchRequest? { get }
 
+    /// Idempotent transport controls are required by system integrations:
+    /// interruption, PiP, and Remote Command Center callbacks describe the
+    /// desired state rather than asking the app to invert its current one.
+    func play()
+    func pause()
     func togglePause()
     func seek(by seconds: Double)
     /// Absolute seek, clamped by the engine. Both seeks are optimistic:
@@ -39,6 +44,9 @@ protocol PlayerEngine: AnyObject, Observable {
     /// nil turns the stream off (subtitles); audio pickers shouldn't pass nil.
     func selectAudioTrack(id: Int?)
     func selectSubtitleTrack(id: Int?)
+    /// Adds a server-downloaded sidecar to the live item and selects it
+    /// without rebuilding the renderers or restarting playback (HEL-49).
+    func addExternalSubtitle(_ track: ExternalSubtitleTrack)
     func setAudioDelay(_ seconds: Double)
 }
 
@@ -71,8 +79,47 @@ nonisolated struct PlayerTrack: Identifiable, Equatable {
     let kind: Kind
     let displayName: String
     let isSelected: Bool
+    let languageTag: String?
+    let isForced: Bool
+    let isHearingImpaired: Bool
+    let source: Source
+
+    enum Source: String, Equatable {
+        case embedded
+        case external
+        case downloaded
+    }
+
+    init(
+        engineID: Int,
+        kind: Kind,
+        displayName: String,
+        isSelected: Bool,
+        languageTag: String? = nil,
+        isForced: Bool = false,
+        isHearingImpaired: Bool = false,
+        source: Source = .embedded
+    ) {
+        self.engineID = engineID
+        self.kind = kind
+        self.displayName = displayName
+        self.isSelected = isSelected
+        self.languageTag = languageTag
+        self.isForced = isForced
+        self.isHearingImpaired = isHearingImpaired
+        self.source = source
+    }
 
     var id: String { "\(kind.rawValue)-\(engineID)" }
+}
+
+/// Server-authored attributes for an embedded demux track. FFmpeg exposes
+/// language/title, but Jellyfin is the authority for accessibility flags;
+/// keeping this separate lets the engine merge both sources by ordinal.
+nonisolated struct PlayerTrackMetadata: Equatable, Sendable {
+    let languageTag: String?
+    let isForced: Bool
+    let isHearingImpaired: Bool
 }
 
 /// A stretch of the item the server has classified — intro, recap, credits
@@ -198,4 +245,25 @@ nonisolated struct ExternalSubtitleTrack {
     let language: String?
     /// Jellyfin's default-subtitle choice pointed at this external stream.
     let select: Bool
+    let isForced: Bool
+    let isHearingImpaired: Bool
+    let isDownloaded: Bool
+
+    init(
+        url: URL,
+        title: String?,
+        language: String?,
+        select: Bool,
+        isForced: Bool = false,
+        isHearingImpaired: Bool = false,
+        isDownloaded: Bool = false
+    ) {
+        self.url = url
+        self.title = title
+        self.language = language
+        self.select = select
+        self.isForced = isForced
+        self.isHearingImpaired = isHearingImpaired
+        self.isDownloaded = isDownloaded
+    }
 }

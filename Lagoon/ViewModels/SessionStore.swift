@@ -281,6 +281,38 @@ final class SessionStore {
         try completeSignIn(with: result)
     }
 
+    #if DEBUG
+    /// Makes the UI regression suite runnable on a clean simulator. The
+    /// public Jellyfin demo credentials are documented and carry no private
+    /// user data; the hook is gated by two launch-only flags and cannot ship
+    /// in Release builds.
+    func bootstrapPublicDemoForRegressionIfRequested() async {
+        guard UserDefaults.standard.bool(forKey: "debug.playerRegression"),
+              UserDefaults.standard.bool(forKey: "debug.regressionBootstrapPublicDemo"),
+              phase != .signedIn else { return }
+        do {
+            try await connect(to: "https://demo.jellyfin.org/stable")
+            let result = try await client.authenticateByName(username: "demo", password: "")
+            guard let url = client.serverURL else { return }
+            // UI tests run in an ephemeral simulator session. Activating the
+            // documented demo token directly avoids making the regression
+            // harness depend on keychain entitlements or persisted accounts.
+            let account = StoredAccount(
+                serverURL: url,
+                serverName: serverName,
+                userId: result.user.id,
+                userName: result.user.name
+            )
+            client.activateSession(token: result.accessToken, userId: result.user.id)
+            activeAccount = account
+            userName = result.user.name
+            phase = .signedIn
+        } catch {
+            print("RegressionBootstrap failed: \(error.localizedDescription)")
+        }
+    }
+    #endif
+
     func quickConnectAvailable() async -> Bool {
         (try? await client.quickConnectEnabled()) ?? false
     }

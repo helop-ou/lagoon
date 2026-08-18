@@ -135,6 +135,37 @@ struct MainTabView: View {
         let requestedSeries = UserDefaults.standard.string(forKey: "debug.regressionSeriesName")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if regressionRun,
+           UserDefaults.standard.bool(forKey: "debug.regressionFindMultiAudioH264") {
+            guard let page = try? await session.client.items(
+                includeTypes: [.movie, .episode],
+                limit: 100
+            ) else {
+                print("RegressionResolve failed multi-audio library scan")
+                return
+            }
+            // Ask the server which sources are direct-playable under the
+            // simulator profile. That preserves every embedded audio stream
+            // and avoids baking a private-library title into the regression.
+            for item in page.items {
+                guard let info = try? await session.client.playbackInfo(itemId: item.id),
+                      let source = info.mediaSources.first(where: { $0.supportsDirectPlay == true }) else {
+                    continue
+                }
+                let streams = source.mediaStreams ?? []
+                let isH264 = streams.contains {
+                    $0.type == "Video" && $0.codec?.lowercased() == "h264"
+                }
+                let audioCount = streams.count { $0.type == "Audio" }
+                if isH264, audioCount > 1 {
+                    print("RegressionResolve multi-audio title=\"\(item.name ?? "?")\" id=\(item.id)")
+                    playerItem = PlayerItem(media: item, startFromBeginning: true)
+                    return
+                }
+            }
+            print("RegressionResolve no direct-play H.264 multi-audio item")
+            return
+        }
+        if regressionRun,
            UserDefaults.standard.bool(forKey: "debug.regressionFindSkippableEpisode"),
            let requestedSeries,
            !requestedSeries.isEmpty {

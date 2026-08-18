@@ -11,14 +11,20 @@ struct SettingsView: View {
     @AppStorage("debug.matchContent") private var matchContent = true
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
+    @State private var subtitlePreferences = SubtitlePreferencesStore()
 
     var body: some View {
-        #if os(tvOS)
-        splitLayout
-        #else
-        touchForm
-            .navigationTitle("Settings")
-        #endif
+        Group {
+            #if os(tvOS)
+            splitLayout
+            #else
+            touchForm
+                .navigationTitle("Settings")
+            #endif
+        }
+        .task(id: session.activeAccount?.id) {
+            subtitlePreferences.configure(accountID: session.activeAccount?.id)
+        }
     }
 
     // MARK: - tvOS: identity | settings list
@@ -88,6 +94,33 @@ struct SettingsView: View {
                 row("Play Next Episode", value: autoplayMode.shortTitle) {
                     cycleAutoplayMode()
                 }
+                row("Subtitle Appearance", value: appearanceTitle) {
+                    var values = subtitlePreferences.values
+                    values.followsSystemAppearance.toggle()
+                    subtitlePreferences.values = values
+                }
+                row("Subtitle Size", value: subtitlePreferences.values.textSize.title) {
+                    cycleSubtitleValue(\.textSize)
+                }
+                row("Subtitle Edge", value: subtitlePreferences.values.edgeStyle.title) {
+                    cycleSubtitleValue(\.edgeStyle)
+                }
+                row("Subtitle Background", value: subtitlePreferences.values.background.title) {
+                    cycleSubtitleValue(\.background)
+                }
+                row("Subtitle Position", value: subtitlePreferences.values.verticalPosition.title) {
+                    cycleSubtitleValue(\.verticalPosition)
+                }
+                row("Preferred Subtitle", value: SubtitlePreferencesStore.displayName(for: subtitlePreferences.primaryLanguage)) {
+                    cycleLanguage(primary: true)
+                }
+                row("Subtitle Fallback", value: SubtitlePreferencesStore.displayName(for: subtitlePreferences.fallbackLanguage)) {
+                    cycleLanguage(primary: false)
+                }
+                row("When Subtitles Are Missing", value: subtitlePreferences.values.missingMode.title) {
+                    cycleMissingSubtitleMode()
+                }
+                subtitlePreview
                 row("Playback HUD", value: showPlaybackHUD ? "On" : "Off") {
                     showPlaybackHUD.toggle()
                 }
@@ -216,6 +249,55 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Subtitle Languages") {
+                Picker("Preferred", selection: primaryLanguageBinding) {
+                    ForEach(settingsLanguageChoices, id: \.self) { language in
+                        Text(SubtitlePreferencesStore.displayName(for: language))
+                            .tag(Optional(language))
+                    }
+                }
+                Picker("Fallback", selection: fallbackLanguageBinding) {
+                    Text("None").tag(String?.none)
+                    ForEach(settingsLanguageChoices, id: \.self) { language in
+                        Text(SubtitlePreferencesStore.displayName(for: language))
+                            .tag(Optional(language))
+                    }
+                }
+                Picker("When Missing", selection: subtitleBinding(\.missingMode)) {
+                    ForEach(MissingSubtitleMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+            }
+
+            Section("Subtitle Appearance") {
+                Toggle("Use System Caption Style", isOn: subtitleBinding(\.followsSystemAppearance))
+                Picker("Size", selection: subtitleBinding(\.textSize, customAppearance: true)) {
+                    ForEach(SubtitleTextSize.allCases) { size in
+                        Text(size.title).tag(size)
+                    }
+                }
+                Picker("Edge", selection: subtitleBinding(\.edgeStyle, customAppearance: true)) {
+                    ForEach(SubtitleEdgeStyle.allCases) { edge in
+                        Text(edge.title).tag(edge)
+                    }
+                }
+                Picker("Background", selection: subtitleBinding(\.background, customAppearance: true)) {
+                    ForEach(SubtitleBackground.allCases) { background in
+                        Text(background.title).tag(background)
+                    }
+                }
+                Picker("Position", selection: subtitleBinding(\.verticalPosition, customAppearance: true)) {
+                    ForEach(SubtitleVerticalPosition.allCases) { position in
+                        Text(position.title).tag(position)
+                    }
+                }
+                subtitlePreview
+                Button("Reset to System") {
+                    subtitlePreferences.resetAppearanceToSystem()
+                }
+            }
+
             Section("About") {
                 LabeledContent("App", value: "Lagoon")
                 LabeledContent("Version", value: Bundle.main.displayVersion)
@@ -230,6 +312,100 @@ struct SettingsView: View {
         }
     }
     #endif
+
+    private var appearanceTitle: String {
+        subtitlePreferences.values.followsSystemAppearance
+            ? String(localized: "System")
+            : String(localized: "Lagoon")
+    }
+
+    private var subtitlePreview: some View {
+        let style = subtitlePreferences.renderStyle
+        return Text("Subtitle preview")
+            .font(style.font)
+            .foregroundStyle(style.foregroundColor)
+            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
+            .padding(.horizontal, Metrics.Space.l)
+            .padding(.vertical, Metrics.Space.s)
+            .background(
+                style.backgroundColor.opacity(style.backgroundOpacity),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("settings.subtitlePreview")
+    }
+
+    private func cycleSubtitleValue<T>(
+        _ keyPath: WritableKeyPath<SubtitlePreferenceValues, T>
+    ) where T: CaseIterable & Equatable {
+        let all = Array(T.allCases)
+        guard !all.isEmpty else { return }
+        var values = subtitlePreferences.values
+        let current = values[keyPath: keyPath]
+        let next = (all.firstIndex(of: current).map { $0 + 1 } ?? 0) % all.count
+        values[keyPath: keyPath] = all[next]
+        values.followsSystemAppearance = false
+        subtitlePreferences.values = values
+    }
+
+    private func cycleMissingSubtitleMode() {
+        let all = MissingSubtitleMode.allCases
+        var values = subtitlePreferences.values
+        let next = (all.firstIndex(of: values.missingMode).map { $0 + 1 } ?? 0) % all.count
+        values.missingMode = all[next]
+        subtitlePreferences.values = values
+    }
+
+    private func cycleLanguage(primary: Bool) {
+        var options = settingsLanguageChoices.map(Optional.some)
+        if !primary { options.insert(nil, at: 0) }
+        let current = primary ? subtitlePreferences.primaryLanguage : subtitlePreferences.fallbackLanguage
+        let next = (options.firstIndex(where: { $0 == current }).map { $0 + 1 } ?? 0) % options.count
+        if primary {
+            subtitlePreferences.setPrimaryLanguage(options[next])
+        } else {
+            subtitlePreferences.setFallbackLanguage(options[next])
+        }
+    }
+
+    private var settingsLanguageChoices: [String] {
+        #if os(tvOS)
+        SubtitlePreferencesStore.commonLanguageChoices
+        #else
+        SubtitlePreferencesStore.allLanguageChoices
+        #endif
+    }
+
+    private var primaryLanguageBinding: Binding<String?> {
+        Binding(
+            get: { subtitlePreferences.primaryLanguage },
+            set: { subtitlePreferences.setPrimaryLanguage($0) }
+        )
+    }
+
+    private var fallbackLanguageBinding: Binding<String?> {
+        Binding(
+            get: { subtitlePreferences.fallbackLanguage },
+            set: { subtitlePreferences.setFallbackLanguage($0) }
+        )
+    }
+
+    private func subtitleBinding<T>(
+        _ keyPath: WritableKeyPath<SubtitlePreferenceValues, T>,
+        customAppearance: Bool = false
+    ) -> Binding<T> {
+        Binding(
+            get: { subtitlePreferences.values[keyPath: keyPath] },
+            set: { newValue in
+                var values = subtitlePreferences.values
+                values[keyPath: keyPath] = newValue
+                if customAppearance {
+                    values.followsSystemAppearance = false
+                }
+                subtitlePreferences.values = values
+            }
+        )
+    }
 }
 
 private extension Bundle {

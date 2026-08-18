@@ -337,7 +337,31 @@ nonisolated final class FFmpegDemuxer {
         guard let ctx = formatContext else {
             throw DemuxError.seekFailed("demuxer not open")
         }
-        let status = av_seek_frame(ctx, -1, Int64(seconds * avTimeBase), seekBackwardFlag)
+        // Anchor the request in the selected video stream's clock. HLS can
+        // expose a separate audio rendition as its default stream; seeking
+        // with stream_index -1 then moves audio correctly while video keeps
+        // reading from its prior playlist position.
+        let timestamp = Int64(
+            seconds * Double(videoTimeBase.den) / Double(max(videoTimeBase.num, 1))
+        )
+        // The legacy single-stream seek can leave split HLS audio/video
+        // inputs at different playlist positions (observed as a full audio
+        // queue and zero video after a backward scrub). The newer API seeks
+        // all active streams to a jointly presentable point. Constraining
+        // max_ts to the requested time still gives decoders the keyframe at
+        // or before the target. Keep the legacy call as a compatibility
+        // fallback for demuxers that do not implement avformat_seek_file.
+        var status = avformat_seek_file(
+            ctx,
+            videoStreamIndex,
+            Int64.min,
+            timestamp,
+            timestamp,
+            0
+        )
+        if status < 0 {
+            status = av_seek_frame(ctx, videoStreamIndex, timestamp, seekBackwardFlag)
+        }
         try Self.validateSeekStatus(status)
         didDrainAtEOF = false
         for decoder in audioDecoders.values {

@@ -173,8 +173,14 @@ still owns color management, presentation, synchronization, and audio output.
   space. Selecting an embedded track re-demuxes from the current
   position (same trick as audio switching) so the active line appears
   immediately; PGS cues are open-ended and close on the next
-  composition event. Not covered: subtitles during HLS transcode (the
-  vtt-over-HLS playlist is not read).
+  composition event. Server Forced/SDH/language metadata is merged into
+  both embedded and sidecar tracks, exposed to Now Playing, and retained
+  when a downloaded subtitle is inserted into the running engine. The
+  player can search Jellyfin's configured providers by ordered preferred
+  language, explicitly download a result, refresh PlaybackInfo, and
+  side-load/select the authenticated external file without restarting the
+  video. Not covered: an embedded subtitle rendition inside an HLS master
+  (remote downloads arrive as external files and do work).
 - **Threading**: the demux loop runs on a serial queue feeding two
   condition-protected sample-buffer queues; renderer pumps drain them via
   `requestMediaDataWhenReady`; state and transport live on the main actor.
@@ -182,7 +188,9 @@ still owns color management, presentation, synchronization, and audio output.
   wake the producer when consumers cross their low-water marks, so a full
   queue blocks without polling or arbitrary sleeps.
 - **Seeks and clock starts** stop the clock, serialize renderer flushes with
-  enqueueing, reset queues, `av_seek_frame`, then re-prime (~12 video
+  enqueueing, reset queues, use `avformat_seek_file` against the selected
+  video stream (with `av_seek_frame` only as a demuxer compatibility
+  fallback), then re-prime (~12 video
   buffers). Playback binds the first presentable media time to a near-future
   host-clock time with `setRate(_:time:atHostTime:)`, so audio and video start
   on one deadline. A generation token prevents an older priming callback from
@@ -248,6 +256,53 @@ still owns color management, presentation, synchronization, and audio output.
   policy. Accepted platform limits: TrueHD Atmos objects unpreservable
   on tvOS; no subtitles during HLS transcode. Transport UX work
   (scrubbing/trickplay/motion) continues on HEL-39.
+
+## System media integration (HEL-41, HEL-80)
+
+Lagoon owns the system behavior AVPlayer would otherwise supply; it does
+not introduce a second player to get it:
+
+- `PlaybackAudioSession` activates `.playback` / `.moviePlayback`, enables
+  multichannel content, uses `.longFormVideo` on iOS, and deactivates with
+  `notifyOthersOnDeactivation` when playback ends. Interruption callbacks
+  are idempotent: resume only when the item was playing and the system sets
+  `shouldResume`. Route changes pause when a personal output (wired,
+  Bluetooth, or AirPlay) disappears, but not for tvOS HDMI mode changes.
+  Media-services reset re-establishes the category and active session.
+- `NowPlayingCoordinator` publishes a stable Jellyfin item identifier,
+  title/episode line, poster, duration, elapsed time, rate, and playback
+  state. It registers play, pause, toggle, ±10 s, absolute position, and
+  audio/subtitle language-option commands. Handlers hop to the main actor
+  because MediaPlayer doesn't promise a callback queue; all targets and
+  Now Playing state are removed on teardown.
+- PiP uses `AVPictureInPictureController.ContentSource` with the existing
+  `AVSampleBufferDisplayLayer` and a
+  `AVPictureInPictureSampleBufferPlaybackDelegate`. Its play/pause/skip
+  callbacks operate on the same `SampleBufferPlayerEngine`; there is no
+  hidden AVPlayer. iOS exposes the system `AVRoutePickerView` for AirPlay.
+  Backgrounding pauses unless PiP is active/transitioning or AirPlay owns
+  the route. `AVInitialRouteSharingPolicy=LongFormVideo` and the audio
+  background mode are declared in the plist.
+- Caption rendering reads Apple's Media Accessibility font, foreground,
+  opacity, size, background, and edge preferences live; Lagoon's per-account
+  override adds size, edge, background, and vertical-position controls.
+  System caption languages seed the ordered primary/fallback search list,
+  system Forced/Automatic/Always On policy seeds a first playback, explicit
+  track selection feeds the language back to the system preference stack,
+  and visible text is reported through
+  `MACaptionAppearanceDidDisplayCaptions`. Authored bitmap subtitles retain
+  their original appearance and placement.
+
+The tvOS simulator regression suite uses a Debug-only capability profile:
+H.264 direct play when possible, otherwise a low-bitrate H.264/AAC HLS
+rendition. This is necessary because CoreSimulator has no dependable HEVC /
+Dolby Vision hardware decoder. Release builds and physical Apple TV runs
+always use the full `DeviceProfile.lagoon` profile. Four real-media UI
+regressions cover pause/resume, forward/backward scrubbing, subtitle
+selection across a seek, rendered subtitle cues, automatic intro skipping,
+and audio switching/re-prime. The audio test discovers a server-declared
+direct-play H.264 item with multiple tracks so HLS cannot silently collapse
+the fixture to one rendition.
 
 ## Display mode matching (tvOS, HEL-64)
 

@@ -192,4 +192,66 @@ nonisolated enum DeviceProfile {
             SubtitleProfile(format: "dvdsub", method: "Embed"),
         ]
     )
+
+    #if DEBUG && targetEnvironment(simulator)
+    /// CoreSimulator has no reliable HEVC/Dolby Vision hardware decoder.
+    /// UI regression tests therefore ask Jellyfin for an H.264/AAC HLS
+    /// rendition; production and physical-device profiles remain unchanged.
+    static let simulatorRegression = Profile(
+        // Keep the generated rendition light enough for deterministic
+        // seek tests even when the server must decode a 4K source first.
+        maxStreamingBitrate: 4_000_000,
+        maxStaticBitrate: 100_000_000,
+        directPlayProfiles: [
+            DirectPlayProfile(
+                container: "mkv,webm,mp4,m4v,mov",
+                type: "Video",
+                videoCodec: "h264",
+                audioCodec: "aac,mp3,ac3,eac3"
+            ),
+            DirectPlayProfile(container: "mp3", type: "Audio"),
+            DirectPlayProfile(container: "m4a,m4b", type: "Audio", audioCodec: "aac,alac"),
+            DirectPlayProfile(container: "flac", type: "Audio"),
+        ],
+        transcodingProfiles: [
+            TranscodingProfile(
+                container: "mp4",
+                type: "Video",
+                videoCodec: "h264",
+                audioCodec: "aac",
+                context: "Streaming",
+                protocol: "hls",
+                maxAudioChannels: "6",
+                minSegments: 1,
+                breakOnNonKeyFrames: true
+            ),
+        ],
+        codecProfiles: [
+            CodecProfile(
+                type: "Video",
+                codec: "h264",
+                conditions: [
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoProfile",
+                        value: "high|main|baseline|constrained baseline",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoRangeType",
+                        value: "SDR",
+                        isRequired: false
+                    ),
+                ]
+            ),
+        ],
+        subtitleProfiles: [
+            SubtitleProfile(format: "vtt", method: "Hls"),
+            SubtitleProfile(format: "vtt", method: "External"),
+            SubtitleProfile(format: "subrip", method: "External"),
+            SubtitleProfile(format: "srt", method: "External"),
+        ]
+    )
+    #endif
 }
