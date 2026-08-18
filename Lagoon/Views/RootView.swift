@@ -12,6 +12,8 @@ struct RootView: View {
                 ServerConnectView()
             case .needsSignIn:
                 SignInView()
+            case .choosingAccount:
+                AccountPickerView()
             case .signedIn:
                 MainTabView()
             }

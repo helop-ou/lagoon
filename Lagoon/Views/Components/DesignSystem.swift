@@ -39,6 +39,8 @@ enum Metrics {
     /// is given.
     static let heroTextWidth: CGFloat = 640
     static let heroTextInset: CGFloat = 56
+    /// Square avatar tile in the account picker (HEL-38).
+    static let accountTileSize: CGFloat = 220
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
@@ -50,6 +52,7 @@ enum Metrics {
     static let posterCaptionHeight: CGFloat = 38
     static let railTopPadding: CGFloat = 6
     static let railBottomPadding: CGFloat = 10
+    static let accountTileSize: CGFloat = 110
     static let scrubberHeight: CGFloat = 8     // matches the AVKit transport bar
     static let detailHeroSpace: CGFloat = 100
     static let detailHeaderSpacing: CGFloat = 12

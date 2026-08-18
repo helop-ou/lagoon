@@ -41,17 +41,48 @@ Lagoon/
 
 ```
 needsServer → needsSignIn → signedIn
+                    ↑            ↓
+              choosingAccount ←──┘
 ```
 
 These are **states, not screens you navigate to** — `RootView` switches on
 the phase with a crossfade. Persistence:
 
-- UserDefaults: server URL + name, user id + name.
-- Keychain (`KeychainStore`): access token and the per-install device id
-  (survives reinstalls, which keeps the server's device list sane).
+- UserDefaults: the `accounts` list (JSON), the active account id, and the
+  server being connected to *right now* (the sign-in screen's subject,
+  which is deliberately separate — a server only becomes an account once
+  credentials actually work).
+- Keychain (`KeychainStore`): one access token **per account**, keyed
+  `token:{serverURL}|{userId}`, plus the per-install device id (survives
+  reinstalls, which keeps the server's device list sane).
 
-On launch `restore()` rebuilds the client from stored state; a missing token
-drops to `needsSignIn`, a missing server URL to `needsServer`.
+On launch `restore()` resumes the last active account. A single profile
+therefore never sees the picker — `choosingAccount` appears only when no
+account can be resumed, or when Settings asks for it. A missing token drops
+to `needsSignIn`, no accounts at all to `needsServer`.
+
+### Multiple accounts (HEL-38)
+
+`StoredAccount` is one server+user pair. Its `id` is
+`{serverURL}|{userId}` and never the display names, so renaming a server or
+a user cannot orphan a token or duplicate an entry.
+
+Two rules that are easy to get wrong:
+
+- **`migrateLegacySessionIfNeeded()` is load-bearing.** The single-slot
+  layout kept the token under the bare account `"accessToken"` with the user
+  id in UserDefaults. Without the one-time move, shipping this feature
+  silently signs every existing install out — the one thing it must not do.
+  It runs before anything else in `restore()` and is idempotent (guarded on
+  the `accounts` key being absent).
+- **Signing out forgets the account.** `logout` revokes the token
+  server-side, so keeping the entry would leave a tile in the picker that
+  can only fail. Other accounts are untouched, and the picker takes over
+  when any remain.
+
+Switching costs no re-authentication and nothing else has to know: every
+Jellyfin call is user-scoped, so Continue Watching and the rest follow from
+the client being re-pointed.
 
 Server address input is expanded by `SessionStore.candidateURLs(for:)`:
 schemeless input probes https then http, plus `:8096` when no port was given;

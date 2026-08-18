@@ -16,11 +16,21 @@ struct SettingsView: View {
             }
 
             Section {
-                Button("Sign Out") {
-                    Task { await session.signOut() }
+                // Only worth offering once there is somewhere to switch to;
+                // with one account it is a button that shows you yourself.
+                if session.accounts.count > 1 {
+                    Button("Switch User") {
+                        session.showAccountPicker()
+                    }
                 }
-                Button("Change Server", role: .destructive) {
-                    Task { await session.forgetServer() }
+                Button("Add Account") {
+                    session.addAccount()
+                }
+                // Signing out forgets this account, because logout revokes
+                // the token server-side and a remembered dead session is
+                // worse than none. Other accounts are untouched (HEL-38).
+                Button("Sign Out", role: .destructive) {
+                    Task { await session.signOut() }
                 }
             }
 
