@@ -62,12 +62,40 @@ way official clients do: episode primary → series poster
 `kind: .thumb` prefers episode stills (their Primary slot), then `Thumb`,
 then backdrops.
 
-## App Transport Security
+## App Transport Security (HEL-42)
 
-`LagoonInfo.plist` sets `NSAllowsArbitraryLoads` because home-LAN Jellyfin
-servers are commonly plain http on `:8096`. The trade-off is deliberate and
-matches Infuse/Swiftfin behavior; revisit if the app ever ships to the App
-Store (scope to `NSAllowsLocalNetworking` + declared domains instead).
+`LagoonInfo.plist` declares **`NSAllowsLocalNetworking` only** — the blanket
+`NSAllowsArbitraryLoads` is gone, which was the App Store prerequisite.
+
+The worry was that this breaks the primary setup: a LAN server on plain http
+at `192.168.1.x:8096`, which is literally the connect screen's placeholder.
+It does not, and the reason is worth recording because the public record is
+contradictory — Apple's DTS says `NSAllowsLocalNetworking` has *no effect on
+IP-address loads* because ATS never applied to them, while CVE-2023-38596
+reported that exemption as a vulnerability and Apple confirmed a fix in
+iOS 17+.
+
+**Measured on tvOS 26.2 (2026-08-18), the exemption still holds.** With only
+`NSAllowsLocalNetworking` set, a plain-http request to `192.168.1.173:8096`
+opened a real TCP flow (`flow:start_connect`, `tcp`) and failed with a
+network error — `-1001` timing out against a dead port — with **zero** ATS
+or cleartext objections anywhere in the log. A policy block would have been
+`-1022` before any socket work. Re-run that probe if a future OS changes it:
+point `server.url` at a dead LAN port and check whether the failure is
+`-1001`/`-1004` (allowed) or `-1022` (blocked).
+
+So the three shapes that matter all still work on cleartext:
+
+- **IP literals** — exempt from ATS entirely, and unaffected by any of these keys.
+- **`.local` names** and **unqualified hostnames** (`http://mediaserver:8096`)
+  — covered by `NSAllowsLocalNetworking`.
+
+What the change *does* block is cleartext to a fully-qualified public domain,
+which is exactly the intent: a remote server must be https.
+
+`SessionStore.candidateURLs` needed no change. It already probes http first
+for IP/`.local` input and https first otherwise, and every http candidate it
+generates for a non-local name is one ATS should reject.
 
 ## Home Screen Sections plugin (HEL-47)
 
