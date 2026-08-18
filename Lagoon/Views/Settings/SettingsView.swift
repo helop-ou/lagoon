@@ -7,6 +7,7 @@ struct SettingsView: View {
     // exercise Atmos/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
+    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
 
     var body: some View {
         #if os(tvOS)
@@ -81,6 +82,9 @@ struct SettingsView: View {
                 row("Skip Intros & Recaps", value: skipMode.shortTitle) {
                     cycleSkipMode()
                 }
+                row("Play Next Episode", value: autoplayMode.shortTitle) {
+                    cycleAutoplayMode()
+                }
                 row("Playback HUD", value: showPlaybackHUD ? "On" : "Off") {
                     showPlaybackHUD.toggle()
                 }
@@ -131,11 +135,18 @@ struct SettingsView: View {
     }
 
     private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
+    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
 
     private func cycleSkipMode() {
         let all = SkipMode.allCases
         let next = (all.firstIndex(of: skipMode).map { $0 + 1 } ?? 0) % all.count
         skipModeRaw = all[next].rawValue
+    }
+
+    private func cycleAutoplayMode() {
+        let all = AutoplayMode.allCases
+        let next = (all.firstIndex(of: autoplayMode).map { $0 + 1 } ?? 0) % all.count
+        autoplayModeRaw = all[next].rawValue
     }
 
     /// Initials rather than a photo: Jellyfin user images are optional and
@@ -173,6 +184,14 @@ struct SettingsView: View {
             Section("Skip Intros & Recaps") {
                 Picker("When one starts", selection: $skipModeRaw) {
                     ForEach(SkipMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+            }
+
+            Section("Play Next Episode") {
+                Picker("When one ends", selection: $autoplayModeRaw) {
+                    ForEach(AutoplayMode.allCases) { mode in
                         Text(mode.title).tag(mode.rawValue)
                     }
                 }

@@ -23,6 +23,14 @@ struct CustomPlayerView<Surface: View>: View {
     /// Lets the host react to the panel opening (the debug HUD hides so
     /// it can't sit on top of the track card).
     var onPanelToggle: ((Bool) -> Void)? = nil
+    /// The episode queued behind this one (HEL-66). Nil for movies, at the
+    /// end of a series, and until the lookup lands.
+    var nextUp: NextUpEpisode? = nil
+    var onPlayNext: (() -> Void)? = nil
+    /// Back during the countdown. The host has to hear about it too: the
+    /// file still has its last seconds to run, and whoever handles the end
+    /// of it must not autoplay over a "no".
+    var onCancelNextUp: (() -> Void)? = nil
     @ViewBuilder let surface: () -> Surface
 
     private enum PanelTab: CaseIterable, Hashable {
@@ -69,6 +77,13 @@ struct CustomPlayerView<Surface: View>: View {
     /// does not survive the MenuPressGate hosting boundary (see below).
     @State private var autoSkipFill: Double = 0
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
+    /// The Up Next card, waved away with Back — stays down for the rest of
+    /// the episode rather than re-arming on the next position tick.
+    @State private var nextUpDismissed = false
+    /// 0…1, drives the countdown fill, value-driven for the same reason
+    /// `autoSkipFill` is.
+    @State private var nextUpFill: Double = 0
+    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
     @FocusState private var focusedTab: PanelTab?
@@ -97,6 +112,12 @@ struct CustomPlayerView<Surface: View>: View {
                 // a pending action to call off. In `button` mode there is
                 // nothing to cancel, so Menu keeps meaning "leave".
                 handledSegmentIDs.insert(segment.id)
+            } else if showsNextUp, autoplayMode == .autoDelay {
+                // Same rule as the skip pill: Back only cancels where
+                // something is pending. In `card` mode the offer sits there
+                // unanswered and Menu still means "leave".
+                nextUpDismissed = true
+                onCancelNextUp?()
             } else if panelOpen {
                 closePanel()
             } else {
@@ -138,6 +159,8 @@ struct CustomPlayerView<Surface: View>: View {
             .animation(.easeOut(duration: Motion.fast), value: seekFeedback)
 
             skipOverlay
+
+            nextUpOverlay
 
             transportOverlay
                 .opacity(transportVisible ? 1 : 0)
@@ -244,6 +267,21 @@ struct CustomPlayerView<Surface: View>: View {
                 break
             }
         }
+        // Arms as the playhead crosses into the countdown window. Keyed on
+        // the flag rather than the position so it fires once, not ten times
+        // a second.
+        .task(id: nextUpCountingDown) {
+            guard nextUpCountingDown else {
+                nextUpFill = 0
+                return
+            }
+            nextUpFill = 1
+            try? await Task.sleep(for: .seconds(AutoplayMode.countdownSeconds))
+            // Back may have waved it away, or a scrub carried the playhead
+            // back out of the credits, while the fill was running.
+            guard !Task.isCancelled, nextUpCountingDown else { return }
+            onPlayNext?()
+        }
         // Two beats of quiet, both timed from the last press. The first
         // ends the acceleration run, so the next press steps 10 s again.
         // The second lands the scrub on its own: without it, opening scrub
@@ -338,6 +376,9 @@ struct CustomPlayerView<Surface: View>: View {
                     // scrubbing while it is up (HEL-63). Select acts on it
                     // instead, which is also the grammar Jaagop described.
                     skip(segment)
+                } else if showsNextUp {
+                    // Not focusable either, and for the same reason.
+                    onPlayNext?()
                 } else {
                     engine.togglePause()
                     pokeControls()
@@ -526,6 +567,153 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .animation(.easeOut(duration: Motion.fast), value: activeSegment?.id)
         .allowsHitTesting(false)
+    }
+
+    // MARK: - Up Next (HEL-66)
+
+    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
+
+    /// The credits, when the server marked them. `MediaSegment.Kind.outro`
+    /// is deliberately not skippable (HEL-63) — this is what it is for.
+    private var outro: MediaSegment? {
+        info.segments.first { $0.kind == .outro }
+    }
+
+    /// When the card appears. With an outro that is where the credits start;
+    /// without one it is a short fixed run-out, because guessing any earlier
+    /// would put the card over the closing scene.
+    private var nextUpStart: Double? {
+        guard nextUp != nil, autoplayMode != .off, engine.duration > 0 else { return nil }
+        if let outro { return outro.start }
+        return engine.duration - NextUpMetrics.fallbackLeadIn
+    }
+
+    /// When the fill starts, which is not always when the card does.
+    ///
+    /// With an outro there are credits to cut short, so the countdown runs
+    /// from their first frame — the whole point of the feature. Without one
+    /// the server has told us nothing about where the episode stops being
+    /// the episode, so the fill is pinned to the last seconds of the file
+    /// and autoplay can never eat content nobody called credits.
+    private var nextUpCountdownStart: Double? {
+        guard let nextUpStart else { return nil }
+        if outro != nil { return nextUpStart }
+        return max(nextUpStart, engine.duration - AutoplayMode.countdownSeconds)
+    }
+
+    /// Suppressed while the panel is open or a scrub is up, exactly as the
+    /// skip pill is: both own the screen and the remote.
+    private var showsNextUp: Bool {
+        guard let nextUpStart, !nextUpDismissed, !panelOpen, !isScrubbing else { return false }
+        return engine.timePosition >= nextUpStart
+    }
+
+    private var nextUpCountingDown: Bool {
+        guard showsNextUp, autoplayMode == .autoDelay, let start = nextUpCountdownStart else { return false }
+        return engine.timePosition >= start
+    }
+
+    /// Bottom-trailing, on the same shelf as the skip pill. The two can
+    /// never be up together — intro and recap live at the front of an
+    /// episode, the credits at the back — so they share the corner rather
+    /// than competing for it.
+    @ViewBuilder
+    private var nextUpOverlay: some View {
+        Group {
+            if showsNextUp, let nextUp {
+                VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                    Text("Up Next")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: Metrics.Space.m) {
+                        CachedAsyncImage(
+                            url: nextUp.imageURL,
+                            maxPixelSize: Int(NextUpMetrics.thumbnailWidth * 2)
+                        ) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            Color.white.opacity(0.08)
+                        }
+                        .frame(
+                            width: NextUpMetrics.thumbnailWidth,
+                            height: (NextUpMetrics.thumbnailWidth * 9 / 16).rounded()
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+
+                        VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                            if let subtitle = nextUp.subtitle {
+                                Text(subtitle)
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(nextUp.title)
+                                .font(.callout.weight(.semibold))
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                    }
+
+                    // The countdown made visible, same grammar as the skip
+                    // pill: it runs the width of the card, so "how long have
+                    // I got" is read rather than guessed. Only `autoDelay`
+                    // has a deadline to draw.
+                    if autoplayMode == .autoDelay {
+                        Capsule()
+                            .fill(.white.opacity(0.25))
+                            .frame(height: NextUpMetrics.barHeight)
+                            .overlay(alignment: .leading) {
+                                GeometryReader { proxy in
+                                    Capsule()
+                                        .fill(.white)
+                                        .frame(width: proxy.size.width * nextUpFill)
+                                        .animation(
+                                            .linear(duration: AutoplayMode.countdownSeconds),
+                                            value: nextUpFill
+                                        )
+                                }
+                            }
+                            .frame(height: NextUpMetrics.barHeight)
+                    }
+
+                    Text(hint)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(Metrics.Space.l)
+                .frame(width: NextUpMetrics.width, alignment: .leading)
+                // Material rather than a black wash, and the same one the
+                // track panel uses: credits are white text on black, and at
+                // any opacity a flat scrim lets them through the card as
+                // readable letters. Blurring is what actually stops it.
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+                .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, Metrics.screenGutter)
+                .padding(.bottom, NextUpMetrics.bottomInset)
+                #if !os(tvOS)
+                // Touch has no Select to route, so the card takes the tap
+                // itself — see the hit-testing note below.
+                .onTapGesture { onPlayNext?() }
+                #endif
+            }
+        }
+        .animation(.easeOut(duration: Motion.fast), value: showsNextUp)
+        // tvOS drives this from the surface's Select, and a focusable card
+        // would move `onMoveCommand` off the surface and kill scrubbing
+        // while it is up — the same trap the skip pill documents.
+        #if os(tvOS)
+        .allowsHitTesting(false)
+        #endif
+    }
+
+    private var hint: LocalizedStringKey {
+        #if os(tvOS)
+        autoplayMode == .autoDelay ? "Select to play now · Back to stay" : "Select to play now"
+        #else
+        "Tap to play now"
+        #endif
     }
 
     // MARK: - Subtitles (HEL-48 M5)
@@ -1148,6 +1336,25 @@ private enum SkipMetrics {
     static let height: CGFloat = 40
     static let bottomInset: CGFloat = 130
     #endif
+}
+
+private enum NextUpMetrics {
+    #if os(tvOS)
+    static let width: CGFloat = 520
+    static let thumbnailWidth: CGFloat = 150
+    /// Clears the transport so the two never overlap, same as `SkipMetrics`.
+    static let bottomInset: CGFloat = 240
+    static let barHeight: CGFloat = 6
+    #else
+    static let width: CGFloat = 300
+    static let thumbnailWidth: CGFloat = 88
+    static let bottomInset: CGFloat = 130
+    static let barHeight: CGFloat = 4
+    #endif
+    /// With no `Outro` segment there is nothing to say where the credits
+    /// begin, so the card appears on a fixed run-out instead. Long enough
+    /// to read and act on, short enough not to sit over the closing scene.
+    static let fallbackLeadIn: Double = 15
 }
 
 /// Scrub-bar geometry. Lives outside `CustomPlayerView` because the view is

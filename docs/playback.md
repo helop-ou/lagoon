@@ -302,6 +302,56 @@ reflects the new position immediately.
   - `handledSegmentIDs` marks a segment before seeking. Without that, landing
     near the segment end puts the playhead back inside it and re-arms the
     whole thing.
+- **Autoplay the next episode** (HEL-66): the credits hand off to the next
+  episode inside the same player — `PlaybackController.playNextEpisode()`
+  reports the finished episode stopped, resets its one-shot state, then
+  starts the next one. Three modes in Settings (`AutoplayMode`): automatic
+  (default), ask-every-time, off. The countdown is 5 s, the same as
+  `SkipMode`'s — two countdowns in one player running at different speeds
+  read as a bug.
+  - **Never resolve the next episode from `Shows/NextUp`.** That endpoint
+    returns the episode *in progress* when there is one — `enableResumable`
+    defaults to `true`, per the server's own OpenAPI document — and at the
+    moment an episode finishes its stop report has not landed yet. NextUp
+    therefore hands back the episode that just ended, and autoplay loops on
+    it forever. `episodeAfter(_:)` uses
+    `Shows/{seriesId}/Episodes?startItemId=<current>&Limit=2` instead:
+    index 1 is the next episode, it doesn't depend on watch state at all,
+    and naming no season is what carries a binge across a season boundary.
+    It also guards that item 0 *is* the anchor — a mismatch means the
+    server never found it and started from the top of the series, and
+    rolling into episode 1 is far worse than doing nothing.
+  - **Two anchors, not one.** The card appears at the `Outro` segment's
+    start when the server marked one, and the countdown runs from there —
+    that is the whole point, cutting the credits short. With no outro there
+    is nothing to say where the episode stops being the episode, so the
+    card appears on a fixed 15 s run-out but the *fill* is pinned to the
+    last 5 s of the file. Collapsing these into one anchor would either
+    hide the card until it was useless or eat content nobody called credits.
+  - **Track selection carries into the next episode**, matched by language
+    and title rather than by ordinal. Two episodes of one show usually
+    share a stream layout, and "usually" is not "always" — a commentary
+    track on one episode would shift every choice below it and hand over
+    the wrong language. Subtitles-off is carried as a choice of its own, or
+    the next episode reinstates the server default. External sidecars stay
+    paired with their streams while the list is built: one whose URL won't
+    resolve is dropped from what the engine gets, so it has to leave the
+    stream list too or every ordinal past it names the wrong track.
+  - **A cancel has to outlive the card.** Back sets `nextUpDismissed`, but
+    the file still has its credits to run, and `didFinish` then arrives and
+    autoplays over the "no" — verified happening, and fixed by plumbing
+    `onCancelNextUp` up to `VideoPlayerView`, which holds the flag until
+    the next episode actually starts. `didFinish` still advances when
+    nothing was cancelled: with no outro the countdown and the end of the
+    file land within a frame of each other, and `playNextEpisode` is
+    guarded (`isAdvancing`) against being taken up on it twice.
+  - The card is **not focusable**, same trap and same fix as the skip pill:
+    it extends the Select and Menu priority chains instead. It sits on the
+    same bottom-trailing shelf, which is free because intros and recaps
+    live at the front of an episode and credits at the back.
+  - Its background is `.regularMaterial`, not a black wash. Credits are
+    white text on black and at *any* opacity a flat scrim lets them through
+    the card as readable letters; blurring is what actually stops it.
 - **Trickplay** (slice 3, Jellyfin 10.9+): `BaseItemDto.Trickplay` is
   `[mediaSourceId: [width: TrickplayInfo]]`, and its `Interval` is
   **milliseconds**. Sheets come from `Videos/{id}/Trickplay/{width}/{n}.jpg`

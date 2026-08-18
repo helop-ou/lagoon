@@ -171,6 +171,34 @@ extension JellyfinClient {
         let page: ItemsPage = try await get("Shows/\(seriesId)/Episodes", query: query)
         return page.items
     }
+
+    /// The episode that follows this one in its series, or nil once the run
+    /// is over — what autoplay rolls into (HEL-66).
+    ///
+    /// Deliberately *not* `Shows/NextUp`. That endpoint returns the episode
+    /// in progress when there is one (`enableResumable` defaults to true,
+    /// per the server's own OpenAPI document), and at the moment an episode
+    /// finishes its stop report has not landed yet — so NextUp hands back
+    /// the episode that just ended and autoplay loops on it forever.
+    ///
+    /// `startItemId` runs the series list forward to a given episode, so
+    /// asking for two from there yields [this, next]. Naming no season is
+    /// what carries a binge across a season boundary.
+    func episodeAfter(_ episode: MediaItem) async throws -> MediaItem? {
+        guard let seriesId = episode.seriesId else { return nil }
+        let userId = try requireUserId()
+        let page: ItemsPage = try await get("Shows/\(seriesId)/Episodes", query: [
+            URLQueryItem(name: "UserId", value: userId),
+            URLQueryItem(name: "startItemId", value: episode.id),
+            URLQueryItem(name: "Limit", value: "2"),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+        ])
+        // A first item that isn't the anchor means the server never found it
+        // and started from the top of the series instead. Rolling into
+        // episode 1 would be far worse than doing nothing.
+        guard page.items.first?.id == episode.id else { return nil }
+        return page.items.dropFirst().first
+    }
 }
 
 // MARK: - Images

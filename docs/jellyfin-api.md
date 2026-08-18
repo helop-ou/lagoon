@@ -46,12 +46,29 @@ Authorization: MediaBrowser Client="Lagoon", Device="Apple TV",
 | Browse/search | `Users/{uid}/Items` | `ParentId`, `IncludeItemTypes`, `SearchTerm`, paged via `StartIndex`/`Limit` |
 | Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
-| Next up | `Shows/NextUp?UserId=` | |
+| Next up | `Shows/NextUp?UserId=` | rail only — **never** for autoplay, see below |
 | Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | |
+| The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one (HEL-66) |
 
 List calls pass `Fields=Overview,Genres,…` (`JellyfinClient.defaultFields`)
 because the server omits those from list payloads by default.
+
+**`Shows/NextUp` is a rail, not a cursor.** It returns the episode *in
+progress* when there is one: `enableResumable` defaults to `true` (checked
+against the server's own `/api-docs/openapi.json` on 10.11.11 — the build
+both fixture and the public demo run). That is right for the Home rail and
+wrong for anything asking "what plays after this", because a stop report
+that hasn't landed yet leaves the episode you just finished looking
+in-progress, so you get it back. Its other flags are `enableRewatching`
+(default `false`) and `disableFirstEpisode` (default `false`).
+
+`Shows/{seriesId}/Episodes` takes **`startItemId`**, which runs the list
+forward to a given episode — so `startItemId=<current>&Limit=2` returns
+`[current, next]` regardless of watch state, and naming no `SeasonId`
+walks the whole series, which is what carries a binge over a season
+boundary. Verified against the demo server: anchored on S1E3 it returned
+exactly S1E3 and S1E4. It also takes `adjacentTo`, which returns siblings.
 
 ## Images
 

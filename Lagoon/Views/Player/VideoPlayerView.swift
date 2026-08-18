@@ -18,6 +18,11 @@ final class PlaybackController {
     private(set) var errorMessage: String?
     private(set) var didFinish = false
 
+    /// The episode queued behind this one, resolved once at start so the Up
+    /// Next card can appear the instant the credits do (HEL-66). Nil for
+    /// movies and at the end of a series.
+    private(set) var nextUp: MediaItem?
+
     private(set) var hudLines: [String] = []
     private var hudTask: Task<Void, Never>?
 
@@ -28,6 +33,36 @@ final class PlaybackController {
     private var playMethod: PlayMethod = .directPlay
     private var progressTask: Task<Void, Never>?
     private var didReportStop = false
+    private var nextUpTask: Task<Void, Never>?
+    /// Guards the hand-off: `didFinish` and an expiring countdown can both
+    /// arrive at the end of a file, and advancing twice would skip an
+    /// episode outright.
+    private var isAdvancing = false
+    /// What the viewer picked in the track panel, carried into the next
+    /// episode (HEL-66). Nil on a first load — there is nothing to carry.
+    private var trackPreference: TrackPreference?
+    /// The current item's streams in the order the engine numbers them, so
+    /// a selected track can be named rather than just counted. Audio is the
+    /// embedded list; subtitles are embedded first, then external.
+    private var audioStreams: [MediaStream] = []
+    private var orderedSubtitleStreams: [MediaStream] = []
+
+    /// A track choice described by what it *is* rather than where it sat.
+    ///
+    /// Matching by language and title rather than by ordinal because two
+    /// episodes of one show usually share a stream layout, and "usually" is
+    /// not "always": a commentary track on one episode would shift every
+    /// choice below it and hand the viewer the wrong language.
+    private struct TrackPreference {
+        var audioLanguage: String?
+        var audioTitle: String?
+        var subtitleLanguage: String?
+        var subtitleTitle: String?
+        /// Subtitles deliberately turned off, which is a choice to carry
+        /// like any other — otherwise the next episode reinstates whatever
+        /// the server thinks the default is.
+        var subtitlesOff: Bool
+    }
     @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     func start(media: MediaItem, startFromBeginning: Bool, client: JellyfinClient) async {
@@ -87,23 +122,39 @@ final class PlaybackController {
                let position = embeddedAudio.firstIndex(where: { $0.index == index }) {
                 initialAudioOrdinal = position + 1
             }
+            // A choice carried in from the previous episode outranks the
+            // server's default: the viewer overrode it once already.
+            if let preference = trackPreference,
+               let carried = Self.ordinal(
+                   matchingLanguage: preference.audioLanguage,
+                   title: preference.audioTitle,
+                   in: embeddedAudio
+               ) {
+                initialAudioOrdinal = carried
+            }
 
             // Subtitles share the ordinal convention, with external
             // (sidecar) streams appended after the embedded ones — the
             // engine lists them in the same order (HEL-48 M5).
             let allSubtitles = (source.mediaStreams ?? []).filter { $0.type == "Subtitle" }
             let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
-            let externalTracks: [ExternalSubtitleTrack] = allSubtitles
+            // Kept paired with their streams: a sidecar whose URL won't
+            // resolve is dropped from what the engine is given, so the
+            // stream list has to lose it too or every ordinal past it
+            // would name the wrong track.
+            let externalPairs: [(stream: MediaStream, track: ExternalSubtitleTrack)] = allSubtitles
                 .filter { $0.isExternal == true }
                 .compactMap { stream in
                     guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else { return nil }
-                    return ExternalSubtitleTrack(
+                    return (stream, ExternalSubtitleTrack(
                         url: url,
                         title: stream.displayTitle,
                         language: stream.language,
                         select: stream.index == source.defaultSubtitleStreamIndex
-                    )
+                    ))
                 }
+            let externalTracks = externalPairs.map(\.track)
+            let orderedSubtitles = embeddedSubtitles + externalPairs.map(\.stream)
             var initialSubtitleOrdinal: Int?
             if let index = source.defaultSubtitleStreamIndex {
                 if let position = embeddedSubtitles.firstIndex(where: { $0.index == index }) {
@@ -112,6 +163,20 @@ final class PlaybackController {
                     initialSubtitleOrdinal = embeddedSubtitles.count + position + 1
                 }
             }
+            if let preference = trackPreference {
+                // 0 is the engine's "no subtitles" ordinal.
+                if preference.subtitlesOff {
+                    initialSubtitleOrdinal = 0
+                } else if let carried = Self.ordinal(
+                    matchingLanguage: preference.subtitleLanguage,
+                    title: preference.subtitleTitle,
+                    in: orderedSubtitles
+                ) {
+                    initialSubtitleOrdinal = carried
+                }
+            }
+            audioStreams = embeddedAudio
+            orderedSubtitleStreams = orderedSubtitles
 
             let engine = SampleBufferPlayerEngine()
             engine.prepare(
@@ -140,10 +205,91 @@ final class PlaybackController {
             ))
             startProgressLoop()
             startHUD(source: source, method: method)
+            resolveNextUp(after: media, client: client)
         } catch {
             engine = nil
             errorMessage = (error as? JellyfinError)?.errorDescription ?? "Playback failed."
         }
+    }
+
+    /// Looks up what plays next, off the critical path.
+    ///
+    /// Deliberately after the engine is running rather than alongside the
+    /// negotiation: nothing on screen needs it for another forty minutes,
+    /// and `start` is the one place in the app where a round trip costs a
+    /// visibly later first frame (HEL-39).
+    private func resolveNextUp(after media: MediaItem, client: JellyfinClient) {
+        nextUpTask?.cancel()
+        nextUp = nil
+        guard media.type == .episode else { return }
+        nextUpTask = Task { [weak self] in
+            let next = try? await client.episodeAfter(media)
+            guard !Task.isCancelled else { return }
+            self?.nextUp = next
+        }
+    }
+
+    /// Roll into the queued episode without leaving the player (HEL-66).
+    ///
+    /// The order is the whole of it: the finished episode's stop report has
+    /// to land *before* the next one starts. Jellyfin marks an item played
+    /// off that report, and starting a second session for the same device
+    /// first leaves the one just finished unresolved.
+    func playNextEpisode() async {
+        guard !isAdvancing, let next = nextUp, let client else { return }
+        isAdvancing = true
+        defer { isAdvancing = false }
+        captureTrackPreference()
+        await stop()
+        didFinish = false
+        didReportStop = false
+        errorMessage = nil
+        hudLines = []
+        playerInfo = nil
+        // Resume rather than restart: `episodeAfter` walks the series in
+        // order, so the next one along can carry a position of its own.
+        await start(media: next, startFromBeginning: false, client: client)
+    }
+
+    /// Reads the live selection back off the engine before it is torn down.
+    private func captureTrackPreference() {
+        guard let engine else { return }
+        let audio = engine.audioTracks.first(where: \.isSelected)
+        let subtitle = engine.subtitleTracks.first(where: \.isSelected)
+        let audioStream = audio.flatMap { Self.stream(at: $0.engineID, in: audioStreams) }
+        let subtitleStream = subtitle.flatMap { Self.stream(at: $0.engineID, in: orderedSubtitleStreams) }
+        trackPreference = TrackPreference(
+            audioLanguage: audioStream?.language,
+            audioTitle: audioStream?.displayTitle,
+            subtitleLanguage: subtitleStream?.language,
+            subtitleTitle: subtitleStream?.displayTitle,
+            // No selected subtitle track is the engine's way of saying off.
+            subtitlesOff: subtitle == nil
+        )
+    }
+
+    /// Engine ordinals are 1-based and count per kind.
+    private static func stream(at ordinal: Int, in streams: [MediaStream]) -> MediaStream? {
+        let index = ordinal - 1
+        return streams.indices.contains(index) ? streams[index] : nil
+    }
+
+    /// Where the carried-over choice lands in this item's streams, or nil to
+    /// leave the server's default alone — which is the right answer when the
+    /// next episode simply hasn't got the track the last one did.
+    private static func ordinal(
+        matchingLanguage language: String?,
+        title: String?,
+        in streams: [MediaStream]
+    ) -> Int? {
+        guard language != nil || title != nil else { return nil }
+        if let exact = streams.firstIndex(where: { $0.language == language && $0.displayTitle == title }) {
+            return exact + 1
+        }
+        // Titles carry episode-specific noise ("English (SDH) - Forced");
+        // language alone is the durable half of the match.
+        guard let language else { return nil }
+        return streams.firstIndex { $0.language == language }.map { $0 + 1 }
     }
 
     private func startProgressLoop() {
@@ -180,6 +326,7 @@ final class PlaybackController {
     func stop() async {
         progressTask?.cancel()
         hudTask?.cancel()
+        nextUpTask?.cancel()
         guard let client, let engine, !didReportStop else { return }
         didReportStop = true
         let seconds = engine.timePosition
@@ -419,6 +566,23 @@ struct VideoPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var controller = PlaybackController()
     @State private var panelOpen = false
+    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
+    /// Back was pressed on the Up Next card. Outlives the card itself,
+    /// because the episode still has its credits to run and the end of the
+    /// file must not undo the answer that was already given.
+    @State private var autoplayCancelled = false
+
+    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
+
+    /// What the Up Next card draws, or nil when there is nothing queued.
+    private var nextUpEpisode: NextUpEpisode? {
+        guard let next = controller.nextUp else { return nil }
+        return NextUpEpisode(
+            title: next.name ?? "",
+            subtitle: next.episodeLabel,
+            imageURL: session.client.imageURL(for: next, kind: .thumb, maxWidth: 480)
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -433,7 +597,10 @@ struct VideoPlayerView: View {
                     engine: engine,
                     info: fallbackInfo,
                     onDismiss: { dismiss() },
-                    onPanelToggle: { panelOpen = $0 }
+                    onPanelToggle: { panelOpen = $0 },
+                    nextUp: nextUpEpisode,
+                    onPlayNext: { advance() },
+                    onCancelNextUp: { autoplayCancelled = true }
                 ) {
                     SampleBufferVideoSurface(engine: engine)
                 }
@@ -454,13 +621,30 @@ struct VideoPlayerView: View {
             )
         }
         .onChange(of: controller.didFinish) { _, finished in
-            if finished {
+            guard finished else { return }
+            // A countdown still running when the file ran out finishes the
+            // job here — without an `Outro` segment to anchor it the two
+            // land within a frame of each other, and whichever arrives
+            // first should win. `playNextEpisode` is guarded against being
+            // taken up on it twice.
+            if autoplayMode == .autoDelay, !autoplayCancelled, controller.nextUp != nil {
+                advance()
+            } else {
+                // `.card` means never acting alone, so an offer that went
+                // unanswered closes the player exactly as `.off` does.
                 dismiss()
             }
         }
         .onDisappear {
             Task { await controller.stop() }
         }
+    }
+
+    /// The next episode starts with a clean slate: a "no" belongs to the
+    /// episode it was said during, not to the rest of the binge.
+    private func advance() {
+        autoplayCancelled = false
+        Task { await controller.playNextEpisode() }
     }
 
     private var fallbackInfo: PlayerItemInfo {

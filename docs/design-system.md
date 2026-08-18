@@ -278,6 +278,13 @@ resolves against whichever side of that it lands on.
   a rail you can focus but not act on is worse than a short honest one — and
   a scrolling one on iOS, where touch needs no focus.
 
+- **Overlays over credits** (HEL-66): anything the player floats during an
+  episode's end titles — the Up Next card today — uses `.regularMaterial`,
+  never a black wash. Credits are white text on black, and a flat scrim
+  lets them through at any opacity as *readable letters*; only blurring
+  actually stops it. The same material the track panel uses, so the two
+  floating surfaces in the player match.
+
 ## Image loading
 
 `CachedAsyncImage` + `ImageCache` replace `AsyncImage` entirely:

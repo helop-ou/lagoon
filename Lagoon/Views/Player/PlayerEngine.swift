@@ -155,6 +155,18 @@ nonisolated struct PlayerItemInfo {
     var segments: [MediaSegment] = []
 }
 
+/// The episode queued behind the one playing, as the Up Next card shows it
+/// (HEL-66). Resolved by the host so the player view stays free of the
+/// Jellyfin client, exactly as `PlayerItemInfo` is.
+nonisolated struct NextUpEpisode: Equatable {
+    /// The episode's own name — never the series, which is the one thing
+    /// the viewer already knows at this point.
+    let title: String
+    /// "S1 E4", when the server numbered it.
+    let subtitle: String?
+    let imageURL: URL?
+}
+
 /// A subtitle that lives outside the media file (Jellyfin external stream)
 /// for the engine to side-load at start.
 nonisolated struct ExternalSubtitleTrack {
