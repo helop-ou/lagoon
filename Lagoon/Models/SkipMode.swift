@@ -1,0 +1,28 @@
+import Foundation
+
+/// How the player treats a skippable segment — intro or recap (HEL-63).
+///
+/// Jaagop's three, 2026-08-18. There is no "off": *button* already covers
+/// wanting nothing to happen, because an ignored button skips nothing.
+nonisolated enum SkipMode: String, CaseIterable, Identifiable {
+    /// Show the button with a fill that runs down, then skip on its own.
+    /// Back/Menu during that window means "no", and cancels it.
+    case autoDelay
+    /// No button; the segment is skipped the instant it is entered.
+    case instant
+    /// The button waits for an explicit confirmation and never acts alone.
+    case button
+
+    var id: String { rawValue }
+
+    var title: LocalizedStringResource {
+        switch self {
+        case .autoDelay: "Skip Automatically"
+        case .instant: "Skip Instantly"
+        case .button: "Ask Every Time"
+        }
+    }
+
+    /// How long the fill takes before `autoDelay` commits.
+    static let autoDelaySeconds: Double = 5
+}

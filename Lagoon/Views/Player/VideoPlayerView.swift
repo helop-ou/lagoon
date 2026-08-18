@@ -54,6 +54,7 @@ final class PlaybackController {
             // than after it — neither is in PlaybackInfo, and waiting for a
             // second round trip would delay the first frame (HEL-39).
             async let extras = client.playbackExtras(itemId: media.id)
+            async let segments = client.mediaSegments(itemId: media.id)
             let info = try await client.playbackInfo(itemId: media.id)
             guard info.errorCode == nil, let source = info.mediaSources.first else {
                 throw JellyfinError.unplayable
@@ -69,7 +70,13 @@ final class PlaybackController {
                 resumeSeconds = Ticks.seconds(ticks)
             }
 
-            playerInfo = itemInfo(for: media, source: source, client: client, extras: await extras)
+            playerInfo = itemInfo(
+                for: media,
+                source: source,
+                client: client,
+                extras: await extras,
+                segments: await segments
+            )
 
             // The server's default audio choice (user language preferences
             // applied server-side) maps to the demuxer's per-type 1-based
@@ -221,7 +228,8 @@ final class PlaybackController {
         for media: MediaItem,
         source: MediaSource,
         client: JellyfinClient,
-        extras: JellyfinClient.PlaybackExtras
+        extras: JellyfinClient.PlaybackExtras,
+        segments: [MediaSegment] = []
     ) -> PlayerItemInfo {
         let streams = source.mediaStreams ?? []
         let video = streams.first(where: { $0.type == "Video" })
@@ -277,7 +285,8 @@ final class PlaybackController {
             videoSummary: videoSummary,
             posterURL: client.imageURL(for: media, kind: .primary, maxWidth: 400),
             chapters: chapters,
-            trickplay: client.trickplaySource(itemId: media.id, mediaSourceId: source.id, extras: extras)
+            trickplay: client.trickplaySource(itemId: media.id, mediaSourceId: source.id, extras: extras),
+            segments: segments
         )
     }
 

@@ -193,3 +193,57 @@ extension JellyfinClient {
         try await postVoid("Sessions/Playing/Stopped", body: info)
     }
 }
+
+// MARK: - Media segments (HEL-63)
+
+extension JellyfinClient {
+    private nonisolated struct MediaSegmentsPage: Decodable {
+        struct Entry: Decodable {
+            let id: String
+            let type: String
+            let startTicks: Int64
+            let endTicks: Int64
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: AnyCodingKey.self)
+                id = (try? c.decode(String.self, forKey: "id")) ?? UUID().uuidString
+                type = (try? c.decode(String.self, forKey: "type")) ?? ""
+                startTicks = (try? c.decode(Int64.self, forKey: "startTicks")) ?? 0
+                endTicks = (try? c.decode(Int64.self, forKey: "endTicks")) ?? 0
+            }
+        }
+
+        let items: [Entry]
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: AnyCodingKey.self)
+            items = (try? c.decodeIfPresent([Entry].self, forKey: "items")) ?? []
+        }
+    }
+
+    /// Intro/recap/credit ranges, or an empty list when the server has none.
+    ///
+    /// Native to Jellyfin 10.10+, so no plugin-specific client code is
+    /// needed even though a plugin is what populates it. Never throws —
+    /// like chapters and trickplay this is garnish, and an older server
+    /// simply goes without.
+    ///
+    /// The endpoint takes an optional `includeSegmentTypes`, deliberately
+    /// unused here: it wants *repeated* query params and 400s on a
+    /// comma-joined list, and filtering client-side costs nothing at these
+    /// sizes.
+    func mediaSegments(itemId: String) async -> [MediaSegment] {
+        let page: MediaSegmentsPage? = try? await get("MediaSegments/\(itemId)")
+        return (page?.items ?? [])
+            .map {
+                MediaSegment(
+                    id: $0.id,
+                    kind: MediaSegment.Kind(rawValue: $0.type) ?? .other,
+                    start: Ticks.seconds($0.startTicks),
+                    end: Ticks.seconds($0.endTicks)
+                )
+            }
+            .filter { $0.end > $0.start }
+            .sorted { $0.start < $1.start }
+    }
+}

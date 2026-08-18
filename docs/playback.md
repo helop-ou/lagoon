@@ -279,6 +279,29 @@ reflects the new position immediately.
   - iOS instead drags the bar directly and seeks on release only — seeking
     per drag update would flush the renderers and re-demux on every frame of
     the gesture.
+- **Skip intro/recap** (HEL-63): `GET MediaSegments/{itemId}` — **native to
+  Jellyfin 10.10+**, so no plugin-specific client code even though a plugin
+  (Intro Skipper) is what populates it. Ticks as usual. `includeSegmentTypes`
+  wants *repeated* query params and 400s on a comma-joined list, so the
+  filtering is done client-side instead.
+  - Only `Intro` and `Recap` are skippable. `Preview` and `Commercial` turn
+    up mid-film in real libraries — one sampled movie carries two
+    `Commercial` segments — and acting on them would raise a skip prompt in
+    the middle of a film. `Outro` is left alone too: the end of an episode
+    is a hand-off to the next one, not something to jump.
+  - Real data breaks the obvious assumptions: episodes carry **two `Intro`
+    segments** more than occasionally, and an `Intro` can start at tick 0.
+    Both are handled; don't "simplify" to first-of-each.
+  - Three modes in Settings (`SkipMode`): auto-after-delay (default, 5 s
+    fill then commits, Menu cancels), instant, and ask-every-time.
+  - **The button is deliberately not focusable.** Taking focus would move
+    `onMoveCommand` off the video surface and kill scrubbing while it is up,
+    so it extends the existing priority chains instead — Select commits a
+    scrub, else skips, else toggles pause; Menu cancels a scrub, else waves
+    off a pending auto-skip, else closes the panel, else exits.
+  - `handledSegmentIDs` marks a segment before seeking. Without that, landing
+    near the segment end puts the playhead back inside it and re-arms the
+    whole thing.
 - **Trickplay** (slice 3, Jellyfin 10.9+): `BaseItemDto.Trickplay` is
   `[mediaSourceId: [width: TrickplayInfo]]`, and its `Interval` is
   **milliseconds**. Sheets come from `Videos/{id}/Trickplay/{width}/{n}.jpg`

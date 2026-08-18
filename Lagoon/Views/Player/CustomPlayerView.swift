@@ -62,6 +62,13 @@ struct CustomPlayerView<Surface: View>: View {
     /// Whether the last scrub input was a chapter hop rather than a step —
     /// they get different self-commit windows (see the task below).
     @State private var scrubHopped = false
+    /// Segments already acted on or waved away, so a committed skip (or a
+    /// "no thanks") doesn't re-arm the moment the playhead lands.
+    @State private var handledSegmentIDs: Set<String> = []
+    /// 0…1, drives the auto-skip fill. Value-driven, because `withAnimation`
+    /// does not survive the MenuPressGate hosting boundary (see below).
+    @State private var autoSkipFill: Double = 0
+    @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
     @FocusState private var focusedTab: PanelTab?
@@ -85,6 +92,11 @@ struct CustomPlayerView<Surface: View>: View {
         MenuPressGate {
             if isScrubbing {
                 cancelScrub()
+            } else if let segment = activeSegment, skipMode == .autoDelay {
+                // Back during the countdown means "no" — the one mode with
+                // a pending action to call off. In `button` mode there is
+                // nothing to cancel, so Menu keeps meaning "leave".
+                handledSegmentIDs.insert(segment.id)
             } else if panelOpen {
                 closePanel()
             } else {
@@ -124,6 +136,8 @@ struct CustomPlayerView<Surface: View>: View {
                 }
             }
             .animation(.easeOut(duration: Motion.fast), value: seekFeedback)
+
+            skipOverlay
 
             transportOverlay
                 .opacity(transportVisible ? 1 : 0)
@@ -207,6 +221,28 @@ struct CustomPlayerView<Surface: View>: View {
         // no-ops until the target crosses into the next thumbnail.
         .onChange(of: scrubTarget) { _, target in
             if let target { trickplay?.update(to: target) }
+        }
+        // Arms whenever the playhead crosses into a skippable segment.
+        // Keyed on the segment id, so it fires once per segment rather than
+        // on every position tick.
+        .task(id: activeSegment?.id) {
+            guard let segment = activeSegment else {
+                autoSkipFill = 0
+                return
+            }
+            switch skipMode {
+            case .instant:
+                skip(segment)
+            case .autoDelay:
+                autoSkipFill = 1
+                try? await Task.sleep(for: .seconds(SkipMode.autoDelaySeconds))
+                // Menu may have waved it away, or a scrub may have carried
+                // the playhead out, while the fill was running.
+                guard !Task.isCancelled, activeSegment?.id == segment.id else { return }
+                skip(segment)
+            case .button:
+                break
+            }
         }
         // Two beats of quiet, both timed from the last press. The first
         // ends the acceleration run, so the next press steps 10 s again.
@@ -296,6 +332,12 @@ struct CustomPlayerView<Surface: View>: View {
                 // native tvOS grammar; otherwise it's play/pause.
                 if let target = scrubTarget {
                     commitScrub(to: target, resume: true)
+                } else if let segment = activeSegment, skipMode != .instant {
+                    // The button is deliberately not focusable: taking focus
+                    // would move `onMoveCommand` off the surface and kill
+                    // scrubbing while it is up (HEL-63). Select acts on it
+                    // instead, which is also the grammar Jaagop described.
+                    skip(segment)
                 } else {
                     engine.togglePause()
                     pokeControls()
@@ -414,6 +456,76 @@ struct CustomPlayerView<Surface: View>: View {
         guard engine.duration > 0 else { return 0 }
         let seconds = scrubTarget ?? engine.timePosition
         return CGFloat(min(max(seconds / engine.duration, 0), 1))
+    }
+
+    // MARK: - Skip intro / recap (HEL-63)
+
+    private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
+
+    /// The skippable segment the playhead is inside, if any.
+    ///
+    /// Suppressed while the panel is open or a scrub is up: both own the
+    /// screen and the remote, and a button that quietly rewrites what Select
+    /// does underneath them would be a trap.
+    private var activeSegment: MediaSegment? {
+        guard !panelOpen, !isScrubbing else { return nil }
+        return info.segments.first {
+            $0.kind.isSkippable
+                && !handledSegmentIDs.contains($0.id)
+                && $0.contains(engine.timePosition)
+        }
+    }
+
+    private func skip(_ segment: MediaSegment) {
+        // Marked before seeking: landing near the end would otherwise put
+        // the playhead back inside the segment and re-arm the whole thing.
+        handledSegmentIDs.insert(segment.id)
+        autoSkipFill = 0
+        engine.seek(to: segment.end)
+        pokeControls()
+    }
+
+    /// Bottom-trailing, clear of the transport — the shelf the reference
+    /// players use. Not focusable; Select drives it (see `onTapGesture`).
+    @ViewBuilder
+    private var skipOverlay: some View {
+        Group {
+            if let segment = activeSegment, skipMode != .instant {
+                HStack(spacing: Metrics.Space.s) {
+                    Image(systemName: "forward.end.alt.fill")
+                        .font(.caption.weight(.bold))
+                    Text(segment.kind.skipTitle)
+                        .font(.callout.weight(.semibold))
+                }
+                .foregroundStyle(.black)
+                .frame(width: SkipMetrics.width, height: SkipMetrics.height)
+                .background(alignment: .leading) {
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.55))
+                        // The countdown made visible: it runs the width of
+                        // the pill, so "how long have I got" is readable at
+                        // a glance rather than guessed.
+                        if skipMode == .autoDelay {
+                            Capsule()
+                                .fill(.white)
+                                .frame(width: SkipMetrics.width * autoSkipFill)
+                                .animation(
+                                    .linear(duration: SkipMode.autoDelaySeconds),
+                                    value: autoSkipFill
+                                )
+                        }
+                    }
+                }
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, Metrics.screenGutter)
+                .padding(.bottom, SkipMetrics.bottomInset)
+            }
+        }
+        .animation(.easeOut(duration: Motion.fast), value: activeSegment?.id)
+        .allowsHitTesting(false)
     }
 
     // MARK: - Subtitles (HEL-48 M5)
@@ -1021,6 +1133,21 @@ struct CustomPlayerView<Surface: View>: View {
         }
         return String(format: "%d:%02d", minutes, secs)
     }
+}
+
+/// Skip-button geometry (HEL-63). Fixed width so the countdown fill can be
+/// sized from it without a GeometryReader.
+private enum SkipMetrics {
+    #if os(tvOS)
+    static let width: CGFloat = 260
+    static let height: CGFloat = 56
+    /// Clears the transport so the two never overlap.
+    static let bottomInset: CGFloat = 240
+    #else
+    static let width: CGFloat = 170
+    static let height: CGFloat = 40
+    static let bottomInset: CGFloat = 130
+    #endif
 }
 
 /// Scrub-bar geometry. Lives outside `CustomPlayerView` because the view is

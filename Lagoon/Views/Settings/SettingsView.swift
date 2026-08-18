@@ -6,6 +6,7 @@ struct SettingsView: View {
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
+    @AppStorage("playback.skipMode") private var skipMode = SkipMode.autoDelay.rawValue
 
     var body: some View {
         Form {
@@ -35,6 +36,26 @@ struct SettingsView: View {
                     Task { await session.signOut() }
                 }
                 .settingsAction()
+            }
+
+            // Intro and recap only. Credits are a hand-off to the next
+            // episode rather than something to jump, and Preview/Commercial
+            // turn up mid-film in real libraries (HEL-63).
+            Section("Skip Intros & Recaps") {
+                ForEach(SkipMode.allCases) { mode in
+                    Button {
+                        skipMode = mode.rawValue
+                    } label: {
+                        Label {
+                            Text(mode.title)
+                        } icon: {
+                            // Selection through content, never a tint — the
+                            // rule the whole HEL-50/HEL-62 family comes from.
+                            Image(systemName: skipMode == mode.rawValue ? "checkmark.circle.fill" : "circle")
+                        }
+                    }
+                    .settingsAction()
+                }
             }
 
             Section("About") {

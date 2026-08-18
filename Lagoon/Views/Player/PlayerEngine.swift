@@ -52,6 +52,43 @@ nonisolated struct PlayerTrack: Identifiable, Equatable {
     var id: String { "\(kind.rawValue)-\(engineID)" }
 }
 
+/// A stretch of the item the server has classified — intro, recap, credits
+/// (HEL-63). Jellyfin 10.10+ serves these natively from `MediaSegments`,
+/// populated by whatever plugin the admin runs.
+nonisolated struct MediaSegment: Identifiable, Equatable {
+    /// What Jellyfin calls the segment. Only `intro` and `recap` are ever
+    /// offered as a skip: `preview` and `commercial` exist in real
+    /// libraries — a sampled film carries two `commercial` segments — and
+    /// acting on them would raise a skip prompt in the middle of a movie.
+    /// `outro` is deliberately not skippable either; the end of an episode
+    /// is a hand-off to the next one, not something to jump over.
+    enum Kind: String {
+        case intro = "Intro"
+        case outro = "Outro"
+        case recap = "Recap"
+        case preview = "Preview"
+        case commercial = "Commercial"
+        case other
+
+        var isSkippable: Bool { self == .intro || self == .recap }
+
+        /// What the button says. Recap gets its own word — being told
+        /// "Skip Intro" over a previously-on montage reads as a bug.
+        var skipTitle: String {
+            self == .recap ? String(localized: "Skip Recap") : String(localized: "Skip Intro")
+        }
+    }
+
+    let id: String
+    let kind: Kind
+    let start: Double
+    let end: Double
+
+    func contains(_ seconds: Double) -> Bool {
+        seconds >= start && seconds < end
+    }
+}
+
 /// A chapter mark on the transport (HEL-39 slice 3).
 nonisolated struct PlayerChapter: Identifiable, Equatable {
     /// Position in the chapter list, which is also its display number.
@@ -114,6 +151,8 @@ nonisolated struct PlayerItemInfo {
     /// nil when the server hasn't generated trickplay tiles; the scrub chip
     /// then shows the timestamp alone.
     var trickplay: TrickplaySource?
+    /// Empty when the server has no segments for the item (HEL-63).
+    var segments: [MediaSegment] = []
 }
 
 /// A subtitle that lives outside the media file (Jellyfin external stream)
