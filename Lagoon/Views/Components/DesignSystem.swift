@@ -41,6 +41,10 @@ enum Metrics {
     static let heroTextInset: CGFloat = 56
     /// Square avatar tile in the account picker (HEL-38).
     static let accountTileSize: CGFloat = 220
+    /// Section list in the split Settings layout — wide enough for the
+    /// longest label plus its focus lozenge, narrow enough that the content
+    /// pane still owns the screen.
+    static let settingsSidebarWidth: CGFloat = 340
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14

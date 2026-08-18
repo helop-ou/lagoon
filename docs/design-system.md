@@ -137,13 +137,29 @@ so the label renders white-on-white and vanishes — with no
 correctly, which is what makes it look like a colour bug rather than a
 styling one.
 
-Giving the control a real style restores the flip: `Settings` uses
-`.buttonStyle(.glass)` plus `.listRowBackground(.clear)` on tvOS (the clear
-background stops the pill sitting inside the row's own plate and reading as
-two stacked buttons). `Toggle` has no `.button` style on tvOS at all, so the
-one switch became a native button that states itself with a checkmark —
-content, not chrome, same as everywhere else. iOS keeps plain `Form` rows,
-which behave.
+Giving the control a real style restores the flip. That was the original
+HEL-62 fix, and it still applies to any `Form` a future screen puts on tvOS
+— but **Settings no longer has one**: it was rebuilt as a two-pane layout
+(below), so `Form` is now an iOS-only shape in this app. `Toggle` also has
+no `.button` style on tvOS at all, which is why the Playback HUD switch is a
+native button stating itself with a checkmark — content, not chrome.
+
+### Settings is two panes on tvOS, a Form on iOS
+
+Sections down a narrow left column, the selected section's controls on the
+right. A single tall column was the first attempt and was wrong for a 16:9
+screen: it left the right half empty and pushed later sections off the
+bottom (Jaagop, 2026-08-18).
+
+**Selection follows focus**, exactly like the player panel's tab bar —
+walking the section list previews each one, instead of making every look
+cost a Select to enter and a Menu to get back out. Left/right crosses
+between the panes, and returning left lands on the section you came from.
+
+Read-only rows (`Server`, `Address`, `Version`) are deliberately **not**
+buttons: they would take focus, give the remote somewhere pointless to go,
+and the focused lozenge would imply an action that doesn't exist. They are
+label-left/value-right text instead.
 
 ## Components
 
