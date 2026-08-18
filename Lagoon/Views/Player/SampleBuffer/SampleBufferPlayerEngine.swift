@@ -516,6 +516,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 result.stalls, result.audioGaps, result.minVideoQueue,
                 result.startPosition, result.windowSeconds
             )
+            // Plain stdout beside the signpost: `devicectl ... --console`
+            // streams this from a real device, where the unified log is
+            // out of reach for a headless harness (HEL-64).
+            print("BenchResult dropped=\(result.dropped) frames=\(result.frames) "
+                + String(format: "percent=%.3f", result.lossPercent)
+                + " corrupted=\(result.corrupted) stalls=\(result.stalls)"
+                + " audioGaps=\(result.audioGaps) minVideoQueue=\(result.minVideoQueue)"
+                + String(format: " start=%.2f window=%.2f", result.startPosition, result.windowSeconds))
             os_signpost(
                 .event,
                 log: PlaybackPerformance.log,
