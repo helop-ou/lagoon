@@ -44,6 +44,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Frame-loss bench progress/result for the HUD (HEL-64); nil unless
     /// Settings → Debug → Frame-loss bench is on.
     private(set) var benchStatus: String?
+    /// Flips true the moment a bench window freezes its result — the
+    /// harness's auto-exit hook (debug.benchAutoExit), so scripted runs
+    /// can leave the player through the clean teardown path instead of
+    /// being killed mid-playback.
+    private(set) var benchCompleted = false
     /// The display-matching request for this video (HEL-64) — published
     /// once the demuxer knows the stream; the player view owns applying it.
     private(set) var displayMatchRequest: DisplayMatchRequest?
@@ -495,6 +500,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         } else {
             bench?.rearm(at: position)
         }
+        benchCompleted = false
         benchStatus = String(format: "arming @%.0fs", position)
     }
 
@@ -518,12 +524,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             )
             // Plain stdout beside the signpost: `devicectl ... --console`
             // streams this from a real device, where the unified log is
-            // out of reach for a headless harness (HEL-64).
+            // out of reach for a headless harness (HEL-64). Carries the
+            // gate states so a remote run is self-describing.
+            var gates = "vtime=\"\(videoTimingDiagnostic ?? "container")\""
+            #if os(tvOS)
+            gates += " display=\"\(DisplayModeMatcher.statusDescription)\""
+            #endif
             print("BenchResult dropped=\(result.dropped) frames=\(result.frames) "
                 + String(format: "percent=%.3f", result.lossPercent)
                 + " corrupted=\(result.corrupted) stalls=\(result.stalls)"
                 + " audioGaps=\(result.audioGaps) minVideoQueue=\(result.minVideoQueue)"
-                + String(format: " start=%.2f window=%.2f", result.startPosition, result.windowSeconds))
+                + String(format: " start=%.2f window=%.2f ", result.startPosition, result.windowSeconds)
+                + gates)
+            benchCompleted = true
             os_signpost(
                 .event,
                 log: PlaybackPerformance.log,

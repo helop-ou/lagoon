@@ -591,6 +591,7 @@ struct VideoPlayerView: View {
     @State private var controller = PlaybackController()
     @State private var panelOpen = false
     @AppStorage("debug.matchContent") private var matchContent = true
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Back was pressed on the Up Next card. Outlives the card itself,
     /// because the episode still has its credits to run and the end of the
@@ -668,6 +669,28 @@ struct VideoPlayerView: View {
         // truth about what is applied.
         .onChange(of: matchContent) { _, _ in
             applyDisplayMatch(controller.engine?.displayMatchRequest)
+        }
+        // Backgrounding mid-playback must hand the display back — the
+        // home screen has no business running at the content's mode — and
+        // returning re-requests it (HEL-64).
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background, .inactive:
+                applyDisplayMatch(nil)
+            case .active:
+                applyDisplayMatch(controller.engine?.displayMatchRequest)
+            @unknown default:
+                break
+            }
+        }
+        // Harness hook (debug.benchAutoExit): a completed bench window
+        // leaves the player through the clean teardown path — stop
+        // report, renderer teardown, display-mode restore — so scripted
+        // device runs never kill the app mid-playback again.
+        .onChange(of: controller.engine?.benchCompleted) { _, completed in
+            if completed == true, UserDefaults.standard.bool(forKey: "debug.benchAutoExit") {
+                dismiss()
+            }
         }
         .onDisappear {
             applyDisplayMatch(nil)
