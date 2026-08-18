@@ -543,12 +543,16 @@ final class PlaybackController {
             lines.append("EL strip: \(strip)")
         }
         #if os(tvOS)
-        // Both halves of the gate: what the player requested and whether
-        // the system's Match Content setting will honor it.
+        // Every gate between the request and the glass: the app's Debug
+        // toggle and the system's Match Content setting. A photo of this
+        // line is what makes a hardware A/B run self-describing.
         if let request = engine.displayMatchRequest {
+            let appToggleOn = UserDefaults.standard.object(forKey: "debug.matchContent") == nil
+                || UserDefaults.standard.bool(forKey: "debug.matchContent")
             lines.append(String(
-                format: "Display: request %.3f Hz · system match %@",
+                format: "Display: request %.3f Hz · app %@ · system %@",
                 request.frameRate,
+                appToggleOn ? "on" : "off",
                 DisplayModeMatcher.systemMatchingEnabled ? "on" : "off"
             ))
         }
@@ -655,6 +659,12 @@ struct VideoPlayerView: View {
         }
         .onChange(of: controller.engine?.displayMatchRequest) { _, request in
             applyDisplayMatch(request)
+        }
+        // Live so an A/B can flip mid-playback (expect the TV's mode
+        // switch flash) and so the HUD's app on/off always tells the
+        // truth about what is applied.
+        .onChange(of: matchContent) { _, _ in
+            applyDisplayMatch(controller.engine?.displayMatchRequest)
         }
         .onDisappear {
             applyDisplayMatch(nil)
