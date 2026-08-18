@@ -105,6 +105,21 @@ why nothing here touches VideoToolbox sessions or shaders directly.
   assumptions degrade to container stamps, never to drift. The HUD's
   `aGaps` counter (audio timestamp discontinuities at enqueue) is the live
   check: it must read 0 during untouched playback.
+- **Video frame-grid timing** (HEL-64): the video half of the same bug,
+  and the expensive one. Matroska quantizes video pts to 1 ms while a
+  23.976 fps frame lasts 41.708 ms; at 60 Hz output the 16.7 ms vsync
+  bins hide the jitter, but on a display *matched* to the content rate
+  there is one vsync per frame and zero slack — a stamp rounded past its
+  deadline misses its only vsync and the frame drops. Measured on real
+  hardware: **10% steady loss** on a 4K HDR10 title with full queues,
+  zero stalls, zero audio gaps, and the display correctly switched.
+  `VideoFrameTimeline` snaps each pts to the nearest whole-frame step
+  from the previous snapped stamp (signed steps — packets arrive in
+  decode order, so B-frame reordering walks backwards), exact integer
+  arithmetic in the frame rate's own timescale; stamps beyond a 5 ms
+  tolerance (VFR, broken mux) pass through untouched and re-anchor.
+  Decode stamps stay the container's — they only order the decode. The
+  HUD's `Vtime: grid N/D` line is the gate check.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is

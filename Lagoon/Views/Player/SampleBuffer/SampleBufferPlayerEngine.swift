@@ -47,6 +47,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// The display-matching request for this video (HEL-64) — published
     /// once the demuxer knows the stream; the player view owns applying it.
     private(set) var displayMatchRequest: DisplayMatchRequest?
+    /// "grid 24000/1001" when video pts are snapped to the exact frame
+    /// grid, nil when container stamps pass through (HEL-64 gate check).
+    private(set) var videoTimingDiagnostic: String?
 
     var queueDepths: (video: Int, audio: Int) {
         (videoQueue.count, audioQueue.count)
@@ -598,6 +601,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         duration: Double,
         videoSize: CGSize,
         displayMatch: DisplayMatchRequest?,
+        videoTiming: String?,
         tracks: [PlayerTrack],
         subtitles: [PlayerTrack],
         embeddedSubtitleCount: Int,
@@ -606,6 +610,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         self.duration = duration
         self.videoSize = videoSize
         displayMatchRequest = displayMatch
+        videoTimingDiagnostic = videoTiming
         audioTracks = tracks
         subtitleTracks = subtitles
         self.embeddedSubtitleCount = embeddedSubtitleCount
@@ -692,6 +697,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 duration: demuxedDuration,
                 videoSize: size,
                 displayMatch: displayMatch,
+                videoTiming: demuxer.videoGridDescription.map { "grid \($0)" },
                 tracks: tracks,
                 subtitles: subtitleTracks,
                 embeddedSubtitleCount: embeddedSubtitles.count,

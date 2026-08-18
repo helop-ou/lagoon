@@ -69,6 +69,10 @@ nonisolated final class FFmpegDemuxer {
     // container timestamps are quantized (Matroska: 1 ms) and the renderer
     // turns every quantization mismatch into an audible discontinuity.
     private var passthroughTimelines: [Int32: PassthroughAudioTimeline] = [:]
+    // HEL-64: the video half of the same fix. On a display matched to the
+    // content rate, a quantized video pts misses its only vsync — 10%
+    // steady loss measured on hardware with full queues and zero stalls.
+    private var videoTimeline: VideoFrameTimeline?
 
     /// HEL-64 hardware experiment (Settings → Debug): set before `open`.
     /// Only arms when the stream really is single-track DoVi with an
@@ -95,6 +99,8 @@ nonisolated final class FFmpegDemuxer {
     /// The video stream's best-guess frame rate (display matching wants
     /// it); 0 when FFmpeg can't tell.
     private(set) var videoFrameRate: Double = 0
+    /// The pts grid in force, for the HUD's gate check (demux queue only).
+    var videoGridDescription: String? { videoTimeline?.gridDescription }
 
     // Written from the main actor at shutdown, polled by FFmpeg's interrupt
     // callback from inside blocked network I/O — this is what guarantees a
@@ -182,6 +188,10 @@ nonisolated final class FFmpegDemuxer {
         if guessedRate.num > 0, guessedRate.den > 0 {
             videoFrameRate = Double(guessedRate.num) / Double(guessedRate.den)
         }
+        videoTimeline = VideoFrameTimeline(
+            frameRateNum: guessedRate.num,
+            frameRateDen: guessedRate.den
+        )
         if stripEnhancementLayer,
            videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
            let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),
@@ -310,6 +320,7 @@ nonisolated final class FFmpegDemuxer {
         for index in passthroughTimelines.keys {
             passthroughTimelines[index]?.reset()
         }
+        videoTimeline?.reset()
         for decoder in subtitleDecoders.values {
             decoder.flush()
         }
@@ -365,6 +376,28 @@ nonisolated final class FFmpegDemuxer {
                     stripStatsLock.unlock()
                 }
             }
+            // Snap the presentation stamp onto the exact frame grid;
+            // decode stamps stay the container's (ordering only).
+            var timing: CMSampleTimingInfo?
+            if videoTimeline != nil, packet.pointee.pts != avNoPTS {
+                let containerSeconds = Double(packet.pointee.pts)
+                    * Double(videoTimeBase.num) / Double(max(videoTimeBase.den, 1))
+                if let snapped = videoTimeline!.snapped(containerSeconds: containerSeconds) {
+                    let scaledDTS = packet.pointee.dts == avNoPTS
+                        ? nil
+                        : packet.pointee.dts.multipliedReportingOverflow(by: Int64(videoTimeBase.num))
+                    let dts: CMTime = if let scaledDTS, !scaledDTS.overflow {
+                        CMTime(value: scaledDTS.partialValue, timescale: max(videoTimeBase.den, 1))
+                    } else {
+                        .invalid
+                    }
+                    timing = CMSampleTimingInfo(
+                        duration: videoTimeline!.frameDuration,
+                        presentationTimeStamp: snapped,
+                        decodeTimeStamp: dts
+                    )
+                }
+            }
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,
                 formatDescription: description,
@@ -372,6 +405,7 @@ nonisolated final class FFmpegDemuxer {
                 isVideo: true,
                 fallbackDuration: 0,
                 isKeyFrame: packet.pointee.flags & keyPacketFlag != 0,
+                timingOverride: timing,
                 payloadOverride: strippedPayload
             ) else { return .skipped }
             return .video(buffer)

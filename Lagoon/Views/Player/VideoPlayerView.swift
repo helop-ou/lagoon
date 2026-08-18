@@ -539,6 +539,9 @@ final class PlaybackController {
         }
         let depths = engine.queueDepths
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
+        if let videoTiming = engine.videoTimingDiagnostic {
+            lines.append("Vtime:   \(videoTiming)")
+        }
         if let strip = engine.enhancementLayerStripInfo {
             lines.append("EL strip: \(strip)")
         }
