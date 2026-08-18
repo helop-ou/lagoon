@@ -23,6 +23,16 @@ nonisolated enum SkipMode: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact form for a settings row's value column, where the row's own
+    /// label already says what the setting is.
+    var shortTitle: String {
+        switch self {
+        case .autoDelay: String(localized: "Automatic")
+        case .instant: String(localized: "Instant")
+        case .button: String(localized: "Ask")
+        }
+    }
+
     /// How long the fill takes before `autoDelay` commits.
     static let autoDelaySeconds: Double = 5
 }

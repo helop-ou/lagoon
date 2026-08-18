@@ -6,31 +6,7 @@ struct SettingsView: View {
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
-    @AppStorage("playback.skipMode") private var skipMode = SkipMode.autoDelay.rawValue
-
-    #if os(tvOS)
-    /// Sections down the left, their contents on the right — the tvOS
-    /// settings shape. One tall column left most of a 16:9 screen empty and
-    /// pushed later sections off the bottom edge.
-    private enum Pane: String, CaseIterable, Identifiable {
-        case server, account, playback, about, debug
-
-        var id: String { rawValue }
-
-        var title: LocalizedStringKey {
-            switch self {
-            case .server: "Server"
-            case .account: "Account"
-            case .playback: "Playback"
-            case .about: "About"
-            case .debug: "Debug"
-            }
-        }
-    }
-
-    @State private var selected: Pane = .server
-    @FocusState private var focusedPane: Pane?
-    #endif
+    @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
 
     var body: some View {
         #if os(tvOS)
@@ -41,150 +17,141 @@ struct SettingsView: View {
         #endif
     }
 
-    // MARK: - tvOS: sections | content
+    // MARK: - tvOS: identity | settings list
 
     #if os(tvOS)
+    /// Who you are on the left, one scrolling list of settings on the right
+    /// — the Infuse shape (Jaagop's reference, 2026-08-18).
+    ///
+    /// The left half is *identity, not navigation*. An earlier attempt put a
+    /// section list there; splitting five short sections across two panes
+    /// only moved the emptiness around, because none of them has enough in
+    /// it to fill a pane. The settings are few enough to live in one list,
+    /// so the left side earns its place by answering "which server and user
+    /// am I looking at" instead.
     private var splitLayout: some View {
         HStack(alignment: .top, spacing: Metrics.Space.section) {
-            sidebar
-            detailPane
+            identityPanel
+            settingsList
         }
         .padding(.horizontal, Metrics.screenGutter)
-        .padding(.top, Metrics.Space.xl)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        // Selection follows focus — the same grammar the player panel's tab
-        // bar uses. Walking the list previews each section instead of making
-        // every look cost a Select and a Menu to get back out.
-        .onChange(of: focusedPane) { _, pane in
-            guard let pane else { return }
-            withAnimation(.easeInOut(duration: Motion.fast)) { selected = pane }
-        }
+        .padding(.top, Metrics.Space.xxl)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private var sidebar: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            ForEach(Pane.allCases) { pane in
-                Button {
-                    // Focus already selected it; Select is just a way in.
-                    selected = pane
-                } label: {
-                    Text(pane.title)
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+    private var identityPanel: some View {
+        VStack(spacing: Metrics.Space.l) {
+            ZStack {
+                Circle().fill(.white.opacity(0.12))
+                Text(initials)
+                    .font(.system(size: 72, weight: .semibold))
+            }
+            .frame(width: Metrics.settingsAvatarSize, height: Metrics.settingsAvatarSize)
+
+            VStack(spacing: Metrics.Space.xs) {
+                Text(session.userName ?? "—")
+                    .font(.title3.bold())
+                Text(session.serverName ?? "Jellyfin")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let host = session.client.serverURL?.host() {
+                    Text(host)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                .buttonStyle(.glass)
-                .focused($focusedPane, equals: pane)
             }
+
+            Text("Lagoon \(session.client.appVersion)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.top, Metrics.Space.s)
         }
-        .frame(width: Metrics.settingsSidebarWidth, alignment: .leading)
+        .frame(width: Metrics.settingsIdentityWidth)
+        .padding(.top, Metrics.Space.xxl)
     }
 
-    private var detailPane: some View {
+    private var settingsList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                detail(for: selected)
+            VStack(spacing: Metrics.Space.m) {
+                // Rows carry their current value on the right and cycle it
+                // on Select, so the list stays one row per setting rather
+                // than one row per option.
+                row("Skip Intros & Recaps", value: skipMode.shortTitle) {
+                    cycleSkipMode()
+                }
+                row("Playback HUD", value: showPlaybackHUD ? "On" : "Off") {
+                    showPlaybackHUD.toggle()
+                }
+
+                // Only worth offering once there is somewhere to switch to;
+                // with one account it is a button that shows you yourself.
+                if session.accounts.count > 1 {
+                    row("Switch User") { session.showAccountPicker() }
+                }
+                row("Add Account") { session.addAccount() }
+                // Signing out forgets this account, because logout revokes
+                // the token server-side and a remembered dead session is
+                // worse than none. Other accounts survive (HEL-38).
+                row("Sign Out", role: .destructive) {
+                    Task { await session.signOut() }
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             // Headroom for the focus lift lives inside the scroller, same
             // rule as every other focusable scroll area.
             .padding(.vertical, Metrics.Space.l)
         }
         .scrollClipDisabled()
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder
-    private func detail(for pane: Pane) -> some View {
-        switch pane {
-        case .server:
-            infoRow("Server", session.serverName ?? "Jellyfin")
-            infoRow("Address", session.client.serverURL?.absoluteString ?? "—")
-            infoRow("User", session.userName ?? "—")
-
-        case .account:
-            // Only worth offering once there is somewhere to switch to; with
-            // one account it is a button that shows you yourself.
-            if session.accounts.count > 1 {
-                Button("Switch User") { session.showAccountPicker() }
-                    .buttonStyle(.glass)
-            }
-            Button("Add Account") { session.addAccount() }
-                .buttonStyle(.glass)
-            // Signing out forgets this account, because logout revokes the
-            // token server-side and a remembered dead session is worse than
-            // none. Other accounts are untouched (HEL-38).
-            Button("Sign Out", role: .destructive) {
-                Task { await session.signOut() }
-            }
-            .buttonStyle(.glass)
-
-        case .playback:
-            // Intro and recap only. Credits hand off to the next episode
-            // rather than being jumped, and Preview/Commercial turn up
-            // mid-film in real libraries (HEL-63).
-            header("Skip Intros & Recaps")
-            ForEach(SkipMode.allCases) { mode in
-                Button {
-                    skipMode = mode.rawValue
-                } label: {
-                    Label {
-                        Text(mode.title)
-                    } icon: {
-                        // Selection through content, never a tint — the rule
-                        // the whole HEL-50/HEL-62 family comes from.
-                        Image(systemName: skipMode == mode.rawValue ? "checkmark.circle.fill" : "circle")
-                    }
+    private func row(
+        _ title: LocalizedStringKey,
+        value: String? = nil,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            HStack(spacing: Metrics.Space.xl) {
+                Text(title)
+                Spacer(minLength: Metrics.Space.xl)
+                if let value {
+                    // No explicit colour: the focused lozenge owns its label
+                    // colours, and `.secondary` resolves against whichever
+                    // side of that it lands on.
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                .buttonStyle(.glass)
             }
-
-        case .about:
-            infoRow("App", "Lagoon")
-            infoRow("Version", session.client.appVersion)
-
-        case .debug:
-            Button {
-                showPlaybackHUD.toggle()
-            } label: {
-                Label(
-                    "Playback HUD",
-                    systemImage: showPlaybackHUD ? "checkmark.circle.fill" : "circle"
-                )
-            }
-            .buttonStyle(.glass)
+            .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.glass)
     }
 
-    /// Label left, value right. Deliberately *not* a `Button`: read-only rows
-    /// that take focus give the remote somewhere pointless to go, and the
-    /// focused lozenge would imply an action that doesn't exist.
-    private func infoRow(_ title: LocalizedStringKey, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-            Spacer(minLength: Metrics.Space.xl)
-            Text(value)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .font(.callout)
-        .padding(.vertical, Metrics.Space.s)
+    private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
+
+    private func cycleSkipMode() {
+        let all = SkipMode.allCases
+        let next = (all.firstIndex(of: skipMode).map { $0 + 1 } ?? 0) % all.count
+        skipModeRaw = all[next].rawValue
     }
 
-    private func header(_ text: LocalizedStringKey) -> some View {
-        Text(text)
-            .textCase(.uppercase)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.bottom, Metrics.Space.xs)
+    /// Initials rather than a photo: Jellyfin user images are optional and
+    /// usually absent, and an empty avatar frame reads worse than a letter.
+    private var initials: String {
+        let parts = (session.userName ?? "").split(separator: " ").prefix(2)
+        let letters = parts.compactMap(\.first)
+        return letters.isEmpty ? "?" : String(letters).uppercased()
     }
     #endif
 
     // MARK: - Touch
 
     #if !os(tvOS)
-    /// `Form` is right on iOS: there is no focused lozenge to fight, and a
-    /// two-pane split would be wrong for the width.
+    /// `Form` is right on iOS: there is no focused lozenge to fight, and the
+    /// identity split would be wrong for the width.
     private var touchForm: some View {
         Form {
             Section("Server") {
@@ -204,7 +171,7 @@ struct SettingsView: View {
             }
 
             Section("Skip Intros & Recaps") {
-                Picker("When one starts", selection: $skipMode) {
+                Picker("When one starts", selection: $skipModeRaw) {
                     ForEach(SkipMode.allCases) { mode in
                         Text(mode.title).tag(mode.rawValue)
                     }

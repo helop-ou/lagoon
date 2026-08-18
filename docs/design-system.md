@@ -144,22 +144,30 @@ HEL-62 fix, and it still applies to any `Form` a future screen puts on tvOS
 no `.button` style on tvOS at all, which is why the Playback HUD switch is a
 native button stating itself with a checkmark — content, not chrome.
 
-### Settings is two panes on tvOS, a Form on iOS
+### Settings is identity | list on tvOS, a Form on iOS
 
-Sections down a narrow left column, the selected section's controls on the
-right. A single tall column was the first attempt and was wrong for a 16:9
-screen: it left the right half empty and pushed later sections off the
-bottom (Jaagop, 2026-08-18).
+**Who you are on the left, one scrolling list of settings on the right** —
+the Infuse shape, and Jaagop's reference (2026-08-18). The left column is
+*identity, not navigation*: avatar, user, server, host, app version.
 
-**Selection follows focus**, exactly like the player panel's tab bar —
-walking the section list previews each one, instead of making every look
-cost a Select to enter and a Menu to get back out. Left/right crosses
-between the panes, and returning left lands on the section you came from.
+Two earlier attempts were wrong and are worth recording, because both look
+reasonable until you see them on a TV:
 
-Read-only rows (`Server`, `Address`, `Version`) are deliberately **not**
-buttons: they would take focus, give the remote somewhere pointless to go,
-and the focused lozenge would imply an action that doesn't exist. They are
-label-left/value-right text instead.
+1. **One tall column.** Left the right half of a 16:9 screen empty from the
+   first button down, and pushed later sections off the bottom as settings
+   were added.
+2. **A section list in the left pane.** Splitting five short sections across
+   two panes only moved the emptiness around — none of them has enough in it
+   to fill a pane, and it added a navigation step to reach a handful of rows.
+
+The settings are few enough to live in **one list**, so the left side earns
+its place by answering "which server and user am I looking at" instead.
+
+Rows carry their **current value on the right and cycle it on Select**, so
+the list stays one row per setting rather than one row per option — three
+skip modes are one row, not three. Rows use `.buttonStyle(.glass)`, so the
+focused lozenge owns its own label colours and `.secondary` on the value
+resolves against whichever side of that it lands on.
 
 ## Components
 
