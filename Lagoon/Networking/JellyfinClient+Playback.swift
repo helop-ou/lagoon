@@ -131,21 +131,28 @@ extension JellyfinClient {
     /// Chapters and trickplay geometry, as the item endpoint reports them.
     nonisolated struct PlaybackExtras: Decodable {
         let chapters: [ChapterInfo]
+        let originalLanguage: String?
         /// Keyed by media source id, then by resolution width — verbatim,
         /// since the decoder's PascalCase strategy leaves dictionary keys
         /// alone (only `CodingKey`s are converted).
         let trickplay: [String: [String: TrickplayTileInfo]]
 
-        static let none = PlaybackExtras(chapters: [], trickplay: [:])
+        static let none = PlaybackExtras(chapters: [], originalLanguage: nil, trickplay: [:])
 
-        init(chapters: [ChapterInfo], trickplay: [String: [String: TrickplayTileInfo]]) {
+        init(
+            chapters: [ChapterInfo],
+            originalLanguage: String? = nil,
+            trickplay: [String: [String: TrickplayTileInfo]]
+        ) {
             self.chapters = chapters
+            self.originalLanguage = originalLanguage
             self.trickplay = trickplay
         }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: AnyCodingKey.self)
             chapters = (try? c.decodeIfPresent([ChapterInfo].self, forKey: "chapters")) ?? []
+            originalLanguage = try? c.decodeIfPresent(String.self, forKey: "originalLanguage")
             trickplay = (try? c.decodeIfPresent([String: [String: TrickplayTileInfo]].self, forKey: "trickplay")) ?? [:]
         }
     }

@@ -213,6 +213,25 @@ nonisolated enum JellyfinSubtitleLanguageCode {
         "yo": "yor", "za": "zha", "zu": "zul",
     ]
 
+    private static let reverse: [String: String] = {
+        var result = Dictionary(uniqueKeysWithValues: common.map { ($0.value, $0.key) })
+        // ISO 639-2/B aliases still appear in older media libraries even
+        // though Jellyfin normally emits the terminological form above.
+        result.merge([
+            "alb": "sq", "arm": "hy", "baq": "eu", "bur": "my", "chi": "zh",
+            "cze": "cs", "dut": "nl", "fre": "fr", "geo": "ka", "ger": "de",
+            "gre": "el", "ice": "is", "mac": "mk", "mao": "mi", "may": "ms",
+            "per": "fa", "rum": "ro", "slo": "sk", "tib": "bo", "wel": "cy",
+        ], uniquingKeysWith: { current, _ in current })
+        return result
+    }()
+
+    static func twoLetter(for identifier: String) -> String? {
+        let base = identifier.lowercased()
+        if base.count == 2 { return base }
+        return reverse[base]
+    }
+
     static func threeLetter(for identifier: String) -> String {
         let normalized = SubtitlePreferencesStore.normalizedLanguage(identifier) ?? identifier.lowercased()
         if normalized.count == 3 { return normalized }

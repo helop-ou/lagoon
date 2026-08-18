@@ -51,8 +51,26 @@ Authorization: MediaBrowser Client="Lagoon", Device="Apple TV",
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one (HEL-66) |
 
-List calls pass `Fields=Overview,Genres,…` (`JellyfinClient.defaultFields`)
-because the server omits those from list payloads by default.
+List calls pass `Fields=Overview,Genres,…,OriginalLanguage`
+(`JellyfinClient.defaultFields`) because the server omits those from list
+payloads by default. `OriginalLanguage` is also read from the full item
+request that already supplies chapters and trickplay at playback start.
+
+## Playback language defaults (HEL-81)
+
+Jellyfin's `MediaStream.IsOriginal` is the authority for Lagoon's Original
+Audio mode. On servers or items that omit it, Lagoon falls back to the
+item's `OriginalLanguage`; it never guesses from a stream title or filename.
+`MediaStream.IsDefault`, `IsForced`, `IsHearingImpaired` and `Language` feed
+the remaining selection modes.
+
+The server profile provides only one audio and one subtitle language, while
+Lagoon supports ordered primary/fallback choices. Those choices are local,
+keyed by Lagoon's server+user account id. A manual in-player selection
+carried into the next episode wins over the local default, which in turn
+wins over the stream index Jellyfin marked as default. ISO 639-2 stream
+codes and BCP-47/ISO 639-1 preferences normalize to the same language before
+matching, including the older bibliographic ISO aliases.
 
 **`Shows/NextUp` is a rail, not a cursor.** It returns the episode *in
 progress* when there is one: `enableResumable` defaults to `true` (checked
@@ -159,7 +177,15 @@ catalogue wholesale is actively wrong: the same server offers
 `ContinueWatching`, `NextUp` **and** `ContinueWatchingNextUp`, plus
 `LatestMovies` alongside `RecentlyAddedMovies` — Home would show the same
 films three times. `HomeViewModel.nativelyCoveredSections` therefore drops
-every section Lagoon already draws and appends only the remainder.
+every section Lagoon already draws and appends only the remainder by
+default.
+
+HEL-60 adds an opt-in local layout in Settings. Once the viewer changes it,
+that ordered enabled set wins outright, including for normally covered
+sections; before then the additive behavior above is unchanged. The layout
+is keyed by server+user, newly discovered catalogue entries start disabled
+for configured layouts, and the entire Settings row stays hidden when the
+plugin route is unavailable.
 
 Consequence worth knowing before testing: on a plain movies/TV server this
 feature correctly renders **nothing**, because every non-empty section is

@@ -241,7 +241,13 @@ final class SubtitlePreferencesStore {
     }
 
     nonisolated static func normalizedLanguage(_ identifier: String) -> String? {
-        let normalized = identifier.replacingOccurrences(of: "_", with: "-")
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let normalized = trimmed.replacingOccurrences(of: "_", with: "-")
+        let base = normalized.split(separator: "-", maxSplits: 1).first.map(String.init) ?? normalized
+        if let twoLetter = JellyfinSubtitleLanguageCode.twoLetter(for: base) {
+            return twoLetter
+        }
         let locale = Locale(identifier: normalized)
         return locale.language.languageCode?.identifier.lowercased()
     }

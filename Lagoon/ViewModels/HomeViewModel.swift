@@ -16,7 +16,7 @@ final class HomeViewModel {
     /// `NextUp` *and* `ContinueWatchingNextUp` at once, plus `Latest*`
     /// alongside `RecentlyAdded*` — Home would show the same films three
     /// times over. `MyMedia` is the library list, which is the tab bar here.
-    private static let nativelyCoveredSections: Set<String> = [
+    static let nativelyCoveredSections: Set<String> = [
         "ContinueWatching", "NextUp", "ContinueWatchingNextUp", "MyMedia",
         "LatestMovies", "LatestShows", "RecentlyAddedMovies", "RecentlyAddedShows",
     ]
@@ -33,10 +33,21 @@ final class HomeViewModel {
     var errorMessage: String?
 
     private var hasLoaded = false
+    private var loadedAccountID: String?
+    private var loadGeneration = 0
 
-    func load(client: JellyfinClient) async {
+    func load(
+        client: JellyfinClient,
+        accountID: String? = nil,
+        homeSectionPreferences: HomeSectionPreferenceValues = HomeSectionPreferenceValues()
+    ) async {
+        if loadedAccountID != accountID {
+            clearForAccountChange()
+            loadedAccountID = accountID
+        }
         guard !hasLoaded else { return }
         hasLoaded = true
+        let generation = loadGeneration
         isLoading = true
         errorMessage = nil
         do {
@@ -65,12 +76,20 @@ final class HomeViewModel {
                 rails = collected.sorted { $0.0 < $1.0 }.map(\.1)
             }
 
-            resume = await resumeItems ?? []
-            nextUp = await nextUpItems ?? []
-            favorites = await favoriteItems ?? []
+            let resolvedResume = await resumeItems ?? []
+            let resolvedNextUp = await nextUpItems ?? []
+            let resolvedFavorites = await favoriteItems ?? []
+            let resolvedPluginRails = await loadPluginRails(
+                client: client,
+                preferences: homeSectionPreferences
+            )
+            guard generation == loadGeneration else { return }
+            resume = resolvedResume
+            nextUp = resolvedNextUp
+            favorites = resolvedFavorites
             latestRails = rails
             TopShelfStore.publish(resume, client: client)
-            pluginRails = await loadPluginRails(client: client)
+            pluginRails = resolvedPluginRails
             heroItems = Array(
                 rails.flatMap(\.items)
                     .filter { $0.backdropImageTags?.isEmpty == false && $0.overview != nil }
@@ -78,15 +97,26 @@ final class HomeViewModel {
                     .prefix(6)
             )
         } catch {
+            guard generation == loadGeneration else { return }
             hasLoaded = false
             errorMessage = "Couldn't load your library."
         }
-        isLoading = false
+        if generation == loadGeneration {
+            isLoading = false
+        }
     }
 
-    func retry(client: JellyfinClient) async {
+    func retry(
+        client: JellyfinClient,
+        accountID: String? = nil,
+        homeSectionPreferences: HomeSectionPreferenceValues = HomeSectionPreferenceValues()
+    ) async {
         hasLoaded = false
-        await load(client: client)
+        await load(
+            client: client,
+            accountID: accountID,
+            homeSectionPreferences: homeSectionPreferences
+        )
     }
 
     /// Cheap re-fetch of the user-data-driven rails: on returning from
@@ -106,6 +136,17 @@ final class HomeViewModel {
         TopShelfStore.publish(resume, client: client)
     }
 
+    func refreshPluginRails(
+        client: JellyfinClient,
+        preferences: HomeSectionPreferenceValues
+    ) async {
+        guard hasLoaded, !isLoading else { return }
+        let generation = loadGeneration
+        let rails = await loadPluginRails(client: client, preferences: preferences)
+        guard generation == loadGeneration else { return }
+        pluginRails = rails
+    }
+
     /// Fetches whatever the Home Screen Sections plugin adds beyond Lagoon's
     /// own rails (HEL-47). Costs nothing on a server without the plugin: the
     /// catalogue call 404s and this returns immediately.
@@ -115,19 +156,24 @@ final class HomeViewModel {
     /// still advertises Books, Music and Jellyseerr rows. Measured against a
     /// real server, all 28 sections resolve in under two seconds
     /// concurrently, and the empty ones answer in ~0.1 s each.
-    private func loadPluginRails(client: JellyfinClient) async -> [LibraryRail] {
-        let sections = await client.homeSections()
-            .filter { !Self.nativelyCoveredSections.contains($0.section) }
+    private func loadPluginRails(
+        client: JellyfinClient,
+        preferences: HomeSectionPreferenceValues
+    ) async -> [LibraryRail] {
+        let sections = HomeSectionPreferenceResolver.sections(
+            from: await client.homeSections(),
+            preferences: preferences,
+            nativelyCovered: Self.nativelyCoveredSections
+        )
         guard !sections.isEmpty else { return [] }
 
-        return await withTaskGroup(of: (order: Int, catalogueIndex: Int, rail: LibraryRail)?.self) { group in
+        return await withTaskGroup(of: (index: Int, rail: LibraryRail)?.self) { group in
             for (index, section) in sections.enumerated() {
                 group.addTask {
                     let items = await client.homeSectionItems(section.section)
                     guard !items.isEmpty else { return nil }
                     return (
-                        order: section.orderIndex ?? index,
-                        catalogueIndex: index,
+                        index: index,
                         rail: LibraryRail(
                             id: "plugin-" + section.section,
                             title: section.displayText ?? section.section,
@@ -139,17 +185,23 @@ final class HomeViewModel {
                     )
                 }
             }
-            var collected: [(order: Int, catalogueIndex: Int, rail: LibraryRail)] = []
+            var collected: [(index: Int, rail: LibraryRail)] = []
             for await entry in group {
                 if let entry { collected.append(entry) }
             }
-            // The plugin reports the same OrderIndex for every section on a
-            // default install, so ties fall back to the catalogue's order.
-            return collected.sorted {
-                $0.order == $1.order
-                    ? $0.catalogueIndex < $1.catalogueIndex
-                    : $0.order < $1.order
-            }.map(\.rail)
+            return collected.sorted { $0.index < $1.index }.map(\.rail)
         }
+    }
+
+    private func clearForAccountChange() {
+        loadGeneration &+= 1
+        hasLoaded = false
+        resume = []
+        nextUp = []
+        favorites = []
+        pluginRails = []
+        latestRails = []
+        heroItems = []
+        errorMessage = nil
     }
 }

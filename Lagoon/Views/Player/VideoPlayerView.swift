@@ -53,7 +53,10 @@ final class PlaybackController {
     /// embedded list; subtitles are embedded first, then external.
     private var audioStreams: [MediaStream] = []
     private var orderedSubtitleStreams: [MediaStream] = []
+    private var preferredAudioLanguages: [String] = []
     private var preferredSubtitleLanguages: [String] = []
+    private var audioDefaultMode: AudioDefaultMode = .serverDefault
+    private var subtitleDefaultMode: SubtitleDefaultMode = .system
     private var missingSubtitleMode: MissingSubtitleMode = .ask
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
@@ -80,6 +83,8 @@ final class PlaybackController {
         media: MediaItem,
         startFromBeginning: Bool,
         client: JellyfinClient,
+        trackPreferences: TrackPreferenceValues = TrackPreferenceValues(),
+        preferredAudioLanguages: [String] = [],
         preferredSubtitleLanguages: [String] = [],
         missingSubtitleMode: MissingSubtitleMode = .ask
     ) async {
@@ -101,6 +106,11 @@ final class PlaybackController {
         }
         self.client = client
         itemId = media.id
+        audioDefaultMode = trackPreferences.audioMode
+        subtitleDefaultMode = trackPreferences.subtitleMode
+        self.preferredAudioLanguages = preferredAudioLanguages.isEmpty
+            ? Locale.preferredLanguages
+            : preferredAudioLanguages
         self.preferredSubtitleLanguages = preferredSubtitleLanguages.isEmpty
             ? SubtitlePreferencesStore.systemCaptionLanguages
             : preferredSubtitleLanguages
@@ -160,6 +170,13 @@ final class PlaybackController {
                let position = embeddedAudio.firstIndex(where: { $0.index == index }) {
                 initialAudioOrdinal = position + 1
             }
+            initialAudioOrdinal = TrackSelectionPolicy.audioOrdinal(
+                mode: audioDefaultMode,
+                candidates: embeddedAudio.map(Self.selectionCandidate),
+                serverDefault: initialAudioOrdinal,
+                preferredLanguages: self.preferredAudioLanguages,
+                originalLanguage: resolvedExtras.originalLanguage ?? media.originalLanguage
+            )
             // A choice carried in from the previous episode outranks the
             // server's default: the viewer overrode it once already.
             if let preference = trackPreference,
@@ -215,16 +232,27 @@ final class PlaybackController {
                     initialSubtitleOrdinal = carried
                 }
             } else {
-                initialSubtitleOrdinal = Self.systemDefaultSubtitleOrdinal(
-                    current: initialSubtitleOrdinal,
-                    subtitles: orderedSubtitles,
-                    selectedAudioLanguage: initialAudioOrdinal.flatMap { ordinal in
-                        embeddedAudio.indices.contains(ordinal - 1)
-                            ? embeddedAudio[ordinal - 1].language
-                            : nil
-                    },
-                    preferredLanguages: self.preferredSubtitleLanguages
-                )
+                let selectedAudioLanguage = initialAudioOrdinal.flatMap { ordinal in
+                    embeddedAudio.indices.contains(ordinal - 1)
+                        ? embeddedAudio[ordinal - 1].language
+                        : nil
+                }
+                if subtitleDefaultMode == .system {
+                    initialSubtitleOrdinal = Self.systemDefaultSubtitleOrdinal(
+                        current: initialSubtitleOrdinal,
+                        subtitles: orderedSubtitles,
+                        selectedAudioLanguage: selectedAudioLanguage,
+                        preferredLanguages: self.preferredSubtitleLanguages
+                    )
+                } else {
+                    initialSubtitleOrdinal = TrackSelectionPolicy.subtitleOrdinal(
+                        mode: subtitleDefaultMode,
+                        candidates: orderedSubtitles.map(Self.selectionCandidate),
+                        serverDefault: initialSubtitleOrdinal,
+                        preferredLanguages: self.preferredSubtitleLanguages,
+                        selectedAudioLanguage: selectedAudioLanguage
+                    )
+                }
             }
             audioStreams = embeddedAudio
             orderedSubtitleStreams = orderedSubtitles
@@ -252,11 +280,12 @@ final class PlaybackController {
             }
             engine.onTrackSelectionChanged = { [weak self, weak engine] in
                 self?.nowPlaying.updateLanguageOptions()
-                if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag {
+                if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag,
+                   let normalized = SubtitlePreferencesStore.normalizedLanguage(language) {
                     // Apple's caption contract asks custom selectors to
                     // feed explicit language choices back to the system's
                     // ordered caption-language preference stack.
-                    _ = MACaptionAppearanceAddSelectedLanguage(.user, language as CFString)
+                    _ = MACaptionAppearanceAddSelectedLanguage(.user, normalized as CFString)
                 }
             }
             self.engine = engine
@@ -309,6 +338,16 @@ final class PlaybackController {
     private nonisolated static func trackMetadata(_ stream: MediaStream) -> PlayerTrackMetadata {
         PlayerTrackMetadata(
             languageTag: stream.language,
+            isForced: stream.isForced == true,
+            isHearingImpaired: stream.isHearingImpaired == true
+        )
+    }
+
+    private nonisolated static func selectionCandidate(_ stream: MediaStream) -> TrackSelectionCandidate {
+        TrackSelectionCandidate(
+            language: stream.language,
+            isDefault: stream.isDefault == true,
+            isOriginal: stream.isOriginal == true,
             isForced: stream.isForced == true,
             isHearingImpaired: stream.isHearingImpaired == true
         )
@@ -430,6 +469,11 @@ final class PlaybackController {
             media: next,
             startFromBeginning: false,
             client: client,
+            trackPreferences: TrackPreferenceValues(
+                audioMode: audioDefaultMode,
+                subtitleMode: subtitleDefaultMode
+            ),
+            preferredAudioLanguages: preferredAudioLanguages,
             preferredSubtitleLanguages: preferredSubtitleLanguages,
             missingSubtitleMode: missingSubtitleMode
         )
@@ -805,6 +849,7 @@ struct VideoPlayerView: View {
     @State private var controller = PlaybackController()
     @State private var pictureInPicture = SampleBufferPictureInPicture()
     @State private var subtitlePreferences = SubtitlePreferencesStore()
+    @State private var trackPreferences = TrackPreferencesStore()
     @State private var panelOpen = false
     @AppStorage("debug.matchContent") private var matchContent = true
     @Environment(\.scenePhase) private var scenePhase
@@ -864,10 +909,13 @@ struct VideoPlayerView: View {
         .interactiveDismissDisabled()
         .task {
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
+            trackPreferences.configure(accountID: session.activeAccount?.id)
             await controller.start(
                 media: playerItem.media,
                 startFromBeginning: playerItem.startFromBeginning,
                 client: session.client,
+                trackPreferences: trackPreferences.values,
+                preferredAudioLanguages: trackPreferences.preferredAudioLanguages,
                 preferredSubtitleLanguages: subtitlePreferences.preferredLanguages,
                 missingSubtitleMode: subtitlePreferences.values.missingMode
             )

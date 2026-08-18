@@ -12,6 +12,8 @@ struct SettingsView: View {
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     @State private var subtitlePreferences = SubtitlePreferencesStore()
+    @State private var trackPreferences = TrackPreferencesStore()
+    @State private var homePreferences = HomeSectionPreferencesStore()
 
     var body: some View {
         Group {
@@ -24,6 +26,9 @@ struct SettingsView: View {
         }
         .task(id: session.activeAccount?.id) {
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
+            trackPreferences.configure(accountID: session.activeAccount?.id)
+            homePreferences.configure(accountID: session.activeAccount?.id)
+            await homePreferences.loadCatalog(client: session.client)
         }
     }
 
@@ -93,6 +98,32 @@ struct SettingsView: View {
                 }
                 row("Play Next Episode", value: autoplayMode.shortTitle) {
                     cycleAutoplayMode()
+                }
+                if !homePreferences.catalog.isEmpty {
+                    NavigationLink {
+                        HomeRowsSettingsView(preferences: homePreferences)
+                    } label: {
+                        HStack(spacing: Metrics.Space.xl) {
+                            Text("Home Rows")
+                            Spacer(minLength: Metrics.Space.xl)
+                            Text(homePreferences.values.isConfigured ? "Custom" : "Lagoon Default")
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                }
+                row("Default Audio", value: trackPreferences.values.audioMode.title) {
+                    cycleTrackValue(\.audioMode)
+                }
+                row("Preferred Audio", value: SubtitlePreferencesStore.displayName(for: trackPreferences.primaryAudioLanguage)) {
+                    cycleAudioLanguage(primary: true)
+                }
+                row("Audio Fallback", value: SubtitlePreferencesStore.displayName(for: trackPreferences.fallbackAudioLanguage)) {
+                    cycleAudioLanguage(primary: false)
+                }
+                row("Default Subtitles", value: trackPreferences.values.subtitleMode.title) {
+                    cycleTrackValue(\.subtitleMode)
                 }
                 row("Subtitle Appearance", value: appearanceTitle) {
                     var values = subtitlePreferences.values
@@ -249,7 +280,41 @@ struct SettingsView: View {
                 }
             }
 
+            if !homePreferences.catalog.isEmpty {
+                Section("Home") {
+                    NavigationLink("Home Rows") {
+                        HomeRowsSettingsView(preferences: homePreferences)
+                    }
+                }
+            }
+
+            Section("Audio Languages") {
+                Picker("Default", selection: trackBinding(\.audioMode)) {
+                    ForEach(AudioDefaultMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                Picker("Preferred", selection: primaryAudioLanguageBinding) {
+                    ForEach(settingsLanguageChoices, id: \.self) { language in
+                        Text(SubtitlePreferencesStore.displayName(for: language))
+                            .tag(Optional(language))
+                    }
+                }
+                Picker("Fallback", selection: fallbackAudioLanguageBinding) {
+                    Text("None").tag(String?.none)
+                    ForEach(settingsLanguageChoices, id: \.self) { language in
+                        Text(SubtitlePreferencesStore.displayName(for: language))
+                            .tag(Optional(language))
+                    }
+                }
+            }
+
             Section("Subtitle Languages") {
+                Picker("Default", selection: trackBinding(\.subtitleMode)) {
+                    ForEach(SubtitleDefaultMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
                 Picker("Preferred", selection: primaryLanguageBinding) {
                     ForEach(settingsLanguageChoices, id: \.self) { language in
                         Text(SubtitlePreferencesStore.displayName(for: language))
@@ -356,6 +421,32 @@ struct SettingsView: View {
         subtitlePreferences.values = values
     }
 
+    private func cycleTrackValue<T>(
+        _ keyPath: WritableKeyPath<TrackPreferenceValues, T>
+    ) where T: CaseIterable & Equatable {
+        let all = Array(T.allCases)
+        guard !all.isEmpty else { return }
+        var values = trackPreferences.values
+        let current = values[keyPath: keyPath]
+        let next = (all.firstIndex(of: current).map { $0 + 1 } ?? 0) % all.count
+        values[keyPath: keyPath] = all[next]
+        trackPreferences.values = values
+    }
+
+    private func cycleAudioLanguage(primary: Bool) {
+        var options = settingsLanguageChoices.map(Optional.some)
+        if !primary { options.insert(nil, at: 0) }
+        let current = primary
+            ? trackPreferences.primaryAudioLanguage
+            : trackPreferences.fallbackAudioLanguage
+        let next = (options.firstIndex(where: { $0 == current }).map { $0 + 1 } ?? 0) % options.count
+        if primary {
+            trackPreferences.setPrimaryAudioLanguage(options[next])
+        } else {
+            trackPreferences.setFallbackAudioLanguage(options[next])
+        }
+    }
+
     private func cycleLanguage(primary: Bool) {
         var options = settingsLanguageChoices.map(Optional.some)
         if !primary { options.insert(nil, at: 0) }
@@ -380,6 +471,33 @@ struct SettingsView: View {
         Binding(
             get: { subtitlePreferences.primaryLanguage },
             set: { subtitlePreferences.setPrimaryLanguage($0) }
+        )
+    }
+
+    private var primaryAudioLanguageBinding: Binding<String?> {
+        Binding(
+            get: { trackPreferences.primaryAudioLanguage },
+            set: { trackPreferences.setPrimaryAudioLanguage($0) }
+        )
+    }
+
+    private var fallbackAudioLanguageBinding: Binding<String?> {
+        Binding(
+            get: { trackPreferences.fallbackAudioLanguage },
+            set: { trackPreferences.setFallbackAudioLanguage($0) }
+        )
+    }
+
+    private func trackBinding<T>(
+        _ keyPath: WritableKeyPath<TrackPreferenceValues, T>
+    ) -> Binding<T> {
+        Binding(
+            get: { trackPreferences.values[keyPath: keyPath] },
+            set: { newValue in
+                var values = trackPreferences.values
+                values[keyPath: keyPath] = newValue
+                trackPreferences.values = values
+            }
         )
     }
 

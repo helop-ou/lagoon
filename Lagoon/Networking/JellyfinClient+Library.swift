@@ -4,7 +4,7 @@ import Foundation
 // which every server from 10.8 onward answers.
 extension JellyfinClient {
     /// Extra item fields the UI needs beyond the server's list defaults.
-    static let defaultFields = "Overview,Genres,Taglines,PrimaryImageAspectRatio,ChildCount,Status"
+    static let defaultFields = "Overview,Genres,Taglines,PrimaryImageAspectRatio,ChildCount,Status,OriginalLanguage"
 
     func userViews() async throws -> [MediaItem] {
         let userId = try requireUserId()

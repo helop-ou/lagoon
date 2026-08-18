@@ -13,7 +13,13 @@ struct HomeView: View {
                 LoadingView()
             } else if let errorMessage = viewModel.errorMessage {
                 ErrorStateView(message: errorMessage) {
-                    Task { await viewModel.retry(client: session.client) }
+                    Task {
+                        await viewModel.retry(
+                            client: session.client,
+                            accountID: session.activeAccount?.id,
+                            homeSectionPreferences: savedHomePreferences
+                        )
+                    }
                 }
             } else {
                 ScrollView(showsIndicators: false) {
@@ -64,11 +70,21 @@ struct HomeView: View {
                 .scrollClipDisabled()
             }
         }
-        .task {
-            await viewModel.load(client: session.client)
+        .task(id: session.activeAccount?.id) {
+            await viewModel.load(
+                client: session.client,
+                accountID: session.activeAccount?.id,
+                homeSectionPreferences: savedHomePreferences
+            )
         }
         .onAppear {
-            Task { await viewModel.refreshProgress(client: session.client) }
+            Task {
+                await viewModel.refreshProgress(client: session.client)
+                await viewModel.refreshPluginRails(
+                    client: session.client,
+                    preferences: savedHomePreferences
+                )
+            }
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem) { item in
@@ -82,5 +98,9 @@ struct HomeView: View {
     /// re-fetched rather than guessing which one moved.
     private func refreshUserData() async {
         await viewModel.refreshProgress(client: session.client)
+    }
+
+    private var savedHomePreferences: HomeSectionPreferenceValues {
+        HomeSectionPreferencesStore.savedValues(accountID: session.activeAccount?.id)
     }
 }

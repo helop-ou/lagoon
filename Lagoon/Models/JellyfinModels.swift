@@ -68,6 +68,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let officialRating: String?
     let runTimeTicks: Int64?
     let status: String?
+    let originalLanguage: String?
     let childCount: Int?
     let indexNumber: Int?
     let parentIndexNumber: Int?
@@ -100,6 +101,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         officialRating = try c.decodeIfPresent(String.self, forKey: "officialRating")
         runTimeTicks = try c.decodeIfPresent(Int64.self, forKey: "runTimeTicks")
         status = try c.decodeIfPresent(String.self, forKey: "status")
+        originalLanguage = try c.decodeIfPresent(String.self, forKey: "originalLanguage")
         childCount = try c.decodeIfPresent(Int.self, forKey: "childCount")
         indexNumber = try c.decodeIfPresent(Int.self, forKey: "indexNumber")
         parentIndexNumber = try c.decodeIfPresent(Int.self, forKey: "parentIndexNumber")
@@ -163,8 +165,8 @@ nonisolated struct MediaSource: Decodable, Identifiable {
     let bitrate: Int?
     let size: Int64?
     let eTag: String?
-    // The server resolves the user's language preferences into these
-    // default stream choices — no client-side preference logic needed.
+    // The server resolves its own single-language preference into these;
+    // Lagoon may apply its richer per-account policy on top.
     let defaultAudioStreamIndex: Int?
     let defaultSubtitleStreamIndex: Int?
     let mediaStreams: [MediaStream]?
@@ -198,6 +200,7 @@ nonisolated struct MediaStream: Decodable {
     let language: String?
     let index: Int?
     let isDefault: Bool?
+    let isOriginal: Bool?
     let isExternal: Bool?
     let isForced: Bool?
     let isHearingImpaired: Bool?
