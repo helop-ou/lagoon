@@ -175,7 +175,7 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, !panelOpen, !engine.isPaused else { return }
+            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing else { return }
             controlsVisible = false
         }
         // The spinner only earns screen time when buffering persists —
@@ -205,13 +205,21 @@ struct CustomPlayerView<Surface: View>: View {
         .onChange(of: scrubTarget) { _, target in
             if let target { trickplay?.update(to: target) }
         }
-        // A pause in the input ends the acceleration run, so the next
-        // press starts back at a 10 s step.
+        // Two beats of quiet, both timed from the last press. The first
+        // ends the acceleration run, so the next press steps 10 s again.
+        // The second lands the scrub on its own: without it, opening scrub
+        // during playback would cost a Select to confirm every small skip,
+        // and the ±10 s nudge would have nowhere to live (HEL-55).
         .task(id: scrubStepToken) {
-            guard scrubRunLength > 0 else { return }
-            try? await Task.sleep(for: .milliseconds(600))
+            guard isScrubbing else { return }
+            try? await Task.sleep(for: ScrubMetrics.runExpiry)
             guard !Task.isCancelled else { return }
             scrubRunLength = 0
+            try? await Task.sleep(for: ScrubMetrics.selfCommit)
+            guard !Task.isCancelled, let target = scrubTarget else { return }
+            // Landing on the timeout keeps whatever the play state was;
+            // only an explicit Select/Play means "go here *and* play on".
+            commitScrub(to: target, resume: false)
         }
     }
 
@@ -247,10 +255,16 @@ struct CustomPlayerView<Surface: View>: View {
                     return
                 }
                 switch direction {
+                // Left/right open scrub rather than seeking blind, playing
+                // or paused (HEL-55). A lone press still reads as a 10 s
+                // skip — it just previews the frame first and lands itself
+                // a beat later; holding accelerates into a real scrub.
                 case .left where canScrub:
                     stepScrub(direction: -1)
                 case .right where canScrub:
                     stepScrub(direction: 1)
+                // No duration to walk along (live streams): blind ±10 s,
+                // with the glyph as the only feedback available.
                 case .left:
                     engine.seek(by: -10)
                     showSeekFeedback(forward: false)
@@ -307,13 +321,18 @@ struct CustomPlayerView<Surface: View>: View {
     private var isScrubbing: Bool { scrubTarget != nil }
 
     private var transportVisible: Bool {
-        (controlsVisible || engine.isPaused) && !panelOpen
+        (controlsVisible || engine.isPaused || isScrubbing) && !panelOpen
     }
 
-    /// The pause-then-walk grammar needs a known duration to walk along;
-    /// without one the arrows stay ±10 s seeks.
+    /// Walking a virtual playhead needs a known duration to walk along;
+    /// without one (live streams) the arrows stay plain ±10 s seeks.
+    ///
+    /// Playback is deliberately no bar to it. This used to also require
+    /// `engine.isPaused`, which left trickplay, chapter ticks and chapter
+    /// hopping unreachable for anyone who never guessed they had to pause
+    /// first — the whole of HEL-55.
     private var canScrub: Bool {
-        engine.isPaused && engine.duration > 0
+        engine.duration > 0
     }
 
     /// Walks the virtual playhead one step. Sustained input accelerates
@@ -333,8 +352,9 @@ struct CustomPlayerView<Surface: View>: View {
         scrubStepToken += 1
     }
 
-    /// Lands the virtual playhead. `resume` is the tvOS grammar (Select/Play
-    /// scrubs *and* plays on); touch drags keep the current play state.
+    /// Lands the virtual playhead. `resume` is the tvOS grammar for an
+    /// explicit commit — Select/Play scrubs *and* plays on. Touch drags and
+    /// the self-commit timeout keep whatever the play state already was.
     private func commitScrub(to target: Double, resume: Bool) {
         endScrub()
         // Resume before seeking: the engine re-anchors the synchronizer
@@ -580,7 +600,7 @@ struct CustomPlayerView<Surface: View>: View {
                     // Glides between the engine's 0.1 s position updates
                     // instead of ticking (HEL-39); big deltas (seeks)
                     // become a quick slide to the target.
-                    .animation(scrubMotion, value: fillFraction)
+                    .animation(fillMotion, value: fillFraction)
                 chapterTicks(in: width)
                 knob(in: width)
             }
@@ -704,10 +724,28 @@ struct CustomPlayerView<Surface: View>: View {
         max(previewSize?.width ?? 0, ScrubMetrics.pillWidth)
     }
 
+    /// The live playhead's curve, matched to the engine's position-update
+    /// cadence so the bar glides instead of ticking.
+    private var liveMotion: Animation { .linear(duration: 0.25) }
+
     /// Scrub steps snap over; while live the knob must glide on exactly the
     /// fill's curve, or the two drift apart between position updates.
     private var scrubMotion: Animation {
-        isScrubbing ? .easeOut(duration: Motion.fast) : .linear(duration: 0.25)
+        isScrubbing ? .easeOut(duration: Motion.fast) : liveMotion
+    }
+
+    /// What the *fill* follows, which is no longer the same thing. Now that
+    /// scrub opens without pausing (HEL-55), the tvOS fill keeps showing the
+    /// live position throughout a scrub — so it has to keep the live curve
+    /// too, or every position update behind the chip would ease out and
+    /// stall instead of gliding. Touch is the other way round: there the
+    /// fill *is* what the thumb drags, so it takes the scrub curve.
+    private var fillMotion: Animation {
+        #if os(tvOS)
+        liveMotion
+        #else
+        scrubMotion
+        #endif
     }
 
     /// How much of the bar is filled. Touch drags the fill along with the
@@ -983,6 +1021,15 @@ struct CustomPlayerView<Surface: View>: View {
 /// generic over its surface, and generics can't hold static storage. The
 /// pill has a fixed width so the edge clamping is exact.
 private enum ScrubMetrics {
+    /// No input for this long and the acceleration run expires, so the next
+    /// press is a 10 s step again rather than a 60 s one.
+    static let runExpiry: Duration = .milliseconds(600)
+    /// A further beat after that and the scrub lands itself. This is what
+    /// keeps a single press a plain 10 s skip now that scrub opens during
+    /// playback (HEL-55) — tune it on hardware, not in the simulator: too
+    /// short and a preview can't be read, too long and a nudge feels stuck.
+    static let selfCommit: Duration = .milliseconds(600)
+
     #if os(tvOS)
     static let knobWidth: CGFloat = 8
     static let knobOverhang: CGFloat = 12

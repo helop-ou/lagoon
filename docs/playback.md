@@ -243,19 +243,42 @@ reflects the new position immediately.
   `PlayerEngine` protocol** — engine internals must never leak into it.
 - Focus invariants: the video surface is focusable at **all** times (Menu
   would quit the app from an unfocusable screen).
-- **Scrub grammar** (HEL-39 slice 2): while *playing*, tvOS arrows are
-  ±10 s seeks; while *paused* they walk a virtual playhead (`scrubTarget`)
-  that only lands when Select or Play/Pause commits it — and committing
-  resumes playback, the native tvOS grammar. Menu cancels back to the live
-  position, so it now outranks close-the-panel in `MenuPressGate`'s policy.
-  Sustained walking accelerates 10 → 30 → 60 s, and the run resets after
-  600 ms of quiet. Mid-scrub, up/down hop chapters (slice 3) — everywhere
-  else down still opens the panel, which is why the hop is scoped to scrub
-  mode: opening the panel mid-scrub would strand the virtual playhead
-  behind it. Backwards hops land on the current chapter's start first, the
-  way track skip-back does. iOS instead drags the bar directly and seeks on
-  release only — seeking per drag update would flush the renderers and
-  re-demux on every frame of the gesture.
+- **Scrub grammar** (HEL-39 slice 2, reworked in HEL-55): tvOS arrows walk
+  a virtual playhead (`scrubTarget`) **whenever the duration is known** —
+  playing or paused alike. Scrub used to additionally require
+  `engine.isPaused`, which meant trickplay, chapter ticks and chapter hops
+  existed but were unreachable unless you guessed you had to pause first;
+  that gate is the whole of HEL-55, and the reason slices 2/3 sat unverified.
+  Only a live stream (`duration == 0`) still falls back to blind ±10 s seeks
+  with the glyph indicator.
+  - **Playback keeps running** behind the chip. Nothing to restore on
+    cancel, and no pause/resume round-trip through the synchronizer on every
+    small skip. So on tvOS the *fill* keeps showing the live position while
+    the *knob* walks ahead — which is why `fillMotion` stays on `liveMotion`
+    there and never takes the scrub curve; easing the fill per position
+    update would stutter the glide. Touch is the reverse: the fill is what
+    the thumb drags, so it takes the scrub curve.
+  - **A lone press is still a 10 s skip.** The scrub lands itself after
+    `ScrubMetrics.runExpiry` + `ScrubMetrics.selfCommit` (600 + 600 ms) of
+    quiet, so a single nudge previews the frame and then commits without a
+    Select. Both constants are hardware-tuning knobs — too short and the
+    preview can't be read, too long and a nudge feels stuck.
+  - Select/Play commits *and plays on* (the native tvOS grammar); the
+    self-commit timeout and iOS drags keep whatever the play state was.
+    Menu cancels back to the live position, so it outranks close-the-panel
+    in `MenuPressGate`'s policy.
+  - Sustained walking accelerates 10 → 30 → 60 s. Mid-scrub, up/down hop
+    chapters (slice 3) — everywhere else down still opens the panel, which
+    is why the hop is scoped to scrub mode: opening the panel mid-scrub
+    would strand the virtual playhead behind it. Backwards hops land on the
+    current chapter's start first, the way track skip-back does.
+  - Chapter ticks stay unlabelled deliberately: a feature film reports ~25
+    of them, and 25 captions along a TV-width bar collide into noise. The
+    chip names the chapter under the playhead instead, which is now
+    reachable without pausing.
+  - iOS instead drags the bar directly and seeks on release only — seeking
+    per drag update would flush the renderers and re-demux on every frame of
+    the gesture.
 - **Trickplay** (slice 3, Jellyfin 10.9+): `BaseItemDto.Trickplay` is
   `[mediaSourceId: [width: TrickplayInfo]]`, and its `Interval` is
   **milliseconds**. Sheets come from `Videos/{id}/Trickplay/{width}/{n}.jpg`
