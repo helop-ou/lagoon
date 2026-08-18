@@ -368,13 +368,19 @@ nonisolated enum SampleBufferFactory {
 
         // Frame dependencies, spelled out for the renderer (HEL-64).
         //
-        // `NotSync` alone is not enough. Without `IsDependedOnByOthers` the
-        // renderer has no way to know which frames are safe to discard, and
-        // an unmarked frame is treated as *droppable* — so reference frames
-        // get thrown away under the slightest pressure and everything that
-        // referenced them degrades too. ffmpeg already knows the answer:
+        // `NotSync` alone leaves the renderer without the one thing it needs
+        // to choose *which* frame to discard under pressure:
+        // `IsDependedOnByOthers`. ffmpeg already knows the answer —
         // `AV_PKT_FLAG_DISPOSABLE` marks exactly the frames nothing else
-        // references (typically non-reference B-frames).
+        // references (typically non-reference B-frames) — so passing it on
+        // costs nothing and is what the API asks for.
+        //
+        // Honesty about what this did *not* do: it was first landed on the
+        // claim that it halved frame loss. That was measured badly, across
+        // different scenes at different sampling rates. Under a controlled
+        // A/B on one fixed scene the rate is the same either way, inside
+        // run-to-run noise. Kept because it is correct, not because it is a
+        // fix; the loss in HEL-64 is still unexplained.
         if isVideo,
            let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true),
            CFArrayGetCount(attachments) > 0 {
