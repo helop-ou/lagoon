@@ -278,7 +278,8 @@ nonisolated enum SampleBufferFactory {
         fallbackDuration: Double,
         isKeyFrame: Bool,
         timingOverride: CMSampleTimingInfo? = nil,
-        payloadOverride: Data? = nil
+        payloadOverride: Data? = nil,
+        markDroppableFrames: Bool = false
     ) -> CMSampleBuffer? {
         let size: Int
         let blockBuffer: CMBlockBuffer?
@@ -340,21 +341,26 @@ nonisolated enum SampleBufferFactory {
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sampleBuffer else { return nil }
 
-        // Frame dependencies, spelled out for the renderer (HEL-64).
+        // Frame dependencies (HEL-64, third and final chapter of 4e2ad5f).
         //
-        // `NotSync` alone leaves the renderer without the one thing it needs
-        // to choose *which* frame to discard under pressure:
-        // `IsDependedOnByOthers`. ffmpeg already knows the answer —
-        // `AV_PKT_FLAG_DISPOSABLE` marks exactly the frames nothing else
-        // references (typically non-reference B-frames) — so passing it on
-        // costs nothing and is what the API asks for.
+        // CMSampleBuffer.h, verbatim: "A frame is considered droppable if
+        // and only if kCMSampleAttachmentKey_IsDependedOnByOthers is
+        // present and set to kCFBooleanFalse." Absent means NOT droppable —
+        // the opposite of what 4e2ad5f assumed when it landed this marking
+        // as a fix. Setting the key false on AV_PKT_FLAG_DISPOSABLE frames
+        // therefore *licenses* the renderer's pre-decode dropper
+        // (AVVideoPerformanceMetrics counts "frames dropped prior to
+        // decoding") for every non-reference frame — 67% of the stream on
+        // the title that measured 10.7% steady loss at a matched display
+        // rate with full queues and zero stalls. The sim A/B that showed
+        // "no difference" ran where that dropper never engages (60 Hz
+        // virtual display, software decode).
         //
-        // Honesty about what this did *not* do: it was first landed on the
-        // claim that it halved frame loss. That was measured badly, across
-        // different scenes at different sampling rates. Under a controlled
-        // A/B on one fixed scene the rate is the same either way, inside
-        // run-to-run noise. Kept because it is correct, not because it is a
-        // fix; the loss in HEL-64 is still unexplained.
+        // So the marking is now opt-in (debug.markDroppableFrames) for the
+        // hardware A/B, and the default volunteers nothing: NotSync and
+        // DependsOnOthers stay — they describe decode dependencies and
+        // carry no droppability meaning — while IsDependedOnByOthers is
+        // set true for reference frames only, and left absent otherwise.
         if isVideo,
            let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true),
            CFArrayGetCount(attachments) > 0 {
@@ -371,7 +377,11 @@ nonisolated enum SampleBufferFactory {
                 set(kCMSampleAttachmentKey_NotSync, true)
             }
             set(kCMSampleAttachmentKey_DependsOnOthers, !isKeyFrame)
-            set(kCMSampleAttachmentKey_IsDependedOnByOthers, !disposable)
+            if !disposable {
+                set(kCMSampleAttachmentKey_IsDependedOnByOthers, true)
+            } else if markDroppableFrames {
+                set(kCMSampleAttachmentKey_IsDependedOnByOthers, false)
+            }
         }
         return sampleBuffer
     }

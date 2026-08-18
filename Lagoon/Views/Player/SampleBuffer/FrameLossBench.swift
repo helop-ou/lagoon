@@ -25,6 +25,8 @@ nonisolated struct FrameLossBench: Equatable {
         var stalls: Int
         var audioGaps: Int
         var videoQueueDepth: Int
+        var optimizedFrames = 0
+        var accumulatedDelay = 0.0
     }
 
     struct Result: Equatable {
@@ -36,6 +38,12 @@ nonisolated struct FrameLossBench: Equatable {
         var stalls: Int
         var audioGaps: Int
         var minVideoQueue: Int
+        /// Frames that took the direct-display path inside the window —
+        /// compare against `frames` to see whether video is being
+        /// composited with UI (HEL-64).
+        var optimizedFrames = 0
+        /// Seconds of accumulated display lateness inside the window.
+        var accumulatedDelay = 0.0
 
         var lossPercent: Double {
             frames > 0 ? Double(dropped) / Double(frames) * 100 : 0
@@ -92,7 +100,9 @@ nonisolated struct FrameLossBench: Equatable {
                 corrupted: sample.corruptedFrames - start.corruptedFrames,
                 stalls: sample.stalls - start.stalls,
                 audioGaps: sample.audioGaps - start.audioGaps,
-                minVideoQueue: minVideoQueue
+                minVideoQueue: minVideoQueue,
+                optimizedFrames: sample.optimizedFrames - start.optimizedFrames,
+                accumulatedDelay: sample.accumulatedDelay - start.accumulatedDelay
             )
             phase = .done(result)
             return result

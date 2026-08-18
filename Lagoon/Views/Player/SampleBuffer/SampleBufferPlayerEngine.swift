@@ -139,6 +139,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // experiment must not change mid-A/B, and the bench arms in
         // beginPlayback.
         demuxer.stripEnhancementLayer = UserDefaults.standard.bool(forKey: "debug.stripDoviEL")
+        demuxer.markDroppableFrames = UserDefaults.standard.bool(forKey: "debug.markDroppableFrames")
         benchEnabled = UserDefaults.standard.bool(forKey: "debug.frameLossBench")
 
         os_signpost(
@@ -329,7 +330,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             let snapshot = VideoPerformanceSnapshot(
                 totalFrames: metrics.totalNumberOfFrames,
                 droppedFrames: metrics.numberOfDroppedFrames,
-                corruptedFrames: metrics.numberOfCorruptedFrames
+                corruptedFrames: metrics.numberOfCorruptedFrames,
+                optimizedCompositingFrames: metrics.numberOfFramesDisplayedUsingOptimizedCompositing,
+                accumulatedFrameDelay: metrics.totalAccumulatedFrameDelay
             )
             Task { @MainActor [weak self, snapshot] in
                 guard let self, !self.shutdownRequested else { return }
@@ -435,7 +438,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Demux primed after open/seek — start (or reposition, if paused) at
     /// the target position.
     private func beginPlayback(at seconds: Double) {
-        let time = CMTime(seconds: seconds, preferredTimescale: 600)
+        // High-precision anchor: at a display matched to the content rate
+        // every frame has one vsync of slack, and a coarse (600/s) anchor
+        // already spends up to 1.7 ms of it before playback begins.
+        let time = CMTime(seconds: seconds, preferredTimescale: 240_000)
         timePosition = seconds
         isBuffering = false
         synchronizer.setRate(isPaused ? 0 : 1, time: time)
@@ -513,7 +519,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             corruptedFrames: snapshot.corruptedFrames,
             stalls: stallCount,
             audioGaps: audioContinuity.gapCount,
-            videoQueueDepth: videoQueue.count
+            videoQueueDepth: videoQueue.count,
+            optimizedFrames: snapshot.optimizedCompositingFrames,
+            accumulatedDelay: snapshot.accumulatedFrameDelay
         )
         if let result = bench!.record(sample) {
             benchStatus = String(
@@ -534,6 +542,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 + String(format: "percent=%.3f", result.lossPercent)
                 + " corrupted=\(result.corrupted) stalls=\(result.stalls)"
                 + " audioGaps=\(result.audioGaps) minVideoQueue=\(result.minVideoQueue)"
+                + " optimized=\(result.optimizedFrames)"
+                + String(format: " delayMs=%.1f", result.accumulatedDelay * 1000)
                 + String(format: " start=%.2f window=%.2f ", result.startPosition, result.windowSeconds)
                 + gates)
             benchCompleted = true

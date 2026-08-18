@@ -47,4 +47,13 @@ nonisolated struct VideoPerformanceSnapshot {
     let totalFrames: Int
     let droppedFrames: Int
     let corruptedFrames: Int
+    /// Frames shown via the power-efficient direct path that bypasses UI
+    /// compositing ("optimized/detached mode"). The ratio of this to
+    /// `totalFrames` is the measurable answer to "is our video being
+    /// composited with UI every frame?" (HEL-64).
+    let optimizedCompositingFrames: Int
+    /// Apple's own jitter metric: accumulated seconds between prescribed
+    /// and actual display times. "Non-zero delays are a sign of playback
+    /// jitter and possible loss of A/V sync."
+    let accumulatedFrameDelay: Double
 }

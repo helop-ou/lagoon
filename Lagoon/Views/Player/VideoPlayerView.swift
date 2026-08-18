@@ -573,6 +573,8 @@ final class PlaybackController {
             lines.append(
                 "Frames:  \(metrics.droppedFrames) dropped / \(metrics.totalFrames)"
                     + (metrics.corruptedFrames > 0 ? " · \(metrics.corruptedFrames) corrupt" : "")
+                    + " · opt \(metrics.optimizedCompositingFrames)"
+                    + String(format: " · delay %.0fms", metrics.accumulatedFrameDelay * 1000)
             )
         }
         return lines

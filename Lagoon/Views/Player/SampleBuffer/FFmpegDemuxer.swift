@@ -78,6 +78,10 @@ nonisolated final class FFmpegDemuxer {
     /// Only arms when the stream really is single-track DoVi with an
     /// enhancement layer present.
     var stripEnhancementLayer = false
+    /// HEL-64 A/B: opt back into marking disposable frames droppable
+    /// (4e2ad5f's behavior) — see the factory's attachment comment for
+    /// why the default volunteers nothing. Set before `open`.
+    var markDroppableFrames = false
     /// Non-nil = stripping armed; demux-queue use only.
     private var videoNALLengthSize: Int?
     // Written per-packet on the demux queue, read by the HUD from the main
@@ -406,7 +410,8 @@ nonisolated final class FFmpegDemuxer {
                 fallbackDuration: 0,
                 isKeyFrame: packet.pointee.flags & keyPacketFlag != 0,
                 timingOverride: timing,
-                payloadOverride: strippedPayload
+                payloadOverride: strippedPayload,
+                markDroppableFrames: markDroppableFrames
             ) else { return .skipped }
             return .video(buffer)
         }

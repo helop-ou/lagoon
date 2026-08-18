@@ -247,6 +247,19 @@ decoder pressure from starvation without a screen recording. Capture those
 with the Instruments **Points of Interest** template on real Apple TV hardware;
 the signposts intentionally ship in Release/TestFlight.
 
+**Frame droppability is opt-in metadata** (HEL-64, the end of the
+4e2ad5f saga): CMSampleBuffer.h — "A frame is considered droppable if
+and only if kCMSampleAttachmentKey_IsDependedOnByOthers is present and
+set to kCFBooleanFalse." Absent = not droppable. Marking disposable
+frames `false` licenses the renderer's *pre-decode* dropper for every
+non-reference frame — 67% of the stream on the title that measured
+10.7% steady loss at a matched display rate with full queues. The
+engine therefore volunteers nothing by default (`IsDependedOnByOthers`
+true on reference frames only, absent otherwise); the old marking sits
+behind `debug.markDroppableFrames` for the hardware A/B. Never trust a
+sim A/B of this: the pre-decode dropper doesn't engage at 60 Hz with
+software decode.
+
 ## Frame-loss bench (HEL-64)
 
 Measuring frame loss casually produces false positives — HEL-64 retracted
@@ -260,7 +273,10 @@ Settings → Debug → Frame-Loss Bench encodes that rule in the app: after
 every playback start or seek it warms up 10 s of *media time*, measures a
 60 s window, then freezes the result into the HUD's `Bench:` line and a
 `Bench Result` signpost (dropped/frames/percent, stalls, `aGaps`,
-min queue depth, window start). Touching the transport re-arms it from the
+min queue depth, window start, plus two fields Apple's metrics expose
+that decide arguments: `optimized` — frames shown via the
+direct-display path that bypasses UI compositing, against `frames` —
+and `delayMs`, Apple's accumulated display-lateness metric). Touching the transport re-arms it from the
 new position — "seek to the scene, hands off, read the number" is the
 whole protocol, identical in the simulator and on hardware. Windows are
 keyed on position, not wall time, so stalls stretch the run without
