@@ -11,6 +11,7 @@ final class HomeViewModel {
 
     var resume: [MediaItem] = []
     var nextUp: [MediaItem] = []
+    var favorites: [MediaItem] = []
     var latestRails: [LibraryRail] = []
     var heroItems: [MediaItem] = []
     var isLoading = true
@@ -29,6 +30,9 @@ final class HomeViewModel {
 
             async let resumeItems = client.resumeItems()
             async let nextUpItems = client.nextUp()
+            // Never fatal to the screen: a server that dislikes the filter
+            // should cost you the rail, not the whole of Home.
+            async let favoriteItems = try? client.favorites()
 
             var rails: [LibraryRail] = []
             try await withThrowingTaskGroup(of: (Int, LibraryRail).self) { group in
@@ -48,6 +52,7 @@ final class HomeViewModel {
 
             resume = try await resumeItems
             nextUp = try await nextUpItems
+            favorites = await favoriteItems ?? []
             latestRails = rails
             heroItems = Array(
                 rails.flatMap(\.items)
@@ -67,15 +72,19 @@ final class HomeViewModel {
         await load(client: client)
     }
 
-    /// Cheap re-fetch of the progress-driven rails when the screen reappears
-    /// (e.g. returning from playback).
+    /// Cheap re-fetch of the user-data-driven rails: on returning from
+    /// playback, and after a card's context menu marks something watched or
+    /// favourited (HEL-40). All three rails are derived from user data, so
+    /// any one of those mutations can move an item between them.
     func refreshProgress(client: JellyfinClient) async {
         guard hasLoaded, !isLoading else { return }
         async let resumeItems = client.resumeItems()
         async let nextUpItems = client.nextUp()
+        async let favoriteItems = try? client.favorites()
         if let refreshed = try? await (resume: resumeItems, nextUp: nextUpItems) {
             resume = refreshed.resume
             nextUp = refreshed.nextUp
         }
+        favorites = await favoriteItems ?? favorites
     }
 }

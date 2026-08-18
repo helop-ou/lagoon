@@ -22,14 +22,30 @@ struct HomeView: View {
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
-                        MediaRail(title: "Continue Watching", items: viewModel.resume, style: .landscape) { item in
-                            playerItem = PlayerItem(media: item)
-                        }
-                        MediaRail(title: "Next Up", items: viewModel.nextUp, style: .landscape) { item in
-                            playerItem = PlayerItem(media: item)
-                        }
+                        MediaRail(
+                            title: "Continue Watching",
+                            items: viewModel.resume,
+                            style: .landscape,
+                            playAction: { playerItem = PlayerItem(media: $0) },
+                            onUserDataChange: refreshUserData
+                        )
+                        MediaRail(
+                            title: "Next Up",
+                            items: viewModel.nextUp,
+                            style: .landscape,
+                            playAction: { playerItem = PlayerItem(media: $0) },
+                            onUserDataChange: refreshUserData
+                        )
+                        // Above Recently Added: things you deliberately
+                        // starred outrank things the server happened to
+                        // ingest, and the rail hides itself when empty.
+                        MediaRail(
+                            title: "Favorites",
+                            items: viewModel.favorites,
+                            onUserDataChange: refreshUserData
+                        )
                         ForEach(viewModel.latestRails) { rail in
-                            MediaRail(title: rail.title, items: rail.items)
+                            MediaRail(title: rail.title, items: rail.items, onUserDataChange: refreshUserData)
                         }
 
                         Color.clear.frame(height: 60)
@@ -49,5 +65,12 @@ struct HomeView: View {
             VideoPlayerView(playerItem: item)
                 .preferredColorScheme(.dark)
         }
+    }
+
+    /// Marking something watched or favourited from a card menu can move it
+    /// between Continue Watching, Next Up and Favorites, so all three are
+    /// re-fetched rather than guessing which one moved.
+    private func refreshUserData() async {
+        await viewModel.refreshProgress(client: session.client)
     }
 }

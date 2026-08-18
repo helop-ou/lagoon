@@ -56,6 +56,7 @@ struct LibraryView: View {
                     LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
                             PosterCard(item: item)
+                                .itemUserDataMenu(item: item)
                                 .onAppear {
                                     if index >= viewModel.items.count - Metrics.gridColumns * 3 {
                                         Task { await viewModel.loadMore(client: session.client, library: library) }

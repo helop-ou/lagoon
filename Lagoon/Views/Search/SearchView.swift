@@ -54,6 +54,7 @@ struct SearchView: View {
                     LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(viewModel.results) { item in
                             PosterCard(item: item)
+                                .itemUserDataMenu(item: item)
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)

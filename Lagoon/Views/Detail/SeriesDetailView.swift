@@ -178,6 +178,9 @@ struct SeriesDetailView: View {
                         } action: {
                             playerItem = PlayerItem(media: episode)
                         }
+                        .itemUserDataMenu(item: episode) {
+                            await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+                        }
                     }
                 }
                 .padding(.horizontal, Metrics.screenGutter)

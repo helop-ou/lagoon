@@ -91,6 +91,24 @@ extension JellyfinClient {
         return page.items
     }
 
+    /// The Favorites rail (HEL-40). `Filters=IsFavorite` does the picking
+    /// server-side. Restricted to movies and series because favouriting is
+    /// a show-level gesture — `ItemActionRow`'s star deliberately targets
+    /// the series, so a rail full of individual episodes would be noise.
+    func favorites(limit: Int = 16) async throws -> [MediaItem] {
+        let userId = try requireUserId()
+        let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "Filters", value: "IsFavorite"),
+            URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "SortBy", value: "SortName"),
+            URLQueryItem(name: "Limit", value: String(limit)),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+            URLQueryItem(name: "ImageTypeLimit", value: "1"),
+        ])
+        return page.items
+    }
+
     // MARK: - User data (HEL-40)
 
     /// Marks an item played, or clears it. Clearing also puts a finished item

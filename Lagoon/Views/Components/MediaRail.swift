@@ -14,6 +14,8 @@ struct MediaRail: View {
     let items: [MediaItem]
     var style: RailStyle = .poster
     var playAction: ((MediaItem) -> Void)?
+    /// Lets a card's watched/favourite menu re-fetch the list it sits in.
+    var onUserDataChange: (() async -> Void)?
 
     var body: some View {
         if !items.isEmpty {
@@ -24,14 +26,17 @@ struct MediaRail: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: Metrics.cardSpacing) {
                         ForEach(items) { item in
-                            switch style {
-                            case .poster:
-                                PosterCard(item: item)
-                            case .landscape:
-                                LandscapeCard(item: item) {
-                                    playAction?(item)
+                            Group {
+                                switch style {
+                                case .poster:
+                                    PosterCard(item: item)
+                                case .landscape:
+                                    LandscapeCard(item: item) {
+                                        playAction?(item)
+                                    }
                                 }
                             }
+                            .itemUserDataMenu(item: item, onChange: onUserDataChange)
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
