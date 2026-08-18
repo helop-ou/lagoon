@@ -550,10 +550,10 @@ final class PlaybackController {
             let appToggleOn = UserDefaults.standard.object(forKey: "debug.matchContent") == nil
                 || UserDefaults.standard.bool(forKey: "debug.matchContent")
             lines.append(String(
-                format: "Display: request %.3f Hz · app %@ · system %@",
+                format: "Display: request %.3f Hz · app %@ · %@",
                 request.frameRate,
                 appToggleOn ? "on" : "off",
-                DisplayModeMatcher.systemMatchingEnabled ? "on" : "off"
+                DisplayModeMatcher.statusDescription
             ))
         }
         #endif

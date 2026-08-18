@@ -186,13 +186,21 @@ The custom player must do by hand what AVPlayerViewController does
 automatically: ask the display to match the content. The engine publishes
 a `DisplayMatchRequest` (the video's tagged `CMFormatDescription` plus
 frame rate) once the demuxer knows the stream; `VideoPlayerView` applies
-it to the key window's `AVDisplayManager.preferredDisplayCriteria`
+it to a window's `AVDisplayManager.preferredDisplayCriteria`
 (`DisplayModeMatcher`) and clears it on exit. Two gates sit above the
 request: the Debug switch `debug.matchContent` (default **on**; off holds
 an A/B still) and the user's tvOS Settings → Video and Audio → Match
-Content options — criteria are silently ignored without those, so the
-HUD's `Display:` line shows both the requested rate and whether system
-matching is enabled.
+Content options — criteria are silently ignored without those. The HUD's
+`Display:` line names every layer separately: the requested rate, the
+app toggle, and then `no window` / `no manager` (lookup failed — nothing
+was applied), `system on/off` (the user setting), and `switched ×N`
+counting the system's actual `AVDisplayManagerModeSwitchStart`
+notifications — the hard proof a request moved the display. The first
+hardware run taught why the layers must be distinguishable: a collapsed
+"off" could not say whether matching was disabled or never reached. Do
+not require the key window in the lookup — during a fullScreenCover the
+key flag isn't guaranteed, and a nil there silently disables the
+feature; any window of the scene reaches the screen's manager.
 
 Why this landed on HEL-64: without a mode switch the display idles at
 60 Hz in whatever range the UI runs, and the compositor cadence-converts
