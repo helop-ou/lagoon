@@ -12,6 +12,218 @@ enum PlaybackPerformance {
     )
 }
 
+/// Resource-level playback accounting. A process footprint by itself cannot
+/// distinguish allocator caching from a player that is still decoding after
+/// its cover disappeared, so lifecycle benchmarks use both signals.
+nonisolated struct PlaybackLifecycleSnapshot: Sendable {
+    let liveEngines: Int
+    let liveControllers: Int
+    let activeDemuxLoops: Int
+    let attachedRendererSets: Int
+    let enginesCreated: Int
+    let enginesDestroyed: Int
+    let uncleanEngineDestructions: Int
+    let footprintBytes: Int64
+
+    var footprintMB: Double { Double(footprintBytes) / 1_048_576 }
+    var mediaResourcesAreQuiescent: Bool {
+        activeDemuxLoops == 0 && attachedRendererSets == 0
+    }
+
+    var regressionValue: String {
+        [
+            "engines=\(liveEngines)",
+            "controllers=\(liveControllers)",
+            "demux=\(activeDemuxLoops)",
+            "renderers=\(attachedRendererSets)",
+            "created=\(enginesCreated)",
+            "destroyed=\(enginesDestroyed)",
+            "unclean=\(uncleanEngineDestructions)",
+            String(format: "memoryMB=%.1f", footprintMB),
+        ].joined(separator: " ")
+    }
+}
+
+/// Thread-safe because demux closure and renderer removal complete on their
+/// own queues. It deliberately ships in Release: the Apple TV hardware path
+/// is where renderer retirement and jetsam headroom are meaningful.
+nonisolated enum PlaybackLifecycleDiagnostics {
+    private static let state = State()
+
+    static func controllerCreated(_ id: UUID) {
+        state.controllerCreated(id)
+        emit("controller-created")
+    }
+    static func controllerDestroyed(_ id: UUID) {
+        state.controllerDestroyed(id)
+        emit("controller-destroyed")
+    }
+    static func engineCreated(_ id: UUID) {
+        state.engineCreated(id)
+        emit("engine-created")
+    }
+    static func engineShutdownStarted(_ id: UUID) {
+        state.engineShutdownStarted(id)
+        emit("shutdown-started")
+    }
+    static func engineDestroyed(_ id: UUID) {
+        state.engineDestroyed(id)
+        emit("engine-destroyed")
+    }
+    static func demuxStarted(_ id: UUID) {
+        state.demuxStarted(id)
+        emit("demux-started")
+    }
+    static func demuxEnded(_ id: UUID) {
+        state.demuxEnded(id)
+        emit("demux-ended")
+    }
+    static func renderersAttached(_ id: UUID) {
+        state.renderersAttached(id)
+        emit("renderers-attached")
+    }
+    static func renderersDetached(_ id: UUID) {
+        state.renderersDetached(id)
+        emit("renderers-detached")
+    }
+
+    static func snapshot() -> PlaybackLifecycleSnapshot {
+        state.snapshot(memory: .current())
+    }
+
+    /// Starting a replacement player while the previous demuxer or renderer
+    /// set is retiring recreates the exact playback → Settings → replay
+    /// resource overlap that this diagnostic tracks. The wait is bounded so
+    /// a broken AVFoundation callback can be measured without deadlocking UI.
+    static func waitForMediaResourcesToRetire(
+        timeout: Duration = .seconds(3)
+    ) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while clock.now < deadline {
+            if state.mediaResourcesAreQuiescent { return true }
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                return false
+            }
+        }
+        return state.mediaResourcesAreQuiescent
+    }
+
+    private static func emit(_ event: String) {
+        let value = snapshot()
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Playback Lifecycle",
+            "event=%{public}s engines=%{public}d controllers=%{public}d demux=%{public}d renderers=%{public}d unclean=%{public}d footprintMB=%{public}.1f",
+            event,
+            value.liveEngines,
+            value.liveControllers,
+            value.activeDemuxLoops,
+            value.attachedRendererSets,
+            value.uncleanEngineDestructions,
+            value.footprintMB
+        )
+    }
+}
+
+nonisolated private final class State: @unchecked Sendable {
+    private let lock = NSLock()
+    private var controllers: Set<UUID> = []
+    private var engines: Set<UUID> = []
+    private var shuttingDownEngines: Set<UUID> = []
+    private var demuxLoops: Set<UUID> = []
+    private var rendererSets: Set<UUID> = []
+    private var created = 0
+    private var destroyed = 0
+    private var uncleanDestructions = 0
+
+    var mediaResourcesAreQuiescent: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return demuxLoops.isEmpty && rendererSets.isEmpty
+    }
+
+    func controllerCreated(_ id: UUID) {
+        lock.lock()
+        controllers.insert(id)
+        lock.unlock()
+    }
+
+    func controllerDestroyed(_ id: UUID) {
+        lock.lock()
+        controllers.remove(id)
+        lock.unlock()
+    }
+
+    func engineCreated(_ id: UUID) {
+        lock.lock()
+        if engines.insert(id).inserted { created += 1 }
+        lock.unlock()
+    }
+
+    func engineShutdownStarted(_ id: UUID) {
+        lock.lock()
+        shuttingDownEngines.insert(id)
+        lock.unlock()
+    }
+
+    func engineDestroyed(_ id: UUID) {
+        lock.lock()
+        if engines.remove(id) != nil { destroyed += 1 }
+        if !shuttingDownEngines.contains(id) {
+            uncleanDestructions += 1
+        }
+        shuttingDownEngines.remove(id)
+        // Do not clear demux/renderer membership here. Renderer removal is
+        // intentionally asynchronous and can outlive the lightweight Swift
+        // engine object; its real AVFoundation completion must balance the
+        // counter or the lifecycle benchmark should fail visibly.
+        lock.unlock()
+    }
+
+    func demuxStarted(_ id: UUID) {
+        lock.lock()
+        demuxLoops.insert(id)
+        lock.unlock()
+    }
+
+    func demuxEnded(_ id: UUID) {
+        lock.lock()
+        demuxLoops.remove(id)
+        lock.unlock()
+    }
+
+    func renderersAttached(_ id: UUID) {
+        lock.lock()
+        rendererSets.insert(id)
+        lock.unlock()
+    }
+
+    func renderersDetached(_ id: UUID) {
+        lock.lock()
+        rendererSets.remove(id)
+        lock.unlock()
+    }
+
+    func snapshot(memory: MemorySnapshot) -> PlaybackLifecycleSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        return PlaybackLifecycleSnapshot(
+            liveEngines: engines.count,
+            liveControllers: controllers.count,
+            activeDemuxLoops: demuxLoops.count,
+            attachedRendererSets: rendererSets.count,
+            enginesCreated: created,
+            enginesDestroyed: destroyed,
+            uncleanEngineDestructions: uncleanDestructions,
+            footprintBytes: memory.footprintBytes
+        )
+    }
+}
+
 /// App memory at a point in time. Playback is the only place where a slow
 /// leak is invisible until it is fatal: jetsam kills for `per-process-limit`
 /// leave a JetsamEvent report, not a crash trace, so nothing in the signpost

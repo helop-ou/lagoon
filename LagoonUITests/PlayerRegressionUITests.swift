@@ -130,6 +130,22 @@ final class PlayerRegressionUITests: XCTestCase {
         moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
         remote.press(.select)
 
+        let playback = app.descendants(matching: .any)["settings.category.playback"]
+        XCTAssertTrue(playback.waitForExistence(timeout: 8))
+        remote.press(.select)
+        let skipMode = app.descendants(matching: .any)["settings.playback.skipMode"]
+        XCTAssertTrue(skipMode.waitForExistence(timeout: 5))
+        remote.press(.right)
+        remote.press(.select)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Skip Automatically"].waitForExistence(timeout: 5),
+            "Playback controls column was unreachable"
+        )
+        remote.press(.menu)
+        let detailBack = app.descendants(matching: .any)["settings.detail.back"]
+        moveFocus(to: detailBack, maxPresses: 2) { remote.press(.left) }
+        remote.press(.select)
+
         let audio = app.descendants(matching: .any)["settings.category.audio"]
         XCTAssertTrue(audio.waitForExistence(timeout: 8))
         moveFocus(to: audio, maxPresses: 5) { remote.press(.down) }
@@ -175,15 +191,22 @@ final class PlayerRegressionUITests: XCTestCase {
         let systemStyle = app.descendants(matching: .any)["settings.subtitles.systemAppearance"]
         XCTAssertTrue(systemStyle.waitForExistence(timeout: 5))
         XCTAssertEqual(systemStyle.label, "Use System Caption Style")
-        // tvOS exposes a focused SwiftUI Toggle as a Switch, but does not
-        // reliably surface hasFocus to XCTest. Moving right still transfers
-        // focus from the Back button into the controls column.
+        // tvOS does not reliably surface hasFocus for a SwiftUI Toggle, so
+        // prove that Right actually reached it by changing its value. This
+        // catches pages whose non-focusable preview strands focus on Back.
+        let previousSystemStyle = systemStyle.valueDescription
         remote.press(.right)
+        remote.press(.select)
+        XCTAssertNotEqual(systemStyle.valueDescription, previousSystemStyle)
         let toggleScreenshot = XCTAttachment(screenshot: app.screenshot())
         toggleScreenshot.name = "Subtitle Appearance native toggle without duplicate state"
         toggleScreenshot.lifetime = .keepAlways
         add(toggleScreenshot)
-        remote.press(.menu)
+        // A changed control may sit much lower than Back. Left must still
+        // return to the Subtitles button in the other column instead of
+        // trapping focus in Appearance.
+        moveFocus(to: back, maxPresses: 2) { remote.press(.left) }
+        remote.press(.select)
         XCTAssertTrue(appearance.waitForExistence(timeout: 5))
         remote.press(.menu)
 
@@ -193,29 +216,485 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.select)
         let myList = app.descendants(matching: .any)["settings.home.row.MyList"]
         XCTAssertTrue(myList.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.home.native.lagoon.movieGenres"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.home.native.lagoon.showGenres"]
+                .waitForExistence(timeout: 5)
+        )
+        XCTAssertEqual(
+            app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier == %@", "settings.home.row.MyList")
+            ).count,
+            1
+        )
+        let nativeContinueWatching = app.descendants(matching: .any)[
+            "settings.home.native.lagoon.continueWatching"
+        ]
         remote.press(.right)
-        moveFocus(to: myList, maxPresses: 6) { remote.press(.down) }
+        moveFocus(to: nativeContinueWatching, maxPresses: 3) { remote.press(.up) }
+        XCTAssertTrue(nativeContinueWatching.hasFocus)
+        let previousNativeVisibility = nativeContinueWatching.valueDescription
+        remote.press(.select)
+        XCTAssertNotEqual(nativeContinueWatching.valueDescription, previousNativeVisibility)
+        let homeRowsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        homeRowsScreenshot.name = "Lagoon native and Home Screen Sections plugin rows"
+        homeRowsScreenshot.lifetime = .keepAlways
+        add(homeRowsScreenshot)
+        moveFocus(to: myList, maxPresses: 12) { remote.press(.down) }
         let previousVisibility = myList.valueDescription
         remote.press(.select)
         XCTAssertNotEqual(myList.valueDescription, previousVisibility)
         remote.press(.menu)
         XCTAssertTrue(home.waitForExistence(timeout: 5))
 
+        let developer = app.descendants(matching: .any)["settings.category.developer"]
+        moveFocus(to: developer, maxPresses: 5) { remote.press(.down) }
+        remote.press(.select)
+        let componentPicker = app.descendants(matching: .any)["settings.developer.component"]
+        XCTAssertTrue(componentPicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.developer.preview"]
+                .waitForExistence(timeout: 5)
+        )
+        remote.press(.right)
+        let developerScreenshot = XCTAttachment(screenshot: app.screenshot())
+        developerScreenshot.name = "Debug-only player component gallery"
+        developerScreenshot.lifetime = .keepAlways
+        add(developerScreenshot)
+
+        remote.press(.select)
+        let nextEpisodeCard = app.descendants(matching: .any)["Next Episode — Card"]
+        XCTAssertTrue(nextEpisodeCard.waitForExistence(timeout: 5))
+        for _ in 0..<4 { remote.press(.down) }
+        remote.press(.select)
+        let nextEpisodeSelection = NSPredicate(format: "value == %@", "Next Episode — Card")
+        expectation(for: nextEpisodeSelection, evaluatedWith: componentPicker)
+        waitForExpectations(timeout: 5)
+        let nextEpisodeScreenshot = XCTAttachment(screenshot: app.screenshot())
+        nextEpisodeScreenshot.name = "Debug-only next episode component preview"
+        nextEpisodeScreenshot.lifetime = .keepAlways
+        add(nextEpisodeScreenshot)
+
+        // The panel preview contains the production controls rather than a
+        // flattened visual sample. Select it and prove remote focus can move
+        // from its tabs into the same audio rows used during playback.
+        remote.press(.select)
+        let playerPanelOption = app.descendants(matching: .any)["Player Panel"]
+        XCTAssertTrue(playerPanelOption.waitForExistence(timeout: 5))
+        // The native menu reopens at its first row, not at the currently
+        // selected row, so Player Panel is eight moves from the top.
+        for _ in 0..<8 { remote.press(.down) }
+        remote.press(.select)
+        let openPlayerPanel = app.buttons["settings.developer.playerPanel.open"]
+        XCTAssertTrue(openPlayerPanel.waitForExistence(timeout: 5))
+        moveFocus(to: openPlayerPanel, maxPresses: 3) { remote.press(.down) }
+        remote.press(.select)
+        let infoTab = app.buttons["player.tab.info"]
+        let audioTab = app.buttons["player.tab.audio"]
+        XCTAssertTrue(infoTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(infoTab.hasFocus)
+        remote.press(.right)
+        remote.press(.right)
+        XCTAssertTrue(audioTab.hasFocus)
+        remote.press(.down)
+        let firstAudioTrack = app.buttons["player.track.audio-1"]
+        XCTAssertTrue(firstAudioTrack.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstAudioTrack.hasFocus)
+        let panelScreenshot = XCTAttachment(screenshot: app.screenshot())
+        panelScreenshot.name = "Debug-only interactive production player panel"
+        panelScreenshot.lifetime = .keepAlways
+        add(panelScreenshot)
+
+        remote.press(.menu)
+        XCTAssertTrue(componentPicker.waitForExistence(timeout: 5))
+        XCTAssertEqual(componentPicker.valueDescription, "Player Panel")
+        remote.press(.menu)
+        XCTAssertTrue(developer.waitForExistence(timeout: 5))
+
         let diagnostics = app.descendants(matching: .any)["settings.category.diagnostics"]
-        moveFocus(to: diagnostics, maxPresses: 3) { remote.press(.down) }
+        moveFocus(to: diagnostics, maxPresses: 2) { remote.press(.down) }
         remote.press(.select)
         let hud = app.descendants(matching: .any)["settings.diagnostics.hud"]
         XCTAssertTrue(hud.waitForExistence(timeout: 5))
         XCTAssertEqual(hud.label, "Playback HUD")
+        let previousHUDValue = hud.valueDescription
         remote.press(.right)
+        remote.press(.select)
+        XCTAssertNotEqual(hud.valueDescription, previousHUDValue)
         let diagnosticsScreenshot = XCTAttachment(screenshot: app.screenshot())
         diagnosticsScreenshot.name = "Diagnostics native toggle without duplicate state"
         diagnosticsScreenshot.lifetime = .keepAlways
         add(diagnosticsScreenshot)
-        remote.press(.menu)
+        let diagnosticsBack = app.descendants(matching: .any)["settings.detail.back"]
+        moveFocus(to: diagnosticsBack, maxPresses: 2) { remote.press(.left) }
+        remote.press(.select)
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
+
+        let account = app.descendants(matching: .any)["settings.category.account"]
+        moveFocus(to: account, maxPresses: 2) { remote.press(.down) }
+        remote.press(.select)
+        let addAccount = app.buttons["settings.account.add"]
+        XCTAssertTrue(addAccount.waitForExistence(timeout: 5))
+        // Connection contains only informational material rows. Right from
+        // Back still has to cross that non-focusable area and reach Actions.
+        remote.press(.right)
+        XCTAssertTrue(addAccount.hasFocus, "Account actions column was unreachable")
+        let accountScreenshot = XCTAttachment(screenshot: app.screenshot())
+        accountScreenshot.name = "Account actions reachable past connection information"
+        accountScreenshot.lifetime = .keepAlways
+        add(accountScreenshot)
+        let accountBack = app.descendants(matching: .any)["settings.detail.back"]
+        moveFocus(to: accountBack, maxPresses: 2) { remote.press(.left) }
+        remote.press(.select)
+        XCTAssertTrue(account.waitForExistence(timeout: 5))
     }
 
-    func testNativeGenreShelfOpensAFilteredLibrary() {
+    func testPlayerPanelPreviewPerformance() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.settingsRegression", "YES",
+        ]
+        app.launch()
+        openPlayerPanelPreview(in: app)
+
+        let infoTab = app.buttons["player.tab.info"]
+        let subtitleTab = app.buttons["player.tab.subtitles"]
+        XCTAssertTrue(infoTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(subtitleTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(infoTab.hasFocus)
+
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(
+            metrics: [
+                XCTClockMetric(),
+                XCTCPUMetric(application: app),
+                XCTMemoryMetric(application: app),
+                XCTHitchMetric(application: app),
+            ],
+            options: options
+        ) {
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            for _ in 0..<3 { remote.press(.right) }
+            XCTAssertTrue(subtitleTab.hasFocus)
+            for _ in 0..<3 { remote.press(.left) }
+            XCTAssertTrue(infoTab.hasFocus)
+            XCTAssertLessThan(
+                ProcessInfo.processInfo.systemUptime - startedAt,
+                1.75,
+                "A six-tab panel sweep exceeded the tvOS responsiveness ceiling"
+            )
+        }
+
+        // Lazy track construction must not trade performance for broken
+        // focus navigation. Exercise the full 30-track stress fixture.
+        for _ in 0..<3 { remote.press(.right) }
+        remote.press(.down) // Off
+        for _ in 0..<30 { remote.press(.down) }
+        XCTAssertTrue(app.buttons["player.track.subtitle-40"].hasFocus)
+    }
+
+    func testPlaybackDismissSettingsReplayLifecycleAndStallBenchmark() {
+        let requestedVC1Series = ProcessInfo.processInfo.environment["LAGOON_LIFECYCLE_VC1_SERIES"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestedReplayCount = Int(
+            ProcessInfo.processInfo.environment["LAGOON_LIFECYCLE_REPLAYS"] ?? ""
+        ) ?? 1
+        // Keep accidental environment values from turning a focused test into
+        // an unbounded overnight run. The dedicated script defaults to three.
+        let replayCount = min(max(requestedReplayCount, 1), 10)
+        var resolverArguments: [String]
+        if let requestedVC1Series, !requestedVC1Series.isEmpty {
+            resolverArguments = ["-debug.regressionFindVC1InSeries", "YES"]
+        } else {
+            resolverArguments = ["-debug.regressionFindPlayable", "YES"]
+        }
+        let app = launchPlayer(
+            title: "lifecycle-regression",
+            series: requestedVC1Series,
+            extraArguments: [
+                "-debug.lifecycleReplayBenchmark", "YES",
+                "-debug.lifecycleReplayDelaySeconds", "12",
+                "-debug.lifecycleReplayCount", String(replayCount),
+            ] + resolverArguments
+        )
+        let firstReady = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1 && $0.int("buffering") == 0
+        }
+        let firstStart = firstReady.double("time")
+        let firstMemory = firstReady.double("memoryMB")
+        waitForState(in: app, timeout: 12) { $0.double("time") > firstStart + 3 }
+
+        remote.press(.menu)
+        let firstCleanup = waitForLifecycle(in: app, timeout: 10) {
+            $0.int("engines") == 0
+                && $0.int("controllers") == 0
+                && $0.int("demux") == 0
+                && $0.int("renderers") == 0
+        }
+        XCTAssertEqual(firstCleanup.int("unclean"), 0)
+
+        // Exercise the screen that exposed the overlap: focus and layout
+        // should remain responsive while the first media resources retire.
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 5))
+        let homeTab = app.tabBars.buttons["Home"]
+        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.category.audio"].waitForExistence(timeout: 5)
+        )
+
+        for replayIndex in 1...replayCount {
+            let replayReady = waitForState(in: app, timeout: 60) {
+                $0.int("ready") == 1 && $0.int("buffering") == 0
+            }
+            let replayStart = replayReady.double("time")
+            let replayStalls = replayReady.int("stalls")
+            XCTAssertLessThanOrEqual(
+                replayReady.double("memoryMB"),
+                firstMemory + 96,
+                "Replay \(replayIndex) retained more than one conservative media-buffer allowance"
+            )
+
+            if replayIndex == 1 {
+                let options = XCTMeasureOptions()
+                options.iterationCount = 1
+                measure(
+                    metrics: [
+                        XCTClockMetric(),
+                        XCTCPUMetric(application: app),
+                        XCTMemoryMetric(application: app),
+                        XCTHitchMetric(application: app),
+                    ],
+                    options: options
+                ) {
+                    Thread.sleep(forTimeInterval: 15)
+                }
+            } else {
+                Thread.sleep(forTimeInterval: 5)
+            }
+
+            let replayResult = state(in: app)
+            let requiredAdvance = replayIndex == 1 ? 10.0 : 3.0
+            XCTAssertGreaterThan(
+                replayResult.double("time"),
+                replayStart + requiredAdvance,
+                "Replay \(replayIndex) did not sustain real-time playback"
+            )
+            XCTAssertEqual(replayResult.int("buffering"), 0)
+            XCTAssertLessThanOrEqual(
+                replayResult.int("stalls") - replayStalls,
+                1,
+                "Replay \(replayIndex) repeatedly stalled after a clean teardown"
+            )
+
+            remote.press(.menu)
+            let cleanup = waitForLifecycle(in: app, timeout: 10) {
+                $0.int("engines") == 0
+                    && $0.int("controllers") == 0
+                    && $0.int("demux") == 0
+                    && $0.int("renderers") == 0
+            }
+            XCTAssertEqual(cleanup.int("unclean"), 0)
+            XCTAssertLessThanOrEqual(
+                cleanup.double("memoryMB"),
+                firstCleanup.double("memoryMB") + 48,
+                "Dismissed playback footprint grew by replay \(replayIndex)"
+            )
+        }
+    }
+
+    func testDismissDuringSuspendedStartupDoesNotResurrectPlaybackWork() {
+        let app = launchPlayer(
+            title: "startup-dismiss-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.lifecycleReplayBenchmark", "YES",
+                // Keep the lifecycle probe mounted without allowing its
+                // automatic replay to overlap this focused assertion.
+                "-debug.lifecycleReplayDelaySeconds", "60",
+                "-debug.regressionPlaybackStartDelaySeconds", "5",
+            ]
+        )
+        waitForState(in: app, timeout: 60) { $0.int("ready") == 1 }
+
+        remote.press(.menu)
+        let cleanup = waitForLifecycle(in: app, timeout: 10) {
+            $0.int("engines") == 0
+                && $0.int("controllers") == 0
+                && $0.int("demux") == 0
+                && $0.int("renderers") == 0
+        }
+        XCTAssertEqual(cleanup.int("unclean"), 0)
+
+        // The injected suspension has now elapsed. A canceled startup must
+        // stay canceled instead of recreating its tasks or media resources.
+        Thread.sleep(forTimeInterval: 6)
+        let settled = waitForLifecycle(in: app, timeout: 2) {
+            $0.int("engines") == 0
+                && $0.int("controllers") == 0
+                && $0.int("demux") == 0
+                && $0.int("renderers") == 0
+        }
+        XCTAssertEqual(settled.int("unclean"), 0)
+        XCTAssertFalse(app.descendants(matching: .any)["player.regression.state"].exists)
+    }
+
+    func testHomeHeroLibraryAndNestedDetailBackStacks() {
+        let app = launchNavigationRegressionApp()
+        let homeTab = app.tabBars.buttons["Home"]
+        XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
+
+        let hero = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "home.hero.")
+        ).firstMatch
+        XCTAssertTrue(hero.waitForExistence(timeout: 20))
+        moveFocus(to: hero, maxPresses: 8) { remote.press(.down) }
+        let heroItemID = hero.identifier.replacingOccurrences(of: "home.hero.", with: "")
+        remote.press(.select)
+
+        let heroDetail = app.descendants(matching: .any)["detail.item.\(heroItemID)"]
+        XCTAssertTrue(heroDetail.waitForExistence(timeout: 8))
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(heroDetail.exists, "Home hero detail did not remain the top route")
+        remote.press(.menu)
+        XCTAssertTrue(hero.waitForExistence(timeout: 5))
+        XCTAssertTrue(hero.hasFocus, "Back did not restore focus to the selected Home hero")
+
+        moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
+        var libraryTabs: [XCUIElement] = []
+        for _ in 0..<40 {
+            libraryTabs = app.tabBars.buttons.allElementsBoundByIndex.filter {
+                !["Home", "Search", "Settings"].contains($0.label)
+            }
+            if !libraryTabs.isEmpty { break }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        guard let libraryTab = libraryTabs.first(where: {
+            $0.label.localizedCaseInsensitiveContains("movie")
+        }) ?? libraryTabs.first else {
+            XCTFail("No content library tab was loaded")
+            return
+        }
+        moveFocus(to: libraryTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let library = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "library.view.")
+        ).firstMatch
+        XCTAssertTrue(library.waitForExistence(timeout: 8))
+        expectation(for: NSPredicate(format: "value != '0 items'"), evaluatedWith: library)
+        waitForExpectations(timeout: 20)
+
+        let posters = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
+        )
+        var focusedPoster: XCUIElement?
+        for _ in 0..<8 {
+            focusedPoster = posters.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedPoster != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard let focusedPoster else {
+            XCTFail("No library poster received focus")
+            return
+        }
+        let libraryItemID = focusedPoster.identifier.replacingOccurrences(
+            of: "media.poster.",
+            with: ""
+        )
+        remote.press(.select)
+
+        let firstDetail = app.descendants(matching: .any)["detail.item.\(libraryItemID)"]
+        XCTAssertTrue(firstDetail.waitForExistence(timeout: 8))
+        let relatedCards = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
+        )
+        XCTAssertTrue(relatedCards.firstMatch.waitForExistence(timeout: 12))
+        var focusedRelated: XCUIElement?
+        for _ in 0..<16 {
+            focusedRelated = relatedCards.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedRelated != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard let focusedRelated else {
+            XCTFail("More Like This could not receive focus")
+            return
+        }
+        let relatedID = focusedRelated.identifier.replacingOccurrences(
+            of: "media.poster.",
+            with: ""
+        )
+        remote.press(.select)
+
+        let secondDetail = app.descendants(matching: .any)["detail.item.\(relatedID)"]
+        XCTAssertTrue(secondDetail.waitForExistence(timeout: 8))
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(secondDetail.exists, "Nested detail did not remain the top route")
+        remote.press(.menu)
+        XCTAssertTrue(firstDetail.waitForExistence(timeout: 5))
+        XCTAssertFalse(secondDetail.exists)
+        remote.press(.menu)
+        XCTAssertTrue(library.waitForExistence(timeout: 5))
+        XCTAssertFalse(firstDetail.exists)
+        XCTAssertTrue(focusedPoster.hasFocus, "Library focus was not restored after two details")
+    }
+
+    func testSearchDetailBackStackPreservesResultsAndFocus() {
+        let app = launchNavigationRegressionApp()
+        let homeTab = app.tabBars.buttons["Home"]
+        let searchTab = app.tabBars.buttons["Search"]
+        XCTAssertTrue(searchTab.waitForExistence(timeout: 20))
+        moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
+        moveFocus(to: searchTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let search = app.descendants(matching: .any)["search.view"]
+        XCTAssertTrue(search.waitForExistence(timeout: 8))
+        expectation(for: NSPredicate(format: "value != '0 items'"), evaluatedWith: search)
+        waitForExpectations(timeout: 20)
+        let resultCount = search.valueDescription
+
+        let posters = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
+        )
+        var focusedPoster: XCUIElement?
+        for _ in 0..<8 {
+            focusedPoster = posters.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedPoster != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard let focusedPoster else {
+            XCTFail("No Search result received focus")
+            return
+        }
+        let itemID = focusedPoster.identifier.replacingOccurrences(of: "media.poster.", with: "")
+        remote.press(.select)
+
+        let detail = app.descendants(matching: .any)["detail.item.\(itemID)"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 8))
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(detail.exists, "Search detail did not remain the top route")
+        remote.press(.menu)
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertEqual(search.valueDescription, resultCount, "Search results were rebuilt on Back")
+        XCTAssertTrue(focusedPoster.hasFocus, "Search focus was not restored to the selected result")
+    }
+
+    func testNativeGenreShelfDetailNavigationAndBackStack() {
         let app = XCUIApplication()
         app.launchArguments = [
             "-debug.playerRegression", "YES",
@@ -236,11 +715,23 @@ final class PlayerRegressionUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.25)
         }
 
-        guard let focusedGenre else {
+        guard var selectedGenreButton = focusedGenre else {
             XCTFail("Could not focus a card in the native Genres shelf")
             return
         }
-        let selectedGenre = focusedGenre.label
+        // Exercise the user's reported route when the public fixture exposes
+        // it; otherwise any genre follows the same typed navigation path.
+        let actionGenre = genreButtons.matching(
+            NSPredicate(format: "label ==[c] %@", "Action genre")
+        ).firstMatch
+        if actionGenre.exists {
+            moveFocus(to: actionGenre, maxPresses: 24) {
+                remote.press(.right)
+            }
+            selectedGenreButton = actionGenre
+        }
+
+        let selectedGenre = selectedGenreButton.label
         let shelfScreenshot = XCTAttachment(screenshot: app.screenshot())
         shelfScreenshot.name = "Native Genres shelf — \(selectedGenre) focused"
         shelfScreenshot.lifetime = .keepAlways
@@ -255,14 +746,63 @@ final class PlayerRegressionUITests: XCTestCase {
         expectation(for: populated, evaluatedWith: library)
         waitForExpectations(timeout: 20)
 
-        for _ in 0..<6 {
-            remote.press(.down)
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        XCTAssertFalse(
-            title.frame.intersects(app.frame),
-            "The genre heading should scroll away instead of covering the poster grid"
+        let posterButtons = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
         )
+        var focusedPoster: XCUIElement?
+        for _ in 0..<8 {
+            focusedPoster = posterButtons.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedPoster != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard let focusedPoster else {
+            XCTFail("Could not focus the first poster in \(selectedGenre)")
+            return
+        }
+        let selectedPosterID = focusedPoster.identifier.replacingOccurrences(
+            of: "media.poster.",
+            with: ""
+        )
+        let selectedPosterName = focusedPoster.label
+        remote.press(.select)
+
+        let detail = app.descendants(matching: .any)["detail.item.\(selectedPosterID)"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 8), "Did not open \(selectedPosterName)")
+        // The original bug only flashed the detail before the genre link
+        // reasserted itself. Waiting proves detail remains the top route.
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertTrue(detail.exists, "Detail popped behind the genre library")
+
+        remote.press(.menu)
+        XCTAssertTrue(library.waitForExistence(timeout: 5))
+        XCTAssertFalse(detail.exists, "Back left the item detail above the genre library")
+
+        remote.press(.menu)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["home.genres.movies"].waitForExistence(timeout: 5)
+                || app.descendants(matching: .any)["home.genres.shows"].waitForExistence(timeout: 5)
+        )
+        XCTAssertFalse(library.exists, "Second Back did not return from genre to Home")
+
+        // Back should restore the exact genre card, not merely return to a
+        // Home screen with invisible or unrelated focus.
+        XCTAssertTrue(selectedGenreButton.hasFocus)
+        remote.press(.select)
+        XCTAssertTrue(library.waitForExistence(timeout: 8))
+
+        // External demo catalog sizes change. Only assert scrolling when the
+        // chosen genre has enough rows to make the heading leave the screen.
+        if posterButtons.count > 8 {
+            for _ in 0..<6 {
+                remote.press(.down)
+                Thread.sleep(forTimeInterval: 0.15)
+            }
+            XCTAssertFalse(
+                title.frame.intersects(app.frame),
+                "The genre heading should scroll away instead of covering the poster grid"
+            )
+        }
     }
 
     private func moveFocus(
@@ -275,6 +815,17 @@ final class PlayerRegressionUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(element.hasFocus, "Could not focus \(element)")
+    }
+
+    private func launchNavigationRegressionApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.navigationRegression", "YES",
+        ]
+        app.launch()
+        return app
     }
 
     private func exerciseAudioTracks(in app: XCUIApplication) {
@@ -319,6 +870,13 @@ final class PlayerRegressionUITests: XCTestCase {
         waitForState(in: app, timeout: 4) { $0.int("panel") == 1 }
         waitForPanelReveal()
         moveRight(toTab: "subtitles", in: app)
+        remote.press(.down) // Search, deliberately ahead of long track lists.
+        waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-search" }
+        let subtitleDiscoveryScreenshot = XCTAttachment(screenshot: app.screenshot())
+        subtitleDiscoveryScreenshot.name = "Subtitle discovery ahead of track list"
+        subtitleDiscoveryScreenshot.lifetime = .keepAlways
+        add(subtitleDiscoveryScreenshot)
+        remote.press(.down) // language
         remote.press(.down) // Off
         waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-off" }
         remote.press(.select)
@@ -330,6 +888,8 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.down)
         waitForState(in: app, timeout: 4) { $0.int("panel") == 1 }
         waitForPanelReveal()
+        remote.press(.down) // Search
+        remote.press(.down) // language
         remote.press(.down) // Off
         waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-off" }
         remote.press(.down) // first real subtitle
@@ -404,9 +964,29 @@ final class PlayerRegressionUITests: XCTestCase {
         return RegressionState(element.value as? String ?? "")
     }
 
+    @discardableResult
+    private func waitForLifecycle(
+        in app: XCUIApplication,
+        timeout: TimeInterval,
+        predicate: (RegressionState) -> Bool
+    ) -> RegressionState {
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest = RegressionState("")
+        repeat {
+            let element = app.descendants(matching: .any)["app.lifecycle.state"]
+            if element.exists {
+                latest = RegressionState(element.value as? String ?? "")
+                if predicate(latest) { return latest }
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        } while Date() < deadline
+        XCTFail("Timed out waiting for playback lifecycle. Latest: \(latest.raw)")
+        return latest
+    }
+
     private func waitForPanelReveal() {
-        // The panel's spring is 400 ms. Focus becomes eligible only once its
-        // tabs have entered the visible focus region on physical tvOS.
+        // The panel's spring is 200 ms; retain extra room for focus settlement
+        // on physical tvOS before issuing the next synthetic remote command.
         Thread.sleep(forTimeInterval: 0.6)
     }
 
@@ -416,6 +996,37 @@ final class PlayerRegressionUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         waitForState(in: app, timeout: 4) { $0.string("tab") == target }
+    }
+
+    private func openPlayerPanelPreview(in app: XCUIApplication) {
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
+        let homeTab = app.tabBars.buttons["Home"]
+        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let developer = app.descendants(matching: .any)["settings.category.developer"]
+        XCTAssertTrue(developer.waitForExistence(timeout: 8))
+        moveFocus(to: developer, maxPresses: 10) { remote.press(.down) }
+        remote.press(.select)
+
+        let componentPicker = app.descendants(matching: .any)["settings.developer.component"]
+        XCTAssertTrue(componentPicker.waitForExistence(timeout: 5))
+        remote.press(.right)
+        remote.press(.select)
+        let playerPanelOption = app.descendants(matching: .any)["Player Panel"]
+        XCTAssertTrue(playerPanelOption.waitForExistence(timeout: 5))
+        for _ in 0..<8 { remote.press(.down) }
+        remote.press(.select)
+
+        let openPlayerPanel = app.buttons["settings.developer.playerPanel.open"]
+        XCTAssertTrue(openPlayerPanel.waitForExistence(timeout: 5))
+        moveFocus(to: openPlayerPanel, maxPresses: 3) { remote.press(.down) }
+        remote.press(.select)
     }
 }
 

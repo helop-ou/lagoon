@@ -1,4 +1,5 @@
 import CoreMedia
+import CoreVideo
 import Foundation
 import Libavcodec
 import Libavformat
@@ -66,7 +67,8 @@ nonisolated final class FFmpegDemuxer {
     private var videoTimeBase = AVRational(num: 1, den: 1)
     private var audioTimeBases: [Int32: AVRational] = [:]
     private var selectedAudioStreamIndex: Int32 = -1
-    private var didDrainAtEOF = false
+    private var didDrainAudioAtEOF = false
+    private var didDrainVideoAtEOF = false
     // M4: codecs CoreAudio can't take compressed decode to LPCM here.
     private var audioDecoders: [Int32: AudioDecoder] = [:]
     private var subtitleDecoders: [Int32: SubtitleDecoder] = [:]
@@ -78,6 +80,12 @@ nonisolated final class FFmpegDemuxer {
     // This was not the root cause of the measured 10% HEVC frame loss, but
     // keeps both compressed and decoded presentation timing sample-exact.
     private var videoTimeline: VideoFrameTimeline?
+    // Apple exposes no tvOS VideoToolbox decoder for VC-1. The original
+    // stream still direct-plays: libavcodec produces ready Core Video frames
+    // that enter the same AVFoundation renderer/synchronizer as every other
+    // codec.
+    private var softwareVideoDecoder: SoftwareVideoDecoder?
+    private var pendingDecodedVideo: [CMSampleBuffer] = []
 
     /// HEL-64 hardware experiment (Settings → Debug): set before `open`.
     /// Only arms when the stream really is single-track DoVi with an
@@ -109,7 +117,10 @@ nonisolated final class FFmpegDemuxer {
     /// it); 0 when FFmpeg can't tell.
     private(set) var videoFrameRate: Double = 0
     /// The pts grid in force, for the HUD's gate check (demux queue only).
-    var videoGridDescription: String? { videoTimeline?.gridDescription }
+    var videoGridDescription: String? {
+        softwareVideoDecoder?.gridDescription ?? videoTimeline?.gridDescription
+    }
+    var outputsDecodedVideo: Bool { softwareVideoDecoder != nil }
 
     // Written from the main actor at shutdown, polled by FFmpeg's interrupt
     // callback from inside blocked network I/O — this is what guarantees a
@@ -129,7 +140,10 @@ nonisolated final class FFmpegDemuxer {
         interruptLock.unlock()
     }
 
-    func open(url: String) throws {
+    func open(
+        url: String,
+        recommendedPixelBufferAttributes: CVPixelBufferAttributes
+    ) throws {
         avformat_network_init()
         guard let allocated = avformat_alloc_context() else {
             throw DemuxError.openFailed("out of memory")
@@ -195,19 +209,32 @@ nonisolated final class FFmpegDemuxer {
             }
         }
         let videoPar = stream.pointee.codecpar!
-        guard let videoDescription = SampleBufferFactory.videoFormatDescription(codecpar: videoPar) else {
-            throw DemuxError.unsupportedVideo(String(cString: avcodec_get_name(videoPar.pointee.codec_id)))
-        }
         videoStreamIndex = bestVideo
         videoTimeBase = stream.pointee.time_base
         let guessedRate = av_guess_frame_rate(ctx, stream, nil)
         if guessedRate.num > 0, guessedRate.den > 0 {
             videoFrameRate = Double(guessedRate.num) / Double(guessedRate.den)
         }
-        videoTimeline = VideoFrameTimeline(
-            frameRateNum: guessedRate.num,
-            frameRateDen: guessedRate.den
-        )
+        var videoDescription = SampleBufferFactory.videoFormatDescription(codecpar: videoPar)
+        if videoDescription == nil, SoftwareVideoDecoder.supports(codecID: videoPar.pointee.codec_id) {
+            let decoder = try SoftwareVideoDecoder(
+                codecpar: videoPar,
+                timeBase: videoTimeBase,
+                frameRate: guessedRate,
+                recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+            )
+            softwareVideoDecoder = decoder
+            videoDescription = decoder.formatDescription
+        }
+        guard let videoDescription else {
+            throw DemuxError.unsupportedVideo(String(cString: avcodec_get_name(videoPar.pointee.codec_id)))
+        }
+        if softwareVideoDecoder == nil {
+            videoTimeline = VideoFrameTimeline(
+                frameRateNum: guessedRate.num,
+                frameRateDen: guessedRate.den
+            )
+        }
         if stripEnhancementLayer,
            videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
            let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),
@@ -363,7 +390,9 @@ nonisolated final class FFmpegDemuxer {
             status = av_seek_frame(ctx, videoStreamIndex, timestamp, seekBackwardFlag)
         }
         try Self.validateSeekStatus(status)
-        didDrainAtEOF = false
+        didDrainAudioAtEOF = false
+        didDrainVideoAtEOF = false
+        pendingDecodedVideo.removeAll(keepingCapacity: true)
         for decoder in audioDecoders.values {
             decoder.flush()
         }
@@ -371,6 +400,7 @@ nonisolated final class FFmpegDemuxer {
             passthroughTimelines[index]?.reset()
         }
         videoTimeline?.reset()
+        softwareVideoDecoder?.flush()
         for decoder in subtitleDecoders.values {
             decoder.flush()
         }
@@ -384,6 +414,9 @@ nonisolated final class FFmpegDemuxer {
 
     func readNext() -> ReadResult {
         guard let ctx = formatContext, let packet else { return .failed("demuxer not open") }
+        if !pendingDecodedVideo.isEmpty {
+            return .video(pendingDecodedVideo.removeFirst())
+        }
         var status = av_read_frame(ctx, packet)
         // M6: only AVERROR_EOF means the stream ended. Anything else is a
         // read failure — retry briefly (the avio reconnect options handle
@@ -396,10 +429,23 @@ nonisolated final class FFmpegDemuxer {
             status = av_read_frame(ctx, packet)
         }
         if status == avErrorEOF || isInterrupted {
-            // Hand the audio decoder's tail (coalesced partial buffer)
-            // to the renderer before declaring the end.
-            if !didDrainAtEOF {
-                didDrainAtEOF = true
+            // Drain delayed B-frames before ending the video queue. VC-1's
+            // libavcodec decoder normally retains pictures at EOF.
+            if !didDrainVideoAtEOF {
+                didDrainVideoAtEOF = true
+                do {
+                    pendingDecodedVideo = try softwareVideoDecoder?.drain() ?? []
+                } catch {
+                    return .failed(error.localizedDescription)
+                }
+                if !pendingDecodedVideo.isEmpty {
+                    return .video(pendingDecodedVideo.removeFirst())
+                }
+            }
+            // Hand the audio decoder's tail (coalesced partial buffer) to the
+            // renderer before declaring the end.
+            if !didDrainAudioAtEOF {
+                didDrainAudioAtEOF = true
                 if selectedAudioStreamIndex >= 0,
                    let decoder = audioDecoders[selectedAudioStreamIndex] {
                     let tail = decoder.drain()
@@ -416,6 +462,16 @@ nonisolated final class FFmpegDemuxer {
         defer { av_packet_unref(packet) }
         let streamIndex = packet.pointee.stream_index
 
+        if streamIndex == videoStreamIndex, let softwareVideoDecoder {
+            do {
+                pendingDecodedVideo = try softwareVideoDecoder.decode(packet: packet)
+            } catch {
+                return .failed(error.localizedDescription)
+            }
+            return pendingDecodedVideo.isEmpty
+                ? .skipped
+                : .video(pendingDecodedVideo.removeFirst())
+        }
         if streamIndex == videoStreamIndex, let description = videoStream?.formatDescription {
             var strippedPayload: Data?
             if let lengthSize = videoNALLengthSize, let data = packet.pointee.data {
@@ -513,6 +569,8 @@ nonisolated final class FFmpegDemuxer {
         // released after dismissal (HEL-57).
         audioDecoders.removeAll(keepingCapacity: false)
         subtitleDecoders.removeAll(keepingCapacity: false)
+        softwareVideoDecoder = nil
+        pendingDecodedVideo.removeAll(keepingCapacity: false)
         audioStreams.removeAll(keepingCapacity: false)
         subtitleStreams.removeAll(keepingCapacity: false)
         videoStream = nil

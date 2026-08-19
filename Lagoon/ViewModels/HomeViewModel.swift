@@ -27,9 +27,11 @@ final class HomeViewModel {
     /// deduped and stripped of empties. Empty on servers without it.
     var pluginRails: [LibraryRail] = []
     var latestRails: [LibraryRail] = []
-    /// One native discovery shelf. Each tile links to a genre grid and uses
-    /// the best landscape artwork available from a ranked library sample.
-    var genreShelf: [GenreShelfItem] = []
+    /// Native movie and show discovery shelves. Keeping their catalogues and
+    /// artwork samples separate prevents a shared genre name from opening a
+    /// mixed Movie/Series grid.
+    var movieGenreShelf: [GenreShelfItem] = []
+    var showGenreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
     var isLoading = true
     var errorMessage: String?
@@ -61,9 +63,17 @@ final class HomeViewModel {
             // Never fatal to the screen: a server that dislikes the filter
             // should cost you the rail, not the whole of Home.
             async let favoriteItems = try? client.favorites()
-            async let genreCatalog = try? client.genres()
-            async let genreArtworkCandidates = try? client.items(
-                includeTypes: [.movie, .series],
+            async let movieGenreCatalog = try? client.genres(includeTypes: [.movie])
+            async let showGenreCatalog = try? client.genres(includeTypes: [.series])
+            async let movieGenreArtworkCandidates = try? client.items(
+                includeTypes: [.movie],
+                sortBy: "CommunityRating",
+                sortOrder: "Descending",
+                limit: 300,
+                fields: "Genres,CommunityRating,PrimaryImageAspectRatio"
+            )
+            async let showGenreArtworkCandidates = try? client.items(
+                includeTypes: [.series],
                 sortBy: "CommunityRating",
                 sortOrder: "Descending",
                 limit: 300,
@@ -89,8 +99,10 @@ final class HomeViewModel {
             let resolvedResume = await resumeItems ?? []
             let resolvedNextUp = await nextUpItems ?? []
             let resolvedFavorites = await favoriteItems ?? []
-            let resolvedGenres = await genreCatalog ?? []
-            let resolvedGenreCandidates = await genreArtworkCandidates?.items ?? []
+            let resolvedMovieGenres = await movieGenreCatalog ?? []
+            let resolvedShowGenres = await showGenreCatalog ?? []
+            let resolvedMovieGenreCandidates = await movieGenreArtworkCandidates?.items ?? []
+            let resolvedShowGenreCandidates = await showGenreArtworkCandidates?.items ?? []
             let resolvedPluginRails = await loadPluginRails(
                 client: client,
                 preferences: homeSectionPreferences
@@ -99,9 +111,15 @@ final class HomeViewModel {
             resume = resolvedResume
             nextUp = resolvedNextUp
             favorites = resolvedFavorites
-            genreShelf = GenreShelfResolver.resolve(
-                catalog: resolvedGenres,
-                candidates: resolvedGenreCandidates
+            movieGenreShelf = GenreShelfResolver.resolve(
+                catalog: resolvedMovieGenres,
+                candidates: resolvedMovieGenreCandidates,
+                includeTypes: [.movie]
+            )
+            showGenreShelf = GenreShelfResolver.resolve(
+                catalog: resolvedShowGenres,
+                candidates: resolvedShowGenreCandidates,
+                includeTypes: [.series]
             )
             latestRails = rails
             TopShelfStore.publish(resume, client: client)
@@ -212,7 +230,8 @@ final class HomeViewModel {
         resume = []
         nextUp = []
         favorites = []
-        genreShelf = []
+        movieGenreShelf = []
+        showGenreShelf = []
         pluginRails = []
         latestRails = []
         heroItems = []

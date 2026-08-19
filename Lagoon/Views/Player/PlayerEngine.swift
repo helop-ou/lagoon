@@ -14,6 +14,9 @@ protocol PlayerEngine: AnyObject, Observable {
     var duration: Double { get }
     var isPaused: Bool { get }
     var isBuffering: Bool { get }
+    /// Number of renderer underruns recovered during this playback session.
+    /// Exposed for the debug regression probe and component preview only.
+    var stallCount: Int { get }
     var videoSize: CGSize? { get }
     var audioTracks: [PlayerTrack] { get }
     var subtitleTracks: [PlayerTrack] { get }
@@ -202,7 +205,7 @@ nonisolated struct TrickplayTile: Equatable {
 
 /// Everything the player's Info tab and transport show about the item —
 /// assembled by the playback controller, engine-independent.
-nonisolated struct PlayerItemInfo {
+nonisolated struct PlayerItemInfo: Equatable {
     /// Transport headline: the series for episodes, the item otherwise.
     let title: String
     /// Small line above the headline, e.g. "S1 E1 · Freedom Day".

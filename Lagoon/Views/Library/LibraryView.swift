@@ -78,5 +78,7 @@ struct LibraryView: View {
                 await viewModel.loadMore(client: session.client, library: library)
             }
         }
+        .accessibilityIdentifier("library.view.\(library.id)")
+        .accessibilityValue("\(viewModel.items.count) items")
     }
 }

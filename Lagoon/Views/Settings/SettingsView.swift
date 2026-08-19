@@ -25,6 +25,14 @@ struct SettingsView: View {
         }
         .task(id: session.activeAccount?.id) {
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
+            #if DEBUG
+            // Keep the remote-navigation regression deterministic between
+            // launches. The test intentionally changes this value and tvOS
+            // otherwise restores that changed state on the next run.
+            if UserDefaults.standard.bool(forKey: "debug.settingsRegression") {
+                subtitlePreferences.resetAppearanceToSystem()
+            }
+            #endif
             trackPreferences.configure(accountID: session.activeAccount?.id)
             homePreferences.configure(accountID: session.activeAccount?.id)
             await homePreferences.loadCatalog(client: session.client)
@@ -98,13 +106,21 @@ struct SettingsView: View {
                     id: "subtitles"
                 ) { subtitleSettings }
 
-                if !homePreferences.catalog.isEmpty {
-                    settingsDestination(
-                        "Home Rows",
-                        detail: homePreferences.values.isConfigured ? "Custom" : "Lagoon Default",
-                        id: "home"
-                    ) { HomeRowsSettingsView(preferences: homePreferences) }
+                settingsDestination(
+                    "Home Rows",
+                    detail: homeRowsDetail,
+                    id: "home"
+                ) { HomeRowsSettingsView(preferences: homePreferences) }
+
+                #if DEBUG
+                settingsDestination(
+                    "Developer",
+                    detail: "Component Previews",
+                    id: "developer"
+                ) {
+                    DeveloperSettingsView(subtitleStyle: subtitlePreferences.renderStyle)
                 }
+                #endif
 
                 settingsDestination(
                     "Diagnostics",
@@ -138,6 +154,10 @@ struct SettingsView: View {
 
     private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
     private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
+    private var homeRowsDetail: String {
+        if homePreferences.catalog.isEmpty { return "Lagoon Native" }
+        return homePreferences.values.isCustomized ? "Custom" : "Native + Plugin"
+    }
 
     private var playbackSettings: some View {
         TVSettingsPage(
@@ -366,10 +386,10 @@ struct SettingsView: View {
 
             TVSettingsSection("Account Actions") {
                 if session.accounts.count > 1 {
-                    settingsAction("Switch User") { session.showAccountPicker() }
+                    settingsAction("Switch User", id: "switch") { session.showAccountPicker() }
                 }
-                settingsAction("Add Account") { session.addAccount() }
-                settingsAction("Sign Out", role: .destructive) {
+                settingsAction("Add Account", id: "add") { session.addAccount() }
+                settingsAction("Sign Out", id: "signOut", role: .destructive) {
                     Task { await session.signOut() }
                 }
             }
@@ -394,6 +414,7 @@ struct SettingsView: View {
 
     private func settingsAction(
         _ title: LocalizedStringKey,
+        id: String,
         role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
@@ -401,6 +422,7 @@ struct SettingsView: View {
             TVSettingsActionLabel(title)
         }
         .buttonStyle(.glass)
+        .accessibilityIdentifier("settings.account.\(id)")
     }
 
     private func languageOptions(includeNone: Bool) -> [TVSettingsOption<String?>] {
@@ -464,11 +486,9 @@ struct SettingsView: View {
                 }
             }
 
-            if !homePreferences.catalog.isEmpty {
-                Section("Home") {
-                    NavigationLink("Home Rows") {
-                        HomeRowsSettingsView(preferences: homePreferences)
-                    }
+            Section("Home") {
+                NavigationLink("Home Rows") {
+                    HomeRowsSettingsView(preferences: homePreferences)
                 }
             }
 
@@ -551,6 +571,14 @@ struct SettingsView: View {
                 LabeledContent("App", value: "Lagoon")
                 LabeledContent("Version", value: Bundle.main.displayVersion)
             }
+
+            #if DEBUG
+            Section("Developer") {
+                NavigationLink("Component Previews") {
+                    DeveloperSettingsView(subtitleStyle: subtitlePreferences.renderStyle)
+                }
+            }
+            #endif
 
             Section("Debug") {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)

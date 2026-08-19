@@ -39,11 +39,12 @@ struct HeroSection: View {
             // and you get the detail page for whatever is on screen. A
             // "See more" button inside it was a second thing to aim at for
             // the one thing the banner already means.
-            NavigationLink(value: current) {
+            NavigationLink(value: ContentNavigationRoute.item(current)) {
                 panel(for: current, width: width)
             }
             .cardButtonStyle()
             .accessibilityLabel(current.name ?? "")
+            .accessibilityIdentifier("home.hero.\(current.id)")
         }
     }
 

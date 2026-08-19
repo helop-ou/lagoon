@@ -53,9 +53,12 @@ final class JellyfinClient {
         return encoder
     }()
 
-    init(deviceId: String) {
+    init(
+        deviceId: String,
+        sessionConfiguration: URLSessionConfiguration = .default
+    ) {
         self.deviceId = deviceId
-        let config = URLSessionConfiguration.default
+        let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
         session = URLSession(configuration: config)
     }

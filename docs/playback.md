@@ -18,7 +18,8 @@ shells instead of 27.
 
 1. `POST Items/{id}/PlaybackInfo?UserId=` with `DeviceProfile.lagoon` — a
    capability profile mirroring exactly what the engine can play: h264/hevc
-   video with aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
+   video plus progressive SDR 8-bit VC-1 up to 1080p, with
+   aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
    vorbis (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov, embedded
    text/PGS subtitles and external vtt (M5), plus an fMP4 HLS transcoding
    profile whose output (hevc/h264 + eac3,ac3,aac) lands back inside the
@@ -44,8 +45,37 @@ libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +
 `AVSampleBufferAudioRenderer` under one `AVSampleBufferRenderSynchronizer`.
 This is the app's only player. H.264 and supported audio codecs stay
 compressed; HEVC is decoded ahead by a hardware-only VideoToolbox session;
+VC-1 is software-decoded by libavcodec into renderer-recommended NV12 Core
+Video buffers;
 unsupported compressed audio is decoded to LPCM by libavcodec. AVFoundation
 still owns color management, presentation, synchronization, and audio output.
+
+### Player panel performance
+
+The Debug-only Player Panel component preview carries a deterministic 30-track
+subtitle fixture. `PlayerRegressionUITests.testPlayerPanelPreviewPerformance`
+sweeps Info → Subtitles → Info five times while XCTest records app CPU, retired
+instructions, memory, wall-clock time, and animation hitches. It also walks
+focus through every stress-fixture row, so lazy construction cannot silently
+break Siri Remote navigation. A single six-tab sweep has a 1.75-second hard
+ceiling in addition to the CPU, memory, hitch, and timing results Xcode stores
+with every benchmark run.
+
+On the tvOS 26.5 simulator, the first optimization pass reduced average app
+CPU time from 0.368 s to 0.299 s (19%), retired instructions from 3.12 billion
+to 2.08 billion (33%), and peak physical memory from 80.0 MB to 72.7 MB (9%).
+Run the focused measurement with:
+
+```sh
+xcodebuild -project Lagoon.xcodeproj -scheme LagoonHardwareRegression \
+  -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest' \
+  -only-testing:LagoonUITests/PlayerRegressionUITests/testPlayerPanelPreviewPerformance test
+```
+
+Release builds also emit a `Player Panel Reveal` interval in the existing
+`ee.helop.lagoon/PlaybackPerformance` signpost category. Use that interval and
+the Animation Hitches instrument for physical-Apple-TV validation, where GPU
+composition cost is more representative than Simulator timing.
 
 - **Why compressed packets stay zero-copy**: Matroska stores h264/hevc
   mp4-style (avcC/hvcC extradata + length-prefixed NALs), so demuxed
@@ -160,6 +190,18 @@ still owns color management, presentation, synchronization, and audio output.
   few seconds to 20–40 s and again emptied the queue; no finite sub-second
   decoded-frame cushion can turn an upstream feed running below real time
   into uninterrupted playback, so those cases correctly enter buffering.
+- **VC-1 direct play**: Apple exposes no VC-1 VideoToolbox decoder on tvOS,
+  but `AVSampleBufferVideoRenderer` accepts ready sample buffers containing
+  Core Video image buffers. Lagoon therefore keeps the original MKV and
+  audio stream, decodes progressive 8-bit VC-1 through its existing pinned
+  libavcodec, copies planar 4:2:0 output into renderer-recommended IOSurface/
+  Metal-compatible NV12 buffers, carries colorimetry and exact frame timing,
+  and wraps each image with `CMSampleBufferCreateReadyWithImageBuffer` for the
+  existing render synchronizer. The advertised profile is capped at 1080p
+  and excludes interlaced video because Lagoon has no deinterlacing stage;
+  anything outside that envelope still uses the server transcode fallback.
+  Keeping eligible files in one original stream also removes the short HLS
+  fragment boundary that caused the reported repeating audio cut-outs.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
@@ -469,6 +511,62 @@ media-buffer releases or C decoder destruction. `Sessions/Playing/Stopped`
 still reports exactly once from the controller after the engine position is
 captured; network reporting never gates UI dismissal.
 
+The dismissal boundary itself is synchronous: before the full-screen cover
+returns to Home or Settings, the controller cancels its clocks and subtitle
+work, detaches system media state, marks the engine cancelled, interrupts
+FFmpeg, and queues renderer teardown. Only the Jellyfin stopped report remains
+asynchronous, and that task carries copied request values rather than retaining
+the controller. A replacement player waits up to 3 s for the prior demux loop
+and renderer set to retire; a timeout is recorded as `Playback Resource
+Retirement Timeout` rather than silently overlapping two media pipelines.
+
+`Playback Lifecycle` signposts record live controllers, engines, demux loops,
+renderer sets, unclean engine destructions, and physical footprint at every
+ownership transition. The Debug-only accessibility probe exposes the same
+counters to `testPlaybackDismissSettingsReplayLifecycleAndStallBenchmark`.
+That regression performs the hardware-shaped sequence—play, dismiss, enter
+Settings, replay—then requires every cleanup point to reach 0/0/0/0, limits
+cleanup-to-cleanup footprint growth to 48 MB, limits replay startup growth to
+96 MB, and permits at most one new stall while media time advances at least
+10 s in a 15 s CPU/memory/hitch measurement window. The focused script runs
+three replay/dismiss cycles by default so smaller per-cycle leaks become a
+slope instead of hiding beneath one allocator-noise allowance. Run it with:
+
+```sh
+scripts/playback-lifecycle-bench.sh
+```
+
+Override the stress length when needed with
+`LAGOON_LIFECYCLE_REPLAYS=5`; values are capped at ten replays. A normal full
+UI-test run performs one replay so this focused hardware benchmark does not
+inflate every development test pass.
+
+On a device already signed into Fixture, target the reported software-decoded
+fixture instead of the public-demo fallback:
+
+```sh
+LAGOON_LIFECYCLE_VC1_SERIES='Rick and Morty' \
+  scripts/playback-lifecycle-bench.sh 'platform=tvOS,id=<Apple-TV-UDID>'
+```
+
+The resolver walks that series' episodes and chooses one whose Jellyfin
+PlaybackInfo actually declares VC-1, so season/file naming changes do not turn
+the benchmark into an H.264 test by accident.
+
+Those allowances are deliberately above simulator allocator noise and below
+one retained decoded-video queue. Set Xcode performance baselines from repeated
+hardware runs; do not use one simulator's absolute RAM number as an Apple TV
+jetsam threshold. For a live secondary check, attach Instruments' Leaks or run
+`leaks` during the second window. The lifecycle counters remain the stronger
+gate for AVFoundation objects because allocator caching can keep footprint flat
+or elevated after the owning engine has gone away.
+
+Stall recovery is bounded as well. Normal refill resumes at the demuxer's
+12-frame low-water cushion; if it cannot rebuild that cushion within 5 s, the
+engine re-primes audio, video, renderers, and the clock at the current media
+position. The pure `StallRecoveryPolicy` unit test makes an accidental return
+to an infinite rate-zero polling loop a deterministic failure.
+
 ## Progress reporting
 
 Positions are ticks (see jellyfin-api.md). Three report points, all fire-
@@ -661,7 +759,7 @@ reflects the new position immediately.
   keeping its buttons out of the focus engine while closed.
   **Verify animations by recording, not screenshots**: `simctl io recordVideo`
   then step frames out with `AVAssetImageGenerator` — a screenshot lands after
-  a 0.4 s animation has finished and tells you nothing.
+  the animation has finished and tells you nothing.
 - Never nest `SharedState.withLock` (non-recursive lock — nesting was the
   engine's first real deadlock). `sample <pid>` on the host names the
   exact stuck line when a queue wedges.

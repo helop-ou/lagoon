@@ -1,0 +1,473 @@
+import SwiftUI
+
+/// Tabs shared by the live player's slide-down panel and the Debug component
+/// gallery. Keeping this outside `CustomPlayerView` ensures the gallery is a
+/// preview of production UI rather than a separately maintained imitation.
+enum PlayerPanelTab: CaseIterable, Hashable {
+    case info
+    case video
+    case audio
+    case subtitles
+
+    var title: String {
+        switch self {
+        case .info: String(localized: "Info")
+        case .video: String(localized: "Video")
+        case .audio: String(localized: "Audio")
+        case .subtitles: String(localized: "Subtitles")
+        }
+    }
+}
+
+/// The panel keeps using the live player's focus namespace so opening and
+/// closing it can hand focus back to the video surface without a dead frame.
+enum PlayerControlFocus: Hashable {
+    case surface
+    case tab(PlayerPanelTab)
+    case track(String)
+}
+
+/// The real Info · Video · Audio · Subtitles panel used during playback.
+/// Values and actions are injected so Debug settings can exercise the same
+/// focusable controls with representative data and harmless local state.
+struct PlayerControlPanel: View {
+    @Binding var selectedTab: PlayerPanelTab
+    let focus: FocusState<PlayerControlFocus?>.Binding
+    let info: PlayerItemInfo
+    let audioTracks: [PlayerTrack]
+    let subtitleTracks: [PlayerTrack]
+    let audioDelay: Double
+    var subtitleSearch: SubtitleSearchCoordinator? = nil
+    var isPictureInPicturePossible = false
+    var isPictureInPictureActive = false
+    var onTogglePictureInPicture: (() -> Void)? = nil
+    let onSelectAudioTrack: (Int?) -> Void
+    let onSelectSubtitleTrack: (Int?) -> Void
+    let onSetAudioDelay: (Double) -> Void
+    var onDismiss: (() -> Void)? = nil
+
+    private static var subtitleOffID: String { "subtitle-off" }
+    /// Room a focused track row needs before its ScrollView clips it.
+    private var rowFocusInset: CGFloat { 20 }
+    /// A track row at rest; the card sizes itself from this plus the gap.
+    private var trackRowHeight: CGFloat { 62 }
+    /// Taller than before, because the roomier gaps fit fewer rows on screen
+    /// and the panel has the vertical space to spare.
+    private var trackListMaxHeight: CGFloat { 460 }
+
+    var body: some View {
+        VStack(spacing: Metrics.Space.xl) {
+            tabBar
+
+            tabCard
+                .padding(.horizontal, Metrics.screenGutter)
+
+            Spacer()
+        }
+        .padding(.top, Metrics.railTopPadding)
+        .defaultFocus(focus, .tab(selectedTab))
+        #if os(iOS)
+        .background(
+            // Dim + tap-out on iOS; tvOS closes via Menu.
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss?() }
+        )
+        #endif
+    }
+
+    // Native buttons only: the system's focused lozenge IS the Infuse
+    // white-pill look — never draw custom focus chrome around it. The
+    // active tab keeps bold text once focus moves down into the card.
+    private var tabBar: some View {
+        HStack(spacing: Metrics.Space.m) {
+            ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    // Always bold. Selection follows focus here, so the
+                    // lozenge already says which tab is active.
+                    Text(tab.title)
+                        .fontWeight(.bold)
+                }
+                .focused(focus, equals: .tab(tab))
+                .accessibilityIdentifier("player.tab.\(String(describing: tab))")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var tabCard: some View {
+        Group {
+            switch selectedTab {
+            case .info: infoCard
+            case .video: videoCard
+            case .audio: audioCard
+            case .subtitles: subtitleCard
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Metrics.Space.xl)
+        // Native focused controls choose their own label color. Forcing a
+        // foreground style here makes their text disappear in the lozenge.
+        .background {
+            #if os(tvOS)
+            // A live material forces every video frame behind this large card
+            // through the compositor. An opaque surface lets the sample-buffer
+            // renderer keep its optimized presentation path while the panel is
+            // open and is substantially cheaper to animate on Apple TV.
+            RoundedRectangle(cornerRadius: Metrics.panelCornerRadius)
+                .fill(Color(red: 0.075, green: 0.075, blue: 0.085))
+            #else
+            RoundedRectangle(cornerRadius: Metrics.panelCornerRadius)
+                .fill(.regularMaterial)
+            #endif
+        }
+    }
+
+    private var infoCard: some View {
+        HStack(alignment: .top, spacing: Metrics.Space.xl) {
+            CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
+                image
+                    .resizable()
+                    .aspectRatio(2 / 3, contentMode: .fill)
+            } placeholder: {
+                Color.white.opacity(0.1)
+            }
+            .frame(width: 130, height: 195)
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+
+            VStack(alignment: .leading, spacing: Metrics.Space.s) {
+                Text(combinedTitle)
+                    .font(.headline)
+                if let overview = info.overview {
+                    Text(overview)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                }
+                if !info.facts.isEmpty {
+                    Text(info.facts.joined(separator: "    "))
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+
+                if let onTogglePictureInPicture {
+                    Button(action: onTogglePictureInPicture) {
+                        Label(
+                            isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
+                            systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
+                    .focused(focus, equals: .track("picture-in-picture"))
+                    .accessibilityIdentifier("player.pictureInPicture")
+                    .padding(.top, Metrics.Space.s)
+                }
+            }
+            Spacer(minLength: 0)
+            #if os(iOS)
+            AirPlayRoutePicker()
+                .frame(width: 44, height: 44)
+                .accessibilityLabel("AirPlay")
+            #endif
+        }
+    }
+
+    private var combinedTitle: String {
+        if let subtitle = info.subtitle {
+            return "\(info.title) – \(subtitle)"
+        }
+        return info.title
+    }
+
+    private var audioCard: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            trackCard(rows: audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
+                onSelectAudioTrack(audioTracks.first(where: { $0.id == rowID })?.engineID)
+            }
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                cardHeader("Options")
+                HStack(spacing: Metrics.Space.m) {
+                    Text("Audio Delay")
+                        .font(.callout)
+                    Spacer()
+                    Button {
+                        onSetAudioDelay(audioDelay - 0.1)
+                    } label: {
+                        Image(systemName: "minus")
+                    }
+                    .accessibilityIdentifier("player.audioDelay.decrease")
+                    Text(String(format: "%+.1f s", audioDelay))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(audioDelay == 0 ? .secondary : .primary)
+                        .accessibilityIdentifier("player.audioDelay.value")
+                    Button {
+                        onSetAudioDelay(audioDelay + 0.1)
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityIdentifier("player.audioDelay.increase")
+                }
+            }
+        }
+    }
+
+    private var videoCard: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+            cardHeader("Track")
+            HStack(spacing: Metrics.Space.s) {
+                Image(systemName: "checkmark")
+                    .font(.caption.bold())
+                Text(info.videoSummary ?? String(localized: "Unknown video track"))
+                    .font(.callout)
+            }
+        }
+    }
+
+    private var subtitleCard: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            if let subtitleSearch {
+                cardHeader("Find Subtitles")
+                VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                    Button {
+                        subtitleSearch.startSearch()
+                    } label: {
+                        Label("Search subtitles…", systemImage: "magnifyingglass")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .disabled(subtitleSearch.phase.isBusy)
+                    .focused(focus, equals: .track("subtitle-search"))
+                    .accessibilityIdentifier("player.subtitleSearch")
+
+                    Menu {
+                        Button("Preferred Languages") {
+                            subtitleSearch.selectLanguage(nil)
+                        }
+                        ForEach(subtitleSearch.languageChoices, id: \.self) { language in
+                            Button(SubtitlePreferencesStore.displayName(for: language)) {
+                                subtitleSearch.selectLanguage(language)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: Metrics.Space.m) {
+                            Label(subtitleSearch.selectedLanguageTitle, systemImage: "globe")
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption.bold())
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .disabled(subtitleSearch.phase.isBusy)
+                    .focused(focus, equals: .track("subtitle-search-language"))
+                    .accessibilityIdentifier("player.subtitleSearch.language")
+                }
+
+                subtitleSearchStatus(subtitleSearch)
+
+                if !subtitleSearch.results.isEmpty {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
+                            ForEach(subtitleSearch.results) { result in
+                                Button {
+                                    subtitleSearch.startDownload(result)
+                                } label: {
+                                    HStack(spacing: Metrics.Space.m) {
+                                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                                            Text(result.name ?? String(localized: "Subtitle"))
+                                                .lineLimit(1)
+                                            Text(subtitleResultDetails(result))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer(minLength: 0)
+                                        if subtitleSearch.phase == .downloading(result.id) {
+                                            ProgressView()
+                                        } else {
+                                            Image(systemName: "arrow.down.circle")
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .disabled(subtitleSearch.phase.isBusy)
+                                .focused(focus, equals: .track("subtitle-result-\(result.id)"))
+                                .accessibilityIdentifier("player.subtitleResult.\(result.id)")
+                            }
+                        }
+                        .padding(.horizontal, rowFocusInset)
+                        .padding(.vertical, rowFocusInset)
+                    }
+                    .padding(.horizontal, -rowFocusInset)
+                    .padding(.vertical, -rowFocusInset)
+                    .frame(maxHeight: 280)
+                }
+
+                Divider()
+            }
+
+            // Discovery stays above this potentially very long list. A
+            // library with dozens of embedded/external tracks should still
+            // reach Find Subtitles with one Down press from the tab bar.
+            trackCard(
+                rows: [(Self.subtitleOffID, String(localized: "Off"), !subtitleTracks.contains(where: \.isSelected))]
+                    + subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
+            ) { rowID in
+                if rowID == Self.subtitleOffID {
+                    onSelectSubtitleTrack(nil)
+                } else {
+                    onSelectSubtitleTrack(subtitleTracks.first(where: { $0.id == rowID })?.engineID)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func subtitleSearchStatus(_ search: SubtitleSearchCoordinator) -> some View {
+        switch search.phase {
+        case .idle:
+            EmptyView()
+        case .searching:
+            HStack {
+                ProgressView()
+                Text("Searching configured providers…")
+                    .foregroundStyle(.secondary)
+            }
+        case .noProvider:
+            Label("No subtitle provider is available on this server.", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        case .noResults:
+            Text("No matching subtitles were found.")
+                .foregroundStyle(.secondary)
+        case .failed(let message):
+            Label("Search failed: \(message)", systemImage: "wifi.exclamationmark")
+                .foregroundStyle(.secondary)
+        case .downloading:
+            EmptyView()
+        case .downloadFailed(let message):
+            Label("Download failed: \(message)", systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.secondary)
+        case .downloaded:
+            Label("Downloaded and selected", systemImage: "checkmark.circle")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func subtitleTrackName(_ track: PlayerTrack) -> String {
+        var labels = [track.displayName]
+        if track.source == .downloaded {
+            labels.append(String(localized: "Downloaded"))
+        } else if track.source == .external {
+            labels.append(String(localized: "External"))
+        }
+        if track.isForced { labels.append(String(localized: "Forced")) }
+        if track.isHearingImpaired { labels.append(String(localized: "SDH")) }
+        return labels.joined(separator: " · ")
+    }
+
+    private func subtitleResultDetails(_ result: RemoteSubtitleInfo) -> String {
+        var details: [String] = []
+        if let language = result.threeLetterISOLanguageName {
+            details.append(SubtitlePreferencesStore.displayName(for: language))
+        }
+        if let provider = result.providerName { details.append(provider) }
+        if let format = result.format { details.append(format.uppercased()) }
+        if result.isForced == true { details.append(String(localized: "Forced")) }
+        if result.hearingImpaired == true { details.append(String(localized: "SDH")) }
+        if let rating = result.communityRating { details.append(String(format: "★ %.1f", rating)) }
+        if let downloads = result.downloadCount { details.append("↓ \(downloads)") }
+        return details.joined(separator: " · ")
+    }
+
+    private func trackCard(
+        rows: [(id: String, name: String, selected: Bool)],
+        onSelect: @escaping (String) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+            cardHeader("Tracks")
+            ScrollView {
+                // Libraries can legitimately expose dozens of subtitle
+                // streams. Keep offscreen buttons out of the focus/layout
+                // tree until scrolling approaches them.
+                LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
+                    ForEach(rows, id: \.id) { row in
+                        Button {
+                            onSelect(row.id)
+                        } label: {
+                            HStack(spacing: Metrics.Space.s) {
+                                Image(systemName: "checkmark")
+                                    .font(.caption.bold())
+                                    .opacity(row.selected ? 1 : 0)
+                                Text(row.name)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .focused(focus, equals: .track(row.id))
+                        .accessibilityIdentifier("player.track.\(row.id)")
+                    }
+                }
+                .padding(.horizontal, rowFocusInset)
+                .padding(.vertical, rowFocusInset)
+            }
+            .padding(.horizontal, -rowFocusInset)
+            .padding(.vertical, -rowFocusInset)
+            .frame(maxHeight: min(CGFloat(rows.count) * (trackRowHeight + Metrics.Space.m), trackListMaxHeight))
+        }
+    }
+
+    private func cardHeader(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .textCase(.uppercase)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.leading, Metrics.Space.m)
+    }
+}
+
+/// Observation boundary between the playback clock and the comparatively
+/// expensive panel hierarchy. `CustomPlayerView` reads position/buffering
+/// several times a second; this host only observes the engine properties the
+/// panel actually displays. Equatable identity prevents unrelated parent
+/// updates from walking the tabs and track rows again.
+struct PlayerControlPanelHost: View, Equatable {
+    let engine: any PlayerEngine
+    @Binding var selectedTab: PlayerPanelTab
+    let focus: FocusState<PlayerControlFocus?>.Binding
+    let info: PlayerItemInfo
+    var subtitleSearch: SubtitleSearchCoordinator? = nil
+    var isPictureInPicturePossible = false
+    var isPictureInPictureActive = false
+    var onTogglePictureInPicture: (() -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.engine === rhs.engine
+            && lhs.info == rhs.info
+            && lhs.subtitleSearch === rhs.subtitleSearch
+            && lhs.isPictureInPicturePossible == rhs.isPictureInPicturePossible
+            && lhs.isPictureInPictureActive == rhs.isPictureInPictureActive
+    }
+
+    var body: some View {
+        PlayerControlPanel(
+            selectedTab: $selectedTab,
+            focus: focus,
+            info: info,
+            audioTracks: engine.audioTracks,
+            subtitleTracks: engine.subtitleTracks,
+            audioDelay: engine.audioDelay,
+            subtitleSearch: subtitleSearch,
+            isPictureInPicturePossible: isPictureInPicturePossible,
+            isPictureInPictureActive: isPictureInPictureActive,
+            onTogglePictureInPicture: onTogglePictureInPicture,
+            onSelectAudioTrack: engine.selectAudioTrack,
+            onSelectSubtitleTrack: engine.selectSubtitleTrack,
+            onSetAudioDelay: engine.setAudioDelay,
+            onDismiss: onDismiss
+        )
+    }
+}

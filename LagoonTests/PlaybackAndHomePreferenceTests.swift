@@ -163,6 +163,12 @@ struct HomeRowPreferenceTests {
         return try JellyfinClient.decoder.decode(Page.self, from: data).items
     }
 
+    private func duplicateCatalog() throws -> [JellyfinClient.HomeSection] {
+        let data = Data(#"{"Items":[{"Section":"MyList","DisplayText":"My List","OrderIndex":1},{"Section":"MyList","DisplayText":"Duplicate My List","OrderIndex":2},{"Section":"Recommendations","DisplayText":"Recommendations","OrderIndex":3}]}"#.utf8)
+        struct Page: Decodable { let items: [JellyfinClient.HomeSection] }
+        return try JellyfinClient.decoder.decode(Page.self, from: data).items
+    }
+
     @Test func untouchedLayoutPreservesTheExistingAdditiveDefault() throws {
         let selected = HomeSectionPreferenceResolver.sections(
             from: try catalog(),
@@ -190,10 +196,84 @@ struct HomeRowPreferenceTests {
 
         #expect(selected.map(\.section) == ["Recommendations", "ContinueWatching"])
     }
+
+    @Test func duplicateServerSectionsAreCollapsedWithoutChangingTheirOrder() throws {
+        let selected = HomeSectionPreferenceResolver.sections(
+            from: try duplicateCatalog(),
+            preferences: HomeSectionPreferenceValues(),
+            nativelyCovered: []
+        )
+
+        #expect(selected.map(\.section) == ["MyList", "Recommendations"])
+        #expect(selected.first?.displayText == "My List")
+    }
+
+    @Test func nativeRowsIdentifyMovieAndShowGenresSeparately() {
+        let choices = HomeSectionPreferenceResolver.nativeChoices
+
+        #expect(choices.allSatisfy { $0.source == .lagoon })
+        #expect(choices.map(\.id).contains("lagoon.movieGenres"))
+        #expect(choices.map(\.id).contains("lagoon.showGenres"))
+        #expect(choices.map(\.title).contains("Movie Genres"))
+        #expect(choices.map(\.title).contains("Show Genres"))
+    }
+
+    @Test func savedLayoutsFromBeforeNativeTogglesKeepEveryNativeRowVisible() throws {
+        let legacy = Data(#"{"isConfigured":true,"rows":[]}"#.utf8)
+        let values = try JSONDecoder().decode(HomeSectionPreferenceValues.self, from: legacy)
+
+        #expect(values.nativeRows.isEmpty)
+        #expect(values.isNativeEnabled("lagoon.continueWatching"))
+        #expect(values.isNativeEnabled("lagoon.movieGenres"))
+        #expect(values.isCustomized) // The legacy plugin layout remains custom.
+    }
+
+    @Test @MainActor func nativeVisibilityTogglePersistsAndRestoresTheDefault() {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:user")
+        store.toggleNative("lagoon.movieGenres")
+        #expect(!store.values.isNativeEnabled("lagoon.movieGenres"))
+        #expect(store.values.isCustomized)
+
+        let restored = HomeSectionPreferencesStore(defaults: defaults)
+        restored.configure(accountID: "server:user")
+        #expect(!restored.values.isNativeEnabled("lagoon.movieGenres"))
+
+        restored.toggleNative("lagoon.movieGenres")
+        #expect(restored.values.isNativeEnabled("lagoon.movieGenres"))
+        #expect(!restored.values.isCustomized)
+    }
 }
 
 @Suite("Home genre discovery")
 struct HomeGenreDiscoveryTests {
+    @Test func navigationRoutesKeepMovieAndShowGenresDistinct() {
+        let movies = ContentNavigationRoute.genre(name: "Action", includeTypes: [.movie])
+        let shows = ContentNavigationRoute.genre(name: "Action", includeTypes: [.series])
+
+        #expect(movies != shows)
+        #expect(Set([movies, shows]).count == 2)
+    }
+
+    @Test func contentRouteArrayPreservesNestedBackOrder() throws {
+        let firstItem = try #require(candidates().first)
+        let secondItem = try #require(candidates().dropFirst().first)
+        var path: [ContentNavigationRoute] = [
+            .genre(name: "Action", includeTypes: [.movie]),
+            .item(firstItem),
+            .item(secondItem),
+        ]
+
+        #expect(path.count == 3)
+        #expect(path.removeLast() == .item(secondItem))
+        #expect(path.removeLast() == .item(firstItem))
+        #expect(path == [.genre(name: "Action", includeTypes: [.movie])])
+    }
+
     private func candidates() throws -> [MediaItem] {
         let data = Data(#"""
         {"Items":[
@@ -233,5 +313,27 @@ struct HomeGenreDiscoveryTests {
 
         #expect(shelf.map(\.name) == ["Action", "Drama"])
         #expect(shelf.allSatisfy { $0.id.hasPrefix("derived-") })
+    }
+
+    @Test func movieAndShowGenreShelvesDoNotMixMediaTypes() throws {
+        let genres = [
+            MediaGenre(id: "action", name: "Action"),
+            MediaGenre(id: "drama", name: "Drama"),
+            MediaGenre(id: "comedy", name: "Comedy"),
+        ]
+
+        let movies = GenreShelfResolver.resolve(
+            catalog: genres,
+            candidates: try candidates(),
+            includeTypes: [.movie]
+        )
+        let shows = GenreShelfResolver.resolve(
+            catalog: genres,
+            candidates: try candidates(),
+            includeTypes: [.series]
+        )
+
+        #expect(movies.map(\.name) == ["Action", "Comedy"])
+        #expect(shows.map(\.name) == ["Drama"])
     }
 }

@@ -21,6 +21,19 @@ struct ItemDetailView: View {
         }
         .task(id: item.id) {
             detail = try? await session.client.item(id: item.id)
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "debug.navigationRegression"),
+               let page = try? await session.client.items(
+                   includeTypes: [.movie],
+                   limit: 10
+               ) {
+                // The public demo's recommendation endpoint is intentionally
+                // sparse. Use different real catalog items so the regression
+                // can always exercise Detail -> Detail -> Back ordering.
+                similar = Array(page.items.filter { $0.id != item.id }.prefix(6))
+                return
+            }
+            #endif
             similar = (try? await session.client.similarItems(itemId: item.id)) ?? []
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)

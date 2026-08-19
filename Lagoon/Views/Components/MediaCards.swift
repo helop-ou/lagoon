@@ -19,7 +19,7 @@ struct PosterCard: View {
         // `.card` scales the poster about a tenth, so a 390pt one grows ~20pt
         // past its resting bottom edge and lands on the title (Jaagop).
         VStack(alignment: .leading, spacing: Metrics.Space.xl) {
-            NavigationLink(value: item) {
+            NavigationLink(value: ContentNavigationRoute.item(item)) {
                 ZStack(alignment: .bottom) {
                     CachedAsyncImage(
                         url: session.client.imageURL(for: item, kind: .primary, maxWidth: Int(Metrics.posterWidth * 1.5)),
@@ -39,6 +39,7 @@ struct PosterCard: View {
             }
             .cardButtonStyle()
             .accessibilityLabel(item.name ?? "Item")
+            .accessibilityIdentifier("media.poster.\(item.id)")
 
             caption
         }
@@ -96,10 +97,12 @@ struct LandscapeCard: View {
                 Button(action: action) {
                     artwork
                 }
+                .accessibilityIdentifier("media.landscape.\(item.id)")
             } else {
-                NavigationLink(value: item) {
+                NavigationLink(value: ContentNavigationRoute.item(item)) {
                     artwork
                 }
+                .accessibilityIdentifier("media.landscape.\(item.id)")
             }
         }
         .cardButtonStyle()

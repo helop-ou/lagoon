@@ -45,6 +45,24 @@ final class SearchViewModel {
             }
         }
     }
+
+    #if DEBUG
+    func loadNavigationRegressionResults(client: JellyfinClient) async {
+        guard results.isEmpty else { return }
+        isSearching = true
+        errorMessage = nil
+        do {
+            let page = try await client.items(includeTypes: [.movie, .series], limit: 60)
+            try Task.checkCancellation()
+            results = page.items
+            hasSearched = true
+        } catch is CancellationError {
+        } catch {
+            errorMessage = "Couldn't load navigation regression content."
+        }
+        isSearching = false
+    }
+    #endif
 }
 
 struct SearchView: View {
@@ -86,7 +104,16 @@ struct SearchView: View {
         .onChange(of: query) { _, newValue in
             viewModel.search(newValue, client: session.client)
         }
+        #if DEBUG
+        .task {
+            if UserDefaults.standard.bool(forKey: "debug.navigationRegression") {
+                await viewModel.loadNavigationRegressionResults(client: session.client)
+            }
+        }
+        #endif
         .animation(.easeInOut(duration: Motion.standard), value: viewModel.results.isEmpty)
+        .accessibilityIdentifier("search.view")
+        .accessibilityValue("\(viewModel.results.count) items")
     }
 
     private var emptyState: some View {

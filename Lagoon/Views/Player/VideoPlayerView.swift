@@ -60,6 +60,15 @@ final class PlaybackController {
     private var missingSubtitleMode: MissingSubtitleMode = .ask
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
+    @ObservationIgnored private let lifecycleID = UUID()
+
+    init() {
+        PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
+    }
+
+    deinit {
+        PlaybackLifecycleDiagnostics.controllerDestroyed(lifecycleID)
+    }
 
     /// A track choice described by what it *is* rather than where it sat.
     ///
@@ -258,6 +267,23 @@ final class PlaybackController {
             orderedSubtitleStreams = orderedSubtitles
 
             configureSystemMediaCallbacks()
+            try Task.checkCancellation()
+            let previousResourcesRetired = await PlaybackLifecycleDiagnostics
+                .waitForMediaResourcesToRetire()
+            if !previousResourcesRetired {
+                let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
+                os_signpost(
+                    .event,
+                    log: PlaybackPerformance.log,
+                    name: "Playback Resource Retirement Timeout",
+                    signpostID: performanceSignpostID,
+                    "demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
+                    lifecycle.activeDemuxLoops,
+                    lifecycle.attachedRendererSets,
+                    lifecycle.footprintMB
+                )
+            }
+            try Task.checkCancellation()
             try audioSession.activate { [weak self] in
                 guard let engine = self?.engine else { return false }
                 return !engine.isPaused
@@ -316,22 +342,49 @@ final class PlaybackController {
             lastKnownPosition = resumeSeconds
             playbackSessionActive = true
 
-            try? await client.reportPlaybackStart(.init(
-                itemId: itemId,
-                mediaSourceId: mediaSourceId,
-                playSessionId: playSessionId,
-                positionTicks: Ticks.ticks(resumeSeconds),
-                playMethod: playMethod.rawValue,
-                canSeek: true
-            ))
+            #if DEBUG
+            // Deterministic UI-test hook for the otherwise tiny interval in
+            // which dismissal can race a suspended startup request.
+            let startupDelay = UserDefaults.standard.double(
+                forKey: "debug.regressionPlaybackStartDelaySeconds"
+            )
+            if startupDelay > 0 {
+                try await Task.sleep(for: .seconds(startupDelay))
+            }
+            #endif
+
+            do {
+                try await client.reportPlaybackStart(.init(
+                    itemId: itemId,
+                    mediaSourceId: mediaSourceId,
+                    playSessionId: playSessionId,
+                    positionTicks: Ticks.ticks(resumeSeconds),
+                    playMethod: playMethod.rawValue,
+                    canSeek: true
+                ))
+            } catch is CancellationError {
+                // A cover dismissed while this request is suspended must not
+                // resume below and recreate progress/HUD/next-up work after
+                // `onDisappear` has already torn the session down.
+                throw CancellationError()
+            } catch {
+                // Jellyfin reporting is advisory; a healthy local stream must
+                // continue when the server declines or times out this call.
+            }
+            try Task.checkCancellation()
+            guard self.engine === engine, playbackSessionActive, !didReportStop else {
+                return
+            }
             startProgressLoop()
             startHUD(source: source, method: method)
             resolveNextUp(after: media, client: client)
         } catch {
-            nowPlaying.stop()
-            audioSession.deactivate()
-            engine = nil
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            // This also claims the exactly-once stop report if cancellation
+            // landed after the playback session became active.
+            _ = beginStop()
+            if !(error is CancellationError) {
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
         }
     }
 
@@ -553,11 +606,18 @@ final class PlaybackController {
         }
     }
 
-    func stop() async {
+    /// Performs every resource-owning part of dismissal synchronously on the
+    /// main actor. The Jellyfin report is returned as an independent task so
+    /// neither UI dismissal nor its network latency retains this controller.
+    @discardableResult
+    func beginStop() -> Task<Void, Never>? {
         progressTask?.cancel()
+        progressTask = nil
         hudTask?.cancel()
+        hudTask = nil
         nextUpTask?.cancel()
-        subtitleSearch.cancel()
+        nextUpTask = nil
+        subtitleSearch.detach()
         let seconds = engine?.timePosition ?? lastKnownPosition
         lastKnownPosition = seconds
 
@@ -571,6 +631,9 @@ final class PlaybackController {
             signpostID: performanceSignpostID
         )
         if let engine {
+            engine.onFinished = nil
+            engine.onError = nil
+            engine.onTrackSelectionChanged = nil
             engine.shutdown()
             self.engine = nil
         }
@@ -583,46 +646,47 @@ final class PlaybackController {
             signpostID: performanceSignpostID
         )
 
-        await reportPlaybackStoppedIfNeeded(at: seconds)
-    }
-
-    private func handleEngineError(_ message: String, engine: SampleBufferPlayerEngine) {
-        let seconds = engine.timePosition
-        lastKnownPosition = seconds
-        engine.shutdown()
-        self.engine = nil
-        nowPlaying.stop()
-        audioSession.deactivate()
-        errorMessage = message
-        // onDisappear may race this task; reportPlaybackStoppedIfNeeded marks
-        // ownership before awaiting, so exactly one path finalizes Jellyfin.
-        Task { [weak self] in
-            await self?.reportPlaybackStoppedIfNeeded(at: seconds)
+        guard let client, playbackSessionActive, !didReportStop else { return nil }
+        didReportStop = true
+        playbackSessionActive = false
+        let itemId = itemId
+        let mediaSourceId = mediaSourceId
+        let playSessionId = playSessionId
+        let signpostID = performanceSignpostID
+        return Task {
+            os_signpost(
+                .begin,
+                log: PlaybackPerformance.log,
+                name: "Playback Stopped Report",
+                signpostID: signpostID
+            )
+            try? await client.reportPlaybackStopped(.init(
+                itemId: itemId,
+                mediaSourceId: mediaSourceId,
+                playSessionId: playSessionId,
+                positionTicks: Ticks.ticks(seconds)
+            ))
+            os_signpost(
+                .end,
+                log: PlaybackPerformance.log,
+                name: "Playback Stopped Report",
+                signpostID: signpostID
+            )
         }
     }
 
-    private func reportPlaybackStoppedIfNeeded(at seconds: Double) async {
-        guard let client, playbackSessionActive, !didReportStop else { return }
-        didReportStop = true
-        playbackSessionActive = false
-        os_signpost(
-            .begin,
-            log: PlaybackPerformance.log,
-            name: "Playback Stopped Report",
-            signpostID: performanceSignpostID
-        )
-        try? await client.reportPlaybackStopped(.init(
-            itemId: itemId,
-            mediaSourceId: mediaSourceId,
-            playSessionId: playSessionId,
-            positionTicks: Ticks.ticks(seconds)
-        ))
-        os_signpost(
-            .end,
-            log: PlaybackPerformance.log,
-            name: "Playback Stopped Report",
-            signpostID: performanceSignpostID
-        )
+    func stop() async {
+        let report = beginStop()
+        await report?.value
+    }
+
+    private func handleEngineError(_ message: String, engine: SampleBufferPlayerEngine) {
+        lastKnownPosition = engine.timePosition
+        let report = beginStop()
+        errorMessage = message
+        // beginStop claims reporting ownership before returning, so a later
+        // onDisappear remains idempotent while this fire-and-forget task runs.
+        _ = report
     }
 
     // Builds the Infuse-style facts line: runtime, year, size, video, audio,
@@ -975,7 +1039,7 @@ struct VideoPlayerView: View {
         .onDisappear {
             applyDisplayMatch(nil)
             pictureInPicture.detach()
-            Task { await controller.stop() }
+            controller.beginStop()
         }
     }
 

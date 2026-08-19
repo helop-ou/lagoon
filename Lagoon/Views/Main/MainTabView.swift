@@ -7,29 +7,34 @@ struct MainTabView: View {
     @State private var playerItem: PlayerItem?
     @State private var deepLinkError: String?
     @State private var deepLinkRetry = 0
+    @State private var lifecycleBenchmarkMedia: MediaItem?
+    @State private var lifecycleReplaysScheduled = 0
+    @State private var homeNavigationPath: [ContentNavigationRoute] = []
+    @State private var libraryNavigationPaths: [String: [ContentNavigationRoute]] = [:]
+    @State private var searchNavigationPath: [ContentNavigationRoute] = []
 
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house.fill") {
-                NavigationStack {
+                NavigationStack(path: $homeNavigationPath) {
                     HomeView()
-                        .navigationDestination(for: MediaItem.self) { ItemDetailRouter(item: $0) }
+                        .contentNavigationDestinations()
                 }
             }
 
             ForEach(libraries) { library in
                 Tab(library.name ?? "Library", systemImage: icon(for: library)) {
-                    NavigationStack {
+                    NavigationStack(path: libraryNavigationPath(for: library.id)) {
                         LibraryView(library: library)
-                            .navigationDestination(for: MediaItem.self) { ItemDetailRouter(item: $0) }
+                            .contentNavigationDestinations()
                     }
                 }
             }
 
             Tab("Search", systemImage: "magnifyingglass", role: .search) {
-                NavigationStack {
+                NavigationStack(path: $searchNavigationPath) {
                     SearchView()
-                        .navigationDestination(for: MediaItem.self) { ItemDetailRouter(item: $0) }
+                        .contentNavigationDestinations()
                 }
             }
 
@@ -42,6 +47,15 @@ struct MainTabView: View {
         .task {
             await loadLibraries()
         }
+        .onChange(of: session.activeAccount?.id) { oldAccountID, newAccountID in
+            guard oldAccountID != newAccountID else { return }
+            // Content values belong to the account that fetched them. This
+            // also dismisses an old user's detail if accounts are switched
+            // without rebuilding MainTabView.
+            homeNavigationPath.removeAll()
+            libraryNavigationPaths.removeAll()
+            searchNavigationPath.removeAll()
+        }
         // Headless hardware harness: resolve a named library item through
         // the app's existing signed-in client, then present the same player
         // path a user selection would. There is intentionally no Settings
@@ -52,10 +66,17 @@ struct MainTabView: View {
         // Presented from the TabView rather than a screen, so a Top Shelf
         // selection resumes playback whichever tab happens to be showing.
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
-        .fullScreenCover(item: $playerItem) { item in
+        .fullScreenCover(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded) { item in
             VideoPlayerView(playerItem: item)
                 .preferredColorScheme(.dark)
         }
+        #if DEBUG
+        .overlay(alignment: .topLeading) {
+            if UserDefaults.standard.bool(forKey: "debug.lifecycleReplayBenchmark") {
+                PlaybackLifecycleRegressionProbe()
+            }
+        }
+        #endif
         // Runs once the session exists: on a cold launch the request is
         // made before there is a client to fetch with, so it waits here
         // instead of being dropped.
@@ -134,6 +155,62 @@ struct MainTabView: View {
 
         let requestedSeries = UserDefaults.standard.string(forKey: "debug.regressionSeriesName")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if regressionRun,
+           UserDefaults.standard.bool(forKey: "debug.regressionFindVC1InSeries"),
+           let requestedSeries,
+           !requestedSeries.isEmpty {
+            guard let seriesPage = try? await session.client.items(
+                includeTypes: [.series],
+                searchTerm: requestedSeries,
+                limit: 20
+            ),
+            let series = seriesPage.items.first(where: {
+                $0.name?.compare(
+                    requestedSeries,
+                    options: [.caseInsensitive, .diacriticInsensitive]
+                ) == .orderedSame
+            }),
+            let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
+                print("RegressionResolve failed VC-1 series=\"\(requestedSeries)\"")
+                return
+            }
+            for episode in episodes {
+                guard let info = try? await session.client.playbackInfo(itemId: episode.id),
+                      let source = info.mediaSources.first,
+                      (source.mediaStreams ?? []).contains(where: {
+                          $0.type == "Video" && ["vc1", "vc-1"].contains($0.codec?.lowercased() ?? "")
+                      }) else { continue }
+                print("RegressionResolve VC-1 series=\"\(requestedSeries)\" title=\"\(episode.name ?? "?")\" id=\(episode.id)")
+                lifecycleBenchmarkMedia = episode
+                playerItem = PlayerItem(media: episode, startFromBeginning: true)
+                return
+            }
+            print("RegressionResolve no VC-1 episode series=\"\(requestedSeries)\"")
+            return
+        }
+        if regressionRun,
+           UserDefaults.standard.bool(forKey: "debug.regressionFindPlayable") {
+            guard let page = try? await session.client.items(
+                includeTypes: [.movie, .episode],
+                limit: 100
+            ) else {
+                print("RegressionResolve failed playable library scan")
+                return
+            }
+            for item in page.items {
+                guard let info = try? await session.client.playbackInfo(itemId: item.id),
+                      let source = info.mediaSources.first,
+                      (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
+                    continue
+                }
+                print("RegressionResolve playable title=\"\(item.name ?? "?")\" id=\(item.id)")
+                lifecycleBenchmarkMedia = item
+                playerItem = PlayerItem(media: item, startFromBeginning: true)
+                return
+            }
+            print("RegressionResolve no playable item")
+            return
+        }
         if regressionRun,
            UserDefaults.standard.bool(forKey: "debug.regressionFindMultiAudioH264") {
             guard let page = try? await session.client.items(
@@ -223,21 +300,74 @@ struct MainTabView: View {
         playerItem = PlayerItem(media: item, startFromBeginning: regressionRun)
     }
 
+    private func scheduleLifecycleReplayIfNeeded() {
+        guard UserDefaults.standard.bool(forKey: "debug.lifecycleReplayBenchmark"),
+              let lifecycleBenchmarkMedia else { return }
+        let configuredCount = UserDefaults.standard.integer(forKey: "debug.lifecycleReplayCount")
+        let replayCount = configuredCount > 0 ? configuredCount : 1
+        guard lifecycleReplaysScheduled < replayCount else { return }
+        lifecycleReplaysScheduled += 1
+        let replayNumber = lifecycleReplaysScheduled + 1
+        let configuredDelay = UserDefaults.standard.double(forKey: "debug.lifecycleReplayDelaySeconds")
+        let delay = configuredDelay > 0 ? configuredDelay : 12
+        Task {
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, playerItem == nil else { return }
+            let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
+            print("LifecycleReplay beforeSession=\(replayNumber) \(lifecycle.regressionValue)")
+            playerItem = PlayerItem(media: lifecycleBenchmarkMedia, startFromBeginning: true)
+        }
+    }
+
     private func icon(for library: LibraryTab) -> String {
         library.collectionType == "tvshows" ? "tv" : "film"
     }
+
+    private func libraryNavigationPath(
+        for libraryID: String
+    ) -> Binding<[ContentNavigationRoute]> {
+        Binding(
+            get: { libraryNavigationPaths[libraryID] ?? [] },
+            set: { libraryNavigationPaths[libraryID] = $0 }
+        )
+    }
 }
+
+#if DEBUG
+/// Non-focusable XCTest probe shown only for the launch-gated lifecycle run.
+/// A periodic view is used because teardown completes off-main and therefore
+/// does not otherwise invalidate SwiftUI when a counter reaches zero.
+private struct PlaybackLifecycleRegressionProbe: View {
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.2)) { _ in
+            let snapshot = PlaybackLifecycleDiagnostics.snapshot()
+            Text("Playback lifecycle")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityElement(children: .ignore)
+                .accessibilityIdentifier("app.lifecycle.state")
+                .accessibilityValue(snapshot.regressionValue)
+                .allowsHitTesting(false)
+        }
+    }
+}
+#endif
 
 /// Routes an item to the right detail screen off its type.
 struct ItemDetailRouter: View {
     let item: MediaItem
 
     var body: some View {
-        switch item.type {
-        case .series:
-            SeriesDetailView(item: item)
-        default:
-            ItemDetailView(item: item)
+        Group {
+            switch item.type {
+            case .series:
+                SeriesDetailView(item: item)
+            default:
+                ItemDetailView(item: item)
+            }
         }
+        .accessibilityIdentifier("detail.item.\(item.id)")
+        .accessibilityValue(item.name ?? "Item")
     }
 }

@@ -498,7 +498,7 @@ nonisolated enum SampleBufferFactory {
 
     // MARK: - HDR / Dolby Vision tagging (HEL-48 M3)
 
-    private static func colorPrimaries(_ primaries: AVColorPrimaries) -> CFString? {
+    static func colorPrimaries(_ primaries: AVColorPrimaries) -> CFString? {
         switch primaries {
         case AVCOL_PRI_BT709: kCMFormatDescriptionColorPrimaries_ITU_R_709_2
         case AVCOL_PRI_BT470BG: kCMFormatDescriptionColorPrimaries_EBU_3213
@@ -510,7 +510,7 @@ nonisolated enum SampleBufferFactory {
         }
     }
 
-    private static func transferFunction(_ transfer: AVColorTransferCharacteristic) -> CFString? {
+    static func transferFunction(_ transfer: AVColorTransferCharacteristic) -> CFString? {
         switch transfer {
         case AVCOL_TRC_BT709, AVCOL_TRC_SMPTE170M: kCMFormatDescriptionTransferFunction_ITU_R_709_2
         case AVCOL_TRC_BT2020_10, AVCOL_TRC_BT2020_12: kCMFormatDescriptionTransferFunction_ITU_R_2020
@@ -523,7 +523,7 @@ nonisolated enum SampleBufferFactory {
         }
     }
 
-    private static func yCbCrMatrix(_ space: AVColorSpace) -> CFString? {
+    static func yCbCrMatrix(_ space: AVColorSpace) -> CFString? {
         switch space {
         case AVCOL_SPC_BT709: kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2
         case AVCOL_SPC_BT470BG, AVCOL_SPC_SMPTE170M: kCMFormatDescriptionYCbCrMatrix_ITU_R_601_4
@@ -533,7 +533,7 @@ nonisolated enum SampleBufferFactory {
         }
     }
 
-    private static func chromaLocation(_ location: AVChromaLocation) -> CFString? {
+    static func chromaLocation(_ location: AVChromaLocation) -> CFString? {
         switch location {
         case AVCHROMA_LOC_LEFT: kCMFormatDescriptionChromaLocation_Left
         case AVCHROMA_LOC_CENTER: kCMFormatDescriptionChromaLocation_Center

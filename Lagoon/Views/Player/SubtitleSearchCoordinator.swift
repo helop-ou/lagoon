@@ -148,6 +148,15 @@ final class SubtitleSearchCoordinator {
     @ObservationIgnored private var downloadTask: Task<Void, Never>?
     @ObservationIgnored private var searchGeneration = 0
     @ObservationIgnored private var downloadGeneration = 0
+    @ObservationIgnored private let downloadedSubtitlePoller: DownloadedSubtitlePoller
+
+    init() {
+        downloadedSubtitlePoller = DownloadedSubtitlePoller()
+    }
+
+    init(downloadedSubtitlePoller: DownloadedSubtitlePoller) {
+        self.downloadedSubtitlePoller = downloadedSubtitlePoller
+    }
 
     var selectedLanguageTitle: String {
         selectedLanguage.map(SubtitlePreferencesStore.displayName)
@@ -243,7 +252,7 @@ final class SubtitleSearchCoordinator {
                 var attachedStream: MediaStream?
                 let track: ExternalSubtitleTrack
                 do {
-                    let stream = try await DownloadedSubtitlePoller().waitForStream(
+                    let stream = try await downloadedSubtitlePoller.waitForStream(
                         mediaSourceID: mediaSourceID,
                         existingSignatures: existingSignatures,
                         requestedLanguage: requestedLanguage
@@ -314,6 +323,21 @@ final class SubtitleSearchCoordinator {
         downloadTask = nil
         searchGeneration &+= 1
         downloadGeneration &+= 1
+    }
+
+    /// Playback dismissal severs the coordinator's session-sized references
+    /// immediately. Cancellation alone stops the work but otherwise leaves
+    /// the client and completion closure alive until the controller dies.
+    func detach() {
+        cancel()
+        client = nil
+        engine = nil
+        onTrackAdded = nil
+        itemID = ""
+        mediaSourceID = ""
+        existingSignatures.removeAll()
+        results.removeAll()
+        phase = .idle
     }
 
     static func makeLanguageChoices(preferredLanguages: [String]) -> [String] {

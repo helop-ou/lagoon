@@ -1,4 +1,5 @@
 import MediaAccessibility
+import OSLog
 import SwiftUI
 
 /// Full-screen custom player styled after the Infuse reference shots on
@@ -39,28 +40,6 @@ struct CustomPlayerView<Surface: View>: View {
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     @ViewBuilder let surface: () -> Surface
 
-    private enum PanelTab: CaseIterable, Hashable {
-        case info
-        case video
-        case audio
-        case subtitles
-
-        var title: String {
-            switch self {
-            case .info: String(localized: "Info")
-            case .video: String(localized: "Video")
-            case .audio: String(localized: "Audio")
-            case .subtitles: String(localized: "Subtitles")
-            }
-        }
-    }
-
-    private enum PlayerFocus: Hashable {
-        case surface
-        case tab(PanelTab)
-        case track(String)
-    }
-
     private struct SeekFeedback: Equatable {
         let forward: Bool
         let token: Int
@@ -69,7 +48,7 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var controlsVisible = true
     @State private var interactionToken = 0
     @State private var panelOpen = false
-    @State private var selectedTab: PanelTab = .info
+    @State private var selectedTab: PlayerPanelTab = .info
     @State private var seekFeedback: SeekFeedback?
     @State private var showsBuffering = false
     /// The virtual playhead's position while scrubbing; nil when the
@@ -101,17 +80,12 @@ struct CustomPlayerView<Surface: View>: View {
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
-    @FocusState private var playerFocus: PlayerFocus?
+    @FocusState private var playerFocus: PlayerControlFocus?
+    @State private var panelRevealSignpostActive = false
+    private let panelSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     /// Slide the panel in on, and back out with, the swipe that summons it.
-    private var panelMotion: Animation { .spring(duration: Motion.standard, bounce: 0.1) }
-    /// Room a focused track row needs before its ScrollView clips it.
-    private var rowFocusInset: CGFloat { 20 }
-    /// A track row at rest; the card sizes itself from this plus the gap.
-    private var trackRowHeight: CGFloat { 62 }
-    /// Taller than before, because the roomier gaps fit fewer rows on screen
-    /// and the panel has the vertical space to spare.
-    private var trackListMaxHeight: CGFloat { 460 }
+    private var panelMotion: Animation { .spring(duration: Motion.fast, bounce: 0.05) }
     /// Far enough to carry the tabs and card clear of the top edge.
     private var panelSlideDistance: CGFloat { 720 }
 
@@ -226,7 +200,10 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
         .onChange(of: playerFocus) { _, focus in
             if case .tab(let tab) = focus {
-                withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
+                // The native focus lozenge already animates. Animating the
+                // selected state as well made SwiftUI interpolate the entire
+                // material card and long track hierarchy on every arrow press.
+                selectedTab = tab
             }
         }
         .task(id: interactionToken) {
@@ -323,17 +300,8 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private func seekIndicator(_ feedback: SeekFeedback) -> some View {
-        HStack {
-            if feedback.forward { Spacer() }
-            Image(systemName: feedback.forward ? "goforward.10" : "gobackward.10")
-                .font(Typography.glyph.weight(.semibold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.6), radius: 6)
-            if !feedback.forward { Spacer() }
-        }
-        .padding(.horizontal, Metrics.screenGutter * 2)
-        .transition(.opacity.combined(with: .scale(scale: 0.85)))
-        .allowsHitTesting(false)
+        PlayerSeekIndicator(forward: feedback.forward)
+            .transition(.opacity.combined(with: .scale(scale: 0.85)))
     }
 
     // MARK: - Surface & remote commands
@@ -369,10 +337,10 @@ struct CustomPlayerView<Surface: View>: View {
                     // that first command: move the selection and focus to
                     // the tab the command was trying to reach.
                     if direction == .left || direction == .right,
-                       let index = PanelTab.allCases.firstIndex(of: selectedTab) {
+                       let index = PlayerPanelTab.allCases.firstIndex(of: selectedTab) {
                         let delta = direction == .right ? 1 : -1
-                        let targetIndex = min(max(index + delta, 0), PanelTab.allCases.count - 1)
-                        let target = PanelTab.allCases[targetIndex]
+                        let targetIndex = min(max(index + delta, 0), PlayerPanelTab.allCases.count - 1)
+                        let target = PlayerPanelTab.allCases[targetIndex]
                         selectedTab = target
                         playerFocus = .tab(target)
                     } else {
@@ -589,34 +557,11 @@ struct CustomPlayerView<Surface: View>: View {
     private var skipOverlay: some View {
         Group {
             if let segment = activeSegment, skipMode != .instant {
-                HStack(spacing: Metrics.Space.s) {
-                    Image(systemName: "forward.end.alt.fill")
-                        .font(.caption.weight(.bold))
-                    Text(segment.kind.skipTitle)
-                        .font(.callout.weight(.semibold))
-                }
-                .accessibilityIdentifier("player.skip")
-                .foregroundStyle(.black)
-                .frame(width: SkipMetrics.width, height: SkipMetrics.height)
-                .background(alignment: .leading) {
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.55))
-                        // The countdown made visible: it runs the width of
-                        // the pill, so "how long have I got" is readable at
-                        // a glance rather than guessed.
-                        if skipMode == .autoDelay {
-                            Capsule()
-                                .fill(.white)
-                                .frame(width: SkipMetrics.width * autoSkipFill)
-                                .animation(
-                                    .linear(duration: SkipMode.autoDelaySeconds),
-                                    value: autoSkipFill
-                                )
-                        }
-                    }
-                }
-                .clipShape(Capsule())
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                PlayerSkipPrompt(
+                    title: segment.kind.skipTitle,
+                    showsCountdown: skipMode == .autoDelay,
+                    fill: autoSkipFill
+                )
                 .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.trailing, Metrics.screenGutter)
@@ -688,73 +633,12 @@ struct CustomPlayerView<Surface: View>: View {
     private var nextUpOverlay: some View {
         Group {
             if showsNextUp, let nextUp {
-                VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    Text("Up Next")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: Metrics.Space.m) {
-                        CachedAsyncImage(
-                            url: nextUp.imageURL,
-                            maxPixelSize: Int(NextUpMetrics.thumbnailWidth * 2)
-                        ) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            Color.white.opacity(0.08)
-                        }
-                        .frame(
-                            width: NextUpMetrics.thumbnailWidth,
-                            height: (NextUpMetrics.thumbnailWidth * 9 / 16).rounded()
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-
-                        VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                            if let subtitle = nextUp.subtitle {
-                                Text(subtitle)
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            Text(nextUp.title)
-                                .font(.callout.weight(.semibold))
-                                .lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
-                    }
-
-                    // The countdown made visible, same grammar as the skip
-                    // pill: it runs the width of the card, so "how long have
-                    // I got" is read rather than guessed. Only `autoDelay`
-                    // has a deadline to draw.
-                    if autoplayMode == .autoDelay {
-                        Capsule()
-                            .fill(.white.opacity(0.25))
-                            .frame(height: NextUpMetrics.barHeight)
-                            .overlay(alignment: .leading) {
-                                GeometryReader { proxy in
-                                    Capsule()
-                                        .fill(.white)
-                                        .frame(width: proxy.size.width * nextUpFill)
-                                        .animation(
-                                            .linear(duration: AutoplayMode.countdownSeconds),
-                                            value: nextUpFill
-                                        )
-                                }
-                            }
-                            .frame(height: NextUpMetrics.barHeight)
-                    }
-
-                    Text(hint)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(Metrics.Space.l)
-                .frame(width: NextUpMetrics.width, alignment: .leading)
-                // Material rather than a black wash, and the same one the
-                // track panel uses: credits are white text on black, and at
-                // any opacity a flat scrim lets them through the card as
-                // readable letters. Blurring is what actually stops it.
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                PlayerNextUpCard(
+                    episode: nextUp,
+                    showsCountdown: autoplayMode == .autoDelay,
+                    fill: nextUpFill,
+                    hint: hint
+                )
                 .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.trailing, Metrics.screenGutter)
@@ -808,19 +692,7 @@ struct CustomPlayerView<Surface: View>: View {
                 if let text = engine.currentSubtitleText {
                     VStack {
                         Spacer()
-                        Text(text)
-                            .font(subtitleStyle.font)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(subtitleStyle.foregroundColor)
-                            .subtitleEdge(subtitleStyle.edgeStyle, color: subtitleStyle.edgeColor)
-                            .padding(.horizontal, Metrics.Space.l)
-                            .padding(.vertical, Metrics.Space.s)
-                            .background(
-                                subtitleStyle.backgroundColor.opacity(subtitleStyle.backgroundOpacity),
-                                in: RoundedRectangle(cornerRadius: 10)
-                            )
-                            .padding(.bottom, subtitleStyle.bottomPadding)
-                            .accessibilityIdentifier("player.subtitle.text")
+                        PlayerSubtitleText(text: text, style: subtitleStyle)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -847,6 +719,15 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private func openPanel() {
+        if !panelRevealSignpostActive {
+            panelRevealSignpostActive = true
+            os_signpost(
+                .begin,
+                log: PlaybackPerformance.log,
+                name: "Player Panel Reveal",
+                signpostID: panelSignpostID
+            )
+        }
         panelOpen = true
         onPanelToggle?(true)
         // defaultFocus is only honored when a fresh scene appears — for a
@@ -858,13 +739,18 @@ struct CustomPlayerView<Surface: View>: View {
         // `panelOpen` and removed the panel's disabled focus environment.
         playerFocus = .surface
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(450))
-            guard panelOpen else { return }
+            try? await Task.sleep(for: .milliseconds(225))
+            guard panelOpen else {
+                finishPanelRevealSignpost()
+                return
+            }
             playerFocus = .tab(selectedTab)
+            finishPanelRevealSignpost()
         }
     }
 
     private func closePanel() {
+        finishPanelRevealSignpost()
         panelOpen = false
         onPanelToggle?(false)
         pokeControls()
@@ -873,6 +759,17 @@ struct CustomPlayerView<Surface: View>: View {
             guard !panelOpen else { return }
             playerFocus = .surface
         }
+    }
+
+    private func finishPanelRevealSignpost() {
+        guard panelRevealSignpostActive else { return }
+        os_signpost(
+            .end,
+            log: PlaybackPerformance.log,
+            name: "Player Panel Reveal",
+            signpostID: panelSignpostID
+        )
+        panelRevealSignpostActive = false
     }
 
     // MARK: - Transport
@@ -1174,370 +1071,19 @@ struct CustomPlayerView<Surface: View>: View {
 
     // MARK: - Panel
 
-    private static var subtitleOffID: String { "subtitle-off" }
-
     private var panel: some View {
-        VStack(spacing: Metrics.Space.xl) {
-            tabBar
-
-            tabCard
-                .padding(.horizontal, Metrics.screenGutter)
-
-            Spacer()
-        }
-        .padding(.top, Metrics.railTopPadding)
-        .defaultFocus($playerFocus, .tab(selectedTab))
-        #if os(iOS)
-        .background(
-            // Dim + tap-out on iOS; tvOS closes via Menu.
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture { closePanel() }
+        PlayerControlPanelHost(
+            engine: engine,
+            selectedTab: $selectedTab,
+            focus: $playerFocus,
+            info: info,
+            subtitleSearch: subtitleSearch,
+            isPictureInPicturePossible: isPictureInPicturePossible,
+            isPictureInPictureActive: isPictureInPictureActive,
+            onTogglePictureInPicture: onTogglePictureInPicture,
+            onDismiss: closePanel
         )
-        #endif
-    }
-
-    // Native buttons only: the system's focused lozenge IS the Infuse
-    // white-pill look — never draw custom focus chrome around it. The
-    // active tab keeps bold text once focus moves down into the card.
-    private var tabBar: some View {
-        HStack(spacing: Metrics.Space.m) {
-            ForEach(PanelTab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.easeInOut(duration: Motion.fast)) { selectedTab = tab }
-                } label: {
-                    // Always bold (Jaagop, 2026-08-17). Selection follows
-                    // focus here, so the lozenge already says which tab is
-                    // active — a weight swap on top of it just made the
-                    // unfocused tabs look faded.
-                    Text(tab.title)
-                        .fontWeight(.bold)
-                }
-                .focused($playerFocus, equals: .tab(tab))
-                .accessibilityIdentifier("player.tab.\(String(describing: tab))")
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var tabCard: some View {
-        Group {
-            switch selectedTab {
-            case .info: infoCard
-            case .video: videoCard
-            case .audio: audioCard
-            case .subtitles: subtitleCard
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Metrics.Space.xl)
-        // No foreground style here: every track row and the audio-delay
-        // steppers are native buttons, and the focused lozenge sets its own
-        // label color. Forcing white made their text vanish exactly when
-        // focused (HEL-50). The material card carries the contrast instead.
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-    }
-
-    private var infoCard: some View {
-        HStack(alignment: .top, spacing: Metrics.Space.xl) {
-            CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
-                image
-                    .resizable()
-                    .aspectRatio(2 / 3, contentMode: .fill)
-            } placeholder: {
-                Color.white.opacity(0.1)
-            }
-            .frame(width: 130, height: 195)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-
-            VStack(alignment: .leading, spacing: Metrics.Space.s) {
-                Text(combinedTitle)
-                    .font(.headline)
-                if let overview = info.overview {
-                    Text(overview)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                }
-                if !info.facts.isEmpty {
-                    Text(info.facts.joined(separator: "    "))
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-
-                if let onTogglePictureInPicture {
-                    Button(action: onTogglePictureInPicture) {
-                        Label(
-                            isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
-                            systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
-                    .focused($playerFocus, equals: .track("picture-in-picture"))
-                    .accessibilityIdentifier("player.pictureInPicture")
-                    .padding(.top, Metrics.Space.s)
-                }
-            }
-            Spacer(minLength: 0)
-            #if os(iOS)
-            AirPlayRoutePicker()
-                .frame(width: 44, height: 44)
-                .accessibilityLabel("AirPlay")
-            #endif
-        }
-    }
-
-    private var combinedTitle: String {
-        if let subtitle = info.subtitle {
-            return "\(info.title) – \(subtitle)"
-        }
-        return info.title
-    }
-
-    // Tracks column plus the Infuse-style OPTIONS column (audio delay,
-    // HEL-48 M6).
-    private var audioCard: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            trackCard(rows: engine.audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
-                if let track = engine.audioTracks.first(where: { $0.id == rowID }) {
-                    engine.selectAudioTrack(id: track.engineID)
-                }
-            }
-            VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                cardHeader("Options")
-                HStack(spacing: Metrics.Space.m) {
-                    Text("Audio Delay")
-                        .font(.callout)
-                    Spacer()
-                    Button {
-                        engine.setAudioDelay(engine.audioDelay - 0.1)
-                    } label: {
-                        Image(systemName: "minus")
-                    }
-                    Text(String(format: "%+.1f s", engine.audioDelay))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(engine.audioDelay == 0 ? .secondary : .primary)
-                    Button {
-                        engine.setAudioDelay(engine.audioDelay + 0.1)
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-        }
-    }
-
-    private var videoCard: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            cardHeader("Track")
-            HStack(spacing: Metrics.Space.s) {
-                Image(systemName: "checkmark")
-                    .font(.caption.bold())
-                Text(info.videoSummary ?? String(localized: "Unknown video track"))
-                    .font(.callout)
-            }
-        }
-    }
-
-    private var subtitleCard: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            trackCard(
-                rows: [(Self.subtitleOffID, String(localized: "Off"), !engine.subtitleTracks.contains(where: \.isSelected))]
-                    + engine.subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
-            ) { rowID in
-                if rowID == Self.subtitleOffID {
-                    engine.selectSubtitleTrack(id: nil)
-                } else if let track = engine.subtitleTracks.first(where: { $0.id == rowID }) {
-                    engine.selectSubtitleTrack(id: track.engineID)
-                }
-            }
-
-            if let subtitleSearch {
-                Divider()
-                cardHeader("Find Subtitles")
-                HStack(spacing: Metrics.Space.m) {
-                    Menu {
-                        Button("Preferred Languages") {
-                            subtitleSearch.selectLanguage(nil)
-                        }
-                        ForEach(subtitleSearch.languageChoices, id: \.self) { language in
-                            Button(SubtitlePreferencesStore.displayName(for: language)) {
-                                subtitleSearch.selectLanguage(language)
-                            }
-                        }
-                    } label: {
-                        Label(subtitleSearch.selectedLanguageTitle, systemImage: "globe")
-                            .lineLimit(1)
-                    }
-                    .disabled(subtitleSearch.phase.isBusy)
-                    .focused($playerFocus, equals: .track("subtitle-search-language"))
-                    .accessibilityIdentifier("player.subtitleSearch.language")
-
-                    Button {
-                        subtitleSearch.startSearch()
-                    } label: {
-                        Label("Search subtitles…", systemImage: "magnifyingglass")
-                    }
-                    .disabled(subtitleSearch.phase.isBusy)
-                    .focused($playerFocus, equals: .track("subtitle-search"))
-                    .accessibilityIdentifier("player.subtitleSearch")
-                }
-
-                subtitleSearchStatus(subtitleSearch)
-
-                if !subtitleSearch.results.isEmpty {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
-                            ForEach(subtitleSearch.results) { result in
-                                Button {
-                                    subtitleSearch.startDownload(result)
-                                } label: {
-                                    HStack(spacing: Metrics.Space.m) {
-                                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                                            Text(result.name ?? String(localized: "Subtitle"))
-                                                .lineLimit(1)
-                                            Text(subtitleResultDetails(result))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                        Spacer(minLength: 0)
-                                        if subtitleSearch.phase == .downloading(result.id) {
-                                            ProgressView()
-                                        } else {
-                                            Image(systemName: "arrow.down.circle")
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .disabled(subtitleSearch.phase.isBusy)
-                                .focused($playerFocus, equals: .track("subtitle-result-\(result.id)"))
-                                .accessibilityIdentifier("player.subtitleResult.\(result.id)")
-                            }
-                        }
-                        .padding(.horizontal, rowFocusInset)
-                        .padding(.vertical, rowFocusInset)
-                    }
-                    .padding(.horizontal, -rowFocusInset)
-                    .padding(.vertical, -rowFocusInset)
-                    .frame(maxHeight: 280)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func subtitleSearchStatus(_ search: SubtitleSearchCoordinator) -> some View {
-        switch search.phase {
-        case .idle:
-            EmptyView()
-        case .searching:
-            HStack {
-                ProgressView()
-                Text("Searching configured providers…")
-                    .foregroundStyle(.secondary)
-            }
-        case .noProvider:
-            Label("No subtitle provider is available on this server.", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.secondary)
-        case .noResults:
-            Text("No matching subtitles were found.")
-                .foregroundStyle(.secondary)
-        case .failed(let message):
-            Label("Search failed: \(message)", systemImage: "wifi.exclamationmark")
-                .foregroundStyle(.secondary)
-        case .downloading:
-            EmptyView()
-        case .downloadFailed(let message):
-            Label("Download failed: \(message)", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.secondary)
-        case .downloaded:
-            Label("Downloaded and selected", systemImage: "checkmark.circle")
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func subtitleTrackName(_ track: PlayerTrack) -> String {
-        var labels = [track.displayName]
-        if track.source == .downloaded {
-            labels.append(String(localized: "Downloaded"))
-        } else if track.source == .external {
-            labels.append(String(localized: "External"))
-        }
-        if track.isForced { labels.append(String(localized: "Forced")) }
-        if track.isHearingImpaired { labels.append(String(localized: "SDH")) }
-        return labels.joined(separator: " · ")
-    }
-
-    private func subtitleResultDetails(_ result: RemoteSubtitleInfo) -> String {
-        var details: [String] = []
-        if let language = result.threeLetterISOLanguageName {
-            details.append(SubtitlePreferencesStore.displayName(for: language))
-        }
-        if let provider = result.providerName { details.append(provider) }
-        if let format = result.format { details.append(format.uppercased()) }
-        if result.isForced == true { details.append(String(localized: "Forced")) }
-        if result.hearingImpaired == true { details.append(String(localized: "SDH")) }
-        if let rating = result.communityRating { details.append(String(format: "★ %.1f", rating)) }
-        if let downloads = result.downloadCount { details.append("↓ \(downloads)") }
-        return details.joined(separator: " · ")
-    }
-
-    private func trackCard(
-        rows: [(id: String, name: String, selected: Bool)],
-        onSelect: @escaping (String) -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            cardHeader("Tracks")
-            // The card hugs short lists; only long ones scroll.
-            // Same clipping rule as every other focusable scroller: the
-            // focused row grows past its resting frame, and a ScrollView
-            // clips at its own edges, so the breathing room has to live
-            // inside the scroll content and be given back outside it.
-            ScrollView {
-                // Rows sat 2pt apart, which is fine at rest and wrong the
-                // moment one is focused: the lozenge is bigger than the row
-                // it grew from, so neighbours collided in a long list
-                // (Jaagop). The gap has to clear the lift, like the poster
-                // captions and the season chips.
-                VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    ForEach(rows, id: \.id) { row in
-                        Button {
-                            onSelect(row.id)
-                        } label: {
-                            HStack(spacing: Metrics.Space.s) {
-                                Image(systemName: "checkmark")
-                                    .font(.caption.bold())
-                                    .opacity(row.selected ? 1 : 0)
-                                Text(row.name)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .focused($playerFocus, equals: .track(row.id))
-                        .accessibilityIdentifier("player.track.\(row.id)")
-                    }
-                }
-                .padding(.horizontal, rowFocusInset)
-                .padding(.vertical, rowFocusInset)
-            }
-            .padding(.horizontal, -rowFocusInset)
-            .padding(.vertical, -rowFocusInset)
-            // Hug a short list, scroll a long one. The per-row estimate has
-            // to include the gap or the card under-sizes itself and a list
-            // that would have fit ends up scrolling.
-            .frame(maxHeight: min(CGFloat(rows.count) * (trackRowHeight + Metrics.Space.m), trackListMaxHeight))
-        }
-    }
-
-    private func cardHeader(_ text: LocalizedStringKey) -> some View {
-        Text(text)
-            .textCase(.uppercase)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.leading, Metrics.Space.m)
+        .equatable()
     }
 
     /// A one-pixel, launch-gated accessibility probe for the physical-device
@@ -1555,12 +1101,21 @@ struct CustomPlayerView<Surface: View>: View {
         case .track(let id): "track-\(id)"
         case nil: "none"
         }
+        let memory = MemorySnapshot.current()
+        let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
         return [
             "ready=\(engine.duration > 0 ? 1 : 0)",
             String(format: "time=%.1f", engine.timePosition),
             String(format: "duration=%.1f", engine.duration),
             "paused=\(engine.isPaused ? 1 : 0)",
             "buffering=\(engine.isBuffering ? 1 : 0)",
+            "stalls=\(engine.stallCount)",
+            String(format: "memoryMB=%.1f", memory.footprintMB),
+            "engines=\(lifecycle.liveEngines)",
+            "controllers=\(lifecycle.liveControllers)",
+            "demux=\(lifecycle.activeDemuxLoops)",
+            "renderers=\(lifecycle.attachedRendererSets)",
+            "unclean=\(lifecycle.uncleanEngineDestructions)",
             "scrubbing=\(isScrubbing ? 1 : 0)",
             String(format: "lastScrub=%.1f", lastCommittedScrubTarget),
             "panel=\(panelOpen ? 1 : 0)",
@@ -1595,6 +1150,156 @@ struct CustomPlayerView<Surface: View>: View {
             return String(format: "%d:%02d:%02d", hours, minutes, secs)
         }
         return String(format: "%d:%02d", minutes, secs)
+    }
+}
+
+/// Shared player chrome rendered by both live playback and the Debug-only
+/// component gallery. Keeping one implementation means gallery approval is
+/// approval of the view that actually ships.
+struct PlayerSkipPrompt: View {
+    let title: String
+    let showsCountdown: Bool
+    let fill: Double
+    var accessibilityIdentifier = "player.skip"
+
+    var body: some View {
+        HStack(spacing: Metrics.Space.s) {
+            Image(systemName: "forward.end.alt.fill")
+                .font(.caption.weight(.bold))
+            Text(title)
+                .font(.callout.weight(.semibold))
+        }
+        .accessibilityIdentifier(accessibilityIdentifier)
+        .foregroundStyle(.black)
+        .frame(width: SkipMetrics.width, height: SkipMetrics.height)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                Capsule().fill(.white.opacity(0.55))
+                if showsCountdown {
+                    Capsule()
+                        .fill(.white)
+                        .frame(width: SkipMetrics.width * min(max(fill, 0), 1))
+                        .animation(
+                            .linear(duration: SkipMode.autoDelaySeconds),
+                            value: fill
+                        )
+                }
+            }
+        }
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+    }
+}
+
+struct PlayerNextUpCard: View {
+    let episode: NextUpEpisode
+    let showsCountdown: Bool
+    let fill: Double
+    let hint: LocalizedStringKey
+    var accessibilityIdentifier = "player.nextUp"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+            Text("Up Next")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: Metrics.Space.m) {
+                CachedAsyncImage(
+                    url: episode.imageURL,
+                    maxPixelSize: Int(NextUpMetrics.thumbnailWidth * 2)
+                ) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Color.white.opacity(0.08)
+                }
+                .frame(
+                    width: NextUpMetrics.thumbnailWidth,
+                    height: (NextUpMetrics.thumbnailWidth * 9 / 16).rounded()
+                )
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+
+                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                    if let subtitle = episode.subtitle {
+                        Text(subtitle)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(episode.title)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+
+            if showsCountdown {
+                Capsule()
+                    .fill(.white.opacity(0.25))
+                    .frame(height: NextUpMetrics.barHeight)
+                    .overlay(alignment: .leading) {
+                        GeometryReader { proxy in
+                            Capsule()
+                                .fill(.white)
+                                .frame(width: proxy.size.width * min(max(fill, 0), 1))
+                                .animation(
+                                    .linear(duration: AutoplayMode.countdownSeconds),
+                                    value: fill
+                                )
+                        }
+                    }
+                    .frame(height: NextUpMetrics.barHeight)
+            }
+
+            Text(hint)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(Metrics.Space.l)
+        .frame(width: NextUpMetrics.width, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+struct PlayerSubtitleText: View {
+    let text: String
+    let style: SubtitleRenderStyle
+    var accessibilityIdentifier = "player.subtitle.text"
+
+    var body: some View {
+        Text(text)
+            .font(style.font)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(style.foregroundColor)
+            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
+            .padding(.horizontal, Metrics.Space.l)
+            .padding(.vertical, Metrics.Space.s)
+            .background(
+                style.backgroundColor.opacity(style.backgroundOpacity),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .padding(.bottom, style.bottomPadding)
+            .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+struct PlayerSeekIndicator: View {
+    let forward: Bool
+    var accessibilityIdentifier = "player.seekFeedback"
+
+    var body: some View {
+        HStack {
+            if forward { Spacer() }
+            Image(systemName: forward ? "goforward.10" : "gobackward.10")
+                .font(Typography.glyph.weight(.semibold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.6), radius: 6)
+            if !forward { Spacer() }
+        }
+        .padding(.horizontal, Metrics.screenGutter * 2)
+        .allowsHitTesting(false)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 

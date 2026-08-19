@@ -86,6 +86,109 @@ struct ApplePlaybackAlignmentTests {
         ) == 960)
     }
 
+    @Test func vc1DirectPlayIsBoundedToTheSoftwareDecoderEnvelope() {
+        let directVideo = DeviceProfile.lagoon.directPlayProfiles.first {
+            $0.type == "Video"
+        }
+        let vc1Profile = DeviceProfile.lagoon.codecProfiles.first {
+            $0.type == "Video" && $0.codec == "vc1"
+        }
+
+        #expect(directVideo?.videoCodec?.split(separator: ",").contains("vc1") == true)
+        #expect(vc1Profile?.conditions.contains {
+            $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == "1920"
+        } == true)
+        #expect(vc1Profile?.conditions.contains {
+            $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == "1080"
+        } == true)
+        #expect(vc1Profile?.conditions.contains {
+            $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+        } == true)
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_VC1))
+    }
+
+    @Test func planarVC1ChromaIsInterleavedIntoCoreVideoNV12Order() {
+        let u: [UInt8] = [10, 20, 30, 40]
+        let v: [UInt8] = [50, 60, 70, 80]
+        var output = [UInt8](repeating: 0xFF, count: 12)
+
+        u.withUnsafeBufferPointer { sourceU in
+            v.withUnsafeBufferPointer { sourceV in
+                output.withUnsafeMutableBufferPointer { destination in
+                    SoftwareVideoDecoder.interleave420Chroma(
+                        sourceU: sourceU.baseAddress!,
+                        sourceUStride: 2,
+                        sourceV: sourceV.baseAddress!,
+                        sourceVStride: 2,
+                        destination: destination.baseAddress!,
+                        destinationStride: 6,
+                        width: 4,
+                        rows: 2
+                    )
+                }
+            }
+        }
+
+        #expect(output == [10, 50, 20, 60, 0xFF, 0xFF, 30, 70, 40, 80, 0xFF, 0xFF])
+    }
+
+    /// Opt-in real-bitstream check used by the playback verification command.
+    /// Keeping the fixture URL outside the repository avoids shipping a large
+    /// third-party media file while still exercising libavformat → VC-1 decode
+    /// → CVPixelBuffer → CMSampleBuffer end to end.
+    @Test func vc1FixtureProducesReadyCoreVideoFrames() throws {
+        guard let rawURL = ProcessInfo.processInfo.environment["LAGOON_VC1_FIXTURE_URL"],
+              !rawURL.isEmpty else { return }
+        let demuxer = FFmpegDemuxer()
+        defer { demuxer.close() }
+        try demuxer.open(
+            url: rawURL,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        #expect(demuxer.videoStream?.codecName == "vc1")
+        #expect(demuxer.outputsDecodedVideo)
+        #expect(!demuxer.audioStreams.isEmpty)
+        if let audio = demuxer.audioStreams.first {
+            demuxer.selectAudio(streamIndex: audio.streamIndex)
+        }
+
+        var decodedFrames = 0
+        var audioBuffers = 0
+        var audioGaps = 0
+        var expectedAudioPTS: CMTime?
+        for _ in 0..<1_000 where decodedFrames < 12 || audioBuffers < 2 {
+            switch demuxer.readNext() {
+            case .video(let buffer):
+                #expect(CMSampleBufferDataIsReady(buffer))
+                #expect(CMSampleBufferGetImageBuffer(buffer) != nil)
+                decodedFrames += 1
+            case .audio(let buffers, _):
+                for buffer in buffers {
+                    let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+                    if let expectedAudioPTS,
+                       abs(CMTimeSubtract(pts, expectedAudioPTS).seconds) > 0.001 {
+                        audioGaps += 1
+                    }
+                    let duration = CMSampleBufferGetDuration(buffer)
+                    expectedAudioPTS = pts.isValid && duration.isValid
+                        ? CMTimeAdd(pts, duration)
+                        : nil
+                    audioBuffers += 1
+                }
+            case .failed(let message):
+                Issue.record("VC-1 fixture failed: \(message)")
+                return
+            case .endOfFile:
+                break
+            default:
+                continue
+            }
+        }
+        #expect(decodedFrames == 12)
+        #expect(audioBuffers >= 2)
+        #expect(audioGaps == 0)
+    }
+
     @Test func failedFFmpegSeekStatusIsRejected() {
         var threw = false
         do {
@@ -106,5 +209,70 @@ struct ApplePlaybackAlignmentTests {
         #expect(PlaybackEndBoundary.endTime(sampledEnd: 41.5, declaredDuration: 99) == 41.5)
         #expect(PlaybackEndBoundary.endTime(sampledEnd: 0, declaredDuration: 99) == 99)
         #expect(PlaybackEndBoundary.endTime(sampledEnd: .nan, declaredDuration: .infinity) == nil)
+    }
+
+    @Test func demuxSoftVideoLimitYieldsToAudioStarvation() {
+        let decision = DemuxBackpressurePolicy.decision(
+            videoCount: 90,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: false,
+            hasAudio: true
+        )
+
+        #expect(decision == .read)
+    }
+
+    @Test func demuxHardVideoLimitPacesWithoutGrowingUnbounded() {
+        let decision = DemuxBackpressurePolicy.decision(
+            videoCount: 120,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: false,
+            hasAudio: true
+        )
+
+        #expect(decision == .waitForVideo(below: 120))
+    }
+
+    @Test func demuxUsesBatchedVideoDrainWhenAudioHasEnoughReserve() {
+        let decision = DemuxBackpressurePolicy.decision(
+            videoCount: 90,
+            audioCount: 100,
+            audioBufferedSeconds: 2.1,
+            videoFrameRate: 24,
+            videoIsDecoded: false,
+            hasAudio: true
+        )
+
+        #expect(decision == .waitForVideo(below: 72))
+    }
+
+    @Test func demuxDoesNotWaitForAudioOnSilentVideo() {
+        let decision = DemuxBackpressurePolicy.decision(
+            videoCount: 90,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: false,
+            hasAudio: false
+        )
+
+        #expect(decision == .waitForVideo(below: 72))
+    }
+
+    @Test func demuxHardAudioLimitPacesWhileVideoNeedsData() {
+        let decision = DemuxBackpressurePolicy.decision(
+            videoCount: 0,
+            audioCount: 270,
+            audioBufferedSeconds: 6,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        )
+
+        #expect(decision == .waitForAudio(below: 270))
     }
 }

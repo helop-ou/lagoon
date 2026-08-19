@@ -16,6 +16,7 @@ nonisolated enum GenreShelfResolver {
     static func resolve(
         catalog: [MediaGenre],
         candidates: [MediaItem],
+        includeTypes: [MediaItemType] = [.movie, .series],
         limit: Int = maximumVisibleGenres
     ) -> [GenreShelfItem] {
         guard limit > 0 else { return [] }
@@ -36,7 +37,7 @@ nonisolated enum GenreShelfResolver {
         }
 
         let rankedCandidates = candidates
-            .filter { $0.type == .movie || $0.type == .series }
+            .filter { includeTypes.contains($0.type) }
             .sorted {
                 let lhs = $0.communityRating ?? -.infinity
                 let rhs = $1.communityRating ?? -.infinity
@@ -83,19 +84,26 @@ nonisolated enum GenreShelfResolver {
 }
 
 struct GenreRail: View {
+    let title: String
     let genres: [GenreShelfItem]
+    let includeTypes: [MediaItemType]
+    let identifier: String
 
     var body: some View {
         if !genres.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Genres")
+                Text(title)
                     .font(.headline)
                     .padding(.leading, Metrics.screenGutter)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: Metrics.cardSpacing) {
                         ForEach(genres) { genre in
-                            GenreCard(genre: genre)
+                            GenreCard(
+                                genre: genre,
+                                includeTypes: includeTypes,
+                                identifier: identifier
+                            )
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
@@ -103,19 +111,22 @@ struct GenreRail: View {
                     .padding(.bottom, Metrics.railBottomPadding)
                 }
             }
-            .accessibilityIdentifier("home.genres")
+            .accessibilityIdentifier("home.genres.\(identifier)")
         }
     }
 }
 
 private struct GenreCard: View {
     let genre: GenreShelfItem
+    let includeTypes: [MediaItemType]
+    let identifier: String
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        NavigationLink {
-            GenreLibraryView(genre: genre.name)
-        } label: {
+        NavigationLink(value: ContentNavigationRoute.genre(
+            name: genre.name,
+            includeTypes: includeTypes
+        )) {
             ZStack(alignment: .bottomLeading) {
                 background
 
@@ -135,7 +146,7 @@ private struct GenreCard: View {
         }
         .cardButtonStyle()
         .accessibilityLabel("\(genre.name) genre")
-        .accessibilityIdentifier("home.genre.\(genre.id)")
+        .accessibilityIdentifier("home.genre.\(identifier).\(genre.id)")
     }
 
     @ViewBuilder
@@ -193,13 +204,17 @@ private final class GenreLibraryViewModel {
         totalCount.map { items.count < $0 } ?? true
     }
 
-    func loadMore(client: JellyfinClient, genre: String) async {
+    func loadMore(
+        client: JellyfinClient,
+        genre: String,
+        includeTypes: [MediaItemType]
+    ) async {
         guard !isLoading, hasMore else { return }
         isLoading = true
         errorMessage = nil
         do {
             let page = try await client.items(
-                includeTypes: [.movie, .series],
+                includeTypes: includeTypes,
                 genres: [genre],
                 startIndex: items.count,
                 limit: pageSize
@@ -215,6 +230,7 @@ private final class GenreLibraryViewModel {
 
 struct GenreLibraryView: View {
     let genre: String
+    let includeTypes: [MediaItemType]
     @Environment(SessionStore.self) private var session
     @State private var viewModel = GenreLibraryViewModel()
 
@@ -228,7 +244,13 @@ struct GenreLibraryView: View {
                 LoadingView()
             } else if viewModel.items.isEmpty, let errorMessage = viewModel.errorMessage {
                 ErrorStateView(message: errorMessage) {
-                    Task { await viewModel.loadMore(client: session.client, genre: genre) }
+                    Task {
+                        await viewModel.loadMore(
+                            client: session.client,
+                            genre: genre,
+                            includeTypes: includeTypes
+                        )
+                    }
                 }
             } else {
                 ScrollView(showsIndicators: false) {
@@ -249,7 +271,13 @@ struct GenreLibraryView: View {
                                     .itemUserDataMenu(item: item)
                                     .onAppear {
                                         if index >= viewModel.items.count - Metrics.gridColumns * 3 {
-                                            Task { await viewModel.loadMore(client: session.client, genre: genre) }
+                                            Task {
+                                                await viewModel.loadMore(
+                                                    client: session.client,
+                                                    genre: genre,
+                                                    includeTypes: includeTypes
+                                                )
+                                            }
                                         }
                                     }
                             }
@@ -264,9 +292,13 @@ struct GenreLibraryView: View {
         #if os(iOS)
         .navigationTitle(genre)
         #endif
-        .task(id: genre) {
+        .task(id: genre + includeTypes.map(\.rawValue).joined()) {
             if viewModel.items.isEmpty {
-                await viewModel.loadMore(client: session.client, genre: genre)
+                await viewModel.loadMore(
+                    client: session.client,
+                    genre: genre,
+                    includeTypes: includeTypes
+                )
             }
         }
         .accessibilityIdentifier("genre.library")

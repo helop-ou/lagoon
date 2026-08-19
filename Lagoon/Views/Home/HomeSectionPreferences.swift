@@ -10,30 +10,134 @@ nonisolated struct HomeSectionPreferenceRow: Codable, Equatable, Identifiable {
 nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
     var isConfigured = false
     var rows: [HomeSectionPreferenceRow] = []
+    /// Native rows are enabled by default. Only explicit overrides are
+    /// persisted so accounts saved before native toggles existed retain the
+    /// original all-visible Home layout.
+    var nativeRows: [HomeSectionPreferenceRow] = []
+
+    init(
+        isConfigured: Bool = false,
+        rows: [HomeSectionPreferenceRow] = [],
+        nativeRows: [HomeSectionPreferenceRow] = []
+    ) {
+        self.isConfigured = isConfigured
+        self.rows = rows
+        self.nativeRows = nativeRows
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case isConfigured
+        case rows
+        case nativeRows
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isConfigured = try container.decodeIfPresent(Bool.self, forKey: .isConfigured) ?? false
+        rows = try container.decodeIfPresent([HomeSectionPreferenceRow].self, forKey: .rows) ?? []
+        nativeRows = try container.decodeIfPresent([HomeSectionPreferenceRow].self, forKey: .nativeRows) ?? []
+    }
+
+    func isNativeEnabled(_ id: String) -> Bool {
+        nativeRows.first(where: { $0.id == id })?.isEnabled ?? true
+    }
+
+    var isCustomized: Bool {
+        isConfigured || nativeRows.contains(where: { !$0.isEnabled })
+    }
 }
 
-nonisolated struct HomeSectionChoice: Identifiable, Equatable {
+nonisolated enum HomeRowSource: String, Equatable, Sendable {
+    case lagoon = "Lagoon Native"
+    case plugin = "Home Screen Sections"
+}
+
+nonisolated struct HomeSectionChoice: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let isEnabled: Bool
+    let source: HomeRowSource
 }
 
 nonisolated enum HomeSectionPreferenceResolver {
+    /// Rows rendered directly by Lagoon rather than fetched through the
+    /// optional Home Screen Sections plugin. They remain visible here even
+    /// on servers without the plugin so ownership is never ambiguous.
+    static var nativeChoices: [HomeSectionChoice] {
+        [
+            HomeSectionChoice(
+                id: "lagoon.continueWatching",
+                title: "Continue Watching",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: "lagoon.nextUp",
+                title: "Next Up",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: "lagoon.favorites",
+                title: "Favorites",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: "lagoon.movieGenres",
+                title: "Movie Genres",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: "lagoon.showGenres",
+                title: "Show Genres",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: "lagoon.recentlyAdded",
+                title: "Recently Added",
+                isEnabled: true,
+                source: .lagoon
+            ),
+        ]
+    }
+
+    /// The plugin catalogue is server-owned input. Keep the first copy of a
+    /// section when a server returns duplicate identifiers so neither the
+    /// dictionary lookup nor SwiftUI's identified rows can trap on them.
+    static func orderedUniqueCatalog(
+        _ catalog: [JellyfinClient.HomeSection]
+    ) -> [JellyfinClient.HomeSection] {
+        let ordered = catalog.enumerated().sorted { lhs, rhs in
+            let lhsOrder = lhs.element.orderIndex ?? lhs.offset
+            let rhsOrder = rhs.element.orderIndex ?? rhs.offset
+            return lhsOrder == rhsOrder ? lhs.offset < rhs.offset : lhsOrder < rhsOrder
+        }.map(\.element)
+
+        var seen = Set<String>()
+        return ordered.filter { seen.insert($0.section).inserted }
+    }
+
     static func sections(
         from catalog: [JellyfinClient.HomeSection],
         preferences: HomeSectionPreferenceValues,
         nativelyCovered: Set<String>
     ) -> [JellyfinClient.HomeSection] {
-        let orderedCatalog = catalog.enumerated().sorted {
-            ($0.element.orderIndex ?? $0.offset) < ($1.element.orderIndex ?? $1.offset)
-        }.map(\.element)
+        let orderedCatalog = orderedUniqueCatalog(catalog)
         guard preferences.isConfigured else {
             return orderedCatalog.filter { !nativelyCovered.contains($0.section) }
         }
 
-        let byID = Dictionary(uniqueKeysWithValues: catalog.map { ($0.section, $0) })
+        let byID = Dictionary(
+            orderedCatalog.map { ($0.section, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
+        var selected = Set<String>()
         return preferences.rows.compactMap { row in
-            row.isEnabled ? byID[row.id] : nil
+            guard row.isEnabled, selected.insert(row.id).inserted else { return nil }
+            return byID[row.id]
         }
     }
 }
@@ -64,21 +168,22 @@ final class HomeSectionPreferencesStore {
     func loadCatalog(client: JellyfinClient) async {
         #if DEBUG
         if UserDefaults.standard.bool(forKey: "debug.settingsRegression") {
-            catalog = Self.settingsRegressionCatalog
+            catalog = HomeSectionPreferenceResolver.orderedUniqueCatalog(Self.settingsRegressionCatalog)
             reconcileConfiguredRows()
             return
         }
         #endif
         let fetched = await client.homeSections()
         guard !Task.isCancelled else { return }
-        catalog = fetched.enumerated().sorted {
-            ($0.element.orderIndex ?? $0.offset) < ($1.element.orderIndex ?? $1.offset)
-        }.map(\.element)
+        catalog = HomeSectionPreferenceResolver.orderedUniqueCatalog(fetched)
         reconcileConfiguredRows()
     }
 
     var choices: [HomeSectionChoice] {
-        let byID = Dictionary(uniqueKeysWithValues: catalog.map { ($0.section, $0) })
+        let byID = Dictionary(
+            catalog.map { ($0.section, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
         let rows: [HomeSectionPreferenceRow]
         if values.isConfigured {
             rows = values.rows
@@ -95,9 +200,38 @@ final class HomeSectionPreferencesStore {
             return HomeSectionChoice(
                 id: row.id,
                 title: section.displayText ?? section.section,
-                isEnabled: row.isEnabled
+                isEnabled: row.isEnabled,
+                source: .plugin
             )
         }
+    }
+
+    var nativeChoices: [HomeSectionChoice] {
+        HomeSectionPreferenceResolver.nativeChoices.map { choice in
+            HomeSectionChoice(
+                id: choice.id,
+                title: choice.title,
+                isEnabled: values.isNativeEnabled(choice.id),
+                source: choice.source
+            )
+        }
+    }
+
+    func toggleNative(_ id: String) {
+        guard HomeSectionPreferenceResolver.nativeChoices.contains(where: { $0.id == id }) else {
+            return
+        }
+        if let index = values.nativeRows.firstIndex(where: { $0.id == id }) {
+            // Enabled is the default, so remove a restored row's override.
+            if values.nativeRows[index].isEnabled {
+                values.nativeRows[index].isEnabled = false
+            } else {
+                values.nativeRows.remove(at: index)
+            }
+        } else {
+            values.nativeRows.append(HomeSectionPreferenceRow(id: id, isEnabled: false))
+        }
+        persist()
     }
 
     func toggle(_ id: String) {
@@ -143,14 +277,18 @@ final class HomeSectionPreferencesStore {
                     id: $0.section,
                     isEnabled: !HomeViewModel.nativelyCoveredSections.contains($0.section)
                 )
-            }
+            },
+            nativeRows: values.nativeRows
         )
     }
 
     private func reconcileConfiguredRows() {
         guard values.isConfigured else { return }
         let known = Set(catalog.map(\.section))
-        var rows = values.rows.filter { known.contains($0.id) }
+        var seen = Set<String>()
+        var rows = values.rows.filter {
+            known.contains($0.id) && seen.insert($0.id).inserted
+        }
         let recorded = Set(rows.map(\.id))
         rows.append(contentsOf: catalog.compactMap { section in
             recorded.contains(section.section)
@@ -176,7 +314,9 @@ final class HomeSectionPreferencesStore {
     #if DEBUG
     private static var settingsRegressionCatalog: [JellyfinClient.HomeSection] {
         struct Page: Decodable { let items: [JellyfinClient.HomeSection] }
-        let data = Data(#"{"Items":[{"Section":"ContinueWatching","DisplayText":"Continue Watching","OrderIndex":0},{"Section":"MyList","DisplayText":"My List","OrderIndex":1},{"Section":"Recommendations","DisplayText":"Recommendations","OrderIndex":2}]}"#.utf8)
+        // MyList is deliberately duplicated to keep the real-server crash
+        // path covered by the tvOS navigation regression test.
+        let data = Data(#"{"Items":[{"Section":"ContinueWatching","DisplayText":"Continue Watching","OrderIndex":0},{"Section":"MyList","DisplayText":"My List","OrderIndex":1},{"Section":"MyList","DisplayText":"Duplicate My List","OrderIndex":2},{"Section":"Recommendations","DisplayText":"Recommendations","OrderIndex":3}]}"#.utf8)
         return (try? JellyfinClient.decoder.decode(Page.self, from: data).items) ?? []
     }
     #endif
@@ -189,12 +329,30 @@ struct HomeRowsSettingsView: View {
         #if os(tvOS)
         TVSettingsPage(
             "Home Rows",
-            description: "Choose and arrange the optional Jellyfin Home Screen Sections rows shown after Lagoon's built-in discovery rows. Reset at any time to restore Lagoon's default ordering."
+            description: "See which Home rows Lagoon provides itself and choose which optional Home Screen Sections plugin rows appear after them."
         ) {
             TVSettingsSection(
-                "Rows",
-                footer: "Choose which plugin rows appear after Lagoon's built-in rows, then arrange their order."
+                "Lagoon Native",
+                footer: "These rows are built into Lagoon and work without the Home Screen Sections plugin."
             ) {
+                ForEach(preferences.nativeChoices) { choice in
+                    HomeNativeRow(choice: choice) {
+                        preferences.toggleNative(choice.id)
+                    }
+                }
+            }
+
+            TVSettingsSection(
+                "Home Screen Sections Plugin",
+                footer: preferences.choices.isEmpty
+                    ? "This server does not expose any Home Screen Sections plugin rows."
+                    : "Turn plugin rows on or off and arrange their order after Lagoon's native rows."
+            ) {
+                if preferences.choices.isEmpty {
+                    Text("No plugin rows available")
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, Metrics.Space.m)
+                }
                 ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
                     HStack(spacing: Metrics.Space.m) {
                         Button {
@@ -203,7 +361,7 @@ struct HomeRowsSettingsView: View {
                             HStack(spacing: Metrics.Space.l) {
                                 VStack(alignment: .leading, spacing: Metrics.Space.xs) {
                                     Text(choice.title)
-                                    Text(choice.isEnabled ? "Shown on Home" : "Hidden from Home")
+                                    Text("\(choice.source.rawValue) · \(choice.isEnabled ? "Shown" : "Hidden")")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -240,7 +398,7 @@ struct HomeRowsSettingsView: View {
                 }
             }
 
-            if preferences.values.isConfigured {
+            if preferences.values.isCustomized {
                 TVSettingsSection("Reset") {
                     Button("Reset to Lagoon Default", role: .destructive) {
                         preferences.reset()
@@ -252,14 +410,35 @@ struct HomeRowsSettingsView: View {
         }
         #else
         List {
+            Section("Lagoon Native") {
+                ForEach(preferences.nativeChoices) { choice in
+                    Button {
+                        preferences.toggleNative(choice.id)
+                    } label: {
+                        Label(
+                            "\(choice.title) · \(choice.source.rawValue)",
+                            systemImage: choice.isEnabled ? "checkmark.circle.fill" : "circle"
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
+                    .accessibilityIdentifier("settings.home.native.\(choice.id)")
+                }
+            }
+
             Section {
+                if preferences.choices.isEmpty {
+                    Text("No plugin rows available on this server.")
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
                     HStack(spacing: Metrics.Space.m) {
                         Button {
                             preferences.toggle(choice.id)
                         } label: {
                             Label(
-                                choice.title,
+                                "\(choice.title) · \(choice.source.rawValue)",
                                 systemImage: choice.isEnabled ? "checkmark.circle.fill" : "circle"
                             )
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -286,11 +465,13 @@ struct HomeRowsSettingsView: View {
                         .accessibilityLabel("Move \(choice.title) down")
                     }
                 }
+            } header: {
+                Text("Home Screen Sections Plugin")
             } footer: {
-                Text("Turn plugin rows on or off and arrange the order they appear after Lagoon's built-in rows.")
+                Text("Plugin rows appear after Lagoon's native rows. Turn them on or off and arrange their order here.")
             }
 
-            if preferences.values.isConfigured {
+            if preferences.values.isCustomized {
                 Section {
                     Button("Reset to Lagoon Default", role: .destructive) {
                         preferences.reset()
@@ -302,3 +483,30 @@ struct HomeRowsSettingsView: View {
         #endif
     }
 }
+
+#if os(tvOS)
+private struct HomeNativeRow: View {
+    let choice: HomeSectionChoice
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Metrics.Space.xl) {
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                    Text(choice.title)
+                    Text("\(choice.source.rawValue) · \(choice.isEnabled ? "Shown" : "Hidden")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: Metrics.Space.xl)
+                Image(systemName: choice.isEnabled ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(choice.isEnabled ? .primary : .secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.glass)
+        .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
+        .accessibilityIdentifier("settings.home.native.\(choice.id)")
+    }
+}
+#endif

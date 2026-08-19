@@ -28,42 +28,65 @@ struct HomeView: View {
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
-                        MediaRail(
-                            title: "Continue Watching",
-                            items: viewModel.resume,
-                            style: .landscape,
-                            showsLandscapeMetadata: true,
-                            playAction: { playerItem = PlayerItem(media: $0) },
-                            onUserDataChange: refreshUserData
-                        )
-                        MediaRail(
-                            title: "Next Up",
-                            items: viewModel.nextUp,
-                            style: .landscape,
-                            showsLandscapeMetadata: true,
-                            playAction: { playerItem = PlayerItem(media: $0) },
-                            onUserDataChange: refreshUserData
-                        )
+                        if isNativeRowEnabled("lagoon.continueWatching") {
+                            MediaRail(
+                                title: "Continue Watching",
+                                items: viewModel.resume,
+                                style: .landscape,
+                                showsLandscapeMetadata: true,
+                                playAction: { playerItem = PlayerItem(media: $0) },
+                                onUserDataChange: refreshUserData
+                            )
+                        }
+                        if isNativeRowEnabled("lagoon.nextUp") {
+                            MediaRail(
+                                title: "Next Up",
+                                items: viewModel.nextUp,
+                                style: .landscape,
+                                showsLandscapeMetadata: true,
+                                playAction: { playerItem = PlayerItem(media: $0) },
+                                onUserDataChange: refreshUserData
+                            )
+                        }
                         // Above Recently Added: things you deliberately
                         // starred outrank things the server happened to
                         // ingest, and the rail hides itself when empty.
-                        MediaRail(
-                            title: "Favorites",
-                            items: viewModel.favorites,
-                            style: .landscape,
-                            onUserDataChange: refreshUserData
-                        )
-                        // A native discovery path that works on every
-                        // Jellyfin server, independent of optional Home
-                        // Screen Sections plugins (HEL-84).
-                        GenreRail(genres: viewModel.genreShelf)
-                        ForEach(viewModel.latestRails) { rail in
+                        if isNativeRowEnabled("lagoon.favorites") {
                             MediaRail(
-                                title: rail.title,
-                                items: rail.items,
+                                title: "Favorites",
+                                items: viewModel.favorites,
                                 style: .landscape,
                                 onUserDataChange: refreshUserData
                             )
+                        }
+                        // A native discovery path that works on every
+                        // Jellyfin server, independent of optional Home
+                        // Screen Sections plugins (HEL-84).
+                        if isNativeRowEnabled("lagoon.movieGenres") {
+                            GenreRail(
+                                title: "Movie Genres",
+                                genres: viewModel.movieGenreShelf,
+                                includeTypes: [.movie],
+                                identifier: "movies"
+                            )
+                        }
+                        if isNativeRowEnabled("lagoon.showGenres") {
+                            GenreRail(
+                                title: "Show Genres",
+                                genres: viewModel.showGenreShelf,
+                                includeTypes: [.series],
+                                identifier: "shows"
+                            )
+                        }
+                        if isNativeRowEnabled("lagoon.recentlyAdded") {
+                            ForEach(viewModel.latestRails) { rail in
+                                MediaRail(
+                                    title: rail.title,
+                                    items: rail.items,
+                                    style: .landscape,
+                                    onUserDataChange: refreshUserData
+                                )
+                            }
                         }
                         // Whatever the server's Home Screen Sections plugin
                         // adds on top (HEL-47) — nothing at all without it.
@@ -114,5 +137,9 @@ struct HomeView: View {
 
     private var savedHomePreferences: HomeSectionPreferenceValues {
         HomeSectionPreferencesStore.savedValues(accountID: session.activeAccount?.id)
+    }
+
+    private func isNativeRowEnabled(_ id: String) -> Bool {
+        savedHomePreferences.isNativeEnabled(id)
     }
 }

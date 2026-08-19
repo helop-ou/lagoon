@@ -2,8 +2,9 @@ import Foundation
 
 // Capability profile sent with PlaybackInfo so the server can decide between
 // direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
-// what the Lagoon sample-buffer engine can play: h264 stays compressed while
-// hevc is hardware-decoded ahead inside the engine; aac/mp3/ac3/eac3 audio
+// what the Lagoon sample-buffer engine can play: h264 stays compressed,
+// hevc is hardware-decoded ahead, and progressive 8-bit VC-1 up to 1080p is
+// software-decoded into Core Video buffers; aac/mp3/ac3/eac3 audio
 // stays compressed plus
 // dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4); text and
 // PGS/VobSub subtitles embedded, vtt external (M5) — in any container
@@ -65,7 +66,7 @@ nonisolated enum DeviceProfile {
             DirectPlayProfile(
                 container: "mkv,webm,mp4,m4v,mov",
                 type: "Video",
-                videoCodec: "hevc,h264",
+                videoCodec: "hevc,h264,vc1",
                 audioCodec: "aac,mp3,ac3,eac3,dts,truehd,flac,opus,vorbis"
             ),
             DirectPlayProfile(container: "mp3", type: "Audio"),
@@ -174,6 +175,53 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
+            // Apple does not expose VC-1 through VideoToolbox on tvOS. Lagoon
+            // decodes this deliberately bounded legacy envelope with
+            // libavcodec and presents ready NV12 image buffers through the
+            // existing AVSampleBufferRenderSynchronizer. Interlaced content
+            // still transcodes because the client has no deinterlacing stage.
+            CodecProfile(
+                type: "Video",
+                codec: "vc1",
+                conditions: [
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoRangeType",
+                        value: "SDR",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "8",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Width",
+                        value: "1920",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Height",
+                        value: "1080",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "NotEquals",
+                        property: "IsAnamorphic",
+                        value: "true",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "NotEquals",
+                        property: "IsInterlaced",
+                        value: "true",
+                        isRequired: true
+                    ),
+                ]
+            ),
         ],
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
@@ -206,7 +254,7 @@ nonisolated enum DeviceProfile {
             DirectPlayProfile(
                 container: "mkv,webm,mp4,m4v,mov",
                 type: "Video",
-                videoCodec: "h264",
+                videoCodec: "h264,vc1",
                 audioCodec: "aac,mp3,ac3,eac3"
             ),
             DirectPlayProfile(container: "mp3", type: "Audio"),
@@ -242,6 +290,42 @@ nonisolated enum DeviceProfile {
                         property: "VideoRangeType",
                         value: "SDR",
                         isRequired: false
+                    ),
+                ]
+            ),
+            CodecProfile(
+                type: "Video",
+                codec: "vc1",
+                conditions: [
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoRangeType",
+                        value: "SDR",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "8",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Width",
+                        value: "1920",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Height",
+                        value: "1080",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "NotEquals",
+                        property: "IsInterlaced",
+                        value: "true",
+                        isRequired: true
                     ),
                 ]
             ),

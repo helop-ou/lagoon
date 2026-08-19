@@ -46,8 +46,18 @@ struct TVSettingsPage<Content: View>: View {
                         .accessibilityIdentifier("settings.detail.description")
                 }
             }
+            // The focus section must occupy the page's full height, not only
+            // the intrinsic Back/title/description height. Account begins
+            // with non-focusable connection information, so its actions sit
+            // below that old region and Left had no candidate to return to.
             .frame(width: Metrics.settingsIdentityWidth, alignment: .leading)
+            .frame(maxHeight: .infinity, alignment: .topLeading)
             .padding(.top, Metrics.Space.l)
+            // Expand the Back button's directional focus region to the full
+            // identity column. Without a matching section on this side, a
+            // control low in the scrolling column could move right but had
+            // no leftward candidate on the same horizontal ray.
+            .focusSection()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
@@ -57,6 +67,10 @@ struct TVSettingsPage<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollClipDisabled()
+            // Treat the whole controls column as a focus target. Some pages
+            // begin with non-focusable preview content, which otherwise
+            // leaves no geometric candidate directly right of Back.
+            .focusSection()
             .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, Metrics.screenGutter)
