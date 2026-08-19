@@ -191,3 +191,47 @@ struct HomeRowPreferenceTests {
         #expect(selected.map(\.section) == ["Recommendations", "ContinueWatching"])
     }
 }
+
+@Suite("Home genre discovery")
+struct HomeGenreDiscoveryTests {
+    private func candidates() throws -> [MediaItem] {
+        let data = Data(#"""
+        {"Items":[
+            {"Id":"action-low","Name":"Action Low","Type":"Movie","CommunityRating":6.0,"Genres":["Action"],"BackdropImageTags":["low"]},
+            {"Id":"drama-best-no-art","Name":"Drama Best","Type":"Series","CommunityRating":9.8,"Genres":["Drama"]},
+            {"Id":"action-best","Name":"Action Best","Type":"Movie","CommunityRating":9.4,"Genres":["Action"],"BackdropImageTags":["best"]},
+            {"Id":"drama-art","Name":"Drama Art","Type":"Series","CommunityRating":8.5,"Genres":["Drama"],"ImageTags":{"Thumb":"thumb"}},
+            {"Id":"comedy","Name":"Comedy","Type":"Movie","CommunityRating":7.5,"Genres":["Comedy"],"BackdropImageTags":["comedy"]}
+        ]}
+        """#.utf8)
+        return try JellyfinClient.decoder.decode(ItemsPage.self, from: data).items
+    }
+
+    @Test func highestRatedLandscapeTitleBecomesEachGenreBackground() throws {
+        let genres = [
+            MediaGenre(id: "action", name: "Action"),
+            MediaGenre(id: "drama", name: "Drama"),
+            MediaGenre(id: "comedy", name: "Comedy"),
+            MediaGenre(id: "stale", name: "Stale Genre"),
+        ]
+
+        let shelf = GenreShelfResolver.resolve(catalog: genres, candidates: try candidates())
+
+        #expect(shelf.map(\.name) == ["Action", "Drama", "Comedy"])
+        #expect(shelf.first(where: { $0.name == "Action" })?.artwork?.id == "action-best")
+        // The absolute top Drama item has no landscape art, so the next
+        // highest-rated suitable title supplies the tile background.
+        #expect(shelf.first(where: { $0.name == "Drama" })?.artwork?.id == "drama-art")
+    }
+
+    @Test func candidatesProvideAUsefulFallbackWhenTheGenreEndpointIsUnavailable() throws {
+        let shelf = GenreShelfResolver.resolve(
+            catalog: [],
+            candidates: try candidates(),
+            limit: 2
+        )
+
+        #expect(shelf.map(\.name) == ["Action", "Drama"])
+        #expect(shelf.allSatisfy { $0.id.hasPrefix("derived-") })
+    }
+}

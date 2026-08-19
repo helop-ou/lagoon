@@ -28,6 +28,9 @@ final class HomeViewModel {
     /// deduped and stripped of empties. Empty on servers without it.
     var pluginRails: [LibraryRail] = []
     var latestRails: [LibraryRail] = []
+    /// One native discovery shelf. Each tile links to a genre grid and uses
+    /// the best landscape artwork available from a ranked library sample.
+    var genreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
     var isLoading = true
     var errorMessage: String?
@@ -59,6 +62,14 @@ final class HomeViewModel {
             // Never fatal to the screen: a server that dislikes the filter
             // should cost you the rail, not the whole of Home.
             async let favoriteItems = try? client.favorites()
+            async let genreCatalog = try? client.genres()
+            async let genreArtworkCandidates = try? client.items(
+                includeTypes: [.movie, .series],
+                sortBy: "CommunityRating",
+                sortOrder: "Descending",
+                limit: 300,
+                fields: "Genres,CommunityRating,PrimaryImageAspectRatio"
+            )
 
             var rails: [LibraryRail] = []
             await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
@@ -79,6 +90,8 @@ final class HomeViewModel {
             let resolvedResume = await resumeItems ?? []
             let resolvedNextUp = await nextUpItems ?? []
             let resolvedFavorites = await favoriteItems ?? []
+            let resolvedGenres = await genreCatalog ?? []
+            let resolvedGenreCandidates = await genreArtworkCandidates?.items ?? []
             let resolvedPluginRails = await loadPluginRails(
                 client: client,
                 preferences: homeSectionPreferences
@@ -87,6 +100,10 @@ final class HomeViewModel {
             resume = resolvedResume
             nextUp = resolvedNextUp
             favorites = resolvedFavorites
+            genreShelf = GenreShelfResolver.resolve(
+                catalog: resolvedGenres,
+                candidates: resolvedGenreCandidates
+            )
             latestRails = rails
             TopShelfStore.publish(resume, client: client)
             pluginRails = resolvedPluginRails
@@ -199,6 +216,7 @@ final class HomeViewModel {
         resume = []
         nextUp = []
         favorites = []
+        genreShelf = []
         pluginRails = []
         latestRails = []
         heroItems = []

@@ -18,9 +18,11 @@ extension JellyfinClient {
         recursive: Bool = true,
         sortBy: String = "SortName",
         sortOrder: String = "Ascending",
+        genres: [String] = [],
         searchTerm: String? = nil,
         startIndex: Int = 0,
-        limit: Int = 100
+        limit: Int = 100,
+        fields: String? = nil
     ) async throws -> ItemsPage {
         let userId = try requireUserId()
         var query = [
@@ -29,7 +31,7 @@ extension JellyfinClient {
             URLQueryItem(name: "SortOrder", value: sortOrder),
             URLQueryItem(name: "StartIndex", value: String(startIndex)),
             URLQueryItem(name: "Limit", value: String(limit)),
-            URLQueryItem(name: "Fields", value: Self.defaultFields),
+            URLQueryItem(name: "Fields", value: fields ?? Self.defaultFields),
             URLQueryItem(name: "ImageTypeLimit", value: "1"),
         ]
         if let parentId {
@@ -38,10 +40,30 @@ extension JellyfinClient {
         if !includeTypes.isEmpty {
             query.append(URLQueryItem(name: "IncludeItemTypes", value: includeTypes.map(\.rawValue).joined(separator: ",")))
         }
+        if !genres.isEmpty {
+            query.append(URLQueryItem(name: "Genres", value: genres.joined(separator: "|")))
+        }
         if let searchTerm {
             query.append(URLQueryItem(name: "SearchTerm", value: searchTerm))
         }
         return try await get("Users/\(userId)/Items", query: query)
+    }
+
+    /// The native genre catalogue for the signed-in user's playable video
+    /// libraries. One catalogue request plus one ranked artwork request is
+    /// deliberately cheaper than fetching a representative for every genre.
+    func genres(includeTypes: [MediaItemType] = [.movie, .series]) async throws -> [MediaGenre] {
+        let userId = try requireUserId()
+        let page: GenresPage = try await get("Genres", query: [
+            URLQueryItem(name: "UserId", value: userId),
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "IncludeItemTypes", value: includeTypes.map(\.rawValue).joined(separator: ",")),
+            URLQueryItem(name: "SortBy", value: "SortName"),
+            URLQueryItem(name: "SortOrder", value: "Ascending"),
+            URLQueryItem(name: "EnableTotalRecordCount", value: "false"),
+            URLQueryItem(name: "Limit", value: "100"),
+        ])
+        return page.items
     }
 
     func item(id: String) async throws -> MediaItem {

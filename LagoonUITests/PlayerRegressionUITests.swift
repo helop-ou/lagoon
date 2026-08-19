@@ -189,6 +189,45 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 5))
     }
 
+    func testNativeGenreShelfOpensAFilteredLibrary() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+        ]
+        app.launch()
+
+        XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 20))
+        let genreButtons = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "home.genre.")
+        )
+
+        var focusedGenre: XCUIElement?
+        for _ in 0..<20 {
+            focusedGenre = genreButtons.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedGenre != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+
+        guard let focusedGenre else {
+            XCTFail("Could not focus a card in the native Genres shelf")
+            return
+        }
+        let selectedGenre = focusedGenre.label
+        let shelfScreenshot = XCTAttachment(screenshot: app.screenshot())
+        shelfScreenshot.name = "Native Genres shelf — \(selectedGenre) focused"
+        shelfScreenshot.lifetime = .keepAlways
+        add(shelfScreenshot)
+        remote.press(.select)
+
+        let library = app.descendants(matching: .any)["genre.library"]
+        XCTAssertTrue(library.waitForExistence(timeout: 8), "Did not open \(selectedGenre)")
+        let populated = NSPredicate(format: "value != '0 items'")
+        expectation(for: populated, evaluatedWith: library)
+        waitForExpectations(timeout: 20)
+    }
+
     private func moveFocus(
         to element: XCUIElement,
         maxPresses: Int,

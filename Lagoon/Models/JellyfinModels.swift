@@ -137,6 +137,23 @@ nonisolated struct ItemsPage: Decodable {
     }
 }
 
+/// A Jellyfin genre is an addressable library item. Keeping the server id
+/// lets Lagoon evolve toward id-based filters, while the current item query
+/// uses the human-readable name supported by older servers too.
+nonisolated struct MediaGenre: Decodable, Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+}
+
+nonisolated struct GenresPage: Decodable {
+    let items: [MediaGenre]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        items = try c.decodeIfPresent([MediaGenre].self, forKey: "items") ?? []
+    }
+}
+
 // MARK: - Playback
 
 nonisolated struct PlaybackInfoResponse: Decodable {

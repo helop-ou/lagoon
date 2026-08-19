@@ -50,6 +50,10 @@ struct HomeView: View {
                             items: viewModel.favorites,
                             onUserDataChange: refreshUserData
                         )
+                        // A native discovery path that works on every
+                        // Jellyfin server, independent of optional Home
+                        // Screen Sections plugins (HEL-84).
+                        GenreRail(genres: viewModel.genreShelf)
                         ForEach(viewModel.latestRails) { rail in
                             MediaRail(title: rail.title, items: rail.items, onUserDataChange: refreshUserData)
                         }
