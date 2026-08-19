@@ -39,12 +39,15 @@ final class PlaybackController {
     private var progressTask: Task<Void, Never>?
     private var didReportStop = false
     private var playbackSessionActive = false
+    private var isClosed = false
     private var lastKnownPosition: Double = 0
     private var nextUpTask: Task<Void, Never>?
+    private var nextPreparationTask: Task<PreparedNextPlayback?, Never>?
+    private var preparedNext: PreparedNextPlayback?
     /// Guards the hand-off: `didFinish` and an expiring countdown can both
     /// arrive at the end of a file, and advancing twice would skip an
     /// episode outright.
-    private var isAdvancing = false
+    private(set) var isAdvancing = false
     /// What the viewer picked in the track panel, carried into the next
     /// episode (HEL-66). Nil on a first load — there is nothing to carry.
     private var trackPreference: TrackPreference?
@@ -60,6 +63,7 @@ final class PlaybackController {
     private var missingSubtitleMode: MissingSubtitleMode = .ask
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
+    @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator()
     @ObservationIgnored private let lifecycleID = UUID()
 
     init() {
@@ -86,6 +90,14 @@ final class PlaybackController {
         /// the server thinks the default is.
         var subtitlesOff: Bool
     }
+
+    private struct PreparedNextPlayback {
+        let mediaID: String
+        let info: PlaybackInfoResponse
+        let source: MediaSource
+        let streamURL: URL
+        let method: PlayMethod
+    }
     @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     func start(
@@ -97,6 +109,29 @@ final class PlaybackController {
         preferredSubtitleLanguages: [String] = [],
         missingSubtitleMode: MissingSubtitleMode = .ask
     ) async {
+        await start(
+            media: media,
+            startFromBeginning: startFromBeginning,
+            client: client,
+            trackPreferences: trackPreferences,
+            preferredAudioLanguages: preferredAudioLanguages,
+            preferredSubtitleLanguages: preferredSubtitleLanguages,
+            missingSubtitleMode: missingSubtitleMode,
+            prepared: nil
+        )
+    }
+
+    private func start(
+        media: MediaItem,
+        startFromBeginning: Bool,
+        client: JellyfinClient,
+        trackPreferences: TrackPreferenceValues,
+        preferredAudioLanguages: [String],
+        preferredSubtitleLanguages: [String],
+        missingSubtitleMode: MissingSubtitleMode,
+        prepared: PreparedNextPlayback?
+    ) async {
+        guard !isClosed else { return }
         os_signpost(
             .begin,
             log: PlaybackPerformance.log,
@@ -130,15 +165,32 @@ final class PlaybackController {
             // second round trip would delay the first frame (HEL-39).
             async let extras = client.playbackExtras(itemId: media.id)
             async let segments = client.mediaSegments(itemId: media.id)
-            let info = try await client.playbackInfo(itemId: media.id)
-            guard info.errorCode == nil, let source = info.mediaSources.first else {
-                throw JellyfinError.unplayable
+            let info: PlaybackInfoResponse
+            let source: MediaSource
+            let streamURL: URL
+            let method: PlayMethod
+            if let prepared, prepared.mediaID == media.id {
+                info = prepared.info
+                source = prepared.source
+                streamURL = prepared.streamURL
+                method = prepared.method
+            } else {
+                info = try await client.playbackInfo(itemId: media.id)
+                guard info.errorCode == nil, let resolvedSource = info.mediaSources.first else {
+                    throw JellyfinError.unplayable
+                }
+                source = resolvedSource
+                (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
             }
             mediaSourceId = source.id
             playSessionId = info.playSessionId
-
-            let (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
             playMethod = method
+            let cacheScope = playbackCache.activate(
+                itemID: media.id,
+                url: streamURL,
+                method: method,
+                expectedLength: source.size
+            )
 
             var resumeSeconds: Double = 0
             if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
@@ -267,6 +319,7 @@ final class PlaybackController {
             orderedSubtitleStreams = orderedSubtitles
 
             configureSystemMediaCallbacks()
+            guard !isClosed else { throw CancellationError() }
             try Task.checkCancellation()
             let previousResourcesRetired = await PlaybackLifecycleDiagnostics
                 .waitForMediaResourcesToRetire()
@@ -283,6 +336,7 @@ final class PlaybackController {
                     lifecycle.footprintMB
                 )
             }
+            guard !isClosed else { throw CancellationError() }
             try Task.checkCancellation()
             try audioSession.activate { [weak self] in
                 guard let engine = self?.engine else { return false }
@@ -292,6 +346,7 @@ final class PlaybackController {
             let engine = SampleBufferPlayerEngine()
             engine.prepare(
                 url: streamURL,
+                cacheScope: cacheScope,
                 startSeconds: resumeSeconds,
                 initialAudioOrdinal: initialAudioOrdinal,
                 initialSubtitleOrdinal: initialSubtitleOrdinal,
@@ -375,6 +430,7 @@ final class PlaybackController {
             guard self.engine === engine, playbackSessionActive, !didReportStop else {
                 return
             }
+            playbackCache.prefetchCurrent()
             startProgressLoop()
             startHUD(source: source, method: method)
             resolveNextUp(after: media, client: client)
@@ -490,12 +546,63 @@ final class PlaybackController {
     /// visibly later first frame (HEL-39).
     private func resolveNextUp(after media: MediaItem, client: JellyfinClient) {
         nextUpTask?.cancel()
+        nextPreparationTask?.cancel()
+        nextPreparationTask = nil
+        preparedNext = nil
+        playbackCache.discardNext()
         nextUp = nil
         guard media.type == .episode else { return }
         nextUpTask = Task { [weak self] in
             let next = try? await client.episodeAfter(media)
             guard !Task.isCancelled else { return }
             self?.nextUp = next
+        }
+    }
+
+    /// Negotiates and warms the successor only near the end of an episode.
+    /// Eight MiB is enough to cover container probing and the first playback
+    /// cushion without turning an unanswered Up Next card into a large
+    /// background download.
+    private func prepareNextIfNeeded(force: Bool = false) {
+        guard preparedNext == nil, nextPreparationTask == nil,
+              let next = nextUp, let client else { return }
+        if !force {
+            guard let engine, engine.duration > 0,
+                  engine.duration - engine.timePosition <= 120 else { return }
+        }
+        nextPreparationTask = Task { [weak self] in
+            guard let self else { return nil }
+            defer { self.nextPreparationTask = nil }
+            do {
+                let info = try await client.playbackInfo(itemId: next.id)
+                guard !Task.isCancelled,
+                      info.errorCode == nil,
+                      let source = info.mediaSources.first else { return nil }
+                let (url, method) = try client.streamURL(itemId: next.id, source: source)
+                guard !Task.isCancelled, self.nextUp?.id == next.id else { return nil }
+                let scope = self.playbackCache.stageNext(
+                    itemID: next.id,
+                    url: url,
+                    method: method,
+                    expectedLength: source.size
+                )
+                await scope?.prefetch(byteCount: 8 * 1_024 * 1_024)
+                guard !Task.isCancelled, self.nextUp?.id == next.id else {
+                    self.playbackCache.discardNext(itemID: next.id)
+                    return nil
+                }
+                let prepared = PreparedNextPlayback(
+                    mediaID: next.id,
+                    info: info,
+                    source: source,
+                    streamURL: url,
+                    method: method
+                )
+                self.preparedNext = prepared
+                return prepared
+            } catch {
+                return nil
+            }
         }
     }
 
@@ -509,13 +616,17 @@ final class PlaybackController {
         guard !isAdvancing, let next = nextUp, let client else { return }
         isAdvancing = true
         defer { isAdvancing = false }
+        prepareNextIfNeeded(force: true)
+        let prepared = await nextPreparationTask?.value
+        nextPreparationTask = nil
+        guard !isClosed else { return }
         captureTrackPreference()
-        await stop()
+        await stop(preservingPreparedNext: true)
+        guard !isClosed else { return }
         didFinish = false
         didReportStop = false
         errorMessage = nil
         hudLines = []
-        playerInfo = nil
         // Resume rather than restart: `episodeAfter` walks the series in
         // order, so the next one along can carry a position of its own.
         await start(
@@ -528,8 +639,10 @@ final class PlaybackController {
             ),
             preferredAudioLanguages: preferredAudioLanguages,
             preferredSubtitleLanguages: preferredSubtitleLanguages,
-            missingSubtitleMode: missingSubtitleMode
+            missingSubtitleMode: missingSubtitleMode,
+            prepared: prepared
         )
+        preparedNext = nil
     }
 
     /// Reads the live selection back off the engine before it is torn down.
@@ -602,6 +715,7 @@ final class PlaybackController {
                     isPaused: engine.isPaused,
                     playMethod: self.playMethod.rawValue
                 ))
+                self.prepareNextIfNeeded()
             }
         }
     }
@@ -610,13 +724,18 @@ final class PlaybackController {
     /// main actor. The Jellyfin report is returned as an independent task so
     /// neither UI dismissal nor its network latency retains this controller.
     @discardableResult
-    func beginStop() -> Task<Void, Never>? {
+    func beginStop(preservingPreparedNext: Bool = false) -> Task<Void, Never>? {
         progressTask?.cancel()
         progressTask = nil
         hudTask?.cancel()
         hudTask = nil
         nextUpTask?.cancel()
         nextUpTask = nil
+        if !preservingPreparedNext {
+            nextPreparationTask?.cancel()
+            nextPreparationTask = nil
+            preparedNext = nil
+        }
         subtitleSearch.detach()
         let seconds = engine?.timePosition ?? lastKnownPosition
         lastKnownPosition = seconds
@@ -637,6 +756,7 @@ final class PlaybackController {
             engine.shutdown()
             self.engine = nil
         }
+        playbackCache.discardCurrent(preservingNext: preservingPreparedNext)
         nowPlaying.stop()
         audioSession.deactivate()
         os_signpost(
@@ -677,6 +797,20 @@ final class PlaybackController {
 
     func stop() async {
         let report = beginStop()
+        await report?.value
+    }
+
+    /// Terminal view dismissal. Unlike the internal episode-to-episode stop,
+    /// this prevents any suspended preparation/report task from resurrecting
+    /// an engine after the full-screen cover has gone away.
+    @discardableResult
+    func close() -> Task<Void, Never>? {
+        isClosed = true
+        return beginStop()
+    }
+
+    private func stop(preservingPreparedNext: Bool) async {
+        let report = beginStop(preservingPreparedNext: preservingPreparedNext)
         await report?.value
     }
 
@@ -839,12 +973,18 @@ final class PlaybackController {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, let engine = self.engine else { return }
                 engine.refreshVideoPerformanceMetrics()
-                self.hudLines = negotiated + Self.liveHUDLines(for: engine)
+                self.hudLines = negotiated + Self.liveHUDLines(
+                    for: engine,
+                    cache: self.playbackCache.current?.metrics
+                )
             }
         }
     }
 
-    private static func liveHUDLines(for engine: SampleBufferPlayerEngine) -> [String] {
+    private static func liveHUDLines(
+        for engine: SampleBufferPlayerEngine,
+        cache: PlaybackCacheMetrics?
+    ) -> [String] {
         var lines: [String] = []
         if let size = engine.videoSize {
             lines.append("Playing: \(Int(size.width))×\(Int(size.height))")
@@ -859,6 +999,15 @@ final class PlaybackController {
         }
         let depths = engine.queueDepths
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
+        if let cache {
+            lines.append(String(
+                format: "Cache:   %.1f MB · %.0f%% hit · %d req · %.0fms avg",
+                Double(cache.cachedBytes) / 1_048_576,
+                cache.hitRate * 100,
+                cache.requestCount,
+                cache.averageRequestMilliseconds
+            ))
+        }
         if let videoTiming = engine.videoTimingDiagnostic {
             lines.append("Vtime:   \(videoTiming)")
         }
@@ -957,6 +1106,8 @@ struct VideoPlayerView: View {
                         pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
                     }
                 }
+            } else if controller.isAdvancing {
+                episodeTransition
             } else {
                 LoadingView()
             }
@@ -1054,7 +1205,7 @@ struct VideoPlayerView: View {
         .onDisappear {
             applyDisplayMatch(nil)
             pictureInPicture.detach()
-            controller.beginStop()
+            controller.close()
         }
     }
 
@@ -1085,6 +1236,25 @@ struct VideoPlayerView: View {
             videoSummary: nil,
             posterURL: nil
         )
+    }
+
+    private var episodeTransition: some View {
+        VStack(spacing: Metrics.Space.m) {
+            ProgressView()
+                .controlSize(.large)
+                .tint(.white)
+            Text("Starting next episode")
+                .font(.headline)
+                .foregroundStyle(.white)
+            if let title = controller.nextUp?.name, !title.isEmpty {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Starting next episode")
+        .focusable()
     }
 
     private var playbackHUD: some View {

@@ -540,6 +540,29 @@ media-buffer releases or C decoder destruction. `Sessions/Playing/Stopped`
 still reports exactly once from the controller after the engine position is
 captured; network reporting never gates UI dismissal.
 
+Direct-play and direct-stream files now pass through a bounded sparse range
+cache (HEL-86) before libavformat. FFmpeg supplies a custom `AVIOContext`;
+cache misses become authenticated HTTP `Range` requests and hits read the
+discardable file under `Library/Caches/Lagoon/Playback`. The active scope
+prefetches at low URLSession priority up to 512 MiB while FFmpeg's foreground
+misses use high priority. The file remains bounded even if a server ignores
+the Range header: the streaming delegate stops after the requested bytes
+rather than accepting a full-file response into memory. Reaching the cap only
+stops new writes — playback continues from the network. The debug Playback HUD
+reports cached MiB, hit rate, and request count so seek improvements and later
+regressions are measurable; it also reports average range-request latency.
+
+Cache ownership is part of the player lifecycle, never an offline-download
+feature. There is one active scope and at most one staged successor. Dismissal,
+failure, or account/player replacement cancels requests and removes both;
+episode advance cancels/removes the old scope and promotes the staged one.
+Deletion waits for an in-flight demux read on a utility queue so the main actor
+does not inherit file/network teardown. Stale scope directories are discarded
+when a new coordinator starts. HLS transcoding deliberately still uses
+libavformat's network path: its child playlists and media segments are opened
+outside the top-level AVIO context and need an `io_open`-level cache in a later
+HEL-86 slice.
+
 The dismissal boundary itself is synchronous: before the full-screen cover
 returns to Home or Settings, the controller cancels its clocks and subtitle
 work, detaches system media state, marks the engine cancelled, interrupts
@@ -700,6 +723,15 @@ reflects the new position immediately.
   (default), ask-every-time, off. The countdown is 5 s, the same as
   `SkipMode`'s — two countdowns in one player running at different speeds
   read as a bug.
+  - HEL-86 keeps the full-screen player mounted through that handoff. Within
+    the last 120 s, the controller negotiates the next PlaybackInfo and warms
+    its first 8 MiB in a second bounded scope. Advance first reports the old
+    session stopped and retires its single engine, then promotes the prepared
+    URL/cache and starts the successor without returning to the presenting
+    screen. The brief retirement interval is an explicit "Starting next
+    episode" state rather than the generic loading screen. There are never two
+    demux/render pipelines alive together; seamless here means a stable player
+    surface and warm bytes, not overlapping decoders.
   - **Never resolve the next episode from `Shows/NextUp`.** That endpoint
     returns the episode *in progress* when there is one — `enableResumable`
     defaults to `true`, per the server's own OpenAPI document — and at the

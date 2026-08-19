@@ -120,6 +120,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var rendererRecoveryInProgress = false
 
     @ObservationIgnored private var pendingURL: URL?
+    @ObservationIgnored nonisolated(unsafe) private var pendingCacheScope: PlaybackCacheScope?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
 
     init() {
@@ -132,6 +133,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func prepare(
         url: URL,
+        cacheScope: PlaybackCacheScope? = nil,
         startSeconds: Double,
         initialAudioOrdinal: Int?,
         initialSubtitleOrdinal: Int? = nil,
@@ -140,6 +142,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         externalSubtitles: [ExternalSubtitleTrack] = []
     ) {
         pendingURL = url
+        pendingCacheScope = cacheScope
         pendingStartSeconds = startSeconds
         self.externalSubtitles = externalSubtitles
         shared.withLock {
@@ -201,6 +204,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             $0.playbackGeneration += 1
         }
         let startURL = url
+        let startCacheScope = pendingCacheScope
         let recommendedPixelBufferAttributes = video.recommendedPixelBufferAttributes
         PlaybackLifecycleDiagnostics.demuxStarted(lifecycleID)
         let demuxLifecycleID = lifecycleID
@@ -214,6 +218,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
             self.runDemuxLoop(
                 url: startURL,
+                cacheScope: startCacheScope,
                 recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
             )
         }
@@ -926,6 +931,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     nonisolated private func runDemuxLoop(
         url: URL,
+        cacheScope: PlaybackCacheScope?,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) {
         defer {
@@ -934,6 +940,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         do {
             try demuxer.open(
                 url: url.absoluteString,
+                cacheScope: cacheScope,
                 recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
             )
         } catch {

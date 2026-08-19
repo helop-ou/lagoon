@@ -44,4 +44,5 @@
 
 ## Deliberate non-goals for now
 
-- Offline downloads.
+- Offline downloads. HEL-86's bounded playback range cache is transient,
+  discardable on player exit, and deliberately cannot become saved media.

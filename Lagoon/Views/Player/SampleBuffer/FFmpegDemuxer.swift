@@ -15,6 +15,7 @@ nonisolated private let avTimeBase = 1_000_000.0 // AV_TIME_BASE
 nonisolated private let seekBackwardFlag: Int32 = 1 // AVSEEK_FLAG_BACKWARD
 nonisolated private let keyPacketFlag: Int32 = 1 // AV_PKT_FLAG_KEY
 nonisolated private let avErrorEOF: Int32 = -541_478_725 // AVERROR_EOF = -MKTAG('E','O','F',' ')
+nonisolated private let customIOFlag: Int32 = 0x0080 // AVFMT_FLAG_CUSTOM_IO
 
 nonisolated enum DemuxError: LocalizedError {
     case openFailed(String)
@@ -62,6 +63,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     private var formatContext: UnsafeMutablePointer<AVFormatContext>?
+    private var cachedIO: FFmpegCachedIO?
     private var packet: UnsafeMutablePointer<AVPacket>?
     private var videoStreamIndex: Int32 = -1
     private var videoTimeBase = AVRational(num: 1, den: 1)
@@ -142,6 +144,7 @@ nonisolated final class FFmpegDemuxer {
 
     func open(
         url: String,
+        cacheScope: PlaybackCacheScope? = nil,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) throws {
         avformat_network_init()
@@ -155,6 +158,12 @@ nonisolated final class FFmpegDemuxer {
             },
             opaque: Unmanaged.passUnretained(self).toOpaque()
         )
+        if let cacheScope {
+            let cachedIO = try FFmpegCachedIO(scope: cacheScope)
+            allocated.pointee.pb = cachedIO.context
+            allocated.pointee.flags |= customIOFlag
+            self.cachedIO = cachedIO
+        }
 
         // Bound every network operation and survive transient drops — an
         // unbounded connect was capable of wedging playback startup.
@@ -168,6 +177,8 @@ nonisolated final class FFmpegDemuxer {
         var ctx: UnsafeMutablePointer<AVFormatContext>? = allocated
         var status = avformat_open_input(&ctx, url, nil, &options)
         guard status >= 0, let ctx else {
+            cachedIO?.close()
+            cachedIO = nil
             throw DemuxError.openFailed(Self.errorText(status))
         }
         formatContext = ctx
@@ -565,6 +576,8 @@ nonisolated final class FFmpegDemuxer {
         if formatContext != nil {
             avformat_close_input(&formatContext)
         }
+        cachedIO?.close()
+        cachedIO = nil
 
         // These wrappers free AVCodecContext/SWR resources in deinit.
         // close() runs on the demux queue; clearing them here prevents that
