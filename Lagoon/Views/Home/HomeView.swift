@@ -50,6 +50,7 @@ struct HomeView: View {
                         MediaRail(
                             title: "Favorites",
                             items: viewModel.favorites,
+                            style: .landscape,
                             onUserDataChange: refreshUserData
                         )
                         // A native discovery path that works on every
@@ -57,7 +58,12 @@ struct HomeView: View {
                         // Screen Sections plugins (HEL-84).
                         GenreRail(genres: viewModel.genreShelf)
                         ForEach(viewModel.latestRails) { rail in
-                            MediaRail(title: rail.title, items: rail.items, onUserDataChange: refreshUserData)
+                            MediaRail(
+                                title: rail.title,
+                                items: rail.items,
+                                style: .landscape,
+                                onUserDataChange: refreshUserData
+                            )
                         }
                         // Whatever the server's Home Screen Sections plugin
                         // adds on top (HEL-47) — nothing at all without it.
@@ -65,7 +71,7 @@ struct HomeView: View {
                             MediaRail(
                                 title: rail.title,
                                 items: rail.items,
-                                style: rail.style,
+                                style: .landscape,
                                 onUserDataChange: refreshUserData
                             )
                         }

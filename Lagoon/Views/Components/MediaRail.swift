@@ -34,8 +34,12 @@ struct MediaRail: View {
                                 case .poster:
                                     PosterCard(item: item)
                                 case .landscape:
-                                    LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata) {
-                                        playAction?(item)
+                                    if let playAction {
+                                        LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata) {
+                                            playAction(item)
+                                        }
+                                    } else {
+                                        LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata)
                                     }
                                 }
                             }

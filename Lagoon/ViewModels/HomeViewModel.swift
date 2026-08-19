@@ -7,7 +7,6 @@ final class HomeViewModel {
         let id: String
         let title: String
         let items: [MediaItem]
-        var style: RailStyle = .poster
     }
 
     /// Plugin sections whose content Lagoon already draws with a rail of its
@@ -194,10 +193,7 @@ final class HomeViewModel {
                         rail: LibraryRail(
                             id: "plugin-" + section.section,
                             title: section.displayText ?? section.section,
-                            items: items,
-                            // Square has no rail of its own; the poster rail
-                            // is the closer fit of the two Lagoon has.
-                            style: section.viewMode == "Landscape" ? .landscape : .poster
+                            items: items
                         )
                     )
                 }

@@ -81,58 +81,70 @@ struct PosterCard: View {
     }
 }
 
-/// 16:9 card for landscape rails; starts playback directly. Resume-oriented
-/// rails can opt into the title/subtitle overlay, while discovery shelves keep
-/// artwork free of the underlying asset's metadata.
+/// 16:9 card for landscape rails. Resume-oriented rails provide a direct-play
+/// action and can opt into metadata; discovery rails navigate to item details
+/// and keep the artwork free of the underlying asset's title.
 struct LandscapeCard: View {
     let item: MediaItem
     var showsMetadata = false
-    let action: () -> Void
+    var action: (() -> Void)? = nil
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        Button(action: action) {
-            ZStack(alignment: .bottomLeading) {
-                CachedAsyncImage(
-                    url: session.client.imageURL(for: item, kind: .thumb, maxWidth: Int(Metrics.landscapeWidth * 1.5)),
-                    maxPixelSize: Int(Metrics.landscapeWidth * 1.5)
-                ) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.white.opacity(0.06)
+        Group {
+            if let action {
+                Button(action: action) {
+                    artwork
                 }
-                .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
-                .clipped()
-
-                if showsMetadata {
-                    LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
-                        .frame(height: Metrics.landscapeHeight * 0.55)
-                        .frame(maxWidth: .infinity, alignment: .bottom)
-
-                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                        Text(item.railTitle)
-                            .font(.footnote.bold())
-                            .lineLimit(1)
-                        if let subtitle = item.railSubtitle {
-                            Text(subtitle)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .padding(.horizontal, Metrics.Space.m)
-                    .padding(.bottom, item.playbackProgress == nil ? 12 : 22)
-                }
-
-                if let progress = item.playbackProgress {
-                    ItemProgressBar(progress: progress)
+            } else {
+                NavigationLink(value: item) {
+                    artwork
                 }
             }
-            .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
         }
         .cardButtonStyle()
         .accessibilityLabel(item.railTitle)
+    }
+
+    private var artwork: some View {
+        ZStack(alignment: .bottomLeading) {
+            CachedAsyncImage(
+                url: session.client.imageURL(for: item, kind: .thumb, maxWidth: Int(Metrics.landscapeWidth * 1.5)),
+                maxPixelSize: Int(Metrics.landscapeWidth * 1.5)
+            ) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                Color.white.opacity(0.06)
+            }
+            .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
+            .clipped()
+
+            if showsMetadata {
+                LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
+                    .frame(height: Metrics.landscapeHeight * 0.55)
+                    .frame(maxWidth: .infinity, alignment: .bottom)
+
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                    Text(item.railTitle)
+                        .font(.footnote.bold())
+                        .lineLimit(1)
+                    if let subtitle = item.railSubtitle {
+                        Text(subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                .padding(.horizontal, Metrics.Space.m)
+                .padding(.bottom, item.playbackProgress == nil ? 12 : 22)
+            }
+
+            if let progress = item.playbackProgress {
+                ItemProgressBar(progress: progress)
+            }
+        }
+        .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
     }
 }
 
