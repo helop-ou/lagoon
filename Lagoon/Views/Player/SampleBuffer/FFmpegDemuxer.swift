@@ -64,6 +64,9 @@ nonisolated final class FFmpegDemuxer {
 
     private var formatContext: UnsafeMutablePointer<AVFormatContext>?
     private var cachedIO: FFmpegCachedIO?
+    private var hlsCache: HLSPlaybackCacheScope?
+    private let childIOLock = NSLock()
+    private var childCachedIO: [UInt: (io: FFmpegCachedIO, lease: HLSPlaybackCacheLease)] = [:]
     private var packet: UnsafeMutablePointer<AVPacket>?
     private var videoStreamIndex: Int32 = -1
     private var videoTimeBase = AVRational(num: 1, den: 1)
@@ -144,7 +147,7 @@ nonisolated final class FFmpegDemuxer {
 
     func open(
         url: String,
-        cacheScope: PlaybackCacheScope? = nil,
+        cacheSession: PlaybackCacheSession? = nil,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) throws {
         avformat_network_init()
@@ -158,11 +161,31 @@ nonisolated final class FFmpegDemuxer {
             },
             opaque: Unmanaged.passUnretained(self).toOpaque()
         )
-        if let cacheScope {
+        if let cacheScope = cacheSession?.directScope {
             let cachedIO = try FFmpegCachedIO(scope: cacheScope)
             allocated.pointee.pb = cachedIO.context
             allocated.pointee.flags |= customIOFlag
             self.cachedIO = cachedIO
+        } else if let hlsCache = cacheSession?.hlsScope {
+            // libavformat copies `opaque` into nested HLS format contexts.
+            // Mutable .m3u8 manifests fall through to avio_open2; immutable
+            // media resources get Lagoon AVIO contexts and bounded LRU files.
+            self.hlsCache = hlsCache
+            allocated.pointee.opaque = Unmanaged.passUnretained(self).toOpaque()
+            allocated.pointee.io_open = { context, output, url, flags, options in
+                guard let context, let opaque = context.pointee.opaque else { return -5 }
+                return Unmanaged<FFmpegDemuxer>
+                    .fromOpaque(opaque)
+                    .takeUnretainedValue()
+                    .openChildIO(output: output, url: url, flags: flags, options: options)
+            }
+            allocated.pointee.io_close2 = { context, ioContext in
+                guard let context, let opaque = context.pointee.opaque else { return -5 }
+                return Unmanaged<FFmpegDemuxer>
+                    .fromOpaque(opaque)
+                    .takeUnretainedValue()
+                    .closeChildIO(ioContext)
+            }
         }
 
         // Bound every network operation and survive transient drops — an
@@ -179,6 +202,8 @@ nonisolated final class FFmpegDemuxer {
         guard status >= 0, let ctx else {
             cachedIO?.close()
             cachedIO = nil
+            closeAllChildIO()
+            hlsCache = nil
             throw DemuxError.openFailed(Self.errorText(status))
         }
         formatContext = ctx
@@ -578,6 +603,8 @@ nonisolated final class FFmpegDemuxer {
         }
         cachedIO?.close()
         cachedIO = nil
+        closeAllChildIO()
+        hlsCache = nil
 
         // These wrappers free AVCodecContext/SWR resources in deinit.
         // close() runs on the demux queue; clearing them here prevents that
@@ -590,6 +617,67 @@ nonisolated final class FFmpegDemuxer {
         audioStreams.removeAll(keepingCapacity: false)
         subtitleStreams.removeAll(keepingCapacity: false)
         videoStream = nil
+    }
+
+    private func openChildIO(
+        output: UnsafeMutablePointer<UnsafeMutablePointer<AVIOContext>?>?,
+        url: UnsafePointer<CChar>?,
+        flags: Int32,
+        options: UnsafeMutablePointer<OpaquePointer?>?
+    ) -> Int32 {
+        guard let output, let url else { return -22 }
+        let nativeOpen = {
+            avio_open2(output, url, flags, nil, options)
+        }
+        guard flags & 1 != 0, flags & 2 == 0,
+              let hlsCache,
+              let resourceURL = URL(string: String(cString: url)) else {
+            return nativeOpen()
+        }
+        do {
+            guard let lease = try hlsCache.leaseResource(at: resourceURL) else {
+                return nativeOpen()
+            }
+            let io = try FFmpegCachedIO(scope: lease.scope)
+            guard let context = io.context else {
+                lease.close()
+                return nativeOpen()
+            }
+            childIOLock.lock()
+            childCachedIO[UInt(bitPattern: context)] = (io, lease)
+            childIOLock.unlock()
+            output.pointee = context
+            return 0
+        } catch {
+            // Cache failure must never make an otherwise playable HLS stream
+            // fail. FFmpeg retains its native reconnect/timeout behavior.
+            return nativeOpen()
+        }
+    }
+
+    private func closeChildIO(_ context: UnsafeMutablePointer<AVIOContext>?) -> Int32 {
+        guard let context else { return 0 }
+        childIOLock.lock()
+        let cached = childCachedIO.removeValue(forKey: UInt(bitPattern: context))
+        childIOLock.unlock()
+        if let cached {
+            cached.io.close()
+            cached.lease.close()
+            return 0
+        }
+        var nativeContext: UnsafeMutablePointer<AVIOContext>? = context
+        return avio_closep(&nativeContext)
+    }
+
+    private func closeAllChildIO() {
+        childIOLock.lock()
+        let cached = Array(childCachedIO.values)
+        childCachedIO.removeAll(keepingCapacity: false)
+        childIOLock.unlock()
+        for resource in cached {
+            resource.io.close()
+            resource.lease.close()
+        }
     }
 
     private static func metadata(_ stream: UnsafeMutablePointer<AVStream>, key: String) -> String? {

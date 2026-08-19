@@ -185,7 +185,7 @@ final class PlaybackController {
             mediaSourceId = source.id
             playSessionId = info.playSessionId
             playMethod = method
-            let cacheScope = playbackCache.activate(
+            let cacheSession = playbackCache.activate(
                 itemID: media.id,
                 url: streamURL,
                 method: method,
@@ -346,7 +346,7 @@ final class PlaybackController {
             let engine = SampleBufferPlayerEngine()
             engine.prepare(
                 url: streamURL,
-                cacheScope: cacheScope,
+                cacheSession: cacheSession,
                 startSeconds: resumeSeconds,
                 initialAudioOrdinal: initialAudioOrdinal,
                 initialSubtitleOrdinal: initialSubtitleOrdinal,
@@ -1001,11 +1001,14 @@ final class PlaybackController {
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
         if let cache {
             lines.append(String(
-                format: "Cache:   %.1f MB · %.0f%% hit · %d req · %.0fms avg",
+                format: "Cache:   %.1f/%.0f MB · %.0f%% hit · %d req · %.0fms avg · %d res · %d evict",
                 Double(cache.cachedBytes) / 1_048_576,
+                Double(cache.capacityBytes) / 1_048_576,
                 cache.hitRate * 100,
                 cache.requestCount,
-                cache.averageRequestMilliseconds
+                cache.averageRequestMilliseconds,
+                cache.resourceCount,
+                cache.evictionCount
             ))
         }
         if let videoTiming = engine.videoTimingDiagnostic {

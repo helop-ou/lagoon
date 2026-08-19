@@ -540,17 +540,37 @@ media-buffer releases or C decoder destruction. `Sessions/Playing/Stopped`
 still reports exactly once from the controller after the engine position is
 captured; network reporting never gates UI dismissal.
 
-Direct-play and direct-stream files now pass through a bounded sparse range
-cache (HEL-86) before libavformat. FFmpeg supplies a custom `AVIOContext`;
-cache misses become authenticated HTTP `Range` requests and hits read the
-discardable file under `Library/Caches/Lagoon/Playback`. The active scope
-prefetches at low URLSession priority up to 512 MiB while FFmpeg's foreground
-misses use high priority. The file remains bounded even if a server ignores
-the Range header: the streaming delegate stops after the requested bytes
-rather than accepting a full-file response into memory. Reaching the cap only
-stops new writes — playback continues from the network. The debug Playback HUD
-reports cached MiB, hit rate, and request count so seek improvements and later
-regressions are measurable; it also reports average range-request latency.
+Direct-play, direct-stream, and transcoded HLS media now pass through a
+bounded sparse range cache (HEL-86) before libavformat. Direct files use one
+custom `AVIOContext`. For HLS, `AVFormatContext.io_open` routes immutable media
+resources through custom contexts while `.m3u8` playlists remain on FFmpeg's
+native path; Jellyfin can update those manifests while a transcode is still
+being produced, so persisting them would risk stale-playlist stalls. Cache
+misses become authenticated HTTP `Range` requests and hits read discardable
+files under `Library/Caches/Lagoon/Playback`.
+
+Each item has an aggregate cap of at most 512 MiB. The coordinator preserves a
+256 MiB volume reserve and uses at most one quarter of the remaining available
+capacity; below 320 MiB free it disables playback caching for that session.
+HLS additionally caps one resource at 32 MiB and 256 remembered resources,
+closes inactive file handles, and evicts only inactive entries in LRU order.
+Active FFmpeg contexts hold leases and can never be removed underneath a read.
+Every HLS resource shares one reusable URLSession for connection reuse and
+bounded memory/socket overhead. If all entries are active, storage is
+unavailable, or a URL is not cache-safe, the `io_open` callback falls back to
+`avio_open2`; the optimization cannot make an otherwise playable stream fail.
+
+The active item prefetches at low URLSession priority up to the cap while
+FFmpeg's foreground misses use high priority. A staged next episode warms only
+8 MiB of the selected HLS media path or direct file, enough for probing and the
+first-frame cushion without downloading an unanswered Up Next choice. When a
+server ignores Range, the streaming delegate discards an unrequested prefix
+and retains only the bounded requested window; later reads remain correct
+without materializing a whole movie in memory. Reaching the cap triggers HLS
+LRU eviction or stops new direct-file writes, while playback continues from
+the network. The debug Playback HUD reports cached MiB, hit rate, request
+count, average request latency, active capacity, live resource count, and
+eviction count so seek improvements and regressions are measurable.
 
 Cache ownership is part of the player lifecycle, never an offline-download
 feature. There is one active scope and at most one staged successor. Dismissal,
@@ -558,10 +578,8 @@ failure, or account/player replacement cancels requests and removes both;
 episode advance cancels/removes the old scope and promotes the staged one.
 Deletion waits for an in-flight demux read on a utility queue so the main actor
 does not inherit file/network teardown. Stale scope directories are discarded
-when a new coordinator starts. HLS transcoding deliberately still uses
-libavformat's network path: its child playlists and media segments are opened
-outside the top-level AVIO context and need an `io_open`-level cache in a later
-HEL-86 slice.
+when a new coordinator starts. HLS resource leases, the reusable URLSession,
+and manifest warmup are cancelled at the same lifecycle boundary.
 
 The dismissal boundary itself is synchronous: before the full-screen cover
 returns to Home or Settings, the controller cancels its clocks and subtitle

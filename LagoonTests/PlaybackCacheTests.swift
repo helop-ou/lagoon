@@ -4,6 +4,26 @@ import Testing
 
 @Suite("Playback cache", .serialized)
 struct PlaybackCacheTests {
+    @Test func adaptiveCapacityPreservesFreeSpaceAndHonorsMaximum() {
+        let mebibyte: Int64 = 1_024 * 1_024
+
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: nil) == 512 * mebibyte)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 319 * mebibyte) == 0)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 320 * mebibyte) == 64 * mebibyte)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 1_024 * mebibyte) == 192 * mebibyte)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 4_096 * mebibyte) == 512 * mebibyte)
+    }
+
+    @Test func rangeLoaderDoesNotRetainItselfThroughItsSessionDelegate() {
+        weak var releasedLoader: URLSessionPlaybackRangeLoader?
+        do {
+            let loader = URLSessionPlaybackRangeLoader()
+            releasedLoader = loader
+            #expect(releasedLoader != nil)
+        }
+        #expect(releasedLoader == nil)
+    }
+
     @Test func rangesMergeOverlapAndAdjacencyWithoutDoubleCounting() {
         var ranges = PlaybackByteRangeSet()
         #expect(ranges.insert(PlaybackByteRange(10, 20)) == 10)
@@ -106,6 +126,168 @@ struct PlaybackCacheTests {
         #expect(PlaybackCacheURLProtocol.rangeHeaders == ["bytes=0-15"])
     }
 
+    @Test func ignoredRangeResponseStreamsPastPrefixForLaterReads() throws {
+        PlaybackCacheURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [PlaybackCacheURLProtocol.self]
+        let loader = URLSessionPlaybackRangeLoader(configuration: configuration)
+
+        let response = try loader.load(
+            url: URL(string: "https://cache.test/video.mkv")!,
+            range: PlaybackByteRange(32, 48),
+            priority: URLSessionTask.highPriority
+        )
+
+        #expect(response.data == Data((32..<48).map(UInt8.init)))
+        #expect(response.offset == 32)
+        #expect(response.totalLength == 256)
+        #expect(response.transferredBytes >= 48)
+        #expect(PlaybackCacheURLProtocol.rangeHeaders == ["bytes=32-47"])
+    }
+
+    @Test func hlsCacheSkipsMutablePlaylistsAndUnsupportedSchemes() {
+        #expect(!HLSPlaybackCacheScope.shouldCache(
+            url: URL(string: "https://media.test/master.m3u8?token=one")!
+        ))
+        #expect(HLSPlaybackCacheScope.shouldCache(
+            url: URL(string: "https://media.test/hls/main/001.ts?token=one")!
+        ))
+        #expect(!HLSPlaybackCacheScope.shouldCache(
+            url: URL(string: "file:///tmp/001.ts")!
+        ))
+    }
+
+    @Test func hlsManifestReferencesResolveRelativeResources() {
+        let manifest = Data("""
+        #EXTM3U
+        #EXT-X-MAP:URI="init.mp4"
+        #EXT-X-KEY:METHOD=AES-128,URI="keys/one.bin"
+        #EXTINF:6.0,
+        segment-001.m4s
+        """.utf8)
+        let base = URL(string: "https://media.test/hls/main/index.m3u8?token=one")!
+
+        let references = HLSPlaybackCacheScope.playlistReferences(
+            data: manifest,
+            relativeTo: base
+        )
+
+        #expect(references.map(\.absoluteString) == [
+            "https://media.test/hls/main/init.mp4",
+            "https://media.test/hls/main/keys/one.bin",
+            "https://media.test/hls/main/segment-001.m4s"
+        ])
+    }
+
+    @Test func hlsVariantSelectionDoesNotMistakeAlternateAudioForVideo() {
+        let manifest = Data("""
+        #EXTM3U
+        #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",URI="audio/main.m3u8"
+        #EXT-X-STREAM-INF:BANDWIDTH=8000000,AUDIO="audio"
+        video/main.m3u8
+        """.utf8)
+        let base = URL(string: "https://media.test/master.m3u8")!
+
+        let variants = HLSPlaybackCacheScope.variantPlaylistURLs(
+            data: manifest,
+            relativeTo: base
+        )
+
+        #expect(variants.map(\.absoluteString) == ["https://media.test/video/main.m3u8"])
+    }
+
+    @Test func hlsCacheEvictsInactiveLRUWithinSharedByteBudget() throws {
+        let payload = Data(repeating: 0xCD, count: 256)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cache = try HLSPlaybackCacheScope(
+            itemID: "episode-hls",
+            sourceURL: URL(string: "https://media.test/master.m3u8")!,
+            directory: directory,
+            byteLimit: 64,
+            maxResources: 3,
+            requestSize: 32,
+            resourceLoader: PlaybackCacheLoaderStub(payload: payload)
+        )
+        defer { cache.cancelAndRemove() }
+        let firstURL = URL(string: "https://media.test/one.ts")!
+        let secondURL = URL(string: "https://media.test/two.ts")!
+        let thirdURL = URL(string: "https://media.test/three.ts")!
+
+        let firstLease = try cache.leaseResource(at: firstURL)
+        let first = try #require(firstLease)
+        #expect(try first.scope.read(offset: 0, length: 8).count == 8)
+        first.close()
+        let secondLease = try cache.leaseResource(at: secondURL)
+        let second = try #require(secondLease)
+        #expect(try second.scope.read(offset: 0, length: 8).count == 8)
+        second.close()
+        let thirdLease = try cache.leaseResource(at: thirdURL)
+        let third = try #require(thirdLease)
+        #expect(try third.scope.read(offset: 0, length: 8).count == 8)
+        third.close()
+
+        #expect(cache.metrics.cachedBytes == 64)
+        #expect(cache.metrics.networkBytes == 96)
+        #expect(cache.metrics.requestCount == 3)
+        #expect(cache.metrics.evictionCount == 1)
+        #expect(cache.metrics.resourceCount == 2)
+        #expect(cache.cachedResourceURLs == [secondURL, thirdURL])
+    }
+
+    @Test func hlsCacheNeverEvictsAnActivelyLeasedResource() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cache = try HLSPlaybackCacheScope(
+            itemID: "active-hls",
+            sourceURL: URL(string: "https://media.test/master.m3u8")!,
+            directory: directory,
+            byteLimit: 64,
+            maxResources: 1,
+            requestSize: 32
+        )
+        defer { cache.cancelAndRemove() }
+        let activeURL = URL(string: "https://media.test/active.ts")!
+        let blockedURL = URL(string: "https://media.test/blocked.ts")!
+
+        let activeLease = try cache.leaseResource(at: activeURL)
+        let active = try #require(activeLease)
+        #expect(try cache.leaseResource(at: blockedURL) == nil)
+        #expect(cache.cachedResourceURLs == [activeURL])
+        active.close()
+    }
+
+    @Test func hlsCacheReopensSuspendedFilesWithoutLosingHits() throws {
+        let payload = Data((0..<128).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cache = try HLSPlaybackCacheScope(
+            itemID: "resume-hls",
+            sourceURL: URL(string: "https://media.test/master.m3u8")!,
+            directory: directory,
+            byteLimit: 128,
+            maxResources: 2,
+            requestSize: 64,
+            resourceLoader: loader
+        )
+        defer { cache.cancelAndRemove() }
+        let segmentURL = URL(string: "https://media.test/segment.ts")!
+
+        let firstLease = try cache.leaseResource(at: segmentURL)
+        let first = try #require(firstLease)
+        #expect(try first.scope.read(offset: 16, length: 8).count == 8)
+        first.close()
+
+        let resumedLease = try cache.leaseResource(at: segmentURL)
+        let resumed = try #require(resumedLease)
+        #expect(try resumed.scope.read(offset: 16, length: 8).count == 8)
+        resumed.close()
+
+        #expect(loader.requestCount == 1)
+        #expect(cache.metrics.cacheHitBytes == 8)
+    }
+
     @MainActor
     @Test func coordinatorPromotesOnlyThePreparedSuccessor() throws {
         let root = FileManager.default.temporaryDirectory
@@ -138,6 +320,34 @@ struct PlaybackCacheTests {
 
         #expect(promoted === prepared)
         #expect(coordinator.current === prepared)
+        #expect(coordinator.next == nil)
+        coordinator.discardAll()
+    }
+
+    @MainActor
+    @Test func coordinatorCreatesAndPromotesTranscodeResourceCaches() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let coordinator = PlaybackCacheCoordinator(rootDirectory: root)
+        let hlsURL = URL(string: "https://media.test/Videos/id/master.m3u8?token=one")!
+
+        let staged = coordinator.stageNext(
+            itemID: "episode-hls",
+            url: hlsURL,
+            method: .transcode,
+            expectedLength: nil
+        )
+        #expect(staged?.hlsScope != nil)
+        #expect(staged?.directScope == nil)
+
+        let promoted = coordinator.activate(
+            itemID: "episode-hls",
+            url: hlsURL,
+            method: .transcode,
+            expectedLength: nil
+        )
+        #expect(promoted === staged)
+        #expect(coordinator.current === staged)
         #expect(coordinator.next == nil)
         coordinator.discardAll()
     }
