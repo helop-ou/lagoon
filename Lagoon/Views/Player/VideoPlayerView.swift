@@ -4,6 +4,17 @@ import OSLog
 import SwiftUI
 import UIKit
 
+private enum PlaybackStartError: LocalizedError {
+    case previousEngineDidNotRetire
+
+    var errorDescription: String? {
+        switch self {
+        case .previousEngineDidNotRetire:
+            "The previous video could not release its player resources. Close the player and try again."
+        }
+    }
+}
+
 /// Identifiable wrapper so `fullScreenCover(item:)` can present playback.
 nonisolated struct PlayerItem: Identifiable {
     let id = UUID()
@@ -82,6 +93,13 @@ final class PlaybackController {
     @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator()
     @ObservationIgnored private let lifecycleID = UUID()
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
+    #if DEBUG
+    /// `debug.regressionStartNearEnd` exists to reach autoplay quickly. It
+    /// must only affect the fixture episode: applying it again to the
+    /// successor made the old handoff test exit before sustained playback
+    /// could be measured.
+    @ObservationIgnored private var didApplyRegressionNearEnd = false
+    #endif
 
     init() {
         PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
@@ -221,7 +239,9 @@ final class PlaybackController {
             }
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "debug.regressionStartNearEnd"),
+               !didApplyRegressionNearEnd,
                let ticks = source.runTimeTicks ?? media.runTimeTicks {
+                didApplyRegressionNearEnd = true
                 resumeSeconds = max(Ticks.seconds(ticks) - 45, 0)
             }
             #endif
@@ -345,7 +365,7 @@ final class PlaybackController {
             guard !isClosed else { throw CancellationError() }
             try Task.checkCancellation()
             let previousResourcesRetired = await PlaybackLifecycleDiagnostics
-                .waitForMediaResourcesToRetire()
+                .waitForMediaResourcesToRetire(timeout: .seconds(15))
             if !previousResourcesRetired {
                 let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
                 os_signpost(
@@ -358,6 +378,11 @@ final class PlaybackController {
                     lifecycle.attachedRendererSets,
                     lifecycle.footprintMB
                 )
+                // Never attach a replacement to the display-layer renderer
+                // while an outgoing synchronizer still owns it. Proceeding
+                // after the old three-second timeout was the autoplay-only
+                // episode-two stall path on Apple TV.
+                throw PlaybackStartError.previousEngineDidNotRetire
             }
             guard !isClosed else { throw CancellationError() }
             try Task.checkCancellation()
@@ -662,7 +687,27 @@ final class PlaybackController {
         nextPreparationTask = nil
         guard !isClosed else { return }
         captureTrackPreference()
-        await stop(preservingPreparedNext: true, preservingPlayerSurface: true)
+        let outgoingResourcesRetired = await stop(
+            preservingPreparedNext: true,
+            preservingPlayerSurface: true
+        )
+        guard outgoingResourcesRetired else {
+            let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
+            os_signpost(
+                .event,
+                log: PlaybackPerformance.log,
+                name: "Playback Resource Retirement Timeout",
+                signpostID: performanceSignpostID,
+                "scope=handoff demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
+                lifecycle.activeDemuxLoops,
+                lifecycle.attachedRendererSets,
+                lifecycle.footprintMB
+            )
+            preparedNext = nil
+            _ = beginStop()
+            errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
+            return
+        }
         guard !isClosed else { return }
         // The old card describes the item that is now becoming current. Do
         // not let it reappear over a successor that resumes near its end.
@@ -864,12 +909,21 @@ final class PlaybackController {
     private func stop(
         preservingPreparedNext: Bool,
         preservingPlayerSurface: Bool
-    ) async {
+    ) async -> Bool {
+        let outgoingEngine = engine
         let report = beginStop(
             preservingPreparedNext: preservingPreparedNext,
             preservingPlayerSurface: preservingPlayerSurface
         )
+        // Stop reporting and local teardown are independent. Await them in
+        // parallel so a slow Jellyfin response does not add to the renderer
+        // retirement latency, while still preserving report-before-start.
+        let retirement = Task {
+            guard let outgoingEngine else { return true }
+            return await outgoingEngine.waitForMediaResourcesToRetire()
+        }
         await report?.value
+        return await retirement.value
     }
 
     private func handleEngineError(_ message: String, engine: SampleBufferPlayerEngine) {
@@ -1123,7 +1177,7 @@ final class PlaybackController {
         if let request = engine.displayMatchRequest {
             lines.append(String(
                 format: "Display: request %.3f Hz · %@",
-                request.frameRate,
+                Double(request.frameRate),
                 DisplayModeMatcher.statusDescription
             ))
         }

@@ -559,6 +559,12 @@ Every HLS resource shares one reusable URLSession for connection reuse and
 bounded memory/socket overhead. If all entries are active, storage is
 unavailable, or a URL is not cache-safe, the `io_open` callback falls back to
 `avio_open2`; the optimization cannot make an otherwise playable stream fail.
+Cached HLS disables libavformat's segment-level HTTP persistence. FFmpeg's HLS
+keep-alive path assumes a segment `AVIOContext` wraps its native HTTP
+`URLContext`, while Lagoon intentionally supplies a file-backed cached
+context; allowing reuse can therefore reinterpret that custom context as HTTP
+state and abort in `hls.c`. Lagoon's shared URLSession still reuses its own
+connections, so this safety boundary does not create one session per segment.
 
 The active item prefetches at low URLSession priority up to the cap while
 FFmpeg's foreground misses use high priority. A staged next episode warms only
@@ -586,9 +592,12 @@ returns to Home or Settings, the controller cancels its clocks and subtitle
 work, detaches system media state, marks the engine cancelled, interrupts
 FFmpeg, and queues renderer teardown. Only the Jellyfin stopped report remains
 asynchronous, and that task carries copied request values rather than retaining
-the controller. A replacement player waits up to 3 s for the prior demux loop
-and renderer set to retire; a timeout is recorded as `Playback Resource
-Retirement Timeout` rather than silently overlapping two media pipelines.
+the controller. A replacement player waits up to 15 s for the exact outgoing
+engine's demux loop and renderer set to retire. Renderer removal is
+asynchronous inside AVFoundation and can exceed the old three-second allowance
+after high-resolution playback. A timeout is recorded as `Playback Resource
+Retirement Timeout` and aborts the replacement instead of silently overlapping
+two media pipelines on one display-layer renderer.
 
 `Playback Lifecycle` signposts record live controllers, engines, demux loops,
 renderer sets, unclean engine destructions, and physical footprint at every
@@ -758,8 +767,12 @@ reflects the new position immediately.
     the successor's primed presentation clock. The same duration appears in
     the Playback HUD and the launch-gated UI-test probe. The hardware journey
     starts a real episode near its end, selects the production Up Next card,
-    asserts the surface never disappears, and requires one engine, demuxer,
-    and renderer set after the successor becomes ready.
+    and injects a seven-second renderer-retirement delay to model slow Apple TV
+    decoder teardown. It asserts the surface never disappears, requires one
+    engine/demuxer/renderer set after the successor becomes ready, then keeps
+    episode two running for 20 seconds with media-clock, stall, buffering, and
+    memory-growth ceilings. A separate cached-HLS journey crosses several
+    segment boundaries and enforces the same single-pipeline invariants.
   - **Never resolve the next episode from `Shows/NextUp`.** That endpoint
     returns the episode *in progress* when there is one — `enableResumable`
     defaults to `true`, per the server's own OpenAPI document — and at the

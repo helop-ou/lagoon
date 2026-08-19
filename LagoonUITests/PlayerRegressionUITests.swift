@@ -118,9 +118,12 @@ final class PlayerRegressionUITests: XCTestCase {
     func testEpisodeHandoffKeepsSurfaceMountedAndStartsSuccessor() throws {
         let app = launchPlayer(
             title: "episode-handoff-regression",
+            simulatorTranscode: false,
             extraArguments: [
                 "-debug.regressionFindEpisodeWithSuccessor", "YES",
+                "-debug.regressionRequireDirectH264Successor", "YES",
                 "-debug.regressionStartNearEnd", "YES",
+                "-debug.regressionRendererRetirementDelaySeconds", "7",
                 "-playback.autoplayMode", "card",
             ]
         )
@@ -177,6 +180,70 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(successor.int("demux"), 1)
         XCTAssertEqual(successor.int("renderers"), 1)
         XCTAssertEqual(successor.int("unclean"), 0)
+
+        // First-frame readiness is not enough: the reported regression
+        // starts after autoplay, then repeatedly starves without recovering.
+        // Leave the exact successor pipeline running and require its media
+        // clock to make sustained progress without accumulating stalls or a
+        // second engine's resources.
+        let successorStartTime = successor.double("time")
+        let successorStartStalls = successor.int("stalls")
+        let successorStartMemory = successor.double("memoryMB")
+        Thread.sleep(forTimeInterval: 20)
+        let sustained = state(in: app)
+        XCTAssertGreaterThan(
+            sustained.double("time"),
+            successorStartTime + 12,
+            "Successor playback did not sustain media-clock progress"
+        )
+        XCTAssertEqual(sustained.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(
+            sustained.int("stalls") - successorStartStalls,
+            1,
+            "Successor entered a repeated stall/re-prime loop"
+        )
+        XCTAssertEqual(sustained.int("engines"), 1)
+        XCTAssertEqual(sustained.int("demux"), 1)
+        XCTAssertEqual(sustained.int("renderers"), 1)
+        XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertLessThan(
+            sustained.double("memoryMB"),
+            successorStartMemory + 96,
+            "Successor playback retained an excessive outgoing footprint"
+        )
+    }
+
+    func testCachedHLSPlaybackCrossesSegmentBoundariesWithoutStalling() throws {
+        let app = launchPlayer(
+            title: "cached-hls-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("time") >= 0
+        }
+        let startTime = initial.double("time")
+        let startStalls = initial.int("stalls")
+        let startMemory = initial.double("memoryMB")
+
+        // Jellyfin's simulator rendition uses short fMP4 segments. Fifteen
+        // seconds crosses several FFmpeg HLS open/close cycles—the old cached
+        // I/O implementation aborted at the first attempted keep-alive reuse.
+        Thread.sleep(forTimeInterval: 15)
+        let sustained = state(in: app)
+        XCTAssertGreaterThan(sustained.double("time"), startTime + 9)
+        XCTAssertEqual(sustained.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(sustained.int("stalls") - startStalls, 1)
+        XCTAssertEqual(sustained.int("engines"), 1)
+        XCTAssertEqual(sustained.int("demux"), 1)
+        XCTAssertEqual(sustained.int("renderers"), 1)
+        XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
     }
 
     func testTvOSSettingsHierarchyPickersAndHomeRowsNavigation() {

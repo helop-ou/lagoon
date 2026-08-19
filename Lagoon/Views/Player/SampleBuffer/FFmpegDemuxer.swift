@@ -195,6 +195,15 @@ nonisolated final class FFmpegDemuxer {
         av_dict_set(&options, "reconnect", "1", 0)
         av_dict_set(&options, "reconnect_streamed", "1", 0)
         av_dict_set(&options, "reconnect_delay_max", "2", 0)
+        if hlsCache != nil {
+            // FFmpeg's HLS keep-alive path assumes every segment AVIOContext
+            // wraps its native HTTP URLContext. Lagoon deliberately replaces
+            // immutable segments with file-backed cached AVIO contexts, so a
+            // later segment can otherwise be mistaken for a reusable HTTP
+            // connection and trip hls.c's `av_assert0(uc)`. Open each cached
+            // segment independently; manifests still use native HTTP I/O.
+            av_dict_set(&options, "http_persistent", "0", 0)
+        }
         defer { av_dict_free(&options) }
 
         var ctx: UnsafeMutablePointer<AVFormatContext>? = allocated

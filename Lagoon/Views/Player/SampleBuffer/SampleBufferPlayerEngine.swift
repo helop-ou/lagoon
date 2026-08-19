@@ -440,6 +440,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
+    /// Completes only after this engine has closed FFmpeg and AVFoundation
+    /// has acknowledged removal of both renderers. The controller keeps the
+    /// instance alive while awaiting this during an episode handoff.
+    nonisolated func waitForMediaResourcesToRetire(
+        timeout: Duration = .seconds(15)
+    ) async -> Bool {
+        await PlaybackLifecycleDiagnostics.waitForMediaResourcesToRetire(
+            for: lifecycleID,
+            timeout: timeout
+        )
+    }
+
     func refreshVideoPerformanceMetrics() {
         guard !shutdownRequested, let renderer = videoRenderer else { return }
         renderer.loadVideoPerformanceMetrics { [weak self] metrics in
@@ -495,6 +507,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audio?.flush()
         videoQueue.reset()
         audioQueue.reset()
+
+        #if DEBUG
+        // Hardware can spend several seconds retiring a 4K decoder and its
+        // queued surfaces. This launch-only hook reproduces that timing on
+        // CoreSimulator so autoplay must prove it never overlaps the old
+        // renderer with the successor.
+        let regressionDelay = UserDefaults.standard.double(
+            forKey: "debug.regressionRendererRetirementDelaySeconds"
+        )
+        if regressionDelay > 0 {
+            Thread.sleep(forTimeInterval: regressionDelay)
+        }
+        #endif
 
         // The synchronizer otherwise retains both renderers until the
         // main-actor engine dies. Removing them asynchronously lets their

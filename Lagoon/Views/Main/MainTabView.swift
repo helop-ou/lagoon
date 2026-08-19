@@ -217,14 +217,39 @@ struct MainTabView: View {
         }
         if regressionRun,
            UserDefaults.standard.bool(forKey: "debug.regressionFindEpisodeWithSuccessor") {
-            guard let page = try? await session.client.items(
-                includeTypes: [.episode],
-                sortBy: "SeriesSortName,ParentIndexNumber,IndexNumber",
-                limit: 100
-            ) else {
-                print("RegressionResolve failed episode handoff library scan")
-                regressionResolution = "error:episode handoff library scan failed"
-                return
+            let episodeItems: [MediaItem]
+            if let requestedSeries, !requestedSeries.isEmpty {
+                guard let seriesPage = try? await session.client.items(
+                    includeTypes: [.series],
+                    searchTerm: requestedSeries,
+                    limit: 20
+                ),
+                let series = seriesPage.items.first(where: {
+                    $0.name?.compare(
+                        requestedSeries,
+                        options: [.caseInsensitive, .diacriticInsensitive]
+                    ) == .orderedSame
+                }),
+                let episodes = try? await session.client.episodes(
+                    seriesId: series.id,
+                    seasonId: nil
+                ) else {
+                    print("RegressionResolve failed handoff series=\"\(requestedSeries)\"")
+                    regressionResolution = "missing:requested handoff series"
+                    return
+                }
+                episodeItems = episodes
+            } else {
+                guard let page = try? await session.client.items(
+                    includeTypes: [.episode],
+                    sortBy: "SeriesSortName,ParentIndexNumber,IndexNumber",
+                    limit: 100
+                ) else {
+                    print("RegressionResolve failed episode handoff library scan")
+                    regressionResolution = "error:episode handoff library scan failed"
+                    return
+                }
+                episodeItems = page.items
             }
             // Select the earliest of at least two catalogue episodes in one
             // series. This keeps resolution to one list request plus usually
@@ -232,7 +257,7 @@ struct MainTabView: View {
             // made a fixture-less public demo slow enough for XCTest's tvOS
             // runner watchdog. The actual player still exercises that API.
             let candidates = Dictionary(
-                grouping: page.items.filter { $0.seriesId != nil },
+                grouping: episodeItems.filter { $0.seriesId != nil },
                 by: { $0.seriesId! }
             ).values.compactMap { episodes -> MediaItem? in
                 guard episodes.count > 1 else { return nil }
@@ -243,11 +268,21 @@ struct MainTabView: View {
                     return (lhs.indexNumber ?? Int.max) < (rhs.indexNumber ?? Int.max)
                 }
             }
+            let requireDirectH264 = UserDefaults.standard.bool(
+                forKey: "debug.regressionRequireDirectH264Successor"
+            )
             for episode in candidates.prefix(20) {
                 guard let info = try? await session.client.playbackInfo(itemId: episode.id),
                       let source = info.mediaSources.first,
                       (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
                     continue
+                }
+                if requireDirectH264 {
+                    let isDirectH264 = source.supportsDirectPlay == true
+                        && (source.mediaStreams ?? []).contains {
+                            $0.type == "Video" && $0.codec?.lowercased() == "h264"
+                        }
+                    guard isDirectH264 else { continue }
                 }
                 print("RegressionResolve handoff title=\"\(episode.name ?? "?")\" id=\(episode.id)")
                 lifecycleBenchmarkMedia = episode

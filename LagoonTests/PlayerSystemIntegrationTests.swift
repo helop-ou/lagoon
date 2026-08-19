@@ -195,6 +195,45 @@ struct PlayerSystemIntegrationTests {
         ) == .reprime)
     }
 
+    @Test func episodeHandoffWaitsForTheSpecificOutgoingPipeline() async {
+        let outgoing = UUID()
+        let unrelated = UUID()
+        PlaybackLifecycleDiagnostics.demuxStarted(outgoing)
+        PlaybackLifecycleDiagnostics.renderersAttached(outgoing)
+        PlaybackLifecycleDiagnostics.demuxStarted(unrelated)
+        defer {
+            PlaybackLifecycleDiagnostics.demuxEnded(outgoing)
+            PlaybackLifecycleDiagnostics.renderersDetached(outgoing)
+            PlaybackLifecycleDiagnostics.demuxEnded(unrelated)
+        }
+
+        let retirement = Task {
+            await PlaybackLifecycleDiagnostics.waitForMediaResourcesToRetire(
+                for: outgoing,
+                timeout: .seconds(1)
+            )
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+        PlaybackLifecycleDiagnostics.demuxEnded(outgoing)
+        PlaybackLifecycleDiagnostics.renderersDetached(outgoing)
+
+        #expect(await retirement.value)
+        #expect(PlaybackLifecycleDiagnostics.snapshot().activeDemuxLoops >= 1)
+    }
+
+    @Test func episodeHandoffRetirementTimeoutCannotBecomeSuccess() async {
+        let outgoing = UUID()
+        PlaybackLifecycleDiagnostics.renderersAttached(outgoing)
+        defer { PlaybackLifecycleDiagnostics.renderersDetached(outgoing) }
+
+        let retired = await PlaybackLifecycleDiagnostics.waitForMediaResourcesToRetire(
+            for: outgoing,
+            timeout: .milliseconds(20)
+        )
+
+        #expect(!retired)
+    }
+
     @Test @MainActor func downloadedSubtitleIsInsertedAndSelectedAtRuntime() {
         let engine = SampleBufferPlayerEngine()
         engine.addExternalSubtitle(ExternalSubtitleTrack(

@@ -98,17 +98,35 @@ nonisolated enum PlaybackLifecycleDiagnostics {
     static func waitForMediaResourcesToRetire(
         timeout: Duration = .seconds(3)
     ) async -> Bool {
+        await waitForMediaResourcesToRetire(engineID: nil, timeout: timeout)
+    }
+
+    /// Handoffs care about the engine they just stopped, not an unrelated
+    /// diagnostic probe. Waiting by identity also lets the controller retain
+    /// the old engine until both its demux loop and asynchronous renderer
+    /// removals have completed.
+    static func waitForMediaResourcesToRetire(
+        for engineID: UUID,
+        timeout: Duration = .seconds(15)
+    ) async -> Bool {
+        await waitForMediaResourcesToRetire(engineID: engineID, timeout: timeout)
+    }
+
+    private static func waitForMediaResourcesToRetire(
+        engineID: UUID?,
+        timeout: Duration
+    ) async -> Bool {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: timeout)
         while clock.now < deadline {
-            if state.mediaResourcesAreQuiescent { return true }
+            if state.mediaResourcesAreQuiescent(for: engineID) { return true }
             do {
                 try await Task.sleep(for: .milliseconds(50))
             } catch {
                 return false
             }
         }
-        return state.mediaResourcesAreQuiescent
+        return state.mediaResourcesAreQuiescent(for: engineID)
     }
 
     private static func emit(_ event: String) {
@@ -140,9 +158,12 @@ nonisolated private final class State: @unchecked Sendable {
     private var destroyed = 0
     private var uncleanDestructions = 0
 
-    var mediaResourcesAreQuiescent: Bool {
+    func mediaResourcesAreQuiescent(for engineID: UUID?) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        if let engineID {
+            return !demuxLoops.contains(engineID) && !rendererSets.contains(engineID)
+        }
         return demuxLoops.isEmpty && rendererSets.isEmpty
     }
 
