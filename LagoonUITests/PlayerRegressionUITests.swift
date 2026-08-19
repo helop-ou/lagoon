@@ -111,6 +111,96 @@ final class PlayerRegressionUITests: XCTestCase {
         )
     }
 
+    func testTvOSSettingsHierarchyPickersAndHomeRowsNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.settingsRegression", "YES",
+        ]
+        app.launch()
+
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
+        let homeTab = app.tabBars.buttons["Home"]
+        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let audio = app.descendants(matching: .any)["settings.category.audio"]
+        XCTAssertTrue(audio.waitForExistence(timeout: 8))
+        moveFocus(to: audio, maxPresses: 5) { remote.press(.down) }
+        remote.press(.select)
+
+        let defaultAudio = app.descendants(matching: .any)["settings.audio.default"]
+        XCTAssertTrue(defaultAudio.waitForExistence(timeout: 5))
+        // SwiftUI exposes a tvOS Menu as an accessibility container rather
+        // than as the focused UIButton. The focus engine still moves from
+        // the Back button to the first menu row deterministically.
+        remote.press(.down)
+        remote.press(.select)
+        let originalAudio = app.descendants(matching: .any)["Original Audio"]
+        XCTAssertTrue(originalAudio.waitForExistence(timeout: 5))
+        let previousAudioDefault = defaultAudio.valueDescription
+        // Menu items have the same XCTest accessibility quirk as their
+        // parent Menu, so validate the selection result rather than a false
+        // `hasFocus` reading. tvOS opens this menu on its first item: choose
+        // Original, or Preferred when Original is already persisted.
+        remote.press(.down)
+        if previousAudioDefault.contains("Original Audio") {
+            remote.press(.down)
+        }
+        remote.press(.select)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertNotEqual(defaultAudio.valueDescription, previousAudioDefault)
+
+        let back = app.descendants(matching: .any)["settings.detail.back"]
+        XCTAssertTrue(back.waitForExistence(timeout: 3))
+        moveFocus(to: back, maxPresses: 5) { remote.press(.up) }
+        remote.press(.select)
+
+        let subtitles = app.descendants(matching: .any)["settings.category.subtitles"]
+        XCTAssertTrue(subtitles.waitForExistence(timeout: 5))
+        moveFocus(to: subtitles, maxPresses: 4) { remote.press(.down) }
+        remote.press(.select)
+        let appearance = app.descendants(matching: .any)["settings.subtitles.appearance"]
+        XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+        moveFocus(to: appearance, maxPresses: 8) { remote.press(.down) }
+        remote.press(.select)
+        XCTAssertTrue(app.descendants(matching: .any)["settings.subtitlePreview"].waitForExistence(timeout: 5))
+        remote.press(.menu)
+        XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+        remote.press(.menu)
+
+        let home = app.descendants(matching: .any)["settings.category.home"]
+        XCTAssertTrue(home.waitForExistence(timeout: 5))
+        moveFocus(to: home, maxPresses: 4) { remote.press(.down) }
+        remote.press(.select)
+        let myList = app.descendants(matching: .any)["settings.home.row.MyList"]
+        XCTAssertTrue(myList.waitForExistence(timeout: 5))
+        moveFocus(to: myList, maxPresses: 6) { remote.press(.down) }
+        let previousVisibility = myList.valueDescription
+        remote.press(.select)
+        XCTAssertNotEqual(myList.valueDescription, previousVisibility)
+        remote.press(.menu)
+        XCTAssertTrue(home.waitForExistence(timeout: 5))
+    }
+
+    private func moveFocus(
+        to element: XCUIElement,
+        maxPresses: Int,
+        move: () -> Void
+    ) {
+        for _ in 0..<maxPresses where !element.hasFocus {
+            move()
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTAssertTrue(element.hasFocus, "Could not focus \(element)")
+    }
+
     private func exerciseAudioTracks(in app: XCUIApplication) {
         let original = state(in: app).int("audio")
         let count = state(in: app).int("audioCount")
@@ -269,4 +359,10 @@ private struct RegressionState {
     func string(_ key: String) -> String { values[key] ?? "" }
     func int(_ key: String) -> Int { Int(values[key] ?? "") ?? -1 }
     func double(_ key: String) -> Double { Double(values[key] ?? "") ?? -1 }
+}
+
+private extension XCUIElement {
+    var valueDescription: String {
+        value as? String ?? ""
+    }
 }

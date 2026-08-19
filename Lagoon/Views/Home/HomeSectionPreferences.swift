@@ -62,6 +62,13 @@ final class HomeSectionPreferencesStore {
     }
 
     func loadCatalog(client: JellyfinClient) async {
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "debug.settingsRegression") {
+            catalog = Self.settingsRegressionCatalog
+            reconcileConfiguredRows()
+            return
+        }
+        #endif
         let fetched = await client.homeSections()
         guard !Task.isCancelled else { return }
         catalog = fetched.enumerated().sorted {
@@ -165,12 +172,82 @@ final class HomeSectionPreferencesStore {
     private nonisolated static func key(_ accountID: String) -> String {
         "home.sectionPreferences.\(accountID)"
     }
+
+    #if DEBUG
+    private static var settingsRegressionCatalog: [JellyfinClient.HomeSection] {
+        struct Page: Decodable { let items: [JellyfinClient.HomeSection] }
+        let data = Data(#"{"Items":[{"Section":"ContinueWatching","DisplayText":"Continue Watching","OrderIndex":0},{"Section":"MyList","DisplayText":"My List","OrderIndex":1},{"Section":"Recommendations","DisplayText":"Recommendations","OrderIndex":2}]}"#.utf8)
+        return (try? JellyfinClient.decoder.decode(Page.self, from: data).items) ?? []
+    }
+    #endif
 }
 
 struct HomeRowsSettingsView: View {
     @Bindable var preferences: HomeSectionPreferencesStore
 
     var body: some View {
+        #if os(tvOS)
+        TVSettingsPage("Home Rows") {
+            TVSettingsSection(
+                "Rows",
+                footer: "Choose which plugin rows appear after Lagoon's built-in rows, then arrange their order."
+            ) {
+                ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
+                    HStack(spacing: Metrics.Space.m) {
+                        Button {
+                            preferences.toggle(choice.id)
+                        } label: {
+                            HStack(spacing: Metrics.Space.l) {
+                                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                                    Text(choice.title)
+                                    Text(choice.isEnabled ? "Shown on Home" : "Hidden from Home")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: Metrics.Space.xl)
+                                Text(choice.isEnabled ? "Shown" : "Hidden")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
+                        .accessibilityIdentifier("settings.home.row.\(choice.id)")
+
+                        Button {
+                            preferences.move(choice.id, by: -1)
+                        } label: {
+                            Image(systemName: "arrow.up")
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.glass)
+                        .disabled(index == 0)
+                        .accessibilityLabel("Move \(choice.title) up")
+
+                        Button {
+                            preferences.move(choice.id, by: 1)
+                        } label: {
+                            Image(systemName: "arrow.down")
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.glass)
+                        .disabled(index == preferences.choices.count - 1)
+                        .accessibilityLabel("Move \(choice.title) down")
+                    }
+                }
+            }
+
+            if preferences.values.isConfigured {
+                TVSettingsSection("Reset") {
+                    Button("Reset to Lagoon Default", role: .destructive) {
+                        preferences.reset()
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("settings.home.reset")
+                }
+            }
+        }
+        #else
         List {
             Section {
                 ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
@@ -219,5 +296,6 @@ struct HomeRowsSettingsView: View {
             }
         }
         .navigationTitle("Home Rows")
+        #endif
     }
 }

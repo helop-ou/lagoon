@@ -32,18 +32,9 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - tvOS: identity | settings list
+    // MARK: - tvOS: identity | short settings hierarchy
 
     #if os(tvOS)
-    /// Who you are on the left, one scrolling list of settings on the right
-    /// — the Infuse shape (Jaagop's reference, 2026-08-18).
-    ///
-    /// The left half is *identity, not navigation*. An earlier attempt put a
-    /// section list there; splitting five short sections across two panes
-    /// only moved the emptiness around, because none of them has enough in
-    /// it to fill a pane. The settings are few enough to live in one list,
-    /// so the left side earns its place by answering "which server and user
-    /// am I looking at" instead.
     private var splitLayout: some View {
         HStack(alignment: .top, spacing: Metrics.Space.section) {
             identityPanel
@@ -90,146 +81,319 @@ struct SettingsView: View {
     private var settingsList: some View {
         ScrollView {
             VStack(spacing: Metrics.Space.m) {
-                // Rows carry their current value on the right and cycle it
-                // on Select, so the list stays one row per setting rather
-                // than one row per option.
-                row("Skip Intros & Recaps", value: skipMode.shortTitle) {
-                    cycleSkipMode()
-                }
-                row("Play Next Episode", value: autoplayMode.shortTitle) {
-                    cycleAutoplayMode()
-                }
+                settingsDestination(
+                    "Playback",
+                    detail: "\(skipMode.shortTitle) · \(autoplayMode.shortTitle)",
+                    id: "playback"
+                ) { playbackSettings }
+
+                settingsDestination(
+                    "Audio",
+                    detail: trackPreferences.values.audioMode.title,
+                    id: "audio"
+                ) { audioSettings }
+
+                settingsDestination(
+                    "Subtitles",
+                    detail: trackPreferences.values.subtitleMode.title,
+                    id: "subtitles"
+                ) { subtitleSettings }
+
                 if !homePreferences.catalog.isEmpty {
-                    NavigationLink {
-                        HomeRowsSettingsView(preferences: homePreferences)
-                    } label: {
-                        HStack(spacing: Metrics.Space.xl) {
-                            Text("Home Rows")
-                            Spacer(minLength: Metrics.Space.xl)
-                            Text(homePreferences.values.isConfigured ? "Custom" : "Lagoon Default")
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glass)
-                }
-                row("Default Audio", value: trackPreferences.values.audioMode.title) {
-                    cycleTrackValue(\.audioMode)
-                }
-                row("Preferred Audio", value: SubtitlePreferencesStore.displayName(for: trackPreferences.primaryAudioLanguage)) {
-                    cycleAudioLanguage(primary: true)
-                }
-                row("Audio Fallback", value: SubtitlePreferencesStore.displayName(for: trackPreferences.fallbackAudioLanguage)) {
-                    cycleAudioLanguage(primary: false)
-                }
-                row("Default Subtitles", value: trackPreferences.values.subtitleMode.title) {
-                    cycleTrackValue(\.subtitleMode)
-                }
-                row("Subtitle Appearance", value: appearanceTitle) {
-                    var values = subtitlePreferences.values
-                    values.followsSystemAppearance.toggle()
-                    subtitlePreferences.values = values
-                }
-                row("Subtitle Size", value: subtitlePreferences.values.textSize.title) {
-                    cycleSubtitleValue(\.textSize)
-                }
-                row("Subtitle Edge", value: subtitlePreferences.values.edgeStyle.title) {
-                    cycleSubtitleValue(\.edgeStyle)
-                }
-                row("Subtitle Background", value: subtitlePreferences.values.background.title) {
-                    cycleSubtitleValue(\.background)
-                }
-                row("Subtitle Position", value: subtitlePreferences.values.verticalPosition.title) {
-                    cycleSubtitleValue(\.verticalPosition)
-                }
-                row("Preferred Subtitle", value: SubtitlePreferencesStore.displayName(for: subtitlePreferences.primaryLanguage)) {
-                    cycleLanguage(primary: true)
-                }
-                row("Subtitle Fallback", value: SubtitlePreferencesStore.displayName(for: subtitlePreferences.fallbackLanguage)) {
-                    cycleLanguage(primary: false)
-                }
-                row("When Subtitles Are Missing", value: subtitlePreferences.values.missingMode.title) {
-                    cycleMissingSubtitleMode()
-                }
-                subtitlePreview
-                row("Playback HUD", value: showPlaybackHUD ? "On" : "Off") {
-                    showPlaybackHUD.toggle()
-                }
-                // Both HEL-64 diagnostics: the bench freezes a controlled
-                // frame-loss number into the HUD, the strip is the DoVi P7
-                // enhancement-layer A/B for real hardware.
-                row("Frame-Loss Bench", value: frameLossBench ? "On" : "Off") {
-                    frameLossBench.toggle()
-                }
-                row("Strip DoVi Enhancement Layer", value: stripDoviEL ? "On" : "Off") {
-                    stripDoviEL.toggle()
-                }
-                // On by default: matching frame rate + dynamic range is
-                // correct player behavior, and the system's own Match
-                // Content settings gate it anyway. Off here holds an A/B
-                // still (HEL-64).
-                row("Match Content Display Mode", value: matchContent ? "On" : "Off") {
-                    matchContent.toggle()
+                    settingsDestination(
+                        "Home Rows",
+                        detail: homePreferences.values.isConfigured ? "Custom" : "Lagoon Default",
+                        id: "home"
+                    ) { HomeRowsSettingsView(preferences: homePreferences) }
                 }
 
-                // Only worth offering once there is somewhere to switch to;
-                // with one account it is a button that shows you yourself.
-                if session.accounts.count > 1 {
-                    row("Switch User") { session.showAccountPicker() }
-                }
-                row("Add Account") { session.addAccount() }
-                // Signing out forgets this account, because logout revokes
-                // the token server-side and a remembered dead session is
-                // worse than none. Other accounts survive (HEL-38).
-                row("Sign Out", role: .destructive) {
-                    Task { await session.signOut() }
-                }
+                settingsDestination(
+                    "Diagnostics",
+                    id: "diagnostics"
+                ) { diagnosticsSettings }
+
+                settingsDestination(
+                    "Account",
+                    detail: session.userName,
+                    id: "account"
+                ) { accountSettings }
             }
-            // Headroom for the focus lift lives inside the scroller, same
-            // rule as every other focusable scroll area.
             .padding(.vertical, Metrics.Space.l)
         }
         .scrollClipDisabled()
         .frame(maxWidth: .infinity)
     }
 
-    private func row(
+    private func settingsDestination<Destination: View>(
         _ title: LocalizedStringKey,
-        value: String? = nil,
-        role: ButtonRole? = nil,
-        action: @escaping () -> Void
+        detail: String? = nil,
+        id: String,
+        @ViewBuilder destination: () -> Destination
     ) -> some View {
-        Button(role: role, action: action) {
-            HStack(spacing: Metrics.Space.xl) {
-                Text(title)
-                Spacer(minLength: Metrics.Space.xl)
-                if let value {
-                    // No explicit colour: the focused lozenge owns its label
-                    // colours, and `.secondary` resolves against whichever
-                    // side of that it lands on.
-                    Text(value)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity)
+        NavigationLink(destination: destination) {
+            TVSettingsNavigationLabel(title, detail: detail)
         }
         .buttonStyle(.glass)
+        .accessibilityIdentifier("settings.category.\(id)")
     }
 
     private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
     private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
 
-    private func cycleSkipMode() {
-        let all = SkipMode.allCases
-        let next = (all.firstIndex(of: skipMode).map { $0 + 1 } ?? 0) % all.count
-        skipModeRaw = all[next].rawValue
+    private var playbackSettings: some View {
+        TVSettingsPage("Playback") {
+            TVSettingsSection(
+                "Playback Behavior",
+                footer: "These choices apply automatically whenever an intro, recap, or next episode is available."
+            ) {
+                TVSettingsMenuPicker(
+                    title: "Skip Intros & Recaps",
+                    valueTitle: skipMode.shortTitle,
+                    accessibilityIdentifier: "settings.playback.skipMode",
+                    selection: $skipModeRaw,
+                    options: SkipMode.allCases.map {
+                        TVSettingsOption(value: $0.rawValue, title: String(localized: $0.title))
+                    }
+                )
+
+                TVSettingsMenuPicker(
+                    title: "Play Next Episode",
+                    valueTitle: autoplayMode.shortTitle,
+                    accessibilityIdentifier: "settings.playback.autoplayMode",
+                    selection: $autoplayModeRaw,
+                    options: AutoplayMode.allCases.map {
+                        TVSettingsOption(value: $0.rawValue, title: String(localized: $0.title))
+                    }
+                )
+
+                settingsToggle("Match Content Display Mode", isOn: $matchContent)
+                    .accessibilityIdentifier("settings.playback.matchContent")
+            }
+        }
     }
 
-    private func cycleAutoplayMode() {
-        let all = AutoplayMode.allCases
-        let next = (all.firstIndex(of: autoplayMode).map { $0 + 1 } ?? 0) % all.count
-        autoplayModeRaw = all[next].rawValue
+    private var audioSettings: some View {
+        TVSettingsPage("Audio") {
+            TVSettingsSection(
+                "Language Selection",
+                footer: "Lagoon uses these preferences when each item starts. Original Audio avoids dubbed tracks when Jellyfin provides original-language metadata."
+            ) {
+                TVSettingsMenuPicker(
+                    title: "Default Audio",
+                    valueTitle: trackPreferences.values.audioMode.title,
+                    accessibilityIdentifier: "settings.audio.default",
+                    selection: trackBinding(\.audioMode),
+                    options: AudioDefaultMode.allCases.map {
+                        TVSettingsOption(value: $0, title: $0.title)
+                    }
+                )
+
+                TVSettingsMenuPicker(
+                    title: "Preferred Audio",
+                    valueTitle: SubtitlePreferencesStore.displayName(for: trackPreferences.primaryAudioLanguage),
+                    accessibilityIdentifier: "settings.audio.preferred",
+                    selection: primaryAudioLanguageBinding,
+                    options: languageOptions(includeNone: false)
+                )
+
+                TVSettingsMenuPicker(
+                    title: "Audio Fallback",
+                    valueTitle: SubtitlePreferencesStore.displayName(for: trackPreferences.fallbackAudioLanguage),
+                    accessibilityIdentifier: "settings.audio.fallback",
+                    selection: fallbackAudioLanguageBinding,
+                    options: languageOptions(includeNone: true)
+                )
+            }
+        }
+    }
+
+    private var subtitleSettings: some View {
+        TVSettingsPage("Subtitles") {
+            TVSettingsSection(
+                "Language Selection",
+                footer: "These defaults are applied when playback starts and when Lagoon searches for a missing subtitle."
+            ) {
+                TVSettingsMenuPicker(
+                    title: "Default Subtitles",
+                    valueTitle: trackPreferences.values.subtitleMode.title,
+                    accessibilityIdentifier: "settings.subtitles.default",
+                    selection: trackBinding(\.subtitleMode),
+                    options: SubtitleDefaultMode.allCases.map {
+                        TVSettingsOption(value: $0, title: $0.title)
+                    }
+                )
+
+                TVSettingsMenuPicker(
+                    title: "Preferred Subtitle",
+                    valueTitle: SubtitlePreferencesStore.displayName(for: subtitlePreferences.primaryLanguage),
+                    accessibilityIdentifier: "settings.subtitles.preferred",
+                    selection: primaryLanguageBinding,
+                    options: languageOptions(includeNone: false)
+                )
+
+                TVSettingsMenuPicker(
+                    title: "Subtitle Fallback",
+                    valueTitle: SubtitlePreferencesStore.displayName(for: subtitlePreferences.fallbackLanguage),
+                    accessibilityIdentifier: "settings.subtitles.fallback",
+                    selection: fallbackLanguageBinding,
+                    options: languageOptions(includeNone: true)
+                )
+
+                TVSettingsMenuPicker(
+                    title: "When Subtitles Are Missing",
+                    valueTitle: subtitlePreferences.values.missingMode.title,
+                    accessibilityIdentifier: "settings.subtitles.missing",
+                    selection: subtitleBinding(\.missingMode),
+                    options: MissingSubtitleMode.allCases.map {
+                        TVSettingsOption(value: $0, title: $0.title)
+                    }
+                )
+            }
+
+            TVSettingsSection("Appearance") {
+                NavigationLink {
+                    subtitleAppearanceSettings
+                } label: {
+                    TVSettingsNavigationLabel("Subtitle Appearance", detail: appearanceTitle)
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("settings.subtitles.appearance")
+            }
+        }
+    }
+
+    private var subtitleAppearanceSettings: some View {
+        TVSettingsPage("Subtitle Appearance", backTitle: "Subtitles") {
+            TVSettingsSection("Preview") {
+                subtitlePreview
+            }
+
+            TVSettingsSection(
+                "Style",
+                footer: "System style follows the caption appearance selected in Apple TV Settings. Changing a Lagoon style option switches to a custom style."
+            ) {
+                settingsToggle(
+                    "Use System Caption Style",
+                    isOn: subtitleBinding(\.followsSystemAppearance)
+                )
+                .accessibilityIdentifier("settings.subtitles.systemAppearance")
+
+                if !subtitlePreferences.values.followsSystemAppearance {
+                    TVSettingsMenuPicker(
+                        title: "Size",
+                        valueTitle: subtitlePreferences.values.textSize.title,
+                        accessibilityIdentifier: "settings.subtitles.size",
+                        selection: subtitleBinding(\.textSize, customAppearance: true),
+                        options: SubtitleTextSize.allCases.map {
+                            TVSettingsOption(value: $0, title: $0.title)
+                        }
+                    )
+
+                    TVSettingsMenuPicker(
+                        title: "Edge",
+                        valueTitle: subtitlePreferences.values.edgeStyle.title,
+                        accessibilityIdentifier: "settings.subtitles.edge",
+                        selection: subtitleBinding(\.edgeStyle, customAppearance: true),
+                        options: SubtitleEdgeStyle.allCases.map {
+                            TVSettingsOption(value: $0, title: $0.title)
+                        }
+                    )
+
+                    TVSettingsMenuPicker(
+                        title: "Background",
+                        valueTitle: subtitlePreferences.values.background.title,
+                        accessibilityIdentifier: "settings.subtitles.background",
+                        selection: subtitleBinding(\.background, customAppearance: true),
+                        options: SubtitleBackground.allCases.map {
+                            TVSettingsOption(value: $0, title: $0.title)
+                        }
+                    )
+
+                    TVSettingsMenuPicker(
+                        title: "Position",
+                        valueTitle: subtitlePreferences.values.verticalPosition.title,
+                        accessibilityIdentifier: "settings.subtitles.position",
+                        selection: subtitleBinding(\.verticalPosition, customAppearance: true),
+                        options: SubtitleVerticalPosition.allCases.map {
+                            TVSettingsOption(value: $0, title: $0.title)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private var diagnosticsSettings: some View {
+        TVSettingsPage("Diagnostics") {
+            TVSettingsSection(
+                "Player Diagnostics",
+                footer: "These tools are intended for diagnosing playback on TestFlight and development builds."
+            ) {
+                settingsToggle("Playback HUD", isOn: $showPlaybackHUD)
+                settingsToggle("Frame-Loss Bench", isOn: $frameLossBench)
+                settingsToggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
+            }
+        }
+    }
+
+    private var accountSettings: some View {
+        TVSettingsPage("Account") {
+            TVSettingsSection("Connection") {
+                settingsInfo("Server", value: session.serverName ?? "Jellyfin")
+                settingsInfo("Address", value: session.client.serverURL?.host() ?? "—")
+                settingsInfo("User", value: session.userName ?? "—")
+            }
+
+            TVSettingsSection("Account Actions") {
+                if session.accounts.count > 1 {
+                    settingsAction("Switch User") { session.showAccountPicker() }
+                }
+                settingsAction("Add Account") { session.addAccount() }
+                settingsAction("Sign Out", role: .destructive) {
+                    Task { await session.signOut() }
+                }
+            }
+        }
+    }
+
+    private func settingsToggle(_ title: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            TVSettingsActionLabel(title, value: isOn.wrappedValue ? "On" : "Off")
+        }
+        .padding(.horizontal, Metrics.Space.l)
+        .frame(minHeight: 64)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func settingsInfo(_ title: LocalizedStringKey, value: String) -> some View {
+        TVSettingsActionLabel(title, value: value)
+            .padding(.horizontal, Metrics.Space.l)
+            .frame(minHeight: 64)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func settingsAction(
+        _ title: LocalizedStringKey,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            TVSettingsActionLabel(title)
+        }
+        .buttonStyle(.glass)
+    }
+
+    private func languageOptions(includeNone: Bool) -> [TVSettingsOption<String?>] {
+        var options = settingsLanguageChoices.map {
+            TVSettingsOption<String?>(
+                value: $0,
+                title: SubtitlePreferencesStore.displayName(for: $0)
+            )
+        }
+        if includeNone {
+            options.insert(TVSettingsOption(value: nil, title: String(localized: "None")), at: 0)
+        }
+        return options
     }
 
     /// Initials rather than a photo: Jellyfin user images are optional and
@@ -386,77 +550,30 @@ struct SettingsView: View {
 
     private var subtitlePreview: some View {
         let style = subtitlePreferences.renderStyle
-        return Text("Subtitle preview")
-            .font(style.font)
-            .foregroundStyle(style.foregroundColor)
-            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
-            .padding(.horizontal, Metrics.Space.l)
-            .padding(.vertical, Metrics.Space.s)
-            .background(
-                style.backgroundColor.opacity(style.backgroundOpacity),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .frame(maxWidth: .infinity)
+        return ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(
+                    LinearGradient(
+                        colors: [.indigo.opacity(0.45), .black.opacity(0.9)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            Text("This is how subtitles will look.")
+                .font(style.font)
+                .foregroundStyle(style.foregroundColor)
+                .subtitleEdge(style.edgeStyle, color: style.edgeColor)
+                .padding(.horizontal, Metrics.Space.l)
+                .padding(.vertical, Metrics.Space.s)
+                .background(
+                    style.backgroundColor.opacity(style.backgroundOpacity),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+                .padding(.bottom, Metrics.Space.l)
+        }
+            .frame(maxWidth: .infinity, minHeight: 150)
             .accessibilityIdentifier("settings.subtitlePreview")
-    }
-
-    private func cycleSubtitleValue<T>(
-        _ keyPath: WritableKeyPath<SubtitlePreferenceValues, T>
-    ) where T: CaseIterable & Equatable {
-        let all = Array(T.allCases)
-        guard !all.isEmpty else { return }
-        var values = subtitlePreferences.values
-        let current = values[keyPath: keyPath]
-        let next = (all.firstIndex(of: current).map { $0 + 1 } ?? 0) % all.count
-        values[keyPath: keyPath] = all[next]
-        values.followsSystemAppearance = false
-        subtitlePreferences.values = values
-    }
-
-    private func cycleMissingSubtitleMode() {
-        let all = MissingSubtitleMode.allCases
-        var values = subtitlePreferences.values
-        let next = (all.firstIndex(of: values.missingMode).map { $0 + 1 } ?? 0) % all.count
-        values.missingMode = all[next]
-        subtitlePreferences.values = values
-    }
-
-    private func cycleTrackValue<T>(
-        _ keyPath: WritableKeyPath<TrackPreferenceValues, T>
-    ) where T: CaseIterable & Equatable {
-        let all = Array(T.allCases)
-        guard !all.isEmpty else { return }
-        var values = trackPreferences.values
-        let current = values[keyPath: keyPath]
-        let next = (all.firstIndex(of: current).map { $0 + 1 } ?? 0) % all.count
-        values[keyPath: keyPath] = all[next]
-        trackPreferences.values = values
-    }
-
-    private func cycleAudioLanguage(primary: Bool) {
-        var options = settingsLanguageChoices.map(Optional.some)
-        if !primary { options.insert(nil, at: 0) }
-        let current = primary
-            ? trackPreferences.primaryAudioLanguage
-            : trackPreferences.fallbackAudioLanguage
-        let next = (options.firstIndex(where: { $0 == current }).map { $0 + 1 } ?? 0) % options.count
-        if primary {
-            trackPreferences.setPrimaryAudioLanguage(options[next])
-        } else {
-            trackPreferences.setFallbackAudioLanguage(options[next])
-        }
-    }
-
-    private func cycleLanguage(primary: Bool) {
-        var options = settingsLanguageChoices.map(Optional.some)
-        if !primary { options.insert(nil, at: 0) }
-        let current = primary ? subtitlePreferences.primaryLanguage : subtitlePreferences.fallbackLanguage
-        let next = (options.firstIndex(where: { $0 == current }).map { $0 + 1 } ?? 0) % options.count
-        if primary {
-            subtitlePreferences.setPrimaryLanguage(options[next])
-        } else {
-            subtitlePreferences.setFallbackLanguage(options[next])
-        }
     }
 
     private var settingsLanguageChoices: [String] {
