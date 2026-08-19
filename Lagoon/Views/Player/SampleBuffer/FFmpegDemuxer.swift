@@ -537,6 +537,9 @@ nonisolated final class FFmpegDemuxer {
                 ? nil
                 : Double(ptsValue) * Double(timeBase.num) / Double(max(timeBase.den, 1))
             let timing = passthroughTimelines[streamIndex]?.timing(containerSeconds: containerSeconds)
+            if passthroughTimelines[streamIndex]?.lastPacketWasOverlapping == true {
+                return .skipped
+            }
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,
                 formatDescription: description,

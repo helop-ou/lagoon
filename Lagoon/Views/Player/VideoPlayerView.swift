@@ -964,6 +964,21 @@ struct VideoPlayerView: View {
             if !controller.hudLines.isEmpty, !panelOpen {
                 playbackHUD
             }
+
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
+               let bench = controller.hudLines.first(where: { $0.hasPrefix("Bench:") }) {
+                Text("Frame-loss regression")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Frame-loss regression")
+                    .accessibilityValue(bench)
+                    .accessibilityIdentifier("player.regression.frameLoss")
+                    .allowsHitTesting(false)
+            }
+            #endif
         }
         .interactiveDismissDisabled()
         .task {

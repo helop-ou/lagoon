@@ -58,12 +58,20 @@ sweeps Info → Subtitles → Info five times while XCTest records app CPU, reti
 instructions, memory, wall-clock time, and animation hitches. It also walks
 focus through every stress-fixture row, so lazy construction cannot silently
 break Siri Remote navigation. A single six-tab sweep has a 1.75-second hard
-ceiling in addition to the CPU, memory, hitch, and timing results Xcode stores
-with every benchmark run.
+ceiling, and the complete sweep plus 30-row walk may grow the app footprint by
+at most 12 MB. These deterministic gates sit beside the CPU, memory, hitch,
+and timing results Xcode stores with every benchmark run.
 
 On the tvOS 26.5 simulator, the first optimization pass reduced average app
 CPU time from 0.368 s to 0.299 s (19%), retired instructions from 3.12 billion
 to 2.08 billion (33%), and peak physical memory from 80.0 MB to 72.7 MB (9%).
+The 2026-08-19 feature-complete regression rerun (three fresh app processes,
+five measured sweeps each) averaged 0.285 s CPU, 2.057 billion instructions,
+and about 78 MB peak memory. CPU and instructions remain better than the
+original optimized baseline; the roughly 7% footprint increase is stable
+between processes and remains below XCTest's 10% regression tolerance.
+A final run after the playback fix measured 0.295 s CPU, 2.090 billion
+instructions, 1.318 s wall time, and 79.8 MB peak, still within that envelope.
 Run the focused measurement with:
 
 ```sh
@@ -150,11 +158,14 @@ composition cost is more representative than Simulator timing.
   discontinuity the renderer renders as crackle; EAC3 (1536 samples =
   exactly 32 ms) was immune, which is why only AAC titles crackled on
   hardware. `PassthroughAudioTimeline` now chains pts sample-exactly from
-  one container anchor, re-anchoring on gaps beyond **half a packet** —
-  tight enough that one *missing* packet re-anchors instead of being
-  smoothed into a permanent A/V offset (the LPCM path's 50 ms tolerance
-  would swallow that for every passthrough codec). Wrong frames-per-packet
-  assumptions degrade to container stamps, never to drift. The HUD's
+  one container anchor. Forward gaps beyond **half a packet** re-anchor —
+  tight enough that one *missing* packet cannot become a permanent A/V
+  offset (the LPCM path's 50 ms tolerance would swallow that for every
+  passthrough codec). Backward packets beyond that tolerance overlap audio
+  already queued and are dropped until the container catches up. This handles
+  the measured HLS AAC boundary sequence (four 1-sample packets followed by a
+  short preroll packet) without pulling the renderer backward; explicit seeks
+  reset the chain before the new anchor. The HUD's
   `aGaps` counter (audio timestamp discontinuities at enqueue) is the live
   check: it must read 0 during untouched playback.
 - **Video frame-grid timing** (HEL-64): Matroska quantizes video PTS to 1 ms
@@ -546,18 +557,16 @@ That regression performs the hardware-shaped sequence—play, dismiss, enter
 Settings, replay—then requires every cleanup point to reach 0/0/0/0, limits
 cleanup-to-cleanup footprint growth to 48 MB, limits replay startup growth to
 96 MB, and permits at most one new stall while media time advances at least
-10 s in a 15 s CPU/memory/hitch measurement window. The focused script runs
-three replay/dismiss cycles by default so smaller per-cycle leaks become a
-slope instead of hiding beneath one allocator-noise allowance. Run it with:
+10 s in a 15 s CPU/memory/hitch measurement window. It runs three
+replay/dismiss cycles by default so smaller per-cycle leaks become a slope
+instead of hiding beneath one allocator-noise allowance. Run it with:
 
 ```sh
 scripts/playback-lifecycle-bench.sh
 ```
 
-Override the stress length when needed with
-`LAGOON_LIFECYCLE_REPLAYS=5`; values are capped at ten replays. A normal full
-UI-test run performs one replay so this focused hardware benchmark does not
-inflate every development test pass.
+When the Xcode test environment supplies `LAGOON_LIFECYCLE_REPLAYS`, the value
+overrides that default and is capped at ten replays.
 
 On a device already signed into Fixture, target the reported software-decoded
 fixture instead of the public-demo fallback:
@@ -570,6 +579,22 @@ LAGOON_LIFECYCLE_VC1_SERIES='Rick and Morty' \
 The resolver walks that series' episodes and chooses one whose Jellyfin
 PlaybackInfo actually declares VC-1, so season/file naming changes do not turn
 the benchmark into an H.264 test by accident.
+
+`testControlledFrameLossPlaybackPerformance` adds frame presentation to the
+automated performance gate. It resolves one playable item, then runs that same
+item from the same position three times. Each run leaves the simulator
+untouched for a 10-second warmup plus a 60-second media-time window and
+requires more than 1,000 frames, no corrupted frames, at most one stall, at
+most 1% frame loss, zero enqueued audio gaps, and no more than 0.5 percentage
+points of run-to-run spread. On 2026-08-19 the post-fix control produced the
+same result in all three windows: 0/1,450 dropped frames, zero corrupted
+frames, zero stalls, zero audio gaps, and a minimum video queue depth of 90.
+The public demo is sufficient for this H.264 simulator control; the scripted
+hardware/Fixture bench remains authoritative for VC-1, HEVC, HDR, and TrueHD.
+
+The same final run's measured 15-second lifecycle window used 1.363 s app CPU,
+peaked at 107.1 MB, and grew by only 115 KB. All three dismiss/replay cycles
+ended with zero live controllers, engines, demuxers, and renderers.
 
 Those allowances are deliberately above simulator allocator noise and below
 one retained decoded-video queue. Set Xcode performance baselines from repeated

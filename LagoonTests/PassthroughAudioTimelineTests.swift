@@ -61,6 +61,27 @@ struct PassthroughAudioTimelineTests {
         #expect(after?.presentationTimeStamp.value == 2048)
     }
 
+    /// HLS segment boundaries can carry a short run of AAC preroll packets
+    /// whose timestamps overlap audio already queued. They must not pull the
+    /// sample-exact chain backward; playback resumes on the same chain once
+    /// the container catches up.
+    @Test func overlappingHLSBoundaryPacketsAreDroppedWithoutMovingTheChain() throws {
+        var timeline = PassthroughAudioTimeline(sampleRate: 48_000, framesPerPacket: 1024)
+        _ = timeline.timing(containerSeconds: 30.997333)
+        _ = timeline.timing(containerSeconds: 31.018667)
+
+        #expect(timeline.timing(containerSeconds: 31.018688) == nil)
+        #expect(timeline.lastPacketWasOverlapping)
+        #expect(timeline.timing(containerSeconds: 31.018708) == nil)
+        #expect(timeline.lastPacketWasOverlapping)
+
+        let produced = timeline.timing(containerSeconds: 31.048)
+        let resumed = try #require(produced)
+        #expect(!timeline.lastPacketWasOverlapping)
+        #expect(resumed.presentationTimeStamp.value == 1_489_920)
+        #expect(resumed.presentationTimeStamp.timescale == 48_000)
+    }
+
     /// A jump past the gap tolerance is a real discontinuity (mid-stream
     /// seek, source gap): the chain must re-anchor to the container, not
     /// paper over it.
@@ -75,10 +96,9 @@ struct PassthroughAudioTimelineTests {
         #expect(next?.presentationTimeStamp.value == Int64((7.5 * 48_000).rounded()) + 1024)
     }
 
-    /// If the frames-per-packet assumption is wrong for a stream, the
-    /// container disagrees beyond tolerance on every packet and each one
-    /// re-anchors — i.e. the timeline degrades to the container stamps
-    /// that shipped before this fix, never to unbounded drift.
+    /// If the declared packet size is shorter than the stream's real cadence,
+    /// the container disagrees beyond tolerance on every packet and each one
+    /// re-anchors instead of accumulating unbounded drift.
     @Test func wrongFramesPerPacketFallsBackToContainerStamps() throws {
         // Assume 1024 but the stream really advances 2048 per packet.
         var timeline = PassthroughAudioTimeline(sampleRate: 48_000, framesPerPacket: 1024)

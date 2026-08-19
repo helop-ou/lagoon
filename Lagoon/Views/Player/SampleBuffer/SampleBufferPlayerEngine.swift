@@ -752,9 +752,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         )
         if let result = bench!.record(sample) {
             benchStatus = String(
-                format: "%.2f%% (%d/%d) · stalls %d · aGaps %d · minQ %d · @%.0f+%.0fs",
+                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aGaps %d · minQ %d · @%.0f+%.0fs",
                 result.lossPercent, result.dropped, result.frames,
-                result.stalls, result.audioGaps, result.minVideoQueue,
+                result.corrupted, result.stalls, result.audioGaps, result.minVideoQueue,
                 result.startPosition, result.windowSeconds
             )
             // Plain stdout beside the signpost: `devicectl ... --console`
@@ -1637,8 +1637,22 @@ nonisolated private final class AudioContinuityMonitor: @unchecked Sendable {
         guard pts.isValid else { return }
         let duration = CMSampleBufferGetDuration(buffer)
         lock.lock()
-        if let expectedNext, abs(CMTimeSubtract(pts, expectedNext).seconds) > 0.001 {
-            gaps += 1
+        if let expectedNext {
+            let delta = CMTimeSubtract(pts, expectedNext).seconds
+            if abs(delta) > 0.001 {
+                gaps += 1
+                os_signpost(
+                    .event,
+                    log: PlaybackPerformance.log,
+                    name: "Audio Timestamp Gap",
+                    "deltaMs=%{public}.3f expected=%{public}.6f actual=%{public}.6f durationMs=%{public}.3f count=%{public}d",
+                    delta * 1_000,
+                    expectedNext.seconds,
+                    pts.seconds,
+                    duration.seconds * 1_000,
+                    gaps
+                )
+            }
         }
         expectedNext = duration.isValid ? CMTimeAdd(pts, duration) : nil
         lock.unlock()

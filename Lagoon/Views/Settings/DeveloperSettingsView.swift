@@ -310,6 +310,19 @@ private struct PlayerPanelComponentPreview: View {
             onDismiss: onDismiss
         )
         .equatable()
+        .overlay(alignment: .topLeading) {
+            Text("Player panel performance")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Player panel performance")
+                .accessibilityValue(
+                    String(format: "memoryMB=%.1f", MemorySnapshot.current().footprintMB)
+                )
+                .accessibilityIdentifier("player.panel.performance")
+                .allowsHitTesting(false)
+        }
         .onChange(of: panelFocus) { _, focusedControl in
             if case .tab(let tab) = focusedControl {
                 selectedTab = tab

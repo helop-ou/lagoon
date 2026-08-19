@@ -384,6 +384,12 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(infoTab.waitForExistence(timeout: 5))
         XCTAssertTrue(subtitleTab.waitForExistence(timeout: 5))
         XCTAssertTrue(infoTab.hasFocus)
+        let performanceProbe = app.descendants(matching: .any)["player.panel.performance"]
+        XCTAssertTrue(performanceProbe.waitForExistence(timeout: 5))
+        let initialMemory = RegressionState(
+            performanceProbe.value as? String ?? ""
+        ).double("memoryMB")
+        XCTAssertGreaterThan(initialMemory, 0, "Panel memory probe did not return a footprint")
 
         let options = XCTMeasureOptions()
         options.iterationCount = 5
@@ -414,6 +420,80 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.down) // Off
         for _ in 0..<30 { remote.press(.down) }
         XCTAssertTrue(app.buttons["player.track.subtitle-40"].hasFocus)
+        let finalMemory = RegressionState(
+            performanceProbe.value as? String ?? ""
+        ).double("memoryMB")
+        XCTAssertGreaterThan(finalMemory, 0, "Panel memory probe stopped reporting a footprint")
+        XCTAssertLessThanOrEqual(
+            finalMemory,
+            initialMemory + 12,
+            "Repeated panel sweeps and the 30-track stress list retained too much memory"
+        )
+    }
+
+    func testControlledFrameLossPlaybackPerformance() throws {
+        // Three same-item, same-position runs are the minimum useful frame-
+        // loss comparison. The app schedules the exact resolved MediaItem
+        // again after dismissal, so server ordering cannot change the scene
+        // between samples.
+        let app = launchPlayer(
+            title: "frame-loss-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.frameLossBench", "YES",
+                "-debug.lifecycleReplayBenchmark", "YES",
+                "-debug.lifecycleReplayDelaySeconds", "2",
+                "-debug.lifecycleReplayCount", "2",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+
+        var results: [FrameLossRegressionResult] = []
+        for run in 1...3 {
+            let ready = waitForState(in: app, timeout: 60) {
+                $0.int("ready") == 1 && $0.int("buffering") == 0
+            }
+            let startingStalls = ready.int("stalls")
+
+            // Leave the simulator untouched for the complete 10 s warmup +
+            // 60 s media-time window. Accessibility polling and screenshots
+            // can perturb presentation, so query only after the window.
+            Thread.sleep(forTimeInterval: 74)
+            let result = try waitForFrameLossResult(in: app, timeout: 25)
+            results.append(result)
+
+            XCTAssertGreaterThan(result.frames, 1_000, "Run \(run) did not cover a full 60 s scene")
+            XCTAssertEqual(result.corrupted, 0, "Run \(run) presented corrupted frames")
+            XCTAssertLessThanOrEqual(result.stalls, 1, "Run \(run) repeatedly stalled")
+            XCTAssertEqual(result.audioGaps, 0, "Run \(run) enqueued discontinuous audio")
+            XCTAssertLessThanOrEqual(
+                result.lossPercent,
+                1,
+                "Run \(run) exceeded the simulator frame-loss regression ceiling"
+            )
+            XCTAssertLessThanOrEqual(
+                state(in: app).int("stalls") - startingStalls,
+                1,
+                "Run \(run) accumulated stalls outside the measured window"
+            )
+
+            remote.press(.menu)
+            let cleanup = waitForLifecycle(in: app, timeout: 10) {
+                $0.int("engines") == 0
+                    && $0.int("controllers") == 0
+                    && $0.int("demux") == 0
+                    && $0.int("renderers") == 0
+            }
+            XCTAssertEqual(cleanup.int("unclean"), 0)
+        }
+
+        let spread = (results.map(\.lossPercent).max() ?? 0)
+            - (results.map(\.lossPercent).min() ?? 0)
+        XCTAssertLessThanOrEqual(
+            spread,
+            0.5,
+            "Same-scene frame loss varied too much across three clean playback sessions"
+        )
     }
 
     func testPlaybackDismissSettingsReplayLifecycleAndStallBenchmark() {
@@ -421,9 +501,10 @@ final class PlayerRegressionUITests: XCTestCase {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let requestedReplayCount = Int(
             ProcessInfo.processInfo.environment["LAGOON_LIFECYCLE_REPLAYS"] ?? ""
-        ) ?? 1
-        // Keep accidental environment values from turning a focused test into
-        // an unbounded overnight run. The dedicated script defaults to three.
+        ) ?? 3
+        // Three cycles make a small per-replay leak visible. Keep accidental
+        // environment values from turning the focused test into an unbounded
+        // overnight run.
         let replayCount = min(max(requestedReplayCount, 1), 10)
         var resolverArguments: [String]
         if let requestedVC1Series, !requestedVC1Series.isEmpty {
@@ -1021,6 +1102,23 @@ final class PlayerRegressionUITests: XCTestCase {
         throw RegressionFixtureError(message: "did not resolve a player fixture before timeout")
     }
 
+    private func waitForFrameLossResult(
+        in app: XCUIApplication,
+        timeout: TimeInterval
+    ) throws -> FrameLossRegressionResult {
+        let deadline = Date().addingTimeInterval(timeout)
+        let probe = app.descendants(matching: .any)["player.regression.frameLoss"]
+        repeat {
+            if probe.exists,
+               let value = probe.value as? String,
+               let result = FrameLossRegressionResult(value) {
+                return result
+            }
+            Thread.sleep(forTimeInterval: 1)
+        } while Date() < deadline
+        throw RegressionFixtureError(message: "frame-loss window did not finish before timeout")
+    }
+
     @discardableResult
     private func waitForState(
         in app: XCUIApplication,
@@ -1113,6 +1211,43 @@ final class PlayerRegressionUITests: XCTestCase {
 private struct RegressionFixtureError: LocalizedError {
     let message: String
     var errorDescription: String? { "Regression fixture resolution failed: \(message)" }
+}
+
+private struct FrameLossRegressionResult {
+    let lossPercent: Double
+    let dropped: Int
+    let frames: Int
+    let corrupted: Int
+    let stalls: Int
+    let audioGaps: Int
+
+    init?(_ value: String) {
+        let pattern = #"([0-9.]+)% \(([0-9]+)/([0-9]+)\).*corrupt ([0-9]+).*stalls ([0-9]+).*aGaps ([0-9]+)"#
+        guard let expression = try? NSRegularExpression(pattern: pattern),
+              let match = expression.firstMatch(
+                in: value,
+                range: NSRange(value.startIndex..., in: value)
+              ),
+              match.numberOfRanges == 7,
+              let percentRange = Range(match.range(at: 1), in: value),
+              let droppedRange = Range(match.range(at: 2), in: value),
+              let framesRange = Range(match.range(at: 3), in: value),
+              let corruptedRange = Range(match.range(at: 4), in: value),
+              let stallsRange = Range(match.range(at: 5), in: value),
+              let audioGapsRange = Range(match.range(at: 6), in: value),
+              let lossPercent = Double(value[percentRange]),
+              let dropped = Int(value[droppedRange]),
+              let frames = Int(value[framesRange]),
+              let corrupted = Int(value[corruptedRange]),
+              let stalls = Int(value[stallsRange]),
+              let audioGaps = Int(value[audioGapsRange]) else { return nil }
+        self.lossPercent = lossPercent
+        self.dropped = dropped
+        self.frames = frames
+        self.corrupted = corrupted
+        self.stalls = stalls
+        self.audioGaps = audioGaps
+    }
 }
 
 private struct RegressionState {
