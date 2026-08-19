@@ -187,7 +187,10 @@ struct HomeRowsSettingsView: View {
 
     var body: some View {
         #if os(tvOS)
-        TVSettingsPage("Home Rows") {
+        TVSettingsPage(
+            "Home Rows",
+            description: "Choose and arrange the optional Jellyfin Home Screen Sections rows shown after Lagoon's built-in discovery rows. Reset at any time to restore Lagoon's default ordering."
+        ) {
             TVSettingsSection(
                 "Rows",
                 footer: "Choose which plugin rows appear after Lagoon's built-in rows, then arrange their order."

@@ -802,16 +802,12 @@ final class PlaybackController {
             lines.append("EL strip: \(strip)")
         }
         #if os(tvOS)
-        // Every gate between the request and the glass: the app's Debug
-        // toggle and the system's Match Content setting. A photo of this
-        // line is what makes a hardware A/B run self-describing.
+        // Every gate between the request and the glass. Lagoon always asks;
+        // the system's Match Content setting remains the user's authority.
         if let request = engine.displayMatchRequest {
-            let appToggleOn = UserDefaults.standard.object(forKey: "debug.matchContent") == nil
-                || UserDefaults.standard.bool(forKey: "debug.matchContent")
             lines.append(String(
-                format: "Display: request %.3f Hz · app %@ · %@",
+                format: "Display: request %.3f Hz · %@",
                 request.frameRate,
-                appToggleOn ? "on" : "off",
                 DisplayModeMatcher.statusDescription
             ))
         }
@@ -851,7 +847,6 @@ struct VideoPlayerView: View {
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var panelOpen = false
-    @AppStorage("debug.matchContent") private var matchContent = true
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Back was pressed on the Up Next card. Outlives the card itself,
@@ -944,12 +939,6 @@ struct VideoPlayerView: View {
         .onChange(of: controller.engine?.duration) { _, _ in
             pictureInPicture.invalidatePlaybackState()
         }
-        // Live so an A/B can flip mid-playback (expect the TV's mode
-        // switch flash) and so the HUD's app on/off always tells the
-        // truth about what is applied.
-        .onChange(of: matchContent) { _, _ in
-            applyDisplayMatch(controller.engine?.displayMatchRequest)
-        }
         // Backgrounding mid-playback must hand the display back — the
         // home screen has no business running at the content's mode — and
         // returning re-requests it (HEL-64).
@@ -992,12 +981,12 @@ struct VideoPlayerView: View {
 
     /// tvOS Match Content (HEL-64): ask the display for the video's own
     /// frame rate and dynamic range instead of letting the compositor
-    /// cadence-convert and tone-map every full-4K frame. Behind a Debug
-    /// switch (default on) so hardware A/Bs can hold it still; the
-    /// system's own Match Content settings gate it beneath that.
+    /// cadence-convert and tone-map every full-4K frame. Lagoon always
+    /// provides the criteria; the system's own Match Content settings are
+    /// the user-facing gate beneath that request.
     private func applyDisplayMatch(_ request: DisplayMatchRequest?) {
         #if os(tvOS)
-        DisplayModeMatcher.apply(matchContent ? request : nil)
+        DisplayModeMatcher.apply(request)
         #endif
     }
 

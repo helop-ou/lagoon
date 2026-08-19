@@ -9,21 +9,24 @@ struct TVSettingsPage<Content: View>: View {
 
     let title: LocalizedStringKey
     let backTitle: LocalizedStringKey
+    let pageDescription: String?
     @ViewBuilder let content: Content
 
     init(
         _ title: LocalizedStringKey,
         backTitle: LocalizedStringKey = "Settings",
+        description: String? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.backTitle = backTitle
+        self.pageDescription = description
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
-            HStack(spacing: Metrics.Space.xl) {
+        HStack(alignment: .top, spacing: Metrics.Space.section) {
+            VStack(alignment: .leading, spacing: Metrics.Space.xl) {
                 Button {
                     dismiss()
                 } label: {
@@ -33,10 +36,18 @@ struct TVSettingsPage<Content: View>: View {
                 .accessibilityIdentifier("settings.detail.back")
 
                 Text(title)
-                    .font(.title2.bold())
+                    .font(.title.bold())
 
-                Spacer(minLength: 0)
+                if let pageDescription {
+                    Text(pageDescription)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("settings.detail.description")
+                }
             }
+            .frame(width: Metrics.settingsIdentityWidth, alignment: .leading)
+            .padding(.top, Metrics.Space.l)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
@@ -46,9 +57,10 @@ struct TVSettingsPage<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollClipDisabled()
+            .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, Metrics.screenGutter)
-        .padding(.top, Metrics.Space.xl)
+        .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .navigationBarBackButtonHidden(true)
         .onExitCommand { dismiss() }

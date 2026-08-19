@@ -232,15 +232,27 @@ struct GenreLibraryView: View {
                 }
             } else {
                 ScrollView(showsIndicators: false) {
-                    LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
-                        ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
-                            PosterCard(item: item)
-                                .itemUserDataMenu(item: item)
-                                .onAppear {
-                                    if index >= viewModel.items.count - Metrics.gridColumns * 3 {
-                                        Task { await viewModel.loadMore(client: session.client, genre: genre) }
+                    VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                        #if os(tvOS)
+                        // A navigation title becomes a floating overlay on
+                        // tvOS as the grid scrolls. Keeping the heading in
+                        // the scroll content makes it leave with the first
+                        // row instead of covering later posters (HEL-84).
+                        Text(genre)
+                            .font(.largeTitle.bold())
+                            .accessibilityIdentifier("genre.library.title")
+                        #endif
+
+                        LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
+                            ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                                PosterCard(item: item)
+                                    .itemUserDataMenu(item: item)
+                                    .onAppear {
+                                        if index >= viewModel.items.count - Metrics.gridColumns * 3 {
+                                            Task { await viewModel.loadMore(client: session.client, genre: genre) }
+                                        }
                                     }
-                                }
+                            }
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
@@ -249,7 +261,9 @@ struct GenreLibraryView: View {
                 .scrollClipDisabled()
             }
         }
+        #if os(iOS)
         .navigationTitle(genre)
+        #endif
         .task(id: genre) {
             if viewModel.items.isEmpty {
                 await viewModel.loadMore(client: session.client, genre: genre)

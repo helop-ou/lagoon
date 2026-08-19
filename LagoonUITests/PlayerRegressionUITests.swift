@@ -137,29 +137,29 @@ final class PlayerRegressionUITests: XCTestCase {
 
         let defaultAudio = app.descendants(matching: .any)["settings.audio.default"]
         XCTAssertTrue(defaultAudio.waitForExistence(timeout: 5))
-        // SwiftUI exposes a tvOS Menu as an accessibility container rather
-        // than as the focused UIButton. The focus engine still moves from
-        // the Back button to the first menu row deterministically.
-        remote.press(.down)
+        let detailDescription = app.descendants(matching: .any)["settings.detail.description"]
+        XCTAssertTrue(detailDescription.waitForExistence(timeout: 3))
+        XCTAssertLessThan(detailDescription.frame.midX, defaultAudio.frame.minX)
+        // Enter the right-hand controls column before opening the native
+        // tvOS pull-down. Without this explicit horizontal move, Select
+        // would activate the Back button in the left identity column.
+        remote.press(.right)
         remote.press(.select)
-        let originalAudio = app.descendants(matching: .any)["Original Audio"]
-        XCTAssertTrue(originalAudio.waitForExistence(timeout: 5))
-        let previousAudioDefault = defaultAudio.valueDescription
-        // Menu items have the same XCTest accessibility quirk as their
-        // parent Menu, so validate the selection result rather than a false
-        // `hasFocus` reading. tvOS opens this menu on its first item: choose
-        // Original, or Preferred when Original is already persisted.
-        remote.press(.down)
-        if previousAudioDefault.contains("Original Audio") {
-            remote.press(.down)
-        }
-        remote.press(.select)
-        Thread.sleep(forTimeInterval: 0.3)
-        XCTAssertNotEqual(defaultAudio.valueDescription, previousAudioDefault)
+        // Native tvOS menus expose their rows as cells with labelled
+        // descendants rather than as buttons or switches.
+        let preferredLanguage = app.descendants(matching: .any)["Preferred Language"]
+        XCTAssertTrue(preferredLanguage.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(preferredLanguage.frame.minX, defaultAudio.frame.midX)
+        let menuScreenshot = XCTAttachment(screenshot: app.screenshot())
+        menuScreenshot.name = "Settings split view with native audio menu"
+        menuScreenshot.lifetime = .keepAlways
+        add(menuScreenshot)
+        remote.press(.menu)
+        XCTAssertTrue(defaultAudio.waitForExistence(timeout: 3))
 
         let back = app.descendants(matching: .any)["settings.detail.back"]
         XCTAssertTrue(back.waitForExistence(timeout: 3))
-        moveFocus(to: back, maxPresses: 5) { remote.press(.up) }
+        moveFocus(to: back, maxPresses: 5) { remote.press(.left) }
         remote.press(.select)
 
         let subtitles = app.descendants(matching: .any)["settings.category.subtitles"]
@@ -168,9 +168,21 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.select)
         let appearance = app.descendants(matching: .any)["settings.subtitles.appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+        remote.press(.right)
         moveFocus(to: appearance, maxPresses: 8) { remote.press(.down) }
         remote.press(.select)
         XCTAssertTrue(app.descendants(matching: .any)["settings.subtitlePreview"].waitForExistence(timeout: 5))
+        let systemStyle = app.descendants(matching: .any)["settings.subtitles.systemAppearance"]
+        XCTAssertTrue(systemStyle.waitForExistence(timeout: 5))
+        XCTAssertEqual(systemStyle.label, "Use System Caption Style")
+        // tvOS exposes a focused SwiftUI Toggle as a Switch, but does not
+        // reliably surface hasFocus to XCTest. Moving right still transfers
+        // focus from the Back button into the controls column.
+        remote.press(.right)
+        let toggleScreenshot = XCTAttachment(screenshot: app.screenshot())
+        toggleScreenshot.name = "Subtitle Appearance native toggle without duplicate state"
+        toggleScreenshot.lifetime = .keepAlways
+        add(toggleScreenshot)
         remote.press(.menu)
         XCTAssertTrue(appearance.waitForExistence(timeout: 5))
         remote.press(.menu)
@@ -181,12 +193,26 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.select)
         let myList = app.descendants(matching: .any)["settings.home.row.MyList"]
         XCTAssertTrue(myList.waitForExistence(timeout: 5))
+        remote.press(.right)
         moveFocus(to: myList, maxPresses: 6) { remote.press(.down) }
         let previousVisibility = myList.valueDescription
         remote.press(.select)
         XCTAssertNotEqual(myList.valueDescription, previousVisibility)
         remote.press(.menu)
         XCTAssertTrue(home.waitForExistence(timeout: 5))
+
+        let diagnostics = app.descendants(matching: .any)["settings.category.diagnostics"]
+        moveFocus(to: diagnostics, maxPresses: 3) { remote.press(.down) }
+        remote.press(.select)
+        let hud = app.descendants(matching: .any)["settings.diagnostics.hud"]
+        XCTAssertTrue(hud.waitForExistence(timeout: 5))
+        XCTAssertEqual(hud.label, "Playback HUD")
+        remote.press(.right)
+        let diagnosticsScreenshot = XCTAttachment(screenshot: app.screenshot())
+        diagnosticsScreenshot.name = "Diagnostics native toggle without duplicate state"
+        diagnosticsScreenshot.lifetime = .keepAlways
+        add(diagnosticsScreenshot)
+        remote.press(.menu)
     }
 
     func testNativeGenreShelfOpensAFilteredLibrary() {
@@ -223,9 +249,20 @@ final class PlayerRegressionUITests: XCTestCase {
 
         let library = app.descendants(matching: .any)["genre.library"]
         XCTAssertTrue(library.waitForExistence(timeout: 8), "Did not open \(selectedGenre)")
+        let title = app.descendants(matching: .any)["genre.library.title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
         let populated = NSPredicate(format: "value != '0 items'")
         expectation(for: populated, evaluatedWith: library)
         waitForExpectations(timeout: 20)
+
+        for _ in 0..<6 {
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTAssertFalse(
+            title.frame.intersects(app.frame),
+            "The genre heading should scroll away instead of covering the poster grid"
+        )
     }
 
     private func moveFocus(
@@ -329,7 +366,6 @@ final class PlayerRegressionUITests: XCTestCase {
             "-debug.regressionBootstrapPublicDemo", "YES",
             "-debug.benchSearchTerm", title,
             "-debug.playbackHUD", "YES",
-            "-debug.matchContent", "YES",
         ]
         if simulatorTranscode {
             app.launchArguments += ["-debug.simulatorTranscode", "YES"]

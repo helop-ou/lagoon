@@ -311,12 +311,11 @@ automatically: ask the display to match the content. The engine publishes
 a `DisplayMatchRequest` (the video's tagged `CMFormatDescription` plus
 frame rate) once the demuxer knows the stream; `VideoPlayerView` applies
 it to a window's `AVDisplayManager.preferredDisplayCriteria`
-(`DisplayModeMatcher`) and clears it on exit. Two gates sit above the
-request: the Debug switch `debug.matchContent` (default **on**; off holds
-an A/B still) and the user's tvOS Settings → Video and Audio → Match
-Content options — criteria are silently ignored without those. The HUD's
-`Display:` line names every layer separately: the requested rate, the
-app toggle, and then `no window` / `no manager` (lookup failed — nothing
+(`DisplayModeMatcher`) and clears it on exit. Lagoon always submits the
+request; the user's tvOS Settings → Video and Audio → Match Content
+options remain the authority, and criteria are silently ignored when those
+are disabled. The HUD's `Display:` line names every observable layer: the
+requested rate, then `no window` / `no manager` (lookup failed — nothing
 was applied), `system on/off` (the user setting), and `switched ×N`
 counting the system's actual `AVDisplayManagerModeSwitchStart`
 notifications — the hard proof a request moved the display. The first

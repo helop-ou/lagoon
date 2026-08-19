@@ -14,6 +14,17 @@ nonisolated enum AudioDefaultMode: String, Codable, CaseIterable, Identifiable {
         case .preferredLanguage: String(localized: "Preferred Language")
         }
     }
+
+    var settingsDescription: String {
+        switch self {
+        case .serverDefault:
+            String(localized: "Uses the audio track Jellyfin marks as default.")
+        case .original:
+            String(localized: "Prefers the title's original-language audio and falls back to your preferred languages when that metadata is unavailable.")
+        case .preferredLanguage:
+            String(localized: "Selects your preferred audio language first, then your fallback language, and finally Jellyfin's default.")
+        }
+    }
 }
 
 nonisolated enum SubtitleDefaultMode: String, Codable, CaseIterable, Identifiable {
@@ -31,6 +42,21 @@ nonisolated enum SubtitleDefaultMode: String, Codable, CaseIterable, Identifiabl
         case .always: String(localized: "Always")
         case .forcedOnly: String(localized: "Forced Only")
         case .off: String(localized: "Off")
+        }
+    }
+
+    var settingsDescription: String {
+        switch self {
+        case .system:
+            String(localized: "Keeps the subtitle track Jellyfin marks as default. Caption languages and appearance still follow Apple TV Settings.")
+        case .smart:
+            String(localized: "Shows full subtitles when the audio is not in one of your preferred languages. When the audio is preferred, only forced subtitles are selected.")
+        case .always:
+            String(localized: "Selects a full subtitle track in your preferred or fallback language whenever one is available.")
+        case .forcedOnly:
+            String(localized: "Selects only forced subtitles, such as translations for foreign-language dialogue.")
+        case .off:
+            String(localized: "Starts playback with subtitles turned off.")
         }
     }
 }

@@ -8,7 +8,6 @@ struct SettingsView: View {
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
-    @AppStorage("debug.matchContent") private var matchContent = true
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     @State private var subtitlePreferences = SubtitlePreferencesStore()
@@ -141,7 +140,10 @@ struct SettingsView: View {
     private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
 
     private var playbackSettings: some View {
-        TVSettingsPage("Playback") {
+        TVSettingsPage(
+            "Playback",
+            description: "Choose how Lagoon handles skippable segments and episode endings. Display matching is always requested during playback; Apple TV's Video and Audio settings decide whether the television changes mode."
+        ) {
             TVSettingsSection(
                 "Playback Behavior",
                 footer: "These choices apply automatically whenever an intro, recap, or next episode is available."
@@ -165,15 +167,16 @@ struct SettingsView: View {
                         TVSettingsOption(value: $0.rawValue, title: String(localized: $0.title))
                     }
                 )
-
-                settingsToggle("Match Content Display Mode", isOn: $matchContent)
-                    .accessibilityIdentifier("settings.playback.matchContent")
             }
         }
     }
 
     private var audioSettings: some View {
-        TVSettingsPage("Audio") {
+        TVSettingsPage(
+            "Audio",
+            description: trackPreferences.values.audioMode.settingsDescription
+                + "\n\nLagoon applies these choices whenever an item starts."
+        ) {
             TVSettingsSection(
                 "Language Selection",
                 footer: "Lagoon uses these preferences when each item starts. Original Audio avoids dubbed tracks when Jellyfin provides original-language metadata."
@@ -208,7 +211,11 @@ struct SettingsView: View {
     }
 
     private var subtitleSettings: some View {
-        TVSettingsPage("Subtitles") {
+        TVSettingsPage(
+            "Subtitles",
+            description: trackPreferences.values.subtitleMode.settingsDescription
+                + "\n\nPreferred and fallback languages are also used when Lagoon searches for a missing subtitle."
+        ) {
             TVSettingsSection(
                 "Language Selection",
                 footer: "These defaults are applied when playback starts and when Lagoon searches for a missing subtitle."
@@ -263,7 +270,11 @@ struct SettingsView: View {
     }
 
     private var subtitleAppearanceSettings: some View {
-        TVSettingsPage("Subtitle Appearance", backTitle: "Subtitles") {
+        TVSettingsPage(
+            "Subtitle Appearance",
+            backTitle: "Subtitles",
+            description: "Use the caption style configured in Apple TV Settings, or turn it off here to customize Lagoon's text subtitles. Authored bitmap subtitles keep their original appearance."
+        ) {
             TVSettingsSection("Preview") {
                 subtitlePreview
             }
@@ -324,20 +335,29 @@ struct SettingsView: View {
     }
 
     private var diagnosticsSettings: some View {
-        TVSettingsPage("Diagnostics") {
+        TVSettingsPage(
+            "Diagnostics",
+            description: "Temporary tools for investigating playback on TestFlight and development builds. Leave them off during normal viewing."
+        ) {
             TVSettingsSection(
                 "Player Diagnostics",
                 footer: "These tools are intended for diagnosing playback on TestFlight and development builds."
             ) {
                 settingsToggle("Playback HUD", isOn: $showPlaybackHUD)
+                    .accessibilityIdentifier("settings.diagnostics.hud")
                 settingsToggle("Frame-Loss Bench", isOn: $frameLossBench)
+                    .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 settingsToggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
+                    .accessibilityIdentifier("settings.diagnostics.dovi")
             }
         }
     }
 
     private var accountSettings: some View {
-        TVSettingsPage("Account") {
+        TVSettingsPage(
+            "Account",
+            description: "View the active Jellyfin connection, switch between saved users, or add and remove an account."
+        ) {
             TVSettingsSection("Connection") {
                 settingsInfo("Server", value: session.serverName ?? "Jellyfin")
                 settingsInfo("Address", value: session.client.serverURL?.host() ?? "—")
@@ -358,11 +378,11 @@ struct SettingsView: View {
 
     private func settingsToggle(_ title: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
-            TVSettingsActionLabel(title, value: isOn.wrappedValue ? "On" : "Off")
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, Metrics.Space.l)
         .frame(minHeight: 64)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private func settingsInfo(_ title: LocalizedStringKey, value: String) -> some View {
@@ -536,7 +556,6 @@ struct SettingsView: View {
                 Toggle("Playback HUD", isOn: $showPlaybackHUD)
                 Toggle("Frame-Loss Bench", isOn: $frameLossBench)
                 Toggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
-                Toggle("Match Content Display Mode", isOn: $matchContent)
             }
         }
     }
