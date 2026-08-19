@@ -90,6 +90,9 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
 nonisolated enum SubtitleParser {
     static func cues(from data: Data) -> [SubtitleCue] {
         guard let content = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16)
+            ?? String(data: data, encoding: .utf16LittleEndian)
+            ?? String(data: data, encoding: .utf16BigEndian)
             ?? String(data: data, encoding: .isoLatin1) else { return [] }
         var result: [SubtitleCue] = []
 

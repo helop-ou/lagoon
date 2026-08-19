@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-@Suite("Player system integration")
+@Suite("Player system integration", .serialized)
 struct PlayerSystemIntegrationTests {
     @Test func privateRouteLossPausesButHDMIDisplayChangeDoesNot() {
         #expect(PlaybackAudioSession.shouldPauseAfterRouteLoss(
@@ -131,7 +131,10 @@ struct PlayerSystemIntegrationTests {
 
     @Test func remoteSubtitleFallbackAcceptsTextCuesAndRejectsOtherFiles() {
         let srt = Data("1\n00:00:01,000 --> 00:00:03,000\nFallback works\n".utf8)
+        let utf16 = "1\n00:00:01,000 --> 00:00:03,000\nUTF-16 works\n"
+            .data(using: .utf16)!
         #expect(SubtitleParser.cues(from: srt).count == 1)
+        #expect(SubtitleParser.cues(from: utf16).count == 1)
         #expect(SubtitleParser.cues(from: Data("not a subtitle".utf8)).isEmpty)
     }
 
@@ -243,6 +246,11 @@ struct PlayerSystemIntegrationTests {
         let result = try #require(coordinator.results.first)
         coordinator.startDownload(result)
         try await waitUntil { coordinator.phase == .downloaded }
+        try await waitUntil {
+            SubtitleDownloadURLProtocol.requests.contains {
+                $0.method == "POST" && $0.path == "/Videos/item-1/Subtitles"
+            }
+        }
 
         let track = try #require(engine.subtitleTracks.first)
         #expect(track.isSelected)
@@ -256,15 +264,101 @@ struct PlayerSystemIntegrationTests {
                 && $0.path == "/Items/item-1/RemoteSearch/Subtitles/eng"
         })
         #expect(requests.contains {
-            $0.method == "POST"
-                && $0.path == "/Items/item-1/RemoteSearch/Subtitles/subtitle-1"
-        })
-        #expect(requests.contains {
             $0.method == "GET"
-                && $0.path == "/Providers/Subtitles/Subtitles/subtitle-1"
+                && $0.percentEncodedPath
+                    == "/Providers/Subtitles/Subtitles/srt-eng-42%2Fprovider%3Fpart%23100%25"
                 && $0.query == "api_key=test-token"
         })
+        let upload = try #require(requests.first {
+            $0.method == "POST" && $0.path == "/Videos/item-1/Subtitles"
+        })
+        #expect(upload.body?.contains(#""Format":"vtt""#) == true)
+        #expect(upload.body?.contains(#""Language":"eng""#) == true)
+        #expect(upload.body?.contains(#""IsHearingImpaired":true"#) == true)
+        #expect(!requests.contains {
+            $0.method == "POST" && $0.path.contains("RemoteSearch/Subtitles")
+        })
         #expect(requests.allSatisfy { $0.authorization?.contains(#"Token="test-token""#) == true })
+    }
+
+    @Test @MainActor func remoteSubtitleSearchKeepsResultsWhenAnotherLanguageFails() async throws {
+        SubtitleDownloadURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
+        let client = JellyfinClient(
+            deviceId: "subtitle-search-test",
+            sessionConfiguration: configuration
+        )
+        client.configure(serverURL: URL(string: "https://subtitle.test")!)
+        client.activateSession(token: "test-token", userId: "user-1")
+
+        let coordinator = SubtitleSearchCoordinator()
+        coordinator.configure(
+            client: client,
+            engine: SampleBufferPlayerEngine(),
+            itemID: "item-1",
+            mediaSourceID: "source-1",
+            streams: [],
+            preferredLanguages: ["fr", "en"],
+            missingMode: .ask,
+            hasSuitableLocalTrack: false,
+            onTrackAdded: { _ in }
+        )
+        coordinator.startSearch()
+        try await waitUntil { coordinator.phase != .searching }
+
+        #expect(coordinator.phase == .idle)
+        #expect(coordinator.results.count == 2)
+        #expect(SubtitleDownloadURLProtocol.requests.contains {
+            $0.path == "/Items/item-1/RemoteSearch/Subtitles/fra"
+        })
+        #expect(SubtitleDownloadURLProtocol.requests.contains {
+            $0.path == "/Items/item-1/RemoteSearch/Subtitles/eng"
+        })
+    }
+
+    @Test @MainActor func missingProviderFileExplainsRemovalOrDownloadLimit() async throws {
+        SubtitleDownloadURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
+        let client = JellyfinClient(
+            deviceId: "subtitle-failure-test",
+            sessionConfiguration: configuration
+        )
+        client.configure(serverURL: URL(string: "https://subtitle.test")!)
+        client.activateSession(token: "test-token", userId: "user-1")
+
+        let engine = SampleBufferPlayerEngine()
+        let coordinator = SubtitleSearchCoordinator(
+            downloadedSubtitlePoller: DownloadedSubtitlePoller(refreshDelays: [.zero])
+        )
+        coordinator.configure(
+            client: client,
+            engine: engine,
+            itemID: "item-1",
+            mediaSourceID: "source-1",
+            streams: [],
+            preferredLanguages: ["en"],
+            missingMode: .ask,
+            hasSuitableLocalTrack: false,
+            onTrackAdded: { _ in }
+        )
+        coordinator.startSearch()
+        try await waitUntil { coordinator.results.count == 2 }
+        let missing = try #require(coordinator.results.first { $0.id == "missing-provider-file" })
+        coordinator.startDownload(missing)
+        try await waitUntil {
+            if case .downloadFailed = coordinator.phase { return true }
+            return false
+        }
+
+        guard case .downloadFailed(let message) = coordinator.phase else {
+            Issue.record("Expected a provider-specific download failure")
+            return
+        }
+        #expect(message.contains("removed"))
+        #expect(message.contains("download limit"))
+        #expect(engine.subtitleTracks.isEmpty)
     }
 
     @MainActor
@@ -287,8 +381,10 @@ struct PlayerSystemIntegrationTests {
 private nonisolated struct RecordedSubtitleRequest: Sendable {
     let method: String
     let path: String
+    let percentEncodedPath: String
     let query: String?
     let authorization: String?
+    let body: String?
 }
 
 /// A deterministic Jellyfin transport for the complete user download flow.
@@ -323,37 +419,49 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
+        let percentEncodedPath = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        )?.percentEncodedPath ?? url.path
         Self.lock.lock()
         Self.recordedRequests.append(RecordedSubtitleRequest(
             method: request.httpMethod ?? "GET",
             path: url.path,
+            percentEncodedPath: percentEncodedPath,
             query: url.query,
-            authorization: request.value(forHTTPHeaderField: "Authorization")
+            authorization: request.value(forHTTPHeaderField: "Authorization"),
+            body: bodyString(from: request)
         ))
         Self.lock.unlock()
 
         let payload: Data
         let status: Int
-        switch (request.httpMethod ?? "GET", url.path) {
+        switch (request.httpMethod ?? "GET", percentEncodedPath) {
         case ("GET", "/Items/item-1/RemoteSearch/Subtitles/eng"):
             payload = Data(#"""
             [{
-              "Id": "subtitle-1",
+              "Id": "srt-eng-42/provider?part#100%",
               "Name": "English provider subtitle",
               "ThreeLetterISOLanguageName": "eng",
               "ProviderName": "Test Provider",
               "Format": "vtt",
               "HearingImpaired": true
+            }, {
+              "Id": "missing-provider-file",
+              "Name": "Deleted provider subtitle",
+              "ThreeLetterISOLanguageName": "eng",
+              "ProviderName": "Test Provider",
+              "Format": "srt"
             }]
             """#.utf8)
             status = 200
-        case ("POST", "/Items/item-1/RemoteSearch/Subtitles/subtitle-1"):
+        case ("GET", "/Items/item-1/RemoteSearch/Subtitles/fra"):
             payload = Data()
-            status = 204
+            status = 500
         case ("POST", "/Items/item-1/PlaybackInfo"):
             payload = Data(#"{ "MediaSources": [{ "Id": "source-1", "MediaStreams": [] }] }"#.utf8)
             status = 200
-        case ("GET", "/Providers/Subtitles/Subtitles/subtitle-1"):
+        case ("GET", "/Providers/Subtitles/Subtitles/srt-eng-42%2Fprovider%3Fpart%23100%25"):
             payload = Data(#"""
             WEBVTT
 
@@ -361,6 +469,17 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
             Downloaded subtitle cue
             """#.utf8)
             status = 200
+        case ("GET", "/Providers/Subtitles/Subtitles/missing-provider-file"):
+            payload = Data()
+            status = 404
+        case ("POST", "/Items/item-1/RemoteSearch/Subtitles/missing-provider-file"):
+            // Jellyfin 10.11 returns 204 even when its internal provider
+            // operation throws; PlaybackInfo remains stale below.
+            payload = Data()
+            status = 204
+        case ("POST", "/Videos/item-1/Subtitles"):
+            payload = Data()
+            status = 204
         default:
             payload = Data()
             status = 404
@@ -383,4 +502,21 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
     }
 
     override func stopLoading() {}
+
+    private func bodyString(from request: URLRequest) -> String? {
+        if let body = request.httpBody {
+            return String(data: body, encoding: .utf8)
+        }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return String(data: data, encoding: .utf8)
+    }
 }

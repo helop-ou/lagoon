@@ -13,6 +13,7 @@ struct MainTabView: View {
     @State private var libraryNavigationPaths: [String: [ContentNavigationRoute]] = [:]
     @State private var searchNavigationPath: [ContentNavigationRoute] = []
     @State private var seerrNavigationPath: [SeerrNavigationRoute] = []
+    @State private var regressionResolution = "idle"
 
     var body: some View {
         TabView {
@@ -81,8 +82,21 @@ struct MainTabView: View {
         }
         #if DEBUG
         .overlay(alignment: .topLeading) {
-            if UserDefaults.standard.bool(forKey: "debug.lifecycleReplayBenchmark") {
-                PlaybackLifecycleRegressionProbe()
+            VStack(alignment: .leading) {
+                if UserDefaults.standard.bool(forKey: "debug.lifecycleReplayBenchmark") {
+                    PlaybackLifecycleRegressionProbe()
+                }
+                if UserDefaults.standard.bool(forKey: "debug.playerRegression") {
+                    Text("Player fixture resolution")
+                        .font(.system(size: 1))
+                        .foregroundStyle(.clear)
+                        .frame(width: 1, height: 1)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Player fixture resolution")
+                        .accessibilityValue(regressionResolution)
+                        .accessibilityIdentifier("player.regression.resolution")
+                        .allowsHitTesting(false)
+                }
             }
         }
         #endif
@@ -161,6 +175,7 @@ struct MainTabView: View {
               let term = UserDefaults.standard.string(forKey: "debug.benchSearchTerm")?
                   .trimmingCharacters(in: .whitespacesAndNewlines),
               !term.isEmpty else { return }
+        regressionResolution = "resolving"
 
         let requestedSeries = UserDefaults.standard.string(forKey: "debug.regressionSeriesName")?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -181,6 +196,7 @@ struct MainTabView: View {
             }),
             let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
                 print("RegressionResolve failed VC-1 series=\"\(requestedSeries)\"")
+                regressionResolution = "error:VC-1 series lookup failed"
                 return
             }
             for episode in episodes {
@@ -191,10 +207,12 @@ struct MainTabView: View {
                       }) else { continue }
                 print("RegressionResolve VC-1 series=\"\(requestedSeries)\" title=\"\(episode.name ?? "?")\" id=\(episode.id)")
                 lifecycleBenchmarkMedia = episode
+                regressionResolution = "resolved"
                 playerItem = PlayerItem(media: episode, startFromBeginning: true)
                 return
             }
             print("RegressionResolve no VC-1 episode series=\"\(requestedSeries)\"")
+            regressionResolution = "missing:VC-1 episode"
             return
         }
         if regressionRun,
@@ -204,6 +222,7 @@ struct MainTabView: View {
                 limit: 100
             ) else {
                 print("RegressionResolve failed playable library scan")
+                regressionResolution = "error:playable library scan failed"
                 return
             }
             for item in page.items {
@@ -214,10 +233,12 @@ struct MainTabView: View {
                 }
                 print("RegressionResolve playable title=\"\(item.name ?? "?")\" id=\(item.id)")
                 lifecycleBenchmarkMedia = item
+                regressionResolution = "resolved"
                 playerItem = PlayerItem(media: item, startFromBeginning: true)
                 return
             }
             print("RegressionResolve no playable item")
+            regressionResolution = "missing:playable item"
             return
         }
         if regressionRun,
@@ -227,6 +248,7 @@ struct MainTabView: View {
                 limit: 100
             ) else {
                 print("RegressionResolve failed multi-audio library scan")
+                regressionResolution = "error:multi-audio library scan failed"
                 return
             }
             // Ask the server which sources are direct-playable under the
@@ -244,11 +266,13 @@ struct MainTabView: View {
                 let audioCount = streams.count { $0.type == "Audio" }
                 if isH264, audioCount > 1 {
                     print("RegressionResolve multi-audio title=\"\(item.name ?? "?")\" id=\(item.id)")
+                    regressionResolution = "resolved"
                     playerItem = PlayerItem(media: item, startFromBeginning: true)
                     return
                 }
             }
             print("RegressionResolve no direct-play H.264 multi-audio item")
+            regressionResolution = "missing:direct-play H.264 multi-audio item"
             return
         }
         if regressionRun,
@@ -268,17 +292,20 @@ struct MainTabView: View {
             }),
             let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
                 print("RegressionResolve failed series=\"\(requestedSeries)\"")
+                regressionResolution = "missing:requested skippable series"
                 return
             }
             for episode in episodes {
                 let segments = await session.client.mediaSegments(itemId: episode.id)
                 if segments.contains(where: { $0.kind.isSkippable }) {
                     print("RegressionResolve skippable series=\"\(requestedSeries)\" title=\"\(episode.name ?? "?")\" id=\(episode.id)")
+                    regressionResolution = "resolved"
                     playerItem = PlayerItem(media: episode, startFromBeginning: true)
                     return
                 }
             }
             print("RegressionResolve no skippable episode series=\"\(requestedSeries)\"")
+            regressionResolution = "missing:skippable episode"
             return
         }
 
@@ -288,6 +315,7 @@ struct MainTabView: View {
             limit: regressionRun ? 100 : 20
         ) else {
             print("BenchResolve failed term=\"\(term)\"")
+            regressionResolution = "error:item lookup failed"
             return
         }
         let requestedYear = UserDefaults.standard.integer(forKey: "debug.benchProductionYear")
@@ -303,9 +331,11 @@ struct MainTabView: View {
             ?? candidates.first
         guard let item else {
             print("BenchResolve no exact match term=\"\(term)\" year=\(requestedYear)")
+            regressionResolution = "missing:exact media fixture"
             return
         }
         print("BenchResolve title=\"\(item.name ?? term)\" year=\(item.productionYear ?? 0) id=\(item.id)")
+        regressionResolution = "resolved"
         playerItem = PlayerItem(media: item, startFromBeginning: regressionRun)
     }
 

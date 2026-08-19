@@ -105,19 +105,26 @@ code knows whether a result came from OpenSubtitles or another plugin.
 | Purpose | Endpoint | Notes |
 |---|---|---|
 | Search | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}` | language is ISO 639-2; Apple/BCP-47 preferences are normalized and converted to three-letter form |
-| Download | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | only runs after an explicit viewer action; result IDs remain one encoded path component |
+| Fetch provider file | `GET Providers/Subtitles/Subtitles/{subtitleId}` | result ids are opaque and remain one percent-encoded path component |
+| Persist fetched file | `POST Videos/{itemId}/Subtitles` | uploads the already validated bytes as base64, avoiding a second provider download |
+| Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | retained for provider formats Lagoon cannot parse directly |
 
 Preferred languages are searched in order and each provider's returned
-ranking is retained. Empty results, absent-provider 404s, transport failures,
+ranking is retained. A failure for one language no longer discards successful
+results from another. Empty results, absent-provider 404s, transport failures,
 and download failures are distinct UI states. Automatic mode searches when
 no suitable local track exists but never downloads silently.
 
-After a successful download Lagoon requests PlaybackInfo again, locates the
-new external subtitle stream, resolves its `DeliveryUrl` with authentication,
-and inserts it into the active sample-buffer engine. Playback position,
-renderers, selected audio, and the Now Playing session are not rebuilt.
-Forced and hearing-impaired metadata from both the result and refreshed
-stream is preserved.
+Jellyfin 10.11's `DownloadRemoteSubtitles` controller catches its internal
+provider/save exception and still returns HTTP 204, so a successful status is
+not evidence that a subtitle exists. Lagoon instead fetches the provider file,
+validates that it contains readable cues, inserts/selects those bytes in the
+active engine immediately, and uploads the same bytes to Jellyfin for future
+sessions. This uses one provider download and still works when the library is
+read-only. Provider formats Lagoon cannot parse use the native endpoint and a
+PlaybackInfo poll as a compatibility fallback. Playback position, renderers,
+selected audio, and the Now Playing session are not rebuilt. Forced and
+hearing-impaired metadata is preserved.
 
 ## App Transport Security (HEL-42)
 

@@ -72,6 +72,24 @@ xcodebuild -project Lagoon.xcodeproj -scheme LagoonHardwareRegression \
   -only-testing:LagoonUITests/PlayerRegressionUITests/testPlayerPanelPreviewPerformance test
 ```
 
+The public Jellyfin demo is sufficient for navigation, generic playback,
+lifecycle, and panel tests, but currently exposes no subtitle, multi-audio,
+chapter, or intro-segment fixture. Rich-media UI tests report an explicit skip
+instead of timing out when those assets are absent. To run every fixture-backed
+journey against a private regression library without committing credentials:
+
+```sh
+LAGOON_REGRESSION_SERVER='https://example.test' \
+LAGOON_REGRESSION_USER='Regression' \
+LAGOON_REGRESSION_PASS='…' \
+xcodebuild test -project Lagoon.xcodeproj -scheme LagoonHardwareRegression \
+  -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest'
+```
+
+The test runner passes these values to the DEBUG-only bootstrap through the
+app launch environment; they are never persisted by Lagoon or compiled into a
+Release build.
+
 Release builds also emit a `Player Panel Reveal` interval in the existing
 `ee.helop.lagoon/PlaybackPerformance` signpost category. Use that interval and
 the Animation Hitches instrument for physical-Apple-TV validation, where GPU

@@ -120,12 +120,45 @@ final class JellyfinClient {
         return url
     }
 
+    /// Builds a route from individually encoded path components. Opaque API
+    /// ids (notably subtitle-provider ids) may contain `/`, `?`, `%`, or `#`;
+    /// interpolating one into a path would change the route or double-encode
+    /// it instead of sending it as the single component Jellyfin expects.
+    func url(pathComponents: [String], query: [URLQueryItem] = []) throws -> URL {
+        guard let serverURL,
+              var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
+            throw JellyfinError.notConfigured
+        }
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/?#%")
+        let encoded = try pathComponents.map { component in
+            guard let value = component.addingPercentEncoding(withAllowedCharacters: allowed) else {
+                throw JellyfinError.invalidServerURL
+            }
+            return value
+        }
+        var path = components.percentEncodedPath
+        if !path.hasSuffix("/") { path += "/" }
+        components.percentEncodedPath = path + encoded.joined(separator: "/")
+        components.queryItems = query.isEmpty ? nil : query
+        guard let url = components.url else { throw JellyfinError.invalidServerURL }
+        return url
+    }
+
     func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         try await send(request(for: url(path: path, query: query), method: "GET"))
     }
 
     func getData(_ path: String, query: [URLQueryItem] = []) async throws -> Data {
         try await data(for: request(for: url(path: path, query: query), method: "GET"))
+    }
+
+    func get<T: Decodable>(_ pathComponents: [String], query: [URLQueryItem] = []) async throws -> T {
+        try await send(request(for: url(pathComponents: pathComponents, query: query), method: "GET"))
+    }
+
+    func getData(_ pathComponents: [String], query: [URLQueryItem] = []) async throws -> Data {
+        try await data(for: request(for: url(pathComponents: pathComponents, query: query), method: "GET"))
     }
 
     func post<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
@@ -142,6 +175,22 @@ final class JellyfinClient {
 
     func postVoid(_ path: String, query: [URLQueryItem] = [], body: some Encodable) async throws {
         _ = try await data(for: request(for: url(path: path, query: query), method: "POST", body: Self.encoder.encode(body)))
+    }
+
+    func postVoid(_ pathComponents: [String], query: [URLQueryItem] = []) async throws {
+        _ = try await data(for: request(for: url(pathComponents: pathComponents, query: query), method: "POST"))
+    }
+
+    func postVoid(
+        _ pathComponents: [String],
+        query: [URLQueryItem] = [],
+        body: some Encodable
+    ) async throws {
+        _ = try await data(for: request(
+            for: url(pathComponents: pathComponents, query: query),
+            method: "POST",
+            body: Self.encoder.encode(body)
+        ))
     }
 
     func deleteVoid(_ path: String, query: [URLQueryItem] = []) async throws {

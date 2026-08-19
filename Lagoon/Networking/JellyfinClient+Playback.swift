@@ -34,6 +34,14 @@ extension JellyfinClient {
         let positionTicks: Int64
     }
 
+    nonisolated struct SubtitleUploadRequest: Encodable {
+        let data: String
+        let language: String?
+        let format: String
+        let isForced: Bool
+        let isHearingImpaired: Bool
+    }
+
     func playbackInfo(itemId: String) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
         #if DEBUG && targetEnvironment(simulator)
@@ -103,14 +111,14 @@ extension JellyfinClient {
     /// Jellyfin expects an ISO language identifier and preserves provider
     /// ranking in the returned array.
     func searchRemoteSubtitles(itemId: String, language: String) async throws -> [RemoteSubtitleInfo] {
-        try await get("Items/\(itemId)/RemoteSearch/Subtitles/\(language)")
+        try await get(["Items", itemId, "RemoteSearch", "Subtitles", language])
     }
 
     /// Asks Jellyfin to download and attach a result. The file belongs to
     /// the server/library after this point; Lagoon then refreshes
     /// PlaybackInfo to obtain the authoritative stream index and URL.
     func downloadRemoteSubtitle(itemId: String, subtitleId: String) async throws {
-        try await postVoid("Items/\(itemId)/RemoteSearch/Subtitles/\(subtitleId)")
+        try await postVoid(["Items", itemId, "RemoteSearch", "Subtitles", subtitleId])
     }
 
     /// Fetches the provider result itself. This is a live-playback fallback
@@ -118,9 +126,41 @@ extension JellyfinClient {
     /// sidecar during their queued library refresh.
     func remoteSubtitleFile(subtitleId: String) async throws -> (url: URL, data: Data) {
         guard let accessToken else { throw JellyfinError.notConfigured }
-        let path = "Providers/Subtitles/Subtitles/\(subtitleId)"
         let query = [URLQueryItem(name: "api_key", value: accessToken)]
-        return (try url(path: path, query: query), try await getData(path, query: query))
+        let components = ["Providers", "Subtitles", "Subtitles", subtitleId]
+        return (
+            try url(pathComponents: components, query: query),
+            try await getData(components, query: query)
+        )
+    }
+
+    /// Persists provider bytes already fetched for immediate playback. This
+    /// avoids asking the provider for the same file a second time and avoids
+    /// Jellyfin's remote-download endpoint silently returning 204 after an
+    /// internal provider/save failure (the behavior in Jellyfin 10.11.x).
+    func uploadSubtitle(
+        itemId: String,
+        data: Data,
+        language: String?,
+        format: String,
+        isForced: Bool,
+        isHearingImpaired: Bool
+    ) async throws {
+        let normalizedFormat = format
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .lowercased()
+        guard !normalizedFormat.isEmpty else { throw SubtitleDownloadError.unsupportedFile }
+        try await postVoid(
+            ["Videos", itemId, "Subtitles"],
+            body: SubtitleUploadRequest(
+                data: data.base64EncodedString(),
+                language: language,
+                format: normalizedFormat,
+                isForced: isForced,
+                isHearingImpaired: isHearingImpaired
+            )
+        )
     }
 
     private func staticStreamQuery(source: MediaSource, accessToken: String) -> [URLQueryItem] {

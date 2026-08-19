@@ -12,6 +12,7 @@ final class PlayerRegressionUITests: XCTestCase {
         // CoreSimulator can exercise both seek directions without relying
         // on a just-in-time HEVC transcode playlist.
         let app = launchPlayer(title: "Pilot", series: "Young Sheldon")
+        try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 45) { value in
             value.int("ready") == 1 && value.int("audioCount") > 0
         }
@@ -65,7 +66,7 @@ final class PlayerRegressionUITests: XCTestCase {
         exerciseSubtitles(in: app)
     }
 
-    func testRealAudioTrackSwitchReprimesPlayback() {
+    func testRealAudioTrackSwitchReprimesPlayback() throws {
         // Resolve a server-declared direct-play H.264 item with multiple
         // embedded renditions. This remains simulator-decodable without
         // hard-coding a private-library title.
@@ -73,6 +74,7 @@ final class PlayerRegressionUITests: XCTestCase {
             title: "multi-audio-regression",
             extraArguments: ["-debug.regressionFindMultiAudioH264", "YES"]
         )
+        try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 60) {
             $0.int("ready") == 1 && $0.int("audioCount") > 1
         }
@@ -90,6 +92,7 @@ final class PlayerRegressionUITests: XCTestCase {
                 "-playback.autoplayMode", "off",
             ]
         )
+        try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 45) {
             $0.int("ready") == 1 && $0.double("skippableEnd") > $0.double("skippableStart")
         }
@@ -99,8 +102,9 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["player.skip"].exists)
     }
 
-    func testRealSubtitleCueReachesThePlayerOverlay() {
+    func testRealSubtitleCueReachesThePlayerOverlay() throws {
         let app = launchPlayer(title: "Pilot", series: "Young Sheldon")
+        try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 45) {
             $0.int("ready") == 1 && $0.int("subtitleCount") > 0 && $0.int("subtitle") > 0
         }
@@ -976,8 +980,45 @@ final class PlayerRegressionUITests: XCTestCase {
             app.launchArguments += ["-debug.regressionSeriesName", series]
         }
         app.launchArguments += extraArguments
+        for key in [
+            "LAGOON_REGRESSION_SERVER",
+            "LAGOON_REGRESSION_USER",
+            "LAGOON_REGRESSION_PASS",
+        ] {
+            if let value = ProcessInfo.processInfo.environment[key] {
+                app.launchEnvironment[key] = value
+            }
+        }
         app.launch()
         return app
+    }
+
+    /// Distinguishes a player failure from a server that simply lacks the
+    /// specialized media fixture. The public Jellyfin demo currently has no
+    /// subtitle, multi-audio, chapter, or intro-segment item; those journeys
+    /// run when a fixture server is supplied through LAGOON_REGRESSION_*.
+    private func requireRegressionFixture(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 25
+    ) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        let resolution = app.descendants(matching: .any)["player.regression.resolution"]
+        repeat {
+            if app.descendants(matching: .any)["player.regression.state"].exists { return }
+            if resolution.exists {
+                let value = resolution.value as? String ?? ""
+                if value.hasPrefix("missing:") {
+                    throw XCTSkip(
+                        "Fixture server " + String(value.dropFirst("missing:".count))
+                    )
+                }
+                if value.hasPrefix("error:") {
+                    throw RegressionFixtureError(message: String(value.dropFirst("error:".count)))
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        } while Date() < deadline
+        throw RegressionFixtureError(message: "did not resolve a player fixture before timeout")
     }
 
     @discardableResult
@@ -1067,6 +1108,11 @@ final class PlayerRegressionUITests: XCTestCase {
         moveFocus(to: openPlayerPanel, maxPresses: 3) { remote.press(.down) }
         remote.press(.select)
     }
+}
+
+private struct RegressionFixtureError: LocalizedError {
+    let message: String
+    var errorDescription: String? { "Regression fixture resolution failed: \(message)" }
 }
 
 private struct RegressionState {

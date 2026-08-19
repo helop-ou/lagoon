@@ -283,16 +283,22 @@ final class SessionStore {
 
     #if DEBUG
     /// Makes the UI regression suite runnable on a clean simulator. The
-    /// public Jellyfin demo credentials are documented and carry no private
-    /// user data; the hook is gated by two launch-only flags and cannot ship
-    /// in Release builds.
+    /// public Jellyfin demo is the zero-configuration default. A richer
+    /// private fixture server can be supplied through test-process launch
+    /// environment without putting its credentials in the project or
+    /// command-line arguments; this hook cannot ship in Release builds.
     func bootstrapPublicDemoForRegressionIfRequested() async {
         guard UserDefaults.standard.bool(forKey: "debug.playerRegression"),
               UserDefaults.standard.bool(forKey: "debug.regressionBootstrapPublicDemo"),
               phase != .signedIn else { return }
+        let environment = ProcessInfo.processInfo.environment
+        let address = environment["LAGOON_REGRESSION_SERVER"]
+            ?? "https://demo.jellyfin.org/stable"
+        let username = environment["LAGOON_REGRESSION_USER"] ?? "demo"
+        let password = environment["LAGOON_REGRESSION_PASS"] ?? ""
         do {
-            try await connect(to: "https://demo.jellyfin.org/stable")
-            let result = try await client.authenticateByName(username: "demo", password: "")
+            try await connect(to: address)
+            let result = try await client.authenticateByName(username: username, password: password)
             guard let url = client.serverURL else { return }
             // UI tests run in an ephemeral simulator session. Activating the
             // documented demo token directly avoids making the regression

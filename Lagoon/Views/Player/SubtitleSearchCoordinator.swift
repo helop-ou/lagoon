@@ -27,12 +27,15 @@ nonisolated enum SubtitleSearchPhase: Equatable {
 
 nonisolated enum SubtitleDownloadError: LocalizedError {
     case notAvailable
+    case providerUnavailable
     case unsupportedFile
 
     var errorDescription: String? {
         switch self {
         case .notAvailable:
-            "Jellyfin did not make this subtitle available. The provider may have failed; try another result."
+            "Jellyfin did not attach this subtitle to the item. Try another result."
+        case .providerUnavailable:
+            "The subtitle provider could not supply this file. It may have been removed or the provider's download limit may have been reached. Try another result."
         case .unsupportedFile:
             "The subtitle provider returned a file Lagoon couldn't read. Try another result."
         }
@@ -146,6 +149,7 @@ final class SubtitleSearchCoordinator {
     @ObservationIgnored private var onTrackAdded: ((MediaStream) -> Void)?
     @ObservationIgnored private var searchTask: Task<Void, Never>?
     @ObservationIgnored private var downloadTask: Task<Void, Never>?
+    @ObservationIgnored private var persistenceTask: Task<Void, Never>?
     @ObservationIgnored private var searchGeneration = 0
     @ObservationIgnored private var downloadGeneration = 0
     @ObservationIgnored private let downloadedSubtitlePoller: DownloadedSubtitlePoller
@@ -214,23 +218,43 @@ final class SubtitleSearchCoordinator {
             guard let self else { return }
             var merged: [RemoteSubtitleInfo] = []
             var seen: Set<String> = []
+            var successfulSearches = 0
+            var providerMissing = false
+            var failures: [Error] = []
             do {
                 for language in languages {
                     try Task.checkCancellation()
                     let code = JellyfinSubtitleLanguageCode.threeLetter(for: language)
-                    let matches = try await client.searchRemoteSubtitles(itemId: itemID, language: code)
-                    guard generation == searchGeneration else { return }
-                    for match in matches where seen.insert(match.id).inserted {
-                        merged.append(match)
+                    do {
+                        let matches = try await client.searchRemoteSubtitles(itemId: itemID, language: code)
+                        successfulSearches += 1
+                        guard generation == searchGeneration else { return }
+                        for match in matches where seen.insert(match.id).inserted {
+                            merged.append(match)
+                        }
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch JellyfinError.server(status: 404) {
+                        providerMissing = true
+                    } catch {
+                        // One unavailable language/provider request must not
+                        // discard results already found for another language.
+                        failures.append(error)
                     }
                 }
                 guard generation == searchGeneration else { return }
                 results = merged
-                phase = merged.isEmpty ? .noResults : .idle
+                if !merged.isEmpty {
+                    phase = .idle
+                } else if let failure = failures.first {
+                    phase = .failed(failure.localizedDescription)
+                } else if providerMissing, successfulSearches == 0 {
+                    phase = .noProvider
+                } else {
+                    phase = .noResults
+                }
             } catch is CancellationError {
                 if generation == searchGeneration { phase = .idle }
-            } catch JellyfinError.server(status: 404) {
-                if generation == searchGeneration { phase = .noProvider }
             } catch {
                 if generation == searchGeneration { phase = .failed(error.localizedDescription) }
             }
@@ -244,52 +268,24 @@ final class SubtitleSearchCoordinator {
         phase = .downloading(result.id)
         downloadTask = Task { [weak self] in
             guard let self else { return }
+            var directFileWasUnsupported = false
             do {
-                try await client.downloadRemoteSubtitle(itemId: itemID, subtitleId: result.id)
                 let requestedLanguage = SubtitlePreferencesStore.normalizedLanguage(
                     result.threeLetterISOLanguageName ?? selectedLanguage ?? ""
                 )
-                var attachedStream: MediaStream?
-                let track: ExternalSubtitleTrack
                 do {
-                    let stream = try await downloadedSubtitlePoller.waitForStream(
-                        mediaSourceID: mediaSourceID,
-                        existingSignatures: existingSignatures,
-                        requestedLanguage: requestedLanguage
-                    ) {
-                        try await client.playbackInfo(itemId: self.itemID)
-                    }
-                    guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else {
-                        throw SubtitleDownloadError.notAvailable
-                    }
-                    attachedStream = stream
-                    track = ExternalSubtitleTrack(
-                        url: url,
-                        title: stream.displayTitle ?? result.name,
-                        language: stream.language ?? result.threeLetterISOLanguageName,
-                        select: true,
-                        isForced: stream.isForced == true || result.isForced == true,
-                        isHearingImpaired: stream.isHearingImpaired == true || result.hearingImpaired == true,
-                        isDownloaded: true
-                    )
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    // The POST endpoint can return success before a queued
-                    // refresh exposes the sidecar (and even when server-side
-                    // saving failed). Validate the provider file before the
-                    // engine advertises it as selected.
-                    let file: (url: URL, data: Data)
-                    do {
-                        file = try await client.remoteSubtitleFile(subtitleId: result.id)
-                    } catch {
-                        throw SubtitleDownloadError.notAvailable
-                    }
+                    // Fetch once for immediate playback, validate the actual
+                    // bytes, then upload those same bytes to Jellyfin. This
+                    // bypasses the 10.11.x endpoint that can return 204 even
+                    // after its internal provider/save operation failed.
+                    let file = try await client.remoteSubtitleFile(subtitleId: result.id)
                     let hasCues = await Task.detached {
                         !SubtitleParser.cues(from: file.data).isEmpty
                     }.value
                     guard hasCues else { throw SubtitleDownloadError.unsupportedFile }
-                    track = ExternalSubtitleTrack(
+                    try Task.checkCancellation()
+                    guard generation == downloadGeneration else { return }
+                    let track = ExternalSubtitleTrack(
                         url: file.url,
                         preloadedData: file.data,
                         title: result.name,
@@ -299,19 +295,68 @@ final class SubtitleSearchCoordinator {
                         isHearingImpaired: result.hearingImpaired == true,
                         isDownloaded: true
                     )
+                    engine.addExternalSubtitle(track)
+                    phase = .downloaded
+
+                    persistenceTask?.cancel()
+                    persistenceTask = Task { [weak self] in
+                        guard let self else { return }
+                        try? await client.uploadSubtitle(
+                            itemId: itemID,
+                            data: file.data,
+                            language: result.threeLetterISOLanguageName,
+                            format: result.format ?? "srt",
+                            isForced: result.isForced == true,
+                            isHearingImpaired: result.hearingImpaired == true
+                        )
+                    }
+                    return
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    if let downloadError = error as? SubtitleDownloadError,
+                       case .unsupportedFile = downloadError {
+                        directFileWasUnsupported = true
+                    }
                 }
+
+                // Binary/unsupported provider formats still get Jellyfin's
+                // native save/convert path as a compatibility fallback.
+                try await client.downloadRemoteSubtitle(itemId: itemID, subtitleId: result.id)
+                let stream = try await downloadedSubtitlePoller.waitForStream(
+                    mediaSourceID: mediaSourceID,
+                    existingSignatures: existingSignatures,
+                    requestedLanguage: requestedLanguage
+                ) {
+                    try await client.playbackInfo(itemId: self.itemID)
+                }
+                guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else {
+                    throw SubtitleDownloadError.notAvailable
+                }
+                let track = ExternalSubtitleTrack(
+                    url: url,
+                    title: stream.displayTitle ?? result.name,
+                    language: stream.language ?? result.threeLetterISOLanguageName,
+                    select: true,
+                    isForced: stream.isForced == true || result.isForced == true,
+                    isHearingImpaired: stream.isHearingImpaired == true || result.hearingImpaired == true,
+                    isDownloaded: true
+                )
                 try Task.checkCancellation()
                 guard generation == downloadGeneration else { return }
-                if let attachedStream {
-                    existingSignatures.insert(SubtitleStreamSignature(attachedStream))
-                }
+                existingSignatures.insert(SubtitleStreamSignature(stream))
                 engine.addExternalSubtitle(track)
-                if let attachedStream { onTrackAdded?(attachedStream) }
+                onTrackAdded?(stream)
                 phase = .downloaded
             } catch is CancellationError {
                 if generation == downloadGeneration { phase = .idle }
             } catch {
-                if generation == downloadGeneration { phase = .downloadFailed(error.localizedDescription) }
+                if generation == downloadGeneration {
+                    let failure: SubtitleDownloadError = directFileWasUnsupported
+                        ? .unsupportedFile
+                        : .providerUnavailable
+                    phase = .downloadFailed(failure.localizedDescription)
+                }
             }
         }
     }
@@ -321,6 +366,8 @@ final class SubtitleSearchCoordinator {
         searchTask = nil
         downloadTask?.cancel()
         downloadTask = nil
+        persistenceTask?.cancel()
+        persistenceTask = nil
         searchGeneration &+= 1
         downloadGeneration &+= 1
     }
