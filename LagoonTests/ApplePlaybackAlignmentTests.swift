@@ -105,6 +105,18 @@ struct ApplePlaybackAlignmentTests {
             $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
         } == true)
         #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_VC1))
+        #expect(AudioDecodePolicy.requiresLocalPCM(
+            codecID: AV_CODEC_ID_AC3,
+            softwareVideoDecoded: true
+        ))
+        #expect(!AudioDecodePolicy.requiresLocalPCM(
+            codecID: AV_CODEC_ID_AC3,
+            softwareVideoDecoded: false
+        ))
+        #expect(!AudioDecodePolicy.requiresLocalPCM(
+            codecID: AV_CODEC_ID_EAC3,
+            softwareVideoDecoded: true
+        ))
     }
 
     @Test func planarVC1ChromaIsInterleavedIntoCoreVideoNV12Order() {
@@ -275,4 +287,24 @@ struct ApplePlaybackAlignmentTests {
 
         #expect(decision == .waitForAudio(below: 270))
     }
+
+    @Test func softwareDecodedVC1KeepsAOneSecondVideoReserve() {
+        let decision = DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 100,
+            audioBufferedSeconds: 3,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            videoIsSoftwareDecoded: true,
+            hasAudio: true
+        )
+
+        #expect(decision == .waitForVideo(below: 24))
+        #expect(DemuxBackpressurePolicy.videoHardLimit(
+            videoIsDecoded: true,
+            videoIsSoftwareDecoded: true
+        ) == 42)
+        #expect(StallRecoveryPolicy.confirmationDelay == .seconds(1))
+    }
+
 }

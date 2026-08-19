@@ -23,6 +23,7 @@ let package = Package(
         .target(
             name: "_LagoonFFmpeg",
             dependencies: [
+                "LagoonPixelOps",
                 "Libavcodec", "Libavformat", "Libavutil", "Libswresample",
                 "gmp", "nettle", "hogweed", "gnutls",
                 "Libdav1d", "Libuavs3d", "lcms2",
@@ -43,6 +44,11 @@ let package = Package(
                 .linkedLibrary("z"),
                 .linkedLibrary("c++"),
             ]
+        ),
+        .target(
+            name: "LagoonPixelOps",
+            path: "Sources/LagoonPixelOps",
+            publicHeadersPath: "include"
         ),
         .binaryTarget(
             name: "Libavcodec",

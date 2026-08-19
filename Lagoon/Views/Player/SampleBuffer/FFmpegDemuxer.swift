@@ -31,6 +31,17 @@ nonisolated enum DemuxError: LocalizedError {
     }
 }
 
+/// AC-3 normally stays compressed through Apple's audio renderer. Alongside
+/// Lagoon's software-decoded VC-1 video, however, that path exhibits audible
+/// interruptions and sustained MallocHelper growth on tvOS. Decoding only
+/// that legacy pairing to LPCM keeps the Jellyfin session Direct Play while
+/// preserving E-AC-3/Atmos passthrough for modern media.
+nonisolated enum AudioDecodePolicy {
+    static func requiresLocalPCM(codecID: AVCodecID, softwareVideoDecoded: Bool) -> Bool {
+        softwareVideoDecoded && codecID == AV_CODEC_ID_AC3
+    }
+}
+
 /// One demuxed stream with everything the render pipeline needs.
 nonisolated struct DemuxedStream {
     let streamIndex: Int32
@@ -126,6 +137,10 @@ nonisolated final class FFmpegDemuxer {
         softwareVideoDecoder?.gridDescription ?? videoTimeline?.gridDescription
     }
     var outputsDecodedVideo: Bool { softwareVideoDecoder != nil }
+
+    func outputsDecodedAudio(streamIndex: Int32) -> Bool {
+        audioDecoders[streamIndex] != nil
+    }
 
     // Written from the main actor at shutdown, polled by FFmpeg's interrupt
     // callback from inside blocked network I/O — this is what guarantees a
@@ -318,7 +333,12 @@ nonisolated final class FFmpegDemuxer {
                 // no decoder for drop out of the track list.
                 var description: CMFormatDescription?
                 var fallbackDuration: Double = 0
-                if let (passthrough, framesPerPacket) = SampleBufferFactory.audioFormatDescription(codecpar: par) {
+                let requiresLocalPCM = AudioDecodePolicy.requiresLocalPCM(
+                    codecID: par.pointee.codec_id,
+                    softwareVideoDecoded: softwareVideoDecoder != nil
+                )
+                if !requiresLocalPCM,
+                   let (passthrough, framesPerPacket) = SampleBufferFactory.audioFormatDescription(codecpar: par) {
                     description = passthrough
                     fallbackDuration = Double(framesPerPacket) / Double(max(par.pointee.sample_rate, 1))
                     passthroughTimelines[Int32(index)] = PassthroughAudioTimeline(

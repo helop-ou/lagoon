@@ -230,7 +230,17 @@ composition cost is more representative than Simulator timing.
   and excludes interlaced video because Lagoon has no deinterlacing stage;
   anything outside that envelope still uses the server transcode fallback.
   Keeping eligible files in one original stream also removes the short HLS
-  fragment boundary that caused the reported repeating audio cut-outs.
+  fragment boundary that caused the reported repeating audio cut-outs. The
+  affected VC-1 + AC-3 pairing decodes AC-3 locally to LPCM before enqueueing
+  it to Apple's audio renderer; this remains Jellyfin Direct Play and is
+  deliberately narrow, so E-AC-3/Atmos and non-VC-1 AC-3 retain compressed
+  passthrough. Planar 4:2:0 chroma interleaving uses an ARM NEON C primitive
+  (with a scalar fallback) instead of a per-byte Swift loop, and software VC-1
+  holds a bounded 30/24-frame decoded reserve with a 42-frame hard ceiling.
+  Each packet iteration has its own autorelease pool: the demux worker is one
+  long-lived dispatch item, so relying on its outer pool retained Core Media
+  scratch allocations until dismissal even though the actual frame queues
+  were bounded.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
@@ -544,59 +554,50 @@ media-buffer releases or C decoder destruction. `Sessions/Playing/Stopped`
 still reports exactly once from the controller after the engine position is
 captured; network reporting never gates UI dismissal.
 
-Release playback uses libavformat's native network I/O for direct-play,
-direct-stream, and transcoded HLS media (HEL-86). The sparse range-cache
-transport is quarantined behind the DEBUG-only
-`-debug.experimentalPlaybackCache YES` launch argument. A custom
-`AVIOContext` is authoritative once attached: it cannot transparently hand a
-failed midstream read back to libavformat. The initial implementation also
-started a whole-current-item prefetch before the first frame. URLSession task
-priority is only a scheduling hint, so that background request could compete
-with or serialize ahead of the demuxer's startup request on a real server.
-Together those properties made an optional optimization capable of turning
-all playback into permanent buffering. Production must remain on the proven
-native transport until the experiment has physical-device fault-injection and
-server-compatibility coverage.
+Release direct-play and direct-stream files use the sparse range buffer
+(HEL-86). One custom `AVIOContext` lets libavformat read and seek through a
+discardable file under `Library/Caches/Lagoon/Playback`; authenticated HTTP
+`Range` misses fill that file and repeated reads are local. The engine first
+tries this path, but if the server rejects or ignores byte ranges during open,
+it closes the partial context and immediately reopens the original URL through
+libavformat's native HTTP transport. A whole-body `200` is rejected before its
+body is delivered: pretending it were a range would redownload and discard an
+ever-growing prefix for every chunk.
 
-The experiment remains available for controlled development. Direct files use
-one custom `AVIOContext`. For HLS, `AVFormatContext.io_open` routes immutable
-media resources through custom contexts while `.m3u8` playlists remain on
-FFmpeg's native path; Jellyfin can update those manifests while a transcode is
-still being produced, so persisting them would risk stale-playlist stalls.
-Cache misses become authenticated HTTP `Range` requests and hits read
-discardable files under `Library/Caches/Lagoon/Playback`. A failed cache read
-returns an I/O error, never EOF: EOF is reserved for a successfully read
-resource ending, while connectivity/authentication/storage failures must enter
-the demuxer's bounded error path instead of masquerading as a complete movie.
+Transcoded HLS stays on native libavformat I/O in Release. Its manifests are
+mutable while Jellyfin produces the rendition, so a direct-file completion
+model does not apply. The HLS resource-cache experiment remains available only
+with `-debug.experimentalPlaybackCache YES`; it leaves `.m3u8` playlists native
+and routes immutable segments through bounded custom contexts. This preserves
+the segment-boundary regression without putting that experimental ownership in
+TestFlight.
 
-Each item has an aggregate cap of at most 512 MiB. The coordinator preserves a
-256 MiB volume reserve and uses at most one quarter of the remaining available
-capacity; below 320 MiB free it disables playback caching for that session.
-HLS additionally caps one resource at 32 MiB and 256 remembered resources,
-closes inactive file handles, and evicts only inactive entries in LRU order.
-Active FFmpeg contexts hold leases and can never be removed underneath a read.
-Every HLS resource shares one reusable URLSession for connection reuse and
-bounded memory/socket overhead. If all entries are active, storage is
-unavailable, or a URL is not cache-safe, the `io_open` callback falls back to
-`avio_open2`; the optimization cannot make an otherwise playable stream fail.
-Cached HLS disables libavformat's segment-level HTTP persistence. FFmpeg's HLS
-keep-alive path assumes a segment `AVIOContext` wraps its native HTTP
-`URLContext`, while Lagoon intentionally supplies a file-backed cached
-context; allowing reuse can therefore reinterpret that custom context as HTTP
-state and abort in `hls.c`. Lagoon's shared URLSession still reuses its own
-connections, so this safety boundary does not create one session per segment.
+The active direct file begins proactive fill only after the initial playback
+cushion has reached the renderer. Fill is cooperative rather than one large
+background request: the controller advances one 1 MiB chunk at a time, pauses
+for four times the measured request duration while video is playing, and
+enters a 20-second cooldown whenever buffering or a new stall is observed.
+Pause allows full-speed fill; backgrounding cancels proactive work. This
+explicit scheduler is required because Apple documents URLSession priority as
+a hint rather than a bandwidth guarantee. Foreground cache misses remain high
+priority, and proactive requests disallow constrained or expensive paths.
 
-Whole-current-item prefetch is disabled, including in the experiment; startup
-traffic belongs exclusively to the foreground demuxer. A staged next episode
-may warm only 8 MiB when the DEBUG experiment is explicitly enabled, enough
-for probing and a first-frame cushion without downloading an unanswered Up
-Next choice. When a server ignores Range, the streaming delegate discards an
-unrequested prefix and retains only the bounded requested window; later reads
-remain correct without materializing a whole movie in memory. Reaching the cap
-triggers HLS LRU eviction or stops new direct-file writes. The debug Playback
-HUD reports cached MiB, hit rate, request count, average request latency,
-active capacity, live resource count, and eviction count so any future attempt
-to ship the optimization has measurable evidence.
+The coordinator preserves 256 MiB of free volume space and permits one half of
+the remainder for the current title. A declared resource smaller than that cap
+can therefore buffer completely; larger titles stop safely at the cap. Only a
+contiguous prefix is reported as buffered. A sparse file is exposed as a
+normal local playback URL only after the complete server-declared byte range
+has been validated and synchronized, so a hole can never masquerade as EOF.
+The scrubber draws this prefix as a middle-opacity layer behind the solid
+played range. The Playback HUD reports contiguous MiB/total MiB, percentage,
+hit rate, request count and latency, while a `Playback Buffer Progress`
+signpost provides the same fraction and stall count for Instruments runs.
+
+A failed cache read returns an I/O error, never EOF: EOF is reserved for a
+successfully read resource ending. URL loading retries transient failures;
+deterministic range incompatibility does not retry because the engine's native
+open fallback is both faster and safer. Reaching the disk cap stops proactive
+fill without stopping playback.
 
 Cache ownership is part of the player lifecycle, never an offline-download
 feature. There is one active scope and at most one staged successor. Dismissal,
@@ -604,8 +605,7 @@ failure, or account/player replacement cancels requests and removes both;
 episode advance cancels/removes the old scope and promotes the staged one.
 Deletion waits for an in-flight demux read on a utility queue so the main actor
 does not inherit file/network teardown. Stale scope directories are discarded
-when a new coordinator starts. HLS resource leases, the reusable URLSession,
-and manifest warmup are cancelled at the same lifecycle boundary.
+when a new coordinator starts.
 
 The dismissal boundary itself is synchronous: before the full-screen cover
 returns to Home or Settings, the controller cancels its clocks and subtitle
@@ -662,6 +662,18 @@ frames, zero stalls, zero audio gaps, and a minimum video queue depth of 90.
 The public demo is sufficient for this H.264 simulator control; the scripted
 hardware/Fixture bench remains authoritative for VC-1, HEVC, HDR, and TrueHD.
 
+`testVC1DirectPlayMaintainsContinuousAudioAndVideo` is the dedicated live
+legacy-codec gate. It resolves VC-1 by inspecting Rick and Morty's real
+PlaybackInfo, requires Direct Play, the sparse direct-file buffer, and local
+LPCM audio, then applies the same untouched 60-second presentation window and
+dismissal lifecycle assertions. The final tvOS 26.5 simulator run against
+Fixture presented 1,445 frames with zero dropped/corrupted frames, zero stalls,
+and zero enqueued audio gaps. Footprint was 73.7 MB on initial readiness,
+84.7 MB after decoder settling, remained 84.7 MB at the end, and returned to
+71.6 MB after dismissal. These numbers are regression evidence, not a physical
+Apple TV jetsam threshold; a signed-device run remains the release acceptance
+test.
+
 The same final run's measured 15-second lifecycle window used 1.363 s app CPU,
 peaked at 107.1 MB, and grew by only 115 KB. All three dismiss/replay cycles
 ended with zero live controllers, engines, demuxers, and renderers.
@@ -674,11 +686,14 @@ jetsam threshold. For a live secondary check, attach Instruments' Leaks or run
 gate for AVFoundation objects because allocator caching can keep footprint flat
 or elevated after the owning engine has gone away.
 
-Stall recovery is bounded as well. Normal refill resumes at the demuxer's
-12-frame low-water cushion; if it cannot rebuild that cushion within 5 s, the
-engine re-primes audio, video, renderers, and the clock at the current media
-position. The pure `StallRecoveryPolicy` unit test makes an accidental return
-to an infinite rate-zero polling loop a deterministic failure.
+Stall recovery is bounded as well. An empty Lagoon queue must remain empty for
+one second before the engine pauses Apple's shared clock; this prevents one
+100 ms scheduling tick from turning a healthy renderer-owned sample into a
+visible micro-stall. Normal refill resumes at the demuxer's 12-frame low-water
+cushion; if it cannot rebuild that cushion within 5 s, the engine re-primes
+audio, video, renderers, and the clock at the current media position. The pure
+`StallRecoveryPolicy` unit test makes an accidental return to an infinite
+rate-zero polling loop a deterministic failure.
 
 ## Progress reporting
 
@@ -772,10 +787,12 @@ reflects the new position immediately.
   read as a bug.
   - HEL-86 keeps both the full-screen player and its UIKit-backed
     `AVSampleBufferDisplayLayer` mounted through that handoff. Within the last
-    120 s, the controller negotiates the next PlaybackInfo. A DEBUG run with
-    the experimental transport explicitly enabled can additionally warm its
-    first 8 MiB in a second bounded scope. Advance first reports the old session
-    stopped and retires its demuxer/render synchronizer; only after the
+    120 s, the controller negotiates the next PlaybackInfo and warms up to the
+    first 8 MiB of a direct-file successor in a second bounded scope. Warmup
+    uses the same one-chunk cooperative scheduler and supersedes active-title
+    proactive fill, so credits never carry two competing downloads. Advance
+    first reports the old session stopped and retires its demuxer/render
+    synchronizer; only after the
     lifecycle counters reach zero does `SampleBufferVideoSurface.updateUIView`
     attach the successor engine to the same display layer. The old final frame
     remains beneath a non-focusable "Starting next episode" overlay instead of
@@ -792,11 +809,13 @@ reflects the new position immediately.
     decoder teardown. It asserts the surface never disappears, requires one
     engine/demuxer/renderer set after the successor becomes ready, then keeps
     episode two running for 20 seconds with media-clock, stall, buffering, and
-    memory-growth ceilings. Native HLS and direct-play journeys assert their
-    negotiated mode, assert that the cache is absent, cross sustained playback
-    windows, and enforce the same single-pipeline invariants. A separate
-    DEBUG-opted-in cached-HLS journey keeps the experimental boundary covered;
-    direct-stream has a fixture-conditional sustained journey too.
+    memory-growth ceilings. Native HLS and buffered direct-play journeys assert
+    their negotiated mode and transport ownership, cross sustained playback
+    windows, and enforce the same single-pipeline invariants. Direct journeys
+    additionally require the published contiguous buffer fraction never to
+    regress. A separate DEBUG-opted-in cached-HLS journey keeps the
+    experimental boundary covered; buffered direct-stream has a fixture-
+    conditional sustained journey too.
   - **Never resolve the next episode from `Shows/NextUp`.** That endpoint
     returns the episode *in progress* when there is one — `enableResumable`
     defaults to `true`, per the server's own OpenAPI document — and at the

@@ -48,6 +48,10 @@ final class PlaybackController {
 
     private(set) var hudLines: [String] = []
     private var hudTask: Task<Void, Never>?
+    /// Contiguous, validated bytes from the beginning of a direct resource.
+    /// The player timeline maps this to time using Jellyfin's declared total
+    /// length; nil means the active HLS/native path has no byte-range model.
+    private(set) var bufferedFraction: Double?
 
     private var client: JellyfinClient?
     private var itemId = ""
@@ -57,10 +61,11 @@ final class PlaybackController {
 
     var activePlayMethod: PlayMethod { playMethod }
 
-    var isExperimentalPlaybackCacheActive: Bool {
+    var isPlaybackCacheActive: Bool {
         playbackCache.current != nil
     }
     private var progressTask: Task<Void, Never>?
+    private var bufferFillTask: Task<Void, Never>?
     private var didReportStop = false
     private var playbackSessionActive = false
     private var isClosed = false
@@ -97,7 +102,7 @@ final class PlaybackController {
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
     @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator(
-        isEnabled: PlaybackBufferPolicy.customIOEnabled
+        isEnabled: PlaybackBufferPolicy.backgroundBufferingEnabled
     )
     @ObservationIgnored private let lifecycleID = UUID()
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
@@ -234,6 +239,12 @@ final class PlaybackController {
                 method: method,
                 expectedLength: source.size
             )
+            let playbackURL = cacheSession?.completeFileURL ?? streamURL
+            let transportCache = !playbackURL.isFileURL
+                && PlaybackBufferPolicy.customIOEnabled(for: method)
+                ? cacheSession
+                : nil
+            publishBufferMetrics(cacheSession?.metrics)
 
             var resumeSeconds: Double = 0
             if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
@@ -401,8 +412,8 @@ final class PlaybackController {
 
             let engine = SampleBufferPlayerEngine()
             engine.prepare(
-                url: streamURL,
-                cacheSession: cacheSession,
+                url: playbackURL,
+                cacheSession: transportCache,
                 startSeconds: resumeSeconds,
                 initialAudioOrdinal: initialAudioOrdinal,
                 initialSubtitleOrdinal: initialSubtitleOrdinal,
@@ -414,6 +425,18 @@ final class PlaybackController {
             engine.onPlaybackStarted = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
                 self.finishEpisodeHandoff(outcome: "ready")
+                if playbackURL.isFileURL {
+                    self.publishBufferMetrics(cacheSession?.metrics)
+                } else {
+                    self.startBufferFill(session: cacheSession, engine: engine)
+                }
+            }
+            engine.onPlaybackCacheFallback = { [weak self, weak engine] in
+                guard let self, let engine, self.engine === engine else { return }
+                self.bufferFillTask?.cancel()
+                self.bufferFillTask = nil
+                self.playbackCache.discardCurrent(preservingNext: true)
+                self.publishBufferMetrics(nil)
             }
             engine.onError = { [weak self, weak engine] message in
                 guard let self, let engine, self.engine === engine else { return }
@@ -642,6 +665,11 @@ final class PlaybackController {
             guard let engine, engine.duration > 0,
                   engine.duration - engine.timePosition <= 120 else { return }
         }
+        // One proactive download at a time. The active file remains readable
+        // from everything already cached while the final two minutes give
+        // the successor's startup bytes priority.
+        bufferFillTask?.cancel()
+        bufferFillTask = nil
         nextPreparationTask = Task { [weak self] in
             guard let self else { return nil }
             defer { self.nextPreparationTask = nil }
@@ -658,7 +686,7 @@ final class PlaybackController {
                     method: method,
                     expectedLength: source.size
                 )
-                await scope?.prefetch(byteCount: 8 * 1_024 * 1_024)
+                await self.warmPreparedNext(scope, byteCount: 8 * 1_024 * 1_024)
                 guard !Task.isCancelled, self.nextUp?.id == next.id else {
                     self.playbackCache.discardNext(itemID: next.id)
                     return nil
@@ -674,6 +702,46 @@ final class PlaybackController {
                 return prepared
             } catch {
                 return nil
+            }
+        }
+    }
+
+    /// Warms a successor in the same cooperative 1 MiB slices as the active
+    /// title. This avoids the old eight-megabyte burst during credits—the
+    /// exact window in which autoplay stalls were previously reproducible.
+    private func warmPreparedNext(
+        _ session: PlaybackCacheSession?,
+        byteCount: Int64
+    ) async {
+        guard let session, session.directScope != nil, byteCount > 0 else { return }
+        let startingBytes = session.metrics.contiguousCachedBytes
+        var observedStalls = engine?.stallCount ?? 0
+        while !Task.isCancelled,
+              session.metrics.contiguousCachedBytes - startingBytes < byteCount {
+            guard let engine else { return }
+            if engine.isBuffering || engine.stallCount > observedStalls {
+                observedStalls = engine.stallCount
+                do {
+                    try await Task.sleep(for: .seconds(10))
+                } catch {
+                    return
+                }
+                continue
+            }
+            let before = session.metrics
+            guard await session.prefetchNextChunk() else { return }
+            let after = session.metrics
+            guard !Task.isCancelled else { return }
+            if !engine.isPaused {
+                let requestSeconds = max(
+                    after.networkRequestSeconds - before.networkRequestSeconds,
+                    0.125
+                )
+                do {
+                    try await Task.sleep(for: .seconds(min(requestSeconds * 4, 8)))
+                } catch {
+                    return
+                }
             }
         }
     }
@@ -781,6 +849,102 @@ final class PlaybackController {
         return streams.firstIndex { $0.language == language }.map { $0 + 1 }
     }
 
+    private func publishBufferMetrics(_ metrics: PlaybackCacheMetrics?) {
+        bufferedFraction = metrics?.bufferedFraction
+    }
+
+    /// Proactive fill starts only after the player has presented its initial
+    /// cushion. It advances in 1 MiB requests, yields between every request,
+    /// and enters a long cooldown after any renderer stall. That makes native
+    /// foreground playback—not URLSession priority hints—the hard priority.
+    private func startBufferFill(
+        session: PlaybackCacheSession?,
+        engine: SampleBufferPlayerEngine
+    ) {
+        bufferFillTask?.cancel()
+        bufferFillTask = nil
+        guard let session, session.directScope != nil else {
+            publishBufferMetrics(session?.metrics)
+            return
+        }
+        bufferFillTask = Task { [weak self, weak engine] in
+            do {
+                try await Task.sleep(for: .seconds(3))
+            } catch {
+                return
+            }
+            var observedStalls = engine?.stallCount ?? 0
+            while !Task.isCancelled {
+                guard let self, let engine,
+                      self.engine === engine,
+                      self.playbackCache.current === session else { return }
+
+                let before = session.metrics
+                self.publishBufferMetrics(before)
+                if before.bufferedFraction == 1
+                    || before.cachedBytes >= before.capacityBytes {
+                    return
+                }
+
+                if engine.isBuffering || engine.stallCount > observedStalls {
+                    observedStalls = engine.stallCount
+                    do {
+                        try await Task.sleep(for: .seconds(20))
+                    } catch {
+                        return
+                    }
+                    continue
+                }
+
+                let advanced = await session.prefetchNextChunk()
+                guard !Task.isCancelled,
+                      self.engine === engine,
+                      self.playbackCache.current === session else { return }
+                let after = session.metrics
+                self.publishBufferMetrics(after)
+                os_signpost(
+                    .event,
+                    log: PlaybackPerformance.log,
+                    name: "Playback Buffer Progress",
+                    signpostID: self.performanceSignpostID,
+                    "cachedMB=%{public}.1f totalMB=%{public}.1f fraction=%{public}.3f stalls=%{public}d",
+                    Double(after.contiguousCachedBytes) / 1_048_576,
+                    Double(after.contentLength ?? 0) / 1_048_576,
+                    after.bufferedFraction ?? -1,
+                    engine.stallCount
+                )
+                guard advanced else { return }
+
+                if !engine.isPaused {
+                    // Keep proactive traffic at roughly <=20% of the link
+                    // time it just measured. A paused viewer gets full-speed
+                    // fill because no foreground demux request is consuming.
+                    let requestSeconds = max(
+                        after.networkRequestSeconds - before.networkRequestSeconds,
+                        0.125
+                    )
+                    do {
+                        try await Task.sleep(for: .seconds(min(requestSeconds * 4, 8)))
+                    } catch {
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    func suspendBufferFill() {
+        bufferFillTask?.cancel()
+        bufferFillTask = nil
+    }
+
+    func resumeBufferFill() {
+        guard bufferFillTask == nil,
+              nextPreparationTask == nil,
+              let engine else { return }
+        startBufferFill(session: playbackCache.current, engine: engine)
+    }
+
     private func startProgressLoop() {
         progressTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -827,6 +991,8 @@ final class PlaybackController {
         progressTask = nil
         hudTask?.cancel()
         hudTask = nil
+        bufferFillTask?.cancel()
+        bufferFillTask = nil
         nextUpTask?.cancel()
         nextUpTask = nil
         if !preservingPreparedNext {
@@ -852,12 +1018,14 @@ final class PlaybackController {
             engine.onError = nil
             engine.onTrackSelectionChanged = nil
             engine.onPlaybackStarted = nil
+            engine.onPlaybackCacheFallback = nil
             engine.shutdown()
             if !preservingPlayerSurface {
                 self.engine = nil
             }
         }
         playbackCache.discardCurrent(preservingNext: preservingPreparedNext)
+        publishBufferMetrics(nil)
         if !preservingPlayerSurface {
             finishEpisodeHandoff(outcome: "cancelled")
             nowPlaying.stop()
@@ -1161,6 +1329,15 @@ final class PlaybackController {
         let depths = engine.queueDepths
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
         if let cache {
+            if let fraction = cache.bufferedFraction,
+               let contentLength = cache.contentLength {
+                lines.append(String(
+                    format: "Buffer:  %.1f/%.1f MB · %.0f%% contiguous",
+                    Double(cache.contiguousCachedBytes) / 1_048_576,
+                    Double(contentLength) / 1_048_576,
+                    fraction * 100
+                ))
+            }
             lines.append(String(
                 format: "Cache:   %.1f/%.0f MB · %.0f%% hit · %d req · %.0fms avg · %d res · %d evict",
                 Double(cache.cachedBytes) / 1_048_576,
@@ -1258,7 +1435,8 @@ struct VideoPlayerView: View {
                     playerSurfaceIdentity: controller.playerSurfaceIdentity,
                     handoffMilliseconds: controller.lastHandoffMilliseconds,
                     playbackMethod: controller.activePlayMethod,
-                    isExperimentalPlaybackCacheActive: controller.isExperimentalPlaybackCacheActive,
+                    isPlaybackCacheActive: controller.isPlaybackCacheActive,
+                    bufferedFraction: controller.bufferedFraction,
                     info: fallbackInfo,
                     onDismiss: { dismiss() },
                     onPanelToggle: { panelOpen = $0 },
@@ -1365,6 +1543,7 @@ struct VideoPlayerView: View {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
+                controller.suspendBufferFill()
                 applyDisplayMatch(nil)
                 if !pictureInPicture.isActive,
                    !pictureInPicture.isTransitioning,
@@ -1378,6 +1557,7 @@ struct VideoPlayerView: View {
                 applyDisplayMatch(nil)
             case .active:
                 subtitlePreferences.refreshSystemAppearance()
+                controller.resumeBufferFill()
                 applyDisplayMatch(controller.engine?.displayMatchRequest)
             @unknown default:
                 break

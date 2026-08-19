@@ -3,6 +3,7 @@ import CoreVideo
 import Foundation
 import Libavcodec
 import Libavutil
+import _LagoonFFmpeg
 
 /// Software video fallback for codecs Apple does not expose through
 /// VideoToolbox. VC-1 is decoded by Lagoon's pinned libavcodec, copied into
@@ -369,15 +370,16 @@ nonisolated final class SoftwareVideoDecoder {
         let firstV = sourceVStride >= 0
             ? sourceV
             : sourceV.advanced(by: (rows - 1) * -sourceVStride)
-        for row in 0..<rows {
-            let inputU = firstU.advanced(by: row * sourceUStride)
-            let inputV = firstV.advanced(by: row * sourceVStride)
-            let output = destination.advanced(by: row * destinationStride)
-            for column in 0..<(width / 2) {
-                output[column * 2] = inputU[column]
-                output[column * 2 + 1] = inputV[column]
-            }
-        }
+        LagoonPixelConversion.interleave420Chroma(
+            sourceU: firstU,
+            sourceUStride: sourceUStride,
+            sourceV: firstV,
+            sourceVStride: sourceVStride,
+            destination: destination,
+            destinationStride: destinationStride,
+            width: width,
+            rows: rows
+        )
     }
 
     private static func apply(_ properties: ColorProperties, to pixelBuffer: CVPixelBuffer) {

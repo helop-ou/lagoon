@@ -19,6 +19,9 @@ protocol PlayerEngine: AnyObject, Observable {
     var stallCount: Int { get }
     var videoSize: CGSize? { get }
     var audioTracks: [PlayerTrack] { get }
+    /// Debug/regression label for the renderer input, not a user-facing
+    /// codec name. Implementations without a distinct path may use unknown.
+    var audioOutputPathDiagnostic: String { get }
     var subtitleTracks: [PlayerTrack] { get }
     /// The subtitle content on screen right now (M5): joined text lines
     /// and/or decoded bitmap rects, rendered by the player UI as an
@@ -51,6 +54,10 @@ protocol PlayerEngine: AnyObject, Observable {
     /// without rebuilding the renderers or restarting playback (HEL-49).
     func addExternalSubtitle(_ track: ExternalSubtitleTrack)
     func setAudioDelay(_ seconds: Double)
+}
+
+extension PlayerEngine {
+    var audioOutputPathDiagnostic: String { "unknown" }
 }
 
 /// What the physical display should be switched to for the current video

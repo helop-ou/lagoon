@@ -4,28 +4,30 @@ import Testing
 
 @Suite("Playback cache", .serialized)
 struct PlaybackCacheTests {
-    @Test func customTransportRequiresExplicitDebugOptIn() {
+    @Test func directFilesUseCachedTransportWhileReleaseHLSStaysNative() {
         let suiteName = "PlaybackCacheTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        #expect(!PlaybackBufferPolicy.customIOEnabled(defaults: defaults))
+        #expect(PlaybackBufferPolicy.customIOEnabled(for: .directPlay, defaults: defaults))
+        #expect(PlaybackBufferPolicy.customIOEnabled(for: .directStream, defaults: defaults))
+        #expect(!PlaybackBufferPolicy.customIOEnabled(for: .transcode, defaults: defaults))
         defaults.set(true, forKey: "debug.experimentalPlaybackCache")
         #if DEBUG
-        #expect(PlaybackBufferPolicy.customIOEnabled(defaults: defaults))
+        #expect(PlaybackBufferPolicy.customIOEnabled(for: .transcode, defaults: defaults))
         #else
-        #expect(!PlaybackBufferPolicy.customIOEnabled(defaults: defaults))
+        #expect(!PlaybackBufferPolicy.customIOEnabled(for: .transcode, defaults: defaults))
         #endif
     }
 
     @Test func adaptiveCapacityPreservesFreeSpaceAndHonorsMaximum() {
         let mebibyte: Int64 = 1_024 * 1_024
 
-        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: nil) == 512 * mebibyte)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: nil) == 2_048 * mebibyte)
         #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 319 * mebibyte) == 0)
         #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 320 * mebibyte) == 64 * mebibyte)
-        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 1_024 * mebibyte) == 192 * mebibyte)
-        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 4_096 * mebibyte) == 512 * mebibyte)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 1_024 * mebibyte) == 384 * mebibyte)
+        #expect(PlaybackCacheCoordinator.recommendedByteLimit(availableBytes: 4_096 * mebibyte) == 1_920 * mebibyte)
     }
 
     @Test func rangeLoaderDoesNotRetainItselfThroughItsSessionDelegate() {
@@ -45,8 +47,41 @@ struct PlaybackCacheTests {
         #expect(ranges.insert(PlaybackByteRange(15, 25)) == 0)
         #expect(ranges.ranges == [PlaybackByteRange(10, 30)])
         #expect(ranges.byteCount == 20)
+        #expect(ranges.contiguousUpperBound == 0)
         #expect(ranges.contains(PlaybackByteRange(12, 28)))
         #expect(!ranges.contains(PlaybackByteRange(0, 12)))
+
+        #expect(ranges.insert(PlaybackByteRange(0, 10)) == 10)
+        #expect(ranges.contiguousUpperBound == 30)
+    }
+
+    @Test func boundedPrefetchPublishesProgressAndOnlyCompletesAWholeFile() async throws {
+        let payload = Data((0..<96).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "episode-buffered",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        #expect(scope.metrics.bufferedFraction == 0)
+        #expect(scope.completeFileURL == nil)
+        #expect(await scope.prefetchNextChunk())
+        #expect(scope.metrics.contiguousCachedBytes == 32)
+        #expect(scope.metrics.bufferedFraction == 1.0 / 3.0)
+        #expect(scope.completeFileURL == nil)
+        #expect(await scope.prefetchNextChunk())
+        #expect(await scope.prefetchNextChunk())
+        #expect(scope.metrics.bufferedFraction == 1)
+        #expect(scope.completeFileURL == scope.fileURL)
+        #expect(!(await scope.prefetchNextChunk()))
     }
 
     @Test func repeatedReadComesFromSparseFileAndReportsAHit() throws {
@@ -123,39 +158,41 @@ struct PlaybackCacheTests {
         }
     }
 
-    @Test func ignoredRangeResponseIsCappedWithoutBufferingTheWholeBody() throws {
+    @Test func ignoredRangeResponseFallsBackBeforeBufferingTheBody() throws {
         PlaybackCacheURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PlaybackCacheURLProtocol.self]
         let loader = URLSessionPlaybackRangeLoader(configuration: configuration)
 
-        let response = try loader.load(
-            url: URL(string: "https://cache.test/video.mkv")!,
-            range: PlaybackByteRange(0, 16),
-            priority: URLSessionTask.highPriority
-        )
-
-        #expect(response.data.count == 16)
-        #expect(response.totalLength == 256)
+        do {
+            _ = try loader.load(
+                url: URL(string: "https://cache.test/video.mkv")!,
+                range: PlaybackByteRange(0, 16),
+                priority: URLSessionTask.highPriority
+            )
+            Issue.record("A whole-body response was accepted as seekable range data")
+        } catch PlaybackCacheError.rangeUnsupported {
+            // Expected: the engine can now reopen through native HTTP.
+        }
         #expect(PlaybackCacheURLProtocol.rangeHeaders == ["bytes=0-15"])
     }
 
-    @Test func ignoredRangeResponseStreamsPastPrefixForLaterReads() throws {
+    @Test func ignoredRangeResponseCannotTriggerQuadraticPrefixDownloads() throws {
         PlaybackCacheURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [PlaybackCacheURLProtocol.self]
         let loader = URLSessionPlaybackRangeLoader(configuration: configuration)
 
-        let response = try loader.load(
-            url: URL(string: "https://cache.test/video.mkv")!,
-            range: PlaybackByteRange(32, 48),
-            priority: URLSessionTask.highPriority
-        )
-
-        #expect(response.data == Data((32..<48).map(UInt8.init)))
-        #expect(response.offset == 32)
-        #expect(response.totalLength == 256)
-        #expect(response.transferredBytes >= 48)
+        do {
+            _ = try loader.load(
+                url: URL(string: "https://cache.test/video.mkv")!,
+                range: PlaybackByteRange(32, 48),
+                priority: URLSessionTask.highPriority
+            )
+            Issue.record("A later whole-body response was accepted as range data")
+        } catch PlaybackCacheError.rangeUnsupported {
+            // Expected: no prefix is downloaded or discarded.
+        }
         #expect(PlaybackCacheURLProtocol.rangeHeaders == ["bytes=32-47"])
     }
 
@@ -306,7 +343,11 @@ struct PlaybackCacheTests {
     @Test func coordinatorPromotesOnlyThePreparedSuccessor() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let coordinator = PlaybackCacheCoordinator(rootDirectory: root, isEnabled: true)
+        let coordinator = PlaybackCacheCoordinator(
+            rootDirectory: root,
+            isEnabled: true,
+            allowsTranscodeCaching: true
+        )
         let current = coordinator.activate(
             itemID: "episode-1",
             url: URL(string: "https://media.test/one.mkv")!,
@@ -342,7 +383,11 @@ struct PlaybackCacheTests {
     @Test func coordinatorCreatesAndPromotesTranscodeResourceCaches() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let coordinator = PlaybackCacheCoordinator(rootDirectory: root, isEnabled: true)
+        let coordinator = PlaybackCacheCoordinator(
+            rootDirectory: root,
+            isEnabled: true,
+            allowsTranscodeCaching: true
+        )
         let hlsURL = URL(string: "https://media.test/Videos/id/master.m3u8?token=one")!
 
         let staged = coordinator.stageNext(
@@ -363,6 +408,34 @@ struct PlaybackCacheTests {
         #expect(promoted === staged)
         #expect(coordinator.current === staged)
         #expect(coordinator.next == nil)
+        coordinator.discardAll()
+    }
+
+    @MainActor
+    @Test func coordinatorCannotCacheTranscodeWhenReleasePolicyDisallowsIt() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let coordinator = PlaybackCacheCoordinator(
+            rootDirectory: root,
+            isEnabled: true,
+            allowsTranscodeCaching: false
+        )
+
+        #expect(coordinator.activate(
+            itemID: "episode-hls",
+            url: URL(string: "https://media.test/Videos/id/master.m3u8")!,
+            method: .transcode,
+            expectedLength: nil
+        ) == nil)
+        #expect(coordinator.current == nil)
+
+        // Release's HLS boundary must not disable the direct-file buffer.
+        #expect(coordinator.activate(
+            itemID: "movie-direct",
+            url: URL(string: "https://media.test/movie.mkv")!,
+            method: .directPlay,
+            expectedLength: 1_024
+        )?.directScope != nil)
         coordinator.discardAll()
     }
 

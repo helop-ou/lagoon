@@ -40,6 +40,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// audio stream (codec, channels, FFmpeg's Atmos/JOC verdict) —
     /// readable without opening the track panel.
     private(set) var audioDiagnostic: String?
+    private(set) var audioOutputPathDiagnostic = "compressed"
     private(set) var videoPerformance: VideoPerformanceSnapshot?
     private(set) var stallCount = 0
     /// Frame-loss bench progress/result for the HUD (HEL-64); nil unless
@@ -83,6 +84,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// clock is anchored. Episode handoff metrics use this rather than stream
     /// discovery so they measure user-visible readiness, not merely an open.
     @ObservationIgnored var onPlaybackStarted: (() -> Void)?
+    /// A direct-file cache is an optimization. If its range transport cannot
+    /// open this server resource, the engine retries immediately through
+    /// libavformat's native HTTP path and asks the controller to retire the
+    /// unusable cache instead of failing playback.
+    @ObservationIgnored var onPlaybackCacheFallback: (() -> Void)?
 
     // MARK: Cross-thread state
 
@@ -99,6 +105,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var bench: FrameLossBench?
     @ObservationIgnored private var benchEnabled = false
     @ObservationIgnored private var benchTickCount = 0
+    @ObservationIgnored private var performanceMetricsLoadInFlight = false
 
     // Written on main, read on the demux loop (or vice versa) — all simple
     // value types behind one lock.
@@ -119,6 +126,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var didFinish = false
     @ObservationIgnored private var didNotifyPlaybackStarted = false
     @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
+    @ObservationIgnored private var stallConfirmationTask: Task<Void, Never>?
+    @ObservationIgnored private var stallConfirmationID: UUID?
     @ObservationIgnored private var stallSignpostActive = false
     @ObservationIgnored private var shutdownRequested = false
     @ObservationIgnored private var rendererNotificationTokens: [NSObjectProtocol] = []
@@ -205,7 +214,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
 
         shared.withLock {
-            $0.pendingSeekSeconds = max(pendingStartSeconds, 0)
+            let start = max(pendingStartSeconds, 0)
+            $0.pendingSeekSeconds = start
+            $0.videoBufferedTo = start
             $0.playbackGeneration += 1
         }
         let startURL = url
@@ -244,6 +255,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func pause() {
         guard !isPaused || synchronizer.rate > 0 else { return }
+        clearPendingStallConfirmation()
         synchronizer.rate = 0
         isPaused = true
         rearmBench(at: timePosition)
@@ -392,6 +404,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         rendererNotificationTokens.removeAll()
         stallRecoveryTask?.cancel()
+        clearPendingStallConfirmation()
         if stallSignpostActive {
             stallSignpostActive = false
             os_signpost(
@@ -453,18 +466,24 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     func refreshVideoPerformanceMetrics() {
-        guard !shutdownRequested, let renderer = videoRenderer else { return }
+        guard !shutdownRequested,
+              !performanceMetricsLoadInFlight,
+              let renderer = videoRenderer else { return }
+        performanceMetricsLoadInFlight = true
         renderer.loadVideoPerformanceMetrics { [weak self] metrics in
-            guard let metrics else { return }
-            let snapshot = VideoPerformanceSnapshot(
-                totalFrames: metrics.totalNumberOfFrames,
-                droppedFrames: metrics.numberOfDroppedFrames,
-                corruptedFrames: metrics.numberOfCorruptedFrames,
-                optimizedCompositingFrames: metrics.numberOfFramesDisplayedUsingOptimizedCompositing,
-                accumulatedFrameDelay: metrics.totalAccumulatedFrameDelay
-            )
+            let snapshot = metrics.map {
+                VideoPerformanceSnapshot(
+                    totalFrames: $0.totalNumberOfFrames,
+                    droppedFrames: $0.numberOfDroppedFrames,
+                    corruptedFrames: $0.numberOfCorruptedFrames,
+                    optimizedCompositingFrames: $0.numberOfFramesDisplayedUsingOptimizedCompositing,
+                    accumulatedFrameDelay: $0.totalAccumulatedFrameDelay
+                )
+            }
             Task { @MainActor [weak self, snapshot] in
-                guard let self, !self.shutdownRequested else { return }
+                guard let self else { return }
+                self.performanceMetricsLoadInFlight = false
+                guard !self.shutdownRequested, let snapshot else { return }
                 let previous = self.videoPerformance
                 let droppedDelta = max(snapshot.droppedFrames - (previous?.droppedFrames ?? 0), 0)
                 let corruptedDelta = max(snapshot.corruptedFrames - (previous?.corruptedFrames ?? 0), 0)
@@ -565,6 +584,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         synchronizer.rate = 0
         shared.withLock {
             $0.pendingSeekSeconds = clamped
+            $0.videoBufferedTo = clamped
             $0.playbackGeneration += 1
         }
         // Enqueue, flush, and queue reset share the pump queue. This makes
@@ -746,11 +766,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // demuxer delivered and the queue is dry, but the file isn't over
         // — the network fell behind. Hold the clock instead of freezing
         // frames while it runs.
-        if !isBuffering, !isPaused, !didFinish, !videoQueue.isFinished,
-           videoQueue.count == 0,
-           duration <= 0 || seconds < duration - 1,
-           shared.withLock({ $0.videoBufferedTo }) - seconds < 0.2 {
-            beginStallRecovery()
+        if isStallCandidate(at: seconds) {
+            confirmStallIfPersistent()
+        } else {
+            clearPendingStallConfirmation()
         }
         // Bench sampling piggybacks on this observer at ~1 Hz — the same
         // async metrics load the HUD uses, just driven while a window runs.
@@ -851,6 +870,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// safe cushion and restart. (The periodic observer stops firing at
     /// rate 0, so recovery needs its own loop.)
     private func beginStallRecovery() {
+        clearPendingStallConfirmation()
         isBuffering = true
         synchronizer.rate = 0
         stallCount += 1
@@ -931,6 +951,46 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
+    /// A single 100 ms observer tick with an empty Lagoon queue is not proof
+    /// of starvation: Apple's renderer may still own presentable samples and
+    /// the demux queue may refill on the next scheduling turn. Confirm the
+    /// condition before pausing the shared clock, otherwise healthy VC-1
+    /// playback acquires visible micro-stalls from the recovery mechanism.
+    private func confirmStallIfPersistent() {
+        guard stallConfirmationTask == nil else { return }
+        let identifier = UUID()
+        stallConfirmationID = identifier
+        stallConfirmationTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: StallRecoveryPolicy.confirmationDelay)
+            } catch {
+                return
+            }
+            guard let self,
+                  self.stallConfirmationID == identifier else { return }
+            self.stallConfirmationID = nil
+            self.stallConfirmationTask = nil
+            guard self.isStallCandidate(at: self.timePosition) else { return }
+            self.beginStallRecovery()
+        }
+    }
+
+    private func clearPendingStallConfirmation() {
+        stallConfirmationID = nil
+        stallConfirmationTask?.cancel()
+        stallConfirmationTask = nil
+    }
+
+    private func isStallCandidate(at seconds: Double) -> Bool {
+        !isBuffering
+            && !isPaused
+            && !didFinish
+            && !videoQueue.isFinished
+            && videoQueue.count == 0
+            && (duration <= 0 || seconds < duration - 1)
+            && shared.withLock({ $0.videoBufferedTo }) - seconds < 0.2
+    }
+
     private func refreshSubtitles(at seconds: Double) {
         let active = subtitleStore.active(at: seconds)
         if active.text != currentSubtitleText {
@@ -976,11 +1036,21 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             PlaybackLifecycleDiagnostics.demuxEnded(lifecycleID)
         }
         do {
-            try demuxer.open(
-                url: url.absoluteString,
-                cacheSession: cacheSession,
-                recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
-            )
+            do {
+                try demuxer.open(
+                    url: url.absoluteString,
+                    cacheSession: cacheSession,
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                )
+            } catch where cacheSession != nil {
+                demuxer.close()
+                Task { @MainActor in self.onPlaybackCacheFallback?() }
+                try demuxer.open(
+                    url: url.absoluteString,
+                    cacheSession: nil,
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                )
+            }
         } catch {
             let message = (error as? DemuxError)?.errorDescription ?? "The stream could not be opened."
             Task { @MainActor in self.onError?(message) }
@@ -1172,10 +1242,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 audioBufferedSeconds: audioQueue.bufferedDuration,
                 videoFrameRate: demuxer.videoFrameRate,
                 videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
+                videoIsSoftwareDecoded: demuxer.outputsDecodedVideo,
                 hasAudio: !demuxer.audioStreams.isEmpty
             ) {
             case .read:
-                step()
+                performDemuxStep()
             case .waitForVideo(let target):
                 videoQueue.waitUntilBelow(target)
             case .waitForAudio(let target):
@@ -1200,6 +1271,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// One av_read_frame worth of work; routes to the queues.
+    ///
+    /// The demux loop itself is one long-lived dispatch work item, so without
+    /// an inner pool any autoreleased Core Media/Objective-C temporaries live
+    /// until the player closes. Ready sample buffers escape through Lagoon's
+    /// queues under ARC; only per-packet framework scratch objects drain here.
+    nonisolated private func performDemuxStep() {
+        autoreleasepool {
+            step()
+        }
+    }
+
     nonisolated private func step() {
         switch demuxer.readNext() {
         case .video(let buffer):
@@ -1214,8 +1296,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 videoQueue.enqueue(buffer)
                 kickPumps()
             }
-            let seconds = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
-            if seconds.isFinite {
+            if let seconds = Self.presentationEnd(of: buffer) {
                 // Stall detection compares the clock against this.
                 shared.withLock { $0.videoBufferedTo = max($0.videoBufferedTo, seconds) }
             }
@@ -1278,14 +1359,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     nonisolated private func recordMediaEnd(_ buffer: CMSampleBuffer) {
+        guard let end = Self.presentationEnd(of: buffer) else { return }
+        shared.withLock { $0.mediaEndSeconds = max($0.mediaEndSeconds, end) }
+    }
+
+    nonisolated private static func presentationEnd(of buffer: CMSampleBuffer) -> Double? {
         let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
-        guard pts.isValid, pts.seconds.isFinite else { return }
+        guard pts.isValid, pts.seconds.isFinite else { return nil }
         let sampleDuration = CMSampleBufferGetDuration(buffer)
         let end = sampleDuration.isValid && sampleDuration.seconds.isFinite
             ? CMTimeAdd(pts, sampleDuration).seconds
             : pts.seconds
-        guard end.isFinite else { return }
-        shared.withLock { $0.mediaEndSeconds = max($0.mediaEndSeconds, end) }
+        return end.isFinite ? end : nil
     }
 
     nonisolated private func failVideoDecode(_ error: Error) {
@@ -1312,14 +1397,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let generation = shared.withLock { $0.playbackGeneration }
         let hasAudio = !demuxer.audioStreams.isEmpty
         let videoHardLimit = DemuxBackpressurePolicy.videoHardLimit(
-            videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo
+            videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
+            videoIsSoftwareDecoded: demuxer.outputsDecodedVideo
         )
-        while (videoQueue.count < 12 || (hasAudio && audioQueue.bufferedDuration < 1.25)),
+        let minimumVideoReserve = demuxer.outputsDecodedVideo ? 18 : 12
+        while (videoQueue.count < minimumVideoReserve || (hasAudio && audioQueue.bufferedDuration < 1.25)),
               videoQueue.count < videoHardLimit,
               !videoQueue.isFinished,
               !shared.withLock({ $0.cancelled }) {
             if shared.withLock({ $0.pendingSeekSeconds != nil }) { return }
-            step()
+            performDemuxStep()
         }
         // Run after any already-scheduled pump blocks. If the renderer can
         // accept data, this records the real first enqueued video PTS for the
@@ -1356,13 +1443,20 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         demuxer.selectAudio(streamIndex: stream.streamIndex)
 
         var diagnostic = "\(stream.codecName) · \(stream.channels)ch"
+        let locallyDecoded = demuxer.outputsDecodedAudio(streamIndex: stream.streamIndex)
+        if locallyDecoded {
+            diagnostic += " · local LPCM"
+        }
         if stream.isAtmos {
             diagnostic += " · Atmos (JOC)"
         } else if stream.codecName == "eac3" {
             diagnostic += " · no JOC"
         }
         let publishedDiagnostic = diagnostic
-        Task { @MainActor in self.audioDiagnostic = publishedDiagnostic }
+        Task { @MainActor in
+            self.audioDiagnostic = publishedDiagnostic
+            self.audioOutputPathDiagnostic = locallyDecoded ? "LPCM" : "compressed"
+        }
     }
 
     /// Copy with all timestamps shifted — how the audio-delay option
@@ -1500,6 +1594,7 @@ nonisolated enum StallRecoveryDecision: Equatable {
 /// demuxer's low-water cushion; five seconds is long enough for the normal
 /// network refill path but bounded well below a visibly frozen player.
 nonisolated enum StallRecoveryPolicy {
+    static let confirmationDelay: Duration = .seconds(1)
     static let resumeVideoCount = 12
     static let reprimeAfter: Duration = .seconds(5)
 
@@ -1604,8 +1699,12 @@ nonisolated enum DemuxBackpressurePolicy {
     private static let audioHardWater = 270
     private static let audioSafetySeconds = 1.25
 
-    static func videoHardLimit(videoIsDecoded: Bool) -> Int {
-        videoIsDecoded ? 30 : 120
+    static func videoHardLimit(
+        videoIsDecoded: Bool,
+        videoIsSoftwareDecoded: Bool = false
+    ) -> Int {
+        if videoIsSoftwareDecoded { return 42 }
+        return videoIsDecoded ? 30 : 120
     }
 
     static func decision(
@@ -1614,11 +1713,15 @@ nonisolated enum DemuxBackpressurePolicy {
         audioBufferedSeconds: Double,
         videoFrameRate: Double,
         videoIsDecoded: Bool,
+        videoIsSoftwareDecoded: Bool = false,
         hasAudio: Bool
     ) -> DemuxBackpressureDecision {
-        let videoHighWater = videoIsDecoded ? 18 : 90
-        let videoLowWater = videoIsDecoded ? 12 : 72
-        let videoHardWater = videoHardLimit(videoIsDecoded: videoIsDecoded)
+        let videoHighWater = videoIsSoftwareDecoded ? 30 : (videoIsDecoded ? 18 : 90)
+        let videoLowWater = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 72)
+        let videoHardWater = videoHardLimit(
+            videoIsDecoded: videoIsDecoded,
+            videoIsSoftwareDecoded: videoIsSoftwareDecoded
+        )
         let safeFrameRate = videoFrameRate.isFinite && videoFrameRate >= 1
             ? videoFrameRate
             : 24
@@ -1640,7 +1743,7 @@ nonisolated enum DemuxBackpressurePolicy {
         }
 
         if hasAudio, audioCount >= audioHighWater {
-            let videoSafetyCount = videoIsDecoded ? 12 : 36
+            let videoSafetyCount = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 36)
             if videoCount >= videoSafetyCount {
                 return .waitForAudio(below: audioLowWater)
             }

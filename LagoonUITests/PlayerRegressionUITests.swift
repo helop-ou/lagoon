@@ -66,6 +66,93 @@ final class PlayerRegressionUITests: XCTestCase {
         exerciseSubtitles(in: app)
     }
 
+    func testRepeatedBufferedScrubbingRecoversAndPreservesPlaybackState() throws {
+        let app = launchPlayer(
+            title: "buffered-scrub-regression",
+            simulatorTranscode: false,
+            extraArguments: [
+                "-debug.regressionFindEpisodeWithSuccessor", "YES",
+                "-debug.regressionRequireDirectH264Successor", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.string("method") == "DirectPlay"
+                && $0.int("cache") == 1
+        }
+        let initialStalls = initial.int("stalls")
+        let initialMemory = initial.double("memoryMB")
+        let initialBuffered = initial.double("buffered")
+
+        // A self-committing nudge made while paused must seek without
+        // silently resuming. This is a different transport path from an
+        // explicit Select commit, which intentionally resumes playback.
+        remote.press(.playPause)
+        waitForState(in: app, timeout: 5) { $0.int("paused") == 1 }
+        let pausedOrigin = state(in: app).double("time")
+        remote.press(.right)
+        waitForState(in: app, timeout: 3) { $0.int("scrubbing") == 1 }
+        let pausedLanding = waitForState(in: app, timeout: 8) {
+            $0.int("scrubbing") == 0
+                && $0.int("buffering") == 0
+                && $0.int("paused") == 1
+                && $0.double("lastScrub") > pausedOrigin + 5
+        }
+        XCTAssertLessThan(
+            abs(pausedLanding.double("time") - pausedLanding.double("lastScrub")),
+            2
+        )
+        remote.press(.playPause)
+        waitForState(in: app, timeout: 5) { $0.int("paused") == 0 }
+
+        // Repeated long forward/backward seeks exercise sparse-cache holes,
+        // renderer flush/re-prime, and scrub acceleration. Every landing
+        // must leave the media clock moving instead of accumulating a
+        // permanent buffering state.
+        for cycle in 1...3 {
+            let forwardOrigin = state(in: app).double("time")
+            for _ in 0..<6 { remote.press(.right) }
+            waitForState(in: app, timeout: 3) { $0.int("scrubbing") == 1 }
+            remote.press(.select)
+            let forward = waitForState(in: app, timeout: 30) {
+                $0.int("scrubbing") == 0
+                    && $0.int("buffering") == 0
+                    && $0.double("time") > forwardOrigin + 45
+            }
+            let forwardLanding = forward.double("time")
+            waitForState(in: app, timeout: 8) { $0.double("time") > forwardLanding + 1 }
+
+            for _ in 0..<4 { remote.press(.left) }
+            waitForState(in: app, timeout: 3) { $0.int("scrubbing") == 1 }
+            remote.press(.select)
+            let backward = waitForState(in: app, timeout: 30) {
+                $0.int("scrubbing") == 0
+                    && $0.int("buffering") == 0
+                    && $0.double("time") < forwardLanding - 20
+            }
+            let backwardLanding = backward.double("time")
+            waitForState(in: app, timeout: 8) { $0.double("time") > backwardLanding + 1 }
+
+            XCTAssertLessThanOrEqual(
+                state(in: app).int("stalls") - initialStalls,
+                1,
+                "Repeated seek cycle \(cycle) accumulated unexpected stalls"
+            )
+        }
+
+        let final = state(in: app)
+        XCTAssertEqual(final.int("buffering"), 0)
+        XCTAssertEqual(final.int("engines"), 1)
+        XCTAssertEqual(final.int("demux"), 1)
+        XCTAssertEqual(final.int("renderers"), 1)
+        XCTAssertEqual(final.int("unclean"), 0)
+        XCTAssertGreaterThanOrEqual(final.double("buffered"), initialBuffered)
+        XCTAssertLessThan(final.double("memoryMB"), initialMemory + 96)
+    }
+
     func testRealAudioTrackSwitchReprimesPlayback() throws {
         // Resolve a server-declared direct-play H.264 item with multiple
         // embedded renditions. This remains simulator-decodable without
@@ -143,7 +230,7 @@ final class PlayerRegressionUITests: XCTestCase {
         let firstItemID = first.string("item")
         let firstSurfaceID = first.string("surface")
         XCTAssertEqual(first.string("method"), "DirectPlay")
-        XCTAssertEqual(first.int("cache"), 0)
+        XCTAssertEqual(first.int("cache"), 1)
 
         // With no server Outro marker, the production card appears for the
         // final 15 seconds. Select drives the exact viewer-facing autoplay
@@ -189,7 +276,7 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(successor.int("renderers"), 1)
         XCTAssertEqual(successor.int("unclean"), 0)
         XCTAssertEqual(successor.string("method"), "DirectPlay")
-        XCTAssertEqual(successor.int("cache"), 0)
+        XCTAssertEqual(successor.int("cache"), 1)
 
         // First-frame readiness is not enough: the reported regression
         // starts after autoplay, then repeatedly starves without recovering.
@@ -294,7 +381,7 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
     }
 
-    func testNativeDirectH264PlaybackStartsAndSustains() throws {
+    func testBufferedDirectH264PlaybackStartsAndSustains() throws {
         let app = launchPlayer(
             title: "native-direct-regression",
             simulatorTranscode: false,
@@ -314,7 +401,7 @@ final class PlayerRegressionUITests: XCTestCase {
         let startStalls = initial.int("stalls")
         let startMemory = initial.double("memoryMB")
         XCTAssertEqual(initial.string("method"), "DirectPlay")
-        XCTAssertEqual(initial.int("cache"), 0)
+        XCTAssertEqual(initial.int("cache"), 1)
 
         Thread.sleep(forTimeInterval: 20)
         let sustained = state(in: app)
@@ -325,10 +412,11 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(sustained.int("demux"), 1)
         XCTAssertEqual(sustained.int("renderers"), 1)
         XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertGreaterThanOrEqual(sustained.double("buffered"), initial.double("buffered"))
         XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
     }
 
-    func testNativeDirectStreamPlaybackStartsAndSustainsWhenFixtureExists() throws {
+    func testBufferedDirectStreamPlaybackStartsAndSustainsWhenFixtureExists() throws {
         let app = launchPlayer(
             title: "native-direct-stream-regression",
             simulatorTranscode: false,
@@ -346,7 +434,7 @@ final class PlayerRegressionUITests: XCTestCase {
         let startTime = initial.double("time")
         let startStalls = initial.int("stalls")
         let startMemory = initial.double("memoryMB")
-        XCTAssertEqual(initial.int("cache"), 0)
+        XCTAssertEqual(initial.int("cache"), 1)
 
         Thread.sleep(forTimeInterval: 20)
         let sustained = state(in: app)
@@ -357,6 +445,7 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(sustained.int("demux"), 1)
         XCTAssertEqual(sustained.int("renderers"), 1)
         XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertGreaterThanOrEqual(sustained.double("buffered"), initial.double("buffered"))
         XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
     }
 
@@ -741,6 +830,123 @@ final class PlayerRegressionUITests: XCTestCase {
         )
     }
 
+    func testVC1DirectPlayMaintainsContinuousAudioAndVideo() throws {
+        let series = ProcessInfo.processInfo.environment["LAGOON_VC1_SERIES"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? "Rick and Morty"
+        let vc1Arguments = [
+            "-debug.regressionFindVC1InSeries", "YES",
+            "-debug.frameLossBench", "YES",
+            "-debug.lifecycleReplayBenchmark", "YES",
+            "-debug.lifecycleReplayDelaySeconds", "60",
+            "-debug.lifecycleReplayCount", "1",
+            "-playback.autoplayMode", "off",
+        ]
+        let app = launchPlayer(
+            title: "vc1-continuity-regression",
+            series: series,
+            simulatorTranscode: false,
+            extraArguments: vc1Arguments
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.string("method") == "DirectPlay"
+                && $0.int("cache") == 1
+                && $0.string("audioPath") == "LPCM"
+        }
+        let initialStalls = initial.int("stalls")
+        let initialMemory = initial.double("memoryMB")
+
+        // Leave the renderer untouched for the same 10 s warmup + 60 s
+        // measurement window as the generic frame-loss benchmark. Sample
+        // memory after that warmup: comparing against the instant the player
+        // first becomes ready mistakes the software decoder's one-time pixel
+        // buffer pool allocation for a leak.
+        Thread.sleep(forTimeInterval: 14)
+        let warmed = state(in: app)
+        // Core Video and AVFoundation establish their decoded-surface
+        // working set lazily. Use a second, later baseline so the leak gate
+        // measures steady-state slope rather than normal pool allocation.
+        Thread.sleep(forTimeInterval: 30)
+        let settled = state(in: app)
+        let steadySeconds = ProcessInfo.processInfo.environment["LAGOON_VC1_STEADY_SECONDS"]
+            .flatMap(Double.init) ?? 60
+        Thread.sleep(forTimeInterval: max(steadySeconds, 60))
+        let result = try waitForFrameLossResult(in: app, timeout: 25)
+        let final = state(in: app)
+
+        let activeDiagnostics = XCTAttachment(string: [
+            String(format: "initialMemoryMB=%.1f", initialMemory),
+            String(format: "warmedMemoryMB=%.1f", warmed.double("memoryMB")),
+            String(format: "settledMemoryMB=%.1f", settled.double("memoryMB")),
+            String(format: "finalMemoryMB=%.1f", final.double("memoryMB")),
+            "frames=\(result.frames)",
+            "dropped=\(result.dropped)",
+            String(format: "lossPercent=%.3f", result.lossPercent),
+            "corrupted=\(result.corrupted)",
+            "stalls=\(result.stalls)",
+            "audioGaps=\(result.audioGaps)",
+        ].joined(separator: " "))
+        activeDiagnostics.name = "VC-1 active playback metrics"
+        activeDiagnostics.lifetime = .keepAlways
+        add(activeDiagnostics)
+
+        remote.press(.menu)
+        let cleanup = waitForLifecycle(in: app, timeout: 10) {
+            $0.int("engines") == 0
+                && $0.int("controllers") == 0
+                && $0.int("demux") == 0
+                && $0.int("renderers") == 0
+        }
+
+        let diagnostics = XCTAttachment(string: [
+            String(format: "initialMemoryMB=%.1f", initialMemory),
+            String(format: "warmedMemoryMB=%.1f", warmed.double("memoryMB")),
+            String(format: "settledMemoryMB=%.1f", settled.double("memoryMB")),
+            String(format: "finalMemoryMB=%.1f", final.double("memoryMB")),
+            String(format: "cleanupMemoryMB=%.1f", cleanup.double("memoryMB")),
+            "frames=\(result.frames)",
+            "dropped=\(result.dropped)",
+            String(format: "lossPercent=%.3f", result.lossPercent),
+            "corrupted=\(result.corrupted)",
+            "stalls=\(result.stalls)",
+            "audioGaps=\(result.audioGaps)",
+        ].joined(separator: " "))
+        diagnostics.name = "VC-1 continuity metrics"
+        diagnostics.lifetime = .keepAlways
+        add(diagnostics)
+
+        XCTAssertGreaterThan(result.frames, 1_000)
+        XCTAssertEqual(result.corrupted, 0)
+        XCTAssertEqual(result.audioGaps, 0, "VC-1 playback enqueued discontinuous audio")
+        XCTAssertLessThanOrEqual(result.stalls, 1)
+        XCTAssertLessThanOrEqual(result.lossPercent, 1)
+        XCTAssertLessThanOrEqual(final.int("stalls") - initialStalls, 1)
+        XCTAssertEqual(final.int("buffering"), 0)
+        XCTAssertEqual(final.int("engines"), 1)
+        XCTAssertEqual(final.int("demux"), 1)
+        XCTAssertEqual(final.int("renderers"), 1)
+        XCTAssertEqual(final.int("unclean"), 0)
+        XCTAssertLessThanOrEqual(
+            final.double("memoryMB"),
+            settled.double("memoryMB") + 64,
+            "VC-1 playback allocator high-water exceeded its bounded reclamation allowance"
+        )
+        XCTAssertLessThan(
+            final.double("memoryMB"),
+            initialMemory + 160,
+            "VC-1 active playback exceeded its conservative decoded-frame allowance"
+        )
+        XCTAssertEqual(cleanup.int("unclean"), 0)
+        XCTAssertLessThanOrEqual(
+            cleanup.double("memoryMB"),
+            initialMemory + 48,
+            "VC-1 decoder or renderer memory remained live after dismissal"
+        )
+    }
+
     func testPlaybackDismissSettingsReplayLifecycleAndStallBenchmark() {
         let requestedVC1Series = ProcessInfo.processInfo.environment["LAGOON_LIFECYCLE_VC1_SERIES"]?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -857,7 +1063,7 @@ final class PlayerRegressionUITests: XCTestCase {
         }
     }
 
-    func testDismissDuringSuspendedStartupDoesNotResurrectPlaybackWork() {
+    func testDismissDuringSuspendedStartupDoesNotResurrectPlaybackWork() throws {
         let app = launchPlayer(
             title: "startup-dismiss-regression",
             extraArguments: [
@@ -869,6 +1075,7 @@ final class PlayerRegressionUITests: XCTestCase {
                 "-debug.regressionPlaybackStartDelaySeconds", "5",
             ]
         )
+        try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 60) { $0.int("ready") == 1 }
 
         remote.press(.menu)
@@ -1343,23 +1550,38 @@ final class PlayerRegressionUITests: XCTestCase {
         in app: XCUIApplication,
         timeout: TimeInterval = 25
     ) throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        let resolution = app.descendants(matching: .any)["player.regression.resolution"]
-        repeat {
-            if app.descendants(matching: .any)["player.regression.state"].exists { return }
-            if resolution.exists {
-                let value = resolution.value as? String ?? ""
-                if value.hasPrefix("missing:") {
-                    throw XCTSkip(
-                        "Fixture server " + String(value.dropFirst("missing:".count))
-                    )
+        // A cold simulator launch has two independent network handshakes:
+        // authenticate the ephemeral regression account, then resolve the
+        // requested media. A transient failure in the first handshake leaves
+        // the app on Sign In, where neither player probe exists. Retry that
+        // launch once instead of reporting a player failure for work that
+        // never reached the player. Explicit fixture/API results remain
+        // terminal so a real regression is never hidden by the retry.
+        for launchAttempt in 0..<2 {
+            let deadline = Date().addingTimeInterval(timeout)
+            let resolution = app.descendants(matching: .any)["player.regression.resolution"]
+            repeat {
+                if app.descendants(matching: .any)["player.regression.state"].exists { return }
+                if resolution.exists {
+                    let value = resolution.value as? String ?? ""
+                    if value.hasPrefix("missing:") {
+                        throw XCTSkip(
+                            "Fixture server " + String(value.dropFirst("missing:".count))
+                        )
+                    }
+                    if value.hasPrefix("error:") {
+                        throw RegressionFixtureError(message: String(value.dropFirst("error:".count)))
+                    }
                 }
-                if value.hasPrefix("error:") {
-                    throw RegressionFixtureError(message: String(value.dropFirst("error:".count)))
-                }
+                Thread.sleep(forTimeInterval: 0.2)
+            } while Date() < deadline
+
+            if launchAttempt == 0 {
+                app.terminate()
+                Thread.sleep(forTimeInterval: 0.5)
+                app.launch()
             }
-            Thread.sleep(forTimeInterval: 0.2)
-        } while Date() < deadline
+        }
         throw RegressionFixtureError(message: "did not resolve a player fixture before timeout")
     }
 

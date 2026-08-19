@@ -33,7 +33,10 @@ struct CustomPlayerView<Surface: View>: View {
     /// Negotiated Jellyfin mode and transport ownership are carried into the
     /// launch-gated probe so regressions prove the intended path actually ran.
     var playbackMethod: PlayMethod = .directPlay
-    var isExperimentalPlaybackCacheActive = false
+    var isPlaybackCacheActive = false
+    /// Contiguous cached prefix mapped onto the title's declared duration.
+    /// nil for HLS or an endpoint whose total length is not yet known.
+    var bufferedFraction: Double? = nil
     let info: PlayerItemInfo
     let onDismiss: () -> Void
     /// Lets the host react to the panel opening (the debug HUD hides so
@@ -912,7 +915,13 @@ struct CustomPlayerView<Surface: View>: View {
             let width = proxy.size.width
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(.white.opacity(0.3))
+                    .fill(.white.opacity(0.16))
+                if let bufferedFraction, bufferedFraction > 0 {
+                    Capsule()
+                        .fill(.white.opacity(0.38))
+                        .frame(width: width * CGFloat(min(max(bufferedFraction, 0), 1)))
+                        .animation(liveMotion, value: bufferedFraction)
+                }
                 Capsule()
                     .fill(.white)
                     .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
@@ -1146,7 +1155,8 @@ struct CustomPlayerView<Surface: View>: View {
             "item=\(playbackIdentity)",
             "surface=\(playerSurfaceIdentity)",
             "method=\(playbackMethod.rawValue)",
-            "cache=\(isExperimentalPlaybackCacheActive ? 1 : 0)",
+            "cache=\(isPlaybackCacheActive ? 1 : 0)",
+            String(format: "buffered=%.3f", bufferedFraction ?? -1),
             String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
             "nextUp=\(showsNextUp ? 1 : 0)",
             "ready=\(engine.duration > 0 ? 1 : 0)",
@@ -1167,6 +1177,7 @@ struct CustomPlayerView<Surface: View>: View {
             "tab=\(String(describing: selectedTab))",
             "focus=\(focusDescription)",
             "audio=\(selectedAudio)",
+            "audioPath=\(engine.audioOutputPathDiagnostic)",
             "audioCount=\(engine.audioTracks.count)",
             "subtitle=\(selectedSubtitle)",
             "subtitleCount=\(engine.subtitleTracks.count)",
