@@ -71,6 +71,22 @@ extension JellyfinClient {
         return try await get("Users/\(userId)/Items/\(id)")
     }
 
+    /// Resolves a Seerr/TMDB catalogue entry back into this user's Jellyfin
+    /// library without guessing from title or year.
+    func item(tmdbID: Int, mediaType: SeerrMediaType) async throws -> MediaItem? {
+        let userId = try requireUserId()
+        let includeType = mediaType == .tv ? MediaItemType.series : .movie
+        let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "AnyProviderIdEquals", value: "tmdb.\(tmdbID)"),
+            URLQueryItem(name: "IncludeItemTypes", value: includeType.rawValue),
+            URLQueryItem(name: "Limit", value: "1"),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+            URLQueryItem(name: "ImageTypeLimit", value: "1"),
+        ])
+        return page.items.first
+    }
+
     func resumeItems(limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Users/\(userId)/Items/Resume", query: [

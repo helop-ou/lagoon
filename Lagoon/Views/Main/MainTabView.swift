@@ -12,6 +12,7 @@ struct MainTabView: View {
     @State private var homeNavigationPath: [ContentNavigationRoute] = []
     @State private var libraryNavigationPaths: [String: [ContentNavigationRoute]] = [:]
     @State private var searchNavigationPath: [ContentNavigationRoute] = []
+    @State private var seerrNavigationPath: [SeerrNavigationRoute] = []
 
     var body: some View {
         TabView {
@@ -19,6 +20,13 @@ struct MainTabView: View {
                 NavigationStack(path: $homeNavigationPath) {
                     HomeView()
                         .contentNavigationDestinations()
+                }
+            }
+
+            Tab("Discover", systemImage: "sparkles") {
+                NavigationStack(path: $seerrNavigationPath) {
+                    DiscoverView()
+                        .seerrNavigationDestinations()
                 }
             }
 
@@ -55,6 +63,7 @@ struct MainTabView: View {
             homeNavigationPath.removeAll()
             libraryNavigationPaths.removeAll()
             searchNavigationPath.removeAll()
+            seerrNavigationPath.removeAll()
         }
         // Headless hardware harness: resolve a named library item through
         // the app's existing signed-in client, then present the same player

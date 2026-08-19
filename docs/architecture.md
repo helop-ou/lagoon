@@ -19,6 +19,7 @@ Lagoon/
     Main/                  MainTabView + detail routing
     Home/                  Home screen, hero carousel
     Library/               Paged poster grid
+    Discovery/             Seerr browse, details, requests, moderation
     Detail/                Movie/episode + series detail
     Search/                Debounced library search
     Player/                Unified sample-buffer playback + progress reporting
@@ -29,7 +30,8 @@ Lagoon/
 
 - `@Observable` everywhere (never `ObservableObject`/`@Published`). Screen
   view models are owned as `@State private var viewModel = …`; the one shared
-  object is `SessionStore`, injected with `.environment(session)`.
+  objects are `SessionStore` and the account-scoped `SeerrSessionStore`,
+  injected from `RootView`.
 - The Swift default actor isolation is `MainActor` (build setting). Model
   types are declared `nonisolated` so Codable conformances stay usable off
   the main actor.
@@ -84,6 +86,16 @@ Switching costs no re-authentication and nothing else has to know: every
 Jellyfin call is user-scoped, so Continue Watching and the rest follow from
 the client being re-pointed.
 
+### Seerr sessions
+
+Seerr is an optional second service boundary, not part of `JellyfinClient`.
+`SeerrSessionStore` shares the configured Seerr address between accounts on
+the same Jellyfin server, but stores a separate opaque `connect.sid` cookie in
+the Keychain for each Lagoon account. Jellyfin passwords are accepted only as
+a one-time fallback and are never persisted; Jellyfin Quick Connect is the
+primary sign-in path. Changing Lagoon accounts clears in-flight Seerr UI state
+and restores only the matching cookie.
+
 Server address input is expanded by `SessionStore.candidateURLs(for:)`:
 schemeless input probes https then http, plus `:8096` when no port was given;
 LAN-looking hosts (IP literals, `.local`) probe http first so a hanging https
@@ -91,11 +103,18 @@ attempt can't stall them.
 
 ## Navigation
 
-`MainTabView` builds tabs dynamically: Home, one tab per `movies`/`tvshows`
-library from `userViews()`, Search (`role: .search`), Settings. Each tab owns
-its own `NavigationStack`; `MediaItem` is the navigation value
+`MainTabView` builds tabs dynamically: Home, Discover, one tab per
+`movies`/`tvshows` library from `userViews()`, Search (`role: .search`), and
+Settings. Each tab owns its own `NavigationStack`; `MediaItem` is the content
+navigation value
 (Hashable by id), routed by `ItemDetailRouter` — `.series` →
 `SeriesDetailView`, everything else → `ItemDetailView`.
+
+Discover has a separate typed `SeerrNavigationRoute`. TMDB ids remain in the
+Seerr model layer; an available title is opened in Lagoon only after an exact
+`AnyProviderIdEquals=tmdb.{id}` lookup returns a Jellyfin item. This avoids
+title/year guesses and prevents a Seerr detail from entering a Jellyfin stack
+under the wrong identity.
 
 Playback is presented as `fullScreenCover(item:)` from whichever screen
 started it; dismissal triggers a re-fetch so resume state stays fresh

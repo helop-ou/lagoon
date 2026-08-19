@@ -4,6 +4,7 @@ import SwiftUI
 /// connection states are states, not screens you navigate to.
 struct RootView: View {
     @State private var session = SessionStore()
+    @State private var seerr = SeerrSessionStore()
 
     var body: some View {
         ZStack {
@@ -20,6 +21,10 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: Motion.standard), value: session.phase)
         .environment(session)
+        .environment(seerr)
+        .task(id: session.activeAccount?.id) {
+            await seerr.activate(for: session.activeAccount)
+        }
         #if DEBUG
         .task {
             await session.bootstrapPublicDemoForRegressionIfRequested()

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(SeerrSessionStore.self) private var seerr
 
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
@@ -111,6 +112,12 @@ struct SettingsView: View {
                     detail: homeRowsDetail,
                     id: "home"
                 ) { HomeRowsSettingsView(preferences: homePreferences) }
+
+                settingsDestination(
+                    "Seerr",
+                    detail: seerr.displayName,
+                    id: "seerr"
+                ) { SeerrSettingsView() }
 
                 #if DEBUG
                 settingsDestination(
@@ -489,6 +496,14 @@ struct SettingsView: View {
             Section("Home") {
                 NavigationLink("Home Rows") {
                     HomeRowsSettingsView(preferences: homePreferences)
+                }
+            }
+
+            Section("Discovery & Requests") {
+                NavigationLink {
+                    SeerrSettingsView()
+                } label: {
+                    LabeledContent("Seerr", value: seerr.displayName)
                 }
             }
 

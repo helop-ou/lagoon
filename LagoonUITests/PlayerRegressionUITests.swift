@@ -250,6 +250,19 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.menu)
         XCTAssertTrue(home.waitForExistence(timeout: 5))
 
+        let seerr = app.descendants(matching: .any)["settings.category.seerr"]
+        XCTAssertTrue(seerr.waitForExistence(timeout: 5))
+        moveFocus(to: seerr, maxPresses: 2) { remote.press(.down) }
+        remote.press(.select)
+        let seerrServer = app.descendants(matching: .any)["settings.seerr.server"]
+        XCTAssertTrue(seerrServer.waitForExistence(timeout: 5))
+        remote.press(.right)
+        XCTAssertTrue(seerrServer.hasFocus, "Seerr server controls column was unreachable")
+        let seerrBack = app.descendants(matching: .any)["settings.detail.back"]
+        moveFocus(to: seerrBack, maxPresses: 2) { remote.press(.left) }
+        remote.press(.select)
+        XCTAssertTrue(seerr.waitForExistence(timeout: 5))
+
         let developer = app.descendants(matching: .any)["settings.category.developer"]
         moveFocus(to: developer, maxPresses: 5) { remote.press(.down) }
         remote.press(.select)
@@ -575,7 +588,7 @@ final class PlayerRegressionUITests: XCTestCase {
         var libraryTabs: [XCUIElement] = []
         for _ in 0..<40 {
             libraryTabs = app.tabBars.buttons.allElementsBoundByIndex.filter {
-                !["Home", "Search", "Settings"].contains($0.label)
+                !["Home", "Discover", "Search", "Settings"].contains($0.label)
             }
             if !libraryTabs.isEmpty { break }
             Thread.sleep(forTimeInterval: 0.25)
@@ -692,6 +705,32 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertEqual(search.valueDescription, resultCount, "Search results were rebuilt on Back")
         XCTAssertTrue(focusedPoster.hasFocus, "Search focus was not restored to the selected result")
+    }
+
+    func testDiscoverSetupNavigationAndBackFocus() {
+        let app = launchNavigationRegressionApp()
+        let homeTab = app.tabBars.buttons["Home"]
+        let discoverTab = app.tabBars.buttons["Discover"]
+        XCTAssertTrue(discoverTab.waitForExistence(timeout: 20))
+        moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
+        moveFocus(to: discoverTab, maxPresses: 4) { remote.press(.right) }
+        remote.press(.select)
+
+        let setup = app.buttons["seerr.setup"]
+        XCTAssertTrue(setup.waitForExistence(timeout: 8))
+        moveFocus(to: setup, maxPresses: 8) { remote.press(.down) }
+        remote.press(.select)
+
+        let server = app.descendants(matching: .any)["settings.seerr.server"]
+        XCTAssertTrue(server.waitForExistence(timeout: 5))
+        remote.press(.right)
+        XCTAssertTrue(server.hasFocus, "Discover's Seerr setup controls were unreachable")
+
+        let back = app.descendants(matching: .any)["settings.detail.back"]
+        moveFocus(to: back, maxPresses: 2) { remote.press(.left) }
+        remote.press(.select)
+        XCTAssertTrue(setup.waitForExistence(timeout: 5))
+        XCTAssertTrue(setup.hasFocus, "Back did not restore focus to Set Up Seerr")
     }
 
     func testNativeGenreShelfDetailNavigationAndBackStack() {

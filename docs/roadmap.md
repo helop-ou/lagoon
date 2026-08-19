@@ -12,6 +12,8 @@
   reporting round-trip (originally AVPlayer; now superseded by the single
   Lagoon sample-buffer engine documented below)
 - Debounced search, settings (sign out / change server)
+- Seerr/Jellyseerr discovery, per-user Quick Connect, title and season
+  requests, request history, and permission-gated moderation
 - iOS builds from the same target with scaled-down metrics
 
 ## Next
@@ -19,8 +21,6 @@
 - **Subtitle & audio track selection** — the device profile already requests
   vtt; surface `MediaStreams` in a picker and pass `SubtitleStreamIndex` /
   `AudioStreamIndex` through PlaybackInfo.
-- **Jellyseerr/Overseerr integration** — request missing titles from search
-  ("not in your library — request it?"), needs its own API client + auth.
 - **Top Shelf extension** — Continue Watching in the tvOS top shelf
   (TVServices; a reference implementation exists).
 - **User switching / multiple servers** — the keychain layout already keys by

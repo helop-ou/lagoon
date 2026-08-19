@@ -1,0 +1,355 @@
+import Foundation
+
+enum SeerrError: LocalizedError, Equatable {
+    case invalidServerURL
+    case invalidResponse
+    case server(Int, String)
+    case unauthenticated
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidServerURL:
+            "Enter a valid Seerr or Jellyseerr server address."
+        case .invalidResponse:
+            "The server returned an unreadable response."
+        case .server(_, let message):
+            message
+        case .unauthenticated:
+            "Connect this Lagoon account to Seerr to continue."
+        }
+    }
+}
+
+/// A separate HTTP boundary for Seerr. It owns only an opaque per-user
+/// session cookie; Jellyfin credentials and Seerr's global API key never
+/// enter this client.
+final class SeerrClient {
+    private(set) var serverURL: URL?
+    private(set) var sessionCookie: String?
+
+    private let session: URLSession
+    private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
+    private var configurationGeneration = 0
+
+    init(session: URLSession = .shared) {
+        self.session = session
+        decoder = JSONDecoder()
+        encoder = JSONEncoder()
+    }
+
+    func configure(serverURL: URL) {
+        configurationGeneration += 1
+        self.serverURL = Self.normalizedServerURL(serverURL)
+    }
+
+    func clear() {
+        configurationGeneration += 1
+        serverURL = nil
+        sessionCookie = nil
+    }
+
+    func setSessionCookie(_ cookie: String?) {
+        sessionCookie = cookie
+    }
+
+    // MARK: - Server and authentication
+
+    func status() async throws -> SeerrServerStatus {
+        try await get("status", authenticated: false)
+    }
+
+    func publicSettings() async throws -> SeerrPublicSettings {
+        try await get("settings/public", authenticated: false)
+    }
+
+    func currentUser() async throws -> SeerrUser {
+        try await get("auth/me")
+    }
+
+    func initiateQuickConnect() async throws -> SeerrQuickConnect {
+        try await post("auth/jellyfin/quickconnect/initiate", authenticated: false)
+    }
+
+    func quickConnectState(secret: String) async throws -> SeerrQuickConnectState {
+        try await get(
+            "auth/jellyfin/quickconnect/check",
+            query: [URLQueryItem(name: "secret", value: secret)],
+            authenticated: false
+        )
+    }
+
+    func authenticateQuickConnect(secret: String) async throws -> SeerrUser {
+        try await post(
+            "auth/jellyfin/quickconnect/authenticate",
+            body: QuickConnectAuthentication(secret: secret),
+            authenticated: false
+        )
+    }
+
+    func authenticateJellyfin(username: String, password: String) async throws -> SeerrUser {
+        try await post(
+            "auth/jellyfin",
+            body: JellyfinAuthentication(username: username, password: password),
+            authenticated: false
+        )
+    }
+
+    func logout() async throws {
+        try await postVoid("auth/logout")
+        sessionCookie = nil
+    }
+
+    // MARK: - Discovery
+
+    func trending(page: Int = 1, mediaType: SeerrMediaType? = nil) async throws -> SeerrDiscoverPage {
+        var query = [URLQueryItem(name: "page", value: String(page))]
+        if let mediaType {
+            query.append(URLQueryItem(name: "mediaType", value: mediaType.rawValue))
+        }
+        return try await get("discover/trending", query: query)
+    }
+
+    func discover(_ mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
+        let path = mediaType == .movie ? "discover/movies" : "discover/tv"
+        return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
+    }
+
+    func upcomingMovies(page: Int = 1) async throws -> SeerrDiscoverPage {
+        try await get(
+            "discover/movies/upcoming",
+            query: [URLQueryItem(name: "page", value: String(page))]
+        )
+    }
+
+    func search(query term: String, page: Int = 1) async throws -> SeerrDiscoverPage {
+        try await get("search", query: [
+            URLQueryItem(name: "query", value: term),
+            URLQueryItem(name: "page", value: String(page)),
+        ])
+    }
+
+    func details(id: Int, mediaType: SeerrMediaType) async throws -> SeerrMediaDetails {
+        switch mediaType {
+        case .movie:
+            return try await get("movie/\(id)")
+        case .tv:
+            return try await get("tv/\(id)")
+        case .person:
+            throw SeerrError.server(400, "People do not have requestable media details.")
+        }
+    }
+
+    // MARK: - Requests
+
+    func requests(
+        take: Int = 20,
+        skip: Int = 0,
+        filter: SeerrRequestFilter = .all,
+        mediaType: SeerrMediaType? = nil,
+        requestedBy: Int? = nil
+    ) async throws -> SeerrRequestsPage {
+        var query = [
+            URLQueryItem(name: "take", value: String(take)),
+            URLQueryItem(name: "skip", value: String(skip)),
+            URLQueryItem(name: "filter", value: filter.rawValue),
+            URLQueryItem(name: "sort", value: "modified"),
+            URLQueryItem(name: "sortDirection", value: "desc"),
+        ]
+        if let mediaType {
+            query.append(URLQueryItem(name: "mediaType", value: mediaType.rawValue))
+        }
+        if let requestedBy {
+            query.append(URLQueryItem(name: "requestedBy", value: String(requestedBy)))
+        }
+        return try await get("request", query: query)
+    }
+
+    func createRequest(_ request: SeerrCreateRequest) async throws -> SeerrMediaRequest {
+        try await post("request", body: request)
+    }
+
+    func request(id: Int) async throws -> SeerrMediaRequest {
+        try await get("request/\(id)")
+    }
+
+    func setRequestStatus(id: Int, approved: Bool) async throws -> SeerrMediaRequest {
+        try await post("request/\(id)/\(approved ? "approve" : "decline")")
+    }
+
+    func deleteRequest(id: Int) async throws {
+        try await deleteVoid("request/\(id)")
+    }
+
+    // MARK: - Artwork
+
+    nonisolated static func imageURL(path: String?, width: Int) -> URL? {
+        guard let path, !path.isEmpty else { return nil }
+        let normalizedPath = path.hasPrefix("/") ? path : "/\(path)"
+        return URL(string: "https://image.tmdb.org/t/p/w\(width)\(normalizedPath)")
+    }
+
+    // MARK: - HTTP
+
+    private func get<T: Decodable>(
+        _ path: String,
+        query: [URLQueryItem] = [],
+        authenticated: Bool = true
+    ) async throws -> T {
+        try await send(path: path, method: "GET", query: query, authenticated: authenticated)
+    }
+
+    private func post<T: Decodable>(
+        _ path: String,
+        authenticated: Bool = true
+    ) async throws -> T {
+        try await send(path: path, method: "POST", authenticated: authenticated)
+    }
+
+    private func post<T: Decodable, Body: Encodable>(
+        _ path: String,
+        body: Body,
+        authenticated: Bool = true
+    ) async throws -> T {
+        try await send(
+            path: path,
+            method: "POST",
+            body: try encoder.encode(body),
+            authenticated: authenticated
+        )
+    }
+
+    private func postVoid(_ path: String) async throws {
+        _ = try await data(path: path, method: "POST", authenticated: true)
+    }
+
+    private func deleteVoid(_ path: String) async throws {
+        _ = try await data(path: path, method: "DELETE", authenticated: true)
+    }
+
+    private func send<T: Decodable>(
+        path: String,
+        method: String,
+        query: [URLQueryItem] = [],
+        body: Data? = nil,
+        authenticated: Bool
+    ) async throws -> T {
+        let payload = try await data(
+            path: path,
+            method: method,
+            query: query,
+            body: body,
+            authenticated: authenticated
+        )
+        do {
+            return try decoder.decode(T.self, from: payload)
+        } catch {
+            throw SeerrError.invalidResponse
+        }
+    }
+
+    private func data(
+        path: String,
+        method: String,
+        query: [URLQueryItem] = [],
+        body: Data? = nil,
+        authenticated: Bool
+    ) async throws -> Data {
+        guard let serverURL else { throw SeerrError.invalidServerURL }
+        let requestGeneration = configurationGeneration
+        var components = URLComponents(
+            url: serverURL.appending(path: "api/v1").appending(path: path),
+            resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = query.isEmpty ? nil : query
+        guard let url = components?.url else { throw SeerrError.invalidServerURL }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if authenticated {
+            guard let sessionCookie else { throw SeerrError.unauthenticated }
+            request.setValue("connect.sid=\(sessionCookie)", forHTTPHeaderField: "Cookie")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        // An account switch clears/reconfigures this shared client. A late
+        // response from the previous account must never install its cookie
+        // or update the new account's UI state.
+        guard configurationGeneration == requestGeneration else { throw CancellationError() }
+        guard let http = response as? HTTPURLResponse else { throw SeerrError.invalidResponse }
+        captureSessionCookie(from: http, url: url)
+        guard (200..<300).contains(http.statusCode) else {
+            if authenticated && http.statusCode == 401 {
+                throw SeerrError.unauthenticated
+            }
+            let message = (try? decoder.decode(ErrorPayload.self, from: data).displayMessage)
+                ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+            throw SeerrError.server(http.statusCode, message)
+        }
+        return data
+    }
+
+    private func captureSessionCookie(from response: HTTPURLResponse, url: URL) {
+        let fields = response.allHeaderFields.reduce(into: [String: String]()) { result, entry in
+            guard let key = entry.key as? String, let value = entry.value as? String else { return }
+            result[key] = value
+        }
+        guard let cookie = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url)
+            .first(where: { $0.name == "connect.sid" }) else { return }
+        sessionCookie = cookie.value
+    }
+
+    nonisolated static func candidateURLs(for input: String) -> [URL] {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty else { return [] }
+        if trimmed.contains("://") {
+            return URL(string: trimmed).map { [normalizedServerURL($0)] } ?? []
+        }
+
+        let host = trimmed.split(separator: "/").first.map(String.init) ?? trimmed
+        let hasPort = host.split(separator: ":").count == 2
+        let looksLocal = host.hasSuffix(".local")
+            || host.split(separator: ":").first.map { $0.allSatisfy { $0.isNumber || $0 == "." } } == true
+        var candidates = looksLocal
+            ? ["http://\(trimmed)", "https://\(trimmed)"]
+            : ["https://\(trimmed)", "http://\(trimmed)"]
+        if !hasPort { candidates.append("http://\(trimmed):5055") }
+        return candidates.compactMap(URL.init(string:)).map(normalizedServerURL)
+    }
+
+    private nonisolated static func normalizedServerURL(_ url: URL) -> URL {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var path = components?.path ?? ""
+        if path.hasSuffix("/api/v1") {
+            path.removeLast("/api/v1".count)
+        }
+        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+        components?.path = path == "/" ? "" : path
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url ?? url
+    }
+}
+
+private nonisolated struct QuickConnectAuthentication: Encodable {
+    let secret: String
+}
+
+private nonisolated struct JellyfinAuthentication: Encodable {
+    let username: String
+    let password: String
+}
+
+private nonisolated struct ErrorPayload: Decodable {
+    let message: String?
+    let error: String?
+
+    var displayMessage: String { message ?? error ?? "The Seerr request failed." }
+}
