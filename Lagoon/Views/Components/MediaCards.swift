@@ -81,9 +81,12 @@ struct PosterCard: View {
     }
 }
 
-/// 16:9 card for continue-watching and next-up rails; starts playback directly.
+/// 16:9 card for landscape rails; starts playback directly. Resume-oriented
+/// rails can opt into the title/subtitle overlay, while discovery shelves keep
+/// artwork free of the underlying asset's metadata.
 struct LandscapeCard: View {
     let item: MediaItem
+    var showsMetadata = false
     let action: () -> Void
     @Environment(SessionStore.self) private var session
 
@@ -101,23 +104,25 @@ struct LandscapeCard: View {
                 .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
                 .clipped()
 
-                LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
-                    .frame(height: Metrics.landscapeHeight * 0.55)
-                    .frame(maxWidth: .infinity, alignment: .bottom)
+                if showsMetadata {
+                    LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
+                        .frame(height: Metrics.landscapeHeight * 0.55)
+                        .frame(maxWidth: .infinity, alignment: .bottom)
 
-                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                    Text(item.railTitle)
-                        .font(.footnote.bold())
-                        .lineLimit(1)
-                    if let subtitle = item.railSubtitle {
-                        Text(subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                        Text(item.railTitle)
+                            .font(.footnote.bold())
                             .lineLimit(1)
+                        if let subtitle = item.railSubtitle {
+                            Text(subtitle)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
+                    .padding(.horizontal, Metrics.Space.m)
+                    .padding(.bottom, item.playbackProgress == nil ? 12 : 22)
                 }
-                .padding(.horizontal, Metrics.Space.m)
-                .padding(.bottom, item.playbackProgress == nil ? 12 : 22)
 
                 if let progress = item.playbackProgress {
                     ItemProgressBar(progress: progress)

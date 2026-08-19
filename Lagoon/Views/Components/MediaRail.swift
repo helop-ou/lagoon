@@ -13,6 +13,9 @@ struct MediaRail: View {
     let title: String
     let items: [MediaItem]
     var style: RailStyle = .poster
+    /// Continue Watching and Next Up need episode context. Other landscape
+    /// shelves should let their artwork stand on its own.
+    var showsLandscapeMetadata = false
     var playAction: ((MediaItem) -> Void)?
     /// Lets a card's watched/favourite menu re-fetch the list it sits in.
     var onUserDataChange: (() async -> Void)?
@@ -31,7 +34,7 @@ struct MediaRail: View {
                                 case .poster:
                                     PosterCard(item: item)
                                 case .landscape:
-                                    LandscapeCard(item: item) {
+                                    LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata) {
                                         playAction?(item)
                                     }
                                 }

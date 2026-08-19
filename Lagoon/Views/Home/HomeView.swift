@@ -32,6 +32,7 @@ struct HomeView: View {
                             title: "Continue Watching",
                             items: viewModel.resume,
                             style: .landscape,
+                            showsLandscapeMetadata: true,
                             playAction: { playerItem = PlayerItem(media: $0) },
                             onUserDataChange: refreshUserData
                         )
@@ -39,6 +40,7 @@ struct HomeView: View {
                             title: "Next Up",
                             items: viewModel.nextUp,
                             style: .landscape,
+                            showsLandscapeMetadata: true,
                             playAction: { playerItem = PlayerItem(media: $0) },
                             onUserDataChange: refreshUserData
                         )
