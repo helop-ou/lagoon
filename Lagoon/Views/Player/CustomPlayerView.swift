@@ -20,6 +20,16 @@ import SwiftUI
 /// fullScreenCover on tvOS 26).
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
+    /// Stable media identity, independent of the engine object's lifetime.
+    /// Changing it resets episode-only chrome while preserving this view's
+    /// structural position and its UIKit video surface.
+    let playbackIdentity: String
+    /// Debug measurement supplied by the host for asserting that UIKit did
+    /// not replace the render surface at an episode boundary.
+    var playerSurfaceIdentity = ""
+    /// Most recent successor-ready latency, exposed only through the launch-
+    /// gated hardware probe and the optional performance HUD.
+    var handoffMilliseconds: Double? = nil
     let info: PlayerItemInfo
     let onDismiss: () -> Void
     /// Lets the host react to the panel opening (the debug HUD hides so
@@ -228,10 +238,8 @@ struct CustomPlayerView<Surface: View>: View {
             guard !Task.isCancelled else { return }
             seekFeedback = nil
         }
-        .task {
-            if trickplay == nil, let source = info.trickplay {
-                trickplay = TrickplayLoader(source: source)
-            }
+        .task(id: playbackIdentity) {
+            resetForPlaybackIdentity()
         }
         // Frames follow the virtual playhead, not playback: the loader
         // no-ops until the target crosses into the next thumbnail.
@@ -413,6 +421,33 @@ struct CustomPlayerView<Surface: View>: View {
     private func pokeControls() {
         controlsVisible = true
         interactionToken += 1
+    }
+
+    /// The SwiftUI player hierarchy deliberately survives autoplay. Clear
+    /// only state that belongs to the finished item; focus and the hosted
+    /// display layer remain in place for a seamless engine swap.
+    private func resetForPlaybackIdentity() {
+        controlsVisible = true
+        interactionToken += 1
+        panelOpen = false
+        onPanelToggle?(false)
+        selectedTab = .info
+        seekFeedback = nil
+        showsBuffering = false
+        scrubTarget = nil
+        lastCommittedScrubTarget = -1
+        scrubRunLength = 0
+        scrubStepToken += 1
+        scrubHopped = false
+        handledSegmentIDs.removeAll()
+        autoSkipFill = 0
+        nextUpDismissed = false
+        nextUpFill = 0
+        trickplay = info.trickplay.map(TrickplayLoader.init(source:))
+        reportDisplayedCaption(nil)
+        #if os(tvOS)
+        playerFocus = .surface
+        #endif
     }
 
     private func showSeekFeedback(forward: Bool) {
@@ -1104,6 +1139,10 @@ struct CustomPlayerView<Surface: View>: View {
         let memory = MemorySnapshot.current()
         let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
         return [
+            "item=\(playbackIdentity)",
+            "surface=\(playerSurfaceIdentity)",
+            String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
+            "nextUp=\(showsNextUp ? 1 : 0)",
             "ready=\(engine.duration > 0 ? 1 : 0)",
             String(format: "time=%.1f", engine.timePosition),
             String(format: "duration=%.1f", engine.duration),

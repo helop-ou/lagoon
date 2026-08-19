@@ -17,6 +17,13 @@ nonisolated struct PlayerItem: Identifiable {
 @MainActor
 final class PlaybackController {
     private(set) var engine: SampleBufferPlayerEngine?
+    /// Changes only when a prepared engine replaces the previous one. The
+    /// persistent player surface uses it to reset episode-scoped chrome.
+    private(set) var playbackIdentity = ""
+    /// Process-local identity of the hosted AVSampleBufferDisplayLayer. The
+    /// debug UI journey compares it across autoplay to prove that a stable
+    /// SwiftUI branch also retained the actual UIKit render surface.
+    private(set) var playerSurfaceIdentity = ""
     private(set) var playerInfo: PlayerItemInfo?
     private(set) var errorMessage: String?
     private(set) var didFinish = false
@@ -48,6 +55,15 @@ final class PlaybackController {
     /// arrive at the end of a file, and advancing twice would skip an
     /// episode outright.
     private(set) var isAdvancing = false
+    /// Presentation state is separate from the reentrancy guard: playback
+    /// reporting may still be finishing after the successor has shown its
+    /// first frame, and must not leave a spinner over healthy video.
+    private(set) var isTransitionOverlayVisible = false
+    private(set) var transitionEpisodeTitle: String?
+    /// User action/EOF to the successor's first primed presentation clock.
+    /// Visible in the HUD and hardware accessibility probe for regression
+    /// comparisons; nil before the first episode handoff.
+    private(set) var lastHandoffMilliseconds: Double?
     /// What the viewer picked in the track panel, carried into the next
     /// episode (HEL-66). Nil on a first load — there is nothing to carry.
     private var trackPreference: TrackPreference?
@@ -65,6 +81,7 @@ final class PlaybackController {
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
     @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator()
     @ObservationIgnored private let lifecycleID = UUID()
+    @ObservationIgnored private var handoffStartedAt: TimeInterval?
 
     init() {
         PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
@@ -202,6 +219,12 @@ final class PlaybackController {
                     resumeSeconds = pinnedStart
                 }
             }
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "debug.regressionStartNearEnd"),
+               let ticks = source.runTimeTicks ?? media.runTimeTicks {
+                resumeSeconds = max(Ticks.seconds(ticks) - 45, 0)
+            }
+            #endif
 
             let resolvedExtras = await extras
             let resolvedSegments = await segments
@@ -355,6 +378,10 @@ final class PlaybackController {
                 externalSubtitles: externalTracks
             )
             engine.onFinished = { [weak self] in self?.didFinish = true }
+            engine.onPlaybackStarted = { [weak self, weak engine] in
+                guard let self, let engine, self.engine === engine else { return }
+                self.finishEpisodeHandoff(outcome: "ready")
+            }
             engine.onError = { [weak self, weak engine] message in
                 guard let self, let engine, self.engine === engine else { return }
                 self.handleEngineError(message, engine: engine)
@@ -369,9 +396,15 @@ final class PlaybackController {
                     _ = MACaptionAppearanceAddSelectedLanguage(.user, normalized as CFString)
                 }
             }
+            playbackIdentity = media.id
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
-            nowPlaying.activate(info: playerInfo, itemID: itemId, engine: engine)
+            nowPlaying.activate(
+                info: playerInfo,
+                itemID: itemId,
+                engine: engine,
+                replacingActiveSession: handoffStartedAt != nil
+            )
             let preferredSet = Set(self.preferredSubtitleLanguages.compactMap(
                 SubtitlePreferencesStore.normalizedLanguage
             ))
@@ -437,6 +470,7 @@ final class PlaybackController {
         } catch {
             // This also claims the exactly-once stop report if cancellation
             // landed after the playback session became active.
+            finishEpisodeHandoff(outcome: error is CancellationError ? "cancelled" : "failed")
             _ = beginStop()
             if !(error is CancellationError) {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -450,6 +484,12 @@ final class PlaybackController {
             isForced: stream.isForced == true,
             isHearingImpaired: stream.isHearingImpaired == true
         )
+    }
+
+    func recordPlayerSurface(identity: String) {
+        if playerSurfaceIdentity != identity {
+            playerSurfaceIdentity = identity
+        }
     }
 
     private nonisolated static func selectionCandidate(_ stream: MediaStream) -> TrackSelectionCandidate {
@@ -616,17 +656,20 @@ final class PlaybackController {
         guard !isAdvancing, let next = nextUp, let client else { return }
         isAdvancing = true
         defer { isAdvancing = false }
+        beginEpisodeHandoff(to: next)
         prepareNextIfNeeded(force: true)
         let prepared = await nextPreparationTask?.value
         nextPreparationTask = nil
         guard !isClosed else { return }
         captureTrackPreference()
-        await stop(preservingPreparedNext: true)
+        await stop(preservingPreparedNext: true, preservingPlayerSurface: true)
         guard !isClosed else { return }
+        // The old card describes the item that is now becoming current. Do
+        // not let it reappear over a successor that resumes near its end.
+        nextUp = nil
         didFinish = false
         didReportStop = false
         errorMessage = nil
-        hudLines = []
         // Resume rather than restart: `episodeAfter` walks the series in
         // order, so the next one along can carry a position of its own.
         await start(
@@ -724,7 +767,10 @@ final class PlaybackController {
     /// main actor. The Jellyfin report is returned as an independent task so
     /// neither UI dismissal nor its network latency retains this controller.
     @discardableResult
-    func beginStop(preservingPreparedNext: Bool = false) -> Task<Void, Never>? {
+    func beginStop(
+        preservingPreparedNext: Bool = false,
+        preservingPlayerSurface: Bool = false
+    ) -> Task<Void, Never>? {
         progressTask?.cancel()
         progressTask = nil
         hudTask?.cancel()
@@ -753,12 +799,18 @@ final class PlaybackController {
             engine.onFinished = nil
             engine.onError = nil
             engine.onTrackSelectionChanged = nil
+            engine.onPlaybackStarted = nil
             engine.shutdown()
-            self.engine = nil
+            if !preservingPlayerSurface {
+                self.engine = nil
+            }
         }
         playbackCache.discardCurrent(preservingNext: preservingPreparedNext)
-        nowPlaying.stop()
-        audioSession.deactivate()
+        if !preservingPlayerSurface {
+            finishEpisodeHandoff(outcome: "cancelled")
+            nowPlaying.stop()
+            audioSession.deactivate()
+        }
         os_signpost(
             .end,
             log: PlaybackPerformance.log,
@@ -809,13 +861,20 @@ final class PlaybackController {
         return beginStop()
     }
 
-    private func stop(preservingPreparedNext: Bool) async {
-        let report = beginStop(preservingPreparedNext: preservingPreparedNext)
+    private func stop(
+        preservingPreparedNext: Bool,
+        preservingPlayerSurface: Bool
+    ) async {
+        let report = beginStop(
+            preservingPreparedNext: preservingPreparedNext,
+            preservingPlayerSurface: preservingPlayerSurface
+        )
         await report?.value
     }
 
     private func handleEngineError(_ message: String, engine: SampleBufferPlayerEngine) {
         lastKnownPosition = engine.timePosition
+        finishEpisodeHandoff(outcome: "failed")
         let report = beginStop()
         errorMessage = message
         // beginStop claims reporting ownership before returning, so a later
@@ -973,12 +1032,53 @@ final class PlaybackController {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, let engine = self.engine else { return }
                 engine.refreshVideoPerformanceMetrics()
-                self.hudLines = negotiated + Self.liveHUDLines(
+                var live = Self.liveHUDLines(
                     for: engine,
                     cache: self.playbackCache.current?.metrics
                 )
+                if let milliseconds = self.lastHandoffMilliseconds {
+                    live.insert(String(format: "Handoff: %.0f ms to ready", milliseconds), at: 0)
+                }
+                self.hudLines = negotiated + live
             }
         }
+    }
+
+    private func beginEpisodeHandoff(to next: MediaItem) {
+        guard handoffStartedAt == nil else { return }
+        lastHandoffMilliseconds = nil
+        isTransitionOverlayVisible = true
+        transitionEpisodeTitle = next.name
+        handoffStartedAt = ProcessInfo.processInfo.systemUptime
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Episode Handoff",
+            signpostID: performanceSignpostID,
+            "from=%{public}s to=%{public}s",
+            itemId,
+            next.id
+        )
+    }
+
+    private func finishEpisodeHandoff(outcome: String) {
+        isTransitionOverlayVisible = false
+        transitionEpisodeTitle = nil
+        guard let startedAt = handoffStartedAt else { return }
+        handoffStartedAt = nil
+        let milliseconds = max(ProcessInfo.processInfo.systemUptime - startedAt, 0) * 1_000
+        if outcome == "ready" {
+            lastHandoffMilliseconds = milliseconds
+        }
+        os_signpost(
+            .end,
+            log: PlaybackPerformance.log,
+            name: "Episode Handoff",
+            signpostID: performanceSignpostID,
+            "outcome=%{public}s durationMs=%{public}.0f",
+            outcome,
+            milliseconds
+        )
     }
 
     private static func liveHUDLines(
@@ -1093,6 +1193,9 @@ struct VideoPlayerView: View {
             } else if let engine = controller.engine {
                 CustomPlayerView(
                     engine: engine,
+                    playbackIdentity: controller.playbackIdentity,
+                    playerSurfaceIdentity: controller.playerSurfaceIdentity,
+                    handoffMilliseconds: controller.lastHandoffMilliseconds,
                     info: fallbackInfo,
                     onDismiss: { dismiss() },
                     onPanelToggle: { panelOpen = $0 },
@@ -1106,17 +1209,27 @@ struct VideoPlayerView: View {
                     subtitleSearch: controller.subtitleSearch
                 ) {
                     SampleBufferVideoSurface(engine: engine) { displayLayer in
+                        let identity = String(ObjectIdentifier(displayLayer).hashValue)
+                        Task { @MainActor in
+                            controller.recordPlayerSurface(identity: identity)
+                        }
                         pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
                     }
                 }
-            } else if controller.isAdvancing {
-                episodeTransition
             } else {
                 LoadingView()
             }
 
             if !controller.hudLines.isEmpty, !panelOpen {
                 playbackHUD
+            }
+
+            // Keep CustomPlayerView and, critically, its UIKit-backed
+            // AVSampleBufferDisplayLayer mounted while the old renderer set
+            // retires and the successor attaches. The cover therefore never
+            // flashes back to its presenting view between episodes.
+            if controller.isTransitionOverlayVisible, controller.errorMessage == nil {
+                episodeTransition
             }
 
             #if DEBUG
@@ -1164,7 +1277,18 @@ struct VideoPlayerView: View {
             }
         }
         .onChange(of: controller.engine?.displayMatchRequest) { _, request in
-            applyDisplayMatch(request)
+            // A shutting-down engine temporarily has no successor criteria.
+            // Preserve the current display mode until the next engine can
+            // state its own request, avoiding an unnecessary HDMI mode round
+            // trip at every episode boundary.
+            if request != nil || !controller.isAdvancing {
+                applyDisplayMatch(request)
+            }
+        }
+        .onChange(of: controller.errorMessage) { _, message in
+            if message != nil {
+                applyDisplayMatch(nil)
+            }
         }
         .onChange(of: controller.engine?.isPaused) { _, _ in
             pictureInPicture.invalidatePlaybackState()
@@ -1249,7 +1373,7 @@ struct VideoPlayerView: View {
             Text("Starting next episode")
                 .font(.headline)
                 .foregroundStyle(.white)
-            if let title = controller.nextUp?.name, !title.isEmpty {
+            if let title = controller.transitionEpisodeTitle, !title.isEmpty {
                 Text(title)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.7))
@@ -1257,7 +1381,9 @@ struct VideoPlayerView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Starting next episode")
-        .focusable()
+        // Focus stays on the persistent video surface so the transition
+        // cannot create a focusless frame or steal the Siri Remote.
+        .allowsHitTesting(false)
     }
 
     private var playbackHUD: some View {

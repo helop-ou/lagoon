@@ -179,8 +179,13 @@ final class NowPlayingCoordinator {
     private var languageActions: [String: (PlayerTrack.Kind, Int)] = [:]
     private var artworkTask: Task<Void, Never>?
 
-    func activate(info: PlayerItemInfo, itemID: String, engine: any PlayerEngine) {
-        stop()
+    func activate(
+        info: PlayerItemInfo,
+        itemID: String,
+        engine: any PlayerEngine,
+        replacingActiveSession: Bool = false
+    ) {
+        reset(publishStopped: !replacingActiveSession)
         self.engine = engine
         nowPlayingInfo = [
             MPMediaItemPropertyTitle: info.title,
@@ -227,6 +232,14 @@ final class NowPlayingCoordinator {
     }
 
     func stop() {
+        reset(publishStopped: true)
+    }
+
+    /// Removes ownership from the previous engine. During an episode
+    /// handoff the system keeps displaying the outgoing item until the new
+    /// metadata is published a few lines later; reporting `.stopped` in that
+    /// gap makes Control Center and HDMI receivers visibly flicker.
+    private func reset(publishStopped: Bool) {
         artworkTask?.cancel()
         artworkTask = nil
         for (command, target) in commandTargets {
@@ -237,9 +250,11 @@ final class NowPlayingCoordinator {
         languageActions.removeAll()
         engine = nil
         nowPlayingInfo.removeAll()
-        let center = MPNowPlayingInfoCenter.default()
-        center.playbackState = .stopped
-        center.nowPlayingInfo = nil
+        if publishStopped {
+            let center = MPNowPlayingInfoCenter.default()
+            center.playbackState = .stopped
+            center.nowPlayingInfo = nil
+        }
     }
 
     private func registerCommands() {

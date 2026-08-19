@@ -79,6 +79,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored var onFinished: (() -> Void)?
     @ObservationIgnored var onError: ((String) -> Void)?
     @ObservationIgnored var onTrackSelectionChanged: (() -> Void)?
+    /// Fires once the initial audio/video cushion is enqueued and the media
+    /// clock is anchored. Episode handoff metrics use this rather than stream
+    /// discovery so they measure user-visible readiness, not merely an open.
+    @ObservationIgnored var onPlaybackStarted: (() -> Void)?
 
     // MARK: Cross-thread state
 
@@ -113,6 +117,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var finishObserver: Any?
     @ObservationIgnored private var didFinish = false
+    @ObservationIgnored private var didNotifyPlaybackStarted = false
     @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
     @ObservationIgnored private var stallSignpostActive = false
     @ObservationIgnored private var shutdownRequested = false
@@ -585,6 +590,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         kickPumps()
         rearmBench(at: time.seconds)
+        if !didNotifyPlaybackStarted {
+            didNotifyPlaybackStarted = true
+            onPlaybackStarted?()
+        }
         os_signpost(
             .event,
             log: PlaybackPerformance.log,

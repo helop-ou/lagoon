@@ -216,6 +216,50 @@ struct MainTabView: View {
             return
         }
         if regressionRun,
+           UserDefaults.standard.bool(forKey: "debug.regressionFindEpisodeWithSuccessor") {
+            guard let page = try? await session.client.items(
+                includeTypes: [.episode],
+                sortBy: "SeriesSortName,ParentIndexNumber,IndexNumber",
+                limit: 100
+            ) else {
+                print("RegressionResolve failed episode handoff library scan")
+                regressionResolution = "error:episode handoff library scan failed"
+                return
+            }
+            // Select the earliest of at least two catalogue episodes in one
+            // series. This keeps resolution to one list request plus usually
+            // one PlaybackInfo request; calling `episodeAfter` for every item
+            // made a fixture-less public demo slow enough for XCTest's tvOS
+            // runner watchdog. The actual player still exercises that API.
+            let candidates = Dictionary(
+                grouping: page.items.filter { $0.seriesId != nil },
+                by: { $0.seriesId! }
+            ).values.compactMap { episodes -> MediaItem? in
+                guard episodes.count > 1 else { return nil }
+                return episodes.min { lhs, rhs in
+                    let lhsSeason = lhs.parentIndexNumber ?? Int.max
+                    let rhsSeason = rhs.parentIndexNumber ?? Int.max
+                    if lhsSeason != rhsSeason { return lhsSeason < rhsSeason }
+                    return (lhs.indexNumber ?? Int.max) < (rhs.indexNumber ?? Int.max)
+                }
+            }
+            for episode in candidates.prefix(20) {
+                guard let info = try? await session.client.playbackInfo(itemId: episode.id),
+                      let source = info.mediaSources.first,
+                      (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
+                    continue
+                }
+                print("RegressionResolve handoff title=\"\(episode.name ?? "?")\" id=\(episode.id)")
+                lifecycleBenchmarkMedia = episode
+                regressionResolution = "resolved"
+                playerItem = PlayerItem(media: episode, startFromBeginning: true)
+                return
+            }
+            print("RegressionResolve no playable episode with a successor")
+            regressionResolution = "missing:playable episode with successor"
+            return
+        }
+        if regressionRun,
            UserDefaults.standard.bool(forKey: "debug.regressionFindPlayable") {
             guard let page = try? await session.client.items(
                 includeTypes: [.movie, .episode],

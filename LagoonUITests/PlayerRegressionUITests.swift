@@ -115,6 +115,70 @@ final class PlayerRegressionUITests: XCTestCase {
         )
     }
 
+    func testEpisodeHandoffKeepsSurfaceMountedAndStartsSuccessor() throws {
+        let app = launchPlayer(
+            title: "episode-handoff-regression",
+            extraArguments: [
+                "-debug.regressionFindEpisodeWithSuccessor", "YES",
+                "-debug.regressionStartNearEnd", "YES",
+                "-playback.autoplayMode", "card",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let first = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && !$0.string("item").isEmpty
+                && !$0.string("surface").isEmpty
+        }
+        let firstItemID = first.string("item")
+        let firstSurfaceID = first.string("surface")
+
+        // With no server Outro marker, the production card appears for the
+        // final 15 seconds. Select drives the exact viewer-facing autoplay
+        // path rather than calling a controller test hook.
+        waitForState(in: app, timeout: 45) { $0.int("nextUp") == 1 }
+        remote.press(.select)
+
+        let deadline = Date().addingTimeInterval(45)
+        var surfaceDisappeared = false
+        var successor = RegressionState("")
+        repeat {
+            let probe = app.descendants(matching: .any)["player.regression.state"]
+            if !probe.exists {
+                surfaceDisappeared = true
+            } else {
+                successor = RegressionState(probe.value as? String ?? "")
+                if successor.string("item") != firstItemID,
+                   successor.int("ready") == 1,
+                   successor.int("buffering") == 0,
+                   successor.double("handoffMs") >= 0 {
+                    break
+                }
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+
+        XCTAssertNotEqual(successor.string("item"), firstItemID, "Successor episode never replaced the first")
+        XCTAssertFalse(surfaceDisappeared, "The player surface disappeared during episode handoff")
+        XCTAssertEqual(
+            successor.string("surface"),
+            firstSurfaceID,
+            "Autoplay replaced the AVSampleBufferDisplayLayer instead of reusing it"
+        )
+        XCTAssertGreaterThanOrEqual(successor.double("handoffMs"), 0)
+        XCTAssertLessThan(
+            successor.double("handoffMs"),
+            20_000,
+            "Prepared episode handoff exceeded the hardware regression ceiling"
+        )
+        XCTAssertEqual(successor.int("engines"), 1)
+        XCTAssertEqual(successor.int("controllers"), 1)
+        XCTAssertEqual(successor.int("demux"), 1)
+        XCTAssertEqual(successor.int("renderers"), 1)
+        XCTAssertEqual(successor.int("unclean"), 0)
+    }
+
     func testTvOSSettingsHierarchyPickersAndHomeRowsNavigation() {
         let app = XCUIApplication()
         app.launchArguments = [

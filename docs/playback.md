@@ -741,15 +741,25 @@ reflects the new position immediately.
   (default), ask-every-time, off. The countdown is 5 s, the same as
   `SkipMode`'s — two countdowns in one player running at different speeds
   read as a bug.
-  - HEL-86 keeps the full-screen player mounted through that handoff. Within
-    the last 120 s, the controller negotiates the next PlaybackInfo and warms
-    its first 8 MiB in a second bounded scope. Advance first reports the old
-    session stopped and retires its single engine, then promotes the prepared
-    URL/cache and starts the successor without returning to the presenting
-    screen. The brief retirement interval is an explicit "Starting next
-    episode" state rather than the generic loading screen. There are never two
-    demux/render pipelines alive together; seamless here means a stable player
-    surface and warm bytes, not overlapping decoders.
+  - HEL-86 keeps both the full-screen player and its UIKit-backed
+    `AVSampleBufferDisplayLayer` mounted through that handoff. Within the last
+    120 s, the controller negotiates the next PlaybackInfo and warms its first
+    8 MiB in a second bounded scope. Advance first reports the old session
+    stopped and retires its demuxer/render synchronizer; only after the
+    lifecycle counters reach zero does `SampleBufferVideoSurface.updateUIView`
+    attach the successor engine to the same display layer. The old final frame
+    remains beneath a non-focusable "Starting next episode" overlay instead of
+    flashing the presenting screen. PiP swaps its transport delegate while
+    retaining the same content source, and audio-session, Now Playing, and
+    tvOS display-match ownership remain active across the boundary. There are
+    never two demux/render pipelines alive together; seamless here means a
+    persistent surface and warm bytes, not overlapping decoders.
+  - An `Episode Handoff` signpost measures viewer action/automatic advance to
+    the successor's primed presentation clock. The same duration appears in
+    the Playback HUD and the launch-gated UI-test probe. The hardware journey
+    starts a real episode near its end, selects the production Up Next card,
+    asserts the surface never disappears, and requires one engine, demuxer,
+    and renderer set after the successor becomes ready.
   - **Never resolve the next episode from `Shows/NextUp`.** That endpoint
     returns the episode *in progress* when there is one — `enableResumable`
     defaults to `true`, per the server's own OpenAPI document — and at the

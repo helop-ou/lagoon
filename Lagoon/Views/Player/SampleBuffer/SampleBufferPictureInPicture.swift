@@ -19,7 +19,12 @@ final class SampleBufferPictureInPicture: NSObject {
     @ObservationIgnored private var possibilityObservation: NSKeyValueObservation?
 
     func attach(displayLayer: AVSampleBufferDisplayLayer, engine: any PlayerEngine) {
-        if self.engine === engine, controller?.contentSource?.sampleBufferDisplayLayer === displayLayer {
+        if controller?.contentSource?.sampleBufferDisplayLayer === displayLayer {
+            // Episode handoff keeps the same display layer. Swap only the
+            // transport delegate target so active PiP is not torn down and
+            // recreated around the new engine.
+            self.engine = engine
+            invalidatePlaybackState()
             return
         }
         detach()
