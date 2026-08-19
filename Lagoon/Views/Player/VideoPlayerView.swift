@@ -54,6 +54,12 @@ final class PlaybackController {
     private var mediaSourceId = ""
     private var playSessionId: String?
     private var playMethod: PlayMethod = .directPlay
+
+    var activePlayMethod: PlayMethod { playMethod }
+
+    var isExperimentalPlaybackCacheActive: Bool {
+        playbackCache.current != nil
+    }
     private var progressTask: Task<Void, Never>?
     private var didReportStop = false
     private var playbackSessionActive = false
@@ -90,7 +96,9 @@ final class PlaybackController {
     private var missingSubtitleMode: MissingSubtitleMode = .ask
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
-    @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator()
+    @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator(
+        isEnabled: PlaybackBufferPolicy.customIOEnabled
+    )
     @ObservationIgnored private let lifecycleID = UUID()
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
     #if DEBUG
@@ -488,7 +496,6 @@ final class PlaybackController {
             guard self.engine === engine, playbackSessionActive, !didReportStop else {
                 return
             }
-            playbackCache.prefetchCurrent()
             startProgressLoop()
             startHUD(source: source, method: method)
             resolveNextUp(after: media, client: client)
@@ -1250,6 +1257,8 @@ struct VideoPlayerView: View {
                     playbackIdentity: controller.playbackIdentity,
                     playerSurfaceIdentity: controller.playerSurfaceIdentity,
                     handoffMilliseconds: controller.lastHandoffMilliseconds,
+                    playbackMethod: controller.activePlayMethod,
+                    isExperimentalPlaybackCacheActive: controller.isExperimentalPlaybackCacheActive,
                     info: fallbackInfo,
                     onDismiss: { dismiss() },
                     onPanelToggle: { panelOpen = $0 },

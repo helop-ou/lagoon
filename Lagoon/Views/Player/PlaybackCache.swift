@@ -1,5 +1,23 @@
 import Foundation
 
+/// The custom FFmpeg AVIO cache is still an experiment, not a production
+/// transport. Native libavformat networking remains the release default so a
+/// cache/range-server incompatibility can never prevent playback. DEBUG runs
+/// opt in explicitly and carry dedicated end-to-end coverage.
+nonisolated enum PlaybackBufferPolicy {
+    static var customIOEnabled: Bool {
+        customIOEnabled(defaults: .standard)
+    }
+
+    static func customIOEnabled(defaults: UserDefaults) -> Bool {
+        #if DEBUG
+        defaults.bool(forKey: "debug.experimentalPlaybackCache")
+        #else
+        false
+        #endif
+    }
+}
+
 /// A half-open byte interval stored in a playback cache file.
 nonisolated struct PlaybackByteRange: Equatable, Sendable {
     let lowerBound: Int64
@@ -1199,11 +1217,15 @@ nonisolated final class PlaybackCacheSession: @unchecked Sendable {
 final class PlaybackCacheCoordinator {
     private let rootDirectory: URL
     private let byteLimit: Int64
+    private let isEnabled: Bool
     private(set) var current: PlaybackCacheSession?
     private(set) var next: PlaybackCacheSession?
-    private var currentPrefetchTask: Task<Void, Never>?
 
-    init(rootDirectory: URL? = nil, byteLimit: Int64? = nil) {
+    init(
+        rootDirectory: URL? = nil,
+        byteLimit: Int64? = nil,
+        isEnabled: Bool
+    ) {
         let caches = rootDirectory
             ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
@@ -1215,6 +1237,7 @@ final class PlaybackCacheCoordinator {
         )
         let available = (volumeAttributes?[.systemFreeSize] as? NSNumber)?.int64Value
         self.byteLimit = byteLimit ?? Self.recommendedByteLimit(availableBytes: available)
+        self.isEnabled = isEnabled
         removeStaleScopes()
     }
 
@@ -1225,24 +1248,14 @@ final class PlaybackCacheCoordinator {
         expectedLength: Int64?
     ) -> PlaybackCacheSession? {
         if let next, next.itemID == itemID, next.sourceURL == url {
-            currentPrefetchTask?.cancel()
             current?.cancelAndRemove()
             current = next
             self.next = nil
             return next
         }
-        currentPrefetchTask?.cancel()
         current?.cancelAndRemove()
         current = makeScope(itemID: itemID, url: url, method: method, expectedLength: expectedLength)
         return current
-    }
-
-    func prefetchCurrent() {
-        currentPrefetchTask?.cancel()
-        guard let current else { return }
-        currentPrefetchTask = Task {
-            await current.prefetch(byteCount: current.prefetchByteCount)
-        }
     }
 
     func stageNext(
@@ -1264,8 +1277,6 @@ final class PlaybackCacheCoordinator {
     }
 
     func discardCurrent(preservingNext: Bool) {
-        currentPrefetchTask?.cancel()
-        currentPrefetchTask = nil
         current?.cancelAndRemove()
         current = nil
         if !preservingNext {
@@ -1283,7 +1294,7 @@ final class PlaybackCacheCoordinator {
         method: PlayMethod,
         expectedLength: Int64?
     ) -> PlaybackCacheSession? {
-        guard byteLimit > 0 else { return nil }
+        guard isEnabled, byteLimit > 0 else { return nil }
         let directory = rootDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         switch method {
         case .directPlay, .directStream:

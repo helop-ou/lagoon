@@ -5,6 +5,7 @@ import Libavutil
 nonisolated private let avSeekSize: Int32 = 0x10000
 nonisolated private let avSeekForce: Int32 = 0x20000
 nonisolated private let avIOErrorEOF: Int32 = -541_478_725
+nonisolated private let avIOErrorIO: Int32 = -5
 
 /// Bridges FFmpeg's synchronous AVIO callbacks to Lagoon's bounded sparse
 /// range cache. The object is retained by FFmpegDemuxer for longer than the
@@ -64,7 +65,12 @@ nonisolated final class FFmpegCachedIO {
             position += Int64(data.count)
             return Int32(data.count)
         } catch {
-            return avIOErrorEOF
+            // EOF means a successfully-read resource ended. Turning a range,
+            // authentication, connectivity, or storage failure into EOF made
+            // libavformat declare a truncated movie complete and left the UI
+            // looking like permanent buffering. Preserve it as an I/O error
+            // so the demuxer's bounded retry/error path remains authoritative.
+            return avIOErrorIO
         }
     }
 

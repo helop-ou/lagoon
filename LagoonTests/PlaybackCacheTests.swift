@@ -4,6 +4,20 @@ import Testing
 
 @Suite("Playback cache", .serialized)
 struct PlaybackCacheTests {
+    @Test func customTransportRequiresExplicitDebugOptIn() {
+        let suiteName = "PlaybackCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        #expect(!PlaybackBufferPolicy.customIOEnabled(defaults: defaults))
+        defaults.set(true, forKey: "debug.experimentalPlaybackCache")
+        #if DEBUG
+        #expect(PlaybackBufferPolicy.customIOEnabled(defaults: defaults))
+        #else
+        #expect(!PlaybackBufferPolicy.customIOEnabled(defaults: defaults))
+        #endif
+    }
+
     @Test func adaptiveCapacityPreservesFreeSpaceAndHonorsMaximum() {
         let mebibyte: Int64 = 1_024 * 1_024
 
@@ -292,7 +306,7 @@ struct PlaybackCacheTests {
     @Test func coordinatorPromotesOnlyThePreparedSuccessor() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let coordinator = PlaybackCacheCoordinator(rootDirectory: root)
+        let coordinator = PlaybackCacheCoordinator(rootDirectory: root, isEnabled: true)
         let current = coordinator.activate(
             itemID: "episode-1",
             url: URL(string: "https://media.test/one.mkv")!,
@@ -328,7 +342,7 @@ struct PlaybackCacheTests {
     @Test func coordinatorCreatesAndPromotesTranscodeResourceCaches() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let coordinator = PlaybackCacheCoordinator(rootDirectory: root)
+        let coordinator = PlaybackCacheCoordinator(rootDirectory: root, isEnabled: true)
         let hlsURL = URL(string: "https://media.test/Videos/id/master.m3u8?token=one")!
 
         let staged = coordinator.stageNext(
@@ -350,6 +364,29 @@ struct PlaybackCacheTests {
         #expect(coordinator.current === staged)
         #expect(coordinator.next == nil)
         coordinator.discardAll()
+    }
+
+    @MainActor
+    @Test func disabledCoordinatorCannotReplaceNativePlaybackTransport() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let coordinator = PlaybackCacheCoordinator(rootDirectory: root, isEnabled: false)
+        let url = URL(string: "https://media.test/movie.mkv")!
+
+        #expect(coordinator.activate(
+            itemID: "movie",
+            url: url,
+            method: .directPlay,
+            expectedLength: 1_024
+        ) == nil)
+        #expect(coordinator.stageNext(
+            itemID: "next",
+            url: url,
+            method: .transcode,
+            expectedLength: nil
+        ) == nil)
+        #expect(coordinator.current == nil)
+        #expect(coordinator.next == nil)
     }
 }
 

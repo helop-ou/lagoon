@@ -195,6 +195,43 @@ struct PlayerSystemIntegrationTests {
         ) == .reprime)
     }
 
+    @Test func playbackURLResolutionPreservesTheNegotiatedTransportMatrix() throws {
+        let client = JellyfinClient(deviceId: "stream-resolution-test")
+        client.configure(serverURL: URL(string: "https://media.test/jellyfin")!)
+        client.activateSession(token: "token", userId: "user")
+
+        let directPlay = try mediaSource(#"""
+        {
+          "Id":"direct", "Container":"mkv",
+          "SupportsDirectPlay":true, "SupportsDirectStream":true
+        }
+        """#)
+        let directPlayResult = try client.streamURL(itemId: "item", source: directPlay)
+        #expect(directPlayResult.method == .directPlay)
+        #expect(directPlayResult.url.path == "/jellyfin/Videos/item/stream")
+
+        let directStream = try mediaSource(#"""
+        {
+          "Id":"remux", "Container":"mov,mp4,m4a",
+          "SupportsDirectPlay":false, "SupportsDirectStream":true
+        }
+        """#)
+        let directStreamResult = try client.streamURL(itemId: "item", source: directStream)
+        #expect(directStreamResult.method == .directStream)
+        #expect(directStreamResult.url.path == "/jellyfin/Videos/item/stream.mov")
+
+        let transcode = try mediaSource(#"""
+        {
+          "Id":"hls", "SupportsDirectPlay":false, "SupportsDirectStream":false,
+          "SupportsTranscoding":true,
+          "TranscodingUrl":"/Videos/item/master.m3u8?PlaySessionId=session"
+        }
+        """#)
+        let transcodeResult = try client.streamURL(itemId: "item", source: transcode)
+        #expect(transcodeResult.method == .transcode)
+        #expect(transcodeResult.url.path == "/Videos/item/master.m3u8")
+    }
+
     @Test func episodeHandoffWaitsForTheSpecificOutgoingPipeline() async {
         let outgoing = UUID()
         let unrelated = UUID()
@@ -414,6 +451,10 @@ struct PlayerSystemIntegrationTests {
 
     private func playbackInfo(_ json: String) throws -> PlaybackInfoResponse {
         try JellyfinClient.decoder.decode(PlaybackInfoResponse.self, from: Data(json.utf8))
+    }
+
+    private func mediaSource(_ json: String) throws -> MediaSource {
+        try JellyfinClient.decoder.decode(MediaSource.self, from: Data(json.utf8))
     }
 }
 

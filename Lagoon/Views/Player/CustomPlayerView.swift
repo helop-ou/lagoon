@@ -30,6 +30,10 @@ struct CustomPlayerView<Surface: View>: View {
     /// Most recent successor-ready latency, exposed only through the launch-
     /// gated hardware probe and the optional performance HUD.
     var handoffMilliseconds: Double? = nil
+    /// Negotiated Jellyfin mode and transport ownership are carried into the
+    /// launch-gated probe so regressions prove the intended path actually ran.
+    var playbackMethod: PlayMethod = .directPlay
+    var isExperimentalPlaybackCacheActive = false
     let info: PlayerItemInfo
     let onDismiss: () -> Void
     /// Lets the host react to the panel opening (the debug HUD hides so
@@ -1141,6 +1145,8 @@ struct CustomPlayerView<Surface: View>: View {
         return [
             "item=\(playbackIdentity)",
             "surface=\(playerSurfaceIdentity)",
+            "method=\(playbackMethod.rawValue)",
+            "cache=\(isExperimentalPlaybackCacheActive ? 1 : 0)",
             String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
             "nextUp=\(showsNextUp ? 1 : 0)",
             "ready=\(engine.duration > 0 ? 1 : 0)",

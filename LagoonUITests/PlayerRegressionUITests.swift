@@ -106,7 +106,13 @@ final class PlayerRegressionUITests: XCTestCase {
         let app = launchPlayer(title: "Pilot", series: "Young Sheldon")
         try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 45) {
-            $0.int("ready") == 1 && $0.int("subtitleCount") > 0 && $0.int("subtitle") > 0
+            $0.int("ready") == 1 && $0.int("subtitleCount") > 0
+        }
+        // The account/system caption default is intentionally user-owned and
+        // may be Off. Exercise the viewer action this test is meant to prove:
+        // explicitly activate the first real track before waiting for a cue.
+        if state(in: app).int("subtitle") == 0 {
+            selectFirstSubtitle(in: app)
         }
         waitForState(in: app, timeout: 60) { $0.int("subtitleVisible") == 1 }
         XCTAssertTrue(
@@ -136,6 +142,8 @@ final class PlayerRegressionUITests: XCTestCase {
         }
         let firstItemID = first.string("item")
         let firstSurfaceID = first.string("surface")
+        XCTAssertEqual(first.string("method"), "DirectPlay")
+        XCTAssertEqual(first.int("cache"), 0)
 
         // With no server Outro marker, the production card appears for the
         // final 15 seconds. Select drives the exact viewer-facing autoplay
@@ -180,6 +188,8 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(successor.int("demux"), 1)
         XCTAssertEqual(successor.int("renderers"), 1)
         XCTAssertEqual(successor.int("unclean"), 0)
+        XCTAssertEqual(successor.string("method"), "DirectPlay")
+        XCTAssertEqual(successor.int("cache"), 0)
 
         // First-frame readiness is not enough: the reported regression
         // starts after autoplay, then repeatedly starves without recovering.
@@ -218,6 +228,7 @@ final class PlayerRegressionUITests: XCTestCase {
             title: "cached-hls-regression",
             extraArguments: [
                 "-debug.regressionFindPlayable", "YES",
+                "-debug.experimentalPlaybackCache", "YES",
                 "-playback.autoplayMode", "off",
             ]
         )
@@ -230,6 +241,8 @@ final class PlayerRegressionUITests: XCTestCase {
         let startTime = initial.double("time")
         let startStalls = initial.int("stalls")
         let startMemory = initial.double("memoryMB")
+        XCTAssertEqual(initial.string("method"), "Transcode")
+        XCTAssertEqual(initial.int("cache"), 1)
 
         // Jellyfin's simulator rendition uses short fMP4 segments. Fifteen
         // seconds crosses several FFmpeg HLS open/close cycles—the old cached
@@ -237,6 +250,107 @@ final class PlayerRegressionUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 15)
         let sustained = state(in: app)
         XCTAssertGreaterThan(sustained.double("time"), startTime + 9)
+        XCTAssertEqual(sustained.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(sustained.int("stalls") - startStalls, 1)
+        XCTAssertEqual(sustained.int("engines"), 1)
+        XCTAssertEqual(sustained.int("demux"), 1)
+        XCTAssertEqual(sustained.int("renderers"), 1)
+        XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
+    }
+
+    func testNativeHLSPlaybackStartsAndCrossesSegmentBoundaries() throws {
+        let app = launchPlayer(
+            title: "native-hls-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("time") >= 0
+        }
+        let startTime = initial.double("time")
+        let startStalls = initial.int("stalls")
+        let startMemory = initial.double("memoryMB")
+        XCTAssertEqual(initial.string("method"), "Transcode")
+        XCTAssertEqual(initial.int("cache"), 0)
+
+        // This is the release transport path: libavformat owns HLS network
+        // I/O directly and no experimental range cache is permitted to sit
+        // between Jellyfin and the demuxer.
+        Thread.sleep(forTimeInterval: 20)
+        let sustained = state(in: app)
+        XCTAssertGreaterThan(sustained.double("time"), startTime + 14)
+        XCTAssertEqual(sustained.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(sustained.int("stalls") - startStalls, 1)
+        XCTAssertEqual(sustained.int("engines"), 1)
+        XCTAssertEqual(sustained.int("demux"), 1)
+        XCTAssertEqual(sustained.int("renderers"), 1)
+        XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
+    }
+
+    func testNativeDirectH264PlaybackStartsAndSustains() throws {
+        let app = launchPlayer(
+            title: "native-direct-regression",
+            simulatorTranscode: false,
+            extraArguments: [
+                "-debug.regressionFindEpisodeWithSuccessor", "YES",
+                "-debug.regressionRequireDirectH264Successor", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("time") >= 0
+        }
+        let startTime = initial.double("time")
+        let startStalls = initial.int("stalls")
+        let startMemory = initial.double("memoryMB")
+        XCTAssertEqual(initial.string("method"), "DirectPlay")
+        XCTAssertEqual(initial.int("cache"), 0)
+
+        Thread.sleep(forTimeInterval: 20)
+        let sustained = state(in: app)
+        XCTAssertGreaterThan(sustained.double("time"), startTime + 14)
+        XCTAssertEqual(sustained.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(sustained.int("stalls") - startStalls, 1)
+        XCTAssertEqual(sustained.int("engines"), 1)
+        XCTAssertEqual(sustained.int("demux"), 1)
+        XCTAssertEqual(sustained.int("renderers"), 1)
+        XCTAssertEqual(sustained.int("unclean"), 0)
+        XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
+    }
+
+    func testNativeDirectStreamPlaybackStartsAndSustainsWhenFixtureExists() throws {
+        let app = launchPlayer(
+            title: "native-direct-stream-regression",
+            simulatorTranscode: false,
+            extraArguments: [
+                "-debug.regressionFindDirectStream", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.string("method") == "DirectStream"
+        }
+        let startTime = initial.double("time")
+        let startStalls = initial.int("stalls")
+        let startMemory = initial.double("memoryMB")
+        XCTAssertEqual(initial.int("cache"), 0)
+
+        Thread.sleep(forTimeInterval: 20)
+        let sustained = state(in: app)
+        XCTAssertGreaterThan(sustained.double("time"), startTime + 14)
         XCTAssertEqual(sustained.int("buffering"), 0)
         XCTAssertLessThanOrEqual(sustained.int("stalls") - startStalls, 1)
         XCTAssertEqual(sustained.int("engines"), 1)
@@ -1166,6 +1280,22 @@ final class PlayerRegressionUITests: XCTestCase {
                 && $0.int("subtitle") == 1
                 && $0.double("time") > beforeSeek + 5
         }
+    }
+
+    private func selectFirstSubtitle(in app: XCUIApplication) {
+        remote.press(.down)
+        waitForState(in: app, timeout: 4) { $0.int("panel") == 1 }
+        waitForPanelReveal()
+        moveRight(toTab: "subtitles", in: app)
+        remote.press(.down) // Search
+        remote.press(.down) // language
+        remote.press(.down) // Off
+        remote.press(.down) // first real subtitle
+        waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-1" }
+        remote.press(.select)
+        waitForState(in: app, timeout: 8) { $0.int("subtitle") == 1 }
+        remote.press(.menu)
+        waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
     }
 
     private func launchPlayer(

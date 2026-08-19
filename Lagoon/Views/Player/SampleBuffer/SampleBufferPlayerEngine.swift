@@ -527,13 +527,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let removals = DispatchGroup()
         if let video {
             removals.enter()
-            synchronizer.removeRenderer(video, at: CMTime(seconds: -1, preferredTimescale: 1)) { _ in
+            // Apple's contract names invalid time as the explicit
+            // immediate-removal sentinel. Avoid manufacturing a negative
+            // timeline value and wait for the completion before declaring
+            // the renderer retired.
+            synchronizer.removeRenderer(video, at: .invalid) { _ in
                 removals.leave()
             }
         }
         if let audio {
             removals.enter()
-            synchronizer.removeRenderer(audio, at: CMTime(seconds: -1, preferredTimescale: 1)) { _ in
+            synchronizer.removeRenderer(audio, at: .invalid) { _ in
                 removals.leave()
             }
         }

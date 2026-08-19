@@ -257,7 +257,11 @@ composition cost is more representative than Simulator timing.
   `requestMediaDataWhenReady`; state and transport live on the main actor.
   Independent video/audio high-water marks apply hysteretic backpressure and
   wake the producer when consumers cross their low-water marks, so a full
-  queue blocks without polling or arbitrary sleeps.
+  queue blocks without polling or arbitrary sleeps. Every renderer data
+  request is paired with `stopRequestingMediaData` before release. Teardown
+  removes each renderer asynchronously at `.invalid` (Apple's immediate-
+  removal sentinel) and waits for both completion callbacks before the next
+  episode can attach a renderer set.
 - **Seeks and clock starts** stop the clock, serialize renderer flushes with
   enqueueing, reset queues, use `avformat_seek_file` against the selected
   video stream (with `av_seek_frame` only as a demuxer compatibility
@@ -540,14 +544,30 @@ media-buffer releases or C decoder destruction. `Sessions/Playing/Stopped`
 still reports exactly once from the controller after the engine position is
 captured; network reporting never gates UI dismissal.
 
-Direct-play, direct-stream, and transcoded HLS media now pass through a
-bounded sparse range cache (HEL-86) before libavformat. Direct files use one
-custom `AVIOContext`. For HLS, `AVFormatContext.io_open` routes immutable media
-resources through custom contexts while `.m3u8` playlists remain on FFmpeg's
-native path; Jellyfin can update those manifests while a transcode is still
-being produced, so persisting them would risk stale-playlist stalls. Cache
-misses become authenticated HTTP `Range` requests and hits read discardable
-files under `Library/Caches/Lagoon/Playback`.
+Release playback uses libavformat's native network I/O for direct-play,
+direct-stream, and transcoded HLS media (HEL-86). The sparse range-cache
+transport is quarantined behind the DEBUG-only
+`-debug.experimentalPlaybackCache YES` launch argument. A custom
+`AVIOContext` is authoritative once attached: it cannot transparently hand a
+failed midstream read back to libavformat. The initial implementation also
+started a whole-current-item prefetch before the first frame. URLSession task
+priority is only a scheduling hint, so that background request could compete
+with or serialize ahead of the demuxer's startup request on a real server.
+Together those properties made an optional optimization capable of turning
+all playback into permanent buffering. Production must remain on the proven
+native transport until the experiment has physical-device fault-injection and
+server-compatibility coverage.
+
+The experiment remains available for controlled development. Direct files use
+one custom `AVIOContext`. For HLS, `AVFormatContext.io_open` routes immutable
+media resources through custom contexts while `.m3u8` playlists remain on
+FFmpeg's native path; Jellyfin can update those manifests while a transcode is
+still being produced, so persisting them would risk stale-playlist stalls.
+Cache misses become authenticated HTTP `Range` requests and hits read
+discardable files under `Library/Caches/Lagoon/Playback`. A failed cache read
+returns an I/O error, never EOF: EOF is reserved for a successfully read
+resource ending, while connectivity/authentication/storage failures must enter
+the demuxer's bounded error path instead of masquerading as a complete movie.
 
 Each item has an aggregate cap of at most 512 MiB. The coordinator preserves a
 256 MiB volume reserve and uses at most one quarter of the remaining available
@@ -566,17 +586,17 @@ context; allowing reuse can therefore reinterpret that custom context as HTTP
 state and abort in `hls.c`. Lagoon's shared URLSession still reuses its own
 connections, so this safety boundary does not create one session per segment.
 
-The active item prefetches at low URLSession priority up to the cap while
-FFmpeg's foreground misses use high priority. A staged next episode warms only
-8 MiB of the selected HLS media path or direct file, enough for probing and the
-first-frame cushion without downloading an unanswered Up Next choice. When a
-server ignores Range, the streaming delegate discards an unrequested prefix
-and retains only the bounded requested window; later reads remain correct
-without materializing a whole movie in memory. Reaching the cap triggers HLS
-LRU eviction or stops new direct-file writes, while playback continues from
-the network. The debug Playback HUD reports cached MiB, hit rate, request
-count, average request latency, active capacity, live resource count, and
-eviction count so seek improvements and regressions are measurable.
+Whole-current-item prefetch is disabled, including in the experiment; startup
+traffic belongs exclusively to the foreground demuxer. A staged next episode
+may warm only 8 MiB when the DEBUG experiment is explicitly enabled, enough
+for probing and a first-frame cushion without downloading an unanswered Up
+Next choice. When a server ignores Range, the streaming delegate discards an
+unrequested prefix and retains only the bounded requested window; later reads
+remain correct without materializing a whole movie in memory. Reaching the cap
+triggers HLS LRU eviction or stops new direct-file writes. The debug Playback
+HUD reports cached MiB, hit rate, request count, average request latency,
+active capacity, live resource count, and eviction count so any future attempt
+to ship the optimization has measurable evidence.
 
 Cache ownership is part of the player lifecycle, never an offline-download
 feature. There is one active scope and at most one staged successor. Dismissal,
@@ -752,8 +772,9 @@ reflects the new position immediately.
   read as a bug.
   - HEL-86 keeps both the full-screen player and its UIKit-backed
     `AVSampleBufferDisplayLayer` mounted through that handoff. Within the last
-    120 s, the controller negotiates the next PlaybackInfo and warms its first
-    8 MiB in a second bounded scope. Advance first reports the old session
+    120 s, the controller negotiates the next PlaybackInfo. A DEBUG run with
+    the experimental transport explicitly enabled can additionally warm its
+    first 8 MiB in a second bounded scope. Advance first reports the old session
     stopped and retires its demuxer/render synchronizer; only after the
     lifecycle counters reach zero does `SampleBufferVideoSurface.updateUIView`
     attach the successor engine to the same display layer. The old final frame
@@ -762,7 +783,7 @@ reflects the new position immediately.
     retaining the same content source, and audio-session, Now Playing, and
     tvOS display-match ownership remain active across the boundary. There are
     never two demux/render pipelines alive together; seamless here means a
-    persistent surface and warm bytes, not overlapping decoders.
+    persistent surface and pre-negotiated playback, not overlapping decoders.
   - An `Episode Handoff` signpost measures viewer action/automatic advance to
     the successor's primed presentation clock. The same duration appears in
     the Playback HUD and the launch-gated UI-test probe. The hardware journey
@@ -771,8 +792,11 @@ reflects the new position immediately.
     decoder teardown. It asserts the surface never disappears, requires one
     engine/demuxer/renderer set after the successor becomes ready, then keeps
     episode two running for 20 seconds with media-clock, stall, buffering, and
-    memory-growth ceilings. A separate cached-HLS journey crosses several
-    segment boundaries and enforces the same single-pipeline invariants.
+    memory-growth ceilings. Native HLS and direct-play journeys assert their
+    negotiated mode, assert that the cache is absent, cross sustained playback
+    windows, and enforce the same single-pipeline invariants. A separate
+    DEBUG-opted-in cached-HLS journey keeps the experimental boundary covered;
+    direct-stream has a fixture-conditional sustained journey too.
   - **Never resolve the next episode from `Shows/NextUp`.** That endpoint
     returns the episode *in progress* when there is one — `enableResumable`
     defaults to `true`, per the server's own OpenAPI document — and at the

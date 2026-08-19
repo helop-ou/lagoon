@@ -295,6 +295,34 @@ struct MainTabView: View {
             return
         }
         if regressionRun,
+           UserDefaults.standard.bool(forKey: "debug.regressionFindDirectStream") {
+            guard let page = try? await session.client.items(
+                includeTypes: [.movie, .episode],
+                limit: 100
+            ) else {
+                print("RegressionResolve failed direct-stream library scan")
+                regressionResolution = "error:direct-stream library scan failed"
+                return
+            }
+            for item in page.items {
+                guard let info = try? await session.client.playbackInfo(itemId: item.id),
+                      let source = info.mediaSources.first,
+                      source.supportsDirectPlay != true,
+                      source.supportsDirectStream == true,
+                      (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
+                    continue
+                }
+                print("RegressionResolve direct-stream title=\"\(item.name ?? "?")\" id=\(item.id)")
+                lifecycleBenchmarkMedia = item
+                regressionResolution = "resolved"
+                playerItem = PlayerItem(media: item, startFromBeginning: true)
+                return
+            }
+            print("RegressionResolve no direct-stream item")
+            regressionResolution = "missing:direct-stream item"
+            return
+        }
+        if regressionRun,
            UserDefaults.standard.bool(forKey: "debug.regressionFindPlayable") {
             guard let page = try? await session.client.items(
                 includeTypes: [.movie, .episode],
