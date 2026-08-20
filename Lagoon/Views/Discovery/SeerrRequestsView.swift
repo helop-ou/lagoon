@@ -91,53 +91,59 @@ struct SeerrRequestsView: View {
 
     @ViewBuilder
     private func content(user: SeerrUser) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Metrics.Space.l) {
-                pageTitle
-                controls(user: user)
+        VStack(alignment: .leading, spacing: 0) {
+            pageTitle
+                .padding(.horizontal, Metrics.screenGutter)
+                .background(Color.black)
+                .zIndex(1)
 
-                if viewModel.isLoading, viewModel.requests.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                        .accessibilityLabel("Loading Requests")
-                } else if let error = viewModel.errorMessage, viewModel.requests.isEmpty {
-                    ErrorStateView(message: error) { refreshID += 1 }
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                } else if viewModel.requests.isEmpty {
-                    VStack(spacing: Metrics.Space.m) {
-                        Image(systemName: "tray")
-                            .font(Typography.glyph)
-                            .foregroundStyle(.secondary)
-                        Text("No \(filter == .all ? "" : filter.title.lowercased() + " ")requests")
-                            .font(.title3)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 400)
-                } else {
-                    ForEach(viewModel.requests) { request in
-                        SeerrRequestRow(request: request)
-                            .onAppear {
-                                guard request.id == viewModel.requests.suffix(4).first?.id else { return }
-                                Task {
-                                    await viewModel.load(
-                                        client: seerr.client,
-                                        user: user,
-                                        filter: filter,
-                                        onlyMine: effectiveOnlyMine(for: user)
-                                    )
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Metrics.Space.l) {
+                    controls(user: user)
+
+                    if viewModel.isLoading, viewModel.requests.isEmpty {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                            .accessibilityLabel("Loading Requests")
+                    } else if let error = viewModel.errorMessage, viewModel.requests.isEmpty {
+                        ErrorStateView(message: error) { refreshID += 1 }
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                    } else if viewModel.requests.isEmpty {
+                        VStack(spacing: Metrics.Space.m) {
+                            Image(systemName: "tray")
+                                .font(Typography.glyph)
+                                .foregroundStyle(.secondary)
+                            Text("No \(filter == .all ? "" : filter.title.lowercased() + " ")requests")
+                                .font(.title3)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 400)
+                    } else {
+                        ForEach(viewModel.requests) { request in
+                            SeerrRequestRow(request: request)
+                                .onAppear {
+                                    guard request.id == viewModel.requests.suffix(4).first?.id else { return }
+                                    Task {
+                                        await viewModel.load(
+                                            client: seerr.client,
+                                            user: user,
+                                            filter: filter,
+                                            onlyMine: effectiveOnlyMine(for: user)
+                                        )
+                                    }
                                 }
-                            }
+                        }
+                    }
+
+                    if viewModel.isLoading, !viewModel.requests.isEmpty {
+                        ProgressView().frame(maxWidth: .infinity).padding(Metrics.Space.xxl)
                     }
                 }
-
-                if viewModel.isLoading, !viewModel.requests.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity).padding(Metrics.Space.xxl)
-                }
+                .padding(.horizontal, Metrics.screenGutter)
+                .padding(.bottom, Metrics.Space.section)
             }
-            .padding(.horizontal, Metrics.screenGutter)
-            .padding(.bottom, Metrics.Space.section)
+            .scrollClipDisabled()
+            .refreshable { await reload(user: user) }
         }
-        .scrollClipDisabled()
-        .refreshable { await reload(user: user) }
     }
 
     private var pageTitle: some View {
@@ -149,18 +155,22 @@ struct SeerrRequestsView: View {
     }
 
     private var signedOutContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                pageTitle
-                    .padding(.horizontal, Metrics.screenGutter)
+        VStack(alignment: .leading, spacing: 0) {
+            pageTitle
+                .padding(.horizontal, Metrics.screenGutter)
+                .background(Color.black)
+                .zIndex(1)
+
+            ScrollView {
                 ErrorStateView(message: SeerrError.unauthenticated.localizedDescription) {
                     Task { await seerr.refreshUser() }
                 }
                 .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                .padding(.horizontal, Metrics.screenGutter)
+                .padding(.bottom, Metrics.Space.section)
             }
-            .padding(.bottom, Metrics.Space.section)
+            .scrollClipDisabled()
         }
-        .scrollClipDisabled()
     }
 
     private var requestsTitle: String {
