@@ -1165,6 +1165,8 @@ struct CustomPlayerView<Surface: View>: View {
             "paused=\(engine.isPaused ? 1 : 0)",
             "buffering=\(engine.isBuffering ? 1 : 0)",
             "stalls=\(engine.stallCount)",
+            "audioRecoveries=\(engine.audioRendererRecoveryCount)",
+            "mediaResetRecoveries=\(engine.mediaServicesResetRecoveryCount)",
             String(format: "memoryMB=%.1f", memory.footprintMB),
             "engines=\(lifecycle.liveEngines)",
             "controllers=\(lifecycle.liveControllers)",
