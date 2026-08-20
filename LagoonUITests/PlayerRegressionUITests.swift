@@ -86,6 +86,7 @@ final class PlayerRegressionUITests: XCTestCase {
         let initialStalls = initial.int("stalls")
         let initialMemory = initial.double("memoryMB")
         let initialBuffered = initial.double("buffered")
+        let initialPlayheadPrefetches = initial.int("playheadPrefetches")
 
         // A self-committing nudge made while paused must seek without
         // silently resuming. This is a different transport path from an
@@ -124,6 +125,20 @@ final class PlayerRegressionUITests: XCTestCase {
             }
             let forwardLanding = forward.double("time")
             waitForState(in: app, timeout: 8) { $0.double("time") > forwardLanding + 1 }
+            if cycle == 1 {
+                // The sparse cache keeps the byte-zero prefix, while its
+                // low-priority writer follows FFmpeg's actual post-seek byte
+                // position. This proves the live transport—not only the
+                // deterministic unit scheduler—made that priority switch.
+                remote.press(.playPause)
+                waitForState(in: app, timeout: 5) { $0.int("paused") == 1 }
+                waitForState(in: app, timeout: 35) {
+                    $0.int("playheadPrefetches") > initialPlayheadPrefetches
+                        && $0.int("bufferRanges") >= 2
+                }
+                remote.press(.playPause)
+                waitForState(in: app, timeout: 5) { $0.int("paused") == 0 }
+            }
 
             for _ in 0..<4 { remote.press(.left) }
             waitForState(in: app, timeout: 3) { $0.int("scrubbing") == 1 }
@@ -150,6 +165,8 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(final.int("renderers"), 1)
         XCTAssertEqual(final.int("unclean"), 0)
         XCTAssertGreaterThanOrEqual(final.double("buffered"), initialBuffered)
+        XCTAssertGreaterThan(final.int("playheadPrefetches"), initialPlayheadPrefetches)
+        XCTAssertGreaterThanOrEqual(final.int("bufferRanges"), 2)
         XCTAssertLessThan(final.double("memoryMB"), initialMemory + 96)
     }
 
@@ -282,6 +299,20 @@ final class PlayerRegressionUITests: XCTestCase {
         waitForState(in: app, timeout: 45) { $0.int("nextUp") == 1 }
         remote.press(.select)
 
+        let transition = app.descendants(matching: .any)["player.episodeTransition"]
+        XCTAssertFalse(
+            transition.waitForExistence(timeout: 0.8),
+            "A healthy episode handoff showed transition feedback immediately"
+        )
+        XCTAssertFalse(
+            app.staticTexts["Starting next episode"].exists,
+            "The countdown card was followed by redundant transition text"
+        )
+        XCTAssertTrue(
+            transition.waitForExistence(timeout: 3),
+            "The deliberately delayed handoff never exposed fallback progress feedback"
+        )
+
         let deadline = Date().addingTimeInterval(45)
         var surfaceDisappeared = false
         var successor = RegressionState("")
@@ -321,6 +352,7 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(successor.int("unclean"), 0)
         XCTAssertEqual(successor.string("method"), "DirectPlay")
         XCTAssertEqual(successor.int("cache"), 1)
+        XCTAssertFalse(transition.exists, "Transition progress remained over ready successor video")
 
         // First-frame readiness is not enough: the reported regression
         // starts after autoplay, then repeatedly starves without recovering.
