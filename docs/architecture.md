@@ -104,17 +104,20 @@ attempt can't stall them.
 ## Navigation
 
 `MainTabView` builds tabs dynamically: Home, Discover, one tab per
-`movies`/`tvshows` library from `userViews()`, Search (`role: .search`), and
-Settings. Each tab owns its own `NavigationStack`; `MediaItem` is the content
-navigation value
+`movies`/`tvshows` library from `userViews()`, and Settings. Discover owns the
+single app-wide search field and presents Jellyfin library matches and Seerr
+catalogue matches as separate rails. Each tab owns its own `NavigationStack`;
+`MediaItem` is the content navigation value
 (Hashable by id), routed by `ItemDetailRouter` — `.series` →
 `SeriesDetailView`, everything else → `ItemDetailView`.
 
-Discover has a separate typed `SeerrNavigationRoute`. TMDB ids remain in the
-Seerr model layer; an available title is opened in Lagoon only after an exact
-`AnyProviderIdEquals=tmdb.{id}` lookup returns a Jellyfin item. This avoids
-title/year guesses and prevents a Seerr detail from entering a Jellyfin stack
-under the wrong identity.
+Discover uses a heterogeneous `NavigationPath` with both
+`SeerrNavigationRoute` and `ContentNavigationRoute`, because its two result
+rails deliberately preserve their respective identities. TMDB ids remain in
+the Seerr model layer; an available title is opened in Lagoon only after an
+exact `AnyProviderIdEquals=tmdb.{id}` lookup returns a Jellyfin item. This
+avoids title/year guesses and prevents a Seerr detail from entering a Jellyfin
+stack under the wrong identity.
 
 Playback is presented as `fullScreenCover(item:)` from whichever screen
 started it; dismissal triggers a re-fetch so resume state stays fresh
