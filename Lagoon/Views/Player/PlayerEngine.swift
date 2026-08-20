@@ -17,6 +17,10 @@ protocol PlayerEngine: AnyObject, Observable {
     /// Number of renderer underruns recovered during this playback session.
     /// Exposed for the debug regression probe and component preview only.
     var stallCount: Int { get }
+    /// AVFoundation audio lifecycle recoveries, exposed to the launch-gated
+    /// integration probe so route and media-service events are measurable.
+    var audioRendererRecoveryCount: Int { get }
+    var mediaServicesResetRecoveryCount: Int { get }
     var videoSize: CGSize? { get }
     var audioTracks: [PlayerTrack] { get }
     /// Debug/regression label for the renderer input, not a user-facing
@@ -58,6 +62,8 @@ protocol PlayerEngine: AnyObject, Observable {
 
 extension PlayerEngine {
     var audioOutputPathDiagnostic: String { "unknown" }
+    var audioRendererRecoveryCount: Int { 0 }
+    var mediaServicesResetRecoveryCount: Int { 0 }
 }
 
 /// What the physical display should be switched to for the current video
