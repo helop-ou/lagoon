@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var homePreferences = HomeSectionPreferencesStore()
+    @State private var pendingAccountAction: AccountAction?
 
     var body: some View {
         Group {
@@ -38,6 +39,24 @@ struct SettingsView: View {
             homePreferences.configure(accountID: session.activeAccount?.id)
             await homePreferences.loadCatalog(client: session.client)
         }
+        .confirmationDialog(
+            "Sign Out?",
+            isPresented: Binding(
+                get: { pendingAccountAction == .signOut },
+                set: { if !$0 { pendingAccountAction = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Sign Out", role: .destructive) {
+                pendingAccountAction = nil
+                Task { await session.signOut() }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingAccountAction = nil
+            }
+        } message: {
+            Text("You’ll need to sign in again to use this Jellyfin account.")
+        }
     }
 
     // MARK: - tvOS: identity | short settings hierarchy
@@ -58,7 +77,7 @@ struct SettingsView: View {
             ZStack {
                 Circle().fill(.white.opacity(0.12))
                 Text(initials)
-                    .font(.system(size: 72, weight: .semibold))
+                    .font(.largeTitle.weight(.semibold))
             }
             .frame(width: Metrics.settingsAvatarSize, height: Metrics.settingsAvatarSize)
 
@@ -130,7 +149,8 @@ struct SettingsView: View {
                 #endif
 
                 settingsDestination(
-                    "Diagnostics",
+                    "Advanced",
+                    detail: "Playback Diagnostics",
                     id: "diagnostics"
                 ) { diagnosticsSettings }
 
@@ -363,18 +383,18 @@ struct SettingsView: View {
 
     private var diagnosticsSettings: some View {
         TVSettingsPage(
-            "Diagnostics",
-            description: "Temporary tools for investigating playback on TestFlight and development builds. Leave them off during normal viewing."
+            "Advanced",
+            description: "Tools for diagnosing playback compatibility. Leave them off during normal viewing."
         ) {
             TVSettingsSection(
-                "Player Diagnostics",
-                footer: "These tools are intended for diagnosing playback on TestFlight and development builds."
+                "Playback Diagnostics",
+                footer: "These options can affect playback behavior and are intended for troubleshooting."
             ) {
-                settingsToggle("Playback HUD", isOn: $showPlaybackHUD)
+                settingsToggle("Show Playback Details", isOn: $showPlaybackHUD)
                     .accessibilityIdentifier("settings.diagnostics.hud")
-                settingsToggle("Frame-Loss Bench", isOn: $frameLossBench)
+                settingsToggle("Run Playback Performance Test", isOn: $frameLossBench)
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
-                settingsToggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
+                settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
             }
         }
@@ -397,7 +417,7 @@ struct SettingsView: View {
                 }
                 settingsAction("Add Account", id: "add") { session.addAccount() }
                 settingsAction("Sign Out", id: "signOut", role: .destructive) {
-                    Task { await session.signOut() }
+                    pendingAccountAction = .signOut
                 }
             }
         }
@@ -409,13 +429,13 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, Metrics.Space.l)
-        .frame(minHeight: 64)
+        .frame(minHeight: 66)
     }
 
     private func settingsInfo(_ title: LocalizedStringKey, value: String) -> some View {
         TVSettingsActionLabel(title, value: value)
             .padding(.horizontal, Metrics.Space.l)
-            .frame(minHeight: 64)
+            .frame(minHeight: 66)
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
 
@@ -473,7 +493,7 @@ struct SettingsView: View {
                 }
                 Button("Add Account") { session.addAccount() }
                 Button("Sign Out", role: .destructive) {
-                    Task { await session.signOut() }
+                    pendingAccountAction = .signOut
                 }
             }
 
@@ -595,10 +615,10 @@ struct SettingsView: View {
             }
             #endif
 
-            Section("Debug") {
-                Toggle("Playback HUD", isOn: $showPlaybackHUD)
-                Toggle("Frame-Loss Bench", isOn: $frameLossBench)
-                Toggle("Strip DoVi Enhancement Layer", isOn: $stripDoviEL)
+            Section("Advanced") {
+                Toggle("Show Playback Details", isOn: $showPlaybackHUD)
+                Toggle("Run Playback Performance Test", isOn: $frameLossBench)
+                Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
             }
         }
     }
@@ -703,6 +723,10 @@ struct SettingsView: View {
             }
         )
     }
+}
+
+private enum AccountAction {
+    case signOut
 }
 
 private extension Bundle {
