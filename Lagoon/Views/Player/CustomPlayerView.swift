@@ -34,9 +34,11 @@ struct CustomPlayerView<Surface: View>: View {
     /// launch-gated probe so regressions prove the intended path actually ran.
     var playbackMethod: PlayMethod = .directPlay
     var isPlaybackCacheActive = false
-    /// Contiguous cached prefix mapped onto the title's declared duration.
-    /// nil for HLS or an endpoint whose total length is not yet known.
+    /// The legacy byte-zero prefix remains in the regression probe. The
+    /// visible scrubber renders every sparse direct-file cache island.
     var bufferedFraction: Double? = nil
+    var bufferedRanges: [PlaybackBufferedRange] = []
+    var playheadPrefetchCount = 0
     let info: PlayerItemInfo
     let onDismiss: () -> Void
     /// Lets the host react to the panel opening (the debug HUD hides so
@@ -916,7 +918,17 @@ struct CustomPlayerView<Surface: View>: View {
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(.white.opacity(0.16))
-                if let bufferedFraction, bufferedFraction > 0 {
+                if !bufferedRanges.isEmpty {
+                    ForEach(bufferedRanges, id: \.self) { range in
+                        let lower = CGFloat(min(max(range.lowerFraction, 0), 1))
+                        let upper = CGFloat(min(max(range.upperFraction, 0), 1))
+                        Capsule()
+                            .fill(.white.opacity(0.38))
+                            .frame(width: max(width * (upper - lower), 1))
+                            .offset(x: width * lower)
+                    }
+                    .animation(liveMotion, value: bufferedRanges)
+                } else if let bufferedFraction, bufferedFraction > 0 {
                     Capsule()
                         .fill(.white.opacity(0.38))
                         .frame(width: width * CGFloat(min(max(bufferedFraction, 0), 1)))
@@ -1157,6 +1169,8 @@ struct CustomPlayerView<Surface: View>: View {
             "method=\(playbackMethod.rawValue)",
             "cache=\(isPlaybackCacheActive ? 1 : 0)",
             String(format: "buffered=%.3f", bufferedFraction ?? -1),
+            "bufferRanges=\(bufferedRanges.count)",
+            "playheadPrefetches=\(playheadPrefetchCount)",
             String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
             "nextUp=\(showsNextUp ? 1 : 0)",
             "ready=\(engine.duration > 0 ? 1 : 0)",
