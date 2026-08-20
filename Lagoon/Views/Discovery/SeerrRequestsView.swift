@@ -68,12 +68,9 @@ struct SeerrRequestsView: View {
             if let user = seerr.user {
                 content(user: user)
             } else {
-                ErrorStateView(message: SeerrError.unauthenticated.localizedDescription) {
-                    Task { await seerr.refreshUser() }
-                }
+                signedOutContent
             }
         }
-        .navigationTitle(onlyMine || seerr.user?.canViewAllRequests != true ? "My Requests" : "All Requests")
         // Keep the fetch on the stable screen root. Putting it on the
         // ScrollView/LoadingView branches made each isLoading transition
         // remove and cancel the task, producing an endless spinner.
@@ -93,52 +90,80 @@ struct SeerrRequestsView: View {
 
     @ViewBuilder
     private func content(user: SeerrUser) -> some View {
-        if viewModel.isLoading, viewModel.requests.isEmpty {
-            LoadingView()
-        } else if let error = viewModel.errorMessage, viewModel.requests.isEmpty {
-            ErrorStateView(message: error) { refreshID += 1 }
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Metrics.Space.l) {
-                    controls(user: user)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Metrics.Space.l) {
+                pageTitle
+                controls(user: user)
 
-                    if viewModel.requests.isEmpty {
-                        VStack(spacing: Metrics.Space.m) {
-                            Image(systemName: "tray")
-                                .font(Typography.glyph)
-                                .foregroundStyle(.secondary)
-                            Text("No \(filter == .all ? "" : filter.title.lowercased() + " ")requests")
-                                .font(.title3)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 400)
-                        .focusable()
-                    } else {
-                        ForEach(viewModel.requests) { request in
-                            SeerrRequestRow(request: request)
-                                .onAppear {
-                                    guard request.id == viewModel.requests.suffix(4).first?.id else { return }
-                                    Task {
-                                        await viewModel.load(
-                                            client: seerr.client,
-                                            user: user,
-                                            filter: filter,
-                                            onlyMine: onlyMine
-                                        )
-                                    }
-                                }
-                        }
+                if viewModel.isLoading, viewModel.requests.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                        .accessibilityLabel("Loading Requests")
+                } else if let error = viewModel.errorMessage, viewModel.requests.isEmpty {
+                    ErrorStateView(message: error) { refreshID += 1 }
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                } else if viewModel.requests.isEmpty {
+                    VStack(spacing: Metrics.Space.m) {
+                        Image(systemName: "tray")
+                            .font(Typography.glyph)
+                            .foregroundStyle(.secondary)
+                        Text("No \(filter == .all ? "" : filter.title.lowercased() + " ")requests")
+                            .font(.title3)
                     }
-
-                    if viewModel.isLoading {
-                        ProgressView().frame(maxWidth: .infinity).padding(Metrics.Space.xxl)
+                    .frame(maxWidth: .infinity, minHeight: 400)
+                } else {
+                    ForEach(viewModel.requests) { request in
+                        SeerrRequestRow(request: request)
+                            .onAppear {
+                                guard request.id == viewModel.requests.suffix(4).first?.id else { return }
+                                Task {
+                                    await viewModel.load(
+                                        client: seerr.client,
+                                        user: user,
+                                        filter: filter,
+                                        onlyMine: onlyMine
+                                    )
+                                }
+                            }
                     }
                 }
-                .padding(.horizontal, Metrics.screenGutter)
-                .padding(.vertical, Metrics.Space.xxl)
+
+                if viewModel.isLoading, !viewModel.requests.isEmpty {
+                    ProgressView().frame(maxWidth: .infinity).padding(Metrics.Space.xxl)
+                }
             }
-            .scrollClipDisabled()
-            .refreshable { await reload(user: user) }
+            .padding(.horizontal, Metrics.screenGutter)
+            .padding(.bottom, Metrics.Space.section)
         }
+        .scrollClipDisabled()
+        .refreshable { await reload(user: user) }
+    }
+
+    private var pageTitle: some View {
+        Text(requestsTitle)
+            .font(.largeTitle.bold())
+            .padding(.top, Metrics.Space.xxl)
+            .padding(.bottom, Metrics.Space.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var signedOutContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                pageTitle
+                    .padding(.horizontal, Metrics.screenGutter)
+                ErrorStateView(message: SeerrError.unauthenticated.localizedDescription) {
+                    Task { await seerr.refreshUser() }
+                }
+                .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+            }
+            .padding(.bottom, Metrics.Space.section)
+        }
+        .scrollClipDisabled()
+    }
+
+    private var requestsTitle: String {
+        onlyMine || seerr.user?.canViewAllRequests != true ? "My Requests" : "All Requests"
     }
 
     private func controls(user: SeerrUser) -> some View {
