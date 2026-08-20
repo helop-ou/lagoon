@@ -4,7 +4,6 @@ nonisolated enum SeerrNavigationRoute: Hashable {
     case settings
     case catalog(SeerrMediaType)
     case media(id: Int, type: SeerrMediaType)
-    case seasonRequest(SeerrMediaDetails)
     case requests
     case request(SeerrMediaRequest)
     case jellyfinItem(MediaItem)
@@ -21,8 +20,6 @@ private struct SeerrNavigationDestination: View {
             SeerrCatalogView(mediaType: type)
         case .media(let id, let type):
             SeerrMediaDetailView(mediaID: id, mediaType: type)
-        case .seasonRequest(let details):
-            SeerrSeasonRequestView(details: details)
         case .requests:
             SeerrRequestsView()
         case .request(let request):
