@@ -48,11 +48,11 @@ struct SeerrMediaDetailView: View {
             set: { if !$0 { popup = nil } }
         )) {
             if popup?.confirmsMovieRequest == true {
+                Button("Cancel", role: .cancel) { popup = nil }
                 Button("Request Movie") {
                     popup = nil
                     requestMovie()
                 }
-                Button("Cancel", role: .cancel) { popup = nil }
             } else {
                 Button("OK") { popup = nil }
             }
@@ -165,7 +165,11 @@ struct SeerrMediaDetailView: View {
             guard !Task.isCancelled else { return }
             details = loaded
             if loaded.mediaInfo?.availability == .available {
-                jellyfinItem = try? await session.client.item(tmdbID: mediaID, mediaType: mediaType)
+                if let jellyfinID = loaded.mediaInfo?.jellyfinMediaId, !jellyfinID.isEmpty {
+                    jellyfinItem = try? await session.client.item(id: jellyfinID)
+                } else {
+                    jellyfinItem = try? await session.client.item(tmdbID: mediaID, mediaType: mediaType)
+                }
             } else {
                 jellyfinItem = nil
             }
@@ -231,6 +235,7 @@ struct SeerrSeasonRequestView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var selected: Set<Int> = []
     @State private var isRequesting = false
+    @State private var isConfirmingRequest = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -240,8 +245,13 @@ struct SeerrSeasonRequestView: View {
                     selectAllOrClear()
                 } label: {
                     Text(allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                #if os(tvOS)
+                .buttonStyle(.glass)
+                #else
                 .buttonStyle(.borderless)
+                #endif
                 .disabled(selectableSeasons.isEmpty || isRequesting)
             }
 
@@ -266,7 +276,11 @@ struct SeerrSeasonRequestView: View {
                         }
                         .contentShape(Rectangle())
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.glass)
+                    #else
                     .buttonStyle(.borderless)
+                    #endif
                     .disabled(!selectable || isRequesting)
                     .accessibilityValue(selectionValue(for: season, selectable: selectable))
                     .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
@@ -280,7 +294,7 @@ struct SeerrSeasonRequestView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
-                    submit()
+                    isConfirmingRequest = true
                 } label: {
                     if isRequesting {
                         ProgressView()
@@ -292,6 +306,16 @@ struct SeerrSeasonRequestView: View {
                 .accessibilityLabel("Request \(selected.count) Season\(selected.count == 1 ? "" : "s")")
                 .accessibilityIdentifier("seerr.seasons.submit")
             }
+        }
+        .confirmationDialog(
+            "Request \(selected.count) Season\(selected.count == 1 ? "" : "s")?",
+            isPresented: $isConfirmingRequest,
+            titleVisibility: .visible
+        ) {
+            Button("Cancel", role: .cancel) {}
+            Button("Send Request") { submit() }
+        } message: {
+            Text("Send a request for the selected season\(selected.count == 1 ? "" : "s") of \(details.displayTitle)?")
         }
         .alert("Couldn't Send Request", isPresented: Binding(
             get: { errorMessage != nil },
