@@ -28,12 +28,14 @@ final class SeerrClient {
     private(set) var sessionCookie: String?
 
     private let session: URLSession
+    private let requestTimeout: TimeInterval
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private var configurationGeneration = 0
 
-    init(session: URLSession = .shared) {
+    init(session: URLSession = .shared, requestTimeout: TimeInterval = 20) {
         self.session = session
+        self.requestTimeout = requestTimeout
         decoder = JSONDecoder()
         encoder = JSONEncoder()
     }
@@ -266,7 +268,7 @@ final class SeerrClient {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 20
+        request.timeoutInterval = requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
@@ -277,7 +279,9 @@ final class SeerrClient {
             request.setValue("connect.sid=\(sessionCookie)", forHTTPHeaderField: "Cookie")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let responsePayload = try await response(for: request)
+        let data = responsePayload.data
+        let response = responsePayload.response
         // An account switch clears/reconfigures this shared client. A late
         // response from the previous account must never install its cookie
         // or update the new account's UI state.
@@ -293,6 +297,30 @@ final class SeerrClient {
             throw SeerrError.server(http.statusCode, message)
         }
         return data
+    }
+
+    /// `URLRequest.timeoutInterval` is an inactivity timeout, not a hard
+    /// deadline. A server that slowly dribbles response bytes can therefore
+    /// keep a discovery request alive indefinitely and strand the UI on an
+    /// activity indicator. Race the transport against an absolute deadline so
+    /// every Seerr screen can reach its existing error-and-retry state.
+    private func response(for request: URLRequest) async throws -> ResponsePayload {
+        try await withThrowingTaskGroup(of: ResponsePayload.self) { group in
+            group.addTask { [session] in
+                let (data, response) = try await session.data(for: request)
+                return ResponsePayload(data: data, response: response)
+            }
+            group.addTask { [requestTimeout] in
+                try await Task.sleep(for: .seconds(requestTimeout))
+                throw URLError(.timedOut)
+            }
+
+            guard let first = try await group.next() else {
+                throw SeerrError.invalidResponse
+            }
+            group.cancelAll()
+            return first
+        }
     }
 
     private func captureSessionCookie(from response: HTTPURLResponse, url: URL) {
@@ -336,6 +364,11 @@ final class SeerrClient {
         components?.fragment = nil
         return components?.url ?? url
     }
+}
+
+private struct ResponsePayload: @unchecked Sendable {
+    let data: Data
+    let response: URLResponse
 }
 
 private nonisolated struct QuickConnectAuthentication: Encodable {
