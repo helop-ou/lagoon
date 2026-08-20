@@ -72,6 +72,13 @@ original optimized baseline; the roughly 7% footprint increase is stable
 between processes and remains below XCTest's 10% regression tolerance.
 A final run after the playback fix measured 0.295 s CPU, 2.090 billion
 instructions, 1.318 s wall time, and 79.8 MB peak, still within that envelope.
+The 2026-08-20 Liquid Glass panel pass measured two fresh processes and ten
+tab sweeps before and after narrowing `GlassEffectContainer` from the entire
+panel tree to the four sibling tab controls. Average app CPU fell from
+0.263 s to 0.243 s (7.7%), retired instructions from 1.685 billion to
+1.496 billion (11.2%), and peak physical memory from 64.5 MB to 64.1 MB.
+Wall time remained remote-input-bound at 1.314 s versus 1.318 s. Both runs
+passed the compact Audio geometry and complete 30-track focus walk.
 Run the focused measurement with:
 
 ```sh
