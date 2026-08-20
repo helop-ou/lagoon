@@ -57,6 +57,36 @@ nonisolated final class FFmpegCachedIO {
         avio_context_free(&context)
     }
 
+    /// Captures FFmpeg's logical file position after a media-time seek. AVIO
+    /// may already have read ahead into its 64 KiB buffer, so `position`
+    /// alone points past the actual demux cursor; ask AVIO for its public
+    /// logical SEEK_CUR position instead.
+    func setTimelineAnchor(seconds: Double, duration: Double) {
+        guard seconds.isFinite, duration.isFinite, duration > 0 else { return }
+        var byteOffset = position
+        if let context {
+            let logicalPosition = avio_seek(context, 0, Int32(SEEK_CUR))
+            if logicalPosition >= 0 {
+                byteOffset = logicalPosition
+            }
+        }
+        setTimelineAnchor(byteOffset: byteOffset, seconds: seconds, duration: duration)
+    }
+
+    /// Video packets carry a more precise byte/time pair than the cursor
+    /// approximation above. Refreshing the anchor while demuxing also keeps
+    /// playback that started at 0:00 aligned as bitrate changes.
+    func setTimelineAnchor(byteOffset: Int64, seconds: Double, duration: Double) {
+        guard byteOffset >= 0,
+              seconds.isFinite,
+              duration.isFinite,
+              duration > 0 else { return }
+        scope.setTimelineAnchor(
+            byteOffset: max(byteOffset, 0),
+            timeFraction: seconds / duration
+        )
+    }
+
     private func read(into buffer: UnsafeMutablePointer<UInt8>, size: Int32) -> Int32 {
         do {
             let data = try scope.read(offset: position, length: Int(size))
