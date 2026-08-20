@@ -929,7 +929,10 @@ struct CustomPlayerView<Surface: View>: View {
                         .frame(width: width * CGFloat(min(max(bufferedFraction, 0), 1)))
                         .animation(liveMotion, value: bufferedFraction)
                 }
-                Capsule()
+                UnevenRoundedRectangle(
+                    topLeadingRadius: Metrics.scrubberHeight / 2,
+                    bottomLeadingRadius: Metrics.scrubberHeight / 2
+                )
                     .fill(.white)
                     .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
                     // Glides between the engine's 0.1 s position updates
@@ -937,8 +940,12 @@ struct CustomPlayerView<Surface: View>: View {
                     // become a quick slide to the target.
                     .animation(fillMotion, value: fillFraction)
                 chapterTicks(in: width)
-                playheadMarker(in: width)
             }
+            // The marker is deliberately an overlay. As a ZStack child its
+            // 28 pt height enlarged the supposedly 6 pt rail and pushed it
+            // into the timestamp row even while the marker was invisible.
+            .frame(width: width, height: Metrics.scrubberHeight)
+            .overlay(alignment: .leading) { playheadMarker(in: width) }
             .overlay(alignment: .bottomLeading) { scrubPreview(in: width) }
             #if os(iOS)
             // The visible rail is deliberately quiet; its touch target is not.
@@ -990,7 +997,7 @@ struct CustomPlayerView<Surface: View>: View {
                     trickplayFrame
                     if let name = scrubChapter?.name {
                         Text(name)
-                            .font(.caption.weight(.medium))
+                            .font(.caption2.weight(.medium))
                             .lineLimit(1)
                             .shadow(color: .black, radius: 3)
                     }
@@ -1028,7 +1035,7 @@ struct CustomPlayerView<Surface: View>: View {
                 Text(Self.timestamp(scrubTarget ?? engine.timePosition))
                     .font(
                         isScrubbing
-                            ? .title3.monospacedDigit().weight(.semibold)
+                            ? .callout.monospacedDigit().weight(.semibold)
                             : .callout.monospacedDigit().weight(.medium)
                     )
                     .frame(width: labelWidth)
@@ -1101,18 +1108,10 @@ struct CustomPlayerView<Surface: View>: View {
         isScrubbing ? .easeOut(duration: Motion.fast) : liveMotion
     }
 
-    /// What the *fill* follows, which is no longer the same thing. Now that
-    /// scrub opens without pausing (HEL-55), the tvOS fill keeps showing the
-    /// live position throughout a scrub — so it has to keep the live curve
-    /// too, or every position update behind the chip would ease out and
-    /// stall instead of gliding. Touch is the other way round: there the
-    /// fill *is* what the thumb drags, so it takes the scrub curve.
+    /// Keep the played edge and vertical marker on the same curve; otherwise
+    /// they visibly separate during quick remote presses.
     private var fillMotion: Animation {
-        #if os(tvOS)
-        liveMotion
-        #else
-        scrubMotion
-        #endif
+        isScrubbing ? scrubMotion : liveMotion
     }
 
     /// The played rail follows the preview target while scrubbing. Cancel
@@ -1449,13 +1448,13 @@ private enum ScrubMetrics {
     static let chapterSelfCommit: Duration = .milliseconds(2000)
 
     #if os(tvOS)
-    static let markerWidth: CGFloat = 4
-    static let markerHeight: CGFloat = 28
-    static let timeLabelWidth: CGFloat = 180
-    static let timeLabelHeight: CGFloat = 44
-    /// Matches the 320 px tiles Jellyfin generates by default, so the
-    /// preview is shown at its native resolution rather than upscaled.
-    static let previewWidth: CGFloat = 320
+    static let markerWidth: CGFloat = 3
+    static let markerHeight: CGFloat = 22
+    static let timeLabelWidth: CGFloat = 150
+    static let timeLabelHeight: CGFloat = 36
+    /// Smaller than the source tile on purpose: a 320 pt frame dominates a
+    /// ten-foot UI even though the underlying Jellyfin image is 320 px.
+    static let previewWidth: CGFloat = 240
     #else
     static let markerWidth: CGFloat = 3
     static let markerHeight: CGFloat = 20
