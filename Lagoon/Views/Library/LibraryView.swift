@@ -17,6 +17,7 @@ final class LibraryViewModel {
     func loadMore(client: JellyfinClient, library: LibraryTab) async {
         guard !isLoading, hasMore else { return }
         isLoading = true
+        defer { isLoading = false }
         errorMessage = nil
         do {
             let page = try await client.items(
@@ -30,7 +31,6 @@ final class LibraryViewModel {
         } catch {
             errorMessage = "Couldn't load this library."
         }
-        isLoading = false
     }
 }
 
@@ -53,15 +53,29 @@ struct LibraryView: View {
                 }
             } else {
                 ScrollView(showsIndicators: false) {
-                    LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
-                        ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
-                            PosterCard(item: item)
-                                .itemUserDataMenu(item: item)
-                                .onAppear {
-                                    if index >= viewModel.items.count - Metrics.gridColumns * 3 {
-                                        Task { await viewModel.loadMore(client: session.client, library: library) }
+                    LazyVStack(spacing: Metrics.Space.xxl) {
+                        LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
+                            ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                                PosterCard(item: item)
+                                    .itemUserDataMenu(item: item)
+                                    .onAppear {
+                                        if index >= viewModel.items.count - Metrics.gridColumns * 3 {
+                                            Task { await viewModel.loadMore(client: session.client, library: library) }
+                                        }
                                     }
-                                }
+                            }
+
+                            if viewModel.isLoading {
+                                ProgressView()
+                                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                                    .accessibilityLabel("Loading more titles")
+                            }
+                        }
+
+                        if let error = viewModel.errorMessage, !viewModel.isLoading {
+                            InlineRetryView(message: error) {
+                                Task { await viewModel.loadMore(client: session.client, library: library) }
+                            }
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
