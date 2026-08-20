@@ -12,6 +12,7 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
     case seekForward
     case buffering
     case playerPanel
+    case playerTransport
 
     var id: String { rawValue }
 
@@ -26,6 +27,7 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
         case .seekForward: "Seek Forward"
         case .buffering: "Buffering"
         case .playerPanel: "Player Panel"
+        case .playerTransport: "Player Transport"
         }
     }
 
@@ -43,6 +45,7 @@ struct DeveloperSettingsView: View {
     @State private var selectedPreview = PlayerComponentPreview.skipIntroCountdown
     @State private var countdownFill = 0.62
     @State private var showsPlayerPanelPreview = false
+    @State private var showsPlayerTransportPreview = false
 
     var body: some View {
         #if os(tvOS)
@@ -78,6 +81,9 @@ struct DeveloperSettingsView: View {
         .fullScreenCover(isPresented: $showsPlayerPanelPreview) {
             PlayerPanelComponentPreviewScreen()
         }
+        .fullScreenCover(isPresented: $showsPlayerTransportPreview) {
+            PlayerTransportComponentPreviewScreen()
+        }
         #else
         Form {
             Section("Player Component") {
@@ -99,6 +105,9 @@ struct DeveloperSettingsView: View {
         .fullScreenCover(isPresented: $showsPlayerPanelPreview) {
             PlayerPanelComponentPreviewScreen()
         }
+        .fullScreenCover(isPresented: $showsPlayerTransportPreview) {
+            PlayerTransportComponentPreviewScreen()
+        }
         #endif
     }
 
@@ -111,7 +120,7 @@ struct DeveloperSettingsView: View {
                 withTransaction(transaction) { countdownFill = 0.62 }
             }
 
-        if selectedPreview == .playerPanel {
+        if selectedPreview == .playerPanel || selectedPreview == .playerTransport {
             // Do not turn this branch into a synthetic accessibility
             // element: its production tabs and rows must remain focusable.
             canvas
@@ -222,6 +231,23 @@ struct DeveloperSettingsView: View {
                 .accessibilityIdentifier("settings.developer.playerPanel.open")
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .playerTransport:
+            VStack(spacing: Metrics.Space.l) {
+                Image(systemName: "slider.horizontal.below.rectangle")
+                    .font(Typography.glyph)
+                Text("The transport uses the full screen so its resting and scrubbing states can be judged over video-like content.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button {
+                    showsPlayerTransportPreview = true
+                } label: {
+                    Label("Open Player Transport Preview", systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("settings.developer.playerTransport.open")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -251,6 +277,84 @@ struct DeveloperSettingsView: View {
             try? await Task.sleep(for: .milliseconds(80))
             countdownFill = 1
         }
+    }
+}
+
+/// Deterministic full-screen playback state for evaluating the production
+/// transport over varied luminance. Right/left enters the real tvOS scrub
+/// interaction; touch platforms exercise the same bar with a drag.
+private struct PlayerTransportComponentPreviewScreen: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var engine = PlayerPanelPreviewEngine()
+
+    var body: some View {
+        CustomPlayerView(
+            engine: engine,
+            playbackIdentity: "player-transport-preview",
+            bufferedFraction: 0.18,
+            bufferedRanges: [
+                PlaybackBufferedRange(lowerFraction: 0, upperFraction: 0.18),
+                PlaybackBufferedRange(lowerFraction: 0.29, upperFraction: 0.62),
+            ],
+            info: previewInfo,
+            onDismiss: { dismiss() }
+        ) {
+            previewSurface
+        }
+        .preferredColorScheme(.dark)
+        .task {
+            engine.timePosition = 404
+        }
+    }
+
+    private var previewInfo: PlayerItemInfo {
+        PlayerItemInfo(
+            title: "Rick and Morty",
+            subtitle: "S1 E1 · Pilot",
+            overview: nil,
+            facts: [],
+            videoSummary: nil,
+            posterURL: nil,
+            chapters: [
+                PlayerChapter(id: 0, name: "Cold Open", start: 0),
+                PlayerChapter(id: 1, name: "The Garage", start: 312),
+                PlayerChapter(id: 2, name: "Dimension 35-C", start: 724),
+                PlayerChapter(id: 3, name: "End Credits", start: 1_240),
+            ]
+        )
+    }
+
+    private var previewSurface: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.06, green: 0.16, blue: 0.28),
+                    Color(red: 0.23, green: 0.08, blue: 0.22),
+                    .black,
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Circle()
+                .fill(.cyan.opacity(0.5))
+                .frame(width: 540, height: 540)
+                .blur(radius: 70)
+                .offset(x: 430, y: -170)
+
+            Circle()
+                .fill(.purple.opacity(0.42))
+                .frame(width: 680, height: 680)
+                .blur(radius: 100)
+                .offset(x: -500, y: 260)
+
+            RoundedRectangle(cornerRadius: 48)
+                .fill(.white.opacity(0.08))
+                .frame(width: 760, height: 390)
+                .rotationEffect(.degrees(-9))
+                .offset(x: 150, y: -40)
+        }
+        .ignoresSafeArea()
     }
 }
 
