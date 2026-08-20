@@ -12,6 +12,7 @@ struct SeerrMediaDetailView: View {
     @State private var isRequesting = false
     @State private var errorMessage: String?
     @State private var popup: Popup?
+    @State private var seasonRequestDetails: SeerrMediaDetails?
     @State private var reloadID = 0
 
     var body: some View {
@@ -59,6 +60,12 @@ struct SeerrMediaDetailView: View {
         } message: {
             Text(popup?.message ?? "")
         }
+        .sheet(item: $seasonRequestDetails, onDismiss: { reloadID += 1 }) { details in
+            NavigationStack {
+                SeerrSeasonRequestView(details: details)
+            }
+            .presentationSizing(.form)
+        }
         .accessibilityIdentifier("seerr.detail.\(mediaType.rawValue).\(mediaID)")
     }
 
@@ -89,7 +96,9 @@ struct SeerrMediaDetailView: View {
             )
         case .partiallyAvailable:
             if mediaType == .tv, seerr.user?.canRequest(.tv) == true {
-                NavigationLink(value: SeerrNavigationRoute.seasonRequest(details)) {
+                Button {
+                    seasonRequestDetails = details
+                } label: {
                     Label("Request More Seasons", systemImage: "plus")
                 }
                 .buttonStyle(.glass)
@@ -117,7 +126,9 @@ struct SeerrMediaDetailView: View {
                     .disabled(isRequesting)
                     .accessibilityIdentifier("seerr.detail.request")
                 } else {
-                    NavigationLink(value: SeerrNavigationRoute.seasonRequest(details)) {
+                    Button {
+                        seasonRequestDetails = details
+                    } label: {
                         Label("Choose Seasons", systemImage: "plus")
                     }
                     .buttonStyle(.glass)
@@ -222,91 +233,77 @@ struct SeerrSeasonRequestView: View {
     @State private var selected: Set<Int> = []
     @State private var isRequesting = false
     @State private var errorMessage: String?
-    @State private var confirmsRequest = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                Text("Choose Seasons")
-                    .font(.largeTitle.bold())
-                Text(details.displayTitle)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
+        List {
+            Section {
+                Button {
+                    selectAllOrClear()
+                } label: {
+                    Label(
+                        allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available",
+                        systemImage: allSelectableSeasonsAreSelected ? "xmark.circle" : "checkmark.circle"
+                    )
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectableSeasons.isEmpty || isRequesting)
+            }
 
-                HStack(spacing: Metrics.Space.m) {
-                    Button(selected.count == selectableSeasons.count ? "Clear" : "Select All") {
-                        if selected.count == selectableSeasons.count {
-                            selected.removeAll()
-                        } else {
-                            selected = Set(selectableSeasons.map(\.seasonNumber))
-                        }
-                    }
-                    .buttonStyle(.glass)
-
+            Section(details.displayTitle) {
+                ForEach(visibleSeasons) { season in
+                    let selectable = isSelectable(season)
                     Button {
-                        confirmsRequest = true
+                        toggle(season)
                     } label: {
-                        if isRequesting {
-                            ProgressView()
-                        } else {
-                            Text("Request \(selected.count) Season\(selected.count == 1 ? "" : "s")")
-                        }
-                    }
-                    .buttonStyle(.glass)
-                    .disabled(selected.isEmpty || isRequesting)
-                    .accessibilityIdentifier("seerr.seasons.submit")
-                }
-
-                LazyVGrid(columns: seasonColumns, alignment: .leading, spacing: Metrics.Space.l) {
-                    ForEach(visibleSeasons) { season in
-                        let selectable = isSelectable(season)
-                        Button {
-                            if selected.contains(season.seasonNumber) {
-                                selected.remove(season.seasonNumber)
-                            } else {
-                                selected.insert(season.seasonNumber)
-                            }
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                                    Text(season.displayName).font(.headline)
-                                    if let count = season.episodeCount {
-                                        Text("\(count) episodes").font(.caption)
-                                    }
-                                }
-                                Spacer()
-                                if selected.contains(season.seasonNumber) {
-                                    Image(systemName: "checkmark")
-                                } else if !selectable {
-                                    Text(seasonState(season))
+                        HStack(spacing: Metrics.Space.l) {
+                            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                                Text(season.displayName)
+                                    .font(.headline)
+                                if let count = season.episodeCount {
+                                    Text("\(count) episodes")
                                         .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
-                            .padding(Metrics.Space.l)
-                            .frame(maxWidth: .infinity, minHeight: 90)
+                            Spacer()
+                            selectionAccessory(for: season, selectable: selectable)
                         }
-                        .buttonStyle(.glass)
-                        .disabled(!selectable)
-                        .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
+                        .contentShape(Rectangle())
                     }
-                }
-
-                if let errorMessage {
-                    Text(errorMessage).font(.callout).foregroundStyle(.red)
+                    .buttonStyle(.borderless)
+                    .disabled(!selectable || isRequesting)
+                    .accessibilityValue(selectionValue(for: season, selectable: selectable))
+                    .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
                 }
             }
-            .padding(.horizontal, Metrics.screenGutter)
-            .padding(.vertical, Metrics.Space.xxl)
         }
-        .scrollClipDisabled()
-        .navigationTitle("Request \(details.displayTitle)")
-        .confirmationDialog(
-            "Request \(selected.count) season\(selected.count == 1 ? "" : "s")?",
-            isPresented: $confirmsRequest,
-            titleVisibility: .visible
-        ) {
-            Button("Send Request") { submit() }
-            Button("Cancel", role: .cancel) {}
+        .navigationTitle("Choose Seasons")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button {
+                    submit()
+                } label: {
+                    if isRequesting {
+                        ProgressView()
+                    } else {
+                        Text("Request \(selected.count)")
+                    }
+                }
+                .disabled(selected.isEmpty || isRequesting)
+                .accessibilityLabel("Request \(selected.count) Season\(selected.count == 1 ? "" : "s")")
+                .accessibilityIdentifier("seerr.seasons.submit")
+            }
+        }
+        .alert("Couldn't Send Request", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK") { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "The request couldn't be sent.")
         }
         .accessibilityIdentifier("seerr.seasons")
     }
@@ -319,8 +316,44 @@ struct SeerrSeasonRequestView: View {
 
     private var selectableSeasons: [SeerrSeason] { visibleSeasons.filter(isSelectable) }
 
-    private var seasonColumns: [GridItem] {
-        [GridItem(.flexible(), spacing: Metrics.Space.l), GridItem(.flexible(), spacing: Metrics.Space.l)]
+    private var allSelectableSeasonsAreSelected: Bool {
+        !selectableSeasons.isEmpty && selected.count == selectableSeasons.count
+    }
+
+    private func toggle(_ season: SeerrSeason) {
+        if selected.contains(season.seasonNumber) {
+            selected.remove(season.seasonNumber)
+        } else {
+            selected.insert(season.seasonNumber)
+        }
+    }
+
+    private func selectAllOrClear() {
+        if allSelectableSeasonsAreSelected {
+            selected.removeAll()
+        } else {
+            selected = Set(selectableSeasons.map(\.seasonNumber))
+        }
+    }
+
+    @ViewBuilder
+    private func selectionAccessory(for season: SeerrSeason, selectable: Bool) -> some View {
+        if selected.contains(season.seasonNumber) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.tint)
+        } else if selectable {
+            Image(systemName: "circle")
+                .foregroundStyle(.tertiary)
+        } else {
+            Label(seasonState(season), systemImage: "checkmark.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func selectionValue(for season: SeerrSeason, selectable: Bool) -> String {
+        if selected.contains(season.seasonNumber) { return "Selected" }
+        return selectable ? "Not selected" : seasonState(season)
     }
 
     private func isSelectable(_ season: SeerrSeason) -> Bool {
