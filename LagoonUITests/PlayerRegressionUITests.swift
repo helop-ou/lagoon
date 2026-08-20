@@ -794,6 +794,29 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(infoTab.waitForExistence(timeout: 5))
         XCTAssertTrue(subtitleTab.waitForExistence(timeout: 5))
         XCTAssertTrue(infoTab.hasFocus)
+
+        // The compact Audio track column and the delay controls must remain
+        // distinct. This catches both a half-screen single-track list and a
+        // delay row squeezed until its label/value overlap.
+        remote.press(.right)
+        remote.press(.right)
+        let firstAudioTrack = app.buttons["player.track.audio-1"]
+        let audioDelayDecrease = app.buttons["player.audioDelay.decrease"]
+        let audioDelayIncrease = app.buttons["player.audioDelay.increase"]
+        XCTAssertTrue(firstAudioTrack.waitForExistence(timeout: 3))
+        XCTAssertTrue(audioDelayDecrease.waitForExistence(timeout: 3))
+        XCTAssertTrue(audioDelayIncrease.waitForExistence(timeout: 3))
+        XCTAssertLessThan(firstAudioTrack.frame.width, app.frame.width * 0.3)
+        XCTAssertLessThan(firstAudioTrack.frame.maxX, audioDelayDecrease.frame.minX)
+        XCTAssertLessThan(audioDelayDecrease.frame.maxX, audioDelayIncrease.frame.minX)
+        let audioPanelScreenshot = XCTAttachment(screenshot: app.screenshot())
+        audioPanelScreenshot.name = "Compact player Audio panel"
+        audioPanelScreenshot.lifetime = .keepAlways
+        add(audioPanelScreenshot)
+        remote.press(.left)
+        remote.press(.left)
+        XCTAssertTrue(infoTab.hasFocus)
+
         let performanceProbe = app.descendants(matching: .any)["player.panel.performance"]
         XCTAssertTrue(performanceProbe.waitForExistence(timeout: 5))
         let initialMemory = RegressionState(
@@ -829,7 +852,10 @@ final class PlayerRegressionUITests: XCTestCase {
         for _ in 0..<3 { remote.press(.right) }
         remote.press(.down) // Off
         for _ in 0..<30 { remote.press(.down) }
-        XCTAssertTrue(app.buttons["player.track.subtitle-40"].hasFocus)
+        let finalTrack = app.buttons["player.track.subtitle-40"]
+        XCTAssertTrue(finalTrack.hasFocus)
+        XCTAssertGreaterThan(finalTrack.frame.minY, subtitleTab.frame.maxY)
+        XCTAssertLessThan(finalTrack.frame.maxY, app.frame.maxY)
         let finalMemory = RegressionState(
             performanceProbe.value as? String ?? ""
         ).double("memoryMB")
