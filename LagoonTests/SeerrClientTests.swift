@@ -57,6 +57,7 @@ struct SeerrClientTests {
         #expect(item.displayTitle == "Arrival")
         #expect(item.year == "2016")
         #expect(item.mediaInfo?.availability == .processing)
+        #expect(item.mediaInfo?.jellyfinMediaId == "jellyfin-arrival")
         #expect(item.mediaInfo?.requests?.first?.requestStatus == .approved)
         #expect(SeerrMockURLProtocol.requests.first?.query?.contains("mediaType=movie") == true)
     }
@@ -220,7 +221,7 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
         case ("GET", "/base/api/v1/auth/me"):
             return (200, ["Content-Type": "application/json"], userJSON)
         case ("GET", "/api/v1/discover/trending"):
-            return (200, ["Content-Type": "application/json"], #"{"page":1,"totalPages":1,"totalResults":1,"results":[{"id":329865,"mediaType":"movie","title":"Arrival","releaseDate":"2016-11-11","mediaInfo":{"id":8,"tmdbId":329865,"status":3,"requests":[{"id":9,"status":2}]}}]}"#)
+            return (200, ["Content-Type": "application/json"], #"{"page":1,"totalPages":1,"totalResults":1,"results":[{"id":329865,"mediaType":"movie","title":"Arrival","releaseDate":"2016-11-11","mediaInfo":{"id":8,"tmdbId":329865,"status":3,"jellyfinMediaId":"jellyfin-arrival","requests":[{"id":9,"status":2}]}}]}"#)
         case ("GET", "/api/v1/request"):
             return (200, ["Content-Type": "application/json"], #"{"pageInfo":{"page":1,"pages":1,"pageSize":20,"results":1},"results":[{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"requestedBy":{"id":7,"username":"jaagop","permissions":32},"seasons":[{"id":1,"seasonNumber":1}]}]}"#)
         case ("POST", "/api/v1/request"):
