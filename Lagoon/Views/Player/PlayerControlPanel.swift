@@ -51,16 +51,21 @@ struct PlayerControlPanel: View {
     private var rowFocusInset: CGFloat { 20 }
     /// A track row at rest; the card sizes itself from this plus the gap.
     private var trackRowHeight: CGFloat { 62 }
-    /// Taller than before, because the roomier gaps fit fewer rows on screen
-    /// and the panel has the vertical space to spare.
-    private var trackListMaxHeight: CGFloat { 460 }
+    /// Keep large libraries scrollable without letting the sheet dominate
+    /// the video behind it.
+    private var trackListMaxHeight: CGFloat { 360 }
 
     var body: some View {
         VStack(spacing: Metrics.Space.xl) {
-            tabBar
-
-            tabCard
-                .padding(.horizontal, Metrics.screenGutter)
+            GlassEffectContainer(spacing: Metrics.Space.s) {
+                VStack(spacing: Metrics.Space.l) {
+                    tabBar
+                    tabCard
+                }
+                .frame(maxWidth: PlayerPanelMetrics.maxWidth)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Metrics.screenGutter)
 
             Spacer()
         }
@@ -80,7 +85,7 @@ struct PlayerControlPanel: View {
     // white-pill look — never draw custom focus chrome around it. The
     // active tab keeps bold text once focus moves down into the card.
     private var tabBar: some View {
-        HStack(spacing: Metrics.Space.m) {
+        HStack(spacing: Metrics.Space.s) {
             ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
                 Button {
                     selectedTab = tab
@@ -90,6 +95,7 @@ struct PlayerControlPanel: View {
                     Text(tab.title)
                         .fontWeight(.bold)
                 }
+                .buttonStyle(.glass)
                 .focused(focus, equals: .tab(tab))
                 .accessibilityIdentifier("player.tab.\(String(describing: tab))")
             }
@@ -107,34 +113,41 @@ struct PlayerControlPanel: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Metrics.Space.xl)
+        .padding(PlayerPanelMetrics.cardPadding)
         // Native focused controls choose their own label color. Forcing a
         // foreground style here makes their text disappear in the lozenge.
-        .background {
-            #if os(tvOS)
-            // A live material forces every video frame behind this large card
-            // through the compositor. An opaque surface lets the sample-buffer
-            // renderer keep its optimized presentation path while the panel is
-            // open and is substantially cheaper to animate on Apple TV.
+        // Apple reserves Liquid Glass for controls/navigation. This is the
+        // content sheet beneath those glass tabs, so tvOS's regular overlay
+        // material preserves that hierarchy and adapts for contrast and
+        // Reduce Transparency without nesting glass inside glass.
+        .background(
+            .regularMaterial,
+            in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius)
+        )
+        .overlay {
             RoundedRectangle(cornerRadius: Metrics.panelCornerRadius)
-                .fill(Color(red: 0.075, green: 0.075, blue: 0.085))
-            #else
-            RoundedRectangle(cornerRadius: Metrics.panelCornerRadius)
-                .fill(.regularMaterial)
-            #endif
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                .allowsHitTesting(false)
         }
     }
 
     private var infoCard: some View {
-        HStack(alignment: .top, spacing: Metrics.Space.xl) {
+        HStack(alignment: .top, spacing: Metrics.Space.l) {
             CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
                 image
                     .resizable()
-                    .aspectRatio(2 / 3, contentMode: .fill)
+                    // Respect the downloaded artwork's own pixels. The
+                    // surrounding frame supplies the poster ratio without
+                    // stretching or zoom-cropping the image itself.
+                    .scaledToFit()
             } placeholder: {
                 Color.white.opacity(0.1)
             }
-            .frame(width: 130, height: 195)
+            .frame(
+                width: PlayerPanelMetrics.posterWidth,
+                height: PlayerPanelMetrics.posterHeight
+            )
+            .background(.white.opacity(0.06))
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
 
             VStack(alignment: .leading, spacing: Metrics.Space.s) {
@@ -144,12 +157,13 @@ struct PlayerControlPanel: View {
                     Text(overview)
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                        .lineLimit(3)
+                        .lineLimit(2)
                 }
                 if !info.facts.isEmpty {
-                    Text(info.facts.joined(separator: "    "))
+                    Text(info.facts.joined(separator: "   "))
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
 
                 if let onTogglePictureInPicture {
@@ -158,12 +172,13 @@ struct PlayerControlPanel: View {
                             isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
                             systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
                         )
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.callout.weight(.medium))
                     }
+                    .buttonStyle(.glass)
+                    .fixedSize()
                     .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
                     .focused(focus, equals: .track("picture-in-picture"))
                     .accessibilityIdentifier("player.pictureInPicture")
-                    .padding(.top, Metrics.Space.s)
                 }
             }
             Spacer(minLength: 0)
@@ -183,33 +198,70 @@ struct PlayerControlPanel: View {
     }
 
     private var audioCard: some View {
+        #if os(tvOS)
+        HStack(alignment: .top, spacing: Metrics.Space.xl) {
+            trackCard(rows: audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
+                onSelectAudioTrack(audioTracks.first(where: { $0.id == rowID })?.engineID)
+            }
+            // One or two audio tracks should read as a compact list, not a
+            // half-screen column. Long libraries still scroll vertically.
+            .frame(
+                width: PlayerPanelMetrics.audioTrackColumnWidth,
+                alignment: .topLeading
+            )
+            .padding(.trailing, Metrics.Space.l)
+            // A standalone vertical Divider greedily accepts the sheet's
+            // full proposed height. Keeping it in this content-sized overlay
+            // makes the Audio sheet follow its actual rows instead.
+            .overlay(alignment: .trailing) {
+                Divider()
+            }
+
+            audioOptions
+                .frame(
+                    width: PlayerPanelMetrics.audioOptionsColumnWidth,
+                    alignment: .topLeading
+                )
+
+            Spacer(minLength: 0)
+        }
+        #else
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
             trackCard(rows: audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
                 onSelectAudioTrack(audioTracks.first(where: { $0.id == rowID })?.engineID)
             }
-            VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                cardHeader("Options")
-                HStack(spacing: Metrics.Space.m) {
-                    Text("Audio Delay")
-                        .font(.callout)
-                    Spacer()
-                    Button {
-                        onSetAudioDelay(audioDelay - 0.1)
-                    } label: {
-                        Image(systemName: "minus")
-                    }
-                    .accessibilityIdentifier("player.audioDelay.decrease")
-                    Text(String(format: "%+.1f s", audioDelay))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(audioDelay == 0 ? .secondary : .primary)
-                        .accessibilityIdentifier("player.audioDelay.value")
-                    Button {
-                        onSetAudioDelay(audioDelay + 0.1)
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityIdentifier("player.audioDelay.increase")
+            audioOptions
+        }
+        #endif
+    }
+
+    private var audioOptions: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+            cardHeader("Options")
+            HStack(spacing: Metrics.Space.m) {
+                Text("Audio Delay")
+                    .font(.callout)
+                    .fixedSize()
+                    .layoutPriority(1)
+                Spacer()
+                Button {
+                    onSetAudioDelay(audioDelay - 0.1)
+                } label: {
+                    Image(systemName: "minus")
                 }
+                .accessibilityIdentifier("player.audioDelay.decrease")
+                Text(String(format: "%+.1f s", audioDelay))
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(audioDelay == 0 ? .secondary : .primary)
+                    .fixedSize()
+                    .layoutPriority(1)
+                    .accessibilityIdentifier("player.audioDelay.value")
+                Button {
+                    onSetAudioDelay(audioDelay + 0.1)
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityIdentifier("player.audioDelay.increase")
             }
         }
     }
@@ -301,7 +353,6 @@ struct PlayerControlPanel: View {
                         .padding(.vertical, rowFocusInset)
                     }
                     .padding(.horizontal, -rowFocusInset)
-                    .padding(.vertical, -rowFocusInset)
                     .frame(maxHeight: 280)
                 }
 
@@ -414,8 +465,12 @@ struct PlayerControlPanel: View {
                 .padding(.vertical, rowFocusInset)
             }
             .padding(.horizontal, -rowFocusInset)
-            .padding(.vertical, -rowFocusInset)
-            .frame(maxHeight: min(CGFloat(rows.count) * (trackRowHeight + Metrics.Space.m), trackListMaxHeight))
+            .frame(
+                maxHeight: min(
+                    CGFloat(rows.count) * (trackRowHeight + Metrics.Space.m) + rowFocusInset * 2,
+                    trackListMaxHeight
+                )
+            )
         }
     }
 
@@ -426,6 +481,22 @@ struct PlayerControlPanel: View {
             .foregroundStyle(.secondary)
             .padding(.leading, Metrics.Space.m)
     }
+}
+
+private enum PlayerPanelMetrics {
+    #if os(tvOS)
+    static let maxWidth: CGFloat = 1_440
+    static let cardPadding: CGFloat = 24
+    static let posterWidth: CGFloat = 112
+    static let audioTrackColumnWidth: CGFloat = 440
+    static let audioOptionsColumnWidth: CGFloat = 600
+    #else
+    static let maxWidth: CGFloat = .infinity
+    static let cardPadding: CGFloat = 20
+    static let posterWidth: CGFloat = 88
+    #endif
+
+    static let posterHeight = posterWidth * 1.5
 }
 
 /// Observation boundary between the playback clock and the comparatively
