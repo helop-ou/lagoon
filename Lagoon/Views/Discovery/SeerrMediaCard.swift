@@ -77,7 +77,7 @@ struct SeerrMediaRail: View {
     let items: [SeerrDiscoverResult]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.s) {
+        VStack(alignment: .leading, spacing: 0) {
             Text(title)
                 .font(.headline)
                 .padding(.horizontal, Metrics.screenGutter)
