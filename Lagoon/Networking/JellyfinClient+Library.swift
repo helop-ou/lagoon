@@ -4,7 +4,7 @@ import Foundation
 // which every server from 10.8 onward answers.
 extension JellyfinClient {
     /// Extra item fields the UI needs beyond the server's list defaults.
-    static let defaultFields = "Overview,Genres,Taglines,PrimaryImageAspectRatio,ChildCount,Status,OriginalLanguage"
+    static let defaultFields = "Overview,Genres,Taglines,PrimaryImageAspectRatio,ChildCount,Status,OriginalLanguage,ProviderIds"
 
     func userViews() async throws -> [MediaItem] {
         let userId = try requireUserId()
@@ -78,13 +78,18 @@ extension JellyfinClient {
         let includeType = mediaType == .tv ? MediaItemType.series : .movie
         let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
             URLQueryItem(name: "Recursive", value: "true"),
-            URLQueryItem(name: "AnyProviderIdEquals", value: "tmdb.\(tmdbID)"),
+            URLQueryItem(name: "AnyProviderIdEquals", value: "Tmdb.\(tmdbID)"),
             URLQueryItem(name: "IncludeItemTypes", value: includeType.rawValue),
             URLQueryItem(name: "Limit", value: "1"),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
             URLQueryItem(name: "ImageTypeLimit", value: "1"),
         ])
-        return page.items.first
+        let expectedID = String(tmdbID)
+        return page.items.first { item in
+            item.providerIds?.first(where: {
+                $0.key.caseInsensitiveCompare("Tmdb") == .orderedSame
+            })?.value == expectedID
+        }
     }
 
     func resumeItems(limit: Int = 12) async throws -> [MediaItem] {
