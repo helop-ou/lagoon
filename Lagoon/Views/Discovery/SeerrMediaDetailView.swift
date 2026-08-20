@@ -11,8 +11,7 @@ struct SeerrMediaDetailView: View {
     @State private var isLoading = true
     @State private var isRequesting = false
     @State private var errorMessage: String?
-    @State private var confirmationMessage: String?
-    @State private var confirmsMovieRequest = false
+    @State private var popup: Popup?
     @State private var reloadID = 0
 
     var body: some View {
@@ -22,110 +21,45 @@ struct SeerrMediaDetailView: View {
             } else if let errorMessage, details == nil {
                 ErrorStateView(message: errorMessage) { reloadID += 1 }
             } else if let details {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Metrics.Space.section) {
-                        hero(details)
-                        if let genres = details.genres, !genres.isEmpty {
-                            Text(genres.map(\.name).joined(separator: " · "))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, Metrics.screenGutter)
-                        }
+                DetailPageScaffold(
+                    backdropURL: SeerrClient.imageURL(path: details.backdropPath, width: 1280)
+                ) {
+                    DetailMetadataHeader(
+                        subtitle: details.tagline,
+                        factTokens: factTokens(details),
+                        genres: details.genres?.map(\.name) ?? [],
+                        communityRating: displayRating(details.voteAverage),
+                        overview: details.overview
+                    ) {
+                        Text(details.displayTitle)
+                            .font(.largeTitle.bold())
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } buttons: {
+                        action(details)
                     }
-                    .padding(.bottom, Metrics.Space.section)
                 }
-                .scrollClipDisabled()
             }
         }
         .navigationTitle(details?.displayTitle ?? mediaType.title)
         .task(id: reloadID) { await load() }
-        .confirmationDialog(
-            "Request \(details?.displayTitle ?? "this movie")?",
-            isPresented: $confirmsMovieRequest,
-            titleVisibility: .visible
-        ) {
-            Button("Request Movie") { requestMovie() }
-            Button("Cancel", role: .cancel) {}
-        }
-        .alert("Seerr", isPresented: Binding(
-            get: { confirmationMessage != nil },
-            set: { if !$0 { confirmationMessage = nil } }
+        .alert(popup?.title ?? "Seerr", isPresented: Binding(
+            get: { popup != nil },
+            set: { if !$0 { popup = nil } }
         )) {
-            Button("OK") {}
+            if popup?.confirmsMovieRequest == true {
+                Button("Request Movie") {
+                    popup = nil
+                    requestMovie()
+                }
+                Button("Cancel", role: .cancel) { popup = nil }
+            } else {
+                Button("OK") { popup = nil }
+            }
         } message: {
-            Text(confirmationMessage ?? "")
+            Text(popup?.message ?? "")
         }
         .accessibilityIdentifier("seerr.detail.\(mediaType.rawValue).\(mediaID)")
-    }
-
-    private func hero(_ details: SeerrMediaDetails) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            CachedAsyncImage(
-                url: SeerrClient.imageURL(path: details.backdropPath, width: 1280),
-                maxPixelSize: 1280
-            ) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Color.white.opacity(0.04)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: Metrics.heroHeight)
-            .clipped()
-
-            LinearGradient(
-                colors: [.black.opacity(0.94), .black.opacity(0.45), .clear],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-
-            HStack(alignment: .bottom, spacing: Metrics.Space.xxl) {
-                CachedAsyncImage(
-                    url: SeerrClient.imageURL(path: details.posterPath, width: 500),
-                    maxPixelSize: Int(Metrics.posterHeight)
-                ) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.white.opacity(0.07)
-                }
-                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-
-                VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                    if let tagline = details.tagline, !tagline.isEmpty {
-                        Text(tagline)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(details.displayTitle)
-                        .font(.largeTitle.bold())
-                        .lineLimit(2)
-
-                    HStack(spacing: Metrics.Space.m) {
-                        if let year = details.year { Text(year) }
-                        if let runtime = runtimeText(details) { Text(runtime) }
-                        if let rating = details.voteAverage, rating > 0 {
-                            Label(String(format: "%.1f", rating), systemImage: "star.fill")
-                        }
-                        Text(availability.title)
-                    }
-                    .font(.footnote)
-
-                    if let overview = details.overview, !overview.isEmpty {
-                        Text(overview)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(6)
-                            .frame(maxWidth: 760, alignment: .leading)
-                    }
-
-                    action(details)
-                }
-                .frame(maxWidth: 900, alignment: .leading)
-            }
-            .padding(.horizontal, Metrics.screenGutter)
-            .padding(.bottom, Metrics.Space.xxl)
-        }
-        .frame(height: Metrics.heroHeight)
     }
 
     @ViewBuilder
@@ -139,12 +73,20 @@ struct SeerrMediaDetailView: View {
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("seerr.detail.open")
             } else {
-                Label("Available in Jellyfin", systemImage: "checkmark.circle.fill")
-                    .font(.callout.bold())
+                statusButton(
+                    title: "Available in Jellyfin",
+                    symbol: "checkmark.circle.fill",
+                    message: "Seerr reports this title as available, but Lagoon couldn't match it to an item in your current Jellyfin library."
+                )
             }
         case .pending, .processing:
-            Label(availability.title, systemImage: "clock")
-                .font(.callout.bold())
+            statusButton(
+                title: availability.title,
+                symbol: "clock",
+                message: availability == .pending
+                    ? "This request is waiting for approval."
+                    : "This title has been approved and is being added to your library."
+            )
         case .partiallyAvailable:
             if mediaType == .tv, seerr.user?.canRequest(.tv) == true {
                 NavigationLink(value: SeerrNavigationRoute.seasonRequest(details)) {
@@ -153,14 +95,21 @@ struct SeerrMediaDetailView: View {
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("seerr.detail.request")
             } else {
-                Label(availability.title, systemImage: "circle.lefthalf.filled")
-                    .font(.callout.bold())
+                statusButton(
+                    title: availability.title,
+                    symbol: "circle.lefthalf.filled",
+                    message: "Some of this title is already available in your Jellyfin library."
+                )
             }
         case .unknown, .deleted:
             if seerr.user?.canRequest(mediaType) == true {
                 if mediaType == .movie {
                     Button {
-                        confirmsMovieRequest = true
+                        popup = Popup(
+                            title: "Request \(details.displayTitle)?",
+                            message: "Send this movie request to Seerr?",
+                            confirmsMovieRequest: true
+                        )
                     } label: {
                         if isRequesting { ProgressView() } else { Label("Request Movie", systemImage: "plus") }
                     }
@@ -175,17 +124,22 @@ struct SeerrMediaDetailView: View {
                     .accessibilityIdentifier("seerr.detail.request")
                 }
             } else {
-                Text("Your Seerr account cannot request this title.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                statusButton(
+                    title: "Request Unavailable",
+                    symbol: "lock",
+                    message: "Your Seerr account doesn't have permission to request this title."
+                )
             }
         }
+    }
 
-        if let errorMessage, self.details != nil {
-            Text(errorMessage)
-                .font(.callout)
-                .foregroundStyle(.red)
+    private func statusButton(title: String, symbol: String, message: String) -> some View {
+        Button {
+            popup = Popup(title: title, message: message)
+        } label: {
+            Label(title, systemImage: symbol)
         }
+        .buttonStyle(.glass)
     }
 
     private var availability: SeerrAvailabilityStatus {
@@ -223,20 +177,41 @@ struct SeerrMediaDetailView: View {
                     seasons: nil,
                     is4k: false
                 ))
-                confirmationMessage = "Request \(request.requestStatus.title.lowercased())."
+                popup = Popup(
+                    title: "Request Sent",
+                    message: "Your request is now \(request.requestStatus.title.lowercased())."
+                )
                 reloadID += 1
             } catch {
-                errorMessage = error.localizedDescription
+                popup = Popup(
+                    title: "Couldn't Send Request",
+                    message: error.localizedDescription
+                )
             }
             isRequesting = false
         }
     }
 
+    private func factTokens(_ details: SeerrMediaDetails) -> [String] {
+        [runtimeText(details), details.year].compactMap { $0 }
+    }
+
+    private func displayRating(_ rating: Double?) -> Double? {
+        guard let rating, rating > 0 else { return nil }
+        return rating
+    }
+
     private func runtimeText(_ details: SeerrMediaDetails) -> String? {
         let minutes = details.runtime ?? details.episodeRunTime?.first
         guard let minutes, minutes > 0 else { return nil }
-        if minutes < 60 { return "\(minutes)m" }
-        return "\(minutes / 60)h \(minutes % 60)m"
+        if minutes < 60 { return "\(minutes) min" }
+        return "\(minutes / 60) h \(minutes % 60) min"
+    }
+
+    private struct Popup {
+        let title: String
+        let message: String
+        var confirmsMovieRequest = false
     }
 }
 
