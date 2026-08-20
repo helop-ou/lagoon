@@ -11,8 +11,10 @@ struct MainTabView: View {
     @State private var lifecycleReplaysScheduled = 0
     @State private var homeNavigationPath: [ContentNavigationRoute] = []
     @State private var libraryNavigationPaths: [String: [ContentNavigationRoute]] = [:]
-    @State private var searchNavigationPath: [ContentNavigationRoute] = []
-    @State private var seerrNavigationPath: [SeerrNavigationRoute] = []
+    // Discover owns both Jellyfin and Seerr results, so its stack needs to
+    // carry both route types. NavigationPath keeps those identities separate
+    // while still allowing a local result and a Seerr result to share a page.
+    @State private var discoverNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
 
     var body: some View {
@@ -25,9 +27,10 @@ struct MainTabView: View {
             }
 
             Tab("Discover", systemImage: "sparkles") {
-                NavigationStack(path: $seerrNavigationPath) {
+                NavigationStack(path: $discoverNavigationPath) {
                     DiscoverView()
                         .seerrNavigationDestinations()
+                        .contentNavigationDestinations()
                 }
             }
 
@@ -37,13 +40,6 @@ struct MainTabView: View {
                         LibraryView(library: library)
                             .contentNavigationDestinations()
                     }
-                }
-            }
-
-            Tab("Search", systemImage: "magnifyingglass", role: .search) {
-                NavigationStack(path: $searchNavigationPath) {
-                    SearchView()
-                        .contentNavigationDestinations()
                 }
             }
 
@@ -63,8 +59,7 @@ struct MainTabView: View {
             // without rebuilding MainTabView.
             homeNavigationPath.removeAll()
             libraryNavigationPaths.removeAll()
-            searchNavigationPath.removeAll()
-            seerrNavigationPath.removeAll()
+            discoverNavigationPath = NavigationPath()
         }
         // Headless hardware harness: resolve a named library item through
         // the app's existing signed-in client, then present the same player
