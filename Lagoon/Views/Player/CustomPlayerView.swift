@@ -58,6 +58,7 @@ struct CustomPlayerView<Surface: View>: View {
     var subtitleStyle: SubtitleRenderStyle = .fallback
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     @ViewBuilder let surface: () -> Surface
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private struct SeekFeedback: Equatable {
         let forward: Bool
@@ -108,7 +109,12 @@ struct CustomPlayerView<Surface: View>: View {
     private let panelSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
     /// Slide the panel in on, and back out with, the swipe that summons it.
-    private var panelMotion: Animation { .spring(duration: Motion.fast, bounce: 0.05) }
+    private var panelMotion: Animation? {
+        reduceMotion ? nil : .spring(duration: Motion.fast, bounce: 0.05)
+    }
+    private var transientScaleTransition: AnyTransition {
+        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9))
+    }
     /// Far enough to carry the tabs and card clear of the top edge.
     private var panelSlideDistance: CGFloat { 720 }
 
@@ -168,7 +174,7 @@ struct CustomPlayerView<Surface: View>: View {
                     seekIndicator(feedback)
                 }
             }
-            .animation(.easeOut(duration: Motion.fast), value: seekFeedback)
+            .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: seekFeedback)
 
             skipOverlay
 
@@ -325,7 +331,7 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func seekIndicator(_ feedback: SeekFeedback) -> some View {
         PlayerSeekIndicator(forward: feedback.forward)
-            .transition(.opacity.combined(with: .scale(scale: 0.85)))
+            .transition(transientScaleTransition)
     }
 
     // MARK: - Surface & remote commands
@@ -613,13 +619,13 @@ struct CustomPlayerView<Surface: View>: View {
                     showsCountdown: skipMode == .autoDelay,
                     fill: autoSkipFill
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                .transition(transientScaleTransition)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.trailing, Metrics.screenGutter)
                 .padding(.bottom, SkipMetrics.bottomInset)
             }
         }
-        .animation(.easeOut(duration: Motion.fast), value: activeSegment?.id)
+        .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: activeSegment?.id)
         #if os(tvOS)
         .allowsHitTesting(false)
         #else
@@ -690,7 +696,7 @@ struct CustomPlayerView<Surface: View>: View {
                     fill: nextUpFill,
                     hint: hint
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                .transition(transientScaleTransition)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.trailing, Metrics.screenGutter)
                 .padding(.bottom, NextUpMetrics.bottomInset)
@@ -701,7 +707,7 @@ struct CustomPlayerView<Surface: View>: View {
                 #endif
             }
         }
-        .animation(.easeOut(duration: Motion.fast), value: showsNextUp)
+        .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: showsNextUp)
         // tvOS drives this from the surface's Select, and a focusable card
         // would move `onMoveCommand` off the surface and kill scrubbing
         // while it is up — the same trap the skip pill documents.
