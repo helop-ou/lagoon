@@ -110,11 +110,27 @@ struct SeerrClientTests {
         #expect(query.contains("requestedBy=7"))
     }
 
-    private func makeClient() -> SeerrClient {
+    @Test func requestDeadlineEndsAStalledSearch() async throws {
+        let client = makeClient(requestTimeout: 0.05)
+        client.configure(serverURL: URL(string: "https://seerr.test")!)
+        client.setSessionCookie("session")
+
+        do {
+            _ = try await client.search(query: "alien")
+            Issue.record("A stalled Seerr search did not reach its absolute deadline")
+        } catch let error as URLError {
+            #expect(error.code == .timedOut)
+        }
+    }
+
+    private func makeClient(requestTimeout: TimeInterval = 20) -> SeerrClient {
         SeerrMockURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SeerrMockURLProtocol.self]
-        return SeerrClient(session: URLSession(configuration: configuration))
+        return SeerrClient(
+            session: URLSession(configuration: configuration),
+            requestTimeout: requestTimeout
+        )
     }
 
     private func user(permissions: Int) -> SeerrUser {
@@ -175,6 +191,12 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             body: body
         ))
         Self.lock.unlock()
+
+        // Deliberately never finishes. The client must enforce an absolute
+        // deadline instead of relying only on URLSession's inactivity timer.
+        if url.path == "/api/v1/search" {
+            return
+        }
 
         let result = response(for: url)
         guard let response = HTTPURLResponse(
