@@ -53,18 +53,25 @@ struct DiscoverView: View {
             if !normalizedSearch.isEmpty {
                 searchContent
             } else if seerr.isLoading {
-                LoadingView()
+                pageState {
+                    ProgressView()
+                        .accessibilityLabel("Loading Discover")
+                }
             } else if !seerr.isConnected {
-                connectionState
+                pageState { connectionState }
             } else if viewModel.isLoading, viewModel.trending.isEmpty {
-                LoadingView()
+                pageState {
+                    ProgressView()
+                        .accessibilityLabel("Loading Discover")
+                }
             } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
-                ErrorStateView(message: error) { reloadID += 1 }
+                pageState {
+                    ErrorStateView(message: error) { reloadID += 1 }
+                }
             } else {
                 discoveryContent
             }
         }
-        .navigationTitle("Discover")
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
         .onChange(of: searchText) { _, newValue in
             librarySearch.search(newValue, client: session.client)
@@ -105,7 +112,9 @@ struct DiscoverView: View {
 
     private var discoveryContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: Metrics.Space.section) {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pageTitle
+
                 HStack(spacing: Metrics.Space.m) {
                     NavigationLink(value: SeerrNavigationRoute.catalog(.movie)) {
                         Label("Movies", systemImage: "film")
@@ -126,7 +135,7 @@ struct DiscoverView: View {
                     .accessibilityIdentifier("seerr.requests")
                 }
                 .padding(.horizontal, Metrics.screenGutter)
-                .padding(.top, Metrics.Space.xxl)
+                .padding(.bottom, Metrics.Space.xl)
 
                 SeerrMediaRail(title: "Trending", items: viewModel.trending)
                 SeerrMediaRail(title: "Popular Movies", items: viewModel.movies)
@@ -139,23 +148,16 @@ struct DiscoverView: View {
         .refreshable { await viewModel.load(client: seerr.client) }
     }
 
-    @ViewBuilder
     private var searchContent: some View {
-        if librarySearch.isSearching,
-           isSearching,
-           librarySearch.results.isEmpty,
-           searchResults.isEmpty {
-            LoadingView()
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: Metrics.Space.section) {
-                    librarySearchSection
-                    seerrSearchSection
-                }
-                .padding(.vertical, Metrics.Space.xxl)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pageTitle
+                librarySearchSection
+                seerrSearchSection
             }
-            .scrollClipDisabled()
+            .padding(.bottom, Metrics.Space.section)
         }
+        .scrollClipDisabled()
     }
 
     @ViewBuilder
@@ -231,7 +233,27 @@ struct DiscoverView: View {
         }
         .padding(.horizontal, Metrics.screenGutter)
         .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-        .focusable(!isLoading && !canRetry)
+    }
+
+    private var pageTitle: some View {
+        Text("Discover")
+            .font(.largeTitle.bold())
+            .padding(.horizontal, Metrics.screenGutter)
+            .padding(.top, Metrics.Space.xxl)
+            .padding(.bottom, Metrics.Space.xl)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func pageState<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                pageTitle
+                content()
+                    .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+            }
+            .padding(.bottom, Metrics.Space.section)
+        }
+        .scrollClipDisabled()
     }
 
     private var normalizedSearch: String {
