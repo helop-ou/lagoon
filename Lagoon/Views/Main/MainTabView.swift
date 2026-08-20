@@ -11,6 +11,7 @@ struct MainTabView: View {
     @State private var lifecycleReplaysScheduled = 0
     @State private var homeNavigationPath: [ContentNavigationRoute] = []
     @State private var libraryNavigationPaths: [String: [ContentNavigationRoute]] = [:]
+    @State private var libraryPickerPath: [LibraryTab] = []
     // Discover owns both Jellyfin and Seerr results, so its stack needs to
     // carry both route types. NavigationPath keeps those identities separate
     // while still allowing a local result and a Seerr result to share a page.
@@ -18,37 +19,7 @@ struct MainTabView: View {
     @State private var regressionResolution = "idle"
 
     var body: some View {
-        TabView {
-            Tab("Home", systemImage: "house.fill") {
-                NavigationStack(path: $homeNavigationPath) {
-                    HomeView()
-                        .contentNavigationDestinations()
-                }
-            }
-
-            Tab("Discover", systemImage: "sparkles") {
-                NavigationStack(path: $discoverNavigationPath) {
-                    DiscoverView()
-                        .seerrNavigationDestinations()
-                        .contentNavigationDestinations()
-                }
-            }
-
-            ForEach(libraries) { library in
-                Tab(library.name ?? "Library", systemImage: icon(for: library)) {
-                    NavigationStack(path: libraryNavigationPath(for: library.id)) {
-                        LibraryView(library: library)
-                            .contentNavigationDestinations()
-                    }
-                }
-            }
-
-            Tab("Settings", systemImage: "gearshape.fill") {
-                NavigationStack {
-                    SettingsView()
-                }
-            }
-        }
+        primaryNavigation
         .task {
             await loadLibraries()
         }
@@ -59,6 +30,7 @@ struct MainTabView: View {
             // without rebuilding MainTabView.
             homeNavigationPath.removeAll()
             libraryNavigationPaths.removeAll()
+            libraryPickerPath.removeAll()
             discoverNavigationPath = NavigationPath()
         }
         // Headless hardware harness: resolve a named library item through
@@ -126,6 +98,52 @@ struct MainTabView: View {
             }
         } message: {
             Text(deepLinkError ?? "The item couldn't be loaded.")
+        }
+    }
+
+    private var primaryNavigation: some View {
+        TabView {
+            Tab("Home", systemImage: "house.fill") {
+                NavigationStack(path: $homeNavigationPath) {
+                    HomeView()
+                        .contentNavigationDestinations()
+                }
+            }
+
+            Tab("Discover", systemImage: "sparkles") {
+                NavigationStack(path: $discoverNavigationPath) {
+                    DiscoverView()
+                        .seerrNavigationDestinations()
+                        .contentNavigationDestinations()
+                }
+            }
+
+            if libraries.count <= 2 {
+                ForEach(libraries) { library in
+                    Tab(library.name ?? "Library", systemImage: icon(for: library)) {
+                        NavigationStack(path: libraryNavigationPath(for: library.id)) {
+                            LibraryView(library: library)
+                                .contentNavigationDestinations()
+                        }
+                    }
+                }
+            } else {
+                Tab("Libraries", systemImage: "rectangle.stack.fill") {
+                    NavigationStack(path: $libraryPickerPath) {
+                        LibraryPickerView(libraries: libraries)
+                            .navigationDestination(for: LibraryTab.self) { library in
+                                LibraryView(library: library)
+                                    .contentNavigationDestinations()
+                            }
+                    }
+                }
+            }
+
+            Tab("Settings", systemImage: "gearshape.fill") {
+                NavigationStack {
+                    SettingsView()
+                }
+            }
         }
     }
 
@@ -471,6 +489,44 @@ struct MainTabView: View {
             get: { libraryNavigationPaths[libraryID] ?? [] },
             set: { libraryNavigationPaths[libraryID] = $0 }
         )
+    }
+}
+
+private struct LibraryPickerView: View {
+    let libraries: [LibraryTab]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
+                Text("Libraries")
+                    .font(.largeTitle.bold())
+                    .padding(.top, Metrics.Space.xxl)
+                    .padding(.bottom, Metrics.Space.s)
+
+                ForEach(libraries) { library in
+                    NavigationLink(value: library) {
+                        HStack(spacing: Metrics.Space.l) {
+                            Image(systemName: library.collectionType == "tvshows" ? "tv" : "film")
+                                .font(.title3)
+                                .frame(width: 36)
+                            Text(library.name ?? "Library")
+                                .font(.headline)
+                            Spacer()
+                            Image(systemName: "chevron.forward")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, Metrics.Space.l)
+                        .frame(minHeight: 66)
+                    }
+                    .buttonStyle(.glass)
+                }
+            }
+            .padding(.horizontal, Metrics.screenGutter)
+            .padding(.bottom, Metrics.Space.section)
+        }
+        .scrollClipDisabled()
+        .background(Color.black.ignoresSafeArea())
+        .accessibilityIdentifier("libraries.picker")
     }
 }
 
