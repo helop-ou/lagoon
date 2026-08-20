@@ -320,6 +320,8 @@ struct SeerrCatalogView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = SeerrCatalogViewModel()
 
+    private var columns: [GridItem] { Metrics.posterGridColumns }
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Metrics.Space.xxl) {
@@ -338,7 +340,7 @@ struct SeerrCatalogView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
-                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Metrics.gridRowSpacing) {
+                    LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(viewModel.items) { item in
                             SeerrMediaCard(item: item)
                                 .onAppear {
@@ -366,9 +368,5 @@ struct SeerrCatalogView: View {
 
     private var catalogTitle: String {
         mediaType == .movie ? "Discover Movies" : "Discover Shows"
-    }
-
-    private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.fixed(Metrics.posterWidth), spacing: Metrics.cardSpacing), count: Metrics.gridColumns)
     }
 }
