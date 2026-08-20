@@ -130,7 +130,21 @@ struct SeerrRequestsView: View {
                 }
 
                 if viewModel.isLoading, !viewModel.requests.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity).padding(Metrics.Space.xxl)
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(Metrics.Space.xxl)
+                        .accessibilityLabel("Loading more requests")
+                } else if let error = viewModel.errorMessage, !viewModel.requests.isEmpty {
+                    InlineRetryView(message: error) {
+                        Task {
+                            await viewModel.load(
+                                client: seerr.client,
+                                user: user,
+                                filter: filter,
+                                onlyMine: effectiveOnlyMine(for: user)
+                            )
+                        }
+                    }
                 }
             }
             .padding(.horizontal, Metrics.screenGutter)
