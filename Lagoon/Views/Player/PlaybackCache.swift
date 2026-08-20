@@ -59,6 +59,34 @@ nonisolated struct PlaybackByteRangeSet: Equatable, Sendable {
         ranges.contains { $0.contains(range) }
     }
 
+    /// Returns the first hole at or after `offset`, bounded by both the
+    /// caller's scheduling window and the next cached island. Proactive
+    /// buffering uses this instead of blindly extending the byte-zero
+    /// prefix so a foreground seek can move its work to the new playhead
+    /// without redownloading or discarding any earlier ranges.
+    func firstUncachedRange(
+        startingAt offset: Int64,
+        endingBefore upperBound: Int64,
+        maximumCount: Int64
+    ) -> PlaybackByteRange? {
+        guard maximumCount > 0, upperBound > 0 else { return nil }
+        var cursor = min(max(offset, 0), upperBound)
+        guard cursor < upperBound else { return nil }
+
+        for range in ranges {
+            if range.upperBound <= cursor { continue }
+            if range.lowerBound > cursor {
+                let end = min(upperBound, min(range.lowerBound, cursor + maximumCount))
+                return end > cursor ? PlaybackByteRange(cursor, end) : nil
+            }
+            cursor = max(cursor, range.upperBound)
+            if cursor >= upperBound { return nil }
+        }
+
+        let end = min(upperBound, cursor + maximumCount)
+        return end > cursor ? PlaybackByteRange(cursor, end) : nil
+    }
+
     @discardableResult
     mutating func insert(_ range: PlaybackByteRange) -> Int64 {
         guard range.count > 0 else { return 0 }
@@ -89,6 +117,14 @@ nonisolated struct PlaybackByteRangeSet: Equatable, Sendable {
     }
 }
 
+/// A sparse cached byte island normalized onto the player timeline. Direct
+/// files can contain several of these after a seek; presenting all of them
+/// avoids pretending that only the uninterrupted byte-zero prefix survived.
+nonisolated struct PlaybackBufferedRange: Equatable, Hashable, Sendable {
+    let lowerFraction: Double
+    let upperFraction: Double
+}
+
 nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     let cachedBytes: Int64
     let networkBytes: Int64
@@ -100,6 +136,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     let capacityBytes: Int64
     let contiguousCachedBytes: Int64
     let contentLength: Int64?
+    let cachedByteRanges: [PlaybackByteRange]
+    let playheadPrefetchCount: Int
 
     init(
         cachedBytes: Int64,
@@ -111,7 +149,9 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         resourceCount: Int = 0,
         capacityBytes: Int64 = 0,
         contiguousCachedBytes: Int64 = 0,
-        contentLength: Int64? = nil
+        contentLength: Int64? = nil,
+        cachedByteRanges: [PlaybackByteRange] = [],
+        playheadPrefetchCount: Int = 0
     ) {
         self.cachedBytes = cachedBytes
         self.networkBytes = networkBytes
@@ -123,11 +163,23 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         self.capacityBytes = capacityBytes
         self.contiguousCachedBytes = contiguousCachedBytes
         self.contentLength = contentLength
+        self.cachedByteRanges = cachedByteRanges
+        self.playheadPrefetchCount = playheadPrefetchCount
     }
 
     var bufferedFraction: Double? {
         guard let contentLength, contentLength > 0 else { return nil }
         return min(max(Double(contiguousCachedBytes) / Double(contentLength), 0), 1)
+    }
+
+    var bufferedRanges: [PlaybackBufferedRange] {
+        guard let contentLength, contentLength > 0 else { return [] }
+        return cachedByteRanges.compactMap { range in
+            let lower = min(max(Double(range.lowerBound) / Double(contentLength), 0), 1)
+            let upper = min(max(Double(range.upperBound) / Double(contentLength), 0), 1)
+            guard upper > lower else { return nil }
+            return PlaybackBufferedRange(lowerFraction: lower, upperFraction: upper)
+        }
     }
 
     var hitRate: Double {
@@ -161,7 +213,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
             resourceCount: resourceCount + other.resourceCount,
             capacityBytes: capacityBytes + other.capacityBytes,
             contiguousCachedBytes: contiguousCachedBytes + other.contiguousCachedBytes,
-            contentLength: nil
+            contentLength: nil,
+            playheadPrefetchCount: playheadPrefetchCount + other.playheadPrefetchCount
         )
     }
 
@@ -176,7 +229,9 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
             resourceCount: resourceCount,
             capacityBytes: capacityBytes,
             contiguousCachedBytes: contiguousCachedBytes,
-            contentLength: contentLength
+            contentLength: contentLength,
+            cachedByteRanges: cachedByteRanges,
+            playheadPrefetchCount: playheadPrefetchCount
         )
     }
 }
@@ -591,6 +646,11 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     private var storageDisabled = false
     private var reservedBytes: Int64 = 0
     private var inFlight: [UUID: (range: PlaybackByteRange, priority: Float)] = [:]
+    /// The end of the most recent foreground demux read. FFmpeg has already
+    /// translated media time into the correct container byte position here,
+    /// so this is safer than estimating bytes from a VBR timeline fraction.
+    private var preferredPrefetchOffset: Int64 = 0
+    private var playheadPrefetchCount = 0
 
     init(
         itemID: String,
@@ -654,7 +714,9 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             resourceCount: 1,
             capacityBytes: byteLimit,
             contiguousCachedBytes: cached.contiguousUpperBound,
-            contentLength: knownLength
+            contentLength: knownLength,
+            cachedByteRanges: cached.ranges,
+            playheadPrefetchCount: playheadPrefetchCount
         )
     }
 
@@ -692,6 +754,12 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         guard requested.count > 0 else {
             lock.unlock()
             return Data()
+        }
+        if priority >= URLSessionTask.defaultPriority {
+            // Cached hits count too: after a backwards seek the correct hot
+            // window may already be on disk, and prefetch should continue at
+            // the end of that island rather than stay near the old playhead.
+            preferredPrefetchOffset = requested.upperBound
         }
         if cached.contains(requested), let file {
             do {
@@ -818,12 +886,32 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     private func nextPrefetchWindow() -> (offset: Int64, count: Int) {
         lock.lock()
         defer { lock.unlock() }
-        let offset = cached.contiguousUpperBound
         let upperBound = min(knownLength ?? byteLimit, byteLimit)
-        return (
-            offset,
-            Int(min(requestSize, max(upperBound - offset, 0)))
-        )
+        guard !storageDisabled, cached.byteCount < byteLimit, upperBound > 0 else {
+            return (0, 0)
+        }
+
+        let prefixEnd = cached.contiguousUpperBound
+        let preferred = min(max(preferredPrefetchOffset, 0), upperBound)
+        if preferred > prefixEnd,
+           let range = cached.firstUncachedRange(
+               startingAt: preferred,
+               endingBefore: upperBound,
+               maximumCount: requestSize
+           ) {
+            playheadPrefetchCount += 1
+            return (range.lowerBound, Int(range.count))
+        }
+
+        // Once the hot playhead-to-EOF window is complete, wrap around and
+        // close the oldest remaining hole. This still allows a whole cached
+        // file to emerge, just without making a new seek wait behind it.
+        guard let range = cached.firstUncachedRange(
+            startingAt: 0,
+            endingBefore: upperBound,
+            maximumCount: requestSize
+        ) else { return (0, 0) }
+        return (range.lowerBound, Int(range.count))
     }
 
     func cancelAndRemove() {
