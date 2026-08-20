@@ -5,9 +5,35 @@ import SwiftUI
 /// the navigation stack.
 struct LoadingView: View {
     var body: some View {
-        ProgressView()
+        ProgressView("Loading")
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .focusable()
+            .accessibilityIdentifier("state.loading")
+    }
+}
+
+/// Keeps a recoverable next-page failure close to the content that did load.
+/// Replacing a populated grid with a full-screen error would discard context;
+/// silently stopping pagination makes the interface look finished instead.
+struct InlineRetryView: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: Metrics.Space.l) {
+            Label(message, systemImage: "wifi.exclamationmark")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: Metrics.Space.l)
+
+            Button("Try Again", action: retry)
+                .buttonStyle(.glass)
+        }
+        .padding(Metrics.Space.l)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius))
+        .accessibilityIdentifier("state.paginationError")
     }
 }
 
