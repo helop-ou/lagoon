@@ -9,6 +9,7 @@ import SwiftUI
 struct AccountPickerView: View {
     @Environment(SessionStore.self) private var session
     @State private var errorMessage: String?
+    @State private var accountToForget: StoredAccount?
 
     /// The server line only earns its place when accounts actually span more
     /// than one server; on the common single-server setup it is noise under
@@ -48,6 +49,25 @@ struct AccountPickerView: View {
         } message: {
             Text(errorMessage ?? "The saved credential could not be removed.")
         }
+        .confirmationDialog(
+            "Forget \(accountToForget?.displayName ?? "This User")?",
+            isPresented: Binding(
+                get: { accountToForget != nil },
+                set: { if !$0 { accountToForget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Forget This User", role: .destructive) {
+                guard let account = accountToForget else { return }
+                accountToForget = nil
+                forget(account)
+            }
+            Button("Cancel", role: .cancel) {
+                accountToForget = nil
+            }
+        } message: {
+            Text("This removes the saved sign-in from Lagoon. You can add the account again later.")
+        }
     }
 
     private func accountButton(_ account: StoredAccount) -> some View {
@@ -72,11 +92,7 @@ struct AccountPickerView: View {
         .cardButtonStyle()
         .contextMenu {
             Button(role: .destructive) {
-                do {
-                    try session.remove(account)
-                } catch {
-                    errorMessage = error.localizedDescription
-                }
+                accountToForget = account
             } label: {
                 Label("Forget This User", systemImage: "person.crop.circle.badge.minus")
             }
@@ -120,5 +136,13 @@ struct AccountPickerView: View {
         let parts = name.split(separator: " ").prefix(2)
         let letters = parts.compactMap(\.first)
         return letters.isEmpty ? "?" : String(letters).uppercased()
+    }
+
+    private func forget(_ account: StoredAccount) {
+        do {
+            try session.remove(account)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
