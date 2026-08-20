@@ -42,7 +42,6 @@ struct SeerrMediaDetailView: View {
                 }
             }
         }
-        .navigationTitle(details?.displayTitle ?? mediaType.title)
         .task(id: reloadID) { await load() }
         .alert(popup?.title ?? "Seerr", isPresented: Binding(
             get: { popup != nil },
@@ -240,10 +239,7 @@ struct SeerrSeasonRequestView: View {
                 Button {
                     selectAllOrClear()
                 } label: {
-                    Label(
-                        allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available",
-                        systemImage: allSelectableSeasonsAreSelected ? "xmark.circle" : "checkmark.circle"
-                    )
+                    Text(allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available")
                 }
                 .buttonStyle(.borderless)
                 .disabled(selectableSeasons.isEmpty || isRequesting)
@@ -339,11 +335,13 @@ struct SeerrSeasonRequestView: View {
     @ViewBuilder
     private func selectionAccessory(for season: SeerrSeason, selectable: Bool) -> some View {
         if selected.contains(season.seasonNumber) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: "checkmark")
+                .font(.headline)
                 .foregroundStyle(.tint)
         } else if selectable {
-            Image(systemName: "circle")
-                .foregroundStyle(.tertiary)
+            Image(systemName: "checkmark")
+                .font(.headline)
+                .hidden()
         } else {
             Label(seasonState(season), systemImage: "checkmark.circle")
                 .font(.caption)
