@@ -100,6 +100,10 @@ struct CustomPlayerView<Surface: View>: View {
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
+    #if os(tvOS)
+    @Namespace private var panelFocusScope
+    @Environment(\.resetFocus) private var resetFocus
+    #endif
     @State private var panelRevealSignpostActive = false
     private let panelSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
@@ -200,6 +204,9 @@ struct CustomPlayerView<Surface: View>: View {
             // survive, so the slide is an offset. Disabled while closed so
             // its buttons stay out of the focus engine's reach.
             panel
+                #if os(tvOS)
+                .focusScope(panelFocusScope)
+                #endif
                 .offset(y: panelOpen ? 0 : -panelSlideDistance)
                 .opacity(panelOpen ? 1 : 0)
                 .disabled(!panelOpen)
@@ -788,6 +795,20 @@ struct CustomPlayerView<Surface: View>: View {
                 finishPanelRevealSignpost()
                 return
             }
+
+            // The panel stays mounted off-screen, so defaultFocus alone does
+            // not run when it slides in. Re-entering its dedicated scope asks
+            // tvOS to resolve a visible default, while the explicit binding
+            // keeps the selected tab and focus state in lockstep.
+            #if os(tvOS)
+            playerFocus = nil
+            await Task.yield()
+            guard panelOpen else {
+                finishPanelRevealSignpost()
+                return
+            }
+            resetFocus(in: panelFocusScope)
+            #endif
             playerFocus = .tab(selectedTab)
             finishPanelRevealSignpost()
         }
