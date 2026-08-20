@@ -7,6 +7,7 @@ import SwiftUI
 struct HeroSection: View {
     let items: [MediaItem]
     @Environment(SessionStore.self) private var session
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var index = 0
     @State private var palette: ArtworkPalette = .fallback
@@ -22,7 +23,7 @@ struct HeroSection: View {
             }
             .frame(height: Metrics.heroHeight)
             .padding(.horizontal, Metrics.screenGutter)
-            .task(id: items.first?.id) {
+            .task(id: "\(items.first?.id ?? "empty"):\(reduceMotion)") {
                 await cycle()
             }
         }
@@ -149,7 +150,7 @@ struct HeroSection: View {
                         .frame(width: dot == index ? 24 : 8, height: 8)
                 }
             }
-            .animation(.easeInOut(duration: Motion.fast), value: index)
+            .animation(reduceMotion ? nil : .easeInOut(duration: Motion.fast), value: index)
             .accessibilityHidden(true)
         }
     }
@@ -161,7 +162,10 @@ struct HeroSection: View {
     private func cycle() async {
         index = 0
         await updatePalette()
-        guard items.count > 1 else { return }
+        // A carousel that moves without input is exactly the kind of
+        // nonessential spatial motion Reduce Motion is intended to stop.
+        // Keep the first recommendation available and fully interactive.
+        guard !reduceMotion, items.count > 1 else { return }
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(7))
             if Task.isCancelled { return }
