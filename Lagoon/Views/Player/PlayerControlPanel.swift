@@ -171,6 +171,7 @@ struct PlayerControlPanel: View {
                         .lineLimit(2)
                 }
 
+                #if os(iOS)
                 if let onTogglePictureInPicture {
                     Button(action: onTogglePictureInPicture) {
                         Label(
@@ -185,6 +186,7 @@ struct PlayerControlPanel: View {
                     .focused(focus, equals: .track("picture-in-picture"))
                     .accessibilityIdentifier("player.pictureInPicture")
                 }
+                #endif
             }
             Spacer(minLength: 0)
             #if os(iOS)
