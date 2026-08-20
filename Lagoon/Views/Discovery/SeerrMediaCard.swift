@@ -89,8 +89,8 @@ struct SeerrMediaRail: View {
                     }
                 }
                 .padding(.horizontal, Metrics.screenGutter)
-                .padding(.top, 40)
-                .padding(.bottom, 80)
+                .padding(.top, Metrics.railTopPadding)
+                .padding(.bottom, Metrics.railBottomPadding)
             }
             .scrollClipDisabled()
         }
