@@ -46,33 +46,41 @@ struct DiscoverView: View {
     @State private var searchRetryID = 0
 
     var body: some View {
-        Group {
-            // Library search remains useful when Seerr is disconnected or
-            // still restoring its cookie, so a query always wins over the
-            // connection state below.
-            if !normalizedSearch.isEmpty {
-                searchContent
-            } else if seerr.isLoading {
-                pageState {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                pageHeader
+
+                // Library search remains useful when Seerr is disconnected
+                // or still restoring its cookie, so a query always wins over
+                // the connection state below.
+                if !normalizedSearch.isEmpty {
+                    searchSections
+                } else if seerr.isLoading {
                     ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                         .accessibilityLabel("Loading Discover")
-                }
-            } else if !seerr.isConnected {
-                pageState { connectionState }
-            } else if viewModel.isLoading, viewModel.trending.isEmpty {
-                pageState {
+                } else if !seerr.isConnected {
+                    connectionState
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                } else if viewModel.isLoading, viewModel.trending.isEmpty {
                     ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                         .accessibilityLabel("Loading Discover")
-                }
-            } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
-                pageState {
+                } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
                     ErrorStateView(message: error) { reloadID += 1 }
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                } else {
+                    discoverySections
                 }
-            } else {
-                discoveryContent
             }
+            .padding(.bottom, Metrics.Space.section)
         }
+        .scrollClipDisabled()
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
+        .refreshable {
+            guard seerr.isConnected, normalizedSearch.isEmpty else { return }
+            await viewModel.load(client: seerr.client)
+        }
         .onChange(of: searchText) { _, newValue in
             librarySearch.search(newValue, client: session.client)
         }
@@ -110,54 +118,40 @@ struct DiscoverView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var discoveryContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                pageTitle
-
-                HStack(spacing: Metrics.Space.m) {
-                    NavigationLink(value: SeerrNavigationRoute.catalog(.movie)) {
-                        Label("Movies", systemImage: "film")
-                    }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("seerr.catalog.movies")
-
-                    NavigationLink(value: SeerrNavigationRoute.catalog(.tv)) {
-                        Label("Shows", systemImage: "tv")
-                    }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("seerr.catalog.shows")
-
-                    NavigationLink(value: SeerrNavigationRoute.requests) {
-                        Label(requestsTitle, systemImage: "tray.full")
-                    }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("seerr.requests")
-                }
-                .padding(.horizontal, Metrics.screenGutter)
-                .padding(.bottom, Metrics.Space.xl)
-
-                SeerrMediaRail(title: "Trending", items: viewModel.trending)
-                SeerrMediaRail(title: "Popular Movies", items: viewModel.movies)
-                SeerrMediaRail(title: "Popular Shows", items: viewModel.shows)
-                SeerrMediaRail(title: "Upcoming Movies", items: viewModel.upcoming)
+    @ViewBuilder
+    private var discoverySections: some View {
+        HStack(spacing: Metrics.Space.m) {
+            NavigationLink(value: SeerrNavigationRoute.catalog(.movie)) {
+                Label("Movies", systemImage: "film")
             }
-            .padding(.bottom, Metrics.Space.section)
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("seerr.catalog.movies")
+
+            NavigationLink(value: SeerrNavigationRoute.catalog(.tv)) {
+                Label("Shows", systemImage: "tv")
+            }
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("seerr.catalog.shows")
+
+            NavigationLink(value: SeerrNavigationRoute.requests) {
+                Label(requestsTitle, systemImage: "tray.full")
+            }
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("seerr.requests")
         }
-        .scrollClipDisabled()
-        .refreshable { await viewModel.load(client: seerr.client) }
+        .padding(.horizontal, Metrics.screenGutter)
+        .padding(.bottom, Metrics.Space.xl)
+
+        SeerrMediaRail(title: "Trending", items: viewModel.trending)
+        SeerrMediaRail(title: "Popular Movies", items: viewModel.movies)
+        SeerrMediaRail(title: "Popular Shows", items: viewModel.shows)
+        SeerrMediaRail(title: "Upcoming Movies", items: viewModel.upcoming)
     }
 
-    private var searchContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                pageTitle
-                librarySearchSection
-                seerrSearchSection
-            }
-            .padding(.bottom, Metrics.Space.section)
-        }
-        .scrollClipDisabled()
+    @ViewBuilder
+    private var searchSections: some View {
+        librarySearchSection
+        seerrSearchSection
     }
 
     @ViewBuilder
@@ -235,25 +229,13 @@ struct DiscoverView: View {
         .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
     }
 
-    private var pageTitle: some View {
+    private var pageHeader: some View {
         Text("Discover")
             .font(.largeTitle.bold())
             .padding(.horizontal, Metrics.screenGutter)
             .padding(.top, Metrics.Space.xxl)
             .padding(.bottom, Metrics.Space.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func pageState<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                pageTitle
-                content()
-                    .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-            }
-            .padding(.bottom, Metrics.Space.section)
-        }
-        .scrollClipDisabled()
     }
 
     private var normalizedSearch: String {
