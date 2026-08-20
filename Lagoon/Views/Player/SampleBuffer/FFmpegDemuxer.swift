@@ -455,6 +455,7 @@ nonisolated final class FFmpegDemuxer {
             status = av_seek_frame(ctx, videoStreamIndex, timestamp, seekBackwardFlag)
         }
         try Self.validateSeekStatus(status)
+        cachedIO?.setTimelineAnchor(seconds: seconds, duration: durationSeconds)
         didDrainAudioAtEOF = false
         didDrainVideoAtEOF = false
         pendingDecodedVideo.removeAll(keepingCapacity: true)
@@ -526,6 +527,21 @@ nonisolated final class FFmpegDemuxer {
         }
         defer { av_packet_unref(packet) }
         let streamIndex = packet.pointee.stream_index
+
+        if streamIndex == videoStreamIndex {
+            let timestamp = packet.pointee.pts != avNoPTS
+                ? packet.pointee.pts
+                : packet.pointee.dts
+            if timestamp != avNoPTS {
+                let seconds = Double(timestamp)
+                    * Double(videoTimeBase.num) / Double(max(videoTimeBase.den, 1))
+                cachedIO?.setTimelineAnchor(
+                    byteOffset: packet.pointee.pos,
+                    seconds: seconds,
+                    duration: durationSeconds
+                )
+            }
+        }
 
         if streamIndex == videoStreamIndex, let softwareVideoDecoder {
             do {
