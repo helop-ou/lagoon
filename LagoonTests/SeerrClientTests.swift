@@ -85,6 +85,30 @@ struct SeerrClientTests {
         #expect(requests[1].path == "/api/v1/request/41/approve")
     }
 
+    @Test func requestListingDecodesPaginationAndScopesToCurrentUser() async throws {
+        let client = makeClient()
+        client.configure(serverURL: URL(string: "https://seerr.test")!)
+        client.setSessionCookie("session")
+
+        let page = try await client.requests(
+            take: 20,
+            skip: 0,
+            filter: .pending,
+            requestedBy: 7
+        )
+
+        #expect(page.pageInfo.page == 1)
+        #expect(page.pageInfo.pages == 1)
+        #expect(page.results.first?.id == 41)
+        #expect(page.results.first?.requestStatus == .pending)
+
+        let query = SeerrMockURLProtocol.requests.first?.query ?? ""
+        #expect(query.contains("take=20"))
+        #expect(query.contains("skip=0"))
+        #expect(query.contains("filter=pending"))
+        #expect(query.contains("requestedBy=7"))
+    }
+
     private func makeClient() -> SeerrClient {
         SeerrMockURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -197,6 +221,8 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             return (200, ["Content-Type": "application/json"], userJSON)
         case ("GET", "/api/v1/discover/trending"):
             return (200, ["Content-Type": "application/json"], #"{"page":1,"totalPages":1,"totalResults":1,"results":[{"id":329865,"mediaType":"movie","title":"Arrival","releaseDate":"2016-11-11","mediaInfo":{"id":8,"tmdbId":329865,"status":3,"requests":[{"id":9,"status":2}]}}]}"#)
+        case ("GET", "/api/v1/request"):
+            return (200, ["Content-Type": "application/json"], #"{"pageInfo":{"page":1,"pages":1,"pageSize":20,"results":1},"results":[{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"requestedBy":{"id":7,"username":"jaagop","permissions":32},"seasons":[{"id":1,"seasonNumber":1}]}]}"#)
         case ("POST", "/api/v1/request"):
             return (201, ["Content-Type": "application/json"], #"{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"seasons":[{"id":1,"seasonNumber":1}]}"#)
         case ("POST", "/api/v1/request/41/approve"):
