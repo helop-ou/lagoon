@@ -795,9 +795,8 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(subtitleTab.waitForExistence(timeout: 5))
         XCTAssertTrue(infoTab.hasFocus)
 
-        // The compact Audio track column and the delay controls must remain
-        // distinct. This catches both a half-screen single-track list and a
-        // delay row squeezed until its label/value overlap.
+        // Track names are the primary Audio content and receive more room
+        // than the secondary delay controls, without letting either overlap.
         remote.press(.right)
         remote.press(.right)
         let firstAudioTrack = app.buttons["player.track.audio-1"]
@@ -806,7 +805,8 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(firstAudioTrack.waitForExistence(timeout: 3))
         XCTAssertTrue(audioDelayDecrease.waitForExistence(timeout: 3))
         XCTAssertTrue(audioDelayIncrease.waitForExistence(timeout: 3))
-        XCTAssertLessThan(firstAudioTrack.frame.width, app.frame.width * 0.3)
+        XCTAssertGreaterThan(firstAudioTrack.frame.width, app.frame.width * 0.33)
+        XCTAssertLessThan(firstAudioTrack.frame.width, app.frame.width * 0.45)
         XCTAssertLessThan(firstAudioTrack.frame.maxX, audioDelayDecrease.frame.minX)
         XCTAssertLessThan(audioDelayDecrease.frame.maxX, audioDelayIncrease.frame.minX)
         let audioPanelScreenshot = XCTAttachment(screenshot: app.screenshot())
