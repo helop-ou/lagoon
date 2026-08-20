@@ -48,10 +48,12 @@ final class PlaybackController {
 
     private(set) var hudLines: [String] = []
     private var hudTask: Task<Void, Never>?
-    /// Contiguous, validated bytes from the beginning of a direct resource.
-    /// The player timeline maps this to time using Jellyfin's declared total
-    /// length; nil means the active HLS/native path has no byte-range model.
+    /// The byte-zero prefix remains available for compatibility diagnostics,
+    /// while the timeline renders every sparse range retained around seeks.
+    /// HLS/native paths have no direct-file byte-range model.
     private(set) var bufferedFraction: Double?
+    private(set) var bufferedRanges: [PlaybackBufferedRange] = []
+    private(set) var playheadPrefetchCount = 0
 
     private var client: JellyfinClient?
     private var itemId = ""
@@ -81,7 +83,6 @@ final class PlaybackController {
     /// reporting may still be finishing after the successor has shown its
     /// first frame, and must not leave a spinner over healthy video.
     private(set) var isTransitionOverlayVisible = false
-    private(set) var transitionEpisodeTitle: String?
     /// User action/EOF to the successor's first primed presentation clock.
     /// Visible in the HUD and hardware accessibility probe for regression
     /// comparisons; nil before the first episode handoff.
@@ -106,6 +107,7 @@ final class PlaybackController {
     )
     @ObservationIgnored private let lifecycleID = UUID()
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
+    @ObservationIgnored private var transitionFeedbackTask: Task<Void, Never>?
     #if DEBUG
     /// `debug.regressionStartNearEnd` exists to reach autoplay quickly. It
     /// must only affect the fixture episode: applying it again to the
@@ -879,6 +881,8 @@ final class PlaybackController {
 
     private func publishBufferMetrics(_ metrics: PlaybackCacheMetrics?) {
         bufferedFraction = metrics?.bufferedFraction
+        bufferedRanges = metrics?.bufferedRanges ?? []
+        playheadPrefetchCount = metrics?.playheadPrefetchCount ?? 0
     }
 
     /// Proactive fill starts only after the player has presented its initial
@@ -935,10 +939,12 @@ final class PlaybackController {
                     log: PlaybackPerformance.log,
                     name: "Playback Buffer Progress",
                     signpostID: self.performanceSignpostID,
-                    "cachedMB=%{public}.1f totalMB=%{public}.1f fraction=%{public}.3f stalls=%{public}d",
-                    Double(after.contiguousCachedBytes) / 1_048_576,
+                    "cachedMB=%{public}.1f totalMB=%{public}.1f prefixFraction=%{public}.3f ranges=%{public}d playheadPrefetches=%{public}d stalls=%{public}d",
+                    Double(after.cachedBytes) / 1_048_576,
                     Double(after.contentLength ?? 0) / 1_048_576,
                     after.bufferedFraction ?? -1,
+                    after.bufferedRanges.count,
+                    after.playheadPrefetchCount,
                     engine.stallCount
                 )
                 guard advanced else { return }
@@ -1304,9 +1310,19 @@ final class PlaybackController {
     private func beginEpisodeHandoff(to next: MediaItem) {
         guard handoffStartedAt == nil else { return }
         lastHandoffMilliseconds = nil
-        isTransitionOverlayVisible = true
-        transitionEpisodeTitle = next.name
-        handoffStartedAt = ProcessInfo.processInfo.systemUptime
+        isTransitionOverlayVisible = false
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        handoffStartedAt = startedAt
+        transitionFeedbackTask?.cancel()
+        transitionFeedbackTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(1.25))
+            } catch {
+                return
+            }
+            guard let self, self.handoffStartedAt == startedAt else { return }
+            self.isTransitionOverlayVisible = true
+        }
         os_signpost(
             .begin,
             log: PlaybackPerformance.log,
@@ -1319,8 +1335,9 @@ final class PlaybackController {
     }
 
     private func finishEpisodeHandoff(outcome: String) {
+        transitionFeedbackTask?.cancel()
+        transitionFeedbackTask = nil
         isTransitionOverlayVisible = false
-        transitionEpisodeTitle = nil
         guard let startedAt = handoffStartedAt else { return }
         handoffStartedAt = nil
         let milliseconds = max(ProcessInfo.processInfo.systemUptime - startedAt, 0) * 1_000
@@ -1360,10 +1377,12 @@ final class PlaybackController {
             if let fraction = cache.bufferedFraction,
                let contentLength = cache.contentLength {
                 lines.append(String(
-                    format: "Buffer:  %.1f/%.1f MB · %.0f%% contiguous",
-                    Double(cache.contiguousCachedBytes) / 1_048_576,
+                    format: "Buffer:  %.1f/%.1f MB · %.0f%% prefix · %d ranges · %d playhead fills",
+                    Double(cache.cachedBytes) / 1_048_576,
                     Double(contentLength) / 1_048_576,
-                    fraction * 100
+                    fraction * 100,
+                    cache.bufferedRanges.count,
+                    cache.playheadPrefetchCount
                 ))
             }
             lines.append(String(
@@ -1465,6 +1484,8 @@ struct VideoPlayerView: View {
                     playbackMethod: controller.activePlayMethod,
                     isPlaybackCacheActive: controller.isPlaybackCacheActive,
                     bufferedFraction: controller.bufferedFraction,
+                    bufferedRanges: controller.bufferedRanges,
+                    playheadPrefetchCount: controller.playheadPrefetchCount,
                     info: fallbackInfo,
                     onDismiss: { dismiss() },
                     onPanelToggle: { panelOpen = $0 },
@@ -1637,21 +1658,11 @@ struct VideoPlayerView: View {
     }
 
     private var episodeTransition: some View {
-        VStack(spacing: Metrics.Space.m) {
-            ProgressView()
-                .controlSize(.large)
-                .tint(.white)
-            Text("Starting next episode")
-                .font(.headline)
-                .foregroundStyle(.white)
-            if let title = controller.transitionEpisodeTitle, !title.isEmpty {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Starting next episode")
+        ProgressView()
+            .controlSize(.large)
+            .tint(.white)
+            .accessibilityLabel("Loading next episode")
+            .accessibilityIdentifier("player.episodeTransition")
         // Focus stays on the persistent video surface so the transition
         // cannot create a focusless frame or steal the Siri Remote.
         .allowsHitTesting(false)
