@@ -8,6 +8,7 @@ private final class SeerrRequestsViewModel {
     var totalPages = 1
     var isLoading = false
     var errorMessage: String?
+    private var loadGeneration = 0
 
     func load(
         client: SeerrClient,
@@ -16,15 +17,25 @@ private final class SeerrRequestsViewModel {
         onlyMine: Bool,
         reset: Bool = false
     ) async {
-        guard !isLoading else { return }
         if reset {
+            // A filter/scope change owns a new generation. Let it supersede
+            // an older request whose task is still unwinding after SwiftUI
+            // cancelled it.
+            loadGeneration += 1
             requests = []
             page = 0
             totalPages = 1
+        } else {
+            guard !isLoading else { return }
         }
         guard page < totalPages else { return }
+        let generation = loadGeneration
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if loadGeneration == generation {
+                isLoading = false
+            }
+        }
         errorMessage = nil
         do {
             let result = try await client.requests(
@@ -33,7 +44,7 @@ private final class SeerrRequestsViewModel {
                 filter: filter,
                 requestedBy: onlyMine ? user.id : nil
             )
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, loadGeneration == generation else { return }
             let existing = Set(requests.map(\.id))
             requests += result.results.filter { !existing.contains($0.id) }
             page = result.pageInfo.page
@@ -63,6 +74,20 @@ struct SeerrRequestsView: View {
             }
         }
         .navigationTitle(onlyMine || seerr.user?.canViewAllRequests != true ? "My Requests" : "All Requests")
+        // Keep the fetch on the stable screen root. Putting it on the
+        // ScrollView/LoadingView branches made each isLoading transition
+        // remove and cancel the task, producing an endless spinner.
+        .task(id: seerr.user.map(loadID) ?? "signed-out") {
+            guard let user = seerr.user else { return }
+            await reload(user: user)
+        }
+        // Returning from a moderation/detail screen should reconcile the
+        // row that may have changed there without tying refresh to a child
+        // view that is replaced during loading.
+        .onAppear {
+            guard !viewModel.requests.isEmpty else { return }
+            refreshID += 1
+        }
         .accessibilityIdentifier("seerr.requests.list")
     }
 
@@ -70,10 +95,8 @@ struct SeerrRequestsView: View {
     private func content(user: SeerrUser) -> some View {
         if viewModel.isLoading, viewModel.requests.isEmpty {
             LoadingView()
-                .task(id: loadID(user: user)) { await reload(user: user) }
         } else if let error = viewModel.errorMessage, viewModel.requests.isEmpty {
             ErrorStateView(message: error) { refreshID += 1 }
-                .task(id: loadID(user: user)) { await reload(user: user) }
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: Metrics.Space.l) {
@@ -115,11 +138,6 @@ struct SeerrRequestsView: View {
             }
             .scrollClipDisabled()
             .refreshable { await reload(user: user) }
-            .task(id: loadID(user: user)) { await reload(user: user) }
-            .onAppear {
-                guard !viewModel.requests.isEmpty else { return }
-                refreshID += 1
-            }
         }
     }
 
