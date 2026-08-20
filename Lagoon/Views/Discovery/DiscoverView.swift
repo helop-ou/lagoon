@@ -46,36 +46,40 @@ struct DiscoverView: View {
     @State private var searchRetryID = 0
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                pageHeader
+        VStack(alignment: .leading, spacing: 0) {
+            pageHeader
+                .background(Color.black)
+                .zIndex(1)
 
-                // Library search remains useful when Seerr is disconnected
-                // or still restoring its cookie, so a query always wins over
-                // the connection state below.
-                if !normalizedSearch.isEmpty {
-                    searchSections
-                } else if seerr.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                        .accessibilityLabel("Loading Discover")
-                } else if !seerr.isConnected {
-                    connectionState
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                } else if viewModel.isLoading, viewModel.trending.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                        .accessibilityLabel("Loading Discover")
-                } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
-                    ErrorStateView(message: error) { reloadID += 1 }
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                } else {
-                    discoverySections
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    // Library search remains useful when Seerr is disconnected
+                    // or still restoring its cookie, so a query always wins over
+                    // the connection state below.
+                    if !normalizedSearch.isEmpty {
+                        searchSections
+                    } else if seerr.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                            .accessibilityLabel("Loading Discover")
+                    } else if !seerr.isConnected {
+                        connectionState
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                    } else if viewModel.isLoading, viewModel.trending.isEmpty {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                            .accessibilityLabel("Loading Discover")
+                    } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
+                        ErrorStateView(message: error) { reloadID += 1 }
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                    } else {
+                        discoverySections
+                    }
                 }
+                .padding(.bottom, Metrics.Space.section)
             }
-            .padding(.bottom, Metrics.Space.section)
+            .scrollClipDisabled()
         }
-        .scrollClipDisabled()
         .background(Color.black.ignoresSafeArea())
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
         .refreshable {
@@ -321,41 +325,48 @@ struct SeerrCatalogView: View {
     @State private var viewModel = SeerrCatalogViewModel()
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                Text(catalogTitle)
-                    .font(.largeTitle.bold())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("seerr.catalog.title")
+        VStack(alignment: .leading, spacing: 0) {
+            Text(catalogTitle)
+                .font(.largeTitle.bold())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Metrics.screenGutter)
+                .padding(.top, Metrics.Space.xxl)
+                .padding(.bottom, Metrics.Space.xl)
+                .background(Color.black)
+                .zIndex(1)
+                .accessibilityIdentifier("seerr.catalog.title")
 
-                if viewModel.isLoading, viewModel.items.isEmpty {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                        .accessibilityLabel("Loading \(catalogTitle)")
-                } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
-                    ErrorStateView(message: error) {
-                        Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true) }
-                    }
-                    .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                } else {
-                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Metrics.gridRowSpacing) {
-                        ForEach(viewModel.items) { item in
-                            SeerrMediaCard(item: item)
-                                .onAppear {
-                                    guard item.id == viewModel.items.suffix(5).first?.id else { return }
-                                    Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client) }
-                                }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                    if viewModel.isLoading, viewModel.items.isEmpty {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                            .accessibilityLabel("Loading \(catalogTitle)")
+                    } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
+                        ErrorStateView(message: error) {
+                            Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true) }
                         }
-                        if viewModel.isLoading {
-                            ProgressView().frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                    } else {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Metrics.gridRowSpacing) {
+                            ForEach(viewModel.items) { item in
+                                SeerrMediaCard(item: item)
+                                    .onAppear {
+                                        guard item.id == viewModel.items.suffix(5).first?.id else { return }
+                                        Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client) }
+                                    }
+                            }
+                            if viewModel.isLoading {
+                                ProgressView().frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                            }
                         }
                     }
                 }
+                .padding(.horizontal, Metrics.screenGutter)
+                .padding(.bottom, Metrics.Space.xxl)
             }
-            .padding(.horizontal, Metrics.screenGutter)
-            .padding(.vertical, Metrics.Space.xxl)
+            .scrollClipDisabled()
         }
-        .scrollClipDisabled()
         .background(Color.black.ignoresSafeArea())
         .refreshable {
             await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true)
