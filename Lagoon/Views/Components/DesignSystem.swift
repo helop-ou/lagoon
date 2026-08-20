@@ -16,7 +16,7 @@ enum Metrics {
     static let posterCaptionHeight: CGFloat = 58
     static let railTopPadding: CGFloat = 40    // headroom for the system focus lift
     static let railBottomPadding: CGFloat = 80
-    static let scrubberHeight: CGFloat = 8     // thin bar, per the Infuse reference
+    static let scrubberHeight: CGFloat = 6     // flat native transport rail
     /// Backdrop left uncovered above the info block — a scroll inset, not a
     /// spacer (see DetailPageScaffold). The reference starts its title about
     /// a third of the way down.
@@ -57,7 +57,7 @@ enum Metrics {
     static let railTopPadding: CGFloat = 6
     static let railBottomPadding: CGFloat = 10
     static let accountTileSize: CGFloat = 110
-    static let scrubberHeight: CGFloat = 8     // matches the AVKit transport bar
+    static let scrubberHeight: CGFloat = 6     // flat native transport rail
     static let detailHeroSpace: CGFloat = 100
     static let detailHeaderSpacing: CGFloat = 12
     static let detailSectionSpacing: CGFloat = 32
