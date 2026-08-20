@@ -794,6 +794,10 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(infoTab.waitForExistence(timeout: 5))
         XCTAssertTrue(subtitleTab.waitForExistence(timeout: 5))
         XCTAssertTrue(infoTab.hasFocus)
+        XCTAssertFalse(
+            app.buttons["player.pictureInPicture"].exists,
+            "Picture in Picture must not appear in the tvOS player panel"
+        )
 
         // Track names are the primary Audio content and receive more room
         // than the secondary delay controls, without letting either overlap.
