@@ -875,27 +875,23 @@ struct CustomPlayerView<Surface: View>: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // Scrubbing hands this space to the time pill (and, from
-                // slice 3, the trickplay frame).
+                // Scrubbing hands this space to the trickplay frame.
                 .opacity(isScrubbing ? 0 : 1)
                 .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
                 .allowsHitTesting(false)
 
                 scrubber
 
-                HStack {
-                    Text(Self.timestamp(engine.timePosition))
-                    Spacer()
-                    Text("-" + Self.timestamp(max(engine.duration - engine.timePosition, 0)))
-                }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .allowsHitTesting(false)
+                timelineLabels
             }
             .padding(Metrics.screenGutter)
             .background(
                 LinearGradient(
-                    colors: [.clear, .black.opacity(0.75)],
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black.opacity(0.22), location: 0.34),
+                        .init(color: .black.opacity(0.76), location: 1),
+                    ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -909,28 +905,27 @@ struct CustomPlayerView<Surface: View>: View {
         .foregroundStyle(.white)
     }
 
-    /// The bar: a live-position fill, chapter ticks, the playhead knob
-    /// (which detaches into the virtual playhead while scrubbing), and the
-    /// scrub chip above it.
+    /// Infuse/AVKit-style flat rail: played and buffered ranges stay inside
+    /// the line, while a slim vertical marker appears only during scrubbing.
     private var scrubber: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(.white.opacity(0.16))
+                    .fill(.white.opacity(0.2))
                 if !bufferedRanges.isEmpty {
                     ForEach(bufferedRanges, id: \.self) { range in
                         let lower = CGFloat(min(max(range.lowerFraction, 0), 1))
                         let upper = CGFloat(min(max(range.upperFraction, 0), 1))
                         Capsule()
-                            .fill(.white.opacity(0.38))
+                            .fill(.white.opacity(0.42))
                             .frame(width: max(width * (upper - lower), 1))
                             .offset(x: width * lower)
                     }
                     .animation(liveMotion, value: bufferedRanges)
                 } else if let bufferedFraction, bufferedFraction > 0 {
                     Capsule()
-                        .fill(.white.opacity(0.38))
+                        .fill(.white.opacity(0.42))
                         .frame(width: width * CGFloat(min(max(bufferedFraction, 0), 1)))
                         .animation(liveMotion, value: bufferedFraction)
                 }
@@ -942,12 +937,12 @@ struct CustomPlayerView<Surface: View>: View {
                     // become a quick slide to the target.
                     .animation(fillMotion, value: fillFraction)
                 chapterTicks(in: width)
-                knob(in: width)
+                playheadMarker(in: width)
             }
-            .overlay(alignment: .bottomLeading) { scrubChip(in: width) }
+            .overlay(alignment: .bottomLeading) { scrubPreview(in: width) }
             #if os(iOS)
-            // A 8pt bar is an unusable touch target on its own.
-            .contentShape(Rectangle().inset(by: -16))
+            // The visible rail is deliberately quiet; its touch target is not.
+            .contentShape(Rectangle().inset(by: -18))
             .gesture(scrubDrag(in: width))
             #endif
         }
@@ -955,21 +950,18 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     @ViewBuilder
-    private func knob(in width: CGFloat) -> some View {
-        // tvOS only draws a knob while scrubbing — the rest of the time the
-        // fill edge is the playhead, per the Infuse reference. Touch always
-        // shows one: it's the drag affordance.
-        #if os(tvOS)
-        let visible = isScrubbing
-        #else
-        let visible = true
-        #endif
+    private func playheadMarker(in width: CGFloat) -> some View {
         Capsule()
             .fill(.white)
-            .shadow(color: .black.opacity(0.5), radius: 4)
-            .frame(width: ScrubMetrics.knobWidth, height: Metrics.scrubberHeight + ScrubMetrics.knobOverhang)
-            .offset(x: min(max(width * knobFraction - ScrubMetrics.knobWidth / 2, 0), max(width - ScrubMetrics.knobWidth, 0)))
-            .opacity(visible ? 1 : 0)
+            .shadow(color: .black.opacity(0.45), radius: 3)
+            .frame(width: ScrubMetrics.markerWidth, height: ScrubMetrics.markerHeight)
+            .offset(
+                x: min(
+                    max(width * knobFraction - ScrubMetrics.markerWidth / 2, 0),
+                    max(width - ScrubMetrics.markerWidth, 0)
+                )
+            )
+            .opacity(isScrubbing ? 1 : 0)
             .animation(scrubMotion, value: knobFraction)
             .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
     }
@@ -988,41 +980,74 @@ struct CustomPlayerView<Surface: View>: View {
         }
     }
 
-    /// What floats above the playhead while scrubbing: the trickplay frame
-    /// when the server has tiles, the timestamp always, and the chapter it
-    /// lands in when the item has chapters. Anchored bottom-left so the
-    /// chip's height never has to be known — it grows upward off the bar.
+    /// Trickplay remains above the rail. The timestamp itself belongs below
+    /// the marker, rendered by `timelineLabels`, just like AVKit and Infuse.
     @ViewBuilder
-    private func scrubChip(in width: CGFloat) -> some View {
+    private func scrubPreview(in width: CGFloat) -> some View {
         Group {
-            if let target = scrubTarget {
+            if scrubTarget != nil, previewSize != nil || scrubChapter?.name != nil {
                 VStack(spacing: Metrics.Space.s) {
                     trickplayFrame
-                    Text(Self.timestamp(target))
-                        .font(.callout.monospacedDigit().weight(.semibold))
-                        .frame(width: ScrubMetrics.pillWidth, height: ScrubMetrics.pillHeight)
-                        .background(.black.opacity(0.7), in: Capsule())
                     if let name = scrubChapter?.name {
                         Text(name)
-                            .font(.caption)
+                            .font(.caption.weight(.medium))
                             .lineLimit(1)
-                            .padding(.horizontal, Metrics.Space.s)
-                            .padding(.vertical, Metrics.Space.xs)
-                            .background(.black.opacity(0.7), in: Capsule())
+                            .shadow(color: .black, radius: 3)
                     }
                 }
                 .foregroundStyle(.white)
                 .frame(width: chipWidth)
                 .offset(
                     x: min(max(width * knobFraction - chipWidth / 2, 0), max(width - chipWidth, 0)),
-                    y: -(Metrics.scrubberHeight + 14)
+                    y: -(Metrics.scrubberHeight + Metrics.Space.m)
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
                 .animation(scrubMotion, value: knobFraction)
-                .accessibilityIdentifier("player.scrub.chip")
             }
         }
         .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
+        .allowsHitTesting(false)
+    }
+
+    /// The elapsed/target label follows the end of the played rail. The
+    /// remaining time stays pinned to the trailing edge unless the two would
+    /// overlap near the end of an item.
+    private var timelineLabels: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let fraction = isScrubbing ? knobFraction : progressFraction
+            let labelWidth = ScrubMetrics.timeLabelWidth
+            let center = min(
+                max(width * fraction, labelWidth / 2),
+                max(width - labelWidth / 2, labelWidth / 2)
+            )
+            let remainingStartsAt = width - labelWidth
+            let elapsedEndsAt = center + labelWidth / 2
+
+            ZStack(alignment: .topLeading) {
+                Text(Self.timestamp(scrubTarget ?? engine.timePosition))
+                    .font(
+                        isScrubbing
+                            ? .title3.monospacedDigit().weight(.semibold)
+                            : .callout.monospacedDigit().weight(.medium)
+                    )
+                    .frame(width: labelWidth)
+                    .offset(x: center - labelWidth / 2)
+                    .animation(scrubMotion, value: fraction)
+                    .accessibilityIdentifier(isScrubbing ? "player.scrub.chip" : "player.elapsed")
+
+                if !isScrubbing {
+                    Text("-" + Self.timestamp(max(engine.duration - engine.timePosition, 0)))
+                        .font(.callout.monospacedDigit().weight(.medium))
+                        .frame(width: labelWidth, alignment: .trailing)
+                        .offset(x: max(width - labelWidth, 0))
+                        .opacity(elapsedEndsAt + Metrics.Space.s < remainingStartsAt ? 1 : 0)
+                }
+            }
+            .foregroundStyle(.white.opacity(isScrubbing ? 1 : 0.82))
+        }
+        .frame(height: ScrubMetrics.timeLabelHeight)
+        .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
         .allowsHitTesting(false)
     }
 
@@ -1063,7 +1088,7 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private var chipWidth: CGFloat {
-        max(previewSize?.width ?? 0, ScrubMetrics.pillWidth)
+        max(previewSize?.width ?? 0, ScrubMetrics.previewWidth)
     }
 
     /// The live playhead's curve, matched to the engine's position-update
@@ -1090,16 +1115,11 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
-    /// How much of the bar is filled. Touch drags the fill along with the
-    /// thumb — direct manipulation, and release always commits. The remote
-    /// leaves it at the frozen live position instead, so while the knob
-    /// walks ahead the fill still shows where Menu would cancel back to.
+    /// The played rail follows the preview target while scrubbing. Cancel
+    /// still returns to the live engine position, but the visual stays joined
+    /// to its marker in the native transport style.
     private var fillFraction: CGFloat {
-        #if os(tvOS)
-        progressFraction
-        #else
         isScrubbing ? knobFraction : progressFraction
-        #endif
     }
 
     #if os(iOS)
@@ -1411,7 +1431,7 @@ private enum NextUpMetrics {
 
 /// Scrub-bar geometry. Lives outside `CustomPlayerView` because the view is
 /// generic over its surface, and generics can't hold static storage. The
-/// pill has a fixed width so the edge clamping is exact.
+/// time label has a fixed width so the edge clamping is exact.
 private enum ScrubMetrics {
     /// No input for this long and the acceleration run expires, so the next
     /// press is a 10 s step again rather than a 60 s one.
@@ -1429,18 +1449,18 @@ private enum ScrubMetrics {
     static let chapterSelfCommit: Duration = .milliseconds(2000)
 
     #if os(tvOS)
-    static let knobWidth: CGFloat = 8
-    static let knobOverhang: CGFloat = 12
-    static let pillWidth: CGFloat = 150
-    static let pillHeight: CGFloat = 52
+    static let markerWidth: CGFloat = 4
+    static let markerHeight: CGFloat = 28
+    static let timeLabelWidth: CGFloat = 180
+    static let timeLabelHeight: CGFloat = 44
     /// Matches the 320 px tiles Jellyfin generates by default, so the
     /// preview is shown at its native resolution rather than upscaled.
     static let previewWidth: CGFloat = 320
     #else
-    static let knobWidth: CGFloat = 14
-    static let knobOverhang: CGFloat = 6
-    static let pillWidth: CGFloat = 88
-    static let pillHeight: CGFloat = 34
+    static let markerWidth: CGFloat = 3
+    static let markerHeight: CGFloat = 20
+    static let timeLabelWidth: CGFloat = 96
+    static let timeLabelHeight: CGFloat = 30
     static let previewWidth: CGFloat = 160
     #endif
 }
