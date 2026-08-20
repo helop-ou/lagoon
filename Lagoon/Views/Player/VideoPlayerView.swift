@@ -430,6 +430,9 @@ final class PlaybackController {
                 } else {
                     self.startBufferFill(session: cacheSession, engine: engine)
                 }
+                #if DEBUG
+                self.scheduleRendererRecoveryRegressionHooks(for: engine)
+                #endif
             }
             engine.onPlaybackCacheFallback = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
@@ -622,6 +625,10 @@ final class PlaybackController {
             self?.engine?.play()
             self?.nowPlaying.updateTimeline()
         }
+        audioSession.onMediaServicesReset = { [weak self] in
+            self?.engine?.recoverAfterMediaServicesReset()
+            self?.nowPlaying.updateTimeline()
+        }
         audioSession.onRouteAvailabilityChanged = { [weak self] active in
             self?.isExternalPlaybackRouteActive = active
         }
@@ -632,6 +639,27 @@ final class PlaybackController {
             self.nowPlaying.updateTimeline()
         }
     }
+
+    #if DEBUG
+    /// Deterministic integration coverage for events that CoreSimulator
+    /// cannot cause by changing a physical HDMI or audio route.
+    private func scheduleRendererRecoveryRegressionHooks(for engine: SampleBufferPlayerEngine) {
+        if UserDefaults.standard.bool(forKey: "debug.regressionInjectAudioRendererFlush") {
+            Task { [weak self, weak engine] in
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, let engine, self.engine === engine else { return }
+                engine.simulateAudioRendererFlushForRegression()
+            }
+        }
+        if UserDefaults.standard.bool(forKey: "debug.regressionInjectMediaServicesReset") {
+            Task { [weak self, weak engine] in
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, let engine, self.engine === engine else { return }
+                self.audioSession.simulateMediaServicesResetForRegression()
+            }
+        }
+    }
+    #endif
 
     /// Looks up what plays next, off the critical path.
     ///
