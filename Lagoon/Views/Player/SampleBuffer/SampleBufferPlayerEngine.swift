@@ -43,6 +43,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var audioOutputPathDiagnostic = "compressed"
     private(set) var videoPerformance: VideoPerformanceSnapshot?
     private(set) var stallCount = 0
+    /// Route/output recovery counters are intentionally session-scoped. The
+    /// regression probe uses them to prove that an injected AVFoundation
+    /// event took the same path as a real notification.
+    private(set) var audioRendererRecoveryCount = 0
+    private(set) var mediaServicesResetRecoveryCount = 0
     /// Frame-loss bench progress/result for the HUD (HEL-64); nil unless
     /// Settings → Debug → Frame-loss bench is on.
     private(set) var benchStatus: String?
@@ -131,7 +136,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var stallSignpostActive = false
     @ObservationIgnored private var shutdownRequested = false
     @ObservationIgnored private var rendererNotificationTokens: [NSObjectProtocol] = []
+    @ObservationIgnored private var audioRendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var rendererRecoveryInProgress = false
+    @ObservationIgnored private var audioRendererRecoveryInProgress = false
+    @ObservationIgnored private var mediaServicesResetRecoveryID: UUID?
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored nonisolated(unsafe) private var pendingCacheSession: PlaybackCacheSession?
@@ -193,6 +201,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         synchronizer.addRenderer(audio)
         PlaybackLifecycleDiagnostics.renderersAttached(lifecycleID)
         observeVideoRenderer(video)
+        observeAudioRenderer(audio)
 
         video.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
             self?.pumpVideo()
@@ -403,6 +412,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             NotificationCenter.default.removeObserver(token)
         }
         rendererNotificationTokens.removeAll()
+        removeAudioRendererObservers()
+        mediaServicesResetRecoveryID = nil
         stallRecoveryTask?.cancel()
         clearPendingStallConfirmation()
         if stallSignpostActive {
@@ -715,6 +726,139 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
         })
     }
+
+    private func observeAudioRenderer(_ renderer: AVSampleBufferAudioRenderer) {
+        let center = NotificationCenter.default
+        audioRendererNotificationTokens.append(center.addObserver(
+            forName: .AVSampleBufferAudioRendererWasFlushedAutomatically,
+            object: renderer,
+            queue: .main
+        ) { [weak self, weak renderer] notification in
+            guard let self, let renderer else { return }
+            MainActor.assumeIsolated {
+                let flushTime = (notification.userInfo?[AVSampleBufferAudioRendererFlushTimeKey]
+                    as? NSValue)?.timeValue
+                self.recoverAudioRenderer(
+                    renderer,
+                    from: flushTime,
+                    reason: "automaticFlush"
+                )
+            }
+        })
+        audioRendererNotificationTokens.append(center.addObserver(
+            forName: .AVSampleBufferAudioRendererOutputConfigurationDidChange,
+            object: renderer,
+            queue: .main
+        ) { [weak self, weak renderer] _ in
+            guard let self, let renderer else { return }
+            MainActor.assumeIsolated {
+                self.recoverAudioRenderer(
+                    renderer,
+                    from: nil,
+                    reason: "outputConfiguration"
+                )
+            }
+        })
+    }
+
+    private func removeAudioRendererObservers() {
+        for token in audioRendererNotificationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        audioRendererNotificationTokens.removeAll()
+    }
+
+    /// AVFoundation delivers automatic audio flushes on an arbitrary queue
+    /// and explicitly requires the follow-up flush to be serialized with
+    /// sample enqueueing. `seek` performs that flush and every queue reset on
+    /// `pumpQueue`, then asks the demux loop to refill from the playhead.
+    private func recoverAudioRenderer(
+        _ renderer: AVSampleBufferAudioRenderer,
+        from flushTime: CMTime?,
+        reason: StaticString
+    ) {
+        guard !shutdownRequested,
+              renderer === audioRenderer,
+              !audioRendererRecoveryInProgress,
+              mediaServicesResetRecoveryID == nil else { return }
+        audioRendererRecoveryInProgress = true
+        defer { audioRendererRecoveryInProgress = false }
+        let notifiedTime = flushTime?.seconds
+        let recoveryPosition = if let notifiedTime, notifiedTime.isFinite, notifiedTime >= 0 {
+            notifiedTime
+        } else {
+            timePosition
+        }
+        audioRendererRecoveryCount += 1
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Renderer Recovery",
+            signpostID: performanceSignpostID,
+            "position=%{public}.3f reason=%{public}s",
+            recoveryPosition,
+            String(describing: reason)
+        )
+        seek(to: recoveryPosition)
+    }
+
+    /// A media-services reset invalidates AVFoundation audio objects. Replace
+    /// the renderer rather than reusing it, retain the current synchronized
+    /// video surface, and deliberately stay paused until an explicit viewer
+    /// or remote-command action calls `play()`.
+    func recoverAfterMediaServicesReset() {
+        guard !shutdownRequested,
+              mediaServicesResetRecoveryID == nil,
+              let outgoingAudio = audioRenderer else { return }
+        pause()
+        isBuffering = true
+        let recoveryPosition = timePosition
+        let recoveryID = UUID()
+        mediaServicesResetRecoveryID = recoveryID
+        removeAudioRendererObservers()
+
+        pumpQueue.async { [weak self, weak outgoingAudio] in
+            guard let self, let outgoingAudio,
+                  !self.shared.withLock({ $0.cancelled }),
+                  self.audioRenderer === outgoingAudio else { return }
+            self.audioRenderer = nil
+            outgoingAudio.stopRequestingMediaData()
+            outgoingAudio.flush()
+            self.audioQueue.reset()
+            self.audioContinuity.reset()
+            self.synchronizer.removeRenderer(outgoingAudio, at: .invalid) { [weak self] removed in
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          !self.shutdownRequested,
+                          self.mediaServicesResetRecoveryID == recoveryID else { return }
+                    guard removed else {
+                        self.mediaServicesResetRecoveryID = nil
+                        self.onError?("Playback audio could not recover after the media service restarted.")
+                        return
+                    }
+                    let replacement = AVSampleBufferAudioRenderer()
+                    self.audioRenderer = replacement
+                    self.synchronizer.addRenderer(replacement)
+                    self.observeAudioRenderer(replacement)
+                    replacement.requestMediaDataWhenReady(on: self.pumpQueue) { [weak self] in
+                        self?.pumpAudio()
+                    }
+                    self.mediaServicesResetRecoveryCount += 1
+                    self.mediaServicesResetRecoveryID = nil
+                    self.seek(to: recoveryPosition)
+                }
+            }
+        }
+    }
+
+    #if DEBUG
+    /// Launch-gated UI regression hook. It invokes the exact notification
+    /// recovery path without pretending CoreSimulator changed hardware.
+    func simulateAudioRendererFlushForRegression() {
+        guard let audioRenderer else { return }
+        recoverAudioRenderer(audioRenderer, from: nil, reason: "regression")
+    }
+    #endif
 
     private func recoverVideoRendererIfRequired(_ renderer: AVSampleBufferVideoRenderer) {
         guard !shutdownRequested,
