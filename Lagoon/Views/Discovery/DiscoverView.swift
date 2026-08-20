@@ -76,6 +76,7 @@ struct DiscoverView: View {
             .padding(.bottom, Metrics.Space.section)
         }
         .scrollClipDisabled()
+        .background(Color.black.ignoresSafeArea())
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
         .refreshable {
             guard seerr.isConnected, normalizedSearch.isEmpty else { return }
@@ -320,16 +321,24 @@ struct SeerrCatalogView: View {
     @State private var viewModel = SeerrCatalogViewModel()
 
     var body: some View {
-        Group {
-            if viewModel.isLoading, viewModel.items.isEmpty {
-                LoadingView()
-            } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
-                ErrorStateView(message: error) {
-                    Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true) }
-                }
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Metrics.Space.xxl) {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                Text(catalogTitle)
+                    .font(.largeTitle.bold())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("seerr.catalog.title")
+
+                if viewModel.isLoading, viewModel.items.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                        .accessibilityLabel("Loading \(catalogTitle)")
+                } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
+                    ErrorStateView(message: error) {
+                        Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                } else {
+                    LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Metrics.gridRowSpacing) {
                         ForEach(viewModel.items) { item in
                             SeerrMediaCard(item: item)
                                 .onAppear {
@@ -341,15 +350,22 @@ struct SeerrCatalogView: View {
                             ProgressView().frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
                         }
                     }
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.vertical, Metrics.Space.xxl)
                 }
-                .scrollClipDisabled()
             }
+            .padding(.horizontal, Metrics.screenGutter)
+            .padding(.vertical, Metrics.Space.xxl)
         }
-        .navigationTitle(mediaType == .movie ? "Discover Movies" : "Discover Shows")
+        .scrollClipDisabled()
+        .background(Color.black.ignoresSafeArea())
+        .refreshable {
+            await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true)
+        }
         .task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client) }
         .accessibilityIdentifier("seerr.catalog.\(mediaType.rawValue)")
+    }
+
+    private var catalogTitle: String {
+        mediaType == .movie ? "Discover Movies" : "Discover Shows"
     }
 
     private var gridColumns: [GridItem] {
