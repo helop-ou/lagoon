@@ -1206,7 +1206,7 @@ final class PlaybackController {
             overview: media.overview,
             facts: facts,
             videoSummary: videoSummary,
-            posterURL: client.imageURL(for: media, kind: .primary, maxWidth: 400),
+            posterURL: client.imageURL(for: media, kind: .poster, maxWidth: 400),
             chapters: chapters,
             trickplay: client.trickplaySource(itemId: media.id, mediaSourceId: source.id, extras: extras),
             segments: segments
