@@ -243,6 +243,9 @@ extension JellyfinClient {
 
 nonisolated enum ItemImageKind {
     case primary
+    /// Portrait artwork for metadata surfaces. Episodes deliberately inherit
+    /// the series Primary image instead of using their landscape still.
+    case poster
     case backdrop
     case thumb
     /// The title's own artwork — a transparent PNG wordmark. Jellyfin has
@@ -267,6 +270,22 @@ extension JellyfinClient {
             } else if let seriesId = item.seriesId, let seriesTag = item.seriesPrimaryImageTag {
                 itemId = seriesId
                 tag = seriesTag
+            } else {
+                return nil
+            }
+        case .poster:
+            if item.type == .episode, let seriesId = item.seriesId {
+                // Jellyfin stores an episode screen grab in Primary. The
+                // player's portrait slot represents the title, so resolve
+                // through the series even when the list response omitted its
+                // image tag; the image endpoint does not require that tag.
+                itemId = seriesId
+                tag = item.seriesPrimaryImageTag
+            } else if let primaryTag = item.imageTags?["Primary"] {
+                tag = primaryTag
+            } else if let seriesId = item.seriesId {
+                itemId = seriesId
+                tag = item.seriesPrimaryImageTag
             } else {
                 return nil
             }
