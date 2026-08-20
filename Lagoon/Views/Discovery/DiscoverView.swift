@@ -78,6 +78,7 @@ struct DiscoverView: View {
         .scrollClipDisabled()
         .background(Color.black.ignoresSafeArea())
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
+        .overlay { SearchDismissalObserver() }
         .refreshable {
             guard seerr.isConnected, normalizedSearch.isEmpty else { return }
             await viewModel.load(client: seerr.client)
@@ -216,6 +217,7 @@ struct DiscoverView: View {
                 .font(.headline)
             if isLoading {
                 ProgressView()
+                    .accessibilityLabel("Searching \(title)")
             } else {
                 Text(message)
                     .font(.callout)
@@ -352,6 +354,17 @@ struct SeerrCatalogView: View {
                             ProgressView().frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
                         }
                     }
+
+                    if let error = viewModel.errorMessage, !viewModel.isLoading {
+                        InlineRetryView(message: error) {
+                            Task {
+                                await viewModel.loadNext(
+                                    mediaType: mediaType,
+                                    client: seerr.client
+                                )
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, Metrics.screenGutter)
@@ -368,5 +381,18 @@ struct SeerrCatalogView: View {
 
     private var catalogTitle: String {
         mediaType == .movie ? "Discover Movies" : "Discover Shows"
+    }
+}
+
+/// Keeps tvOS search presentation from surviving after Discover leaves the
+/// hierarchy. The dismiss action is available only below `.searchable`.
+private struct SearchDismissalObserver: View {
+    @Environment(\.dismissSearch) private var dismissSearch
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+            .onDisappear { dismissSearch() }
     }
 }
