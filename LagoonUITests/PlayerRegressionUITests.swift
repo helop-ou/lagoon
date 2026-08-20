@@ -168,6 +168,50 @@ final class PlayerRegressionUITests: XCTestCase {
         exerciseAudioTracks(in: app)
     }
 
+    func testAudioRouteFlushAndMediaServicesResetRecoverWithoutAutomaticResume() throws {
+        let app = launchPlayer(
+            title: "audio-lifecycle-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.regressionInjectAudioRendererFlush", "YES",
+                "-debug.regressionInjectMediaServicesReset", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.int("audioCount") > 0
+        }
+        let initialTime = initial.double("time")
+
+        let afterFlush = waitForState(in: app, timeout: 30) {
+            $0.int("audioRecoveries") == 1
+                && $0.int("buffering") == 0
+                && $0.int("paused") == 0
+        }
+        XCTAssertGreaterThan(afterFlush.double("time"), initialTime)
+
+        let afterReset = waitForState(in: app, timeout: 30) {
+            $0.int("mediaResetRecoveries") == 1
+                && $0.int("buffering") == 0
+                && $0.int("paused") == 1
+        }
+        let pausedTime = afterReset.double("time")
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertLessThan(abs(state(in: app).double("time") - pausedTime), 0.8)
+
+        remote.press(.playPause)
+        let resumed = waitForState(in: app, timeout: 8) {
+            $0.int("paused") == 0 && $0.double("time") > pausedTime + 1
+        }
+        XCTAssertEqual(resumed.int("engines"), 1)
+        XCTAssertEqual(resumed.int("demux"), 1)
+        XCTAssertEqual(resumed.int("renderers"), 1)
+        XCTAssertEqual(resumed.int("unclean"), 0)
+    }
+
     func testAutomaticIntroSkipUsesRealSegmentAndPlayerSeek() throws {
         let app = launchPlayer(
             title: "hardware-regression",
