@@ -57,13 +57,18 @@ struct PlayerControlPanel: View {
 
     var body: some View {
         VStack(spacing: Metrics.Space.xl) {
-            GlassEffectContainer(spacing: Metrics.Space.s) {
-                VStack(spacing: Metrics.Space.l) {
+            VStack(spacing: Metrics.Space.l) {
+                // Only the sibling glass tabs need shared sampling and
+                // blending. Keeping the material sheet and its potentially
+                // long track tree outside this specialized container avoids
+                // an unnecessary glass-compositing subtree on every tab move.
+                GlassEffectContainer(spacing: Metrics.Space.s) {
                     tabBar
-                    tabCard
                 }
-                .frame(maxWidth: PlayerPanelMetrics.maxWidth)
+
+                tabCard
             }
+            .frame(maxWidth: PlayerPanelMetrics.maxWidth)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Metrics.screenGutter)
 
