@@ -11,6 +11,7 @@ import UIKit
 final class PlaybackAudioSession {
     var onPauseRequested: (() -> Void)?
     var onResumeRequested: (() -> Void)?
+    var onMediaServicesReset: (() -> Void)?
     var onRouteAvailabilityChanged: ((Bool) -> Void)?
     var onError: ((Error) -> Void)?
 
@@ -81,7 +82,7 @@ final class PlaybackAudioSession {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.restoreAfterMediaServicesReset(isPlaying: isPlaying)
+                self?.restoreAfterMediaServicesReset()
             }
         })
     }
@@ -129,8 +130,13 @@ final class PlaybackAudioSession {
         onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
     }
 
-    private func restoreAfterMediaServicesReset(isPlaying: () -> Bool) {
-        let shouldResume = isPlaying()
+    private func restoreAfterMediaServicesReset() {
+        // The media server has discarded every AVAudioSession property and
+        // invalidated the renderer that was using it. Apple requires apps to
+        // recreate those audio objects and to wait for user action before
+        // resuming playback.
+        isActive = false
+        wasPlayingBeforeInterruption = false
         do {
             #if os(iOS)
             try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo, options: [])
@@ -140,13 +146,18 @@ final class PlaybackAudioSession {
             try session.setSupportsMultichannelContent(true)
             try session.setActive(true)
             isActive = true
-            if shouldResume {
-                onResumeRequested?()
-            }
+            onMediaServicesReset?()
+            onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
         } catch {
             onError?(error)
         }
     }
+
+    #if DEBUG
+    func simulateMediaServicesResetForRegression() {
+        restoreAfterMediaServicesReset()
+    }
+    #endif
 
     /// Apple recommends pausing for old-device-unavailable, but only a
     /// private/remote output disappearing should do that here. tvOS changes
