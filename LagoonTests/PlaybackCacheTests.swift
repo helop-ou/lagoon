@@ -84,6 +84,60 @@ struct PlaybackCacheTests {
         #expect(!(await scope.prefetchNextChunk()))
     }
 
+    @Test func seekMovesProactiveFillToPlayheadThenWrapsBackWithoutLosingPrefix() async throws {
+        let payload = Data((0..<256).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-seek-buffer",
+            sourceURL: URL(string: "https://media.test/movie.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        // Establish the ordinary byte-zero prefix, then model FFmpeg's real
+        // high-priority range read after a seek to the middle of the file.
+        #expect(await scope.prefetchNextChunk())
+        #expect(try scope.read(offset: 128, length: 8) == payload.subdata(in: 128..<136))
+        #expect(loader.requestedRanges == [
+            PlaybackByteRange(0, 32),
+            PlaybackByteRange(128, 160),
+        ])
+
+        // Proactive traffic must continue after the seek's cached island,
+        // not resume at byte 32. Both islands remain visible to the UI.
+        #expect(await scope.prefetchNextChunk())
+        #expect(loader.requestedRanges.last == PlaybackByteRange(160, 192))
+        #expect(scope.metrics.cachedByteRanges == [
+            PlaybackByteRange(0, 32),
+            PlaybackByteRange(128, 192),
+        ])
+        #expect(scope.metrics.bufferedRanges == [
+            PlaybackBufferedRange(lowerFraction: 0, upperFraction: 0.125),
+            PlaybackBufferedRange(lowerFraction: 0.5, upperFraction: 0.75),
+        ])
+        #expect(scope.metrics.playheadPrefetchCount == 1)
+
+        // Finish playhead-to-EOF first, then verify the scheduler wraps back
+        // to the earliest hole and can still promote a complete sparse file.
+        #expect(await scope.prefetchNextChunk())
+        #expect(loader.requestedRanges.last == PlaybackByteRange(192, 224))
+        #expect(await scope.prefetchNextChunk())
+        #expect(loader.requestedRanges.last == PlaybackByteRange(224, 256))
+        #expect(await scope.prefetchNextChunk())
+        #expect(loader.requestedRanges.last == PlaybackByteRange(32, 64))
+        while await scope.prefetchNextChunk() {}
+
+        #expect(scope.metrics.cachedByteRanges == [PlaybackByteRange(0, 256)])
+        #expect(scope.metrics.bufferedFraction == 1)
+        #expect(scope.completeFileURL == scope.fileURL)
+    }
+
     @Test func repeatedReadComesFromSparseFileAndReportsAHit() throws {
         let payload = Data((0..<128).map(UInt8.init))
         let loader = PlaybackCacheLoaderStub(payload: payload)
@@ -508,6 +562,7 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
     private let payload: Data
     private let lock = NSLock()
     private var requests = 0
+    private var ranges: [PlaybackByteRange] = []
     private var cancelled = false
 
     init(payload: Data) {
@@ -518,6 +573,12 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
         lock.lock()
         defer { lock.unlock() }
         return requests
+    }
+
+    var requestedRanges: [PlaybackByteRange] {
+        lock.lock()
+        defer { lock.unlock() }
+        return ranges
     }
 
     var wasCancelled: Bool {
@@ -531,6 +592,7 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
         defer { lock.unlock() }
         guard !cancelled else { throw PlaybackCacheError.cancelled }
         requests += 1
+        ranges.append(range)
         let lower = min(Int(range.lowerBound), payload.count)
         let upper = min(Int(range.upperBound), payload.count)
         return PlaybackRangeResponse(
