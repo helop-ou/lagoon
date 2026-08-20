@@ -82,6 +82,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let parentBackdropItemId: String?
     let parentBackdropImageTags: [String]?
     let seriesPrimaryImageTag: String?
+    let providerIds: [String: String]?
     let mediaSources: [MediaSource]?
     /// Cast and crew — only the single-item endpoint returns these, so rails
     /// hand the detail page an item with an empty list until it re-fetches.
@@ -115,6 +116,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         parentBackdropItemId = try c.decodeIfPresent(String.self, forKey: "parentBackdropItemId")
         parentBackdropImageTags = try c.decodeIfPresent([String].self, forKey: "parentBackdropImageTags")
         seriesPrimaryImageTag = try c.decodeIfPresent(String.self, forKey: "seriesPrimaryImageTag")
+        providerIds = try c.decodeIfPresent([String: String].self, forKey: "providerIds")
         mediaSources = try? c.decodeIfPresent([MediaSource].self, forKey: "mediaSources")
         people = try? c.decodeIfPresent([Person].self, forKey: "people")
     }
