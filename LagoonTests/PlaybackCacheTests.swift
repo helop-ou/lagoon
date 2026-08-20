@@ -138,6 +138,35 @@ struct PlaybackCacheTests {
         #expect(scope.completeFileURL == scope.fileURL)
     }
 
+    @Test func timelineAnchorMapsSparseByteRangesThroughTheActualPlayhead() {
+        let metrics = PlaybackCacheMetrics(
+            cachedBytes: 30,
+            networkBytes: 30,
+            cacheHitBytes: 0,
+            requestCount: 1,
+            networkRequestSeconds: 0.1,
+            contiguousCachedBytes: 10,
+            contentLength: 100,
+            cachedByteRanges: [
+                PlaybackByteRange(0, 10),
+                PlaybackByteRange(70, 90),
+            ],
+            timelineAnchor: PlaybackTimelineAnchor(
+                byteOffset: 75,
+                timeFraction: 0.5
+            )
+        )
+
+        let ranges = metrics.bufferedRanges
+        #expect(ranges.count == 2)
+        #expect(abs(ranges[0].upperFraction - (1.0 / 15.0)) < 0.000_001)
+        #expect(ranges[1].lowerFraction < 0.5)
+        #expect(ranges[1].upperFraction > 0.5)
+        #expect(abs(ranges[1].upperFraction - 0.8) < 0.000_001)
+        // The legacy prefix metric remains byte-based for diagnostics.
+        #expect(metrics.bufferedFraction == 0.1)
+    }
+
     @Test func repeatedReadComesFromSparseFileAndReportsAHit() throws {
         let payload = Data((0..<128).map(UInt8.init))
         let loader = PlaybackCacheLoaderStub(payload: payload)
