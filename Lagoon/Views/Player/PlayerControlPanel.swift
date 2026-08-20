@@ -493,8 +493,8 @@ private enum PlayerPanelMetrics {
     static let maxWidth: CGFloat = 1_440
     static let cardPadding: CGFloat = 24
     static let posterWidth: CGFloat = 112
-    static let audioTrackColumnWidth: CGFloat = 440
-    static let audioOptionsColumnWidth: CGFloat = 600
+    static let audioTrackColumnWidth: CGFloat = 720
+    static let audioOptionsColumnWidth: CGFloat = 520
     #else
     static let maxWidth: CGFloat = .infinity
     static let cardPadding: CGFloat = 20
