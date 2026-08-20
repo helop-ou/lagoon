@@ -125,6 +125,15 @@ nonisolated struct PlaybackBufferedRange: Equatable, Hashable, Sendable {
     let upperFraction: Double
 }
 
+/// The container byte position FFmpeg selected for a known media time.
+/// Direct files are commonly variable bitrate, so this anchor is required
+/// to project sparse byte ranges onto the scrubber without putting the hot
+/// cache island visibly ahead of (or behind) the playhead.
+nonisolated struct PlaybackTimelineAnchor: Equatable, Sendable {
+    let byteOffset: Int64
+    let timeFraction: Double
+}
+
 nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     let cachedBytes: Int64
     let networkBytes: Int64
@@ -138,6 +147,7 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     let contentLength: Int64?
     let cachedByteRanges: [PlaybackByteRange]
     let playheadPrefetchCount: Int
+    let timelineAnchor: PlaybackTimelineAnchor?
 
     init(
         cachedBytes: Int64,
@@ -151,7 +161,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         contiguousCachedBytes: Int64 = 0,
         contentLength: Int64? = nil,
         cachedByteRanges: [PlaybackByteRange] = [],
-        playheadPrefetchCount: Int = 0
+        playheadPrefetchCount: Int = 0,
+        timelineAnchor: PlaybackTimelineAnchor? = nil
     ) {
         self.cachedBytes = cachedBytes
         self.networkBytes = networkBytes
@@ -165,6 +176,7 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         self.contentLength = contentLength
         self.cachedByteRanges = cachedByteRanges
         self.playheadPrefetchCount = playheadPrefetchCount
+        self.timelineAnchor = timelineAnchor
     }
 
     var bufferedFraction: Double? {
@@ -175,11 +187,36 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     var bufferedRanges: [PlaybackBufferedRange] {
         guard let contentLength, contentLength > 0 else { return [] }
         return cachedByteRanges.compactMap { range in
-            let lower = min(max(Double(range.lowerBound) / Double(contentLength), 0), 1)
-            let upper = min(max(Double(range.upperBound) / Double(contentLength), 0), 1)
+            let lower = timelineFraction(for: range.lowerBound, contentLength: contentLength)
+            let upper = timelineFraction(for: range.upperBound, contentLength: contentLength)
             guard upper > lower else { return nil }
             return PlaybackBufferedRange(lowerFraction: lower, upperFraction: upper)
         }
+    }
+
+    /// Piecewise-linear projection through the most recent timeline anchor.
+    /// byte-to-time relationship is still an estimate between known points,
+    /// but the active playhead itself is exact and both file boundaries stay
+    /// pinned to 0 and 1.
+    private func timelineFraction(for byteOffset: Int64, contentLength: Int64) -> Double {
+        let byteOffset = min(max(byteOffset, 0), contentLength)
+        guard let timelineAnchor,
+              timelineAnchor.byteOffset > 0,
+              timelineAnchor.byteOffset < contentLength,
+              timelineAnchor.timeFraction > 0,
+              timelineAnchor.timeFraction < 1 else {
+            return Double(byteOffset) / Double(contentLength)
+        }
+
+        if byteOffset <= timelineAnchor.byteOffset {
+            return timelineAnchor.timeFraction
+                * Double(byteOffset)
+                / Double(timelineAnchor.byteOffset)
+        }
+        return timelineAnchor.timeFraction
+            + (1 - timelineAnchor.timeFraction)
+                * Double(byteOffset - timelineAnchor.byteOffset)
+                / Double(contentLength - timelineAnchor.byteOffset)
     }
 
     var hitRate: Double {
@@ -214,7 +251,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
             capacityBytes: capacityBytes + other.capacityBytes,
             contiguousCachedBytes: contiguousCachedBytes + other.contiguousCachedBytes,
             contentLength: nil,
-            playheadPrefetchCount: playheadPrefetchCount + other.playheadPrefetchCount
+            playheadPrefetchCount: playheadPrefetchCount + other.playheadPrefetchCount,
+            timelineAnchor: nil
         )
     }
 
@@ -231,7 +269,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
             contiguousCachedBytes: contiguousCachedBytes,
             contentLength: contentLength,
             cachedByteRanges: cachedByteRanges,
-            playheadPrefetchCount: playheadPrefetchCount
+            playheadPrefetchCount: playheadPrefetchCount,
+            timelineAnchor: timelineAnchor
         )
     }
 }
@@ -651,6 +690,7 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     /// so this is safer than estimating bytes from a VBR timeline fraction.
     private var preferredPrefetchOffset: Int64 = 0
     private var playheadPrefetchCount = 0
+    private var timelineAnchor: PlaybackTimelineAnchor?
 
     init(
         itemID: String,
@@ -716,7 +756,22 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             contiguousCachedBytes: cached.contiguousUpperBound,
             contentLength: knownLength,
             cachedByteRanges: cached.ranges,
-            playheadPrefetchCount: playheadPrefetchCount
+            playheadPrefetchCount: playheadPrefetchCount,
+            timelineAnchor: timelineAnchor
+        )
+    }
+
+    /// Records the file position selected by FFmpeg for a concrete playback
+    /// time. This is presentation metadata only; scheduling continues to use
+    /// FFmpeg's observed foreground reads as its authoritative hot offset.
+    func setTimelineAnchor(byteOffset: Int64, timeFraction: Double) {
+        guard byteOffset >= 0, timeFraction.isFinite else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        let upperBound = knownLength ?? byteLimit
+        timelineAnchor = PlaybackTimelineAnchor(
+            byteOffset: min(byteOffset, upperBound),
+            timeFraction: min(max(timeFraction, 0), 1)
         )
     }
 
