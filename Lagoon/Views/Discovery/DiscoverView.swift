@@ -34,22 +34,28 @@ private final class DiscoverViewModel {
 }
 
 struct DiscoverView: View {
+    @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = DiscoverViewModel()
+    @State private var librarySearch = SearchViewModel()
     @State private var searchText = ""
     @State private var searchResults: [SeerrDiscoverResult] = []
     @State private var isSearching = false
     @State private var searchError: String?
     @State private var reloadID = 0
+    @State private var searchRetryID = 0
 
     var body: some View {
         Group {
-            if seerr.isLoading {
+            // Library search remains useful when Seerr is disconnected or
+            // still restoring its cookie, so a query always wins over the
+            // connection state below.
+            if !normalizedSearch.isEmpty {
+                searchContent
+            } else if seerr.isLoading {
                 LoadingView()
             } else if !seerr.isConnected {
                 connectionState
-            } else if !normalizedSearch.isEmpty {
-                searchContent
             } else if viewModel.isLoading, viewModel.trending.isEmpty {
                 LoadingView()
             } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
@@ -59,15 +65,19 @@ struct DiscoverView: View {
             }
         }
         .navigationTitle("Discover")
-        .searchable(text: $searchText, prompt: "Movies and shows")
+        .searchable(text: $searchText, prompt: "Search your library and Seerr")
+        .onChange(of: searchText) { _, newValue in
+            librarySearch.search(newValue, client: session.client)
+        }
         .task(id: "\(seerr.user?.id ?? -1):\(reloadID)") {
             guard seerr.isConnected else { return }
             await viewModel.load(client: seerr.client)
         }
-        .task(id: normalizedSearch) {
+        .task(id: "\(seerr.user?.id ?? -1):\(normalizedSearch):\(searchRetryID)") {
             await performSearch()
         }
         .accessibilityIdentifier("seerr.discover")
+        .accessibilityValue("\(librarySearch.results.count) library, \(searchResults.count) Seerr results")
     }
 
     private var connectionState: some View {
@@ -131,32 +141,97 @@ struct DiscoverView: View {
 
     @ViewBuilder
     private var searchContent: some View {
-        if isSearching, searchResults.isEmpty {
+        if librarySearch.isSearching,
+           isSearching,
+           librarySearch.results.isEmpty,
+           searchResults.isEmpty {
             LoadingView()
-        } else if let searchError, searchResults.isEmpty {
-            ErrorStateView(message: searchError) { reloadID += 1 }
-        } else if searchResults.isEmpty {
-            VStack(spacing: Metrics.Space.m) {
-                Image(systemName: "magnifyingglass")
-                    .font(Typography.glyph)
-                    .foregroundStyle(.secondary)
-                Text("No movies or shows found")
-                    .font(.title3)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .focusable()
         } else {
             ScrollView {
-                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Metrics.Space.xxl) {
-                    ForEach(searchResults.filter { $0.mediaType == .movie || $0.mediaType == .tv }) { item in
-                        SeerrMediaCard(item: item)
-                    }
+                LazyVStack(alignment: .leading, spacing: Metrics.Space.section) {
+                    librarySearchSection
+                    seerrSearchSection
                 }
-                .padding(.horizontal, Metrics.screenGutter)
                 .padding(.vertical, Metrics.Space.xxl)
             }
             .scrollClipDisabled()
         }
+    }
+
+    @ViewBuilder
+    private var librarySearchSection: some View {
+        if !librarySearch.results.isEmpty {
+            MediaRail(title: "In Your Library", items: librarySearch.results)
+        } else {
+            searchStatusSection(
+                title: "In Your Library",
+                isLoading: librarySearch.isSearching,
+                message: librarySearch.errorMessage ?? "No matching movies or shows in your library.",
+                canRetry: librarySearch.errorMessage != nil
+            ) {
+                librarySearch.search(searchText, client: session.client)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var seerrSearchSection: some View {
+        if !seerr.isConnected {
+            VStack(alignment: .leading, spacing: Metrics.Space.l) {
+                Text("From Seerr")
+                    .font(.headline)
+                Text(seerr.isLoading
+                     ? "Connecting to Seerr…"
+                     : "Connect Seerr to find titles outside your library.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if !seerr.isLoading {
+                    NavigationLink(value: SeerrNavigationRoute.settings) {
+                        Text(seerr.isConfigured ? "Sign In to Seerr" : "Set Up Seerr")
+                    }
+                    .buttonStyle(.glass)
+                }
+            }
+            .padding(.horizontal, Metrics.screenGutter)
+        } else if !requestableSearchResults.isEmpty {
+            SeerrMediaRail(title: "From Seerr", items: requestableSearchResults)
+        } else {
+            searchStatusSection(
+                title: "From Seerr",
+                isLoading: isSearching,
+                message: searchError ?? "No matching movies or shows on Seerr.",
+                canRetry: searchError != nil
+            ) {
+                searchRetryID += 1
+            }
+        }
+    }
+
+    private func searchStatusSection(
+        title: String,
+        isLoading: Bool,
+        message: String,
+        canRetry: Bool,
+        retry: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            Text(title)
+                .font(.headline)
+            if isLoading {
+                ProgressView()
+            } else {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if canRetry {
+                    Button("Try Again", action: retry)
+                        .buttonStyle(.glass)
+                }
+            }
+        }
+        .padding(.horizontal, Metrics.screenGutter)
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+        .focusable(!isLoading && !canRetry)
     }
 
     private var normalizedSearch: String {
@@ -167,13 +242,19 @@ struct DiscoverView: View {
         seerr.user?.canViewAllRequests == true ? "All Requests" : "My Requests"
     }
 
-    private var gridColumns: [GridItem] {
-        Array(repeating: GridItem(.fixed(Metrics.posterWidth), spacing: Metrics.cardSpacing), count: Metrics.gridColumns)
+    private var requestableSearchResults: [SeerrDiscoverResult] {
+        searchResults.filter { $0.mediaType == .movie || $0.mediaType == .tv }
     }
 
     private func performSearch() async {
         let term = normalizedSearch
-        guard seerr.isConnected, !term.isEmpty else {
+        guard !term.isEmpty else {
+            searchResults = []
+            searchError = nil
+            isSearching = false
+            return
+        }
+        guard seerr.isConnected else {
             searchResults = []
             searchError = nil
             isSearching = false
