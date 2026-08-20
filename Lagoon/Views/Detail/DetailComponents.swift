@@ -123,37 +123,23 @@ struct DetailHeader<Buttons: View>: View {
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.detailHeaderSpacing) {
-            #if os(tvOS)
+        DetailMetadataHeader(
+            subtitle: upNext.flatMap { item in
+                item.episodeLabel.map {
+                    [$0, item.name].compactMap(\.self).joined(separator: "  ·  ")
+                }
+            },
+            factTokens: factTokens,
+            qualityTokens: qualityTokens,
+            officialRating: item.officialRating,
+            genres: item.genres ?? [],
+            communityRating: item.communityRating,
+            overview: upNext?.overview ?? item.overview
+        ) {
             TitleArtView(item: item)
-            #else
-            // The phone has one full-width information column, rather than
-            // tvOS's leading column beside the artwork.
-            TitleArtView(item: item)
-                .frame(maxWidth: .infinity, alignment: .center)
-            #endif
-
-            if let upNext, let label = upNext.episodeLabel {
-                Text([label, upNext.name].compactMap(\.self).joined(separator: "  ·  "))
-                    .font(.title3.weight(.semibold))
-                    .lineLimit(1)
-            }
-
-            facts
-            supportingFacts
-
-            if let overview = upNext?.overview ?? item.overview {
-                Text(overview)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .frame(maxWidth: 1000, alignment: .leading)
-            }
-
+        } buttons: {
             buttons
-                .padding(.top, Metrics.Space.xs)
         }
-        .padding(.horizontal, Metrics.screenGutter)
     }
 
     /// Runtime first, then year — the reference's order.
@@ -179,6 +165,77 @@ struct DetailHeader<Buttons: View>: View {
     private var qualityTokens: [String] {
         item.mediaSources?.first?.qualityTokens ?? []
     }
+}
+
+/// The common visual language for both Jellyfin and Seerr media details.
+/// The services supply different title artwork and actions, while all of the
+/// information hierarchy and platform-specific layout remains one component.
+struct DetailMetadataHeader<Title: View, Buttons: View>: View {
+    let subtitle: String?
+    let factTokens: [String]
+    let qualityTokens: [String]
+    let officialRating: String?
+    let genres: [String]
+    let communityRating: Double?
+    let overview: String?
+    @ViewBuilder let title: Title
+    @ViewBuilder let buttons: Buttons
+
+    init(
+        subtitle: String? = nil,
+        factTokens: [String],
+        qualityTokens: [String] = [],
+        officialRating: String? = nil,
+        genres: [String] = [],
+        communityRating: Double? = nil,
+        overview: String?,
+        @ViewBuilder title: () -> Title,
+        @ViewBuilder buttons: () -> Buttons
+    ) {
+        self.subtitle = subtitle
+        self.factTokens = factTokens
+        self.qualityTokens = qualityTokens
+        self.officialRating = officialRating
+        self.genres = genres
+        self.communityRating = communityRating
+        self.overview = overview
+        self.title = title()
+        self.buttons = buttons()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.detailHeaderSpacing) {
+            #if os(tvOS)
+            title
+            #else
+            // The phone has one full-width information column, rather than
+            // tvOS's leading column beside the artwork.
+            title
+                .frame(maxWidth: .infinity, alignment: .center)
+            #endif
+
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+            }
+
+            facts
+            supportingFacts
+
+            if let overview, !overview.isEmpty {
+                Text(overview)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .frame(maxWidth: 1000, alignment: .leading)
+            }
+
+            buttons
+                .padding(.top, Metrics.Space.xs)
+        }
+        .padding(.horizontal, Metrics.screenGutter)
+    }
 
     @ViewBuilder
     private var facts: some View {
@@ -195,7 +252,7 @@ struct DetailHeader<Buttons: View>: View {
         // of information. Separate rows let every token stay intact instead
         // of producing "1 h 56" / "min" and "TrueHD" / "7.1" fragments.
         VStack(alignment: .leading, spacing: Metrics.Space.s) {
-            if !factTokens.isEmpty || item.officialRating != nil {
+            if !factTokens.isEmpty || officialRating != nil {
                 HStack(spacing: Metrics.Space.m) {
                     primaryFactViews
                 }
@@ -217,7 +274,7 @@ struct DetailHeader<Buttons: View>: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        if let official = item.officialRating {
+        if let official = officialRating {
             Text(official)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -242,19 +299,19 @@ struct DetailHeader<Buttons: View>: View {
     @ViewBuilder
     private var supportingFacts: some View {
         #if os(tvOS)
-        if let genres = item.genres, !genres.isEmpty {
+        if !genres.isEmpty {
             genreText(genres)
         }
-        if let rating = item.communityRating {
+        if let rating = communityRating {
             communityRatingText(rating)
         }
         #else
-        if item.genres?.isEmpty == false || item.communityRating != nil {
+        if !genres.isEmpty || communityRating != nil {
             HStack(spacing: Metrics.Space.l) {
-                if let genres = item.genres, !genres.isEmpty {
+                if !genres.isEmpty {
                     genreText(genres)
                 }
-                if let rating = item.communityRating {
+                if let rating = communityRating {
                     communityRatingText(rating)
                         .fixedSize(horizontal: true, vertical: false)
                 }
