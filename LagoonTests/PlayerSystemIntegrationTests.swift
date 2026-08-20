@@ -232,6 +232,30 @@ struct PlayerSystemIntegrationTests {
         #expect(transcodeResult.url.path == "/Videos/item/master.m3u8")
     }
 
+    @Test func episodePosterUsesSeriesArtworkInsteadOfTheEpisodeStill() throws {
+        let client = JellyfinClient(deviceId: "poster-resolution-test")
+        client.configure(serverURL: URL(string: "https://media.test/jellyfin")!)
+        let episode = try JellyfinClient.decoder.decode(
+            MediaItem.self,
+            from: Data(#"""
+            {
+              "Id":"episode-1", "Type":"Episode", "SeriesId":"series-1",
+              "ImageTags":{"Primary":"episode-still-tag"},
+              "SeriesPrimaryImageTag":"series-poster-tag"
+            }
+            """#.utf8)
+        )
+
+        let poster = try #require(client.imageURL(for: episode, kind: .poster, maxWidth: 400))
+        let still = try #require(client.imageURL(for: episode, kind: .primary, maxWidth: 400))
+
+        #expect(poster.path == "/jellyfin/Items/series-1/Images/Primary")
+        #expect(URLComponents(url: poster, resolvingAgainstBaseURL: false)?.queryItems?.contains {
+            $0.name == "tag" && $0.value == "series-poster-tag"
+        } == true)
+        #expect(still.path == "/jellyfin/Items/episode-1/Images/Primary")
+    }
+
     @Test func episodeHandoffWaitsForTheSpecificOutgoingPipeline() async {
         let outgoing = UUID()
         let unrelated = UUID()
