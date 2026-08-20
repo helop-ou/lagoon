@@ -206,6 +206,8 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
     let status4k: Int?
     let externalServiceId: Int?
     let externalServiceId4k: Int?
+    let jellyfinMediaId: String?
+    let jellyfinMediaId4k: String?
     let requests: [SeerrRequestReference]?
     let seasons: [SeerrMediaSeasonStatus]?
 
