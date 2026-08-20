@@ -71,6 +71,7 @@ struct SeerrRequestsView: View {
                 signedOutContent
             }
         }
+        .background(Color.black.ignoresSafeArea())
         // Keep the fetch on the stable screen root. Putting it on the
         // ScrollView/LoadingView branches made each isLoading transition
         // remove and cancel the task, producing an endless spinner.
@@ -121,7 +122,7 @@ struct SeerrRequestsView: View {
                                         client: seerr.client,
                                         user: user,
                                         filter: filter,
-                                        onlyMine: onlyMine
+                                        onlyMine: effectiveOnlyMine(for: user)
                                     )
                                 }
                             }
@@ -203,7 +204,7 @@ struct SeerrRequestsView: View {
     }
 
     private func loadID(user: SeerrUser) -> String {
-        "\(user.id):\(filter.rawValue):\(onlyMine):\(refreshID)"
+        "\(user.id):\(filter.rawValue):\(effectiveOnlyMine(for: user)):\(refreshID)"
     }
 
     private func reload(user: SeerrUser) async {
@@ -211,9 +212,13 @@ struct SeerrRequestsView: View {
             client: seerr.client,
             user: user,
             filter: filter,
-            onlyMine: onlyMine,
+            onlyMine: effectiveOnlyMine(for: user),
             reset: true
         )
+    }
+
+    private func effectiveOnlyMine(for user: SeerrUser) -> Bool {
+        !user.canViewAllRequests || onlyMine
     }
 }
 
@@ -351,7 +356,7 @@ struct SeerrRequestDetailView: View {
                 .scrollClipDisabled()
             }
         }
-        .navigationTitle(details?.displayTitle ?? "Request")
+        .background(Color.black.ignoresSafeArea())
         .task { await load() }
         .confirmationDialog(
             confirmation?.title ?? "Update Request",
