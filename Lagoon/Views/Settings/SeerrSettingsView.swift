@@ -11,6 +11,7 @@ struct SeerrSettingsView: View {
     @State private var isWorking = false
     @State private var errorMessage: String?
     @State private var pollTask: Task<Void, Never>?
+    @State private var pendingConfirmation: Confirmation?
 
     var body: some View {
         Group {
@@ -30,6 +31,31 @@ struct SeerrSettingsView: View {
             serverAddress = seerr.suggestedServerAddress(for: session.activeAccount)
         }
         .onDisappear { pollTask?.cancel() }
+        .confirmationDialog(
+            confirmationTitle,
+            isPresented: Binding(
+                get: { pendingConfirmation != nil },
+                set: { if !$0 { pendingConfirmation = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if pendingConfirmation == .disconnect {
+                Button("Disconnect Account", role: .destructive) {
+                    pendingConfirmation = nil
+                    Task { await seerr.disconnect() }
+                }
+            } else if pendingConfirmation == .changeServer {
+                Button("Change Server", role: .destructive) {
+                    pendingConfirmation = nil
+                    changeServer()
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingConfirmation = nil
+            }
+        } message: {
+            Text(confirmationMessage)
+        }
     }
 
     #if os(tvOS)
@@ -66,7 +92,7 @@ struct SeerrSettingsView: View {
                     infoRow("User", value: user.name)
                     infoRow("Access", value: permissionSummary(for: user))
                     Button("Disconnect Seerr Account") {
-                        Task { await seerr.disconnect() }
+                        pendingConfirmation = .disconnect
                     }
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("settings.seerr.disconnect")
@@ -77,12 +103,7 @@ struct SeerrSettingsView: View {
 
             TVSettingsSection("Server Actions") {
                 Button("Change Seerr Server", role: .destructive) {
-                    pollTask?.cancel()
-                    Task {
-                        await seerr.forgetServer()
-                        serverAddress = seerr.suggestedServerAddress(for: session.activeAccount)
-                        quickConnectCode = nil
-                    }
+                    pendingConfirmation = .changeServer
                 }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("settings.seerr.changeServer")
@@ -118,7 +139,7 @@ struct SeerrSettingsView: View {
                         LabeledContent("User", value: user.name)
                         LabeledContent("Access", value: permissionSummary(for: user))
                         Button("Disconnect Seerr Account", role: .destructive) {
-                            Task { await seerr.disconnect() }
+                            pendingConfirmation = .disconnect
                         }
                     } else {
                         authenticationControls
@@ -127,12 +148,7 @@ struct SeerrSettingsView: View {
 
                 Section {
                     Button("Change Seerr Server", role: .destructive) {
-                        pollTask?.cancel()
-                        Task {
-                            await seerr.forgetServer()
-                            serverAddress = seerr.suggestedServerAddress(for: session.activeAccount)
-                            quickConnectCode = nil
-                        }
+                        pendingConfirmation = .changeServer
                     }
                 }
             }
@@ -212,7 +228,7 @@ struct SeerrSettingsView: View {
     private func infoRow(_ title: LocalizedStringKey, value: String) -> some View {
         TVSettingsActionLabel(title, value: value)
             .padding(.horizontal, Metrics.Space.l)
-            .frame(minHeight: 64)
+            .frame(minHeight: 66)
             .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
     }
     #endif
@@ -237,6 +253,34 @@ struct SeerrSettingsView: View {
                 errorMessage = error.localizedDescription
             }
             isWorking = false
+        }
+    }
+
+    private var confirmationTitle: String {
+        switch pendingConfirmation {
+        case .disconnect: "Disconnect Seerr Account?"
+        case .changeServer: "Change Seerr Server?"
+        case nil: "Confirm Action"
+        }
+    }
+
+    private var confirmationMessage: String {
+        switch pendingConfirmation {
+        case .disconnect:
+            "You’ll need to connect this Jellyfin user to Seerr again before making requests."
+        case .changeServer:
+            "This removes the saved Seerr server and account connection from Lagoon."
+        case nil:
+            ""
+        }
+    }
+
+    private func changeServer() {
+        pollTask?.cancel()
+        Task {
+            await seerr.forgetServer()
+            serverAddress = seerr.suggestedServerAddress(for: session.activeAccount)
+            quickConnectCode = nil
         }
     }
 
@@ -298,4 +342,9 @@ struct SeerrSettingsView: View {
         if shows { return "Shows" }
         return "View Only"
     }
+}
+
+private enum Confirmation {
+    case disconnect
+    case changeServer
 }
