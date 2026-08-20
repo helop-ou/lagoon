@@ -584,14 +584,22 @@ priority, and proactive requests disallow constrained or expensive paths.
 
 The coordinator preserves 256 MiB of free volume space and permits one half of
 the remainder for the current title. A declared resource smaller than that cap
-can therefore buffer completely; larger titles stop safely at the cap. Only a
-contiguous prefix is reported as buffered. A sparse file is exposed as a
-normal local playback URL only after the complete server-declared byte range
-has been validated and synchronized, so a hole can never masquerade as EOF.
-The scrubber draws this prefix as a middle-opacity layer behind the solid
-played range. The Playback HUD reports contiguous MiB/total MiB, percentage,
-hit rate, request count and latency, while a `Playback Buffer Progress`
-signpost provides the same fraction and stall count for Instruments runs.
+can therefore buffer completely; larger titles stop safely at the cap. The
+legacy percentage diagnostic reports only the contiguous byte-zero prefix. A
+sparse file is exposed as a normal local playback URL only after the complete
+server-declared byte range has been validated and synchronized, so a hole can
+never masquerade as EOF.
+
+The scrubber draws every cached byte island as a middle-opacity layer behind
+the solid played range. File-byte fractions are not timeline fractions for
+variable-bitrate media, so FFmpeg's video-packet byte positions are paired
+with their media timestamps as playback advances; a seek records an initial
+cursor anchor before the first post-seek packet arrives. Buffered ranges are
+projected piecewise through the latest anchor, keeping the active island
+joined to the playhead while preserving 0 and EOF as exact endpoints. The
+Playback HUD reports contiguous MiB/total MiB, percentage, hit rate, request
+count and latency, while a `Playback Buffer Progress` signpost provides the
+same fraction and stall count for Instruments runs.
 
 A failed cache read returns an I/O error, never EOF: EOF is reserved for a
 successfully read resource ending. URL loading retries transient failures;
