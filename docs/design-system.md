@@ -19,8 +19,10 @@ convention; iOS scales down via `#if os(tvOS)`.
 | `gridColumns` | 5 | 3 |
 | rail focus headroom | top 40 / bottom 80 | 6 / 10 |
 
-Shared radii: card 12, card artwork 10, badge 6, hero panel 32, progress bar
-6 pt capsule. `Motion`: fast 0.2 / standard 0.4 / slow 0.6 / crossfade 0.8.
+Shared radii: card 12, card artwork 10, badge 6, hero panel 32. Player
+progress is a flat 6 pt rail with an attached time label and a transient
+vertical scrub marker; Liquid Glass is reserved for action controls.
+`Motion`: fast 0.2 / standard 0.4 / slow 0.6 / crossfade 0.8.
 
 ### Spacing scale (`Metrics.Space`, HEL-51)
 
