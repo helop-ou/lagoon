@@ -6,14 +6,17 @@ import Libavutil
 import _LagoonFFmpeg
 
 /// Software video fallback for codecs Apple does not expose through
-/// VideoToolbox. VC-1 is decoded by Lagoon's pinned libavcodec, copied into
+/// VideoToolbox — VC-1/WMV3 and MPEG-4 Part 2 (the Xvid/DivX envelope AVI
+/// rips carry). Each is decoded by Lagoon's pinned libavcodec, copied into
 /// renderer-recommended Core Video buffers, and wrapped as ready image sample
 /// buffers. AVFoundation still owns presentation, color conversion, A/V sync,
 /// display matching, and output.
 ///
-/// This intentionally supports only the 8-bit 4:2:0 output VC-1 produces for
-/// Lagoon's advertised progressive 1080p envelope. A different decoded pixel
-/// format fails closed instead of silently presenting incorrect color.
+/// This intentionally supports only 8-bit 4:2:0 output, which is all these
+/// codecs produce inside Lagoon's advertised progressive envelope — MPEG-4
+/// Part 2 Simple and Advanced Simple Profiles have no other pixel format by
+/// specification. A different decoded pixel format fails closed instead of
+/// silently presenting incorrect color.
 nonisolated final class SoftwareVideoDecoder {
     enum DecoderError: LocalizedError {
         case codecSetup(String)
@@ -27,19 +30,19 @@ nonisolated final class SoftwareVideoDecoder {
         var errorDescription: String? {
             switch self {
             case .codecSetup(let detail):
-                "The VC-1 software decoder could not start (\(detail))."
+                "The software video decoder could not start (\(detail))."
             case .pixelBufferPool(let status):
-                "Core Video could not create the VC-1 frame pool (\(status))."
+                "Core Video could not create the software decode frame pool (\(status))."
             case .pixelBuffer(let status):
-                "Core Video could not allocate a VC-1 frame (\(status))."
+                "Core Video could not allocate a software-decoded frame (\(status))."
             case .unsupportedPixelFormat(let format):
-                "The VC-1 decoder produced an unsupported pixel format (\(format))."
+                "The software video decoder produced an unsupported pixel format (\(format))."
             case .outputFormat(let status):
-                "Core Media could not describe a decoded VC-1 frame (\(status))."
+                "Core Media could not describe a software-decoded frame (\(status))."
             case .outputSample(let status):
-                "Core Media could not wrap a decoded VC-1 frame (\(status))."
+                "Core Media could not wrap a software-decoded frame (\(status))."
             case .decode(let status):
-                "The VC-1 software decoder failed (\(status))."
+                "The software video decoder failed (\(status))."
             }
         }
     }
@@ -65,7 +68,9 @@ nonisolated final class SoftwareVideoDecoder {
     var gridDescription: String? { timeline?.gridDescription }
 
     static func supports(codecID: AVCodecID) -> Bool {
-        codecID == AV_CODEC_ID_VC1 || codecID == AV_CODEC_ID_WMV3
+        codecID == AV_CODEC_ID_VC1
+            || codecID == AV_CODEC_ID_WMV3
+            || codecID == AV_CODEC_ID_MPEG4
     }
 
     init(
