@@ -232,10 +232,9 @@ struct ApplePlaybackAlignmentTests {
         #expect(mpeg4Profile?.conditions.contains {
             $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
         } == true)
-        // No pixel-aspect handling exists either.
-        #expect(mpeg4Profile?.conditions.contains {
-            $0.property == "IsAnamorphic" && $0.condition == "NotEquals" && $0.value == "true"
-        } == true)
+        // Anamorphic is deliberately NOT excluded — pixel aspect is carried
+        // through the format description now. See
+        // anamorphicSourcesAreNoLongerExcludedFromDirectPlay.
 
         #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_MPEG4))
         // AC-3 beside software-decoded video already routes to local LPCM,
@@ -249,6 +248,51 @@ struct ApplePlaybackAlignmentTests {
             codecID: AV_CODEC_ID_MP3,
             softwareVideoDecoded: true
         ))
+    }
+
+    @Test func squareAndNearSquarePixelsCarryNoAspectExtension() {
+        // Unknown (libavformat's 0/1) and exactly square must stay nil so the
+        // format description handed to the renderer, AVDisplayCriteria and
+        // VideoToolbox is byte-identical to what shipped before.
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 0, den: 1)) == nil)
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 1, den: 1)) == nil)
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 1920, den: 1920)) == nil)
+        // Malformed values fail closed rather than dividing by zero.
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 16, den: 0)) == nil)
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: -16, den: 15)) == nil)
+        // Rounding artifacts observed in real files: a 3840x1744 HDR remux
+        // and a 624x352 AVI. Both are a hundredth of a percent off square.
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 1_744, den: 1_745)) == nil)
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 180_224, den: 180_219)) == nil)
+    }
+
+    @Test func genuineAnamorphicPixelsAreCarriedThrough() {
+        // Every standard broadcast/DVD pixel aspect, wide and narrow.
+        for (num, den) in [(16, 15), (12, 11), (32, 27), (64, 45), (15, 16), (11, 12)] {
+            let aspect = SampleBufferFactory.pixelAspectRatio(
+                AVRational(num: Int32(num), den: Int32(den))
+            )
+            #expect(aspect?.horizontal == Int32(num))
+            #expect(aspect?.vertical == Int32(den))
+        }
+        // The 1% boundary itself, from both sides.
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 101, den: 100)) != nil)
+        #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 1_001, den: 1_000)) == nil)
+    }
+
+    @Test func anamorphicSourcesAreNoLongerExcludedFromDirectPlay() {
+        // The engine now carries pixel aspect through, so the profile must
+        // not keep asking the server to transcode non-square sources.
+        for profile in DeviceProfile.lagoon.codecProfiles {
+            #expect(!profile.conditions.contains { $0.property == "IsAnamorphic" })
+        }
+        // Interlaced still transcodes — there is no deinterlacing stage.
+        let interlacedGuards = DeviceProfile.lagoon.codecProfiles.filter { profile in
+            profile.conditions.contains {
+                $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+            }
+        }
+        #expect(interlacedGuards.count == DeviceProfile.lagoon.codecProfiles.count)
     }
 
     /// Point `LAGOON_MPEG4_FIXTURE_URL` at a Jellyfin direct-play URL for an
