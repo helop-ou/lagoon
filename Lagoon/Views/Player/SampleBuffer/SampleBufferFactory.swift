@@ -75,6 +75,15 @@ nonisolated enum SampleBufferFactory {
             // `amve` through to presentation for correct HDR adaptation.
             extensions[kCMFormatDescriptionExtension_AmbientViewingEnvironment] = ambient
         }
+        // Non-square pixels. Without this a 720x576 PAL DVD rip with a
+        // 16:15 pixel aspect renders squished to its coded 5:4 box instead
+        // of the 4:3 it was authored as.
+        if let aspect = pixelAspectRatio(codecpar.pointee.sample_aspect_ratio) {
+            extensions[kCMFormatDescriptionExtension_PixelAspectRatio] = [
+                kCMFormatDescriptionKey_PixelAspectRatioHorizontalSpacing: aspect.horizontal,
+                kCMFormatDescriptionKey_PixelAspectRatioVerticalSpacing: aspect.vertical,
+            ]
+        }
 
         // Dolby Vision, single-layer profiles only. Profile 5 (IPTPQc2) is
         // meaningless without the DoVi decode path, so the sample entry
@@ -107,6 +116,31 @@ nonisolated enum SampleBufferFactory {
             formatDescriptionOut: &description
         )
         return status == noErr ? description : nil
+    }
+
+    /// The stream's non-square pixel geometry, or nil when it is square,
+    /// near enough to square to be invisible, or the container never said
+    /// (libavformat reports 0/1 for unknown).
+    ///
+    /// Returning nil rather than 1:1 keeps every format description that
+    /// works today byte-identical: this sits on the path taken by every
+    /// h264/hevc title, and the same description is handed to
+    /// `AVDisplayCriteria` for tvOS display-mode matching and to
+    /// `VTDecompressionSessionCreate`.
+    ///
+    /// The 1% tolerance matters as much as the square case. Real files carry
+    /// rounding artifacts — 1744:1745 on a 4K remux and 180224:180219 on an
+    /// AVI both appear in practice — and honouring those would attach an
+    /// extension, and change those descriptions, to correct a geometry error
+    /// of a hundredth of a percent. Genuine anamorphic PARs are far coarser:
+    /// 16:15, 12:11, 32:27 and 64:45 are all at least 6% off square.
+    static func pixelAspectRatio(_ sar: AVRational) -> (horizontal: Int32, vertical: Int32)? {
+        guard sar.num > 0, sar.den > 0 else { return nil }
+        // Exact integer form of |num/den - 1| >= 1%.
+        let numerator = Int64(sar.num)
+        let denominator = Int64(sar.den)
+        guard abs(numerator - denominator) * 100 >= denominator else { return nil }
+        return (sar.num, sar.den)
     }
 
     /// Returns the description plus the codec's frames-per-packet (for
