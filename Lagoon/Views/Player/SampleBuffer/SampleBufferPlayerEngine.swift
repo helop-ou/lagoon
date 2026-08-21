@@ -1300,7 +1300,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 displayMatch: displayMatch,
                 videoTiming: demuxer.videoGridDescription.map {
                     if demuxer.outputsDecodedVideo {
-                        "grid \($0) · libavcodec VC-1 SW"
+                        // Name the codec rather than assuming VC-1 — the
+                        // software path also carries MPEG-4 Part 2.
+                        "grid \($0) · libavcodec \(demuxer.videoStream?.codecName ?? "?") SW"
                     } else if let videoDecoder {
                         "grid \($0) · VideoToolbox HW · reorder \(videoDecoder.reorderDepth)"
                     } else {
