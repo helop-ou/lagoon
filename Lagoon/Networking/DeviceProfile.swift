@@ -6,6 +6,9 @@ import Foundation
 // hevc is hardware-decoded ahead, and progressive 8-bit VC-1 and MPEG-4
 // Part 2 up to 1080p are software-decoded into Core Video buffers;
 // aac/mp3/ac3/eac3 audio stays compressed plus
+// non-square pixels carried through as a PixelAspectRatio extension, so
+// anamorphic sources (PAL DVD rips at 720x576 with a 16:15 pixel aspect)
+// direct-play instead of transcoding;
 // dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4); text and
 // PGS/VobSub subtitles embedded, vtt external (M5) — in any container
 // libavformat demuxes, plus the fMP4 HLS transcode fallback (whose
@@ -127,12 +130,6 @@ nonisolated enum DeviceProfile {
                     ),
                     ProfileCondition(
                         condition: "NotEquals",
-                        property: "IsAnamorphic",
-                        value: "true",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
                         property: "IsInterlaced",
                         value: "true",
                         isRequired: false
@@ -159,12 +156,6 @@ nonisolated enum DeviceProfile {
                         condition: "LessThanEqual",
                         property: "VideoLevel",
                         value: "52",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsAnamorphic",
-                        value: "true",
                         isRequired: false
                     ),
                     ProfileCondition(
@@ -210,12 +201,6 @@ nonisolated enum DeviceProfile {
                     ),
                     ProfileCondition(
                         condition: "NotEquals",
-                        property: "IsAnamorphic",
-                        value: "true",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
                         property: "IsInterlaced",
                         value: "true",
                         isRequired: true
@@ -258,12 +243,6 @@ nonisolated enum DeviceProfile {
                         property: "Height",
                         value: "1080",
                         isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsAnamorphic",
-                        value: "true",
-                        isRequired: false
                     ),
                     ProfileCondition(
                         condition: "NotEquals",
