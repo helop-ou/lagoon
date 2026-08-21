@@ -201,6 +201,124 @@ struct ApplePlaybackAlignmentTests {
         #expect(audioGaps == 0)
     }
 
+    @Test func mpeg4DirectPlayIsBoundedToTheSoftwareDecoderEnvelope() {
+        let directVideo = DeviceProfile.lagoon.directPlayProfiles.first {
+            $0.type == "Video"
+        }
+        let mpeg4Profile = DeviceProfile.lagoon.codecProfiles.first {
+            $0.type == "Video" && $0.codec == "mpeg4"
+        }
+
+        #expect(directVideo?.container.split(separator: ",").contains("avi") == true)
+        #expect(directVideo?.videoCodec?.split(separator: ",").contains("mpeg4") == true)
+        // Widening the envelope must not drop what already direct-played.
+        #expect(directVideo?.videoCodec?.split(separator: ",").contains("hevc") == true)
+        #expect(directVideo?.videoCodec?.split(separator: ",").contains("h264") == true)
+        #expect(directVideo?.videoCodec?.split(separator: ",").contains("vc1") == true)
+        for container in ["mkv", "webm", "mp4", "m4v", "mov"] {
+            #expect(directVideo?.container.split(separator: ",").contains(Substring(container)) == true)
+        }
+
+        #expect(mpeg4Profile?.conditions.contains {
+            $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == "1920"
+        } == true)
+        #expect(mpeg4Profile?.conditions.contains {
+            $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == "1080"
+        } == true)
+        #expect(mpeg4Profile?.conditions.contains {
+            $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "8"
+        } == true)
+        // No deinterlacing stage exists, so interlaced MPEG-4 must transcode.
+        #expect(mpeg4Profile?.conditions.contains {
+            $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+        } == true)
+        // No pixel-aspect handling exists either.
+        #expect(mpeg4Profile?.conditions.contains {
+            $0.property == "IsAnamorphic" && $0.condition == "NotEquals" && $0.value == "true"
+        } == true)
+
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_MPEG4))
+        // AC-3 beside software-decoded video already routes to local LPCM,
+        // so the pairing that made VC-1 stutter covers these files unchanged.
+        #expect(AudioDecodePolicy.requiresLocalPCM(
+            codecID: AV_CODEC_ID_AC3,
+            softwareVideoDecoded: true
+        ))
+        // MP3 — what most of these rips carry — stays compressed passthrough.
+        #expect(!AudioDecodePolicy.requiresLocalPCM(
+            codecID: AV_CODEC_ID_MP3,
+            softwareVideoDecoded: true
+        ))
+    }
+
+    /// Point `LAGOON_MPEG4_FIXTURE_URL` at a Jellyfin direct-play URL for an
+    /// MPEG-4 Part 2 (Xvid/DivX) AVI. Packed-bitstream rips are the
+    /// interesting case: one chunk can carry two VOPs, so the decoder returns
+    /// several frames for one packet and none for the next, and the "VOP not
+    /// coded" markers arrive as 7-byte packets.
+    @Test func mpeg4FixtureProducesReadyCoreVideoFrames() throws {
+        guard let rawURL = ProcessInfo.processInfo.environment["LAGOON_MPEG4_FIXTURE_URL"],
+              !rawURL.isEmpty else { return }
+        let demuxer = FFmpegDemuxer()
+        defer { demuxer.close() }
+        try demuxer.open(
+            url: rawURL,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        #expect(demuxer.videoStream?.codecName == "mpeg4")
+        #expect(demuxer.outputsDecodedVideo)
+        #expect(!demuxer.audioStreams.isEmpty)
+        if let audio = demuxer.audioStreams.first {
+            demuxer.selectAudio(streamIndex: audio.streamIndex)
+        }
+
+        var decodedFrames = 0
+        var audioBuffers = 0
+        var audioGaps = 0
+        var lastVideoPTS: CMTime?
+        var videoWentBackwards = 0
+        var expectedAudioPTS: CMTime?
+        for _ in 0..<1_000 where decodedFrames < 12 || audioBuffers < 2 {
+            switch demuxer.readNext() {
+            case .video(let buffer):
+                #expect(CMSampleBufferDataIsReady(buffer))
+                #expect(CMSampleBufferGetImageBuffer(buffer) != nil)
+                let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+                // Frames leave libavcodec in presentation order even when a
+                // packed chunk carried two of them.
+                if let lastVideoPTS, pts.isValid, pts < lastVideoPTS {
+                    videoWentBackwards += 1
+                }
+                if pts.isValid { lastVideoPTS = pts }
+                decodedFrames += 1
+            case .audio(let buffers, _):
+                for buffer in buffers {
+                    let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+                    if let expectedAudioPTS,
+                       abs(CMTimeSubtract(pts, expectedAudioPTS).seconds) > 0.001 {
+                        audioGaps += 1
+                    }
+                    let duration = CMSampleBufferGetDuration(buffer)
+                    expectedAudioPTS = pts.isValid && duration.isValid
+                        ? CMTimeAdd(pts, duration)
+                        : nil
+                    audioBuffers += 1
+                }
+            case .failed(let message):
+                Issue.record("MPEG-4 fixture failed: \(message)")
+                return
+            case .endOfFile:
+                break
+            default:
+                continue
+            }
+        }
+        #expect(decodedFrames == 12)
+        #expect(audioBuffers >= 2)
+        #expect(audioGaps == 0)
+        #expect(videoWentBackwards == 0)
+    }
+
     @Test func failedFFmpegSeekStatusIsRejected() {
         var threw = false
         do {
