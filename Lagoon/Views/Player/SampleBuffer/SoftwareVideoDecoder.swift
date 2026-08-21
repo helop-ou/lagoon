@@ -62,6 +62,7 @@ nonisolated final class SoftwareVideoDecoder {
     private let pixelFormat: OSType
     private let pixelBufferPool: CVPixelBufferPool
     private let colorProperties: ColorProperties
+    private let pixelAspectRatio: (horizontal: Int32, vertical: Int32)?
     private var timeline: VideoFrameTimeline?
 
     let formatDescription: CMVideoFormatDescription
@@ -154,7 +155,8 @@ nonisolated final class SoftwareVideoDecoder {
             avcodec_free_context(&contextPointer)
             throw DecoderError.pixelBuffer(prototypeStatus)
         }
-        Self.apply(properties, to: prototype)
+        let aspect = SampleBufferFactory.pixelAspectRatio(codecpar.pointee.sample_aspect_ratio)
+        Self.apply(properties, pixelAspectRatio: aspect, to: prototype)
         var description: CMVideoFormatDescription?
         let descriptionStatus = CMVideoFormatDescriptionCreateForImageBuffer(
             allocator: kCFAllocatorDefault,
@@ -177,6 +179,7 @@ nonisolated final class SoftwareVideoDecoder {
         pixelFormat = outputPixelFormat
         pixelBufferPool = createdPool
         colorProperties = properties
+        pixelAspectRatio = aspect
         timeline = VideoFrameTimeline(
             frameRateNum: frameRate.num,
             frameRateDen: frameRate.den
@@ -281,7 +284,7 @@ nonisolated final class SoftwareVideoDecoder {
                 rows: height / 2
             )
         }
-        Self.apply(colorProperties, to: pixelBuffer)
+        Self.apply(colorProperties, pixelAspectRatio: pixelAspectRatio, to: pixelBuffer)
 
         let rawPTS = frame.pointee.best_effort_timestamp != Int64.min
             ? frame.pointee.best_effort_timestamp
@@ -387,7 +390,25 @@ nonisolated final class SoftwareVideoDecoder {
         )
     }
 
-    private static func apply(_ properties: ColorProperties, to pixelBuffer: CVPixelBuffer) {
+    private static func apply(
+        _ properties: ColorProperties,
+        pixelAspectRatio: (horizontal: Int32, vertical: Int32)?,
+        to pixelBuffer: CVPixelBuffer
+    ) {
+        if let pixelAspectRatio {
+            // `CMVideoFormatDescriptionCreateForImageBuffer` reads this back
+            // off the buffer, so the description built from the prototype
+            // carries the same geometry the compressed path advertises.
+            CVBufferSetAttachment(
+                pixelBuffer,
+                kCVImageBufferPixelAspectRatioKey,
+                [
+                    kCVImageBufferPixelAspectRatioHorizontalSpacingKey: pixelAspectRatio.horizontal,
+                    kCVImageBufferPixelAspectRatioVerticalSpacingKey: pixelAspectRatio.vertical,
+                ] as CFDictionary,
+                .shouldPropagate
+            )
+        }
         if let primaries = properties.primaries {
             CVBufferSetAttachment(
                 pixelBuffer,
