@@ -18,7 +18,8 @@ shells instead of 27.
 
 1. `POST Items/{id}/PlaybackInfo?UserId=` with `DeviceProfile.lagoon` — a
    capability profile mirroring exactly what the engine can play: h264/hevc
-   video plus progressive SDR 8-bit VC-1 and MPEG-4 Part 2 up to 1080p, with
+   video plus progressive SDR 8-bit VC-1 and MPEG-4 Part 2 up to 1080p,
+   square or anamorphic, with
    aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
    vorbis (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov/avi, embedded
    text/PGS subtitles and external vtt (M5), plus an fMP4 HLS transcoding
@@ -273,6 +274,37 @@ composition cost is more representative than Simulator timing.
   `mpeg4_unpack_bframes` BSF is present in the pinned build if a defect ever
   does surface; the demuxer has no bitstream-filter plumbing today, and
   adding it was deliberately not done on this evidence.
+- **Anamorphic / non-square pixels**: `SampleBufferFactory` attaches
+  `kCMFormatDescriptionExtension_PixelAspectRatio` from the stream's
+  `sample_aspect_ratio`, and `SoftwareVideoDecoder` attaches the matching
+  `kCVImageBufferPixelAspectRatioKey` to its Core Video buffers (the
+  prototype the format description is built from, and every frame), so both
+  the compressed and software paths advertise the same geometry.
+  `videoDimensions()` returns
+  `CMVideoFormatDescriptionGetPresentationDimensions` rather than coded
+  dimensions — `videoSize` positions the subtitle overlay, so an anamorphic
+  stream would otherwise lay cues out against the wrong box.
+  **The 1% tolerance is the load-bearing part.** `pixelAspectRatio` returns
+  nil for square, unknown (libavformat's 0/1) *and anything within 1% of
+  square*, so those format descriptions stay byte-identical — this code is
+  on the path taken by every h264/hevc title, and the same description goes
+  to `AVDisplayCriteria` and `VTDecompressionSessionCreate`. Real files are
+  full of rounding artifacts: probing all 245 items Jellyfin flags
+  `IsAnamorphic` on fixture found **203 with a genuine pixel aspect**
+  (16:15 and 64:45 PAL, 4:3 HDV, 45:44, 8:9) and **42 that are artifacts**
+  (1744:1745, 1279:1280, 180224:180219 — hundredths of a percent). Honouring
+  those would have changed 42 descriptions to correct nothing visible.
+  Every genuine case is h264 (200) or mpeg4 (3); all 27 hevc items in that
+  set are artifacts, so **no VideoToolbox-decoded stream in this library
+  carries a PAR extension** and whether VideoToolbox propagates the
+  attachment onto its output buffers is untested — it would only matter for
+  a genuinely anamorphic HEVC source.
+  Verified in the simulator: 720x576 SAR 16:15 presents 768x576, SAR 64:45
+  presents 1024x576 (filling the 16:9 frame instead of pillarboxed and
+  squished), the software path's 710x480 SAR 8:9 presents 631x480, and a
+  square 1920x1080 h264 still reports 1920x1080 with 0 dropped frames.
+  The device profile no longer excludes `IsAnamorphic`; interlaced still
+  transcodes, because there is still no deinterlacing stage.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
