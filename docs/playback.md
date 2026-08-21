@@ -18,9 +18,9 @@ shells instead of 27.
 
 1. `POST Items/{id}/PlaybackInfo?UserId=` with `DeviceProfile.lagoon` — a
    capability profile mirroring exactly what the engine can play: h264/hevc
-   video plus progressive SDR 8-bit VC-1 up to 1080p, with
+   video plus progressive SDR 8-bit VC-1 and MPEG-4 Part 2 up to 1080p, with
    aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
-   vorbis (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov, embedded
+   vorbis (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov/avi, embedded
    text/PGS subtitles and external vtt (M5), plus an fMP4 HLS transcoding
    profile whose output (hevc/h264 + eac3,ac3,aac) lands back inside the
    same envelope. The server does the deciding.
@@ -45,8 +45,8 @@ libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +
 `AVSampleBufferAudioRenderer` under one `AVSampleBufferRenderSynchronizer`.
 This is the app's only player. H.264 and supported audio codecs stay
 compressed; HEVC is decoded ahead by a hardware-only VideoToolbox session;
-VC-1 is software-decoded by libavcodec into renderer-recommended NV12 Core
-Video buffers;
+VC-1 and MPEG-4 Part 2 are software-decoded by libavcodec into
+renderer-recommended NV12 Core Video buffers;
 unsupported compressed audio is decoded to LPCM by libavcodec. AVFoundation
 still owns color management, presentation, synchronization, and audio output.
 
@@ -248,6 +248,31 @@ composition cost is more representative than Simulator timing.
   long-lived dispatch item, so relying on its outer pool retained Core Media
   scratch allocations until dismissal even though the actual frame queues
   were bounded.
+- **MPEG-4 Part 2 direct play**: the Xvid/DivX AVI envelope rides the exact
+  same libavcodec → Core Video path VC-1 opened, so enabling it was
+  `SoftwareVideoDecoder.supports` plus an `avi` container and a bounded
+  `mpeg4` codec profile — no new engine machinery. Simple and Advanced
+  Simple Profile are 8-bit 4:2:0 *by specification*, which is exactly the
+  envelope the software decoder accepts, so the pixel-format gate cannot be
+  surprised. AC-3 beside this video routes through the existing
+  `AudioDecodePolicy.requiresLocalPCM` rule — it keys on
+  `softwareVideoDecoded`, not on VC-1, so the pairing that made VC-1 stutter
+  was already handled (HUD confirms `ac3 · 2ch · local LPCM`).
+  **Packed bitstream** is the one real quirk. Old DivX/Xvid rips pack two
+  VOPs into one AVI chunk and mark the gap with a 7-byte "VOP not coded"
+  packet; libavcodec logs `Discarding excessive bitstream in packed xvid`
+  and consumes them correctly. A decode sweep of all 197 AVI titles on
+  fixture (5 s from the start plus 3 s after a mid-file seek) found 167
+  clean, 29 packed-bitstream, and 1 genuinely damaged file
+  (`illegal MB_type` / `ac-tex damaged` — the server transcode hits the same
+  errors, so direct play does not make it worse). Frame accounting is exact
+  either way: 120 s of a packed title decodes 2877 frames raw and 2878
+  through `mpeg4_unpack_bframes`. Crucially there are **no zero-size
+  packets** (minimum is 7 bytes) — a zero-size packet is libavcodec's drain
+  signal and would have ended the stream mid-playback. The
+  `mpeg4_unpack_bframes` BSF is present in the pinned build if a defect ever
+  does surface; the demuxer has no bitstream-filter plumbing today, and
+  adding it was deliberately not done on this evidence.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
