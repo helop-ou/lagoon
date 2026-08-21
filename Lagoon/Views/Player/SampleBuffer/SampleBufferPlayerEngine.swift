@@ -1637,10 +1637,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     nonisolated private func videoDimensions() -> CGSize {
-        // Format description dimensions come straight from codec parameters.
         guard let description = demuxer.videoStream?.formatDescription else { return .zero }
-        let dimensions = CMVideoFormatDescriptionGetDimensions(description)
-        return CGSize(width: CGFloat(dimensions.width), height: CGFloat(dimensions.height))
+        // Presentation, not coded, dimensions. This size positions the
+        // subtitle overlay (`displayedVideoRect`), so an anamorphic stream —
+        // a 720x576 PAL rip displaying 4:3 — would otherwise have its cues
+        // laid out against the wrong box.
+        return CMVideoFormatDescriptionGetPresentationDimensions(
+            description,
+            usePixelAspectRatio: true,
+            useCleanAperture: true
+        )
     }
 
     nonisolated private static func trackName(for stream: DemuxedStream) -> String {
