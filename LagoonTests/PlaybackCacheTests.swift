@@ -55,6 +55,22 @@ struct PlaybackCacheTests {
         #expect(ranges.contiguousUpperBound == 30)
     }
 
+    @Test func removingAnIntervalSplitsTheIslandItLandsInside() {
+        var ranges = PlaybackByteRangeSet()
+        ranges.insert(PlaybackByteRange(0, 100))
+
+        #expect(ranges.remove(PlaybackByteRange(40, 60)) == 20)
+        #expect(ranges.ranges == [PlaybackByteRange(0, 40), PlaybackByteRange(60, 100)])
+        #expect(!ranges.contains(PlaybackByteRange(50, 55)))
+        #expect(ranges.contiguousUpperBound == 40)
+
+        // Overlapping the edges of two islands only takes what they hold.
+        #expect(ranges.remove(PlaybackByteRange(30, 70)) == 20)
+        #expect(ranges.ranges == [PlaybackByteRange(0, 30), PlaybackByteRange(70, 100)])
+        #expect(ranges.remove(PlaybackByteRange(200, 300)) == 0)
+        #expect(ranges.byteCount == 60)
+    }
+
     @Test func boundedPrefetchPublishesProgressAndOnlyCompletesAWholeFile() async throws {
         let payload = Data((0..<96).map(UInt8.init))
         let loader = PlaybackCacheLoaderStub(payload: payload)
@@ -72,6 +88,7 @@ struct PlaybackCacheTests {
         defer { scope.cancelAndRemove() }
 
         #expect(scope.metrics.bufferedFraction == 0)
+        #expect(!scope.metrics.isWindowed)
         #expect(scope.completeFileURL == nil)
         #expect(await scope.prefetchNextChunk())
         #expect(scope.metrics.contiguousCachedBytes == 32)
@@ -222,6 +239,128 @@ struct PlaybackCacheTests {
             PlaybackByteRange(128, 144),
         ])
         #expect(scope.metrics.networkBytes == 80)
+    }
+
+    @Test func readsThatCannotBeStoredFetchOnlyWhatWasAsked() throws {
+        let payload = PlaybackCacheTests.pattern(byteCount: 256)
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-unstorable",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: 0,
+            requestSize: 64,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        #expect(try scope.read(offset: 0, length: 8) == payload.subdata(in: 0..<8))
+        #expect(try scope.read(offset: 8, length: 8) == payload.subdata(in: 8..<16))
+        #expect(loader.requestedRanges == [
+            PlaybackByteRange(0, 8),
+            PlaybackByteRange(8, 16),
+        ])
+        #expect(scope.metrics.networkBytes == 16)
+    }
+
+    @Test func aTitleLargerThanTheCapBuffersThroughASlidingWindow() throws {
+        let requestSize: Int64 = 64 * 1_024
+        let byteLimit = 4 * requestSize
+        let payload = PlaybackCacheTests.pattern(byteCount: Int(16 * requestSize))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-windowed",
+            sourceURL: URL(string: "https://media.test/remux.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: byteLimit,
+            requestSize: requestSize,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        #expect(scope.metrics.isWindowed)
+        try PlaybackCacheTests.play(scope, payload: payload, from: 0, to: 12 * requestSize, step: requestSize)
+
+        let metrics = scope.metrics
+        // Playing three times the cap must not cost more than one request per
+        // read: the window gives bytes back instead of refusing new ones.
+        #expect(loader.requestCount == 12)
+        #expect(loader.requestedRanges.allSatisfy { $0.count == requestSize })
+        #expect(metrics.evictionCount > 0)
+        #expect(metrics.cachedBytes <= byteLimit)
+        #expect(metrics.cachedByteRanges.first?.lowerBound ?? 0 > 0)
+
+        // What the window kept is the recent past, so playback that pauses and
+        // resumes does not pay for the same bytes twice.
+        let hits = metrics.cacheHitBytes
+        _ = try scope.read(offset: 11 * requestSize, length: Int(requestSize))
+        #expect(scope.metrics.cacheHitBytes == hits + requestSize)
+        #expect(loader.requestCount == 12)
+    }
+
+    @Test func seekingBackwardsRecentresTheWindowAndNeverReadsAPunchedHole() throws {
+        let requestSize: Int64 = 64 * 1_024
+        let byteLimit = 4 * requestSize
+        let payload = PlaybackCacheTests.pattern(byteCount: Int(16 * requestSize))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-seek-back",
+            sourceURL: URL(string: "https://media.test/remux.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: byteLimit,
+            requestSize: requestSize,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        try PlaybackCacheTests.play(scope, payload: payload, from: 0, to: 12 * requestSize, step: requestSize)
+        #expect(scope.metrics.cachedByteRanges.first?.lowerBound ?? 0 > 0)
+        let evictionsBeforeSeek = scope.metrics.evictionCount
+
+        // Back to the start. Those blocks were deallocated, so this has to come
+        // back from the network byte-exact — a hole must never read as zeros.
+        #expect(try scope.read(offset: 0, length: Int(requestSize))
+            == payload.subdata(in: 0..<Int(requestSize)))
+
+        // Playing on from the new position re-centres the window; the island
+        // left far ahead is what pays for the room now.
+        try PlaybackCacheTests.play(scope, payload: payload, from: requestSize, to: 5 * requestSize, step: requestSize)
+
+        let metrics = scope.metrics
+        #expect(metrics.cachedBytes <= byteLimit)
+        #expect(metrics.evictionCount > evictionsBeforeSeek)
+        #expect(metrics.cachedByteRanges.last?.upperBound ?? 0 <= 12 * requestSize)
+        #expect(loader.requestedRanges.allSatisfy { $0.count <= requestSize })
+    }
+
+    /// Reads a scope the way FFmpeg's AVIO buffer does, checking every byte.
+    private static func play(
+        _ scope: PlaybackCacheScope,
+        payload: Data,
+        from start: Int64,
+        to end: Int64,
+        step: Int64
+    ) throws {
+        var offset = start
+        while offset < end {
+            let count = Int(min(step, end - offset))
+            let chunk = try scope.read(offset: offset, length: count)
+            #expect(chunk == payload.subdata(in: Int(offset)..<Int(offset) + count))
+            offset += Int64(count)
+        }
+    }
+
+    private static func pattern(byteCount: Int) -> Data {
+        Data((0..<byteCount).map { UInt8($0 % 251) })
     }
 
     @Test func cancellationStopsRequestsAndRejectsLaterReads() throws {
