@@ -168,6 +168,36 @@ overscan, body width included.
 `LagoonJellyfishAccent` remains as the still artwork, and is what Reduce Motion
 falls back to.
 
+## Iconography
+
+SF Symbols, and **fill is not a free choice**. Three families, each internally
+consistent:
+
+| family | style | examples |
+| --- | --- | --- |
+| Navigation — tabs, library rows | **filled** | `house.fill`, `film.fill`, `play.square.stack.fill`, `gearshape.fill` |
+| Transport — player controls | **filled** | `play.fill`, `pause.fill`, `forward.end.alt.fill` |
+| Empty and error states | **outline** | `exclamationmark.triangle`, `play.slash`, `tray`, `wifi.exclamationmark` |
+
+Filled for navigation is the platform convention and it is what survives being
+read across a room. Outline for empty states keeps artwork from shouting —
+those are pictures, not controls.
+
+A literal "everything filled" is neither achievable nor desirable: `checkmark`,
+`chevron.*`, `plus`, `minus`, `xmark`, `magnifyingglass` and `speedometer` are
+strokes by construction and have no filled variant.
+
+Anything the app *navigates to* takes its glyph from `ContentIcon`, not from a
+string at the call site. The tab bar, the library picker row and Discover's
+catalogue buttons had each spelled Movies and Shows themselves and drifted
+apart — two of them outline, the rest filled. Shows is a stack rather than a
+television, because a series is a pile of episodes and that is also what tells
+it apart from Movies at a glance.
+
+`everyContentIconResolvesToARealSymbol` asserts each name is a real symbol on
+the running OS: a missing one renders as nothing at all — no crash, no warning,
+just a hole in the tab bar.
+
 ## Focus strategy
 
 **No custom focus scaling anywhere.** Cards rely on the system `.card` button

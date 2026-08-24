@@ -140,13 +140,13 @@ struct DiscoverView: View {
     private var discoverySections: some View {
         HStack(spacing: Metrics.Space.m) {
             NavigationLink(value: SeerrNavigationRoute.catalog(.movie)) {
-                Label("Movies", systemImage: "film")
+                Label("Movies", systemImage: ContentIcon.movies)
             }
             .buttonStyle(.glass)
             .accessibilityIdentifier("seerr.catalog.movies")
 
             NavigationLink(value: SeerrNavigationRoute.catalog(.tv)) {
-                Label("Shows", systemImage: "tv")
+                Label("Shows", systemImage: ContentIcon.shows)
             }
             .buttonStyle(.glass)
             .accessibilityIdentifier("seerr.catalog.shows")

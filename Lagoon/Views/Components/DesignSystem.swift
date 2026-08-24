@@ -194,6 +194,43 @@ extension Color {
     nonisolated static let lagoonShore = Color(red: 0x0D / 255, green: 0x4A / 255, blue: 0x57 / 255)
 }
 
+/// SF Symbols, in one place for the kinds of thing the app navigates to, so a
+/// library tab, the library picker and Discover's catalogue buttons cannot
+/// drift apart — which is exactly what had happened.
+///
+/// **Fill is not a free choice.** Three families, each internally consistent:
+///
+/// - **Navigation** (tabs, library rows) is *filled*. That is the platform
+///   convention for a tab bar and it is what survives being read across a
+///   room.
+/// - **Transport** (`play.fill`, `pause.fill`, `forward.end.alt.fill`) is
+///   *filled*, matching every other player on the platform.
+/// - **Empty and error states** (`exclamationmark.triangle`, `play.slash`,
+///   `tray`, `wifi.exclamationmark`) are *outline*. They are artwork rather
+///   than controls, and outline keeps them from shouting.
+///
+/// A literal "everything filled" is not achievable and should not be
+/// attempted: `checkmark`, `chevron.*`, `plus`, `minus`, `xmark`,
+/// `magnifyingglass` and `speedometer` are strokes by construction and have no
+/// filled variant.
+nonisolated enum ContentIcon {
+    /// A single strip: one film, one thing to watch.
+    static let movies = "film.fill"
+    /// A stack, because a series is a pile of episodes rather than one item —
+    /// which is also what tells it apart from Movies at a glance.
+    static let shows = "play.square.stack.fill"
+    /// Every library at once, when there are too many for tabs of their own.
+    static let libraries = "rectangle.stack.fill"
+    static let home = "house.fill"
+    static let discover = "sparkles"
+    static let settings = "gearshape.fill"
+
+    /// Jellyfin's collection type for a library, as a glyph.
+    static func library(collectionType: String?) -> String {
+        collectionType == "tvshows" ? shows : movies
+    }
+}
+
 extension View {
     /// System card style on tvOS (lift, parallax, specular); plain elsewhere.
     @ViewBuilder

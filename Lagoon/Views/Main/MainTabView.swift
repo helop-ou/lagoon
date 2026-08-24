@@ -103,14 +103,14 @@ struct MainTabView: View {
 
     private var primaryNavigation: some View {
         TabView {
-            Tab("Home", systemImage: "house.fill") {
+            Tab("Home", systemImage: ContentIcon.home) {
                 NavigationStack(path: $homeNavigationPath) {
                     HomeView()
                         .contentNavigationDestinations()
                 }
             }
 
-            Tab("Discover", systemImage: "sparkles") {
+            Tab("Discover", systemImage: ContentIcon.discover) {
                 NavigationStack(path: $discoverNavigationPath) {
                     DiscoverView()
                         .seerrNavigationDestinations()
@@ -128,7 +128,7 @@ struct MainTabView: View {
                     }
                 }
             } else {
-                Tab("Libraries", systemImage: "rectangle.stack.fill") {
+                Tab("Libraries", systemImage: ContentIcon.libraries) {
                     NavigationStack(path: $libraryPickerPath) {
                         LibraryPickerView(libraries: libraries)
                             .navigationDestination(for: LibraryTab.self) { library in
@@ -139,7 +139,7 @@ struct MainTabView: View {
                 }
             }
 
-            Tab("Settings", systemImage: "gearshape.fill") {
+            Tab("Settings", systemImage: ContentIcon.settings) {
                 NavigationStack {
                     SettingsView()
                 }
@@ -479,7 +479,7 @@ struct MainTabView: View {
     }
 
     private func icon(for library: LibraryTab) -> String {
-        library.collectionType == "tvshows" ? "tv" : "film"
+        ContentIcon.library(collectionType: library.collectionType)
     }
 
     private func libraryNavigationPath(
@@ -506,7 +506,7 @@ private struct LibraryPickerView: View {
                 ForEach(libraries) { library in
                     NavigationLink(value: library) {
                         HStack(spacing: Metrics.Space.l) {
-                            Image(systemName: library.collectionType == "tvshows" ? "tv" : "film")
+                            Image(systemName: ContentIcon.library(collectionType: library.collectionType))
                                 .font(.title3)
                                 .frame(width: 36)
                             Text(library.name ?? "Library")

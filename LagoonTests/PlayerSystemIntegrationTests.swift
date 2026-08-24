@@ -1,5 +1,6 @@
 import AVFAudio
 import AVFoundation
+import UIKit
 import Foundation
 import Testing
 @testable import Lagoon
@@ -311,6 +312,31 @@ struct PlayerSystemIntegrationTests {
         #expect(engine.rate == PlaybackRatePolicy.maximum)
         engine.setRate(.nan)
         #expect(engine.rate == 1)
+    }
+
+    @Test @MainActor func everyContentIconResolvesToARealSymbol() {
+        // A symbol that does not exist on this OS renders as nothing at all —
+        // no crash, no warning, just a hole in the tab bar. Naming them in one
+        // place is only half the fix; this is the other half.
+        for name in [
+            ContentIcon.home,
+            ContentIcon.discover,
+            ContentIcon.movies,
+            ContentIcon.shows,
+            ContentIcon.libraries,
+            ContentIcon.settings,
+            ContentIcon.library(collectionType: "tvshows"),
+            ContentIcon.library(collectionType: "movies"),
+            ContentIcon.library(collectionType: nil),
+        ] {
+            #expect(UIImage(systemName: name) != nil, "no SF Symbol named \(name)")
+        }
+
+        // Movies and Shows must not collapse to the same glyph, or the tabs
+        // stop telling you which library you are in.
+        #expect(ContentIcon.movies != ContentIcon.shows)
+        #expect(ContentIcon.library(collectionType: "tvshows") == ContentIcon.shows)
+        #expect(ContentIcon.library(collectionType: nil) == ContentIcon.movies)
     }
 
     @Test func playbackRateStepsThroughTheSupportedSetAndWraps() {
