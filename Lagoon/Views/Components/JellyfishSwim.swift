@@ -2,24 +2,27 @@ import SwiftUI
 
 /// The jellyfish accent, swimming.
 ///
-/// A jellyfish does not travel at a constant speed. It contracts its bell in a
-/// quick squeeze, and *that squeeze is the propulsion* — it surges, then coasts
-/// with the bell relaxing open while the tentacles catch up. Translating the
-/// supplied artwork along a path would miss all of that and read as a sticker
-/// being dragged around, so the mark is rebuilt here as a parametric path from
-/// the same geometry as `Lagoon_Jellyfish_Accent.svg` and deformed per frame.
+/// A jellyfish does not travel at a constant speed, and it does not travel
+/// sideways. It contracts its bell in a quick squeeze, and *that squeeze is
+/// the propulsion* — it lifts, then sinks back while the bell reopens and the
+/// tentacles catch up. Translating the supplied artwork along a path would
+/// miss all of that and read as a sticker being dragged around, so the mark is
+/// rebuilt here as a parametric path from the same geometry as
+/// `Lagoon_Jellyfish_Accent.svg` and deformed per frame.
 ///
-/// Three things are coupled, and the coupling is the whole effect:
+/// Four things are coupled, and the coupling is the whole effect:
 ///
-/// - **Contraction drives distance.** Forward travel is the integral of the
-///   bell's contraction rate, so the animal only gains ground while squeezing.
-///   The glide term adds a little carried momentum so it does not stall dead
-///   between beats.
+/// - **The beat pushes up.** Lift takes the shape of the contraction, so the
+///   animal rises quickly while it squeezes and sinks slowly while it does
+///   not. It holds height only while working for it — the way someone treading
+///   water goes under the moment they stop.
+/// - **Over a beat, lift and sink cancel.** Where it actually ends up is a
+///   separate, far slower drift, so it hovers instead of climbing away.
 /// - **The bell deforms rather than scales.** Contracting narrows it, draws it
 ///   taller, and tucks the rim inward; relaxing lets it spread back out.
 /// - **The tentacles lag.** They answer a slightly *earlier* moment than the
 ///   bell, so they stream out straight behind a surge and curl back under
-///   during the coast.
+///   during the sink.
 ///
 /// Everything is a closed-form function of time — nothing integrates frame to
 /// frame — so the motion cannot drift, desynchronise, or depend on when the
@@ -27,37 +30,37 @@ import SwiftUI
 struct JellyfishSwimLayer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Where each animal loops, in unit coordinates of the containing space.
+    /// Where each animal hovers, in unit coordinates of the containing space.
     ///
     /// Two constraints shape these. The centre column belongs to the lockup
     /// and the form, so nothing crosses it — an animal surfacing from behind a
-    /// button reads as a glitch, not as depth. And every loop stays inside the
-    /// 5% the TV may swallow to overscan, body width included, because a
+    /// button reads as a glitch, not as depth. And every drift stays inside
+    /// the 5% the TV may swallow to overscan, body width included, because a
     /// jellyfish half-eaten by the bezel is worse than no jellyfish.
     private static let swimmers: [Swimmer] = [
         Swimmer(
-            centre: CGPoint(x: 0.18, y: 0.54),
-            drift: CGSize(width: 0.08, height: 0.28),
-            lobes: CGSize(width: 1, height: 2),
-            period: 3.1,
+            home: CGPoint(x: 0.18, y: 0.50),
+            wander: CGSize(width: 0.035, height: 0.10),
+            wanderPeriod: CGSize(width: 34, height: 47),
+            period: 3.6,
             phase: 0,
             scale: 1.0,
             opacity: 0.30
         ),
         Swimmer(
-            centre: CGPoint(x: 0.82, y: 0.38),
-            drift: CGSize(width: 0.09, height: 0.24),
-            lobes: CGSize(width: 2, height: 1),
-            period: 3.9,
+            home: CGPoint(x: 0.82, y: 0.36),
+            wander: CGSize(width: 0.030, height: 0.09),
+            wanderPeriod: CGSize(width: 41, height: 55),
+            period: 4.4,
             phase: 0.45,
             scale: 0.78,
             opacity: 0.22
         ),
         Swimmer(
-            centre: CGPoint(x: 0.85, y: 0.80),
-            drift: CGSize(width: 0.07, height: 0.08),
-            lobes: CGSize(width: 1, height: 2),
-            period: 4.6,
+            home: CGPoint(x: 0.85, y: 0.78),
+            wander: CGSize(width: 0.028, height: 0.07),
+            wanderPeriod: CGSize(width: 29, height: 38),
+            period: 5.2,
             phase: 0.75,
             scale: 0.60,
             opacity: 0.16
@@ -92,15 +95,15 @@ struct JellyfishSwimLayer: View {
     }
 }
 
-/// One animal: where it loops, how fast it beats, and how big it is.
+/// One animal: where it hovers, how fast it beats, and how big it is.
 private struct Swimmer {
-    /// Centre of its loop, in unit coordinates.
-    let centre: CGPoint
-    /// Half-extent of the loop, in unit coordinates.
-    let drift: CGSize
-    /// Lissajous lobe counts. Unequal values make the loop a figure rather
-    /// than an ellipse, so the animal is rarely on the same heading twice.
-    let lobes: CGSize
+    /// Centre of its slow drift, in unit coordinates.
+    let home: CGPoint
+    /// Half-extent of that drift, in unit coordinates.
+    let wander: CGSize
+    /// Seconds for a full drift on each axis. Deliberately long and mutually
+    /// prime-ish, so the animal never retraces the same figure.
+    let wanderPeriod: CGSize
     /// Seconds per bell beat.
     let period: Double
     /// Offset into the beat, so they are never in unison.
@@ -108,42 +111,49 @@ private struct Swimmer {
     let scale: Double
     let opacity: Double
 
-    /// Loop distance covered by one full beat. Small enough that a beat moves
-    /// the animal about its own length.
-    private var strideLength: Double { 0.09 }
-    /// Coasting travel per beat, as a share of the surge.
-    private var glideShare: Double { 0.35 }
+    /// How far one beat lifts the animal, as a share of its own height.
+    private var liftShare: Double { 0.55 }
+    /// The lift peaks a moment after the squeeze does — the body carries
+    /// upward before gravity takes it back.
+    private var liftLag: Double { 0.06 }
     /// How far behind the bell the tentacles answer, in beats.
     private var tentacleLag: Double { 0.16 }
     /// Share of the beat spent contracting. A real bell squeezes fast and
     /// reopens slowly, which is what makes the motion read as alive.
     private var squeeze: Double { 0.3 }
     /// How far the body may lean out of upright, either way.
-    static let maximumTilt: Double = 0.38
+    private var maximumTilt: Double { 0.22 }
 
     func draw(in context: inout GraphicsContext, size: CGSize, seconds: Double) {
         let beats = seconds / period + phase
-        let travel = travelled(at: beats)
-        let position = point(along: travel, in: size)
-        // Heading from the loop's tangent, sampled rather than differentiated
-        // so the two stay consistent to within a hair at any step size.
-        let ahead = point(along: travel + 0.0025, in: size)
-        let heading = atan2(ahead.y - position.y, ahead.x - position.x)
+        let beat = beats.truncatingRemainder(dividingBy: 1)
+        let contraction = Self.contraction(of: beat, squeeze: squeeze)
+        let trail = Self.thrust(of: beat - tentacleLag, squeeze: squeeze)
 
-        let contraction = Self.contraction(of: beats.truncatingRemainder(dividingBy: 1), squeeze: squeeze)
-        let trail = Self.thrust(of: (beats - tentacleLag).truncatingRemainder(dividingBy: 1), squeeze: squeeze)
-
-        // The artwork is drawn apex-up in a 256x280 box and the tangent is
-        // measured apex-forward, hence the quarter turn — but only a damped
-        // share of it. Turned fully into its heading the animal swims flat on
-        // its side, which reads as a dead one, and at that angle the accent
-        // stops being recognisable as the mark at all. A real jellyfish holds
-        // its bell broadly upright and lets sideways movement be drift, so the
-        // body leans into the turn and no further.
-        let lean = atan2(sin(heading + .pi / 2), cos(heading + .pi / 2))
-        let tilt = min(max(lean, -Self.maximumTilt), Self.maximumTilt)
         let side = min(size.width, size.height)
         let drawn = side * 0.115 * scale
+
+        // The beat is the propulsion, and it pushes *up*. The lift takes the
+        // shape of the contraction, so it rises quickly on the squeeze and
+        // sinks back slowly while the bell reopens — the animal only holds
+        // height while it is working for it, and gravity has it the rest of
+        // the time. Over a beat the two cancel, so it treads water rather than
+        // climbing off the screen; where it actually goes is the slow drift.
+        let lift = drawn * liftShare * Self.contraction(of: beat - liftLag, squeeze: squeeze)
+
+        let sway = seconds / wanderPeriod.width * .pi * 2 + phase * .pi * 2
+        let rise = seconds / wanderPeriod.height * .pi * 2 + phase * .pi * 2
+        let position = CGPoint(
+            x: (home.x + wander.width * sin(sway)) * size.width,
+            y: (home.y + wander.height * sin(rise)) * size.height - lift
+        )
+
+        // Upright, always, leaning only into the sideways drift — the rate of
+        // that drift is its cosine. A bell turned fully into its heading swims
+        // flat on its side, which reads as a dead one, and at that angle the
+        // accent stops being recognisable as the mark at all.
+        let tilt = maximumTilt * cos(sway)
+
         var body = context
         body.translateBy(x: position.x, y: position.y)
         body.rotate(by: .radians(tilt))
@@ -163,32 +173,11 @@ private struct Swimmer {
         )
     }
 
-    /// Distance along the loop, in beats' worth of travel.
-    ///
-    /// The surge term is the integral of the contraction rate: it climbs only
-    /// while the bell is squeezing and then holds flat for the rest of the
-    /// beat. The glide term is linear, and is the momentum the animal carries
-    /// into the coast.
-    private func travelled(at beats: Double) -> Double {
-        let completed = beats.rounded(.down)
-        let phase = beats - completed
-        let surge = completed + (phase < squeeze
-            ? Self.contraction(of: phase, squeeze: squeeze)
-            : 1)
-        return (surge + beats * glideShare) * strideLength
-    }
-
-    private func point(along travel: Double, in size: CGSize) -> CGPoint {
-        CGPoint(
-            x: (centre.x + drift.width * sin(travel * .pi * 2 * lobes.width)) * size.width,
-            y: (centre.y + drift.height * sin(travel * .pi * 2 * lobes.height + .pi / 3)) * size.height
-        )
-    }
-
     /// 0 relaxed, 1 fully contracted. Two cosine halves, so the rate is zero
     /// at both ends of the beat and the loop never shows a seam.
     static func contraction(of phase: Double, squeeze: Double) -> Double {
-        let phase = phase < 0 ? phase + 1 : phase
+        var phase = phase.truncatingRemainder(dividingBy: 1)
+        if phase < 0 { phase += 1 }
         if phase < squeeze {
             return 0.5 - 0.5 * cos(.pi * phase / squeeze)
         }
@@ -198,7 +187,8 @@ private struct Swimmer {
     /// How hard the bell is pushing right now, 0...1. Only the contracting
     /// half of the beat produces any.
     static func thrust(of phase: Double, squeeze: Double) -> Double {
-        let phase = phase < 0 ? phase + 1 : phase
+        var phase = phase.truncatingRemainder(dividingBy: 1)
+        if phase < 0 { phase += 1 }
         guard phase < squeeze else { return 0 }
         return sin(.pi * phase / squeeze)
     }

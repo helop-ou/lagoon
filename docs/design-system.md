@@ -129,18 +129,28 @@ onboarding screen it would be a motif, which is the thing that rule forbids.
 
 There it swims (`JellyfishSwimLayer`). Moving the supplied artwork along a path
 would read as a sticker being dragged, so the mark is rebuilt as a parametric
-path from the same geometry and deformed per frame. What sells it is that three
-things are coupled: the bell's contraction *is* the propulsion, so distance is
-the integral of the contraction rate and the animal only gains ground while it
-squeezes; the bell narrows and elongates rather than scaling; and the tentacles
-answer a slightly earlier moment than the bell, streaming out behind a surge and
-curling under on the coast. Every value is a closed-form function of time, so
-nothing integrates frame to frame and the motion cannot drift or desynchronise.
+path from the same geometry and deformed per frame. What sells it is that four
+things are coupled:
 
-Two placement rules, both learned the hard way: the body leans into its heading
-but never turns fully into it — a jellyfish flat on its side reads as a dead one
-and stops being recognisable as the mark — and every loop stays clear of both
-the centre column and the 5% a TV may overscan, body width included.
+- The beat pushes **up**. Lift takes the shape of the contraction, so the animal
+  rises quickly while it squeezes and sinks slowly while it does not — it holds
+  height only while working for it, the way someone treading water goes under
+  the moment they stop. Measured on device: +138 px of rise over roughly a third
+  of the beat, then a sink about two and a half times slower.
+- Over a beat, lift and sink cancel exactly. Where it actually ends up is a
+  separate, far slower drift, so it hovers rather than climbing off the screen.
+- The bell narrows and elongates rather than scaling.
+- The tentacles answer a slightly earlier moment than the bell, streaming out
+  behind a surge and curling under on the sink.
+
+Every value is a closed-form function of time, so nothing integrates frame to
+frame and the motion cannot drift or desynchronise.
+
+Two placement rules, both learned the hard way: the body stays upright and leans
+only into its sideways drift — turned fully into its heading it swims flat on
+its side, which reads as a dead one and stops being recognisable as the mark —
+and every drift stays clear of both the centre column and the 5% a TV may
+overscan, body width included.
 `LagoonJellyfishAccent` remains as the still artwork, and is what Reduce Motion
 falls back to.
 
