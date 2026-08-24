@@ -7,6 +7,29 @@ extension JellyfinClient {
         let deviceProfile: DeviceProfile.Profile
         let autoOpenLiveStream: Bool
         let maxStreamingBitrate: Int
+        /// Jellyfin defaults all four of these to true. They are sent
+        /// explicitly so a retry can withdraw them one rung at a time
+        /// (HEL-100) rather than restating the whole profile.
+        let enableDirectPlay: Bool
+        let enableDirectStream: Bool
+        let allowVideoStreamCopy: Bool
+        let allowAudioStreamCopy: Bool
+
+        init(
+            deviceProfile: DeviceProfile.Profile,
+            autoOpenLiveStream: Bool,
+            maxStreamingBitrate: Int,
+            delivery: PlaybackDelivery
+        ) {
+            self.deviceProfile = deviceProfile
+            self.autoOpenLiveStream = autoOpenLiveStream
+            self.maxStreamingBitrate = maxStreamingBitrate
+            let flags = delivery.flags
+            enableDirectPlay = flags.enableDirectPlay
+            enableDirectStream = flags.enableDirectStream
+            allowVideoStreamCopy = flags.allowVideoStreamCopy
+            allowAudioStreamCopy = flags.allowAudioStreamCopy
+        }
     }
 
     nonisolated struct PlaybackStartInfo: Encodable {
@@ -42,7 +65,14 @@ extension JellyfinClient {
         let isHearingImpaired: Bool
     }
 
-    func playbackInfo(itemId: String) async throws -> PlaybackInfoResponse {
+    /// Negotiates a stream. `delivery` is how hard the server is being asked
+    /// to work: `.negotiated` lets it pick freely (direct play for anything
+    /// inside the profile), while the lower rungs withdraw permissions after
+    /// a playback failure so it reaches for a remux, then a re-encode.
+    func playbackInfo(
+        itemId: String,
+        delivery: PlaybackDelivery = .negotiated
+    ) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
         #if DEBUG && targetEnvironment(simulator)
         let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
@@ -57,7 +87,8 @@ extension JellyfinClient {
             body: PlaybackInfoRequest(
                 deviceProfile: profile,
                 autoOpenLiveStream: true,
-                maxStreamingBitrate: profile.maxStreamingBitrate
+                maxStreamingBitrate: profile.maxStreamingBitrate,
+                delivery: delivery
             )
         )
     }

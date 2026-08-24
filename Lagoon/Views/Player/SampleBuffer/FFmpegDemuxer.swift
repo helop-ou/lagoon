@@ -29,6 +29,16 @@ nonisolated enum DemuxError: LocalizedError {
         case .unsupportedVideo(let codec): "The Lagoon engine can't decode \(codec) yet."
         }
     }
+
+    /// Whether a different delivery of the same media could help. Opening
+    /// and seeking are container and transport problems, which a server-side
+    /// remux routinely fixes; an unsupported codec is not.
+    var cause: PlaybackEngineFailure.Cause {
+        switch self {
+        case .openFailed, .seekFailed: .delivery
+        case .unsupportedVideo: .undecodable
+        }
+    }
 }
 
 /// AC-3 normally stays compressed through Apple's audio renderer. Alongside

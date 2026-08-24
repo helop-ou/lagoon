@@ -56,6 +56,20 @@ final class PlaybackController {
     private(set) var playheadPrefetchCount = 0
 
     private var client: JellyfinClient?
+    /// Retained so a failed attempt can be replayed on the next rung of the
+    /// delivery ladder (HEL-100); everything else `start` needs is already
+    /// controller state.
+    private var currentMedia: MediaItem?
+    /// How the current item is being delivered, and the position a retry
+    /// resumes from. The ladder belongs to one item — a new one starts at
+    /// the top.
+    private var delivery: PlaybackDelivery = .negotiated
+    private var deliveryItemId: String?
+    private var resumeOverride: Double?
+    /// One rung at a time. The renderer and the demux loop can both report
+    /// the same collapse, and two fallbacks in flight would skip a rung —
+    /// straight past the cheap remux to a transcode nobody needed.
+    private var isFallingBack = false
     private var itemId = ""
     private var mediaSourceId = ""
     private var playSessionId: String?
@@ -199,6 +213,14 @@ final class PlaybackController {
             )
         }
         self.client = client
+        currentMedia = media
+        if deliveryItemId != media.id {
+            // A different item negotiates from scratch: the previous one's
+            // failures say nothing about this file.
+            deliveryItemId = media.id
+            delivery = .negotiated
+            resumeOverride = nil
+        }
         itemId = media.id
         audioDefaultMode = trackPreferences.audioMode
         subtitleDefaultMode = trackPreferences.subtitleMode
@@ -225,7 +247,7 @@ final class PlaybackController {
                 streamURL = prepared.streamURL
                 method = prepared.method
             } else {
-                info = try await client.playbackInfo(itemId: media.id)
+                info = try await client.playbackInfo(itemId: media.id, delivery: delivery)
                 guard info.errorCode == nil, let resolvedSource = info.mediaSources.first else {
                     throw JellyfinError.unplayable
                 }
@@ -249,9 +271,15 @@ final class PlaybackController {
             publishBufferMetrics(cacheSession?.metrics)
 
             var resumeSeconds: Double = 0
-            if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
+            if let resumeOverride {
+                // A fallback retry resumes exactly where the failure landed,
+                // which outranks both the server's position and an explicit
+                // "start from beginning" the viewer already got past.
+                resumeSeconds = resumeOverride
+            } else if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
                 resumeSeconds = Ticks.seconds(ticks)
             }
+            resumeOverride = nil
             if UserDefaults.standard.bool(forKey: "debug.frameLossBench") {
                 let pinnedStart = UserDefaults.standard.double(forKey: "debug.benchStartSeconds")
                 if pinnedStart > 0 {
@@ -434,6 +462,7 @@ final class PlaybackController {
                 }
                 #if DEBUG
                 self.scheduleRendererRecoveryRegressionHooks(for: engine)
+                self.scheduleDeliveryFallbackRegression(for: engine)
                 #endif
             }
             engine.onPlaybackCacheFallback = { [weak self, weak engine] in
@@ -443,9 +472,9 @@ final class PlaybackController {
                 self.playbackCache.discardCurrent(preservingNext: true)
                 self.publishBufferMetrics(nil)
             }
-            engine.onError = { [weak self, weak engine] message in
+            engine.onError = { [weak self, weak engine] failure in
                 guard let self, let engine, self.engine === engine else { return }
-                self.handleEngineError(message, engine: engine)
+                self.handleEngineError(failure, engine: engine)
             }
             engine.onTrackSelectionChanged = { [weak self, weak engine] in
                 self?.nowPlaying.updateLanguageOptions()
@@ -1171,14 +1200,114 @@ final class PlaybackController {
         return await retirement.value
     }
 
-    private func handleEngineError(_ message: String, engine: SampleBufferPlayerEngine) {
+    private func handleEngineError(_ failure: PlaybackEngineFailure, engine: SampleBufferPlayerEngine) {
         lastKnownPosition = engine.timePosition
+        if !isClosed, !isFallingBack, currentMedia != nil, client != nil,
+           let next = PlaybackFallbackPolicy.next(after: delivery, cause: failure.cause) {
+            isFallingBack = true
+            // This engine has said its piece; anything it reports from here
+            // belongs to a session that is already being torn down.
+            engine.onError = nil
+            Task { await self.fallBack(to: next, after: failure) }
+            return
+        }
         finishEpisodeHandoff(outcome: "failed")
         let report = beginStop()
-        errorMessage = message
+        errorMessage = failure.message
         // beginStop claims reporting ownership before returning, so a later
         // onDisappear remains idempotent while this fire-and-forget task runs.
         _ = report
+    }
+
+    #if DEBUG
+    /// Fails the first negotiated attempt on purpose so the delivery ladder
+    /// can be walked without a broken file. The fallback only ever runs when
+    /// something is already wrong, which makes it exactly the path that never
+    /// gets exercised in ordinary use.
+    ///
+    /// `debug.regressionFailFirstDelivery` is `delivery` (expect the cheap
+    /// remux rung) or `undecodable` (expect the transcode rung, remux
+    /// skipped). Injected after playback starts so the retry has a real
+    /// position to resume from.
+    private func scheduleDeliveryFallbackRegression(for engine: SampleBufferPlayerEngine) {
+        guard let injected = UserDefaults.standard.string(
+            forKey: "debug.regressionFailFirstDelivery"
+        ), delivery == .negotiated else { return }
+        let cause: PlaybackEngineFailure.Cause = injected == "undecodable" ? .undecodable : .delivery
+        Task { [weak self, weak engine] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, let engine, self.engine === engine else { return }
+            self.handleEngineError(
+                PlaybackEngineFailure(
+                    cause: cause,
+                    message: "Injected \(injected) failure (regression hook)."
+                ),
+                engine: engine
+            )
+        }
+    }
+    #endif
+
+    /// Asks the server to deliver the same media a different way and starts
+    /// over where the failure landed (HEL-100).
+    ///
+    /// The viewer sees the player reload rather than an error, so the rungs
+    /// are worth their latency only because the alternative is the film
+    /// ending here. Each rung is entered at most once — `next` only ever
+    /// moves downward — so a stream that fails every way still terminates in
+    /// the overlay.
+    private func fallBack(to next: PlaybackDelivery, after failure: PlaybackEngineFailure) async {
+        // Held across the restart as well: a failure arriving while the next
+        // attempt is still starting up takes the terminal path rather than
+        // tearing down an engine that is mid-flight. That is today's
+        // behaviour for a rare race, never worse than it.
+        defer { isFallingBack = false }
+        guard !isClosed, let client, let media = currentMedia else { return }
+        let resumeAt = engine?.timePosition ?? lastKnownPosition
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Playback Delivery Fallback",
+            signpostID: performanceSignpostID,
+            "from=%{public}s to=%{public}s cause=%{public}s position=%{public}.3f",
+            delivery.rawValue,
+            next.rawValue,
+            failure.cause == .undecodable ? "undecodable" : "delivery",
+            resumeAt
+        )
+        // Same teardown the episode handoff uses, and for the same reason:
+        // keeping the display layer mounted lets the successor attach to the
+        // surface that is already there. Tearing it down instead left the
+        // outgoing renderer set registered as attached — its removal
+        // completion never fired once SwiftUI had destroyed the layer under
+        // it — and the retirement wait then timed out every single time.
+        let outgoingResourcesRetired = await stop(
+            preservingPreparedNext: true,
+            preservingPlayerSurface: true
+        )
+        guard !isClosed else { return }
+        guard outgoingResourcesRetired else {
+            errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
+            return
+        }
+        didFinish = false
+        didReportStop = false
+        errorMessage = nil
+        delivery = next
+        resumeOverride = resumeAt
+        await start(
+            media: media,
+            startFromBeginning: false,
+            client: client,
+            trackPreferences: TrackPreferenceValues(
+                audioMode: audioDefaultMode,
+                subtitleMode: subtitleDefaultMode
+            ),
+            preferredAudioLanguages: preferredAudioLanguages,
+            preferredSubtitleLanguages: preferredSubtitleLanguages,
+            missingSubtitleMode: missingSubtitleMode,
+            prepared: nil
+        )
     }
 
     // Builds the Infuse-style facts line: runtime, year, size, video, audio,

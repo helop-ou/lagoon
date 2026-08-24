@@ -83,7 +83,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     @ObservationIgnored var onFinished: (() -> Void)?
-    @ObservationIgnored var onError: ((String) -> Void)?
+    /// Playback could not continue. The failure carries whether a different
+    /// delivery of the same media might work, so the controller can drop to
+    /// the next rung of the fallback ladder instead of stranding the viewer
+    /// (HEL-100).
+    @ObservationIgnored var onError: ((PlaybackEngineFailure) -> Void)?
     @ObservationIgnored var onTrackSelectionChanged: (() -> Void)?
     /// Fires once the initial audio/video cushion is enqueued and the media
     /// clock is anchored. Episode handoff metrics use this rather than stream
@@ -838,7 +842,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                           self.mediaServicesResetRecoveryID == recoveryID else { return }
                     guard removed else {
                         self.mediaServicesResetRecoveryID = nil
-                        self.onError?("Playback audio could not recover after the media service restarted.")
+                        self.onError?(PlaybackEngineFailure(
+                            cause: .delivery,
+                            message: "Playback audio could not recover after the media service restarted."
+                        ))
                         return
                     }
                     let replacement = AVSampleBufferAudioRenderer()
@@ -899,7 +906,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let detail = notificationError?.localizedDescription
             ?? renderer.error?.localizedDescription
             ?? "unknown renderer error"
-        onError?("Playback failed in the Lagoon video renderer (\(detail)).")
+        // The renderer decodes what it was handed. Nothing about the way
+        // those samples were delivered will change its verdict.
+        onError?(PlaybackEngineFailure(
+            cause: .undecodable,
+            message: "Playback failed in the Lagoon video renderer (\(detail))."
+        ))
     }
 
     private func observeTime(_ time: CMTime) {
@@ -1201,8 +1213,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 )
             }
         } catch {
-            let message = (error as? DemuxError)?.errorDescription ?? "The stream could not be opened."
-            Task { @MainActor in self.onError?(message) }
+            let demuxError = error as? DemuxError
+            let failure = PlaybackEngineFailure(
+                cause: demuxError?.cause ?? .delivery,
+                message: demuxError?.errorDescription ?? "The stream could not be opened."
+            )
+            Task { @MainActor in self.onError?(failure) }
             return
         }
         if demuxer.videoStream?.codecName == "hevc",
@@ -1352,12 +1368,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     do {
                         try demuxer.seek(toSeconds: target)
                     } catch {
-                        let message = (error as? DemuxError)?.errorDescription
-                            ?? "The stream could not seek to that position."
+                        let demuxError = error as? DemuxError
+                        let failure = PlaybackEngineFailure(
+                            cause: demuxError?.cause ?? .delivery,
+                            message: demuxError?.errorDescription
+                                ?? "The stream could not seek to that position."
+                        )
                         shared.withLock { $0.cancelled = true }
                         videoQueue.markFinished()
                         audioQueue.markFinished()
-                        Task { @MainActor in self.onError?(message) }
+                        Task { @MainActor in self.onError?(failure) }
                         break
                     }
                 }
@@ -1497,7 +1517,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         case .failed(let message):
             videoQueue.markFinished()
             audioQueue.markFinished()
-            Task { @MainActor in self.onError?("Playback failed in the Lagoon engine (\(message)).") }
+            // A read that kept failing past libavformat's own reconnects:
+            // the transport, not the samples.
+            let failure = PlaybackEngineFailure(
+                cause: .delivery,
+                message: "Playback failed in the Lagoon engine (\(message))."
+            )
+            Task { @MainActor in self.onError?(failure) }
             shared.withLock { $0.cancelled = true }
         }
     }
@@ -1537,8 +1563,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioQueue.interruptWaits()
         demuxer.interrupt()
         let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        // Every caller is a decoder: VideoToolbox refusing a session or a
+        // frame, or libavcodec refusing the stream. Redelivering the same
+        // bitstream cannot change that.
+        let failure = PlaybackEngineFailure(
+            cause: .undecodable,
+            message: "Playback failed in the Lagoon engine (\(detail))."
+        )
         Task { @MainActor in
-            self.onError?("Playback failed in the Lagoon engine (\(detail)).")
+            self.onError?(failure)
         }
     }
 

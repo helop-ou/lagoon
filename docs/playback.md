@@ -40,6 +40,68 @@ shells instead of 27.
    so resume is handled the same way as direct play: an initial demuxer
    seek, keeping position reporting absolute in every play method.
 
+### When playback fails: the delivery ladder (HEL-100)
+
+Negotiation happens once, before the first frame, so a direct play that the
+engine cannot actually handle used to end the film: the error overlay's only
+control is **Back**. The controller now re-negotiates instead, descending one
+rung at a time and resuming at the position the failure interrupted. The
+viewer sees the player reload, not an error.
+
+| rung | PlaybackInfo flags | what the server does |
+| --- | --- | --- |
+| `negotiated` | all four true (Jellyfin's own defaults) | direct play — the original file, no server work |
+| `remux` | `EnableDirectPlay=false` | HLS fMP4, video **stream-copied**: a container rewrite, no encoder |
+| `transcode` | also `EnableDirectStream=false`, `AllowVideoStreamCopy=false` | HLS fMP4, video re-encoded |
+
+**The middle rung is not `SupportsDirectStream`.** Jellyfin couples the two:
+withdrawing direct play returns both flags false and hands back a
+`TranscodingUrl` regardless. Verified against 10.11 — the remux and transcode
+rungs return URLs differing by exactly one parameter, `allowVideoStreamCopy=false`.
+That single flag is the whole distinction between a remux and a transcode, and
+it is why the two rungs are worth keeping apart: a remux costs the server a
+container rewrite, a transcode costs it minutes of CPU per viewer.
+
+Which rung comes next depends on whether redelivering the same samples could
+possibly help, which is what `PlaybackEngineFailure.Cause` records:
+
+- `.delivery` — the container, the transport, or an AVFoundation object
+  failed. A server-side rewrite routinely fixes these, so the next rung is
+  the cheap one.
+- `.undecodable` — a codec outside the envelope, a VideoToolbox session the
+  hardware declined, a decode that failed. A stream copy hands the decoder the
+  same bitstream, so the remux rung is **skipped**: straight to the re-encode.
+
+Both lower rungs arrive as HLS, which costs the embedded subtitle track (the
+engine cannot demux subtitles out of a Jellyfin transcode). That is a further
+reason the ladder is only ever descended after a real failure, never
+pre-emptively.
+
+The retry reuses the episode-handoff teardown (`preservingPlayerSurface: true`)
+rather than a full one, and that is load-bearing, not cosmetic. Tearing the
+surface down left the outgoing renderer set permanently registered as attached:
+once SwiftUI had destroyed the `AVSampleBufferDisplayLayer`, the
+`removeRenderer` completion never fired, `renderersDetached` never ran, and the
+retirement wait timed out at 15 s on every single fallback — "The previous video
+could not release its player resources." Keeping the layer mounted also means
+the viewer sees the last frame rather than a black screen while the next rung
+negotiates. Measured on the simulator: with the surface torn down,
+`renderers=1` and `retired=false`; preserved, `renderers=0` and `retired=true`
+on every rung. (The underlying detachment failure looks pre-existing and wider
+than this path — see HEL-110.)
+
+Bounds worth knowing: the ladder belongs to one item and resets for the next;
+`next` only ever moves downward, so a stream that fails every way still ends in
+the overlay rather than a restart loop; and a failure arriving while the next
+attempt is *still starting* takes the terminal path rather than tearing down an
+engine mid-flight — today's behaviour for a rare race, never worse than it.
+
+`debug.regressionFailFirstDelivery` (`delivery` or `undecodable`) fails the
+first negotiated attempt on purpose, since this path only ever runs when
+something is already broken. Verified on the simulator against fixture: direct
+play at 0:02 → injected failure at 2.1 s → remux rung playing at 0:23, queues
+full, zero stalls.
+
 ## The engine (`Lagoon/Views/Player/SampleBuffer/`)
 
 libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +
