@@ -143,7 +143,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var audioRendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var rendererRecoveryInProgress = false
     @ObservationIgnored private var audioRendererRecoveryInProgress = false
-    @ObservationIgnored private var mediaServicesResetRecoveryID: UUID?
+    /// Non-nil while a fresh audio renderer is being swapped in. Both paths
+    /// that replace one share it, so a flush notification cannot start a
+    /// second swap on top of the first.
+    @ObservationIgnored private var audioRendererReplacementID: UUID?
+    @ObservationIgnored private var audioStatusObservation: NSKeyValueObservation?
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored nonisolated(unsafe) private var pendingCacheSession: PlaybackCacheSession?
@@ -422,7 +426,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         rendererNotificationTokens.removeAll()
         removeAudioRendererObservers()
-        mediaServicesResetRecoveryID = nil
+        audioRendererReplacementID = nil
         stallRecoveryTask?.cancel()
         clearPendingStallConfirmation()
         if stallSignpostActive {
@@ -768,6 +772,29 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 )
             }
         })
+        // The two notifications above are the renderer's recoverable events.
+        // Hard failure has no notification: Apple exposes it as `status`,
+        // documented key-value observable and "terminal status from which
+        // recovery is not always possible". Unobserved, a failed renderer
+        // left the film playing on in silence with nothing reported (HEL-101).
+        //
+        // KVO is delivered on whichever thread changed the property, which
+        // for a CoreMedia-owned renderer is not the main one — hence a hop
+        // rather than the `assumeIsolated` the notification blocks can use.
+        audioStatusObservation = renderer.observe(\.status, options: [.new]) {
+            [weak self, weak renderer] _, _ in
+            Task { @MainActor [weak self, weak renderer] in
+                guard let self, let renderer else { return }
+                self.handleAudioRendererStatus(renderer)
+            }
+        }
+    }
+
+    private func handleAudioRendererStatus(_ renderer: AVSampleBufferAudioRenderer) {
+        guard !shutdownRequested,
+              renderer === audioRenderer,
+              renderer.status == .failed else { return }
+        replaceAudioRenderer(renderer, for: .rendererFailed)
     }
 
     private func removeAudioRendererObservers() {
@@ -775,6 +802,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             NotificationCenter.default.removeObserver(token)
         }
         audioRendererNotificationTokens.removeAll()
+        audioStatusObservation?.invalidate()
+        audioStatusObservation = nil
     }
 
     /// AVFoundation delivers automatic audio flushes on an arbitrary queue
@@ -789,7 +818,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard !shutdownRequested,
               renderer === audioRenderer,
               !audioRendererRecoveryInProgress,
-              mediaServicesResetRecoveryID == nil else { return }
+              audioRendererReplacementID == nil else { return }
         audioRendererRecoveryInProgress = true
         defer { audioRendererRecoveryInProgress = false }
         let notifiedTime = flushTime?.seconds
@@ -816,15 +845,44 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// video surface, and deliberately stay paused until an explicit viewer
     /// or remote-command action calls `play()`.
     func recoverAfterMediaServicesReset() {
+        guard let outgoingAudio = audioRenderer else { return }
+        replaceAudioRenderer(outgoingAudio, for: .mediaServicesReset)
+    }
+
+    /// Swaps in a fresh audio renderer and refills it from the playhead.
+    ///
+    /// The only recovery AVFoundation offers for a renderer it has failed or
+    /// invalidated — neither state can be cleared on the object itself. The
+    /// synchronizer keeps the video renderer attached throughout, so what a
+    /// viewer loses is a few hundred milliseconds of audio rather than the
+    /// film.
+    private func replaceAudioRenderer(
+        _ outgoingAudio: AVSampleBufferAudioRenderer,
+        for replacement: AudioRendererReplacement
+    ) {
         guard !shutdownRequested,
-              mediaServicesResetRecoveryID == nil,
-              let outgoingAudio = audioRenderer else { return }
-        pause()
+              audioRendererReplacementID == nil,
+              outgoingAudio === audioRenderer else { return }
+        if replacement.staysPaused {
+            pause()
+        }
         isBuffering = true
         let recoveryPosition = timePosition
-        let recoveryID = UUID()
-        mediaServicesResetRecoveryID = recoveryID
+        let replacementID = UUID()
+        audioRendererReplacementID = replacementID
+        // Invalidates this renderer's status observation too, so a failed
+        // renderer cannot re-report its terminal state while being retired.
         removeAudioRendererObservers()
+        let outgoingError = outgoingAudio.error?.localizedDescription
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Renderer Recovery",
+            signpostID: performanceSignpostID,
+            "position=%{public}.3f reason=%{public}s",
+            recoveryPosition,
+            String(describing: replacement.reason)
+        )
 
         pumpQueue.async { [weak self, weak outgoingAudio] in
             guard let self, let outgoingAudio,
@@ -839,24 +897,32 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 Task { @MainActor [weak self] in
                     guard let self,
                           !self.shutdownRequested,
-                          self.mediaServicesResetRecoveryID == recoveryID else { return }
+                          self.audioRendererReplacementID == replacementID else { return }
                     guard removed else {
-                        self.mediaServicesResetRecoveryID = nil
+                        self.audioRendererReplacementID = nil
                         self.onError?(PlaybackEngineFailure(
                             cause: .delivery,
-                            message: "Playback audio could not recover after the media service restarted."
+                            message: replacement.failureMessage(detail: outgoingError)
                         ))
                         return
                     }
-                    let replacement = AVSampleBufferAudioRenderer()
-                    self.audioRenderer = replacement
-                    self.synchronizer.addRenderer(replacement)
-                    self.observeAudioRenderer(replacement)
-                    replacement.requestMediaDataWhenReady(on: self.pumpQueue) { [weak self] in
+                    let incoming = AVSampleBufferAudioRenderer()
+                    self.audioRenderer = incoming
+                    self.synchronizer.addRenderer(incoming)
+                    self.observeAudioRenderer(incoming)
+                    incoming.requestMediaDataWhenReady(on: self.pumpQueue) { [weak self] in
                         self?.pumpAudio()
                     }
-                    self.mediaServicesResetRecoveryCount += 1
-                    self.mediaServicesResetRecoveryID = nil
+                    switch replacement {
+                    case .mediaServicesReset:
+                        self.mediaServicesResetRecoveryCount += 1
+                    case .rendererFailed:
+                        self.audioRendererRecoveryCount += 1
+                    }
+                    self.audioRendererReplacementID = nil
+                    // Refills both queues and re-anchors the clock. A paused
+                    // engine repositions without starting, which is what the
+                    // media-services case requires.
                     self.seek(to: recoveryPosition)
                 }
             }
@@ -869,6 +935,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func simulateAudioRendererFlushForRegression() {
         guard let audioRenderer else { return }
         recoverAudioRenderer(audioRenderer, from: nil, reason: "regression")
+    }
+
+    /// The same for hard failure. A renderer cannot be made to report
+    /// `.failed` on demand, so the regression drives the replacement the
+    /// observation would have started (HEL-101).
+    func simulateAudioRendererFailureForRegression() {
+        guard let audioRenderer else { return }
+        replaceAudioRenderer(audioRenderer, for: .rendererFailed)
     }
     #endif
 
@@ -1772,6 +1846,49 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 }
 
 // MARK: - Support types
+
+/// Why an audio renderer is being replaced. The two cases differ in what
+/// the viewer is owed afterwards, which is the only reason they are not one.
+nonisolated enum AudioRendererReplacement: Equatable {
+    /// The media server restarted and invalidated every AVFoundation audio
+    /// object. Apple requires an app to wait for an explicit viewer or
+    /// remote-command action before resuming, so this one stays paused.
+    case mediaServicesReset
+    /// The renderer reported `.failed`, which Apple documents as terminal.
+    /// Nothing the viewer did caused it and nothing they can do fixes it, so
+    /// playback resumes on its own once the replacement is fed.
+    case rendererFailed
+
+    var staysPaused: Bool {
+        switch self {
+        case .mediaServicesReset: true
+        case .rendererFailed: false
+        }
+    }
+
+    var reason: StaticString {
+        switch self {
+        case .mediaServicesReset: "mediaServicesReset"
+        case .rendererFailed: "rendererFailed"
+        }
+    }
+
+    /// Only reached when the replacement itself fails, which leaves playback
+    /// with no audio path at all. `detail` is the renderer's own error where
+    /// it had one — the server's reason beats ours (HEL-98's lesson).
+    func failureMessage(detail: String?) -> String {
+        switch self {
+        case .mediaServicesReset:
+            "Playback audio could not recover after the media service restarted."
+        case .rendererFailed:
+            if let detail, !detail.isEmpty {
+                "Playback audio failed and could not be restarted (\(detail))."
+            } else {
+                "Playback audio failed and could not be restarted."
+            }
+        }
+    }
+}
 
 nonisolated enum StallRecoveryDecision: Equatable {
     case wait

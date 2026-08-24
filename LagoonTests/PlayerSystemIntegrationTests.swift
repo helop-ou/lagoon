@@ -299,6 +299,37 @@ struct PlayerSystemIntegrationTests {
         #expect(!engine.isPaused)
     }
 
+    @Test func onlyAMediaServicesResetLeavesThePlayerPaused() {
+        // Apple requires an app to wait for an explicit viewer action after a
+        // media-services reset, so that replacement stays paused. A renderer
+        // that failed on its own is nothing the viewer did or can fix, and
+        // resuming is the whole point of replacing it.
+        #expect(AudioRendererReplacement.mediaServicesReset.staysPaused)
+        #expect(!AudioRendererReplacement.rendererFailed.staysPaused)
+    }
+
+    @Test func aFailedAudioRendererReportsItsOwnReasonWhenItCannotBeReplaced() {
+        // Reached only when the replacement itself fails, which leaves
+        // playback with no audio path at all — so the message has to carry
+        // whatever AVFoundation said rather than a guess of ours.
+        #expect(
+            AudioRendererReplacement.rendererFailed
+                .failureMessage(detail: "The operation could not be completed")
+                .contains("The operation could not be completed")
+        )
+        // No error attached is the common case: say what happened, without a
+        // dangling empty parenthetical.
+        let bare = AudioRendererReplacement.rendererFailed.failureMessage(detail: nil)
+        #expect(!bare.contains("("))
+        #expect(AudioRendererReplacement.rendererFailed.failureMessage(detail: "") == bare)
+        // A reset says why it happened; the renderer's own error is noise
+        // next to "the media service restarted".
+        #expect(
+            AudioRendererReplacement.mediaServicesReset.failureMessage(detail: "ignored")
+                == "Playback audio could not recover after the media service restarted."
+        )
+    }
+
     @Test func stallRecoveryResumesOnlyWithACushionAndCannotWaitForever() {
         #expect(StallRecoveryPolicy.decision(
             elapsed: .seconds(1),

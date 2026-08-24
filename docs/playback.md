@@ -515,6 +515,35 @@ not introduce a second player to get it:
   `shouldResume`. Route changes pause when a personal output (wired,
   Bluetooth, or AirPlay) disappears, but not for tvOS HDMI mode changes.
   Media-services reset re-establishes the category and active session.
+- **Audio renderer failure** (HEL-101). The two notifications an audio
+  renderer posts — `WasFlushedAutomatically` and
+  `OutputConfigurationDidChange` — are its *recoverable* events, and both
+  reseek from the playhead. Hard failure has no notification: Apple exposes
+  it as `status`, documented key-value observable and "terminal status from
+  which recovery is not always possible". Unobserved, a failed renderer left
+  the film playing on in silence with nothing reported anywhere.
+  The observation hops to the main actor rather than using
+  `MainActor.assumeIsolated` like the notification blocks, because KVO is
+  delivered on whichever thread changed the property and a CoreMedia-owned
+  renderer does not change it on the main one.
+  Recovery is replacement — the object cannot be revived — and it shares one
+  path with the media-services reset, which needs the same swap. The two
+  differ only in what the viewer is owed afterwards, which is what
+  `AudioRendererReplacement` encodes: a reset stays paused because Apple
+  requires an explicit viewer action before resuming, while a renderer that
+  failed on its own resumes, since nothing the viewer did caused it. Neither
+  un-pauses a viewer who paused deliberately: the refill goes through `seek`,
+  and `beginPlayback` honours `isPaused`. The video renderer stays attached
+  to the synchronizer throughout, so what is lost is a few hundred
+  milliseconds of audio rather than the film. If the swap itself fails,
+  playback has no audio path at all and the failure is reported as
+  `.delivery`, which sends it to the delivery ladder above.
+  `debug.regressionInjectAudioRendererFailure` drives it (a renderer cannot
+  be made to report `.failed` on demand), and the HUD's `Recovery:` line
+  counts audio replacements and service resets separately — otherwise a
+  replacement leaves no trace at all, which is the point of it. Verified on
+  the simulator: injected mid-playback at 691.2 s, resumed at 691.2 s, clock
+  past 727 s with queues refilled, zero stalls and zero audio gaps.
 - `NowPlayingCoordinator` publishes a stable Jellyfin item identifier,
   title/episode line, poster, duration, elapsed time, rate, and playback
   state. It registers play, pause, toggle, ±10 s, absolute position, and

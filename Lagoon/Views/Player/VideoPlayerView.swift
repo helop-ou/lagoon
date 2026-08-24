@@ -701,6 +701,13 @@ final class PlaybackController {
                 self.audioSession.simulateMediaServicesResetForRegression()
             }
         }
+        if UserDefaults.standard.bool(forKey: "debug.regressionInjectAudioRendererFailure") {
+            Task { [weak self, weak engine] in
+                try? await Task.sleep(for: .seconds(4))
+                guard let self, let engine, self.engine === engine else { return }
+                engine.simulateAudioRendererFailureForRegression()
+            }
+        }
     }
     #endif
 
@@ -1538,6 +1545,14 @@ final class PlaybackController {
         }
         let depths = engine.queueDepths
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
+        // Only once something has actually been rebuilt. A renderer that
+        // failed and was replaced leaves no other trace — playback simply
+        // carries on, which is the point (HEL-101).
+        if engine.audioRendererRecoveryCount > 0 || engine.mediaServicesResetRecoveryCount > 0 {
+            lines.append(
+                "Recovery: audio ×\(engine.audioRendererRecoveryCount) · service ×\(engine.mediaServicesResetRecoveryCount)"
+            )
+        }
         if let cache {
             if let fraction = cache.bufferedFraction,
                let contentLength = cache.contentLength {
