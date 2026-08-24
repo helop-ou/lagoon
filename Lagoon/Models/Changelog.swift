@@ -3,9 +3,13 @@ import Foundation
 /// One shipped build.
 ///
 /// Curated by hand rather than generated from the commit log: a changelog
-/// answers what changed *for the viewer*, which 250 commits of `feat:` and
-/// `fix:` do not. Build numbers are part of the identity because TestFlight
-/// assigns them per upload, so one marketing version covers many builds.
+/// answers what changed *for the viewer*, which a few hundred `feat:` and
+/// `fix:` subjects do not. Build numbers are part of the identity because one
+/// marketing version spans many builds.
+///
+/// **See docs/release.md, "How to write the notes", before adding an entry.**
+/// The short version: say what changed for someone watching, one line per
+/// thing they would notice, and leave out everything invisible.
 nonisolated struct ChangelogEntry: Identifiable, Equatable, Sendable {
     let version: String
     let build: String

@@ -17,7 +17,8 @@ MPVKit/libmpv/MoltenVK/libplacebo out of the project entirely since
 - `docs/playback.md` — device profile, stream resolution, progress reporting; player gotchas
 - `docs/design-system.md` — tokens, focus strategy, hero/glow, image cache rules
 - `docs/roadmap.md` — MVP scope and planned features (seerr, subtitles, Top Shelf, …)
-- `docs/release.md` — TestFlight flow (Xcode GUI, build numbers auto-managed at upload)
+- `docs/release.md` — TestFlight flow, **build numbers owned by the repo**
+  (never let Xcode manage them at upload), and how to write changelog entries
 
 Quick rules that prevent regressions:
 

@@ -65,21 +65,78 @@ first. **Adding a release is one entry at the top:**
 
 ```swift
 ChangelogEntry(
-    version: "0.2",            // CFBundleShortVersionString / MARKETING_VERSION
-    build: "7",                // CFBundleVersion — what Xcode set at upload
+    version: "0.2",             // MARKETING_VERSION
+    build: "51",                // CURRENT_PROJECT_VERSION
     released: "September 2026", // month, not a day
-    headline: "One line on what this build is about.",
+    headline: "One line naming the theme of this build.",
     changes: [
-        "One user-visible change per line.",
-        "Write for a viewer, not a reviewer — no ticket keys, no file names.",
+        "One line per thing a viewer would notice.",
     ]
 ),
 ```
 
-Version and build together identify the entry, because TestFlight assigns a
-new build number to every upload while the marketing version stays put. The
-entry whose version *and* build match the running bundle is badged
+Version and build together identify the entry, because one marketing version
+spans many builds. The entry matching the running bundle is badged
 **Installed** in the panel.
+
+### How to write the notes
+
+The reader is someone who watches things in Lagoon. They have not read the
+code, do not know the ticket numbers, and are not looking for credit — they
+want to know what is different since they last opened the app. Everything
+below follows from that.
+
+**Say what changed for them, not what was built.** The same change, both ways:
+
+| commit | changelog |
+| --- | --- |
+| `feat: buffer large titles through a sliding cache window` | A long film no longer starts stuttering partway through. |
+| `fix: report the real cause of a subtitle failure` | Subtitle failures say what actually went wrong rather than always blaming the provider. |
+
+**For a fix, name the symptom that is gone.** People recognise the annoyance,
+not the repair. "No longer stutters an hour in" lands; "corrected the eviction
+policy" does not.
+
+**One line per noticeable thing — not per commit, and not per ticket.** HEL-92
+was seven commits and became two lines. A ticket that produced nothing visible
+gets no line at all.
+
+**Leave out everything invisible.** Refactors, tests, documentation, and fixes
+to bugs that never shipped. If it was broken and repaired inside the same
+release cycle, it never happened as far as the viewer is concerned.
+
+**No ticket keys, no file names, no type names** — with one exception: when the
+technical fact *is* the claim. "A playback engine of Lagoon's own, with no
+AVPlayer in the path" earns its jargon, because the sort of person who installs
+a third-party Jellyfin client cares about exactly that. "Sized the AVIO buffer
+to the cache request size" does not.
+
+**If a change needs setup, say where.** "Add a key in Settings → Subtitles"
+saves someone hunting for it.
+
+**Put the most noticeable thing first.** The panel shows the top of the list
+before anything is scrolled.
+
+**Admit the gaps.** The 0.1 (50) entry closes by saying builds 1–50 predate the
+changelog and are not itemised. A list that quietly skips things is worse than
+one that says what it is missing — the same reasoning as the "This build isn't
+listed" state.
+
+Quick check before committing an entry: read each line and ask *would someone
+who has never seen the code know what is different?* If not, rewrite it or drop
+it.
+
+### Why this is not generated from commits
+
+The mechanics would be easy — the history has conventional prefixes and Jira
+keys, so filtering and grouping is a short script. It is the output that fails.
+Commit subjects are addressed to whoever maintains the code, the granularity is
+wrong (seven commits, two lines), and most commits describe work no viewer can
+see. A generated list would read like a commit log, which is precisely what a
+changelog is not.
+
+A generator that *drafts* an entry for editing is worth having if writing them
+ever becomes a chore. Publishing one unedited is not.
 
 ## Build numbers are owned by the repository
 
