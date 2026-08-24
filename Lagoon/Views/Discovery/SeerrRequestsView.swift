@@ -71,7 +71,6 @@ struct SeerrRequestsView: View {
                 signedOutContent
             }
         }
-        .background(Color.black.ignoresSafeArea())
         // Keep the fetch on the stable screen root. Putting it on the
         // ScrollView/LoadingView branches made each isLoading transition
         // remove and cancel the task, producing an endless spinner.
@@ -113,19 +112,23 @@ struct SeerrRequestsView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 400)
                 } else {
-                    ForEach(viewModel.requests) { request in
-                        SeerrRequestRow(request: request)
-                            .onAppear {
-                                guard request.id == viewModel.requests.suffix(4).first?.id else { return }
-                                Task {
-                                    await viewModel.load(
-                                        client: seerr.client,
-                                        user: user,
-                                        filter: filter,
-                                        onlyMine: effectiveOnlyMine(for: user)
-                                    )
+                    LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.gridRowSpacing) {
+                        ForEach(Array(viewModel.requests.enumerated()), id: \.element.id) { index, request in
+                            SeerrRequestCard(request: request)
+                                .onAppear {
+                                    guard index >= viewModel.requests.count - Metrics.gridColumns * 3 else {
+                                        return
+                                    }
+                                    Task {
+                                        await viewModel.load(
+                                            client: seerr.client,
+                                            user: user,
+                                            filter: filter,
+                                            onlyMine: effectiveOnlyMine(for: user)
+                                        )
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
 
@@ -236,51 +239,83 @@ struct SeerrRequestsView: View {
     }
 }
 
-private struct SeerrRequestRow: View {
+/// One request as a poster card, the same shape the rest of the app uses for
+/// media. It replaced a full-width glass slab holding a small poster in a lot
+/// of empty space, which made a handful of requests fill the screen and
+/// matched nothing else in the app.
+private struct SeerrRequestCard: View {
     let request: SeerrMediaRequest
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var details: SeerrMediaDetails?
 
     var body: some View {
-        NavigationLink(value: SeerrNavigationRoute.request(request)) {
-            HStack(spacing: Metrics.Space.l) {
-                CachedAsyncImage(
-                    url: SeerrClient.imageURL(path: details?.posterPath, width: 300),
-                    maxPixelSize: 240
-                ) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.white.opacity(0.07)
-                }
-                .frame(width: posterWidth, height: posterHeight)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-
-                VStack(alignment: .leading, spacing: Metrics.Space.s) {
-                    Text(details?.displayTitle ?? "Loading \(request.resolvedMediaType.title)…")
-                        .font(.headline)
-                        .lineLimit(2)
-                    HStack(spacing: Metrics.Space.m) {
-                        Label(request.requestStatus.title, systemImage: statusIcon)
-                        if let name = request.requestedBy?.name {
-                            Text("Requested by \(name)")
+        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+            NavigationLink(value: SeerrNavigationRoute.request(request)) {
+                ZStack(alignment: .topTrailing) {
+                    CachedAsyncImage(
+                        url: SeerrClient.imageURL(path: details?.posterPath, width: 500),
+                        maxPixelSize: Int(Metrics.posterHeight)
+                    ) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        ZStack {
+                            Color.white.opacity(0.07)
+                            Text(details?.displayTitle ?? "")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(Metrics.Space.m)
                         }
                     }
-                    .font(.caption)
-                    if let year = details?.year {
-                        Text(year).font(.caption2)
-                    }
+                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                    .clipped()
+
+                    // One word, like the availability badges on the Discover
+                    // cards. The full "Pending Approval" wrapped to two lines
+                    // and covered a third of the artwork.
+                    Label(statusBadge, systemImage: statusIcon)
+                        .font(.caption2.bold())
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .padding(.horizontal, Metrics.Space.s)
+                        .padding(.vertical, Metrics.Space.xs)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(Metrics.Space.s)
                 }
-                Spacer()
-                Image(systemName: "chevron.forward")
+                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
-            .padding(Metrics.Space.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .cardButtonStyle()
+            .accessibilityLabel(details?.displayTitle ?? "Request \(request.id)")
+            .accessibilityValue(request.requestStatus.title)
+            .accessibilityIdentifier("seerr.request.\(request.id)")
+
+            VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                Text(details?.displayTitle ?? "Loading \(request.resolvedMediaType.title)…")
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                if let name = request.requestedBy?.name {
+                    Text(name)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight, alignment: .topLeading)
         }
-        .buttonStyle(.glass)
-        .accessibilityIdentifier("seerr.request.\(request.id)")
+        .frame(width: Metrics.posterWidth)
         .task(id: request.id) {
             guard let tmdbID = request.tmdbID else { return }
             details = try? await seerr.client.details(id: tmdbID, mediaType: request.resolvedMediaType)
+        }
+    }
+
+    private var statusBadge: String {
+        switch request.requestStatus {
+        case .pending: String(localized: "Pending")
+        case .approved: String(localized: "Approved")
+        case .declined: String(localized: "Declined")
         }
     }
 
@@ -291,16 +326,6 @@ private struct SeerrRequestRow: View {
         case .declined: "xmark.circle"
         }
     }
-
-    private var posterWidth: CGFloat {
-        #if os(tvOS)
-        120
-        #else
-        80
-        #endif
-    }
-
-    private var posterHeight: CGFloat { posterWidth * 1.5 }
 }
 
 struct SeerrRequestDetailView: View {
@@ -324,56 +349,41 @@ struct SeerrRequestDetailView: View {
             if isLoading, details == nil {
                 LoadingView()
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                        HStack(alignment: .top, spacing: Metrics.Space.xxl) {
-                            CachedAsyncImage(
-                                url: SeerrClient.imageURL(path: details?.posterPath, width: 500),
-                                maxPixelSize: Int(Metrics.posterHeight)
-                            ) { image in
-                                image.resizable().scaledToFill()
-                            } placeholder: {
-                                Color.white.opacity(0.07)
-                            }
-                            .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
-                            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-
-                            VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                                Text(details?.displayTitle ?? "Request #\(request.id)")
-                                    .font(.largeTitle.bold())
-                                Label(currentRequest.requestStatus.title, systemImage: statusIcon)
-                                    .font(.headline)
-                                if let requestedBy = currentRequest.requestedBy?.name {
-                                    Text("Requested by \(requestedBy)").font(.callout)
-                                }
-                                if let seasons = currentRequest.seasons, !seasons.isEmpty {
-                                    Text("Seasons \(seasons.map { String($0.seasonNumber) }.joined(separator: ", "))")
-                                        .font(.callout)
-                                }
-                                if let overview = details?.overview {
-                                    Text(overview)
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(7)
-                                        .frame(maxWidth: 760, alignment: .leading)
-                                }
-                                actions
-                                if let errorMessage {
-                                    Text(errorMessage).font(.callout).foregroundStyle(.red)
-                                }
-                            }
-                        }
+                // The same scaffold every other detail page uses. Hand-rolling
+                // one here is what produced the narrow centred box: nothing
+                // claimed the page width, so the ScrollView hugged its
+                // content and the background was sized to that. The scaffold
+                // pins the page to the screen it belongs to — its own comment
+                // records this being fixed once already (HEL-41).
+                DetailPageScaffold(
+                    backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: 1280)
+                ) {
+                    DetailMetadataHeader(
+                        subtitle: currentRequest.requestStatus.title,
+                        factTokens: factTokens,
+                        genres: details?.genres?.map(\.name) ?? [],
+                        overview: details?.overview
+                    ) {
+                        Text(details?.displayTitle ?? "Request #\(request.id)")
+                            .font(.largeTitle.bold())
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } buttons: {
+                        actions
                     }
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.vertical, Metrics.Space.xxl)
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, Metrics.screenGutter)
+                    }
                 }
-                .scrollClipDisabled()
             }
         }
-        .background(Color.black.ignoresSafeArea())
         .task { await load() }
         .confirmationDialog(
-            confirmation?.title ?? "Update Request",
+            confirmation.map(confirmationTitle) ?? String(localized: "Update Request"),
             isPresented: Binding(
                 get: { confirmation != nil },
                 set: { if !$0 { confirmation = nil } }
@@ -381,39 +391,97 @@ struct SeerrRequestDetailView: View {
             titleVisibility: .visible
         ) {
             if let confirmation {
-                Button(confirmation.actionTitle, role: confirmation.role) { apply(confirmation) }
+                Button(confirmationActionTitle(confirmation), role: confirmation.role) {
+                    apply(confirmation)
+                }
             }
             Button("Cancel", role: .cancel) {}
         }
         .accessibilityIdentifier("seerr.request.detail.\(request.id)")
     }
 
+    private var factTokens: [String] {
+        var tokens: [String] = []
+        if let requestedBy = currentRequest.requestedBy?.name {
+            tokens.append(String(localized: "Requested by \(requestedBy)"))
+        }
+        if let seasons = currentRequest.seasons, !seasons.isEmpty {
+            let numbers = seasons.map { String($0.seasonNumber) }.joined(separator: ", ")
+            tokens.append(seasons.count == 1
+                ? String(localized: "Season \(numbers)")
+                : String(localized: "Seasons \(numbers)"))
+        }
+        if currentRequest.is4k == true { tokens.append("4K") }
+        if let year = details?.year { tokens.append(year) }
+        return tokens
+    }
+
+    /// A request that is not pending used to render no actions at all, so an
+    /// approved or declined one was a dead end. Jellyseerr allows removing a
+    /// request in any state, and a manager looking at their own pending
+    /// request previously got Approve/Decline with no way to cancel it,
+    /// because the first branch won.
     @ViewBuilder
     private var actions: some View {
         if isMutating {
             ProgressView()
-        } else if currentRequest.requestStatus == .pending, seerr.user?.canManageRequests == true {
+        } else {
             HStack(spacing: Metrics.Space.m) {
-                Button("Approve") { confirmation = .approve }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("seerr.request.approve")
-                Button("Decline", role: .destructive) { confirmation = .decline }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("seerr.request.decline")
+                if currentRequest.requestStatus == .pending, canModerate {
+                    Button("Approve") { confirmation = .approve }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("seerr.request.approve")
+                    Button("Decline", role: .destructive) { confirmation = .decline }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("seerr.request.decline")
+                }
+                if canRemove {
+                    Button(removeTitle, role: .destructive) { confirmation = .delete }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("seerr.request.cancel")
+                }
             }
-        } else if currentRequest.requestStatus == .pending,
-                  currentRequest.requestedBy?.id == seerr.user?.id {
-            Button("Cancel Request", role: .destructive) { confirmation = .delete }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("seerr.request.cancel")
         }
     }
 
-    private var statusIcon: String {
-        switch currentRequest.requestStatus {
-        case .pending: "clock"
-        case .approved: "checkmark.circle.fill"
-        case .declined: "xmark.circle.fill"
+    private var canModerate: Bool {
+        seerr.user?.canManageRequests == true
+    }
+
+    private var isOwnRequest: Bool {
+        currentRequest.requestedBy?.id != nil && currentRequest.requestedBy?.id == seerr.user?.id
+    }
+
+    private var canRemove: Bool {
+        canModerate || isOwnRequest
+    }
+
+    /// Withdrawing something still awaiting approval is a cancellation;
+    /// removing one already decided is not. The confirmation has to agree
+    /// with the button that opened it.
+    private var removeTitle: LocalizedStringKey {
+        currentRequest.requestStatus == .pending ? "Cancel Request" : "Remove Request"
+    }
+
+    private func confirmationTitle(_ confirmation: Confirmation) -> String {
+        switch confirmation {
+        case .approve: String(localized: "Approve this request?")
+        case .decline: String(localized: "Decline this request?")
+        case .delete:
+            currentRequest.requestStatus == .pending
+                ? String(localized: "Cancel this request?")
+                : String(localized: "Remove this request?")
+        }
+    }
+
+    private func confirmationActionTitle(_ confirmation: Confirmation) -> String {
+        switch confirmation {
+        case .approve: String(localized: "Approve")
+        case .decline: String(localized: "Decline")
+        case .delete:
+            currentRequest.requestStatus == .pending
+                ? String(localized: "Cancel Request")
+                : String(localized: "Remove Request")
         }
     }
 
@@ -458,20 +526,6 @@ struct SeerrRequestDetailView: View {
         case decline
         case delete
 
-        var title: String {
-            switch self {
-            case .approve: "Approve this request?"
-            case .decline: "Decline this request?"
-            case .delete: "Cancel this request?"
-            }
-        }
-        var actionTitle: String {
-            switch self {
-            case .approve: "Approve"
-            case .decline: "Decline"
-            case .delete: "Cancel Request"
-            }
-        }
         var role: ButtonRole? {
             switch self {
             case .approve: nil
