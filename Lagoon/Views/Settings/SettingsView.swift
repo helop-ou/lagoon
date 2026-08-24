@@ -11,9 +11,27 @@ struct SettingsView: View {
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
+    @AppStorage("subtitles.source") private var subtitleSourceRaw = SubtitleSourcePreference.automatic.rawValue
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var homePreferences = HomeSectionPreferencesStore()
+
+    private var subtitleSourcePreference: SubtitleSourcePreference {
+        SubtitleSourcePreference(rawValue: subtitleSourceRaw) ?? .automatic
+    }
+
+    private var subtitleSourceBinding: Binding<SubtitleSourcePreference> {
+        Binding(
+            get: { subtitleSourcePreference },
+            set: { subtitleSourceRaw = $0.rawValue }
+        )
+    }
+
+    private var openSubtitlesSummary: String {
+        let account = OpenSubtitlesAccountStore.shared
+        if !account.isConfigured { return String(localized: "No key") }
+        return account.accountName ?? String(localized: "Anonymous")
+    }
     @State private var pendingAccountAction: AccountAction?
 
     var body: some View {
@@ -304,6 +322,31 @@ struct SettingsView: View {
                 )
             }
 
+            TVSettingsSection(
+                "Where Subtitles Come From",
+                footer: "Automatic uses your Jellyfin server when your account may manage subtitles — which saves the file for every client — and OpenSubtitles directly when it may not."
+            ) {
+                TVSettingsMenuPicker(
+                    title: "Search With",
+                    valueTitle: subtitleSourcePreference.displayName,
+                    accessibilityIdentifier: "settings.subtitles.source",
+                    selection: subtitleSourceBinding,
+                    options: SubtitleSourcePreference.allCases.map {
+                        TVSettingsOption(value: $0, title: $0.displayName)
+                    }
+                )
+
+                NavigationLink {
+                    OpenSubtitlesSettingsView()
+                } label: {
+                    TVSettingsNavigationLabel(
+                        "OpenSubtitles",
+                        detail: openSubtitlesSummary
+                    )
+                }
+                .accessibilityIdentifier("settings.subtitles.openSubtitles")
+            }
+
             TVSettingsSection("Appearance") {
                 NavigationLink {
                     subtitleAppearanceSettings
@@ -572,6 +615,23 @@ struct SettingsView: View {
                         Text(mode.title).tag(mode)
                     }
                 }
+            }
+
+            Section {
+                Picker("Search With", selection: subtitleSourceBinding) {
+                    ForEach(SubtitleSourcePreference.allCases, id: \.self) { source in
+                        Text(source.displayName).tag(source)
+                    }
+                }
+                NavigationLink {
+                    OpenSubtitlesSettingsView()
+                } label: {
+                    LabeledContent("OpenSubtitles", value: openSubtitlesSummary)
+                }
+            } header: {
+                Text("Where Subtitles Come From")
+            } footer: {
+                Text("Automatic uses your Jellyfin server when your account may manage subtitles — which saves the file for every client — and OpenSubtitles directly when it may not.")
             }
 
             Section("Subtitle Appearance") {
