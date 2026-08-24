@@ -608,7 +608,7 @@ nonisolated enum SampleBufferFactory {
     /// payload CoreMedia expects (SEI mastering_display_colour_volume /
     /// mdcv box): primaries in G,B,R order at 0.00002 steps, luminance at
     /// 0.0001 cd/m².
-    private static func masteringDisplayColorVolume(_ codecpar: UnsafeMutablePointer<AVCodecParameters>) -> Data? {
+    static func masteringDisplayColorVolume(_ codecpar: UnsafeMutablePointer<AVCodecParameters>) -> Data? {
         guard let metadata: AVMasteringDisplayMetadata = sideData(codecpar, type: AV_PKT_DATA_MASTERING_DISPLAY_METADATA),
               metadata.has_primaries != 0, metadata.has_luminance != 0 else {
             return nil
@@ -629,7 +629,7 @@ nonisolated enum SampleBufferFactory {
 
     /// 4-byte big-endian MaxCLL + MaxFALL (SEI content_light_level_info /
     /// clli box).
-    private static func contentLightLevel(_ codecpar: UnsafeMutablePointer<AVCodecParameters>) -> Data? {
+    static func contentLightLevel(_ codecpar: UnsafeMutablePointer<AVCodecParameters>) -> Data? {
         guard let metadata: AVContentLightMetadata = sideData(codecpar, type: AV_PKT_DATA_CONTENT_LIGHT_LEVEL),
               metadata.MaxCLL > 0 || metadata.MaxFALL > 0 else {
             return nil
@@ -642,7 +642,7 @@ nonisolated enum SampleBufferFactory {
 
     /// The 8-byte big-endian `amve` / H.274 payload Apple uses for ambient
     /// HDR adaptation: illuminance at 1/10000 lux, then CIE x/y at 1/50000.
-    private static func ambientViewingEnvironment(
+    static func ambientViewingEnvironment(
         _ codecpar: UnsafeMutablePointer<AVCodecParameters>
     ) -> Data? {
         guard let metadata: AVAmbientViewingEnvironment = sideData(

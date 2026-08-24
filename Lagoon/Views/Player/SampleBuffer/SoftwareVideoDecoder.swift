@@ -51,6 +51,13 @@ nonisolated final class SoftwareVideoDecoder {
         let transfer: CFString?
         let matrix: CFString?
         let chromaLocation: CFString?
+        /// HDR10 static metadata. The compressed path puts these straight
+        /// into the format description; here they have to travel as buffer
+        /// attachments, because the description is derived from a pixel
+        /// buffer rather than built by hand.
+        let masteringDisplay: Data?
+        let contentLightLevel: Data?
+        let ambientViewingEnvironment: Data?
     }
 
     private let codecContext: UnsafeMutablePointer<AVCodecContext>
@@ -168,7 +175,10 @@ nonisolated final class SoftwareVideoDecoder {
             primaries: SampleBufferFactory.colorPrimaries(codecpar.pointee.color_primaries),
             transfer: SampleBufferFactory.transferFunction(codecpar.pointee.color_trc),
             matrix: SampleBufferFactory.yCbCrMatrix(codecpar.pointee.color_space),
-            chromaLocation: SampleBufferFactory.chromaLocation(codecpar.pointee.chroma_location)
+            chromaLocation: SampleBufferFactory.chromaLocation(codecpar.pointee.chroma_location),
+            masteringDisplay: SampleBufferFactory.masteringDisplayColorVolume(codecpar),
+            contentLightLevel: SampleBufferFactory.contentLightLevel(codecpar),
+            ambientViewingEnvironment: SampleBufferFactory.ambientViewingEnvironment(codecpar)
         )
         var prototype: CVPixelBuffer?
         let prototypeStatus = CVPixelBufferPoolCreatePixelBuffer(
@@ -607,6 +617,43 @@ nonisolated final class SoftwareVideoDecoder {
                 pixelBuffer,
                 kCVImageBufferChromaLocationTopFieldKey,
                 chromaLocation,
+                .shouldPropagate
+            )
+        }
+        // HDR10 static metadata. The transfer function alone is what switches
+        // tvOS into HDR, but without these the display tone-maps from its own
+        // defaults instead of the master's — and the codecs that reach this
+        // path (VP9 always, AV1 wherever there is no hardware decoder) are
+        // advertised for HDR10/HLG/HDR10+ in `DeviceProfile`.
+        //
+        // `CMVideoFormatDescriptionCreateForImageBuffer` copies propagated
+        // attachments into the description's extensions, and these three
+        // CVBuffer keys are the same strings as their CMFormatDescription
+        // counterparts, so the prototype carries them into the format
+        // description and every decoded frame carries them to the renderer.
+        if let masteringDisplay = properties.masteringDisplay {
+            CVBufferSetAttachment(
+                pixelBuffer,
+                kCVImageBufferMasteringDisplayColorVolumeKey,
+                masteringDisplay as CFData,
+                .shouldPropagate
+            )
+        }
+        if let contentLightLevel = properties.contentLightLevel {
+            CVBufferSetAttachment(
+                pixelBuffer,
+                kCVImageBufferContentLightLevelInfoKey,
+                contentLightLevel as CFData,
+                .shouldPropagate
+            )
+        }
+        if let ambientViewingEnvironment = properties.ambientViewingEnvironment {
+            // Apple TN3145: custom sample-buffer playback has to carry `amve`
+            // through to presentation for correct HDR adaptation.
+            CVBufferSetAttachment(
+                pixelBuffer,
+                kCVImageBufferAmbientViewingEnvironmentKey,
+                ambientViewingEnvironment as CFData,
                 .shouldPropagate
             )
         }

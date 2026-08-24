@@ -413,7 +413,16 @@ composition cost is more representative than Simulator timing.
   ARM NEON primitive (with scalar fallback); native P010 output is copied
   stride-aware. Color primaries, transfer function, YCbCr matrix, range,
   chroma location, pixel aspect, and exact presentation timing propagate on
-  both paths. The software 1080p ceiling is intentional for the first release:
+  both paths, as does HDR10 static metadata — the compressed path writes
+  mastering display, content light level and `amve` into the format
+  description directly, while the software path attaches the same three
+  payloads to the pixel buffer, where
+  `CMVideoFormatDescriptionCreateForImageBuffer` copies them into the
+  description and the renderer sees them on every frame. Transfer function
+  alone is what switches tvOS into HDR; without the rest the display
+  tone-maps from its own defaults instead of the master's, which matters
+  here because VP9 always takes the software path and AV1 takes it on every
+  Apple TV shipping today. The software 1080p ceiling is intentional for the first release:
   widen it only after the physical-device frame-loss and memory benches show
   enough CPU and jetsam headroom.
 - **Anamorphic / non-square pixels**: `SampleBufferFactory` attaches
