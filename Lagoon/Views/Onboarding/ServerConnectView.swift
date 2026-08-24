@@ -9,15 +9,11 @@ struct ServerConnectView: View {
 
     var body: some View {
         ZStack {
-            BrandBackground(style: .field)
+            BrandBackground()
 
-            // Atmosphere, and only here. The brand package restricts the
-            // jellyfish to "punctuation in loading, empty-state, or
-            // atmospheric moments" — putting it on every onboarding screen
-            // would make it a motif instead, which is the thing it says not
-            // to do. This is the app's first screen and the one with room to
-            // spare. The animals stay low-contrast, one-colour, and clear of
-            // the centre column.
+            // Onboarding shares one surface and one school of jellyfish, so
+            // the three screens read as one place rather than three that
+            // happen to use the same colours.
             JellyfishSwimLayer()
 
             VStack(spacing: Metrics.Space.l) {

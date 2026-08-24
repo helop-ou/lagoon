@@ -97,13 +97,11 @@ bright accent — one word for two colors is a trap, so the roles are named afte
 the mark instead. `AccentColor` in the catalogue is Aqua.
 
 **Backgrounds.** The guidelines call Deep Navy "the default full-bleed field",
-and `BrandBackground` offers it two ways. `.field` is that literal reading —
-flat, full-bleed Deep Navy — and the connect screen uses it, because it is the
-app's front door and the one screen that is purely identity: the mark wants a
-field behind it, not a void. `.wash` lifts Deep Navy off black from the bottom
-edge and is what sign-in and the account picker use, because past the front
-door black is the ground Lagoon plays content against. Deep Navy is
-RGB(11, 29, 40), so neither is far from black.
+and `BrandBackground` is that literal reading — flat, full-bleed Deep Navy. All
+three onboarding screens use it, so they read as one place rather than three
+that happen to share a palette. Past onboarding, black is the ground Lagoon
+plays content against and `MainTabView` onwards is unchanged. Deep Navy is
+RGB(11, 29, 40), so this is not far from black to begin with.
 
 `LagoonLockup` composes the mark rather than shipping one asset, because the
 package has no dark-background lockup: its color lockup sets the wordmark in
@@ -124,8 +122,10 @@ Re-run it, and re-measure the ratios, if the artwork changes shape.
 
 The jellyfish is the secondary accent, and the package restricts it: "only as
 punctuation in loading, empty-state, or atmospheric moments … small, one-color,
-and low contrast." It appears on the connect screen and nowhere else — on every
-onboarding screen it would be a motif, which is the thing that rule forbids.
+and low contrast." It appears across onboarding and nowhere else in the app —
+Jaagop's call, for uniformity across the three screens, and further than the
+letter of that rule goes. Held to the rest of it: one colour, small, and
+0.15–0.30 opacity.
 
 There it swims (`JellyfishSwimLayer`). Moving the supplied artwork along a path
 would read as a sticker being dragged, so the mark is rebuilt as a parametric
@@ -146,7 +146,12 @@ things are coupled:
 Every value is a closed-form function of time, so nothing integrates frame to
 frame and the motion cannot drift or desynchronise.
 
-Two placement rules, both learned the hard way: the body stays upright and leans
+Placement is per screen (`JellyfishSwimLayer.School`), because the free water
+is not the same on each: the connect and sign-in forms are a narrow centred
+column with both flanks open, while the picker's rail owns the middle band and
+grows rightwards as accounts are added.
+
+Two further rules, both learned the hard way: the body stays upright and leans
 only into its sideways drift — turned fully into its heading it swims flat on
 its side, which reads as a dead one and stops being recognisable as the mark —
 and every drift stays clear of both the centre column and the 5% a TV may

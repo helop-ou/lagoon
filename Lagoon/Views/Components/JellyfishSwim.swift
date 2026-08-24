@@ -28,44 +28,96 @@ import SwiftUI
 /// frame — so the motion cannot drift, desynchronise, or depend on when the
 /// view happened to appear.
 struct JellyfishSwimLayer: View {
+    /// Which stretch of water is free. Every onboarding screen shows the same
+    /// three animals, but they cannot hover in the same places: the connect
+    /// and sign-in forms are a narrow centred column with both flanks open,
+    /// while the account picker's rail owns the middle band and grows
+    /// rightwards as accounts are added.
+    enum School {
+        /// Flanking a narrow centred column.
+        case flanking
+        /// Clear of a horizontal rail across the middle.
+        case besideTheRail
+
+        /// Placement obeys two constraints in every case. Nothing crosses the
+        /// screen's own content — an animal surfacing from behind a button
+        /// reads as a glitch, not as depth — and every drift stays inside the
+        /// 5% a TV may swallow to overscan, body width and a beat's lift
+        /// included, because a jellyfish half-eaten by the bezel is worse than
+        /// no jellyfish.
+        var swimmers: [Swimmer] {
+            switch self {
+            case .flanking:
+                [
+                    Swimmer(
+                        home: CGPoint(x: 0.18, y: 0.50),
+                        wander: CGSize(width: 0.035, height: 0.10),
+                        wanderPeriod: CGSize(width: 34, height: 47),
+                        period: 3.6,
+                        phase: 0,
+                        scale: 1.0,
+                        opacity: 0.30
+                    ),
+                    Swimmer(
+                        home: CGPoint(x: 0.82, y: 0.36),
+                        wander: CGSize(width: 0.030, height: 0.09),
+                        wanderPeriod: CGSize(width: 41, height: 55),
+                        period: 4.4,
+                        phase: 0.45,
+                        scale: 0.78,
+                        opacity: 0.22
+                    ),
+                    Swimmer(
+                        home: CGPoint(x: 0.85, y: 0.78),
+                        wander: CGSize(width: 0.028, height: 0.07),
+                        wanderPeriod: CGSize(width: 29, height: 38),
+                        period: 5.2,
+                        phase: 0.75,
+                        scale: 0.60,
+                        opacity: 0.16
+                    ),
+                ]
+            case .besideTheRail:
+                // The rail sits across roughly the middle third and may run
+                // the full width once enough accounts exist, so nothing hovers
+                // at that height — these keep to the band above it and the
+                // floor below.
+                [
+                    Swimmer(
+                        home: CGPoint(x: 0.15, y: 0.20),
+                        wander: CGSize(width: 0.030, height: 0.055),
+                        wanderPeriod: CGSize(width: 34, height: 47),
+                        period: 3.6,
+                        phase: 0,
+                        scale: 0.82,
+                        opacity: 0.26
+                    ),
+                    Swimmer(
+                        home: CGPoint(x: 0.86, y: 0.22),
+                        wander: CGSize(width: 0.026, height: 0.050),
+                        wanderPeriod: CGSize(width: 41, height: 55),
+                        period: 4.4,
+                        phase: 0.45,
+                        scale: 0.70,
+                        opacity: 0.20
+                    ),
+                    Swimmer(
+                        home: CGPoint(x: 0.80, y: 0.89),
+                        wander: CGSize(width: 0.028, height: 0.035),
+                        wanderPeriod: CGSize(width: 29, height: 38),
+                        period: 5.2,
+                        phase: 0.75,
+                        scale: 0.58,
+                        opacity: 0.15
+                    ),
+                ]
+            }
+        }
+    }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Where each animal hovers, in unit coordinates of the containing space.
-    ///
-    /// Two constraints shape these. The centre column belongs to the lockup
-    /// and the form, so nothing crosses it — an animal surfacing from behind a
-    /// button reads as a glitch, not as depth. And every drift stays inside
-    /// the 5% the TV may swallow to overscan, body width included, because a
-    /// jellyfish half-eaten by the bezel is worse than no jellyfish.
-    private static let swimmers: [Swimmer] = [
-        Swimmer(
-            home: CGPoint(x: 0.18, y: 0.50),
-            wander: CGSize(width: 0.035, height: 0.10),
-            wanderPeriod: CGSize(width: 34, height: 47),
-            period: 3.6,
-            phase: 0,
-            scale: 1.0,
-            opacity: 0.30
-        ),
-        Swimmer(
-            home: CGPoint(x: 0.82, y: 0.36),
-            wander: CGSize(width: 0.030, height: 0.09),
-            wanderPeriod: CGSize(width: 41, height: 55),
-            period: 4.4,
-            phase: 0.45,
-            scale: 0.78,
-            opacity: 0.22
-        ),
-        Swimmer(
-            home: CGPoint(x: 0.85, y: 0.78),
-            wander: CGSize(width: 0.028, height: 0.07),
-            wanderPeriod: CGSize(width: 29, height: 38),
-            period: 5.2,
-            phase: 0.75,
-            scale: 0.60,
-            opacity: 0.16
-        ),
-    ]
+    var school: School = .flanking
 
     var body: some View {
         if reduceMotion {
@@ -84,7 +136,7 @@ struct JellyfishSwimLayer: View {
             TimelineView(.animation) { timeline in
                 Canvas { context, size in
                     let seconds = timeline.date.timeIntervalSinceReferenceDate
-                    for swimmer in Self.swimmers {
+                    for swimmer in school.swimmers {
                         swimmer.draw(in: &context, size: size, seconds: seconds)
                     }
                 }
@@ -96,7 +148,7 @@ struct JellyfishSwimLayer: View {
 }
 
 /// One animal: where it hovers, how fast it beats, and how big it is.
-private struct Swimmer {
+struct Swimmer {
     /// Centre of its slow drift, in unit coordinates.
     let home: CGPoint
     /// Half-extent of that drift, in unit coordinates.

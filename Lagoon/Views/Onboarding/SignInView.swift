@@ -16,6 +16,7 @@ struct SignInView: View {
     var body: some View {
         ZStack {
             BrandBackground()
+            JellyfishSwimLayer()
 
             ScrollView {
                 VStack(spacing: Metrics.Space.l) {
