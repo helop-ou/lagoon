@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "52",
+            released: "August 2026",
+            headline: "Subtitle search works for server administrators again.",
+            changes: [
+                "If you administer your Jellyfin server, Lagoon no longer refuses to search for subtitles before it has even asked the server.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "51",
             released: "August 2026",
             headline: "Seerr signs itself in.",
