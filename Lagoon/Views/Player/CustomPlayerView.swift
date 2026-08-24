@@ -1716,8 +1716,11 @@ struct PlayerSpeedButton: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: Metrics.Space.xs) {
+                // Same size as its own label, and as the pause glyph across
+                // the row. `.title3` is 38pt on tvOS — larger than either, and
+                // in a transport that is meant to stay out of the way.
                 Image(systemName: "speedometer")
-                    .font(.title3)
+                    .font(.callout.weight(.semibold))
                 if !isDefaultRate {
                     Text(PlaybackRatePolicy.title(rate))
                         .font(.callout.monospacedDigit().weight(.semibold))
