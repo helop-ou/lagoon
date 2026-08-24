@@ -60,6 +60,20 @@ guard let icon = source("icon") ?? source("back") else {
     exit(1)
 }
 
+/// The supplied artwork's edge colour, used to extend it into frames of a
+/// different aspect ratio.
+let frameColor: NSColor = {
+    guard let icon = source("icon") ?? source("back"),
+          let tiff = icon.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          // The corner, not the mid-edge: mid-edge lands inside the
+          // artwork's own field, which framed a dark icon in bright blue.
+          let corner = rep.colorAt(x: 2, y: 2) else {
+        return rgb(0x06_1A_28)
+    }
+    return corner.usingColorSpace(.deviceRGB) ?? rgb(0x06_1A_28)
+}()
+
 // MARK: - Drawing
 
 func render(width: Int, height: Int, opaque: Bool, _ draw: (CGSize) -> Void) -> Data {
@@ -73,16 +87,11 @@ func render(width: Int, height: Int, opaque: Bool, _ draw: (CGSize) -> Void) -> 
     NSGraphicsContext.current = context
     let size = CGSize(width: width, height: height)
     if opaque {
-        let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: [oceanMid.cgColor, oceanDeep.cgColor, deepTop.cgColor] as CFArray,
-            locations: [0, 0.62, 1]
-        )!
-        context.cgContext.drawLinearGradient(
-            gradient,
-            start: CGPoint(x: 0, y: size.height), end: CGPoint(x: size.width, y: 0),
-            options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
-        )
+        // Sampled from the artwork's own corner rather than assumed, so the
+        // 5:3 tvOS frame extends the supplied art instead of framing it in a
+        // palette that may have nothing to do with it.
+        context.cgContext.setFillColor(frameColor.cgColor)
+        context.cgContext.fill(CGRect(origin: .zero, size: size))
     }
     draw(size)
     NSGraphicsContext.restoreGraphicsState()
@@ -157,7 +166,7 @@ func emitStack(_ stack: String, _ w: Int, _ h: Int) {
                 guard let image = layer.image else { return }
                 // The Back layer fills its frame; the parallax layers sit on
                 // top and are fitted so nothing is cropped away.
-                if layer.opaque { fit(image, size, inset: 0.92) } else { fit(image, size) }
+                fit(image, size)
             }
             write(data, "\(imageset)/\(file)\(suffix).png")
         }
@@ -174,15 +183,45 @@ func emitStack(_ stack: String, _ w: Int, _ h: Int) {
 emitStack("App Icon", 400, 240)
 emitStack("App Icon - App Store", 1280, 768)
 
-// Top Shelf: a supplied banner is aspect-filled; otherwise the icon is placed
-// on the palette background.
+/// Without a supplied banner, compose one: the mark lifted out of the icon —
+/// clipped to a circle so the icon's own rounded-square edge does not read as
+/// a card floating on the background — beside the wordmark.
+func drawLockup(_ image: NSImage, _ size: CGSize) {
+    let mark = size.height * 0.74
+    let fontSize = size.height * 0.30
+    let gap = size.height * 0.06
+    let attributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
+        .foregroundColor: rgb(0x5F_EC_E6),
+    ]
+    let text = NSAttributedString(string: "Lagoon", attributes: attributes)
+    let textSize = text.size()
+    let originX = size.width / 2 - (mark + gap + textSize.width) / 2
+
+    NSGraphicsContext.current?.saveGraphicsState()
+    let circle = NSBezierPath(ovalIn: NSRect(
+        x: originX, y: size.height / 2 - mark / 2, width: mark, height: mark
+    ))
+    circle.addClip()
+    image.draw(
+        in: CGRect(x: originX, y: size.height / 2 - mark / 2, width: mark, height: mark),
+        from: .zero, operation: .sourceOver, fraction: 1
+    )
+    NSGraphicsContext.current?.restoreGraphicsState()
+
+    text.draw(at: CGPoint(
+        x: originX + mark + gap,
+        y: size.height / 2 - textSize.height / 2
+    ))
+}
+
 let banner = source("topshelf")
 for (name, w, h) in [("Top Shelf Image", 1920, 720), ("Top Shelf Image Wide", 2320, 720)] {
     let imageset = "\(brand)/\(name).imageset"
     let file = name.lowercased().replacingOccurrences(of: " ", with: "-")
     for (suffix, scale) in [("", 1), ("@2x", 2)] {
         let data = render(width: w * scale, height: h * scale, opaque: true) { size in
-            if let banner { fill(banner, size) } else { fit(icon, size, inset: 0.62) }
+            if let banner { fill(banner, size) } else { drawLockup(icon, size) }
         }
         write(data, "\(imageset)/\(file)\(suffix).png")
     }
