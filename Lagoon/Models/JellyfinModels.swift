@@ -258,6 +258,7 @@ nonisolated struct MediaStream: Decodable {
     let channels: Int?
     let width: Int?
     let height: Int?
+    let bitDepth: Int?
     let bitRate: Int?
     let realFrameRate: Double?
 }

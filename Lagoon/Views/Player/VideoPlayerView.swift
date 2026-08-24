@@ -1453,6 +1453,25 @@ final class PlaybackController {
             if let range = video.videoRangeType { line += " · \(range)" }
             if let width = video.width, let height = video.height { line += " · \(width)×\(height)" }
             negotiated.append(line)
+            if let width = video.width, let height = video.height {
+                let bitDepth = video.bitDepth ?? (video.videoRangeType == "SDR" ? 8 : 10)
+                let frameMB = Double(DecodedFrameMemory.bytesPer420Frame(
+                    width: width,
+                    height: height,
+                    bitDepth: bitDepth
+                )) / 1_048_576
+                let hardQueueMB = Double(DecodedFrameMemory.queuedBytes(
+                    width: width,
+                    height: height,
+                    bitDepth: bitDepth,
+                    frames: DemuxBackpressurePolicy.videoHardLimit(videoIsDecoded: true)
+                )) / 1_048_576
+                negotiated.append(String(
+                    format: "Surface: %.1f MB/frame · %.0f MB app hard queue",
+                    frameMB,
+                    hardQueueMB
+                ))
+            }
         }
         let audioStreams = source.mediaStreams?.filter { $0.type == "Audio" } ?? []
         if let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first {

@@ -1064,6 +1064,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     private func feedBench(_ snapshot: VideoPerformanceSnapshot) {
         guard bench != nil else { return }
+        let memory = MemorySnapshot.current()
         let sample = FrameLossBench.Sample(
             position: timePosition,
             totalFrames: snapshot.totalFrames,
@@ -1073,13 +1074,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             audioGaps: audioContinuity.gapCount,
             videoQueueDepth: videoQueue.count,
             optimizedFrames: snapshot.optimizedCompositingFrames,
-            accumulatedDelay: snapshot.accumulatedFrameDelay
+            accumulatedDelay: snapshot.accumulatedFrameDelay,
+            footprintBytes: memory.footprintBytes,
+            availableBytes: memory.availableBytes
         )
         if let result = bench!.record(sample) {
             benchStatus = String(
-                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aGaps %d · minQ %d · @%.0f+%.0fs",
+                format: "%.2f%% (%d/%d) · stalls %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
                 result.lossPercent, result.dropped, result.frames,
-                result.corrupted, result.stalls, result.audioGaps, result.minVideoQueue,
+                result.stalls, result.minVideoQueue,
+                result.peakFootprintMB, result.footprintGrowthMB,
                 result.startPosition, result.windowSeconds
             )
             // Plain stdout beside the signpost: `devicectl ... --console`
@@ -1097,12 +1101,22 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             #if os(tvOS)
             gates += " display=\"\(DisplayModeMatcher.statusDescription)\""
             #endif
+            if let size = videoSize {
+                gates += " playing=\"\(Int(size.width))x\(Int(size.height))\""
+            }
             print("BenchResult dropped=\(result.dropped) frames=\(result.frames) "
                 + String(format: "percent=%.3f", result.lossPercent)
                 + " corrupted=\(result.corrupted) stalls=\(result.stalls)"
                 + " audioGaps=\(result.audioGaps) minVideoQueue=\(result.minVideoQueue)"
                 + " optimized=\(result.optimizedFrames)"
                 + String(format: " delayMs=%.1f", result.accumulatedDelay * 1000)
+                + String(format: " memoryStartMB=%.1f memoryPeakMB=%.1f memoryGrowthMB=%.1f",
+                    Double(result.startingFootprintBytes) / 1_048_576,
+                    result.peakFootprintMB,
+                    result.footprintGrowthMB)
+                + (result.minimumAvailableBytes > 0
+                    ? String(format: " minimumAvailableMB=%.1f", result.minimumAvailableMB)
+                    : "")
                 + String(format: " start=%.2f window=%.2f ", result.startPosition, result.windowSeconds)
                 + gates)
             benchCompleted = true
@@ -1111,7 +1125,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 log: PlaybackPerformance.log,
                 name: "Bench Result",
                 signpostID: performanceSignpostID,
-                "dropped=%{public}d frames=%{public}d percent=%{public}.3f corrupted=%{public}d stalls=%{public}d audioGaps=%{public}d minVideoQueue=%{public}d start=%{public}.2f window=%{public}.2f",
+                "dropped=%{public}d frames=%{public}d percent=%{public}.3f corrupted=%{public}d stalls=%{public}d audioGaps=%{public}d minVideoQueue=%{public}d memoryStartMB=%{public}.1f memoryPeakMB=%{public}.1f memoryGrowthMB=%{public}.1f minimumAvailableMB=%{public}.1f start=%{public}.2f window=%{public}.2f",
                 result.dropped,
                 result.frames,
                 result.lossPercent,
@@ -1119,6 +1133,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 result.stalls,
                 result.audioGaps,
                 result.minVideoQueue,
+                Double(result.startingFootprintBytes) / 1_048_576,
+                result.peakFootprintMB,
+                result.footprintGrowthMB,
+                result.minimumAvailableMB,
                 result.startPosition,
                 result.windowSeconds
             )

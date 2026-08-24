@@ -798,6 +798,31 @@ leaves no crash trace, because jetsam writes a `JetsamEvent` report instead.
 Anything above roughly 0.2 MB/s sustained over a few minutes needs explaining;
 see the note under the renderer feed below for the one that shipped.
 
+### Decoded-frame memory ceiling (HEL-109)
+
+The controlled frame-loss bench also samples physical footprint at roughly
+1 Hz for the exact warmup-delimited window. `BenchResult` and its signpost now
+report `memoryStartMB`, `memoryPeakMB`, `memoryGrowthMB`, and the minimum
+jetsam headroom as `minimumAvailableMB`; the HUD freezes the peak and growth in
+the `Bench:` line. This is the measurement to record on physical Apple TV for
+a 3840×2160 Main 10 HDR title, with the HUD off so the overlay does not alter
+the video path. The console line includes the presentation dimensions and
+whether the stream used VideoToolbox or libavcodec, making a captured result
+self-identifying.
+
+The byte arithmetic is pinned separately so the measured process number has
+something honest to compare against. A 4:2:0 P010 surface is
+`3840 × 2160 × 3 = 24,883,200` bytes (23.73 MiB): luma and half as many chroma
+samples, each stored in a 16-bit word. Lagoon's decoded-video soft/hard queue
+limits remain 18/30 frames, so the app-visible queue alone is approximately
+427/712 MiB at 4K Main 10. VideoToolbox may retain 6–16 reorder surfaces and
+the renderer owns another private set, which is why multiplying the queue is
+not a process ceiling and why the bench peak—not the estimate—is authoritative.
+Do not lower the 18-frame soft cushion from arithmetic alone; it is the reserve
+that removed steady 4K presentation loss. If the physical peak leaves too
+little headroom, reduce the 30-frame hard limit first and repeat the identical
+window.
+
 The renderer feed is kept cheap under high-bitrate load: packet wakeups are
 coalesced onto a user-interactive serial pump, and the app-side sample FIFO is
 head-indexed/amortized O(1) rather than shifting its whole Swift array for every

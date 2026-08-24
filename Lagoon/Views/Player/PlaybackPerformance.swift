@@ -285,6 +285,24 @@ nonisolated struct MemorySnapshot {
     }
 }
 
+/// The storage cost of a decoded 4:2:0 surface. Core Video's NV12 output is
+/// 1.5 bytes per pixel; P010 stores each 10-bit component in a 16-bit word,
+/// so it is 3 bytes per pixel. This is an estimate of Lagoon's visible queue,
+/// not VideoToolbox or renderer-private surfaces; the controlled bench peak
+/// above is the authority for the process ceiling (HEL-109).
+nonisolated enum DecodedFrameMemory {
+    static func bytesPer420Frame(width: Int, height: Int, bitDepth: Int) -> Int64 {
+        guard width > 0, height > 0 else { return 0 }
+        let samples = Int64(width) * Int64(height) * 3 / 2
+        return samples * (bitDepth > 8 ? 2 : 1)
+    }
+
+    static func queuedBytes(width: Int, height: Int, bitDepth: Int, frames: Int) -> Int64 {
+        bytesPer420Frame(width: width, height: height, bitDepth: bitDepth)
+            * Int64(max(frames, 0))
+    }
+}
+
 nonisolated struct VideoPerformanceSnapshot {
     let totalFrames: Int
     let droppedFrames: Int

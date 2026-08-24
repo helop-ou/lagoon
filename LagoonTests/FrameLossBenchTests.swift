@@ -12,7 +12,9 @@ struct FrameLossBenchTests {
         corrupted: Int = 0,
         stalls: Int = 0,
         audioGaps: Int = 0,
-        queue: Int = 90
+        queue: Int = 90,
+        footprintMB: Int = 100,
+        availableMB: Int = 500
     ) -> FrameLossBench.Sample {
         FrameLossBench.Sample(
             position: position,
@@ -21,7 +23,9 @@ struct FrameLossBenchTests {
             corruptedFrames: corrupted,
             stalls: stalls,
             audioGaps: audioGaps,
-            videoQueueDepth: queue
+            videoQueueDepth: queue,
+            footprintBytes: Int64(footprintMB) * 1_048_576,
+            availableBytes: availableMB * 1_048_576
         )
     }
 
@@ -45,10 +49,29 @@ struct FrameLossBenchTests {
     @Test func windowCompletesWithDeltas() throws {
         var bench = FrameLossBench(at: 300, warmupSeconds: 10, windowSeconds: 60)
         _ = bench.record(sample(position: 310, frames: 240, dropped: 9, stalls: 1, audioGaps: 100, queue: 80))
-        _ = bench.record(sample(position: 340, frames: 960, dropped: 12, stalls: 1, audioGaps: 150, queue: 40))
+        _ = bench.record(sample(
+            position: 340,
+            frames: 960,
+            dropped: 12,
+            stalls: 1,
+            audioGaps: 150,
+            queue: 40,
+            footprintMB: 620,
+            availableMB: 300
+        ))
         #expect(bench.record(sample(position: 369, frames: 1650, dropped: 15, queue: 85)) == nil)
         let final = bench.record(
-            sample(position: 370.5, frames: 1690, dropped: 18, corrupted: 1, stalls: 2, audioGaps: 200, queue: 90)
+            sample(
+                position: 370.5,
+                frames: 1690,
+                dropped: 18,
+                corrupted: 1,
+                stalls: 2,
+                audioGaps: 200,
+                queue: 90,
+                footprintMB: 590,
+                availableMB: 320
+            )
         )
         let result = try #require(final)
         #expect(result.startPosition == 310)
@@ -59,7 +82,26 @@ struct FrameLossBenchTests {
         #expect(result.stalls == 1)
         #expect(result.audioGaps == 100)
         #expect(result.minVideoQueue == 40)
+        #expect(result.startingFootprintBytes == 100 * 1_048_576)
+        #expect(result.peakFootprintBytes == 620 * 1_048_576)
+        #expect(result.footprintGrowthMB == 520)
+        #expect(result.minimumAvailableMB == 300)
         #expect(abs(result.lossPercent - 9.0 / 1450 * 100) < 0.0001)
+    }
+
+    @Test func decoded4KMain10SurfaceEstimateMatchesP010Storage() {
+        let frame = DecodedFrameMemory.bytesPer420Frame(
+            width: 3840,
+            height: 2160,
+            bitDepth: 10
+        )
+        #expect(frame == 24_883_200)
+        #expect(DecodedFrameMemory.queuedBytes(
+            width: 3840,
+            height: 2160,
+            bitDepth: 10,
+            frames: 30
+        ) == 746_496_000)
     }
 
     /// The result is delivered exactly once and then frozen — later

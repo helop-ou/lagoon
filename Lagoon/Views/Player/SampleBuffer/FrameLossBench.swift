@@ -27,6 +27,10 @@ nonisolated struct FrameLossBench: Equatable {
         var videoQueueDepth: Int
         var optimizedFrames = 0
         var accumulatedDelay = 0.0
+        /// Physical footprint and jetsam headroom sampled in the same
+        /// controlled window as frame loss (HEL-109).
+        var footprintBytes: Int64 = 0
+        var availableBytes: Int = 0
     }
 
     struct Result: Equatable {
@@ -44,10 +48,20 @@ nonisolated struct FrameLossBench: Equatable {
         var optimizedFrames = 0
         /// Seconds of accumulated display lateness inside the window.
         var accumulatedDelay = 0.0
+        var startingFootprintBytes: Int64 = 0
+        var peakFootprintBytes: Int64 = 0
+        /// Zero when the platform does not expose jetsam headroom.
+        var minimumAvailableBytes: Int = 0
 
         var lossPercent: Double {
             frames > 0 ? Double(dropped) / Double(frames) * 100 : 0
         }
+
+        var peakFootprintMB: Double { Double(peakFootprintBytes) / 1_048_576 }
+        var footprintGrowthMB: Double {
+            Double(max(peakFootprintBytes - startingFootprintBytes, 0)) / 1_048_576
+        }
+        var minimumAvailableMB: Double { Double(minimumAvailableBytes) / 1_048_576 }
     }
 
     enum Phase: Equatable {
@@ -61,6 +75,8 @@ nonisolated struct FrameLossBench: Equatable {
     private(set) var phase: Phase
     private var start: Sample?
     private var minVideoQueue = Int.max
+    private var peakFootprintBytes: Int64 = 0
+    private var minimumAvailableBytes = Int.max
 
     init(at position: Double, warmupSeconds: Double = 10, windowSeconds: Double = 60) {
         self.warmupSeconds = warmupSeconds
@@ -74,6 +90,8 @@ nonisolated struct FrameLossBench: Equatable {
         phase = .warming(measureFrom: position + warmupSeconds)
         start = nil
         minVideoQueue = .max
+        peakFootprintBytes = 0
+        minimumAvailableBytes = .max
     }
 
     /// Feed one metrics snapshot; returns the result exactly once, on the
@@ -86,11 +104,17 @@ nonisolated struct FrameLossBench: Equatable {
             guard sample.position >= measureFrom else { return nil }
             start = sample
             minVideoQueue = sample.videoQueueDepth
+            peakFootprintBytes = sample.footprintBytes
+            minimumAvailableBytes = sample.availableBytes > 0 ? sample.availableBytes : .max
             phase = .measuring(since: sample.position)
             return nil
         case .measuring:
             guard let start else { return nil }
             minVideoQueue = min(minVideoQueue, sample.videoQueueDepth)
+            peakFootprintBytes = max(peakFootprintBytes, sample.footprintBytes)
+            if sample.availableBytes > 0 {
+                minimumAvailableBytes = min(minimumAvailableBytes, sample.availableBytes)
+            }
             guard sample.position - start.position >= windowSeconds else { return nil }
             let result = Result(
                 startPosition: start.position,
@@ -102,7 +126,10 @@ nonisolated struct FrameLossBench: Equatable {
                 audioGaps: sample.audioGaps - start.audioGaps,
                 minVideoQueue: minVideoQueue,
                 optimizedFrames: sample.optimizedFrames - start.optimizedFrames,
-                accumulatedDelay: sample.accumulatedDelay - start.accumulatedDelay
+                accumulatedDelay: sample.accumulatedDelay - start.accumulatedDelay,
+                startingFootprintBytes: start.footprintBytes,
+                peakFootprintBytes: peakFootprintBytes,
+                minimumAvailableBytes: minimumAvailableBytes == .max ? 0 : minimumAvailableBytes
             )
             phase = .done(result)
             return result
