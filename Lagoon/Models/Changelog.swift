@@ -35,11 +35,10 @@ nonisolated enum Changelog {
             changes: [
                 "Playback speed, from half to double, in the Video tab of the playback panel. Voices keep their pitch, and the speed you pick carries into the next episode.",
                 "Lagoon has a new look: a new app icon and Top Shelf artwork, and the mark now carries through the setup and sign-in screens instead of stopping at the home screen.",
-                "Subtitles authored with a place on screen — signs, captions over artwork, two people talking at once — now appear where they were meant to, in their own colour, bold and italic, instead of being stacked at the bottom.",
-                "10-bit AV1 and VP9 now play directly instead of being re-encoded by your server — up to 1080p on hardware with no AV1 decoder of its own.",
+                "Subtitles authored with a place on screen now appear where they were meant to, in their own colour, bold and italic, instead of being stacked at the bottom. That covers signs, captions over artwork, and two people talking at once.",
+                "10-bit AV1 and VP9 now play directly instead of being re-encoded by your server, up to 1080p on hardware with no AV1 decoder of its own.",
                 "MPEG-2 video, LPCM soundtracks and DVB subtitles play directly too, which covers most DVD rips and recorded television. Interlaced recordings still go through your server, because that is what deinterlaces them.",
                 "Stereo soundtracks now get Spatial Audio on AirPods, the way Apple's own player does.",
-                "On hardware with no HEVC decoder, Lagoon now asks your server for something it can actually play instead of failing on the file.",
                 "Starting another film after one failed no longer waits fifteen seconds to announce that the previous video could not release its player resources.",
                 "A film that fails also stops leaving your server working on a stream nobody is watching.",
             ]
@@ -50,7 +49,7 @@ nonisolated enum Changelog {
             released: "August 2026",
             headline: "Playback recovers instead of giving up.",
             changes: [
-                "A film that won't play no longer ends at an error screen: Lagoon asks your server to send it another way and picks up where it stopped — without making the server re-encode unless nothing else works.",
+                "A film that won't play no longer ends at an error screen: Lagoon asks your server to send it another way and picks up where it stopped, without making the server re-encode unless nothing else works.",
                 "If the sound stops partway through a film, Lagoon rebuilds the audio and keeps playing rather than running on in silence.",
                 "Pausing near the start of a film now buffers as far ahead as the cache allows, instead of stopping short of it.",
             ]
@@ -61,7 +60,7 @@ nonisolated enum Changelog {
             released: "August 2026",
             headline: "Subtitle errors say what the server said.",
             changes: [
-                "When a subtitle download fails, Lagoon now shows the reason your server gave — an exhausted provider allowance, say — instead of guessing between causes.",
+                "When a subtitle download fails, Lagoon now shows the reason your server gave, such as an exhausted provider allowance, instead of guessing between causes.",
             ]
         ),
         ChangelogEntry(
@@ -79,7 +78,7 @@ nonisolated enum Changelog {
             released: "August 2026",
             headline: "Seerr signs itself in.",
             changes: [
-                "If your Seerr uses Jellyfin accounts, Discover now just works — no second login to type, since you are already signed in to Jellyfin.",
+                "If your Seerr uses Jellyfin accounts, Discover now just works. There is no second login to type, since you are already signed in to Jellyfin.",
             ]
         ),
         ChangelogEntry(
@@ -89,7 +88,7 @@ nonisolated enum Changelog {
             headline: "Playback, subtitles and requests.",
             changes: [
                 "A long film no longer starts stuttering partway through: the disk buffer now travels with the playhead instead of filling up and giving out.",
-                "Subtitle failures say what actually went wrong — a missing server permission, an expired session or a timeout — rather than always blaming the provider.",
+                "Subtitle failures say what actually went wrong, whether that is a missing server permission, an expired session or a timeout, rather than always blaming the provider.",
                 "Subtitles can be fetched straight from OpenSubtitles when your Jellyfin account isn't allowed to manage them. Add a key in Settings -> Subtitles.",
                 "Subtitles that aren't UTF-8 now decode by language instead of rendering as garbage.",
                 "Seerr requests are a poster grid, and opening one gives a proper page with the actions that apply to it.",
@@ -103,7 +102,7 @@ nonisolated enum Changelog {
             released: "August 2026",
             headline: "First TestFlight build.",
             changes: [
-                "A playback engine of Lagoon's own — libavformat demuxing straight into AVSampleBufferDisplayLayer, with no AVPlayer in the path.",
+                "A playback engine of Lagoon's own: libavformat demuxing straight into AVSampleBufferDisplayLayer, with no AVPlayer in the path.",
                 "Direct play for H.264, HEVC, VC-1, MPEG-4 Part 2 and anamorphic sources, so far fewer titles fall back to transcoding.",
                 "HDR10 and Dolby Vision with tvOS display-mode matching, plus Dolby Digital, Atmos and TrueHD passthrough.",
                 "Embedded PGS, VobSub and text subtitles, external sidecars, and provider search when a title has none.",

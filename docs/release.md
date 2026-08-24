@@ -114,6 +114,14 @@ to the cache request size" does not.
 **If a change needs setup, say where.** "Add a key in Settings → Subtitles"
 saves someone hunting for it.
 
+**No em-dashes.** Jaagop's call, and it is enforced rather than remembered:
+`ChangelogTests.notesAvoidEmDashes` fails the build on one. An em-dash is
+almost always doing a job a comma, a colon or a full stop does better, and the
+rewrite is usually the clearer sentence. "the reason your server gave — an
+exhausted provider allowance, say — instead of guessing" became "the reason
+your server gave, such as an exhausted provider allowance, instead of
+guessing". This applies to the changelog only; prose in `docs/` is unaffected.
+
 **Put the most noticeable thing first.** The panel shows the top of the list
 before anything is scrolled.
 

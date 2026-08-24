@@ -26,6 +26,23 @@ struct ChangelogTests {
         )
     }
 
+    /// Jaagop's call on house style, enforced here because a style rule
+    /// nobody checks is a style rule that decays. See docs/release.md.
+    @Test @MainActor func notesAvoidEmDashes() {
+        let emDash = "\u{2014}"
+        for entry in Changelog.entries {
+            #expect(
+                !entry.headline.contains(emDash),
+                "Em-dash in the \(entry.displayVersion) headline: \(entry.headline)"
+            )
+            for change in entry.changes {
+                let note = "Em-dash in a \(entry.displayVersion) note; use a comma, "
+                    + "a colon or a full stop instead: \(change)"
+                #expect(!change.contains(emDash), Comment(rawValue: note))
+            }
+        }
+    }
+
     @Test func anEntryIsIdentifiedByVersionAndBuildTogether() {
         // One marketing version spans many builds, so the version alone
         // cannot identify an entry.
