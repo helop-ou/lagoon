@@ -275,8 +275,43 @@ struct PlayerControlPanel: View {
         }
     }
 
+    /// The same split the Audio tab uses: what is playing on the left, the
+    /// options for it on the right. Speed is a short, fixed set of values, so
+    /// its options are a row rather than a column — six stacked rows made the
+    /// card taller than the sheet needed to be, for six numbers.
     private var videoCard: some View {
+        #if os(tvOS)
+        HStack(alignment: .top, spacing: Metrics.Space.xl) {
+            videoTrack
+                .frame(
+                    width: PlayerPanelMetrics.videoTrackColumnWidth,
+                    alignment: .topLeading
+                )
+                .padding(.trailing, Metrics.Space.l)
+                // Same content-sized overlay as the Audio tab: a standalone
+                // vertical Divider would take the sheet's full proposed
+                // height.
+                .overlay(alignment: .trailing) {
+                    Divider()
+                }
+
+            // Takes whatever the track column leaves rather than a width of
+            // its own: at a fixed 720 the last value was clipped by the card's
+            // edge, and the row's width depends on how the six labels
+            // measure, which is not a number worth guessing.
+            videoOptions
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        #else
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            videoTrack
+            videoOptions
+        }
+        #endif
+    }
+
+    private var videoTrack: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Track")
             HStack(spacing: Metrics.Space.s) {
                 Image(systemName: "checkmark")
@@ -284,46 +319,62 @@ struct PlayerControlPanel: View {
                 Text(info.videoSummary ?? String(localized: "Unknown video track"))
                     .font(.callout)
             }
+        }
+    }
 
-            Divider()
-
+    private var videoOptions: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Playback Speed")
-            // Built exactly like the audio and subtitle track lists: plain
-            // buttons, the checkmark as the selection, the focus lozenge as
-            // the only chrome. A first attempt made these `.buttonStyle(.glass)`
-            // pills, which is wrong twice over — it made them the one filled
-            // thing in a panel of plain rows, and a glass button tints its
-            // label with the accent, which is white, so on a bright backdrop
-            // the labels vanished into their own pills.
-            VStack(alignment: .leading, spacing: Metrics.Space.m) {
+            #if os(iOS)
+            // Six values do not fit across the narrowest phone. tvOS must not
+            // get this: a ScrollView there would take the focus movement that
+            // walks the row.
+            ScrollView(.horizontal, showsIndicators: false) {
+                speedOptionsRow
+            }
+            #else
+            speedOptionsRow
+            #endif
+        }
+    }
+
+    private var speedOptionsRow: some View {
+        HStack(spacing: Metrics.Space.xs) {
                 ForEach(PlaybackRatePolicy.supported, id: \.self) { rate in
                     Button {
                         onSetPlaybackRate(rate)
                     } label: {
-                        HStack(spacing: Metrics.Space.s) {
-                            Image(systemName: "checkmark")
-                                .font(.caption.bold())
-                                .opacity(playbackRate == rate ? 1 : 0)
+                        HStack(spacing: Metrics.Space.xs) {
+                            // Rendered only on the selected value rather than
+                            // held at zero opacity: in a row this short, six
+                            // permanent checkmark gutters is most of the width.
+                            if playbackRate == rate {
+                                Image(systemName: "checkmark")
+                                    .font(.caption2.bold())
+                            }
                             Text(PlaybackRatePolicy.title(rate))
-                                .monospacedDigit()
-                            Spacer(minLength: 0)
+                                .font(.callout.monospacedDigit())
+                                .lineLimit(1)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize()
                     }
+                    // The system's own dial for control metrics, so the focus
+                    // lozenge stays native while the row stays compact.
+                    .controlSize(.small)
                     .focused(focus, equals: .track(Self.speedRowID(rate)))
                     .accessibilityIdentifier(
                         "player.playbackRate.\(PlaybackRatePolicy.identifier(rate))"
                     )
                 }
-            }
-            .padding(.horizontal, rowFocusInset)
-            .padding(.vertical, rowFocusInset)
-            .padding(.horizontal, -rowFocusInset)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, rowFocusInset)
+        .padding(.vertical, rowFocusInset)
+        .padding(.horizontal, -rowFocusInset)
     }
 
-    /// Focus identity for one speed row, in the panel's `track` namespace so
-    /// it walks with the other rows.
+    /// Focus identity for one speed option, in the panel's `track` namespace
+    /// so it walks with the other rows.
     static func speedRowID(_ rate: Double) -> String {
         "playback-rate-\(PlaybackRatePolicy.identifier(rate))"
     }
@@ -581,6 +632,8 @@ private enum PlayerPanelMetrics {
     static let posterWidth: CGFloat = 112
     static let audioTrackColumnWidth: CGFloat = 720
     static let audioOptionsColumnWidth: CGFloat = 520
+    /// The video track summary is one line; the speeds take the rest.
+    static let videoTrackColumnWidth: CGFloat = 560
     #else
     static let maxWidth: CGFloat = .infinity
     static let cardPadding: CGFloat = 20

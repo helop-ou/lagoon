@@ -91,9 +91,10 @@ final class PlayerRegressionUITests: XCTestCase {
             )
         }
 
-        // Take whatever the next row is: the assertion is that choosing from
-        // the list changes the rate, not which row tvOS lands on first.
-        remote.press(.down)
+        // The options are a row, so right steps to the next one. Take
+        // whatever it lands on: the assertion is that choosing changes the
+        // rate, not which value tvOS lands on first.
+        remote.press(.right)
         remote.press(.select)
         let applied = waitForState(in: app, timeout: 8) { $0.string("rate") != "1" }
         XCTAssertNotEqual(applied.string("rate"), "1", "picking a row should change the rate")
