@@ -18,11 +18,12 @@ shells instead of 27.
 
 1. `POST Items/{id}/PlaybackInfo?UserId=` with `DeviceProfile.lagoon` — a
    capability profile mirroring exactly what the engine can play: h264/hevc
-   video plus progressive SDR 8-bit VC-1 and MPEG-4 Part 2 up to 1080p,
+   video plus progressive SDR 8-bit VC-1, MPEG-4 Part 2, and MPEG-2 up to 1080p,
    square or anamorphic, with
    aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
-   vorbis (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov/avi, embedded
-   text/PGS subtitles and external vtt (M5), plus an fMP4 HLS transcoding
+   vorbis/PCM (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov/avi,
+   embedded text/PGS/VobSub/DVB subtitles and external vtt (M5), plus an fMP4
+   HLS transcoding
    profile whose output (hevc/h264 + eac3,ac3,aac) lands back inside the
    same envelope. The server does the deciding.
 2. Pick the first `MediaSource` and resolve a URL via
@@ -384,6 +385,15 @@ composition cost is more representative than Simulator timing.
   `mpeg4_unpack_bframes` BSF is present in the pinned build if a defect ever
   does surface; the demuxer has no bitstream-filter plumbing today, and
   adding it was deliberately not done on this evidence.
+- **MPEG-2, PCM and DVB subtitles** (HEL-104): these already had decoders in
+  the pinned FFmpeg build; the missing piece was the profile that allowed the
+  server to send them. Progressive SDR MPEG-2 uses the bounded 8-bit 4:2:0
+  software-video path at up to 1080p. Interlaced MPEG-2 still transcodes
+  because Lagoon has no deinterlacer. MPEG program/transport-stream and VOB
+  containers are included so DVD and recorded-TV sources can actually reach
+  that path. Integer/float PCM variants, Blu-ray LPCM, and DVD LPCM use the
+  existing libavcodec → Float32 LPCM audio renderer path; DVB bitmap subtitles
+  use the same paletted-rectangle decoder and overlay as PGS and VobSub.
 - **Anamorphic / non-square pixels**: `SampleBufferFactory` attaches
   `kCMFormatDescriptionExtension_PixelAspectRatio` from the stream's
   `sample_aspect_ratio`, and `SoftwareVideoDecoder` attaches the matching

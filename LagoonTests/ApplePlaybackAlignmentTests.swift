@@ -250,6 +250,55 @@ struct ApplePlaybackAlignmentTests {
         ))
     }
 
+    @Test func mpeg2PCMAndDVBUseTheExistingLocalDecodePaths() {
+        let directVideo = DeviceProfile.everything.directPlayProfiles.first {
+            $0.type == "Video"
+        }
+        let videoCodecs = directVideo?.videoCodec?.split(separator: ",") ?? []
+        let audioCodecs = directVideo?.audioCodec?.split(separator: ",") ?? []
+        let mpeg2 = DeviceProfile.everything.codecProfiles.first {
+            $0.type == "Video" && $0.codec == "mpeg2video"
+        }
+
+        #expect(videoCodecs.contains("mpeg2video"))
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_MPEG2VIDEO))
+        #expect(avcodec_find_decoder(AV_CODEC_ID_MPEG2VIDEO) != nil)
+        #expect(mpeg2?.conditions.contains {
+            $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == "1920"
+        } == true)
+        #expect(mpeg2?.conditions.contains {
+            $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == "1080"
+        } == true)
+        #expect(mpeg2?.conditions.contains {
+            $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "8"
+        } == true)
+        #expect(mpeg2?.conditions.contains {
+            $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+        } == true)
+
+        // Representative PCM variants cover ordinary little-endian files,
+        // big-endian sources, and Blu-ray LPCM. All reach AudioDecoder's
+        // generic libavcodec -> Float32 LPCM path.
+        let advertisedPCM = [
+            "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le",
+            "pcm_s16be", "pcm_s24be", "pcm_s32be", "pcm_f32be", "pcm_f64be",
+            "pcm_bluray", "pcm_dvd",
+        ]
+        for codec in advertisedPCM {
+            #expect(audioCodecs.contains(Substring(codec)))
+            #expect(avcodec_find_decoder_by_name(codec) != nil)
+        }
+
+        for container in ["mpg", "mpeg", "ts", "mpegts", "m2ts", "vob"] {
+            #expect(directVideo?.container.split(separator: ",").contains(Substring(container)) == true)
+        }
+
+        #expect(DeviceProfile.everything.subtitleProfiles.contains {
+            $0.format == "dvbsub" && $0.method == "Embed"
+        })
+        #expect(avcodec_find_decoder(AV_CODEC_ID_DVB_SUBTITLE) != nil)
+    }
+
     @Test func squareAndNearSquarePixelsCarryNoAspectExtension() {
         // Unknown (libavformat's 0/1) and exactly square must stay nil so the
         // format description handed to the renderer, AVDisplayCriteria and

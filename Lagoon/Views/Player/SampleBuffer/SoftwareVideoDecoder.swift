@@ -6,8 +6,9 @@ import Libavutil
 import _LagoonFFmpeg
 
 /// Software video fallback for codecs Apple does not expose through
-/// VideoToolbox — VC-1/WMV3 and MPEG-4 Part 2 (the Xvid/DivX envelope AVI
-/// rips carry). Each is decoded by Lagoon's pinned libavcodec, copied into
+/// VideoToolbox — VC-1/WMV3, MPEG-4 Part 2 (the Xvid/DivX envelope AVI
+/// rips carry), and progressive MPEG-2. Each is decoded by Lagoon's pinned
+/// libavcodec, copied into
 /// renderer-recommended Core Video buffers, and wrapped as ready image sample
 /// buffers. AVFoundation still owns presentation, color conversion, A/V sync,
 /// display matching, and output.
@@ -72,6 +73,7 @@ nonisolated final class SoftwareVideoDecoder {
         codecID == AV_CODEC_ID_VC1
             || codecID == AV_CODEC_ID_WMV3
             || codecID == AV_CODEC_ID_MPEG4
+            || codecID == AV_CODEC_ID_MPEG2VIDEO
     }
 
     init(

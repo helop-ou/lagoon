@@ -3,14 +3,14 @@ import Foundation
 // Capability profile sent with PlaybackInfo so the server can decide between
 // direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
 // what the Lagoon sample-buffer engine can play: h264 stays compressed,
-// hevc is hardware-decoded ahead, and progressive 8-bit VC-1 and MPEG-4
-// Part 2 up to 1080p are software-decoded into Core Video buffers;
+// hevc is hardware-decoded ahead, and progressive 8-bit VC-1, MPEG-4
+// Part 2, and MPEG-2 up to 1080p are software-decoded into Core Video buffers;
 // aac/mp3/ac3/eac3 audio stays compressed plus
 // non-square pixels carried through as a PixelAspectRatio extension, so
 // anamorphic sources (PAL DVD rips at 720x576 with a 16:15 pixel aspect)
 // direct-play instead of transcoding;
-// dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4); text and
-// PGS/VobSub subtitles embedded, vtt external (M5) — in any container
+// dts/truehd/flac/opus/vorbis/PCM decoded to LPCM via libavcodec (M4); text,
+// PGS/VobSub/DVB subtitles embedded, vtt external (M5) — in any container
 // libavformat demuxes, plus the fMP4 HLS transcode fallback (whose
 // hevc/h264 + eac3 output lands back inside the same envelope).
 nonisolated enum DeviceProfile {
@@ -70,10 +70,10 @@ nonisolated enum DeviceProfile {
         maxStaticBitrate: 100_000_000,
         directPlayProfiles: [
             DirectPlayProfile(
-                container: "mkv,webm,mp4,m4v,mov,avi",
+                container: "mkv,webm,mp4,m4v,mov,avi,mpg,mpeg,ts,mpegts,m2ts,vob",
                 type: "Video",
-                videoCodec: "hevc,h264,vc1,mpeg4",
-                audioCodec: "aac,mp3,ac3,eac3,dts,truehd,flac,opus,vorbis"
+                videoCodec: "hevc,h264,vc1,mpeg4,mpeg2video",
+                audioCodec: "aac,mp3,ac3,eac3,dts,truehd,flac,opus,vorbis,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_f64le,pcm_s16be,pcm_s24be,pcm_s32be,pcm_f32be,pcm_f64be,pcm_bluray,pcm_dvd"
             ),
             DirectPlayProfile(container: "mp3", type: "Audio"),
             DirectPlayProfile(container: "m4a,m4b", type: "Audio", audioCodec: "aac,alac"),
@@ -255,6 +255,47 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
+            // MPEG-2 uses the same 8-bit planar 4:2:0 software path as the
+            // other legacy codecs. Progressive DVD/recording sources can
+            // therefore remain Direct Play, while the required interlace
+            // guard keeps the much larger interlaced part of the format on
+            // Jellyfin's deinterlacing transcode until Lagoon owns one.
+            CodecProfile(
+                type: "Video",
+                codec: "mpeg2video",
+                conditions: [
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoRangeType",
+                        value: "SDR",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "8",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Width",
+                        value: "1920",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Height",
+                        value: "1080",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "NotEquals",
+                        property: "IsInterlaced",
+                        value: "true",
+                        isRequired: true
+                    ),
+                ]
+            ),
         ],
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
@@ -271,6 +312,7 @@ nonisolated enum DeviceProfile {
             SubtitleProfile(format: "pgssub", method: "Embed"),
             SubtitleProfile(format: "pgs", method: "Embed"),
             SubtitleProfile(format: "dvdsub", method: "Embed"),
+            SubtitleProfile(format: "dvbsub", method: "Embed"),
         ]
     )
 
