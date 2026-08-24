@@ -512,6 +512,20 @@ not introduce a second player to get it:
   `shouldResume`. Route changes pause when a personal output (wired,
   Bluetooth, or AirPlay) disappears, but not for tvOS HDMI mode changes.
   Media-services reset re-establishes the category and active session.
+- **Audio spatialization** (HEL-105). Every audio renderer is built by one
+  factory, `SampleBufferPlayerEngine.makeAudioRenderer`, so a replacement
+  after a failure or a media-services reset sounds exactly like the renderer
+  it replaces. What the factory changes is the spatialization default, which
+  differs between Apple's two players and not in this one's favour:
+  `AVPlayerItem` documents `monoStereoAndMultichannel` for video content,
+  while `AVSampleBufferAudioRenderer` documents — and, verified at runtime,
+  really does default to — `multichannel` alone. Left alone, a stereo
+  soundtrack that AVPlayer would spatialize on AirPods plays flat, which
+  covers a great deal of television, anime and older film. The property
+  grants permission rather than forcing an effect: the viewer's Spatial Audio
+  setting still decides, and over HDMI to a receiver it changes nothing.
+  A test pins both defaults, so if a future SDK closes the gap it says so and
+  the override can go.
 - **An engine that has shut down must never be revived** (HEL-110).
   `attach(displayLayer:)` guards on `shutdownRequested`, not only on the
   renderer being empty. `finishRendererShutdown` nils `videoRenderer`, so the

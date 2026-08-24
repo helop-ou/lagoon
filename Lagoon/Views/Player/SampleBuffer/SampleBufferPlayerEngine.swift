@@ -209,7 +209,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         )
 
         let video = displayLayer.sampleBufferRenderer
-        let audio = AVSampleBufferAudioRenderer()
+        let audio = Self.makeAudioRenderer()
         videoRenderer = video
         audioRenderer = audio
         synchronizer.addRenderer(video)
@@ -262,6 +262,27 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
             )
         }
+    }
+
+    /// Every audio renderer this engine owns, configured identically — a
+    /// replacement after a failure or a media-services reset has to sound
+    /// exactly like the one it replaces.
+    ///
+    /// The spatialization default differs between Apple's two players, and
+    /// not in this one's favour: `AVPlayerItem` documents
+    /// `monoStereoAndMultichannel` for video content, while
+    /// `AVSampleBufferAudioRenderer` documents `multichannel` alone. Left at
+    /// its default, a stereo soundtrack that AVPlayer would spatialize on
+    /// AirPods plays flat here — which covers a great deal of television,
+    /// anime and older film (HEL-105).
+    ///
+    /// This grants permission rather than forcing an effect: the viewer's
+    /// Spatial Audio setting still decides, and over HDMI to a receiver it
+    /// changes nothing at all.
+    static func makeAudioRenderer() -> AVSampleBufferAudioRenderer {
+        let renderer = AVSampleBufferAudioRenderer()
+        renderer.allowedAudioSpatializationFormats = .monoStereoAndMultichannel
+        return renderer
     }
 
     // MARK: - Transport (PlayerEngine)
@@ -913,7 +934,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         ))
                         return
                     }
-                    let incoming = AVSampleBufferAudioRenderer()
+                    let incoming = Self.makeAudioRenderer()
                     self.audioRenderer = incoming
                     self.synchronizer.addRenderer(incoming)
                     self.observeAudioRenderer(incoming)

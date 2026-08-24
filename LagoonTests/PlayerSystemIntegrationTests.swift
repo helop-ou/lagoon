@@ -300,6 +300,20 @@ struct PlayerSystemIntegrationTests {
         #expect(!engine.isPaused)
     }
 
+    @Test @MainActor func everyAudioRendererSpatializesStereoTheWayAVPlayerDoes() {
+        // Apple's two players disagree on the default, and the sample-buffer
+        // one is the stingier: `AVPlayerItem` documents
+        // `monoStereoAndMultichannel` for video content, while
+        // `AVSampleBufferAudioRenderer` documents `multichannel` alone. The
+        // first expectation pins that difference — if a future SDK closes it,
+        // this test says so and the override becomes redundant.
+        #expect(AVSampleBufferAudioRenderer().allowedAudioSpatializationFormats == .multichannel)
+        #expect(
+            SampleBufferPlayerEngine.makeAudioRenderer().allowedAudioSpatializationFormats
+                == .monoStereoAndMultichannel
+        )
+    }
+
     @Test @MainActor func aShutDownEngineCannotBeBroughtBackToLife() async {
         // SwiftUI re-mounts the player surface after a failed playback, and
         // `makeUIView` attaches unconditionally. `finishRendererShutdown`
