@@ -90,7 +90,7 @@ struct PlayerControlPanel: View {
     // white-pill look — never draw custom focus chrome around it. The
     // active tab keeps bold text once focus moves down into the card.
     private var tabBar: some View {
-        HStack(spacing: Metrics.Space.s) {
+        HStack(spacing: Metrics.Space.m) {
             ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
                 Button {
                     selectedTab = tab
