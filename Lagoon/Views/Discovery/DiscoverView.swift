@@ -86,6 +86,13 @@ struct DiscoverView: View {
         .onChange(of: searchText) { _, newValue in
             librarySearch.search(newValue, client: session.client)
         }
+        // A viewer already signed in to Jellyfin should not meet a second
+        // login. This uses the Jellyfin session Lagoon holds to sign in to
+        // Seerr without a password; it is silent when there is nothing to do
+        // and gives up after one attempt per activation (HEL-95).
+        .task(id: "seerr-auto-signin:\(seerr.configuredURL?.absoluteString ?? "")") {
+            await seerr.signInUsingJellyfinIfNeeded(session.client)
+        }
         .task(id: "\(seerr.user?.id ?? -1):\(reloadID)") {
             guard seerr.isConnected else { return }
             await viewModel.load(client: seerr.client)
@@ -111,6 +118,15 @@ struct DiscoverView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 700)
+            // Signing in automatically is the normal path, so when it does
+            // not work the reason belongs here rather than only in Settings.
+            if seerr.isConfigured, let message = seerr.errorMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 700)
+            }
             NavigationLink(value: SeerrNavigationRoute.settings) {
                 Text(seerr.isConfigured ? "Sign In" : "Set Up Seerr")
             }

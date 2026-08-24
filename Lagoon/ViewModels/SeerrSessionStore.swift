@@ -18,6 +18,9 @@ final class SeerrSessionStore {
     private let defaults: UserDefaults
     private var activeAccount: StoredAccount?
     private var activationToken = UUID()
+    /// One attempt per activation. A server with Quick Connect off would
+    /// otherwise be re-asked every time Discover appears.
+    private var hasAttemptedJellyfinSignIn = false
 
     init(client: SeerrClient = SeerrClient(), defaults: UserDefaults = .standard) {
         self.client = client
@@ -52,6 +55,7 @@ final class SeerrSessionStore {
         user = nil
         isLoading = false
         errorMessage = nil
+        hasAttemptedJellyfinSignIn = false
         client.clear()
 
         guard let account,
@@ -130,6 +134,68 @@ final class SeerrSessionStore {
         try finishAuthentication(user: authenticatedUser)
         return true
     }
+
+    /// Signs in to Seerr using the Jellyfin session Lagoon already holds, so
+    /// a viewer who is signed in to Jellyfin never sees a Seerr login at all.
+    ///
+    /// Jellyseerr's Jellyfin login takes a plaintext password, and Lagoon does
+    /// not keep one — only an access token. Quick Connect closes that gap
+    /// without a password: Jellyseerr asks Jellyfin for a code, and Lagoon,
+    /// being an authenticated Jellyfin client, approves that code itself. It
+    /// is the viewer's own account on both ends.
+    func signInUsingJellyfin(_ jellyfin: JellyfinClient) async throws {
+        guard isConfigured else { throw SeerrError.invalidServerURL }
+        let token = activationToken
+        let accountID = activeAccount?.id
+        errorMessage = nil
+
+        // Quick Connect is a server setting and may be off, in which case
+        // there is nothing to fall back on but the manual paths.
+        guard (try? await jellyfin.quickConnectEnabled()) == true else {
+            throw SeerrError.quickConnectUnavailable
+        }
+        guard activationToken == token, activeAccount?.id == accountID else {
+            throw CancellationError()
+        }
+
+        let handshake = try await client.initiateQuickConnect()
+        _ = try await jellyfin.authorizeQuickConnect(code: handshake.code)
+
+        // Jellyseerr verifies the code against Jellyfin on its own schedule,
+        // so the approval is not always visible on the first check.
+        for delay in Self.quickConnectConfirmationDelays {
+            try await Task.sleep(for: delay)
+            guard activationToken == token, activeAccount?.id == accountID else {
+                throw CancellationError()
+            }
+            if try await pollQuickConnect(secret: handshake.secret) { return }
+        }
+        throw SeerrError.unauthenticated
+    }
+
+    /// The automatic path. Silent when there is nothing to do, and attempted
+    /// only once per activation so a server without Quick Connect is not
+    /// re-asked on every appearance.
+    func signInUsingJellyfinIfNeeded(_ jellyfin: JellyfinClient) async {
+        guard isConfigured, !isConnected, !isLoading, !hasAttemptedJellyfinSignIn else { return }
+        hasAttemptedJellyfinSignIn = true
+        do {
+            try await signInUsingJellyfin(jellyfin)
+        } catch is CancellationError {
+        } catch {
+            // The manual paths remain, so this is a fallback rather than a
+            // failure: say what happened without turning Discover into an
+            // error screen.
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    nonisolated static let quickConnectConfirmationDelays: [Duration] = [
+        .zero,
+        .milliseconds(400),
+        .seconds(1),
+        .seconds(2),
+    ]
 
     func signIn(username: String, password: String) async throws {
         let token = activationToken

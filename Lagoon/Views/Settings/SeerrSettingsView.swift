@@ -179,7 +179,17 @@ struct SeerrSettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, Metrics.Space.l)
         } else {
-            Button("Connect with Jellyfin Quick Connect", action: startQuickConnect)
+            // The password-free path: Lagoon approves a Quick Connect code
+            // for the account it is already signed in as, so nothing has to
+            // be typed or approved elsewhere (HEL-95).
+            Button("Use This Jellyfin Account", action: signInUsingJellyfin)
+                #if os(tvOS)
+                .buttonStyle(.glass)
+                #endif
+                .disabled(isWorking)
+                .accessibilityIdentifier("settings.seerr.useJellyfinAccount")
+
+            Button("Approve on Another Device", action: startQuickConnect)
                 #if os(tvOS)
                 .buttonStyle(.glass)
                 #endif
@@ -281,6 +291,20 @@ struct SeerrSettingsView: View {
             await seerr.forgetServer()
             serverAddress = seerr.suggestedServerAddress(for: session.activeAccount)
             quickConnectCode = nil
+        }
+    }
+
+    private func signInUsingJellyfin() {
+        isWorking = true
+        errorMessage = nil
+        Task {
+            defer { isWorking = false }
+            do {
+                try await seerr.signInUsingJellyfin(session.client)
+            } catch is CancellationError {
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

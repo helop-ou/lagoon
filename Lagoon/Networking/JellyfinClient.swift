@@ -320,6 +320,20 @@ extension JellyfinClient {
         try await get("QuickConnect/Connect", query: [URLQueryItem(name: "secret", value: secret)])
     }
 
+    /// Approves a Quick Connect code on behalf of the signed-in user — the
+    /// other half of the handshake, performed by a client that is *already*
+    /// authenticated. Normally that is your phone approving a television;
+    /// Lagoon uses it to approve a code Jellyseerr asked Jellyfin for, which
+    /// is how Seerr can be signed into without a password (HEL-95).
+    ///
+    /// Verified against Jellyfin 10.11: a client may authorise a code for its
+    /// own user, and the requesting side's `Connect` immediately reports
+    /// authenticated.
+    @discardableResult
+    func authorizeQuickConnect(code: String) async throws -> Bool {
+        try await post("QuickConnect/Authorize", query: [URLQueryItem(name: "code", value: code)])
+    }
+
     func authenticateWithQuickConnect(secret: String) async throws -> AuthenticationResult {
         try await post("Users/AuthenticateWithQuickConnect", body: QuickConnectAuthRequest(secret: secret))
     }

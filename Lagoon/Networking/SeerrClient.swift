@@ -5,6 +5,7 @@ enum SeerrError: LocalizedError, Equatable {
     case invalidResponse
     case server(Int, String)
     case unauthenticated
+    case quickConnectUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ enum SeerrError: LocalizedError, Equatable {
             message
         case .unauthenticated:
             "Connect this Lagoon account to Seerr to continue."
+        case .quickConnectUnavailable:
+            "Quick Connect is turned off on this Jellyfin server, so Lagoon can't sign in to Seerr for you. Sign in below instead."
         }
     }
 }
