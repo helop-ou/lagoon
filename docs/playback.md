@@ -40,6 +40,57 @@ shells instead of 27.
    so resume is handled the same way as direct play: an initial demuxer
    seek, keeping position reporting absolute in every play method.
 
+### What this device is offered (HEL-102)
+
+`DeviceProfile.everything` is the envelope the engine can play;
+`DeviceProfile.lagoon` is that envelope minus whatever the running hardware
+cannot decode, and it is what gets sent. The subtraction is deliberately a
+short transform over the literal rather than a second literal, so the envelope
+stays the single statement of what the engine supports.
+
+Exactly one capability is consulted, and the reason is specific:
+`VideoToolboxDecoder` creates its session with
+`kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder`, so
+without a hardware decoder HEVC does not degrade — it fails outright with
+-12906. Everything else in the envelope survives a missing hardware decoder:
+H.264 reaches `AVSampleBufferVideoRenderer` compressed and may be decoded in
+software, and VC-1 and MPEG-4 Part 2 are libavcodec on the CPU.
+
+**Do not gate more on `VTIsHardwareDecodeSupported` than that.** It reports
+hardware alone: on the tvOS simulator it answers false for *every* codec,
+including the H.264 the simulator plainly plays. Gating wholesale would strip
+the profile to nothing.
+
+Removing HEVC touches three places, and missing any one of them undoes the
+other two:
+
+- the direct-play codec list, the obvious one;
+- the `hevc` codec profile, or the server sees conditions for a codec it is
+  not being offered;
+- the **transcoding** profile, which is the one that bites. Left listing
+  `hevc,h264` it lets the server answer a fallback request with an HEVC
+  rendition — the exact format the device just said it cannot decode. That is
+  how a simulator run of the delivery ladder failed every rung with -12906.
+
+H.264 is also capped at 1080p in the reduced profile. Without it the
+subtraction makes things worse rather than better: a 4K HEVC film stops direct
+playing and the server is asked for H.264 *at 4K*, an enormous transcode for a
+device with no chance of decoding it — observed doing exactly that, the player
+sitting at 0 s with empty queues. Hardware that cannot decode HEVC will not
+manage 4K H.264 either. It is a heuristic, not a measurement: VideoToolbox
+answers per codec and never per resolution.
+
+Verified against Jellyfin 10.11 with a 4K HEVC/DoVi source: the full profile
+direct-plays it, the reduced profile refuses direct play and returns
+`VideoCodec=h264 MaxWidth=1920 MaxHeight=1080`, and an H.264 source
+direct-plays under both.
+
+On the hardware Lagoon targets (tvOS 26 / iOS 26) HEVC decoders are expected
+everywhere, so this is defensive rather than load-bearing today; where it
+already shows is the simulator, which now negotiates H.264 on its own. Its
+real payoff is the mechanism: AV1 support genuinely varies by device, which is
+what HEL-103 needs.
+
 ### When playback fails: the delivery ladder (HEL-100)
 
 Negotiation happens once, before the first frame, so a direct play that the

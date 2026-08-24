@@ -62,7 +62,10 @@ nonisolated enum DeviceProfile {
         let method: String
     }
 
-    static let lagoon = Profile(
+    /// Every format the engine knows how to play, before this device's
+    /// capabilities are subtracted. Use it to reason about the envelope
+    /// itself; `lagoon` is what actually gets sent.
+    static let everything = Profile(
         maxStreamingBitrate: 120_000_000,
         maxStaticBitrate: 100_000_000,
         directPlayProfiles: [
@@ -270,6 +273,94 @@ nonisolated enum DeviceProfile {
             SubtitleProfile(format: "dvdsub", method: "Embed"),
         ]
     )
+
+    /// What this device is offered: the full envelope minus anything its
+    /// hardware cannot decode.
+    static var lagoon: Profile { profile(for: .current) }
+
+    /// Subtracts rather than rebuilds, so the envelope above stays the single
+    /// statement of what the engine can play and this stays a short, testable
+    /// transform over it.
+    ///
+    /// HEVC is the only thing capability can remove today, and it has to come
+    /// out in three places, not one. The direct-play list is the obvious one.
+    /// The codec profile has to go too, or the server sees conditions for a
+    /// codec it is not being offered. And the **transcoding** profile matters
+    /// most: left listing `hevc,h264` it lets a server answer a transcode
+    /// request with an HEVC rendition, which is precisely the format this
+    /// device just said it cannot decode — a fallback that lands back on the
+    /// same failure.
+    static func profile(for capabilities: PlaybackCapabilities) -> Profile {
+        guard !capabilities.hardwareHEVC else { return everything }
+        return Profile(
+            maxStreamingBitrate: everything.maxStreamingBitrate,
+            maxStaticBitrate: everything.maxStaticBitrate,
+            directPlayProfiles: everything.directPlayProfiles.map { profile in
+                var reduced = profile
+                reduced.videoCodec = profile.videoCodec.flatMap(withoutHEVC)
+                return reduced
+            },
+            transcodingProfiles: everything.transcodingProfiles.map { profile in
+                TranscodingProfile(
+                    container: profile.container,
+                    type: profile.type,
+                    videoCodec: withoutHEVC(profile.videoCodec) ?? profile.videoCodec,
+                    audioCodec: profile.audioCodec,
+                    context: profile.context,
+                    protocol: profile.protocol,
+                    maxAudioChannels: profile.maxAudioChannels,
+                    minSegments: profile.minSegments,
+                    breakOnNonKeyFrames: profile.breakOnNonKeyFrames
+                )
+            },
+            codecProfiles: everything.codecProfiles
+                .filter { $0.codec != "hevc" }
+                .map(boundedToHD),
+            subtitleProfiles: everything.subtitleProfiles
+        )
+    }
+
+    /// Caps H.264 at 1080p for a device with no HEVC decoder.
+    ///
+    /// Without this the subtraction has a sharp edge: a 4K HEVC film stops
+    /// direct-playing and the server is asked for H.264 instead — at 4K,
+    /// because nothing said otherwise. That is an enormous transcode produced
+    /// for a device that has no chance of decoding it, and it was observed
+    /// doing exactly that (the player sat at 0 s with empty queues while the
+    /// server worked). Hardware that cannot decode HEVC is not going to manage
+    /// 4K H.264 either, so the honest ceiling is HD.
+    ///
+    /// A heuristic, not a measurement: VideoToolbox answers per codec, never
+    /// per resolution, so there is no API that would make this exact. It errs
+    /// toward a stream that plays.
+    private static func boundedToHD(_ profile: CodecProfile) -> CodecProfile {
+        guard profile.codec == "h264" else { return profile }
+        return CodecProfile(
+            type: profile.type,
+            codec: profile.codec,
+            conditions: profile.conditions + [
+                ProfileCondition(
+                    condition: "LessThanEqual",
+                    property: "Width",
+                    value: "1920",
+                    isRequired: true
+                ),
+                ProfileCondition(
+                    condition: "LessThanEqual",
+                    property: "Height",
+                    value: "1080",
+                    isRequired: true
+                ),
+            ]
+        )
+    }
+
+    /// nil when nothing would be left — an empty codec list means "no
+    /// constraint" to Jellyfin, which is the opposite of what removal means.
+    private static func withoutHEVC(_ codecs: String) -> String? {
+        let kept = codecs.split(separator: ",").filter { $0 != "hevc" }
+        return kept.isEmpty ? nil : kept.joined(separator: ",")
+    }
 
     #if DEBUG && targetEnvironment(simulator)
     /// CoreSimulator has no reliable HEVC/Dolby Vision hardware decoder.

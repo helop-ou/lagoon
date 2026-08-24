@@ -87,10 +87,10 @@ struct ApplePlaybackAlignmentTests {
     }
 
     @Test func vc1DirectPlayIsBoundedToTheSoftwareDecoderEnvelope() {
-        let directVideo = DeviceProfile.lagoon.directPlayProfiles.first {
+        let directVideo = DeviceProfile.everything.directPlayProfiles.first {
             $0.type == "Video"
         }
-        let vc1Profile = DeviceProfile.lagoon.codecProfiles.first {
+        let vc1Profile = DeviceProfile.everything.codecProfiles.first {
             $0.type == "Video" && $0.codec == "vc1"
         }
 
@@ -202,10 +202,10 @@ struct ApplePlaybackAlignmentTests {
     }
 
     @Test func mpeg4DirectPlayIsBoundedToTheSoftwareDecoderEnvelope() {
-        let directVideo = DeviceProfile.lagoon.directPlayProfiles.first {
+        let directVideo = DeviceProfile.everything.directPlayProfiles.first {
             $0.type == "Video"
         }
-        let mpeg4Profile = DeviceProfile.lagoon.codecProfiles.first {
+        let mpeg4Profile = DeviceProfile.everything.codecProfiles.first {
             $0.type == "Video" && $0.codec == "mpeg4"
         }
 
@@ -280,19 +280,98 @@ struct ApplePlaybackAlignmentTests {
         #expect(SampleBufferFactory.pixelAspectRatio(AVRational(num: 1_001, den: 1_000)) == nil)
     }
 
+    @Test func hardwareWithoutHEVCIsNeverOfferedHEVC() throws {
+        // The engine creates its HEVC session with
+        // RequireHardwareAcceleratedVideoDecoder, so on a device without one
+        // HEVC does not degrade — it fails outright with -12906. Claiming it
+        // anyway buys a guaranteed failure.
+        let reduced = DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: false))
+        let json = try String(
+            decoding: JellyfinClient.encoder.encode(reduced),
+            as: UTF8.self
+        )
+        // The strongest form of the assertion: not one mention survives
+        // anywhere in what is sent, whichever section it was hiding in.
+        #expect(!json.contains("hevc"))
+
+        // Nothing else may be collateral damage. H.264 in particular is NOT
+        // gated on hardware: it is handed to the renderer compressed and may
+        // be decoded in software — which is exactly how the simulator plays
+        // it while reporting no hardware support for any codec at all.
+        let directVideo = reduced.directPlayProfiles.first { $0.type == "Video" }
+        let codecs = directVideo?.videoCodec?.split(separator: ",") ?? []
+        #expect(codecs.contains("h264"))
+        #expect(codecs.contains("vc1"))
+        #expect(codecs.contains("mpeg4"))
+        #expect(reduced.codecProfiles.contains { $0.codec == "h264" })
+        #expect(reduced.codecProfiles.contains { $0.codec == "vc1" })
+        #expect(reduced.codecProfiles.contains { $0.codec == "mpeg4" })
+        #expect(reduced.subtitleProfiles.count == DeviceProfile.everything.subtitleProfiles.count)
+        #expect(reduced.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
+
+        // The transcode profile is the one that would otherwise undo all of
+        // this: listing hevc there lets the server answer a fallback request
+        // with the very format the device cannot decode.
+        #expect(reduced.transcodingProfiles.first?.videoCodec == "h264")
+    }
+
+    @Test func aDeviceWithoutHEVCIsNotAskedToPlay4KH264Instead() {
+        // Subtracting HEVC has a sharp edge without this: a 4K HEVC film stops
+        // direct-playing and the server is asked for H.264 at 4K, because
+        // nothing said otherwise — an enormous transcode for a device that
+        // cannot decode it either. Verified against Jellyfin 10.11: the
+        // conditions come back as MaxWidth=1920, MaxHeight=1080 on the
+        // transcode URL.
+        let reduced = DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: false))
+        let h264 = reduced.codecProfiles.first { $0.codec == "h264" }
+        #expect(h264?.conditions.contains {
+            $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == "1920"
+        } == true)
+        #expect(h264?.conditions.contains {
+            $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == "1080"
+        } == true)
+        // The conditions the envelope already carried have to survive.
+        #expect(h264?.conditions.contains { $0.property == "VideoLevel" } == true)
+        #expect(h264?.conditions.contains { $0.property == "IsInterlaced" } == true)
+
+        // Hardware that can decode HEVC keeps 4K H.264, which it can also
+        // decode: the ceiling belongs to the reduced profile alone.
+        let full = DeviceProfile.everything.codecProfiles.first { $0.codec == "h264" }
+        #expect(full?.conditions.contains { $0.property == "Width" } == false)
+    }
+
+    @Test func hardwareWithHEVCIsOfferedTheWholeEnvelope() throws {
+        // Subtraction only. With the hardware present the profile must be the
+        // declared envelope exactly, not a rebuild that drifts from it.
+        //
+        // Compared as objects rather than bytes: the client's encoder uses a
+        // custom key strategy, which costs it stable key ordering, so two
+        // encodings of the same value are equal as JSON but not as data.
+        let full = try JSONSerialization.jsonObject(
+            with: JellyfinClient.encoder.encode(
+                DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: true))
+            )
+        ) as? NSDictionary
+        let envelope = try JSONSerialization.jsonObject(
+            with: JellyfinClient.encoder.encode(DeviceProfile.everything)
+        ) as? NSDictionary
+        #expect(full != nil)
+        #expect(full == envelope)
+    }
+
     @Test func anamorphicSourcesAreNoLongerExcludedFromDirectPlay() {
         // The engine now carries pixel aspect through, so the profile must
         // not keep asking the server to transcode non-square sources.
-        for profile in DeviceProfile.lagoon.codecProfiles {
+        for profile in DeviceProfile.everything.codecProfiles {
             #expect(!profile.conditions.contains { $0.property == "IsAnamorphic" })
         }
         // Interlaced still transcodes — there is no deinterlacing stage.
-        let interlacedGuards = DeviceProfile.lagoon.codecProfiles.filter { profile in
+        let interlacedGuards = DeviceProfile.everything.codecProfiles.filter { profile in
             profile.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
             }
         }
-        #expect(interlacedGuards.count == DeviceProfile.lagoon.codecProfiles.count)
+        #expect(interlacedGuards.count == DeviceProfile.everything.codecProfiles.count)
     }
 
     /// Point `LAGOON_MPEG4_FIXTURE_URL` at a Jellyfin direct-play URL for an
