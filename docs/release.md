@@ -117,3 +117,52 @@ the panel says so at the top. A list that quietly omits the build someone is
 running is worse than one that admits the gap.
 
 Builds between 1 and 50 predate all of this and are not itemised.
+
+### Turning the renumbering off
+
+In the Organizer this is a per-upload checkbox, **"Manage version and build
+number"**, and only the **Custom** method shows it — every other tile is
+labelled "Use recommended settings…", which means Xcode answers the options
+pages itself and the default is on. There is no project setting for it.
+
+So: Distribute App → **Custom** → App Store Connect → Upload → untick it on the
+options page. Confirm afterwards that App Store Connect shows the same build
+number the repository declares. A higher one means it was still on.
+
+## Uploading from the command line
+
+`scripts/upload-testflight.sh` does the same thing without the checkbox,
+because `ExportOptions.plist` pins the setting in a committed file:
+
+```sh
+scripts/upload-testflight.sh both --dry-run   # print the commands only
+scripts/upload-testflight.sh tvos
+scripts/upload-testflight.sh both
+```
+
+It refuses to start if the declared version and build have no changelog entry —
+the same rule `ChangelogTests` enforces, checked before spending minutes on an
+archive rather than after.
+
+`ExportOptions.plist` sets `testFlightInternalTestingOnly`, which does more
+than default to internal: the build **cannot** be added to an external group at
+all, so it can never reach Beta App Review. Uploading never triggers review
+either way; that only happens when a build is submitted to an external group.
+Every key in the file is verified present in Xcode 26.6's IDEDistribution
+framework.
+
+Authentication uses an App Store Connect API key, because `xcodebuild` cannot
+reuse Xcode's signed-in account non-interactively. Create one under **App Store
+Connect → Users and Access → Integrations → App Store Connect API**, then:
+
+```sh
+export ASC_KEY_ID=XXXXXXXXXX
+export ASC_ISSUER_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+export ASC_KEY_PATH=~/private_keys/AuthKey_XXXXXXXXXX.p8
+```
+
+**Keep the `.p8` out of the repository** — it is a credential for the whole
+account, and it cannot be re-downloaded after issue.
+
+The GUI flow above remains perfectly fine; this exists so the setting is
+enforced by a file rather than by remembering a checkbox.

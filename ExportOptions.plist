@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The command-line equivalent of Organizer's "TestFlight Internal Only"
+	     tile, minus the renumbering it does silently (HEL-94).
+
+	     Every key here is verified present in Xcode 26.6's IDEDistribution
+	     framework. -->
+
+	<key>method</key>
+	<string>app-store-connect</string>
+
+	<!-- Upload rather than write an .ipa to disk. -->
+	<key>destination</key>
+	<string>upload</string>
+
+	<!-- Marks the build as usable for internal testing only: it cannot be
+	     added to an external group at all, so it can never reach Beta App
+	     Review. Stricter than the Organizer tile, not looser. Uploading by
+	     itself never triggers review either way — that only happens when a
+	     build is submitted to an external group. -->
+	<key>testFlightInternalTestingOnly</key>
+	<true/>
+
+	<!-- The whole point. Left at its default of true, Xcode rewrites the
+	     version and build number of the app *and* the Top Shelf extension on
+	     the way out, which is how the project came to say build 1 while ~43
+	     tvOS builds existed. See docs/release.md. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>
