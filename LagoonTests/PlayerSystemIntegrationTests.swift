@@ -542,7 +542,7 @@ struct PlayerSystemIntegrationTests {
             RemoteSubtitleInfo.self,
             from: Data(#"{ "Id": "forbidden-file", "Name": "Forbidden", "ThreeLetterISOLanguageName": "eng", "ProviderName": "Test Provider", "Format": "srt" }"#.utf8)
         )
-        coordinator.startDownload(forbidden)
+        coordinator.startDownload(SubtitleCandidate(forbidden))
         try await waitUntil { coordinator.phase == .notPermitted }
 
         // Jellyfin's save path fetches from the provider a second time, so it
@@ -582,7 +582,9 @@ struct PlayerSystemIntegrationTests {
         )
         coordinator.startSearch()
         try await waitUntil { coordinator.results.count == 2 }
-        let missing = try #require(coordinator.results.first { $0.id == "missing-provider-file" })
+        // Candidate ids are namespaced by source now that results can come
+        // from Jellyfin or the provider directly.
+        let missing = try #require(coordinator.results.first { $0.jellyfinID == "missing-provider-file" })
         coordinator.startDownload(missing)
         try await waitUntil {
             if case .downloadFailed = coordinator.phase { return true }

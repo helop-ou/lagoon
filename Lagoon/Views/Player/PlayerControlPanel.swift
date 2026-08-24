@@ -326,6 +326,12 @@ struct PlayerControlPanel: View {
 
                 subtitleSearchStatus(subtitleSearch)
 
+                if let source = subtitleSearch.activeSource, !subtitleSearch.results.isEmpty {
+                    Text(subtitleSourceCaption(source, search: subtitleSearch))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if !subtitleSearch.results.isEmpty {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
@@ -402,6 +408,13 @@ struct PlayerControlPanel: View {
                 systemImage: "lock"
             )
             .foregroundStyle(.secondary)
+        case .providerNotConfigured:
+            Label(
+                OpenSubtitlesError.notConfigured.localizedDescription
+                    + String(localized: " Add one in Settings → Subtitles."),
+                systemImage: "key"
+            )
+            .foregroundStyle(.secondary)
         case .noResults:
             Text("No matching subtitles were found.")
                 .foregroundStyle(.secondary)
@@ -431,16 +444,38 @@ struct PlayerControlPanel: View {
         return labels.joined(separator: " · ")
     }
 
-    private func subtitleResultDetails(_ result: RemoteSubtitleInfo) -> String {
+    /// Where these results came from, and — for the direct provider — what
+    /// is left of today's allowance, since it is small enough to matter.
+    private func subtitleSourceCaption(
+        _ source: SubtitleSourceKind,
+        search: SubtitleSearchCoordinator
+    ) -> String {
+        switch source {
+        case .jellyfin:
+            return String(localized: "From your Jellyfin server · saved to the library")
+        case .openSubtitles:
+            if let remaining = search.providerRemainingDownloads {
+                return String(localized: "From OpenSubtitles · this player only · \(remaining) downloads left today")
+            }
+            return String(localized: "From OpenSubtitles · this player only")
+        }
+    }
+
+    private func subtitleResultDetails(_ result: SubtitleCandidate) -> String {
         var details: [String] = []
-        if let language = result.threeLetterISOLanguageName {
+        if let language = result.language {
             details.append(SubtitlePreferencesStore.displayName(for: language))
         }
         if let provider = result.providerName { details.append(provider) }
         if let format = result.format { details.append(format.uppercased()) }
-        if result.isForced == true { details.append(String(localized: "Forced")) }
-        if result.hearingImpaired == true { details.append(String(localized: "SDH")) }
-        if let rating = result.communityRating { details.append(String(format: "★ %.1f", rating)) }
+        // An exact-release match is the single most useful thing to know
+        // about a result, so it is called out rather than left implicit.
+        if result.isHashMatch { details.append(String(localized: "Exact match")) }
+        if result.isForced { details.append(String(localized: "Forced")) }
+        if result.isHearingImpaired { details.append(String(localized: "SDH")) }
+        if result.isAITranslated || result.isMachineTranslated {
+            details.append(String(localized: "Machine translated"))
+        }
         if let downloads = result.downloadCount { details.append("↓ \(downloads)") }
         return details.joined(separator: " · ")
     }
