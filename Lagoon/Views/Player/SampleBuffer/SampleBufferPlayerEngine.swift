@@ -185,7 +185,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     func attach(displayLayer: AVSampleBufferDisplayLayer) {
-        guard videoRenderer == nil, let url = pendingURL else { return }
+        // A shut-down engine must never come back to life (HEL-110).
+        // `finishRendererShutdown` nils `videoRenderer`, so the emptiness
+        // check alone lets a retired engine pass — and SwiftUI does re-mount
+        // the surface after a failed playback, which used to re-register a
+        // renderer set that could never detach again (`shutdown` early-returns
+        // on `shutdownRequested`) and start a second demux loop that reopened
+        // the stream, transcode session and all.
+        guard !shutdownRequested, videoRenderer == nil, let url = pendingURL else { return }
 
         // Debug switches, read once per playback like the HUD's: the strip
         // experiment must not change mid-A/B, and the bench arms in

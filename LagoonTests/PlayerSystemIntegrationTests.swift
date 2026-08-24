@@ -1,4 +1,5 @@
 import AVFAudio
+import AVFoundation
 import Foundation
 import Testing
 @testable import Lagoon
@@ -297,6 +298,32 @@ struct PlayerSystemIntegrationTests {
         engine.play()
         engine.play()
         #expect(!engine.isPaused)
+    }
+
+    @Test @MainActor func aShutDownEngineCannotBeBroughtBackToLife() async {
+        // SwiftUI re-mounts the player surface after a failed playback, and
+        // `makeUIView` attaches unconditionally. `finishRendererShutdown`
+        // nils the renderer, so an emptiness check alone let a retired engine
+        // pass: it re-registered a renderer set that could never detach — its
+        // `shutdown` early-returns once requested — and started a second
+        // demux loop that reopened the stream, server transcode and all
+        // (HEL-110).
+        let before = PlaybackLifecycleDiagnostics.snapshot()
+        let engine = SampleBufferPlayerEngine()
+        engine.prepare(
+            url: URL(string: "https://media.test/never-opened.mkv")!,
+            startSeconds: 0,
+            initialAudioOrdinal: nil
+        )
+        engine.shutdown()
+        engine.attach(displayLayer: AVSampleBufferDisplayLayer())
+
+        // Nothing was registered, so nothing is left needing an asynchronous
+        // AVFoundation completion to balance it.
+        let after = PlaybackLifecycleDiagnostics.snapshot()
+        #expect(after.attachedRendererSets == before.attachedRendererSets)
+        #expect(after.activeDemuxLoops == before.activeDemuxLoops)
+        #expect(await engine.waitForMediaResourcesToRetire(timeout: .seconds(5)))
     }
 
     @Test func onlyAMediaServicesResetLeavesThePlayerPaused() {

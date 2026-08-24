@@ -52,39 +52,39 @@ nonisolated enum PlaybackLifecycleDiagnostics {
 
     static func controllerCreated(_ id: UUID) {
         state.controllerCreated(id)
-        emit("controller-created")
+        emit("controller-created", id)
     }
     static func controllerDestroyed(_ id: UUID) {
         state.controllerDestroyed(id)
-        emit("controller-destroyed")
+        emit("controller-destroyed", id)
     }
     static func engineCreated(_ id: UUID) {
         state.engineCreated(id)
-        emit("engine-created")
+        emit("engine-created", id)
     }
     static func engineShutdownStarted(_ id: UUID) {
         state.engineShutdownStarted(id)
-        emit("shutdown-started")
+        emit("shutdown-started", id)
     }
     static func engineDestroyed(_ id: UUID) {
         state.engineDestroyed(id)
-        emit("engine-destroyed")
+        emit("engine-destroyed", id)
     }
     static func demuxStarted(_ id: UUID) {
         state.demuxStarted(id)
-        emit("demux-started")
+        emit("demux-started", id)
     }
     static func demuxEnded(_ id: UUID) {
         state.demuxEnded(id)
-        emit("demux-ended")
+        emit("demux-ended", id)
     }
     static func renderersAttached(_ id: UUID) {
         state.renderersAttached(id)
-        emit("renderers-attached")
+        emit("renderers-attached", id)
     }
     static func renderersDetached(_ id: UUID) {
         state.renderersDetached(id)
-        emit("renderers-detached")
+        emit("renderers-detached", id)
     }
 
     static func snapshot() -> PlaybackLifecycleSnapshot {
@@ -129,8 +129,17 @@ nonisolated enum PlaybackLifecycleDiagnostics {
         return state.mediaResourcesAreQuiescent(for: engineID)
     }
 
-    private static func emit(_ event: String) {
+    private static func emit(_ event: String, _ id: UUID? = nil) {
         let value = snapshot()
+        #if DEBUG
+        // `debug.playbackLifecycleLog`: the same events the signpost carries,
+        // on stdout, because signposts do not reach `simctl launch --console`
+        // and renderer retirement is exactly what needs watching there.
+        if UserDefaults.standard.bool(forKey: "debug.playbackLifecycleLog") {
+            let who = id.map { String($0.uuidString.prefix(4)) } ?? "----"
+            print("Lifecycle \(event) id=\(who) \(value.regressionValue)")
+        }
+        #endif
         os_signpost(
             .event,
             log: PlaybackPerformance.log,

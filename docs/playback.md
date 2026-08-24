@@ -78,17 +78,14 @@ reason the ladder is only ever descended after a real failure, never
 pre-emptively.
 
 The retry reuses the episode-handoff teardown (`preservingPlayerSurface: true`)
-rather than a full one, and that is load-bearing, not cosmetic. Tearing the
-surface down left the outgoing renderer set permanently registered as attached:
-once SwiftUI had destroyed the `AVSampleBufferDisplayLayer`, the
-`removeRenderer` completion never fired, `renderersDetached` never ran, and the
-retirement wait timed out at 15 s on every single fallback — "The previous video
-could not release its player resources." Keeping the layer mounted also means
-the viewer sees the last frame rather than a black screen while the next rung
-negotiates. Measured on the simulator: with the surface torn down,
-`renderers=1` and `retired=false`; preserved, `renderers=0` and `retired=true`
-on every rung. (The underlying detachment failure looks pre-existing and wider
-than this path — see HEL-110.)
+rather than a full one: the viewer keeps the last frame instead of a black
+screen while the next rung negotiates, and it is the path autoplay has hardened.
+It also sidestepped the retirement timeout that made every early fallback fail
+— though **not for the reason first recorded here**. That was blamed on
+`removeRenderer`'s completion going missing once SwiftUI destroyed the layer,
+which a later trace disproved: a healthy engine dismissed with the surface torn
+down detaches perfectly (`renderers-detached` fires, counters reach zero). The
+real cause was the revival bug below (HEL-110), now fixed.
 
 Bounds worth knowing: the ladder belongs to one item and resets for the next;
 `next` only ever moves downward, so a stream that fails every way still ends in
@@ -515,6 +512,24 @@ not introduce a second player to get it:
   `shouldResume`. Route changes pause when a personal output (wired,
   Bluetooth, or AirPlay) disappears, but not for tvOS HDMI mode changes.
   Media-services reset re-establishes the category and active session.
+- **An engine that has shut down must never be revived** (HEL-110).
+  `attach(displayLayer:)` guards on `shutdownRequested`, not only on the
+  renderer being empty. `finishRendererShutdown` nils `videoRenderer`, so the
+  emptiness check alone let a retired engine pass — and SwiftUI *does* re-mount
+  the player surface after a failed playback, whose `makeUIView` attaches
+  unconditionally. The retired engine then re-registered a renderer set that
+  could never be detached, because `shutdown` early-returns once requested, and
+  started a **second demux loop** that reopened the stream — for a transcode,
+  a second server-side ffmpeg job nobody would ever stop.
+  The stale renderer entry is process-global and `PlaybackController.start`
+  waits on it, so one failed title delayed the next by the full 15 s timeout
+  and showed "The previous video could not release its player resources."
+  Deliberately *not* fixed by clearing the counters in `deinit`: renderer
+  removal is asynchronous and outlives the Swift object, so its real
+  AVFoundation completion has to balance the counter or the lifecycle
+  benchmark stops being able to see a leak at all. Traced with
+  `debug.playbackLifecycleLog`, which prints each lifecycle event with the
+  engine id — the ids are what made "the same engine attached twice" visible.
 - **Audio renderer failure** (HEL-101). The two notifications an audio
   renderer posts — `WasFlushedAutomatically` and
   `OutputConfigurationDidChange` — are its *recoverable* events, and both
