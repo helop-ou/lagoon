@@ -94,7 +94,16 @@ root and its backgrounds stay black.
 The names deliberately diverge from the package. What it calls "Lagoon Teal"
 is the dark `#0D4A57`, while this codebase has always used `lagoonTeal` for the
 bright accent — one word for two colors is a trap, so the roles are named after
-the mark instead. `AccentColor` in the catalogue is Aqua.
+the mark instead.
+
+**`AccentColor` stays white, and no brand colour may ever be assigned to it.**
+This has now been got wrong twice. It is the system-wide tint, so setting it to
+Aqua does not accent one thing — it repaints every button label, every list
+row, and every control in the app, which is the opposite of "brand colour only
+for branding". Jaagop's call, and a standing one: "simple and white like
+Infuse" (HEL-50, and again during the HEL-97 refresh). If a control looks wrong
+in white, the button *style* is the culprit — see `.glassProminent` below —
+never the accent.
 
 **Backgrounds.** The guidelines call Deep Navy "the default full-bleed field",
 and `BrandBackground` is that literal reading — flat, full-bleed Deep Navy. All
