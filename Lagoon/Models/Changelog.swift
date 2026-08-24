@@ -28,19 +28,15 @@ nonisolated enum Changelog {
             build: "1",
             released: "August 2026",
             headline: "First TestFlight build.",
-            // Written short on purpose: tvOS fixes the changelog panel's
-            // width, so long sentences wrap every few words in it.
             changes: [
-                "A playback engine of Lagoon's own, with no AVPlayer in the path.",
-                "Direct play for H.264, HEVC, VC-1, MPEG-4 Part 2 and anamorphic sources.",
-                "HDR10 and Dolby Vision, with tvOS display-mode matching.",
-                "Dolby Digital, Atmos and TrueHD passthrough.",
-                "PGS, VobSub and text subtitles, plus provider search.",
-                "Trickplay scrubbing and intro skipping.",
-                "Autoplay into the next episode without leaving the player.",
-                "Direct-play files buffer ahead of the playhead.",
-                "Home rails, genre discovery, search and Top Shelf.",
-                "Seerr: browse, request and manage requests in-app.",
+                "A playback engine of Lagoon's own — libavformat demuxing straight into AVSampleBufferDisplayLayer, with no AVPlayer in the path.",
+                "Direct play for H.264, HEVC, VC-1, MPEG-4 Part 2 and anamorphic sources, so far fewer titles fall back to transcoding.",
+                "HDR10 and Dolby Vision with tvOS display-mode matching, plus Dolby Digital, Atmos and TrueHD passthrough.",
+                "Embedded PGS, VobSub and text subtitles, external sidecars, and provider search when a title has none.",
+                "Trickplay scrubbing, intro and recap skipping, and autoplay into the next episode without leaving the player.",
+                "Direct-play files buffer ahead of the playhead over HTTP range requests.",
+                "Home rails, genre discovery, library browsing, search and a Top Shelf extension.",
+                "Seerr: browse, request and manage requests from inside the app.",
             ]
         ),
     ]

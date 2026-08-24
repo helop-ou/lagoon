@@ -53,3 +53,43 @@ it. Marketing version changes are deliberate and manual:
   ~28 frameworks to the 11 the engine actually links
   (`Packages/LagoonFFmpeg`); the rest of the warnings only go away if we
   ever build FFmpeg ourselves with dSYMs kept.
+
+## Changelog (HEL-94)
+
+Settings → About → Changelog shows every shipped build. It is a hand-written
+list, not something generated from git: a changelog answers what changed *for
+the viewer*, which a few hundred `feat:`/`fix:` subjects do not.
+
+The list is `Changelog.entries` in `Lagoon/Models/Changelog.swift`, newest
+first. **Adding a release is one entry at the top:**
+
+```swift
+ChangelogEntry(
+    version: "0.2",            // CFBundleShortVersionString / MARKETING_VERSION
+    build: "7",                // CFBundleVersion — what Xcode set at upload
+    released: "September 2026", // month, not a day
+    headline: "One line on what this build is about.",
+    changes: [
+        "One user-visible change per line.",
+        "Write for a viewer, not a reviewer — no ticket keys, no file names.",
+    ]
+),
+```
+
+Version and build together identify the entry, because TestFlight assigns a
+new build number to every upload while the marketing version stays put. The
+entry whose version *and* build match the running bundle is badged
+**Installed** in the panel.
+
+Since Xcode bumps the build number at upload, the number is not known until
+after the archive. Two ways to handle it:
+
+- add the entry after uploading, with the build number App Store Connect
+  shows, and ship it in the *next* build; or
+- set `CURRENT_PROJECT_VERSION` by hand before archiving and use that.
+
+Either is fine. If the running build has no entry — the normal case between
+those two moments — `Changelog.runningBuildIsListed()` detects it, the About
+row reads "This build isn't listed", and the panel says so at the top. That is
+deliberate: a list that quietly omits the build someone is actually running is
+worse than one that admits the gap.

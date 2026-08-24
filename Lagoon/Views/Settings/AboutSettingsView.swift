@@ -51,13 +51,20 @@ struct AboutSettingsView: View {
             }
         }
         .sheet(isPresented: $showingChangelog) {
-            // A panel rather than a page: the changelog is something you
-            // glance at and dismiss, and it should not push the settings
-            // hierarchy a level deeper. tvOS fixes the panel's width — a
-            // wider frame on the content just overflows it — so the notes
-            // are written to read at this width rather than fought against.
-            NavigationStack { ChangelogView() }
-                .presentationSizing(.page)
+            // A modal rather than another pushed page: the changelog is
+            // something you glance at and dismiss.
+            //
+            // No NavigationStack on tvOS. Its title has no background of its
+            // own, so the notes scrolled visibly behind it, and it was also
+            // what squeezed the sheet to roughly half its natural width. The
+            // panel draws its own header and footer bars instead.
+            //
+            // `presentationSizing` has no effect on a tvOS sheet with custom
+            // content — .form and .page render identically — so the sheet
+            // takes the size it wants. Narrowing it would mean drawing panel
+            // chrome by hand, which is not worth it.
+            ChangelogView()
+                .presentationSizing(.form)
         }
     }
     #endif
@@ -186,6 +193,15 @@ struct ChangelogView: View {
                                 }
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                #if os(tvOS)
+                                // tvOS scrolls by moving focus, so a panel of
+                                // plain text cannot be scrolled at all —
+                                // everything below the fold was unreachable.
+                                // Each note is its own focus target; the
+                                // scroll view follows focus down the list.
+                                .focusable()
+                                #endif
                             }
                         }
                     }
@@ -194,8 +210,14 @@ struct ChangelogView: View {
             }
             .padding(Metrics.Space.xl)
         }
-        .navigationTitle("Changelog")
         #if os(tvOS)
+        .safeAreaInset(edge: .top) {
+            Text("Changelog")
+                .font(.title3.bold())
+                .padding(Metrics.Space.l)
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)
+        }
         // A tvOS sheet has no chrome of its own, so the panel provides the
         // only way out besides the Menu button.
         .safeAreaInset(edge: .bottom) {
@@ -209,6 +231,7 @@ struct ChangelogView: View {
         }
         .onExitCommand { dismiss() }
         #else
+        .navigationTitle("Changelog")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Done") { dismiss() }
