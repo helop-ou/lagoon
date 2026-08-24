@@ -111,7 +111,9 @@ code knows whether a result came from OpenSubtitles or another plugin.
 
 **Every one of those routes requires the per-user `EnableSubtitleManagement`
 permission, and it is off by default for every non-administrator** (Jellyfin
-10.9+). Without it all four answer `403` with an HTML body — verified on both
+10.9+). Accounts without it use the direct OpenSubtitles source instead — see
+`docs/playback.md`, "Two subtitle sources"; nothing below applies to that
+path, which never touches Jellyfin. Without it all four answer `403` with an HTML body — verified on both
 fixture 10.11.11 and the public demo server, whose accounts are both
 non-admin with the flag unset. On a shared server that is the common case, so
 Lagoon reads `User.Policy.EnableSubtitleManagement` (free in the
