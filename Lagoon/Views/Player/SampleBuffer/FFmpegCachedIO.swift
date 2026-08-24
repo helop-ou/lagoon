@@ -15,7 +15,13 @@ nonisolated final class FFmpegCachedIO {
     private var position: Int64 = 0
     private(set) var context: UnsafeMutablePointer<AVIOContext>?
 
-    init(scope: PlaybackCacheScope, bufferSize: Int32 = 64 * 1_024) throws {
+    /// The AVIO buffer defaults to the cache's own request size. Anything
+    /// smaller costs a whole network request per buffer whenever the bytes
+    /// cannot be stored — a full window, or storage disabled — because the
+    /// remainder of each fetch is then discarded instead of cached.
+    init(scope: PlaybackCacheScope, bufferSize: Int32? = nil) throws {
+        let bufferSize = bufferSize
+            ?? Int32(min(max(scope.requestSize, 64 * 1_024), 1_024 * 1_024))
         self.scope = scope
         guard let buffer = av_malloc(Int(bufferSize))?.assumingMemoryBound(to: UInt8.self) else {
             throw PlaybackCacheError.storageUnavailable
@@ -58,9 +64,9 @@ nonisolated final class FFmpegCachedIO {
     }
 
     /// Captures FFmpeg's logical file position after a media-time seek. AVIO
-    /// may already have read ahead into its 64 KiB buffer, so `position`
-    /// alone points past the actual demux cursor; ask AVIO for its public
-    /// logical SEEK_CUR position instead.
+    /// may already have read ahead into its own buffer, so `position` alone
+    /// points past the actual demux cursor; ask AVIO for its public logical
+    /// SEEK_CUR position instead.
     func setTimelineAnchor(seconds: Double, duration: Double) {
         guard seconds.isFinite, duration.isFinite, duration > 0 else { return }
         var byteOffset = position

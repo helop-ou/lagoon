@@ -683,7 +683,10 @@ nonisolated final class FFmpegDemuxer {
             guard let lease = try hlsCache.leaseResource(at: resourceURL) else {
                 return nativeOpen()
             }
-            let io = try FFmpegCachedIO(scope: lease.scope)
+            // FFmpeg holds several segment contexts open at once, and a
+            // whole segment fits under the per-resource cap, so these keep the
+            // small buffer: there is no unstorable-read case to amortize here.
+            let io = try FFmpegCachedIO(scope: lease.scope, bufferSize: 64 * 1_024)
             guard let context = io.context else {
                 lease.close()
                 return nativeOpen()
