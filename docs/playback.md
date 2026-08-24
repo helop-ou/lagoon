@@ -631,8 +631,12 @@ not introduce a second player to get it:
 - **Playback speed** (HEL-106). 0.5× through 2×, from a control at the right
   end of the transport's title row, directly above the scrubber — where the
   reference player (and the `AVPlayerViewController` it is built on) keeps its
-  transport buttons. Its label is the current rate rather than an icon, so it
-  is also the readout; there is no second label to keep in sync.
+  transport buttons. It is a `speedometer` icon, so the transport stays a row
+  of icons the way the reference has it — with the rate joining the icon only
+  once it is *not* 1×. An icon alone cannot say how fast you are going, and the
+  one moment that matters is when you have changed it and might forget; so the
+  button is still the readout, without a permanent number sitting in the
+  chrome.
 
   On tvOS **Up** moves focus from the surface to it and Select opens the list
   of speeds; Menu closes the list, and Down hands focus back to the surface,

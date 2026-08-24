@@ -1699,18 +1699,30 @@ nonisolated enum PlayerSpeedMetrics {
 /// buttons: the right end of the title row, above the scrubber.
 ///
 /// A plain `Button`, so the tvOS focus lozenge is the whole selection visual
-/// — no chrome of its own. Its label is the current rate rather than an icon,
-/// so the button doubles as the readout and there is no second label to keep
-/// in sync.
+/// — no chrome of its own.
+///
+/// The icon carries it at 1×, which keeps the transport a row of icons the way
+/// the reference player has it. The rate joins the icon only once it is *not*
+/// 1×: an icon alone cannot say how fast you are going, and the one moment
+/// that matters is when you have changed it and might forget. So the button is
+/// still the readout, without a permanent number sitting in the chrome.
 struct PlayerSpeedButton: View {
     let rate: Double
     let onOpen: () -> Void
     var accessibilityIdentifier = "player.playbackRate"
 
+    private var isDefaultRate: Bool { abs(rate - 1) < 0.001 }
+
     var body: some View {
         Button(action: onOpen) {
-            Text(PlaybackRatePolicy.title(rate))
-                .font(.callout.monospacedDigit().weight(.semibold))
+            HStack(spacing: Metrics.Space.xs) {
+                Image(systemName: "speedometer")
+                    .font(.title3)
+                if !isDefaultRate {
+                    Text(PlaybackRatePolicy.title(rate))
+                        .font(.callout.monospacedDigit().weight(.semibold))
+                }
+            }
         }
         .accessibilityLabel("Playback Speed")
         .accessibilityValue(PlaybackRatePolicy.title(rate))
