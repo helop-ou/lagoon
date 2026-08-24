@@ -97,6 +97,11 @@ nonisolated enum PlaybackRatePolicy {
         String(format: "%g×", clamped(rate))
     }
 
+    /// Stable identifier for a rate, for accessibility and UI tests.
+    static func identifier(_ rate: Double) -> String {
+        String(format: "%g", clamped(rate)).replacingOccurrences(of: ".", with: "_")
+    }
+
     /// The next rate up, wrapping back to the slowest past the top. The
     /// transport control is a single button rather than a list, so stepping
     /// is how the viewer moves through the set — and wrapping means the

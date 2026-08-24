@@ -23,6 +23,9 @@ enum PlayerPanelTab: CaseIterable, Hashable {
 /// closing it can hand focus back to the video surface without a dead frame.
 enum PlayerControlFocus: Hashable {
     case surface
+    /// The transport's speed control. It lives outside the panel, so it is
+    /// its own case rather than a `track`.
+    case speed
     case tab(PlayerPanelTab)
     case track(String)
 }

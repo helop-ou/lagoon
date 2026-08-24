@@ -631,13 +631,28 @@ not introduce a second player to get it:
 - **Playback speed** (HEL-106). 0.5× through 2×, from a control at the right
   end of the transport's title row, directly above the scrubber — where the
   reference player (and the `AVPlayerViewController` it is built on) keeps its
-  transport buttons. On tvOS **Up** steps through the speeds; the control is
-  deliberately *not* focusable, because taking focus would move `onMoveCommand`
-  off the surface and kill scrubbing while it is up (HEL-63, the same reason
-  the skip prompt is not focusable), and Up was the one direction the remote
-  grammar had left. It shows the current rate rather than an icon, so it is
-  also the readout — there is no second label to keep in sync. On iOS it is a
-  button in the transport row that was already there. Pausing, seeking, buffering,
+  transport buttons. Its label is the current rate rather than an icon, so it
+  is also the readout; there is no second label to keep in sync.
+
+  On tvOS **Up** moves focus from the surface to it and Select opens the list
+  of speeds; Menu closes the list, and Down hands focus back to the surface,
+  which has to own it for the arrows to scrub (HEL-63). It is the only
+  focusable thing in the transport, which is why that overlay no longer
+  refuses hit testing outright, and why the auto-hide will not fire while the
+  control holds focus — hiding it would strand focus on a disabled control.
+
+  The list is built from native buttons rather than a SwiftUI `Menu`:
+  **`Menu` never presents inside the tvOS fullScreenCover here.** The button
+  takes focus and Select does nothing at all — verified on device, then
+  replaced. Same class of tvOS-26 fullScreenCover gap as the one
+  `MenuPressGate` exists for. Focus visuals are still entirely native; only
+  the list's placement is ours.
+
+  `testPlaybackSpeedMenuOpensFromTheTransportAndAppliesARate` drives the whole
+  path with real remote presses: Up reaches it, Select lists all six, a choice
+  applies, Down returns focus, and the arrows still scrub afterwards.
+
+  On iOS it is a button in the transport row that was already there. Pausing, seeking, buffering,
   renderer recovery, delivery fallback and next-episode handoff all preserve
   it. Every audio renderer uses the time-domain pitch algorithm, including a
   replacement after media-services reset. Stall recovery, the delivered-PTS

@@ -66,6 +66,49 @@ final class PlayerRegressionUITests: XCTestCase {
         exerciseSubtitles(in: app)
     }
 
+    /// The speed control is the only focusable thing in the transport, so
+    /// this covers the whole interaction: Up reaches it from the surface,
+    /// Select opens the native list, a choice applies, and Down hands focus
+    /// back to the surface — which has to own it for the arrows to scrub.
+    func testPlaybackSpeedMenuOpensFromTheTransportAndAppliesARate() throws {
+        let app = launchPlayer(title: "The Great Train Robbery", simulatorTranscode: false)
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) { $0.int("ready") == 1 }
+        XCTAssertEqual(state(in: app).string("rate"), "1")
+
+        remote.press(.up)
+        let focused = waitForState(in: app, timeout: 5) { $0.string("focus") == "speed" }
+        XCTAssertEqual(focused.string("focus"), "speed", "Up should reach the transport's speed control")
+
+        remote.press(.select)
+        for rate in ["0_5", "0_75", "1", "1_25", "1_5", "2"] {
+            let option = app.descendants(matching: .any)["player.playbackRate.\(rate)"]
+            XCTAssertTrue(
+                option.waitForExistence(timeout: 5),
+                "the speed list should offer \(rate)"
+            )
+        }
+
+        // Move off the current selection and take whatever it lands on: the
+        // assertion is that choosing from the list changes the rate, not
+        // which row tvOS highlights first.
+        remote.press(.down)
+        remote.press(.select)
+        let applied = waitForState(in: app, timeout: 8) { $0.string("rate") != "1" }
+        XCTAssertNotEqual(applied.string("rate"), "1", "picking from the list should change the rate")
+
+        // The transport must not hide while its control holds focus, and Down
+        // must return focus to the surface.
+        remote.press(.down)
+        let returned = waitForState(in: app, timeout: 5) { $0.string("focus") == "surface" }
+        XCTAssertEqual(returned.string("focus"), "surface", "Down should hand focus back to the surface")
+
+        // And scrubbing still works once the surface owns focus again.
+        remote.press(.right)
+        let scrubbing = waitForState(in: app, timeout: 5) { $0.int("scrubbing") == 1 }
+        XCTAssertEqual(scrubbing.int("scrubbing"), 1, "the surface must still own the arrows")
+    }
+
     func testRepeatedBufferedScrubbingRecoversAndPreservesPlaybackState() throws {
         let app = launchPlayer(
             title: "buffered-scrub-regression",
