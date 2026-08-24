@@ -573,6 +573,74 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertLessThan(sustained.double("memoryMB"), startMemory + 96)
     }
 
+    /// The changelog lists every build, so it opens collapsed: a build is a
+    /// row you focus and press to read. This covers that, and that scrolling
+    /// still works, which on tvOS means focus has somewhere to go.
+    func testChangelogBuildsExpandAndCollapse() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.settingsRegression", "YES",
+        ]
+        app.launch()
+
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
+        let homeTab = app.tabBars.buttons["Home"]
+        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let about = app.descendants(matching: .any)["settings.category.about"]
+        XCTAssertTrue(about.waitForExistence(timeout: 8))
+        moveFocus(to: about, maxPresses: 8) { remote.press(.down) }
+        remote.press(.select)
+
+        let changelogButton = app.descendants(matching: .any)["settings.about.changelog"]
+        XCTAssertTrue(changelogButton.waitForExistence(timeout: 8))
+        moveFocus(to: changelogButton, maxPresses: 8) { remote.press(.right) }
+        moveFocus(to: changelogButton, maxPresses: 8) { remote.press(.down) }
+        remote.press(.select)
+
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.changelog"].waitForExistence(timeout: 8),
+            "the changelog sheet did not open"
+        )
+
+        // Every build is listed as its own row, collapsed.
+        for build in ["55", "54", "53"] {
+            let row = app.descendants(matching: .any)["settings.changelog.\(build)"]
+            XCTAssertTrue(
+                row.waitForExistence(timeout: 5),
+                "build \(build) should have a row of its own"
+            )
+        }
+
+        // An older build's notes are hidden until its row is opened.
+        // Matched on a fragment: XCUITest rejects an identifier query over 128
+        // characters, and changelog notes are sentences.
+        let olderNote = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS %@", "exhausted provider allowance"))
+            .firstMatch
+        XCTAssertFalse(olderNote.exists, "a collapsed build should not show its notes")
+
+        let build53 = app.descendants(matching: .any)["settings.changelog.53"]
+        moveFocus(to: build53, maxPresses: 10) { remote.press(.down) }
+        remote.press(.select)
+        XCTAssertTrue(
+            olderNote.waitForExistence(timeout: 5),
+            "opening a build should reveal its notes"
+        )
+
+        remote.press(.select)
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertFalse(olderNote.exists, "pressing again should close it")
+    }
+
     func testTvOSSettingsHierarchyPickersAndHomeRowsNavigation() {
         let app = XCUIApplication()
         app.launchArguments = [

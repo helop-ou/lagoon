@@ -163,15 +163,9 @@ struct ChangelogView: View {
         // sheet's single blurred surface. Laid out in sequence, each part
         // gets its own space and the whole panel shares one background.
         VStack(spacing: 0) {
-            HStack(spacing: Metrics.Space.m) {
-                LagoonLockup(
-                    layout: .horizontal,
-                    symbolHeight: Metrics.lockupHeaderSymbolHeight
-                )
-                Text("Changelog")
-                    .font(.title3.bold())
-            }
-            .padding(Metrics.Space.l)
+            Text("Changelog")
+                .font(.title3.bold())
+                .padding(Metrics.Space.l)
 
             notes
 
@@ -193,6 +187,53 @@ struct ChangelogView: View {
         #endif
     }
 
+    /// Builds start collapsed except the one you are running, which is what
+    /// you opened this to read.
+    @State private var expanded: Set<String> = Set(
+        Changelog.entries.filter { Changelog.isRunning($0) }.map(\.id)
+    )
+
+    private func toggle(_ entry: ChangelogEntry) {
+        withAnimation(.easeInOut(duration: Motion.fast)) {
+            if expanded.contains(entry.id) {
+                expanded.remove(entry.id)
+            } else {
+                expanded.insert(entry.id)
+            }
+        }
+    }
+
+    private func entryHeader(_ entry: ChangelogEntry) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.m) {
+            Image(systemName: expanded.contains(entry.id) ? "chevron.down" : "chevron.forward")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.m) {
+                    Text(entry.displayVersion)
+                        .font(.title3.bold())
+                    if Changelog.isRunning(entry) {
+                        Text("Installed")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, Metrics.Space.s)
+                            .padding(.vertical, Metrics.Space.xs)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                    Spacer(minLength: 0)
+                    Text(entry.released)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                // The headline stays visible while collapsed: it is the one
+                // line that says whether this build is worth opening.
+                Text(entry.headline)
+                    .font(.callout.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
     private var notes: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
@@ -208,43 +249,39 @@ struct ChangelogView: View {
 
                 ForEach(Changelog.entries) { entry in
                     VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                        HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.m) {
-                            Text(entry.displayVersion)
-                                .font(.title3.bold())
-                            if Changelog.isRunning(entry) {
-                                Text("Installed")
-                                    .font(.caption2.bold())
-                                    .padding(.horizontal, Metrics.Space.s)
-                                    .padding(.vertical, Metrics.Space.xs)
-                                    .background(.regularMaterial, in: Capsule())
-                            }
-                            Spacer(minLength: 0)
-                            Text(entry.released)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        // The header is the control: focus a build, press, and
+                        // it opens. Collapsed, the whole history is a short
+                        // list you can scan instead of a wall of notes.
+                        Button {
+                            toggle(entry)
+                        } label: {
+                            entryHeader(entry)
                         }
+                        .accessibilityIdentifier("settings.changelog.\(entry.build)")
 
-                        Text(entry.headline)
-                            .font(.callout.weight(.medium))
-
-                        VStack(alignment: .leading, spacing: Metrics.Space.s) {
-                            ForEach(entry.changes, id: \.self) { change in
-                                HStack(alignment: .top, spacing: Metrics.Space.s) {
-                                    Text("•")
-                                    Text(change)
-                                        .fixedSize(horizontal: false, vertical: true)
+                        if expanded.contains(entry.id) {
+                            VStack(alignment: .leading, spacing: Metrics.Space.s) {
+                                ForEach(entry.changes, id: \.self) { change in
+                                    HStack(alignment: .top, spacing: Metrics.Space.s) {
+                                        Text("•")
+                                        Text(change)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    #if os(tvOS)
+                                    // tvOS scrolls by moving focus, so a panel
+                                    // of plain text cannot be scrolled at all;
+                                    // everything below the fold was
+                                    // unreachable. Each note is its own focus
+                                    // target and the scroll view follows focus
+                                    // down the list. Still needed with the
+                                    // builds collapsed: one expanded entry can
+                                    // be taller than the sheet on its own.
+                                    .focusable()
+                                    #endif
                                 }
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                #if os(tvOS)
-                                // tvOS scrolls by moving focus, so a panel of
-                                // plain text cannot be scrolled at all —
-                                // everything below the fold was unreachable.
-                                // Each note is its own focus target; the
-                                // scroll view follows focus down the list.
-                                .focusable()
-                                #endif
                             }
                         }
                     }
