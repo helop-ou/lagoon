@@ -648,11 +648,42 @@ priority, and proactive requests disallow constrained or expensive paths.
 
 The coordinator preserves 256 MiB of free volume space and permits one half of
 the remainder for the current title. A declared resource smaller than that cap
-can therefore buffer completely; larger titles stop safely at the cap. The
-legacy percentage diagnostic reports only the contiguous byte-zero prefix. A
-sparse file is exposed as a normal local playback URL only after the complete
-server-declared byte range has been validated and synchronized, so a hole can
-never masquerade as EOF.
+buffers completely and keeps the whole-file scheduler: nothing is evicted, and
+proactive fill wraps back to close early holes until the file is contiguous.
+
+A title **larger** than the cap is buffered through a window that travels with
+the playhead instead. Filling to the cap and stopping was a cliff, not a
+graceful stop: once the playhead reached the filled edge, every read missed,
+and because a miss fetched a whole 1 MiB request while storing none of it, one
+64 KiB AVIO buffer cost a 1 MiB download and a round trip — sixteen times the
+bandwidth and sixteen times the requests, serialized on the demux thread. The
+engine's own cushion is only the sample queues (~4 s of compressed video), so
+that state was permanent rebuffering roughly an hour into a large movie. The
+window keeps `byteLimit / 8` (at most 256 MiB) behind the playhead for ordinary
+backwards scrubbing and spends the rest ahead of it, freeing the islands
+furthest from the playhead when a request needs room. `preferredPrefetchOffset`
+follows every foreground read, so a backwards seek re-centres the window on its
+next demux read and the bytes now far *ahead* become the eviction candidates;
+anything evicted is simply refetched, because the range set is the sole
+authority on what the file may be read for.
+
+Eviction reclaims real blocks with `F_PUNCHHOLE` over the block-aligned
+interior of a range, and the cap is checked against `st_blocks` as well as the
+range bookkeeping — logical eviction without physical reclaim would let the
+file grow past the free-space reserve. If the filesystem refuses to punch, the
+scope abandons the window and falls back to a fixed cap, but reads then ask
+only for the bytes they were given, so the amplification never returns. For the
+same reason the AVIO buffer is sized to the cache's request size: one demux
+read is at most one network request even when nothing can be stored.
+
+`debug.playbackCacheCapMB` forces a small cap in DEBUG so the window is
+observable within a minute instead of after gigabytes.
+
+The legacy percentage diagnostic reports only the contiguous byte-zero prefix,
+which a windowed title drops to 0 as soon as the head is evicted; the scrubber's
+islands stay accurate. A sparse file is exposed as a normal local playback URL
+only after the complete server-declared byte range has been validated and
+synchronized, so a hole can never masquerade as EOF.
 
 The scrubber draws every cached byte island as a middle-opacity layer behind
 the solid played range. File-byte fractions are not timeline fractions for
@@ -668,8 +699,10 @@ same fraction and stall count for Instruments runs.
 A failed cache read returns an I/O error, never EOF: EOF is reserved for a
 successfully read resource ending. URL loading retries transient failures;
 deterministic range incompatibility does not retry because the engine's native
-open fallback is both faster and safer. Reaching the disk cap stops proactive
-fill without stopping playback.
+open fallback is both faster and safer. Reaching the disk cap no longer ends
+proactive fill for a windowed title — "nothing to fetch" means the read-ahead
+is full, so the controller waits for the playhead to make room rather than
+giving up on the rest of the movie.
 
 Cache ownership is part of the player lifecycle, never an offline-download
 feature. There is one active scope and at most one staged successor. Dismissal,
