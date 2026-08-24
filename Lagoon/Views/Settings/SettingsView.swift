@@ -173,6 +173,12 @@ struct SettingsView: View {
                 ) { diagnosticsSettings }
 
                 settingsDestination(
+                    "About",
+                    detail: Bundle.main.displayVersion,
+                    id: "about"
+                ) { AboutSettingsView() }
+
+                settingsDestination(
                     "Account",
                     detail: session.userName,
                     id: "account"
@@ -662,9 +668,12 @@ struct SettingsView: View {
                 }
             }
 
-            Section("About") {
-                LabeledContent("App", value: "Lagoon")
-                LabeledContent("Version", value: Bundle.main.displayVersion)
+            Section {
+                NavigationLink {
+                    AboutSettingsView()
+                } label: {
+                    LabeledContent("About", value: Bundle.main.displayVersion)
+                }
             }
 
             #if DEBUG
