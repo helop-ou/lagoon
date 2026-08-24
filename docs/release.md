@@ -81,15 +81,39 @@ new build number to every upload while the marketing version stays put. The
 entry whose version *and* build match the running bundle is badged
 **Installed** in the panel.
 
-Since Xcode bumps the build number at upload, the number is not known until
-after the archive. Two ways to handle it:
+## Build numbers are owned by the repository
 
-- add the entry after uploading, with the build number App Store Connect
-  shows, and ship it in the *next* build; or
-- set `CURRENT_PROJECT_VERSION` by hand before archiving and use that.
+**Xcode's "Automatically manage version and build number" must stay unchecked
+in the upload sheet.** Lagoon sets its own `CURRENT_PROJECT_VERSION`, because
+letting Xcode assign one at upload meant the repository could not say what
+shipped as what: the project said build 1 while roughly 43 tvOS builds and 20
+iOS builds existed, from the same setting, on two sequences that had silently
+diverged. Nothing could match a changelog entry to a build, and the test below
+would have been gating a number nobody shipped.
 
-Either is fine. If the running build has no entry — the normal case between
-those two moments — `Changelog.runningBuildIsListed()` detects it, the About
-row reads "This build isn't listed", and the panel says so at the top. That is
-deliberate: a list that quietly omits the build someone is actually running is
-worse than one that admits the gap.
+The setting is project-level, so one value covers the app and the Top Shelf
+extension — App Store Connect requires those to match.
+
+The sequence restarted at **50** (clear of both platforms' high-water marks;
+App Store Connect only requires the number to increase per platform, so the
+gap on iOS is fine). Before archiving:
+
+```sh
+scripts/bump-build.sh          # next build
+scripts/bump-build.sh --set 60 # jump to a specific number
+```
+
+It refuses to go backwards and refuses to run if the configurations have
+drifted apart. Commit the bump together with the changelog entry.
+
+`ChangelogTests.theBuildThisProjectDeclaresHasChangelogNotes` fails when the
+declared version and build have no entry, so a build cannot reach TestFlight
+without someone having written what changed in it. `LagoonTests` is app-hosted,
+so the test reads the app bundle's real values.
+
+If a build somehow ships without notes, `Changelog.runningBuildIsListed()`
+still detects it at runtime: the About row reads "This build isn't listed" and
+the panel says so at the top. A list that quietly omits the build someone is
+running is worse than one that admits the gap.
+
+Builds between 1 and 50 predate all of this and are not itemised.

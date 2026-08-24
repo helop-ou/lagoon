@@ -9,9 +9,10 @@ struct ChangelogTests {
     /// declares — meaning a build cannot reach TestFlight without someone
     /// having written what changed in it.
     ///
-    /// This only bites if the build number in the repository is the real one.
-    /// While Xcode assigns it at upload, `CURRENT_PROJECT_VERSION` stays at
-    /// whatever was committed and the test passes on a number nobody shipped.
+    /// This is only a real gate because Lagoon owns its build number rather
+    /// than letting Xcode assign one at upload — see docs/release.md. If that
+    /// checkbox is ever re-enabled, `CURRENT_PROJECT_VERSION` stops matching
+    /// what ships and this passes on a number nobody uploaded.
     @Test @MainActor func theBuildThisProjectDeclaresHasChangelogNotes() {
         let version = Changelog.version()
         let build = Changelog.build()

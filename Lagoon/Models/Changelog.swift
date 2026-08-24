@@ -25,6 +25,21 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "50",
+            released: "August 2026",
+            headline: "Playback, subtitles and requests.",
+            changes: [
+                "A long film no longer starts stuttering partway through: the disk buffer now travels with the playhead instead of filling up and giving out.",
+                "Subtitle failures say what actually went wrong — a missing server permission, an expired session or a timeout — rather than always blaming the provider.",
+                "Subtitles can be fetched straight from OpenSubtitles when your Jellyfin account isn't allowed to manage them. Add a key in Settings -> Subtitles.",
+                "Subtitles that aren't UTF-8 now decode by language instead of rendering as garbage.",
+                "Seerr requests are a poster grid, and opening one gives a proper page with the actions that apply to it.",
+                "This About screen, with a changelog.",
+                "Build numbers now come from the project rather than being assigned at upload, so builds between 1 and 50 predate this list and aren't itemised.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "1",
             released: "August 2026",
             headline: "First TestFlight build.",
