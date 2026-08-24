@@ -762,8 +762,12 @@ struct CustomPlayerView<Surface: View>: View {
                     if !defaultCues.isEmpty {
                         VStack(spacing: Metrics.Space.xs) {
                             Spacer()
-                            ForEach(Array(defaultCues.enumerated()), id: \.offset) { _, cue in
-                                PlayerStyledSubtitleText(cue: cue, style: subtitleStyle)
+                            ForEach(Array(defaultCues.enumerated()), id: \.offset) { index, cue in
+                                PlayerStyledSubtitleText(
+                                    cue: cue,
+                                    style: subtitleStyle,
+                                    accessibilityIdentifier: Self.subtitleIdentifier(index)
+                                )
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -772,12 +776,16 @@ struct CustomPlayerView<Surface: View>: View {
                     ForEach(
                         Array(textCues.filter { !$0.usesDefaultPlacement }.enumerated()),
                         id: \.offset
-                    ) { _, cue in
+                    ) { index, cue in
                         PositionedSubtitleLayout(
                             position: cue.position,
                             alignment: cue.alignment ?? .bottomCenter
                         ) {
-                            PlayerStyledSubtitleText(cue: cue, style: subtitleStyle)
+                            PlayerStyledSubtitleText(
+                                cue: cue,
+                                style: subtitleStyle,
+                                accessibilityIdentifier: Self.subtitleIdentifier(defaultCues.count + index)
+                            )
                         }
                         .frame(width: videoRect.width, height: videoRect.height)
                         .position(x: videoRect.midX, y: videoRect.midY)
@@ -790,6 +798,13 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     /// Where the aspect-fit video actually sits inside the surface.
+    /// The first cue on screen keeps `player.subtitle.text`; the rest are
+    /// suffixed so simultaneous authored cues stay individually addressable
+    /// without making that name ambiguous.
+    static func subtitleIdentifier(_ index: Int) -> String {
+        index == 0 ? "player.subtitle.text" : "player.subtitle.text.\(index)"
+    }
+
     private func displayedVideoRect(in container: CGSize) -> CGRect {
         guard let videoSize = engine.videoSize, videoSize.width > 0, videoSize.height > 0,
               container.width > 0, container.height > 0 else {
@@ -1444,6 +1459,10 @@ struct PlayerSubtitleText: View {
 struct PlayerStyledSubtitleText: View {
     let cue: SubtitleTextCue
     let style: SubtitleRenderStyle
+    /// Simultaneous authored cues are separate elements, so only the first
+    /// keeps the canonical identifier — several elements answering to one
+    /// name is an ambiguous match for anything querying it.
+    var accessibilityIdentifier = "player.subtitle.text"
 
     var body: some View {
         styledText
@@ -1458,7 +1477,7 @@ struct PlayerStyledSubtitleText: View {
                 in: RoundedRectangle(cornerRadius: 10)
             )
             .accessibilityLabel(cue.text)
-            .accessibilityIdentifier("player.subtitle.text")
+            .accessibilityIdentifier(accessibilityIdentifier)
     }
 
     private var styledText: Text {
@@ -1469,7 +1488,7 @@ struct PlayerStyledSubtitleText: View {
             if let color = run.primaryColor {
                 fragment = fragment.foregroundColor(color.swiftUIColor)
             }
-            return Text("\(partial)\(fragment)")
+            return partial + fragment
         }
     }
 }

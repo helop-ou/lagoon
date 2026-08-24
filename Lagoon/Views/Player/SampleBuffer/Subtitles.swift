@@ -292,10 +292,17 @@ nonisolated enum ASSSubtitleTextParser {
         style: inout Style
     ) {
         // \r or \rStyle resets inline state. The named style table remains
-        // deliberately out of scope; subsequent supported overrides in the
-        // same block are still applied below.
-        if block.range(of: #"\\r(?:[^\\}]*)"#, options: .regularExpression) != nil {
+        // deliberately out of scope.
+        //
+        // Overrides apply left to right, so a reset only clears what precedes
+        // it: `{\i1\r}` ends up plain and `{\r\i1}` ends up italic. Style
+        // tags are therefore read from whatever follows the last reset, while
+        // alignment and position — which are not part of `Style` — keep
+        // reading the whole block.
+        var styleScope = block
+        if let reset = lastResetRange(in: block) {
             style = Style()
+            styleScope = String(block[reset.upperBound...])
         }
         if let raw = lastCapture(#"\\an([1-9])"#, in: block),
            let value = Int(raw),
@@ -312,15 +319,23 @@ nonisolated enum ASSSubtitleTextParser {
                 y: y / playResolution.height
             )
         }
-        if let raw = lastCapture(#"\\b(-?\d+)"#, in: block), let value = Int(raw) {
+        if let raw = lastCapture(#"\\b(-?\d+)"#, in: styleScope), let value = Int(raw) {
             style.isBold = value != 0
         }
-        if let raw = lastCapture(#"\\i(-?\d+)"#, in: block), let value = Int(raw) {
+        if let raw = lastCapture(#"\\i(-?\d+)"#, in: styleScope), let value = Int(raw) {
             style.isItalic = value != 0
         }
-        if let raw = lastCapture(#"\\(?:1)?c&H([0-9A-Fa-f]{6,8})&"#, in: block) {
+        if let raw = lastCapture(#"\\(?:1)?c&H([0-9A-Fa-f]{6,8})&"#, in: styleScope) {
             style.primaryColor = color(fromASSHex: raw)
         }
+    }
+
+    /// Range of the last `\r` / `\rStyle` reset in an override block.
+    private static func lastResetRange(in block: String) -> Range<String.Index>? {
+        guard let expression = try? NSRegularExpression(pattern: #"\\r(?:[^\\}]*)"#) else { return nil }
+        let range = NSRange(block.startIndex..<block.endIndex, in: block)
+        guard let match = expression.matches(in: block, range: range).last else { return nil }
+        return Range(match.range, in: block)
     }
 
     private static func color(fromASSHex raw: String) -> SubtitleTextColor? {

@@ -371,6 +371,30 @@ struct PlayerSystemIntegrationTests {
         #expect(!cue.runs[1].isItalic)
     }
 
+    @Test func assResetOnlyClearsTheOverridesBeforeIt() throws {
+        // Override tags apply left to right, so where the reset sits decides
+        // what survives it. Reading style tags from the whole block made
+        // `{\i1\r}` italic, which is the one thing it cannot be.
+        let resetLast = try #require(ASSSubtitleTextParser.cue(
+            from: #"0,0,Default,,0,0,0,,{\b1\i1\r}Plain"#
+        ))
+        #expect(resetLast.usesDefaultStyle)
+
+        let resetFirst = try #require(ASSSubtitleTextParser.cue(
+            from: #"0,0,Default,,0,0,0,,{\r\i1}Italic"#
+        ))
+        #expect(resetFirst.runs.first?.isItalic == true)
+        #expect(resetFirst.runs.first?.isBold == false)
+
+        // Placement is not part of the inline style table, so a reset in the
+        // same block must not take the alignment with it.
+        let placed = try #require(ASSSubtitleTextParser.cue(
+            from: #"0,0,Default,,0,0,0,,{\an8\b1\r}Top"#
+        ))
+        #expect(placed.alignment == .topCenter)
+        #expect(placed.usesDefaultStyle)
+    }
+
     @Test func ordinaryASSDialogueKeepsTheLegacyBottomCentrePresentation() throws {
         let cue = try #require(ASSSubtitleTextParser.cue(
             from: #"0,0,Default,,0,0,0,,Hello\Nworld"#
