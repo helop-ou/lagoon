@@ -1053,10 +1053,21 @@ struct CustomPlayerView<Surface: View>: View {
     /// Native buttons in a stack, so the tvOS focus lozenge is the selection
     /// visual exactly as it is in the panel's track lists — the list is
     /// hand-placed, the focus never is.
+    ///
+    /// No `.buttonStyle` on the rows, deliberately. Apple: "Certain interface
+    /// elements, like image views and buttons, adopt Liquid Glass **when they
+    /// gain focus**" on tvOS — so a default button already turns to glass at
+    /// the moment it should, while asking for glass outright would make all
+    /// six permanently glass, against "use Liquid Glass effects sparingly …
+    /// limit these effects to the most important functional elements". Six
+    /// mutually exclusive speeds are also a coherent set, and the button
+    /// guidance is explicit that such a set shares one style: "When you use
+    /// buttons of the same size to offer two or more options, you signal that
+    /// the options form a coherent set of choices.
     @ViewBuilder
     private var speedList: some View {
         if speedListOpen {
-            VStack(spacing: Metrics.Space.xs) {
+            VStack(spacing: PlayerSpeedMetrics.listRowSpacing) {
                 ForEach(PlaybackRatePolicy.supported, id: \.self) { option in
                     Button {
                         engine.setRate(option)
@@ -1064,10 +1075,15 @@ struct CustomPlayerView<Surface: View>: View {
                     } label: {
                         HStack(spacing: Metrics.Space.s) {
                             Image(systemName: "checkmark")
-                                .font(.caption.bold())
+                                .font(PlayerSpeedMetrics.listFont.bold())
                                 .opacity(option == engine.rate ? 1 : 0)
                             Text(PlaybackRatePolicy.title(option))
-                                .font(.callout.monospacedDigit())
+                                .font(PlayerSpeedMetrics.listFont.monospacedDigit())
+                                // "0.75×" and "1.25×" are the widest labels and
+                                // wrapped to two lines at the first width tried,
+                                // which left the rows different heights.
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                             Spacer(minLength: 0)
                         }
                         .frame(width: PlayerSpeedMetrics.listWidth)
@@ -1076,11 +1092,20 @@ struct CustomPlayerView<Surface: View>: View {
                     .accessibilityIdentifier("player.playbackRate.\(PlaybackRatePolicy.identifier(option))")
                 }
             }
-            .padding(Metrics.Space.m)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+            // `.controlSize` is the system's own dial for this, so the focus
+            // lozenge stays native while the metrics come down — the one way
+            // to shrink a tvOS button that is not drawing focus by hand.
+            .controlSize(.small)
+            .padding(PlayerSpeedMetrics.listPadding)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: PlayerSpeedMetrics.listCornerRadius))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .padding(.trailing, Metrics.screenGutter)
             .padding(.bottom, PlayerSpeedMetrics.listBottomInset)
+            // Up/down walk the options natively; Menu closes, through the
+            // same gate that closes the panel. Nothing intercepts the arrows
+            // here — a down handler left over from a horizontal draft did, and
+            // it silently ate the press that should have moved to the next
+            // speed.
             .focusSection()
             .transition(.opacity)
         }
@@ -1684,14 +1709,37 @@ private extension SubtitleTextColor {
     }
 }
 
+/// A menu, per Apple's own definition: a vertical list of mutually exclusive
+/// options with a checkmark on the one in effect. Its *pop-up button* — the
+/// component this would otherwise be — is documented as "not supported in
+/// tvOS", which is the same gap that stops SwiftUI's `Menu` presenting inside
+/// this fullScreenCover, so the list is built here.
+///
+/// Everything below is smaller than the panel's equivalent on purpose. A
+/// default tvOS button pads itself for a full-width track row, which is far
+/// too much for six short numbers; `.controlSize(.small)` is the system's own
+/// dial for that, and the only one that moves the metrics without drawing the
+/// focus lozenge by hand. A smaller font and an explicit `.frame(height:)`
+/// were both tried first and neither shifted the button's minimum.
 nonisolated enum PlayerSpeedMetrics {
     #if os(tvOS)
-    static let listWidth: CGFloat = 180
+    /// Fits "✓ 0.75×" — the widest label — and nothing more.
+    static let listWidth: CGFloat = 146
     /// Clears the transport's title row, scrubber and time labels.
     static let listBottomInset: CGFloat = 260
+    static let listFont: Font = .footnote
+    static let listRowSpacing: CGFloat = Metrics.Space.hair
+    static let listPadding: CGFloat = Metrics.Space.s
+    /// Tighter than `Metrics.panelCornerRadius`: that radius belongs to a
+    /// full-width sheet, and on a box this small it reads as a blob.
+    static let listCornerRadius: CGFloat = 18
     #else
-    static let listWidth: CGFloat = 120
+    static let listWidth: CGFloat = 104
     static let listBottomInset: CGFloat = 120
+    static let listFont: Font = .footnote
+    static let listRowSpacing: CGFloat = Metrics.Space.hair
+    static let listPadding: CGFloat = Metrics.Space.s
+    static let listCornerRadius: CGFloat = 14
     #endif
 }
 

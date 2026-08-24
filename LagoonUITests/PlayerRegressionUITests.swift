@@ -89,16 +89,17 @@ final class PlayerRegressionUITests: XCTestCase {
             )
         }
 
-        // Move off the current selection and take whatever it lands on: the
-        // assertion is that choosing from the list changes the rate, not
-        // which row tvOS highlights first.
+        // The list is vertical, so down steps to the next speed. Take
+        // whatever it lands on: the assertion is that choosing from the list
+        // changes the rate, not which row tvOS highlights first.
         remote.press(.down)
         remote.press(.select)
         let applied = waitForState(in: app, timeout: 8) { $0.string("rate") != "1" }
         XCTAssertNotEqual(applied.string("rate"), "1", "picking from the list should change the rate")
 
-        // The transport must not hide while its control holds focus, and Down
-        // must return focus to the surface.
+        // Choosing closes the list and returns focus to the button, and Down
+        // from there must return focus to the surface — the transport must
+        // not have hidden underneath any of it.
         remote.press(.down)
         let returned = waitForState(in: app, timeout: 5) { $0.string("focus") == "surface" }
         XCTAssertEqual(returned.string("focus"), "surface", "Down should hand focus back to the surface")
