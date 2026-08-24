@@ -206,24 +206,45 @@ extension View {
     }
 }
 
-/// Brand wash for the onboarding screens only. Black stays the ground — this
-/// is Deep Navy lifted off it from the bottom, which is dark enough that the
-/// screens still read as black while the shore colors have something to sit
-/// against.
-struct BrandBackgroundGradient: View {
+/// The two brand surfaces the onboarding screens sit on.
+///
+/// The guidelines call Deep Navy "the default full-bleed field", and the
+/// connect screen takes them at their word: it is the app's front door, the
+/// one screen that is purely identity, and the mark wants a field rather than
+/// a void behind it. Everywhere past it, black is the rule Lagoon plays
+/// content against, so sign-in and the account picker only lift Deep Navy off
+/// black instead of replacing it — near enough to the field to belong to it,
+/// dark enough to still read as black.
+///
+/// Deep Navy is RGB(11, 29, 40), so neither of these is far from black.
+struct BrandBackground: View {
+    enum Style {
+        /// Flat, full-bleed Deep Navy.
+        case field
+        /// Deep Navy raised off black from the bottom edge.
+        case wash
+    }
+
+    var style: Style = .wash
+
     var body: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color.lagoonNavy, location: 0),
-                .init(color: Color.lagoonNavy.opacity(0.6), location: 0.4),
-                .init(color: Color.lagoonNavy.opacity(0.2), location: 0.8),
-                .init(color: .clear, location: 1),
-            ],
-            startPoint: .bottom,
-            endPoint: .top
-        )
-        .background(Color.black)
-        .ignoresSafeArea()
+        switch style {
+        case .field:
+            Color.lagoonNavy.ignoresSafeArea()
+        case .wash:
+            LinearGradient(
+                stops: [
+                    .init(color: Color.lagoonNavy, location: 0),
+                    .init(color: Color.lagoonNavy.opacity(0.6), location: 0.4),
+                    .init(color: Color.lagoonNavy.opacity(0.2), location: 0.8),
+                    .init(color: .clear, location: 1),
+                ],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+            .background(Color.black)
+            .ignoresSafeArea()
+        }
     }
 }
 

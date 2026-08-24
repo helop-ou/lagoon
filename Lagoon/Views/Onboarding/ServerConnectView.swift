@@ -9,7 +9,7 @@ struct ServerConnectView: View {
 
     var body: some View {
         ZStack {
-            BrandBackgroundGradient()
+            BrandBackground(style: .field)
 
             // Atmosphere, and only here. The brand package restricts the
             // jellyfish to "punctuation in loading, empty-state, or
@@ -37,7 +37,7 @@ struct ServerConnectView: View {
                     .foregroundStyle(.secondary)
                     .padding(.bottom, Metrics.Space.l)
 
-                TextField("Server address", text: $address, prompt: Text("Enter server URL or IP"))
+                TextField("Server address", text: $address, prompt: Text("Server URL or IP"))
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

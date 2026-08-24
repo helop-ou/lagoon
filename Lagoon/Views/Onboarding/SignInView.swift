@@ -15,7 +15,7 @@ struct SignInView: View {
 
     var body: some View {
         ZStack {
-            BrandBackgroundGradient()
+            BrandBackground()
 
             ScrollView {
                 VStack(spacing: Metrics.Space.l) {

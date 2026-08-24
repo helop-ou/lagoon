@@ -96,6 +96,15 @@ is the dark `#0D4A57`, while this codebase has always used `lagoonTeal` for the
 bright accent — one word for two colors is a trap, so the roles are named after
 the mark instead. `AccentColor` in the catalogue is Aqua.
 
+**Backgrounds.** The guidelines call Deep Navy "the default full-bleed field",
+and `BrandBackground` offers it two ways. `.field` is that literal reading —
+flat, full-bleed Deep Navy — and the connect screen uses it, because it is the
+app's front door and the one screen that is purely identity: the mark wants a
+field behind it, not a void. `.wash` lifts Deep Navy off black from the bottom
+edge and is what sign-in and the account picker use, because past the front
+door black is the ground Lagoon plays content against. Deep Navy is
+RGB(11, 29, 40), so neither is far from black.
+
 `LagoonLockup` composes the mark rather than shipping one asset, because the
 package has no dark-background lockup: its color lockup sets the wordmark in
 Ink `#07161D`, invisible on black, and its white lockup flattens the two shores

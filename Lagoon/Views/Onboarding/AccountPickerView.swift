@@ -20,7 +20,7 @@ struct AccountPickerView: View {
 
     var body: some View {
         ZStack {
-            BrandBackgroundGradient()
+            BrandBackground()
 
             VStack(spacing: Metrics.Space.section) {
                 VStack(spacing: Metrics.Space.l) {
