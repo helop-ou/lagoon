@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "55",
+            released: "August 2026",
+            headline: "A film that failed to play no longer holds up the next one.",
+            changes: [
+                "Starting another film after one failed no longer waits fifteen seconds to announce that the previous video could not release its player resources.",
+                "A film that fails also stops leaving your server working on a stream nobody is watching.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "54",
             released: "August 2026",
             headline: "Playback recovers instead of giving up.",
