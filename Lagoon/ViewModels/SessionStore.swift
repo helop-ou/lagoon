@@ -353,7 +353,13 @@ final class SessionStore {
         // rather than duplicating them.
         save(accounts: accounts.filter { $0.id != account.id } + [account])
 
-        client.activateSession(token: result.accessToken, userId: result.user.id)
+        // Sign-in already carries the account's policy; taking it here saves
+        // the extra Users/Me round trip a restored token has to make.
+        client.activateSession(
+            token: result.accessToken,
+            userId: result.user.id,
+            policy: result.user.policy
+        )
         activeAccount = account
         userName = result.user.name
         defaults.set(account.id, forKey: DefaultsKey.activeAccountId)

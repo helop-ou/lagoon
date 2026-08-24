@@ -16,6 +16,22 @@ nonisolated struct UserDto: Codable, Identifiable {
     let name: String?
     let serverId: String?
     let primaryImageTag: String?
+    let policy: UserPolicy?
+}
+
+/// The permissions Jellyfin attaches to an account. Only the ones Lagoon
+/// acts on are decoded. Subtitle management is off by default for every
+/// non-administrator, and without it Jellyfin answers 403 to every remote
+/// subtitle search, fetch and upload (HEL-91).
+nonisolated struct UserPolicy: Codable {
+    let isAdministrator: Bool?
+    let enableSubtitleManagement: Bool?
+
+    /// Administrators pass the policy implicitly, so an absent flag on an
+    /// admin account is permission, not the lack of it.
+    var allowsSubtitleManagement: Bool {
+        enableSubtitleManagement ?? (isAdministrator ?? false)
+    }
 }
 
 nonisolated struct AuthenticationResult: Decodable {

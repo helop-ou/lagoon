@@ -32,6 +32,9 @@ final class JellyfinClient {
     private(set) var accessToken: String?
     private(set) var userId: String?
     let deviceId: String
+    /// Resolved once per session: sign-in carries the policy, a restored
+    /// token does not, so this is filled from whichever arrives first.
+    private var subtitleManagementAllowed: Bool?
 
     private let session: URLSession
 
@@ -69,14 +72,33 @@ final class JellyfinClient {
         self.serverURL = serverURL
     }
 
-    func activateSession(token: String, userId: String) {
+    func activateSession(token: String, userId: String, policy: UserPolicy? = nil) {
         accessToken = token
         self.userId = userId
+        subtitleManagementAllowed = policy?.allowsSubtitleManagement
     }
 
     func clearSession() {
         accessToken = nil
         userId = nil
+        subtitleManagementAllowed = nil
+    }
+
+    /// Whether this account may use Jellyfin's remote-subtitle endpoints.
+    /// Every one of them answers 403 without the permission, so asking once
+    /// is what lets the UI say so plainly instead of failing per result.
+    /// An unreachable server answers `true`: a network problem must not be
+    /// reported to the viewer as a permissions problem.
+    func canManageSubtitles() async -> Bool {
+        if let subtitleManagementAllowed { return subtitleManagementAllowed }
+        guard let user = try? await currentUser() else { return true }
+        let allowed = user.policy?.allowsSubtitleManagement ?? true
+        subtitleManagementAllowed = allowed
+        return allowed
+    }
+
+    func currentUser() async throws -> UserDto {
+        try await get("Users/Me")
     }
 
     var appVersion: String {
@@ -153,12 +175,28 @@ final class JellyfinClient {
         try await data(for: request(for: url(path: path, query: query), method: "GET"))
     }
 
-    func get<T: Decodable>(_ pathComponents: [String], query: [URLQueryItem] = []) async throws -> T {
-        try await send(request(for: url(pathComponents: pathComponents, query: query), method: "GET"))
+    func get<T: Decodable>(
+        _ pathComponents: [String],
+        query: [URLQueryItem] = [],
+        timeout: TimeInterval? = nil
+    ) async throws -> T {
+        try await send(request(
+            for: url(pathComponents: pathComponents, query: query),
+            method: "GET",
+            timeout: timeout
+        ))
     }
 
-    func getData(_ pathComponents: [String], query: [URLQueryItem] = []) async throws -> Data {
-        try await data(for: request(for: url(pathComponents: pathComponents, query: query), method: "GET"))
+    func getData(
+        _ pathComponents: [String],
+        query: [URLQueryItem] = [],
+        timeout: TimeInterval? = nil
+    ) async throws -> Data {
+        try await data(for: request(
+            for: url(pathComponents: pathComponents, query: query),
+            method: "GET",
+            timeout: timeout
+        ))
     }
 
     func post<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
@@ -177,8 +215,16 @@ final class JellyfinClient {
         _ = try await data(for: request(for: url(path: path, query: query), method: "POST", body: Self.encoder.encode(body)))
     }
 
-    func postVoid(_ pathComponents: [String], query: [URLQueryItem] = []) async throws {
-        _ = try await data(for: request(for: url(pathComponents: pathComponents, query: query), method: "POST"))
+    func postVoid(
+        _ pathComponents: [String],
+        query: [URLQueryItem] = [],
+        timeout: TimeInterval? = nil
+    ) async throws {
+        _ = try await data(for: request(
+            for: url(pathComponents: pathComponents, query: query),
+            method: "POST",
+            timeout: timeout
+        ))
     }
 
     func postVoid(
@@ -197,9 +243,15 @@ final class JellyfinClient {
         _ = try await data(for: request(for: url(path: path, query: query), method: "DELETE"))
     }
 
-    private func request(for url: URL, method: String, body: Data? = nil) -> URLRequest {
+    private func request(
+        for url: URL,
+        method: String,
+        body: Data? = nil,
+        timeout: TimeInterval? = nil
+    ) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        if let timeout { request.timeoutInterval = timeout }
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
