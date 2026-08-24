@@ -29,16 +29,29 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "55",
+            released: "August 2026",
+            headline: "Play at your own speed.",
+            changes: [
+                "Playback speed, from half to double, in the Video tab of the playback panel. Voices keep their pitch, and the speed you pick carries into the next episode.",
+                "Lagoon has a new app icon and new Top Shelf artwork.",
+                "Subtitles authored with a place on screen — signs, captions over artwork, two people talking at once — now appear where they were meant to, in their own colour, bold and italic, instead of being stacked at the bottom.",
+                "10-bit AV1 and VP9 now play directly instead of being re-encoded by your server — up to 1080p on hardware with no AV1 decoder of its own.",
+                "MPEG-2 video, LPCM soundtracks and DVB subtitles play directly too, which covers most DVD rips and recorded television. Interlaced recordings still go through your server, because that is what deinterlaces them.",
+                "Stereo soundtracks now get Spatial Audio on AirPods, the way Apple's own player does.",
+                "On hardware with no HEVC decoder, Lagoon now asks your server for something it can actually play instead of failing on the file.",
+                "Starting another film after one failed no longer waits fifteen seconds to announce that the previous video could not release its player resources.",
+                "A film that fails also stops leaving your server working on a stream nobody is watching.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "54",
             released: "August 2026",
             headline: "Playback recovers instead of giving up.",
             changes: [
                 "A film that won't play no longer ends at an error screen: Lagoon asks your server to send it another way and picks up where it stopped — without making the server re-encode unless nothing else works.",
-                "Starting another film after one failed no longer waits fifteen seconds to announce that the previous video could not release its player resources.",
-                "A film that fails also stops leaving your server working on a stream nobody is watching.",
                 "If the sound stops partway through a film, Lagoon rebuilds the audio and keeps playing rather than running on in silence.",
-                "Stereo soundtracks now get Spatial Audio on AirPods, the way Apple's own player does.",
-                "On hardware with no HEVC decoder, Lagoon now asks your server for something it can actually play instead of failing on the file.",
                 "Pausing near the start of a film now buffers as far ahead as the cache allows, instead of stopping short of it.",
             ]
         ),
