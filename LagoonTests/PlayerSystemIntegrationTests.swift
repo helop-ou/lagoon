@@ -115,17 +115,27 @@ struct PlayerSystemIntegrationTests {
         #expect(SubtitleSearchCoordinator.mostActionable([]) == nil)
     }
 
-    @Test func administratorsPassSubtitleManagementWithoutAnExplicitFlag() throws {
+    @Test func subtitleManagementOnlyBlocksWhenTheAnswerIsKnown() throws {
         let decode = { (json: String) in
             try JellyfinClient.decoder.decode(UserPolicy.self, from: Data(json.utf8))
         }
         #expect(try decode(#"{"EnableSubtitleManagement": true}"#).allowsSubtitleManagement)
+
+        // The only case that blocks: told no, and not an administrator.
+        #expect(try !decode(#"{"IsAdministrator": false, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
         #expect(try !decode(#"{"EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
-        // Administrators satisfy the policy implicitly.
+
+        // Administrators pass regardless of the flag. Jellyfin hides the
+        // checkbox for them because the permission is implied, so an admin's
+        // stored value is routinely false — reading that as a denial locked
+        // administrators out of their own servers (HEL-96).
+        #expect(try decode(#"{"IsAdministrator": true, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": true}"#).allowsSubtitleManagement)
-        #expect(try !decode(#"{"IsAdministrator": false}"#).allowsSubtitleManagement)
-        // An explicit denial still wins over the administrator shortcut.
-        #expect(try !decode(#"{"IsAdministrator": true, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
+
+        // Unknown is not a denial: the server is the authority and answers
+        // 403 if it disagrees, which HEL-91 reports properly.
+        #expect(try decode(#"{}"#).allowsSubtitleManagement)
+        #expect(try decode(#"{"IsAdministrator": false}"#).allowsSubtitleManagement)
     }
 
     @Test @MainActor func downloadedSubtitleWaitsForRefreshAndMatchesRequestedLanguage() async throws {

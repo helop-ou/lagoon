@@ -27,10 +27,23 @@ nonisolated struct UserPolicy: Codable {
     let isAdministrator: Bool?
     let enableSubtitleManagement: Bool?
 
-    /// Administrators pass the policy implicitly, so an absent flag on an
-    /// admin account is permission, not the lack of it.
+    /// Whether to let a subtitle search start.
+    ///
+    /// This is a pre-flight convenience, not the authority: the server
+    /// decides, and since HEL-91 a 403 is reported honestly. So it only
+    /// blocks when the answer is positively known, and anything ambiguous is
+    /// allowed through to be settled by the server. Getting it wrong in the
+    /// restrictive direction stops someone who would have succeeded, which is
+    /// worse than not checking at all.
+    ///
+    /// Administrators pass regardless of the flag. Jellyfin's dashboard hides
+    /// subtitle management for them because it is implied, so the stored
+    /// value on an admin account is routinely `false` — never ticked because
+    /// there is no checkbox to tick. Reading that as a denial locked
+    /// administrators out of their own servers (HEL-96).
     var allowsSubtitleManagement: Bool {
-        enableSubtitleManagement ?? (isAdministrator ?? false)
+        if isAdministrator == true { return true }
+        return enableSubtitleManagement ?? true
     }
 }
 
