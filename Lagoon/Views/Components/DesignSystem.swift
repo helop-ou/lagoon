@@ -122,6 +122,14 @@ enum Metrics {
         #endif
     }
 
+    /// A sheet with custom content ignores `presentationSizing` on tvOS, so
+    /// a modal panel states its own size or it fills the screen.
+    #if os(tvOS)
+    static let modalPanelSize = CGSize(width: 1_240, height: 760)
+    #else
+    static let modalPanelSize = CGSize(width: 420, height: 560)
+    #endif
+
     static var posterHeight: CGFloat { (posterWidth * 3 / 2).rounded() }
     static var landscapeHeight: CGFloat { (landscapeWidth * 9 / 16).rounded() }
 

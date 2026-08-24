@@ -64,7 +64,11 @@ struct AboutSettingsView: View {
             // takes the size it wants. Narrowing it would mean drawing panel
             // chrome by hand, which is not worth it.
             ChangelogView()
-                .presentationSizing(.form)
+                .frame(
+                    width: Metrics.modalPanelSize.width,
+                    height: Metrics.modalPanelSize.height
+                )
+                .presentationSizing(.fitted)
         }
     }
     #endif
@@ -151,6 +155,39 @@ struct ChangelogView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        #if os(tvOS)
+        // A plain three-part stack — title, scrolling notes, Done — rather
+        // than safeAreaInset overlays. Insets draw *over* the content, so the
+        // button sat on top of the notes, and giving the bars their own
+        // material to hide that painted two darker rectangles across the
+        // sheet's single blurred surface. Laid out in sequence, each part
+        // gets its own space and the whole panel shares one background.
+        VStack(spacing: 0) {
+            Text("Changelog")
+                .font(.title3.bold())
+                .padding(Metrics.Space.l)
+
+            notes
+
+            Button("Done") { dismiss() }
+                .buttonStyle(.glass)
+                .padding(Metrics.Space.l)
+        }
+        .onExitCommand { dismiss() }
+        .accessibilityIdentifier("settings.changelog")
+        #else
+        notes
+            .navigationTitle("Changelog")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .accessibilityIdentifier("settings.changelog")
+        #endif
+    }
+
+    private var notes: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 if !Changelog.runningBuildIsListed() {
@@ -208,36 +245,8 @@ struct ChangelogView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(Metrics.Space.xl)
+            .padding(.horizontal, Metrics.Space.xl)
+            .padding(.bottom, Metrics.Space.xl)
         }
-        #if os(tvOS)
-        .safeAreaInset(edge: .top) {
-            Text("Changelog")
-                .font(.title3.bold())
-                .padding(Metrics.Space.l)
-                .frame(maxWidth: .infinity)
-                .background(.regularMaterial)
-        }
-        // A tvOS sheet has no chrome of its own, so the panel provides the
-        // only way out besides the Menu button.
-        .safeAreaInset(edge: .bottom) {
-            // A bar rather than a floating button: without a background of
-            // its own it sat on top of the notes still scrolling behind it.
-            Button("Done") { dismiss() }
-                .buttonStyle(.glass)
-                .padding(Metrics.Space.l)
-                .frame(maxWidth: .infinity)
-                .background(.regularMaterial)
-        }
-        .onExitCommand { dismiss() }
-        #else
-        .navigationTitle("Changelog")
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
-            }
-        }
-        #endif
-        .accessibilityIdentifier("settings.changelog")
     }
 }
