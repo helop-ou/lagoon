@@ -175,7 +175,7 @@ consistent:
 
 | family | style | examples |
 | --- | --- | --- |
-| Navigation — tabs, library rows | **filled** | `house.fill`, `film.fill`, `play.square.stack.fill`, `gearshape.fill` |
+| Navigation — tabs, library rows | **filled** | `house.fill`, `movieclapper.fill`, `rectangle.stack.badge.play.fill`, `gearshape.fill` |
 | Transport — player controls | **filled** | `play.fill`, `pause.fill`, `forward.end.alt.fill` |
 | Empty and error states | **outline** | `exclamationmark.triangle`, `play.slash`, `tray`, `wifi.exclamationmark` |
 
@@ -190,9 +190,31 @@ strokes by construction and have no filled variant.
 Anything the app *navigates to* takes its glyph from `ContentIcon`, not from a
 string at the call site. The tab bar, the library picker row and Discover's
 catalogue buttons had each spelled Movies and Shows themselves and drifted
-apart — two of them outline, the rest filled. Shows is a stack rather than a
-television, because a series is a pile of episodes and that is also what tells
-it apart from Movies at a glance.
+apart — two of them outline, the rest filled.
+
+**Shape is a selection criterion, not only meaning.** Measured at a common
+point size, `house.fill` and `gearshape.fill` are the tab bar's fixed anchors
+at 1.13 and 1.00 width-to-height and ~0.55 ink density; anything that strays
+far from them reads as out of place, which is exactly how Movies looked.
+`film.fill` measured 1.28 wide and 0.85 dense — simultaneously the widest and
+the heaviest glyph in the bar — while `play.square.stack.fill` was 0.75, the
+outlier at the opposite end, so the two sat beside each other mismatched in
+both directions. The set is now 1.00–1.13 wide.
+
+| tab | glyph | w/h | ink |
+| --- | --- | --- | --- |
+| Home | `house.fill` | 1.13 | 0.55 |
+| Discover | `sparkle` | 1.00 | 0.28 |
+| Shows | `rectangle.stack.badge.play.fill` | 1.10 | 0.65 |
+| Movies | `movieclapper.fill` | 1.04 | 0.73 |
+| Libraries | `square.grid.2x2.fill` | 1.00 | 0.81 |
+| Settings | `gearshape.fill` | 1.00 | 0.56 |
+
+Shows is a stack because a series is a pile of episodes, which is also what
+tells it apart from Movies at a glance; Libraries is therefore a grid rather
+than a stack, so the two cannot be confused. Discover stays the lightest glyph
+in the bar at 0.28 — that is what a sparkle *is*, and forcing it heavier would
+make it something else.
 
 `everyContentIconResolvesToARealSymbol` asserts each name is a real symbol on
 the running OS: a missing one renders as nothing at all — no crash, no warning,

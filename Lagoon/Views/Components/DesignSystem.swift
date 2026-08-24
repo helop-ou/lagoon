@@ -213,16 +213,33 @@ extension Color {
 /// attempted: `checkmark`, `chevron.*`, `plus`, `minus`, `xmark`,
 /// `magnifyingglass` and `speedometer` are strokes by construction and have no
 /// filled variant.
+/// Glyphs are also chosen for *shape*, not only meaning. Measured at a common
+/// point size, `house.fill` and `gearshape.fill` are the fixed anchors of the
+/// tab bar at 1.13 and 1.00 width-to-height and ~0.55 ink density, and every
+/// other tab has to sit near them or it reads as out of place. The set below
+/// spans 1.00–1.13 and 0.28–0.81.
+///
+/// What that replaced: `film.fill` was 1.28 wide and 0.85 dense — both the
+/// widest *and* the heaviest glyph in the bar, which is why Movies looked
+/// wrong; and `play.square.stack.fill` was 0.75, the outlier at the opposite
+/// end, so the two sat beside each other mismatched in both directions.
 nonisolated enum ContentIcon {
-    /// A single strip: one film, one thing to watch.
-    static let movies = "film.fill"
-    /// A stack, because a series is a pile of episodes rather than one item —
-    /// which is also what tells it apart from Movies at a glance.
-    static let shows = "play.square.stack.fill"
+    /// A clapperboard. 1.04 — square enough to sit beside the gear, where a
+    /// film strip's 1.28 could not.
+    static let movies = "movieclapper.fill"
+    /// A stack with a play badge: a series is a pile of episodes rather than
+    /// one item, which is also what tells it apart from Movies at a glance.
+    /// 1.10, near-identical to the house beside it.
+    static let shows = "rectangle.stack.badge.play.fill"
     /// Every library at once, when there are too many for tabs of their own.
-    static let libraries = "rectangle.stack.fill"
+    /// A grid rather than a stack, so it cannot be mistaken for Shows.
+    static let libraries = "square.grid.2x2.fill"
     static let home = "house.fill"
-    static let discover = "sparkles"
+    /// The single sparkle, not the cluster: `sparkles` measured 0.81, narrow
+    /// and lopsided next to the rest. It stays the lightest glyph in the bar
+    /// at 0.28 ink, which is what a sparkle is — forcing it heavier would make
+    /// it something else.
+    static let discover = "sparkle"
     static let settings = "gearshape.fill"
 
     /// Jellyfin's collection type for a library, as a glyph.
