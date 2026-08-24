@@ -38,6 +38,7 @@ nonisolated enum Changelog {
                 "A film that fails also stops leaving your server working on a stream nobody is watching.",
                 "If the sound stops partway through a film, Lagoon rebuilds the audio and keeps playing rather than running on in silence.",
                 "Stereo soundtracks now get Spatial Audio on AirPods, the way Apple's own player does.",
+                "On hardware with no HEVC decoder, Lagoon now asks your server for something it can actually play instead of failing on the file.",
                 "Pausing near the start of a film now buffers as far ahead as the cache allows, instead of stopping short of it.",
             ]
         ),
