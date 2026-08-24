@@ -111,14 +111,20 @@ extension JellyfinClient {
     /// Jellyfin expects an ISO language identifier and preserves provider
     /// ranking in the returned array.
     func searchRemoteSubtitles(itemId: String, language: String) async throws -> [RemoteSubtitleInfo] {
-        try await get(["Items", itemId, "RemoteSearch", "Subtitles", language])
+        try await get(
+            ["Items", itemId, "RemoteSearch", "Subtitles", language],
+            timeout: SubtitleRequestTimeout.provider
+        )
     }
 
     /// Asks Jellyfin to download and attach a result. The file belongs to
     /// the server/library after this point; Lagoon then refreshes
     /// PlaybackInfo to obtain the authoritative stream index and URL.
     func downloadRemoteSubtitle(itemId: String, subtitleId: String) async throws {
-        try await postVoid(["Items", itemId, "RemoteSearch", "Subtitles", subtitleId])
+        try await postVoid(
+            ["Items", itemId, "RemoteSearch", "Subtitles", subtitleId],
+            timeout: SubtitleRequestTimeout.provider
+        )
     }
 
     /// Fetches the provider result itself. This is a live-playback fallback
@@ -130,7 +136,7 @@ extension JellyfinClient {
         let components = ["Providers", "Subtitles", "Subtitles", subtitleId]
         return (
             try url(pathComponents: components, query: query),
-            try await getData(components, query: query)
+            try await getData(components, query: query, timeout: SubtitleRequestTimeout.provider)
         )
     }
 

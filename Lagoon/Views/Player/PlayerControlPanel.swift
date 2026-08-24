@@ -396,6 +396,12 @@ struct PlayerControlPanel: View {
         case .noProvider:
             Label("No subtitle provider is available on this server.", systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.secondary)
+        case .notPermitted:
+            Label(
+                SubtitleDownloadError.notPermitted.localizedDescription,
+                systemImage: "lock"
+            )
+            .foregroundStyle(.secondary)
         case .noResults:
             Text("No matching subtitles were found.")
                 .foregroundStyle(.secondary)
