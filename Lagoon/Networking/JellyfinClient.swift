@@ -7,7 +7,11 @@ nonisolated enum JellyfinError: LocalizedError {
     case notConfigured
     case invalidServerURL
     case unauthorized
-    case server(status: Int)
+    /// `message` is whatever the server said in the body. Jellyfin wraps a
+    /// provider's exception into a 500 and puts the real reason there — an
+    /// exhausted OpenSubtitles quota, for instance — so discarding it left
+    /// the UI guessing between causes it could have simply read (HEL-98).
+    case server(status: Int, message: String? = nil)
     case unplayable
 
     var errorDescription: String? {
@@ -15,7 +19,12 @@ nonisolated enum JellyfinError: LocalizedError {
         case .notConfigured: "Not connected to a server."
         case .invalidServerURL: "That doesn't look like a valid server address."
         case .unauthorized: "Wrong username or password."
-        case .server(let status): "The server returned an error (\(status))."
+        case .server(let status, let message):
+            if let message, !message.isEmpty {
+                "\(message) (\(status))"
+            } else {
+                "The server returned an error (\(status))."
+            }
         case .unplayable: "This item can't be played on this device."
         }
     }
@@ -275,8 +284,40 @@ final class JellyfinClient {
         case 401:
             throw JellyfinError.unauthorized
         default:
-            throw JellyfinError.server(status: http.statusCode)
+            throw JellyfinError.server(
+                status: http.statusCode,
+                message: Self.serverMessage(from: data)
+            )
         }
+    }
+
+    /// Pulls a human sentence out of an error body. Jellyfin answers with
+    /// problem-details JSON, plain text, or an HTML page depending on where
+    /// the failure happened; only the first two say anything worth showing.
+    static func serverMessage(from data: Data) -> String? {
+        guard !data.isEmpty, data.count < 64 * 1_024 else { return nil }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["detail", "title", "message", "Message", "error"] {
+                if let value = object[key] as? String {
+                    return condensed(value)
+                }
+            }
+            return nil
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        // An HTML error page is the server's chrome, not its explanation.
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") else { return nil }
+        return condensed(text)
+    }
+
+    private static func condensed(_ value: String) -> String? {
+        let clean = value
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: " +", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return nil }
+        return clean.count > 180 ? String(clean.prefix(180)) + "…" : clean
     }
 
     // MARK: - Server probe (pre-auth, arbitrary URL)

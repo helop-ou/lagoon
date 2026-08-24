@@ -76,6 +76,7 @@ struct PlayerSystemIntegrationTests {
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 401)) == .sessionExpired)
         #expect(SubtitleDownloadError.classify(JellyfinError.unauthorized) == .sessionExpired)
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 429)) == .rateLimited)
+        // No body: nothing better to say than our own wording.
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 502)) == .providerUnavailable)
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 404)) == .server(404))
         #expect(SubtitleDownloadError.classify(URLError(.timedOut)) == .timedOut)
@@ -87,6 +88,63 @@ struct PlayerSystemIntegrationTests {
         // The quota wording must not appear on failures that are not quota.
         #expect(SubtitleDownloadError.notPermitted.errorDescription?.contains("download limit") == false)
         #expect(SubtitleDownloadError.timedOut.errorDescription?.contains("download limit") == false)
+    }
+
+    @Test func theServersOwnExplanationBeatsOneInventedHere() {
+        // The reported case: an admin who could search but whose download
+        // failed got "the provider could not supply this file — it may have
+        // been removed or the limit reached", which is two guesses. Jellyfin
+        // wraps the provider's exception into a 500 and puts the real reason
+        // in the body; it was being discarded (HEL-98).
+        let quota = JellyfinError.server(
+            status: 500,
+            message: "OpenSubtitles download limit reached for today"
+        )
+        let classified = SubtitleDownloadError.classify(quota)
+        #expect(classified == .reported(status: 500, message: "OpenSubtitles download limit reached for today"))
+        #expect(classified.localizedDescription.contains("download limit reached"))
+        // Not the hedge it used to be.
+        #expect(classified != .providerUnavailable)
+
+        // Statuses we understand keep our wording, which is better than the
+        // server's terse one and is actionable.
+        #expect(SubtitleDownloadError.classify(
+            JellyfinError.server(status: 403, message: "Forbidden")) == .notPermitted)
+        #expect(SubtitleDownloadError.classify(
+            JellyfinError.server(status: 401, message: "Unauthorized")) == .sessionExpired)
+
+        // A reported 5xx is still transient; a reported 4xx is not.
+        #expect(SubtitleDownloadError.reported(status: 503, message: "busy").isRetryable)
+        #expect(!SubtitleDownloadError.reported(status: 400, message: "bad request").isRetryable)
+    }
+
+    @Test func aBodyCarryingResponseIsStillRecognisedByItsStatus() {
+        // The compatibility fallback and the item-missing branch key off 404.
+        // Once a 404 can carry a message it is no longer `.server(404)`, so
+        // they have to branch on the status instead of on case equality.
+        let bare = SubtitleDownloadError.classify(JellyfinError.server(status: 404))
+        let withBody = SubtitleDownloadError.classify(
+            JellyfinError.server(status: 404, message: "Item not found"))
+        #expect(bare.httpStatus == 404)
+        #expect(withBody.httpStatus == 404)
+        #expect(bare != withBody)
+    }
+
+    @Test func onlyBodiesThatSaySomethingAreShown() {
+        let json = Data(#"{"detail":"Provider returned no results","status":500}"#.utf8)
+        #expect(JellyfinClient.serverMessage(from: json) == "Provider returned no results")
+
+        let plain = Data("  Download limit reached\n".utf8)
+        #expect(JellyfinClient.serverMessage(from: plain) == "Download limit reached")
+
+        // The 403 from a real Jellyfin is an HTML page — chrome, not an
+        // explanation, and it must not be pasted into the UI.
+        #expect(JellyfinClient.serverMessage(from: Data("<html><body>no</body></html>".utf8)) == nil)
+        #expect(JellyfinClient.serverMessage(from: Data()) == nil)
+
+        // Long bodies are truncated rather than filling the screen.
+        let long = JellyfinClient.serverMessage(from: Data(String(repeating: "x", count: 400).utf8))
+        #expect((long?.count ?? 0) <= 181)
     }
 
     @Test func subtitleRetriesOnlyCoverFastFailingTransientErrors() {

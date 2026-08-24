@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "53",
+            released: "August 2026",
+            headline: "Subtitle errors say what the server said.",
+            changes: [
+                "When a subtitle download fails, Lagoon now shows the reason your server gave — an exhausted provider allowance, say — instead of guessing between causes.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "52",
             released: "August 2026",
             headline: "Subtitle search works for server administrators again.",

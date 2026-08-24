@@ -46,6 +46,10 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     case timedOut
     case offline
     case server(Int)
+    /// The server explained itself. Its own words beat any wording invented
+    /// here, because it is the only party that knows whether the provider
+    /// refused, timed out, or ran the account out of downloads (HEL-98).
+    case reported(status: Int, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -67,6 +71,21 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
             "Lagoon couldn't reach the Jellyfin server."
         case .server(let status):
             "Jellyfin returned an error (\(status))."
+        case .reported(let status, let message):
+            "\(message) (\(status))"
+        }
+    }
+
+    /// The HTTP status behind this, where there was one. Callers branch on
+    /// the status rather than on case equality, so a response that carries a
+    /// message is still recognised as the same failure.
+    var httpStatus: Int? {
+        switch self {
+        case .server(let status), .reported(let status, _): status
+        case .notPermitted: 403
+        case .sessionExpired: 401
+        case .rateLimited: 429
+        default: nil
         }
     }
 
@@ -79,14 +98,19 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
             switch jellyfin {
             case .unauthorized:
                 return .sessionExpired
-            case .server(let status):
+            case .server(let status, let message):
+                // Our own wording is better for the cases we understand;
+                // beyond those the server's sentence is the whole point.
                 switch status {
                 case 401: return .sessionExpired
                 case 403: return .notPermitted
                 case 429: return .rateLimited
-                case 500...599: return .providerUnavailable
-                default: return .server(status)
+                default: break
                 }
+                if let message, !message.isEmpty {
+                    return .reported(status: status, message: message)
+                }
+                return (500...599).contains(status) ? .providerUnavailable : .server(status)
             default:
                 return .server(0)
             }
@@ -117,6 +141,8 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         switch self {
         case .offline, .providerUnavailable:
             true
+        case .reported(let status, _):
+            (500...599).contains(status)
         case .timedOut, .rateLimited, .notPermitted, .sessionExpired,
              .unsupportedFile, .notAvailable, .server:
             false
@@ -453,7 +479,7 @@ final class SubtitleSearchCoordinator {
                 let classified = SubtitleDownloadError.classify(error)
                 // Jellyfin answers 404 for an item it cannot find, not for a
                 // missing provider; treat it as such.
-                if case .server(404) = classified {
+                if classified.httpStatus == 404 {
                     itemMissing = true
                 } else {
                     failures.append(classified)
@@ -693,7 +719,7 @@ final class SubtitleSearchCoordinator {
             // retry could never fix — a 403 or an expired session would only
             // burn the provider's download quota on its way to the same error.
             guard let directFailure,
-                  directFailure == .unsupportedFile || directFailure == .server(404) else {
+                  directFailure == .unsupportedFile || directFailure.httpStatus == 404 else {
                 throw directFailure ?? .providerUnavailable
             }
 
@@ -733,7 +759,7 @@ final class SubtitleSearchCoordinator {
             // save then attached nothing: the result really has gone from the
             // provider, which is the one case the quota/removal wording is
             // earned.
-            if failure == .notAvailable, directFailure == .server(404) {
+            if failure == .notAvailable, directFailure?.httpStatus == 404 {
                 failure = .providerUnavailable
             }
             phase = failure == .notPermitted
