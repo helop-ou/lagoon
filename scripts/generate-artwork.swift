@@ -19,8 +19,12 @@ func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
 let deepTop = rgb(0x06_1A_28)
 let deepBottom = rgb(0x08_2E_44)
 let teal = rgb(0x4A_D1_C7)
-let tealDark = rgb(0x1E_6E_78)
-let tealMid = rgb(0x2F_9E_9B)
+let tealMid = rgb(0x2F_AE_A9)
+let mint = rgb(0xC8_F6_EE)
+let oceanDeep = rgb(0x06_35_4D)
+let oceanMid = rgb(0x0B_67_73)
+let sand = rgb(0xF1_DF_B5)
+let jellyViolet = rgb(0x8C_82_DF)
 
 // MARK: - Rendering plumbing
 
@@ -63,103 +67,166 @@ func writeJSON(_ object: [String: Any], _ path: String) {
 func drawBackground(_ cg: CGContext, _ size: CGSize, glow: Bool) {
     let gradient = CGGradient(
         colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [deepBottom.cgColor, deepTop.cgColor] as CFArray,
-        locations: [0, 1]
+        colors: [oceanMid.cgColor, oceanDeep.cgColor, deepTop.cgColor] as CFArray,
+        locations: [0, 0.62, 1]
     )!
-    cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: size.height), options: [])
+    cg.drawLinearGradient(
+        gradient,
+        start: CGPoint(x: size.width * 0.12, y: 0),
+        end: CGPoint(x: size.width * 0.88, y: size.height),
+        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+    )
     if glow {
         let glowGradient = CGGradient(
             colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: [teal.withAlphaComponent(0.32).cgColor, teal.withAlphaComponent(0).cgColor] as CFArray,
+            colors: [teal.withAlphaComponent(0.24).cgColor, teal.withAlphaComponent(0).cgColor] as CFArray,
             locations: [0, 1]
         )!
         cg.drawRadialGradient(
             glowGradient,
-            startCenter: CGPoint(x: size.width * 0.5, y: size.height * 0.30), startRadius: 0,
-            endCenter: CGPoint(x: size.width * 0.5, y: size.height * 0.30), endRadius: size.width * 0.55,
+            startCenter: CGPoint(x: size.width * 0.43, y: size.height * 0.38), startRadius: 0,
+            endCenter: CGPoint(x: size.width * 0.43, y: size.height * 0.38), endRadius: max(size.width, size.height) * 0.62,
+            options: []
+        )
+
+        let coolGlow = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: [tealMid.withAlphaComponent(0.12).cgColor, tealMid.withAlphaComponent(0).cgColor] as CFArray,
+            locations: [0, 1]
+        )!
+        cg.drawRadialGradient(
+            coolGlow,
+            startCenter: CGPoint(x: size.width * 0.74, y: size.height * 0.82), startRadius: 0,
+            endCenter: CGPoint(x: size.width * 0.74, y: size.height * 0.82), endRadius: max(size.width, size.height) * 0.46,
             options: []
         )
     }
 }
 
-/// One water band: a gentle two-crest curve filled down to the bottom edge.
-func wavePath(_ size: CGSize, baseline: CGFloat, amplitude: CGFloat, phase: CGFloat) -> CGPath {
+/// A quiet tidal contour. The curves give the flat icon some depth and become
+/// the middle parallax layer on tvOS without competing with the logo mark.
+func tidePath(_ size: CGSize, baseline: CGFloat, phase: CGFloat) -> CGPath {
     let path = CGMutablePath()
     let y = size.height * baseline
-    let amp = size.height * amplitude
-    path.move(to: CGPoint(x: 0, y: 0))
-    path.addLine(to: CGPoint(x: 0, y: y + amp * sin(phase)))
-    let steps = 48
-    for i in 1...steps {
-        let t = CGFloat(i) / CGFloat(steps)
-        let x = size.width * t
-        path.addLine(to: CGPoint(x: x, y: y + amp * sin(phase + t * .pi * 2.2)))
-    }
-    path.addLine(to: CGPoint(x: size.width, y: 0))
-    path.closeSubpath()
+    let amplitude = size.height * 0.055
+    path.move(to: CGPoint(x: -size.width * 0.08, y: y + sin(phase) * amplitude))
+    path.addCurve(
+        to: CGPoint(x: size.width * 0.52, y: y + cos(phase) * amplitude),
+        control1: CGPoint(x: size.width * 0.10, y: y + cos(phase) * amplitude * 1.8),
+        control2: CGPoint(x: size.width * 0.34, y: y - sin(phase) * amplitude * 1.6)
+    )
+    path.addCurve(
+        to: CGPoint(x: size.width * 1.08, y: y - sin(phase) * amplitude),
+        control1: CGPoint(x: size.width * 0.70, y: y + sin(phase) * amplitude * 1.7),
+        control2: CGPoint(x: size.width * 0.90, y: y - cos(phase) * amplitude * 1.5)
+    )
     return path
 }
 
 func drawWaves(_ cg: CGContext, _ size: CGSize) {
-    let bands: [(CGFloat, CGFloat, NSColor)] = [
-        (0.34, 0.030, tealDark.withAlphaComponent(0.55)),
-        (0.26, 0.026, tealMid.withAlphaComponent(0.65)),
-        (0.18, 0.022, teal.withAlphaComponent(0.85)),
+    let contours: [(CGFloat, CGFloat, CGFloat, NSColor)] = [
+        (0.16, 0.35, 0.012, teal.withAlphaComponent(0.22)),
+        (0.25, 1.25, 0.009, tealMid.withAlphaComponent(0.18)),
+        (0.34, 2.10, 0.007, mint.withAlphaComponent(0.10)),
     ]
-    for (index, band) in bands.enumerated() {
-        cg.setFillColor(band.2.cgColor)
-        cg.addPath(wavePath(size, baseline: band.0, amplitude: band.1, phase: CGFloat(index) * 1.9 + 0.6))
-        cg.fillPath()
+    cg.setLineCap(.round)
+    for contour in contours {
+        cg.setStrokeColor(contour.3.cgColor)
+        cg.setLineWidth(size.height * contour.2)
+        cg.addPath(tidePath(size, baseline: contour.0, phase: contour.1))
+        cg.strokePath()
     }
 }
 
-/// The lagoon itself, aerial view: a bright shallow pool sheltered by a
-/// pale sand crescent, open at the upper-trailing edge like a real inlet.
-func drawLagoonMark(_ cg: CGContext, _ size: CGSize, center: CGPoint, diameter: CGFloat) {
-    let radius = diameter / 2
-    let sand = rgb(0xF2_E3_BE)
-    let ringRadius = radius * 1.22
-    let ringWidth = diameter * 0.15
-
-    // Sandbar first so its shadow lands behind; the gap (~28°–80°) is the inlet.
-    cg.setShadow(offset: CGSize(width: 0, height: -diameter * 0.04), blur: diameter * 0.18, color: NSColor.black.withAlphaComponent(0.35).cgColor)
-    cg.setStrokeColor(sand.cgColor)
-    cg.setLineWidth(ringWidth)
-    cg.setLineCap(.round)
-    let ring = CGMutablePath()
-    ring.addArc(center: center, radius: ringRadius, startAngle: 1.4, endAngle: 0.5, clockwise: false)
-    cg.addPath(ring)
-    cg.strokePath()
-    cg.setShadow(offset: .zero, blur: 0, color: nil)
-
-    // Shallow water: light center falling off to deeper teal at the rim.
-    cg.saveGState()
-    cg.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: diameter, height: diameter))
-    cg.clip()
-    let pool = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [rgb(0xD8_F6_EE).cgColor, teal.cgColor, rgb(0x25_86_84).cgColor] as CFArray,
-        locations: [0, 0.6, 1]
-    )!
-    cg.drawRadialGradient(
-        pool,
-        startCenter: CGPoint(x: center.x - radius * 0.25, y: center.y + radius * 0.3), startRadius: 0,
-        endCenter: CGPoint(x: center.x, y: center.y), endRadius: radius * 1.05,
-        options: []
-    )
-    cg.restoreGState()
+/// The letterform as a lagoon read off a chart: concentric depth bands
+/// following one L-shaped spine, deep water at the outside stepping in to the
+/// bright shallows at its core. The letter *is* the water — nothing is placed
+/// beside anything, which is what made the previous icon read as a sticker
+/// album rather than a mark.
+func lSpine(_ size: CGSize) -> CGPath {
+    let unit = min(size.width, size.height)
+    let c = CGPoint(x: size.width / 2, y: size.height / 2)
+    let path = CGMutablePath()
+    path.move(to: CGPoint(x: c.x - unit * 0.150, y: c.y + unit * 0.285))
+    path.addLine(to: CGPoint(x: c.x - unit * 0.150, y: c.y - unit * 0.195))
+    path.addLine(to: CGPoint(x: c.x + unit * 0.215, y: c.y - unit * 0.195))
+    return path
 }
 
-func drawWordmark(_ cg: CGContext, _ size: CGSize, fontSize: CGFloat, center: CGPoint) {
-    let text = NSAttributedString(
-        string: "Lagoon",
-        attributes: [
-            .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
-            .foregroundColor: teal,
-        ]
+/// Outermost (deepest) first. Split across the tvOS parallax layers so the
+/// bright core lifts away from the deep water on focus: at rest a flat mark,
+/// in motion a lagoon you are looking into.
+let depthBands: [(width: CGFloat, color: NSColor)] = [
+    (0.300, oceanDeep.withAlphaComponent(0.55)),
+    (0.242, oceanMid),
+    (0.180, tealMid),
+    (0.120, teal),
+    (0.059, mint),
+]
+
+func drawContours(_ cg: CGContext, _ size: CGSize, _ bands: ArraySlice<(width: CGFloat, color: NSColor)>) {
+    let unit = min(size.width, size.height)
+    let path = lSpine(size)
+    cg.setLineCap(.round)
+    cg.setLineJoin(.round)
+    for band in bands {
+        cg.setStrokeColor(band.color.cgColor)
+        cg.setLineWidth(unit * band.width)
+        cg.addPath(path)
+        cg.strokePath()
+    }
+}
+
+/// A jellyfish reduced to a bell and four filaments. It lives on the Top Shelf
+/// artwork, which is wide enough to hold it: at icon size it could only ever
+/// sit next to the letter rather than belong to it.
+func drawJellyfish(_ cg: CGContext, at center: CGPoint, radius r: CGFloat, alpha: CGFloat) {
+    let bell = CGMutablePath()
+    bell.move(to: CGPoint(x: center.x - r, y: center.y))
+    bell.addArc(center: center, radius: r, startAngle: .pi, endAngle: 0, clockwise: true)
+    bell.addQuadCurve(
+        to: CGPoint(x: center.x - r, y: center.y),
+        control: CGPoint(x: center.x, y: center.y - r * 0.40)
     )
-    let bounds = text.size()
-    text.draw(at: CGPoint(x: center.x - bounds.width / 2, y: center.y - bounds.height / 2))
+    cg.setFillColor(jellyViolet.withAlphaComponent(alpha).cgColor)
+    cg.addPath(bell)
+    cg.fillPath()
+    cg.setStrokeColor(mint.withAlphaComponent(alpha * 0.75).cgColor)
+    cg.setLineWidth(r * 0.11)
+    cg.addPath(bell)
+    cg.strokePath()
+
+    cg.setLineCap(.round)
+    cg.setLineWidth(r * 0.13)
+    for (index, offset) in [-0.56, -0.19, 0.19, 0.56].enumerated() {
+        let x = center.x + r * CGFloat(offset)
+        let sway: CGFloat = index % 2 == 0 ? 1 : -1
+        let tentacle = CGMutablePath()
+        tentacle.move(to: CGPoint(x: x, y: center.y - r * 0.18))
+        tentacle.addQuadCurve(
+            to: CGPoint(x: x + r * 0.28 * sway, y: center.y - r * 1.30),
+            control: CGPoint(x: x - r * 0.26 * sway, y: center.y - r * 0.78)
+        )
+        cg.setStrokeColor(mint.withAlphaComponent(alpha * 0.62).cgColor)
+        cg.addPath(tentacle)
+        cg.strokePath()
+    }
+}
+
+func wordmarkAttributes(_ fontSize: CGFloat) -> [NSAttributedString.Key: Any] {
+    [
+        .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
+        .foregroundColor: mint,
+    ]
+}
+
+func wordmarkSize(_ fontSize: CGFloat) -> CGSize {
+    NSAttributedString(string: "Lagoon", attributes: wordmarkAttributes(fontSize)).size()
+}
+
+func drawWordmark(_ cg: CGContext, fontSize: CGFloat, leading: CGPoint) {
+    let text = NSAttributedString(string: "Lagoon", attributes: wordmarkAttributes(fontSize))
+    text.draw(at: CGPoint(x: leading.x, y: leading.y - text.size().height / 2))
 }
 
 // MARK: - Asset compositions
@@ -167,34 +234,73 @@ func drawWordmark(_ cg: CGContext, _ size: CGSize, fontSize: CGFloat, center: CG
 func backLayer(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: true) { cg, size in
         drawBackground(cg, size, glow: true)
+        // The two deepest bands belong to the water and stay put.
+        drawContours(cg, size, depthBands[0..<2])
     }
 }
 
 func middleLayer(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: false) { cg, size in
-        drawWaves(cg, size)
+        drawContours(cg, size, depthBands[2..<4])
     }
 }
 
 func frontLayer(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: false) { cg, size in
-        drawLagoonMark(cg, size, center: CGPoint(x: size.width * 0.5, y: size.height * 0.58), diameter: size.height * 0.34)
+        // Only the bright core, so focus lifts it clear of the deep.
+        drawContours(cg, size, depthBands[4...])
     }
 }
 
 func flatIcon(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: true) { cg, size in
         drawBackground(cg, size, glow: true)
-        drawWaves(cg, size)
-        drawLagoonMark(cg, size, center: CGPoint(x: size.width * 0.5, y: size.height * 0.58), diameter: size.height * 0.30)
+        drawContours(cg, size, depthBands[...])
     }
 }
 
+/// The wide banner is where the Jellyfin lineage gets room: the mark and
+/// wordmark as one measured lockup, with jellyfish drifting at three depths.
+/// The banner is the only place they can be large enough to read as creatures
+/// rather than as specks.
 func topShelf(_ w: Int, _ h: Int) -> Data {
     renderPNG(width: w, height: h, opaque: true) { cg, size in
         drawBackground(cg, size, glow: true)
         drawWaves(cg, size)
-        drawWordmark(cg, size, fontSize: size.height * 0.30, center: CGPoint(x: size.width * 0.5, y: size.height * 0.60))
+
+        let markSize = size.height * 0.58
+        let fontSize = size.height * 0.30
+        let gap = size.height * 0.06
+        // Measured rather than guessed: the first attempt centred the two
+        // pieces independently and they overlapped into "LLagoon".
+        let text = wordmarkSize(fontSize)
+        let lockup = markSize + gap + text.width
+        let originX = size.width * 0.5 - lockup / 2
+
+        let drifters: [(x: CGFloat, y: CGFloat, r: CGFloat, alpha: CGFloat)] = [
+            (0.115, 0.62, 0.070, 0.90),
+            (0.885, 0.70, 0.052, 0.66),
+            (0.805, 0.28, 0.034, 0.42),
+        ]
+        for drifter in drifters {
+            drawJellyfish(
+                cg,
+                at: CGPoint(x: size.width * drifter.x, y: size.height * drifter.y),
+                radius: size.height * drifter.r,
+                alpha: drifter.alpha
+            )
+        }
+
+        cg.saveGState()
+        cg.translateBy(x: originX, y: size.height * 0.5 - markSize / 2)
+        drawContours(cg, CGSize(width: markSize, height: markSize), depthBands[...])
+        cg.restoreGState()
+
+        drawWordmark(
+            cg,
+            fontSize: fontSize,
+            leading: CGPoint(x: originX + markSize + gap, y: size.height * 0.5)
+        )
     }
 }
 
