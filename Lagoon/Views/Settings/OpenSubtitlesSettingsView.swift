@@ -24,59 +24,72 @@ struct OpenSubtitlesSettingsView: View {
 
     #if os(tvOS)
     private var tvBody: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.xl) {
-                TVSettingsSection(
-                    "Provider Key",
-                    footer: "OpenSubtitles requires an application key. Register one free at opensubtitles.com under API Consumers, then paste it here. Searching costs nothing; downloads are limited per day."
-                ) {
-                    TVSettingsActionLabel("Status", value: keyStatus)
-                    TextField("OpenSubtitles API key", text: $apiKey)
-                        .accessibilityIdentifier("settings.openSubtitles.apiKey")
-                    Button("Save Key") { saveKey() }
-                        .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
-                    if account.apiKeyOverride != nil {
-                        Button("Remove Saved Key", role: .destructive) {
-                            account.setAPIKeyOverride(nil)
-                            apiKey = ""
-                        }
-                    }
-                }
+        TVSettingsPage(
+            "OpenSubtitles",
+            backTitle: "Subtitles",
+            description: "A direct subtitle source for Jellyfin accounts that may not manage subtitles. Downloads go straight into the player and are never uploaded to your Jellyfin library.",
+            titleLineLimit: 1
+        ) {
+            TVSettingsSection(
+                "Provider Key",
+                footer: "OpenSubtitles requires an application key. Register one free at opensubtitles.com under API Consumers, then paste it here. Searching costs nothing; downloads are limited per day."
+            ) {
+                TVSettingsActionLabel("Status", value: keyStatus)
 
-                TVSettingsSection(
-                    "Account",
-                    footer: "Optional. Without an account Lagoon can still download a few subtitles a day; signing in raises that allowance. Downloads go straight into the player and are never uploaded to Jellyfin."
-                ) {
-                    TVSettingsActionLabel(
-                        "Signed In As",
-                        value: account.accountName ?? String(localized: "Not signed in")
-                    )
-                    if account.isSignedIn {
-                        Button("Sign Out", role: .destructive) { account.signOut() }
-                    } else {
-                        TextField("OpenSubtitles username", text: $username)
-                            .accessibilityIdentifier("settings.openSubtitles.username")
-                        SecureField("OpenSubtitles password", text: $password)
-                            .accessibilityIdentifier("settings.openSubtitles.password")
-                        Button(action: signIn) {
-                            if account.isWorking {
-                                ProgressView()
-                            } else {
-                                Text("Sign In")
-                            }
-                        }
-                        .disabled(!canSignIn)
+                TextField("OpenSubtitles API key", text: $apiKey)
+                    .accessibilityIdentifier("settings.openSubtitles.apiKey")
+
+                Button("Save Key") { saveKey() }
+                    .buttonStyle(.glass)
+                    .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                if account.apiKeyOverride != nil {
+                    Button("Remove Saved Key", role: .destructive) {
+                        account.setAPIKeyOverride(nil)
+                        apiKey = ""
                     }
-                    if let message = account.lastErrorMessage {
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                    .buttonStyle(.glass)
                 }
             }
-            .padding(Metrics.Space.xl)
+
+            TVSettingsSection(
+                "Account",
+                footer: "Optional. Without an account Lagoon can still download a few subtitles a day; signing in raises that allowance."
+            ) {
+                TVSettingsActionLabel(
+                    "Signed In As",
+                    value: account.accountName ?? String(localized: "Not signed in")
+                )
+
+                if account.isSignedIn {
+                    Button("Sign Out", role: .destructive) { account.signOut() }
+                        .buttonStyle(.glass)
+                } else {
+                    TextField("OpenSubtitles username", text: $username)
+                        .accessibilityIdentifier("settings.openSubtitles.username")
+
+                    SecureField("OpenSubtitles password", text: $password)
+                        .accessibilityIdentifier("settings.openSubtitles.password")
+
+                    Button(action: signIn) {
+                        if account.isWorking {
+                            ProgressView()
+                        } else {
+                            Text("Sign In")
+                        }
+                    }
+                    .buttonStyle(.glass)
+                    .disabled(!canSignIn)
+                }
+
+                if let message = account.lastErrorMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
-        .navigationTitle("OpenSubtitles")
         .onAppear(perform: load)
     }
     #endif

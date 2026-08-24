@@ -10,17 +10,24 @@ struct TVSettingsPage<Content: View>: View {
     let title: LocalizedStringKey
     let backTitle: LocalizedStringKey
     let pageDescription: String?
+    let titleLineLimit: Int
     @ViewBuilder let content: Content
 
     init(
         _ title: LocalizedStringKey,
         backTitle: LocalizedStringKey = "Settings",
         description: String? = nil,
+        // Two lines suit the multi-word titles. A long *single* word would be
+        // hyphenated mid-word in this narrow column instead — SwiftUI prefers
+        // hyphenating over scaling whenever the line limit still allows a
+        // wrap — so those pages ask for one line and let the text scale.
+        titleLineLimit: Int = 2,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.backTitle = backTitle
         self.pageDescription = description
+        self.titleLineLimit = titleLineLimit
         self.content = content()
     }
 
@@ -37,6 +44,8 @@ struct TVSettingsPage<Content: View>: View {
 
                 Text(title)
                     .font(.title.bold())
+                    .lineLimit(titleLineLimit)
+                    .minimumScaleFactor(0.6)
 
                 if let pageDescription {
                     Text(pageDescription)
