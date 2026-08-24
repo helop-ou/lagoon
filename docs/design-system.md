@@ -105,6 +105,10 @@ are measured from the package's own lockups, which do not agree with each other
 mark as the stacked one does, and centres it on cap height rather than on its
 ink box.
 
+`LagoonLockup` applies its own clear space — "equal to half the symbol height
+on all sides", per the guidelines — rather than leaving it to call sites, which
+had already broken the rule at every one of its four placements.
+
 `scripts/import-brand-vectors.swift` brings the marks in and crops each PDF to
 its ink, so a `.frame(height:)` sizes the mark and not the page's padding.
 Re-run it, and re-measure the ratios, if the artwork changes shape.

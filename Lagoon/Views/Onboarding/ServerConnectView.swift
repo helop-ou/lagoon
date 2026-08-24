@@ -37,7 +37,7 @@ struct ServerConnectView: View {
                     .foregroundStyle(.secondary)
                     .padding(.bottom, Metrics.Space.l)
 
-                TextField("Server address", text: $address, prompt: Text("192.168.1.100:8096 or https://jellyfin.example.com"))
+                TextField("Server address", text: $address, prompt: Text("Enter server URL or IP"))
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

@@ -272,6 +272,11 @@ struct LagoonLockup: View {
 
     private var wordmarkHeight: CGFloat { symbolHeight * layout.wordmarkRatio }
     private var gap: CGFloat { symbolHeight * layout.gapRatio }
+    /// "Keep lockup clear space equal to half the symbol height on all
+    /// sides" — the guidelines' rule, enforced by the component rather than
+    /// left to each call site, where it was already being broken four times
+    /// out of four.
+    private var clearSpace: CGFloat { symbolHeight / 2 }
 
     var body: some View {
         Group {
@@ -293,6 +298,7 @@ struct LagoonLockup: View {
                 }
             }
         }
+        .padding(clearSpace)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Lagoon")
     }

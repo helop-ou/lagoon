@@ -23,7 +23,6 @@ struct SignInView: View {
                         layout: .horizontal,
                         symbolHeight: Metrics.lockupHeaderSymbolHeight
                     )
-                    .padding(.bottom, Metrics.Space.s)
                     Text("Sign In")
                         .font(.largeTitle.bold())
                     Text(session.serverName ?? "Jellyfin")
