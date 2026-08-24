@@ -101,6 +101,22 @@ nonisolated enum PlaybackRatePolicy {
     static func identifier(_ rate: Double) -> String {
         String(format: "%g", clamped(rate)).replacingOccurrences(of: ".", with: "_")
     }
+
+    /// The adjacent supported rate in `direction`, clamped at both ends.
+    ///
+    /// Clamped rather than wrapped: the control is a pair of +/- buttons, and
+    /// a plus that jumps from 2× to 0.5× would read as a bug rather than as a
+    /// wrap. `nearest` first, because the engine accepts anything inside the
+    /// envelope — Remote Command Center can hand it 1.1 — so stepping has to
+    /// start from a value that may not be in the set.
+    static func stepped(from rate: Double, by direction: Int) -> Double {
+        let current = clamped(rate)
+        guard direction != 0 else { return current }
+        if direction > 0 {
+            return supported.first { $0 > current + 0.001 } ?? supported[supported.count - 1]
+        }
+        return supported.last { $0 < current - 0.001 } ?? supported[0]
+    }
 }
 
 /// What the physical display should be switched to for the current video

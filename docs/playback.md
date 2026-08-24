@@ -629,19 +629,24 @@ not introduce a second player to get it:
   A test pins both defaults, so if a future SDK closes the gap it says so and
   the override can go.
 - **Playback speed** (HEL-106). 0.5× through 2×, from the playback panel's
-  **Video** tab, which is the same split the Audio tab uses: what is playing on
-  the left, its options on the right, a content-sized divider between. Speed is
-  a short fixed set, so its options are a *row* under the header rather than a
-  column — stacked, six `.controlSize(.small)` buttons made the card several
-  times taller than the sheet needed for six numbers. The options column takes
-  whatever the track column leaves rather than a width of its own; at a fixed
-  720 the last value was clipped by the card's edge, and the row's width
-  depends on how the labels measure. On iOS the row scrolls horizontally,
-  because six values do not fit across the narrowest phone; tvOS must not,
-  since a ScrollView there would eat the focus movement that walks the row.
-  Plain buttons, a checkmark for the current rate, the tvOS focus lozenge as
-  the only chrome. The transport shows the selected rate beside the title
-  whenever it is not 1×. Pausing, seeking, buffering,
+  **Video** tab, which mirrors the Audio tab twice over: the same split — what
+  is playing on the left, its options on the right, a content-sized divider
+  between — and the same control shape as the audio delay row, a label, the
+  value, and a pair of `-`/`+` steppers. It is the same kind of setting, one
+  value from a short ordered scale, and it is almost always left at 1×, so it
+  gets a row rather than six selectable options; those were tried both stacked
+  and as a row and neither earned the space. Stepping is clamped at both ends
+  rather than wrapped: a plus at 2× that landed on 0.5× reads as a bug. The
+  value is dimmed at 1× exactly as a zero delay is.
+
+  The options column declares `.focusSection()`, which the Audio tab does not
+  need: its left column is a list of focusable rows, so something always sits
+  directly under the tab. This card's left column is a summary line, and
+  without the section Down from the tab finds nothing below it and focus never
+  enters the card at all.
+
+  The transport shows the selected rate beside the title whenever it is not
+  1×. Pausing, seeking, buffering,
   renderer recovery, delivery fallback and next-episode handoff all preserve
   it. Every audio renderer uses the time-domain pitch algorithm, including a
   replacement after media-services reset. Stall recovery, the delivered-PTS

@@ -68,7 +68,7 @@ final class PlayerRegressionUITests: XCTestCase {
 
     /// Playback speed lives in the panel's Video tab, so this drives the
     /// route a viewer actually takes: down into the panel, across to Video,
-    /// down into the rows, and pick one.
+    /// down onto the steppers, and step it.
     func testPlaybackSpeedIsChosenFromTheVideoTab() throws {
         let app = launchPlayer(title: "The Great Train Robbery", simulatorTranscode: false)
         try requireRegressionFixture(in: app)
@@ -81,23 +81,30 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.right)
         waitForState(in: app, timeout: 5) { $0.string("tab") == "video" }
 
-        // Down again drops into the card's rows.
+        // Down drops into the card, onto the speed steppers.
         remote.press(.down)
-        for rate in ["0_5", "0_75", "1", "1_25", "1_5", "2"] {
-            let option = app.descendants(matching: .any)["player.playbackRate.\(rate)"]
+        for control in ["decrease", "value", "increase"] {
+            let element = app.descendants(matching: .any)["player.playbackRate.\(control)"]
             XCTAssertTrue(
-                option.waitForExistence(timeout: 5),
-                "the Video tab should offer \(rate)"
+                element.waitForExistence(timeout: 5),
+                "the Video tab should offer the speed \(control)"
             )
         }
 
-        // The options are a row, so right steps to the next one. Take
-        // whatever it lands on: the assertion is that choosing changes the
-        // rate, not which value tvOS lands on first.
+        // Focus enters the section on the leftmost control, which is minus.
+        remote.press(.select)
+        let lowered = waitForState(in: app, timeout: 8) { $0.string("rate") == "0.75" }
+        XCTAssertEqual(lowered.string("rate"), "0.75", "minus should step down one value")
+
+        // Right crosses the value label to plus, which steps back up.
         remote.press(.right)
         remote.press(.select)
-        let applied = waitForState(in: app, timeout: 8) { $0.string("rate") != "1" }
-        XCTAssertNotEqual(applied.string("rate"), "1", "picking a row should change the rate")
+        let restored = waitForState(in: app, timeout: 8) { $0.string("rate") == "1" }
+        XCTAssertEqual(restored.string("rate"), "1", "plus should step back up")
+
+        remote.press(.select)
+        let raised = waitForState(in: app, timeout: 8) { $0.string("rate") == "1.25" }
+        XCTAssertEqual(raised.string("rate"), "1.25", "plus should step past the default")
 
         // Menu closes the panel, and the arrows still scrub afterwards.
         remote.press(.menu)

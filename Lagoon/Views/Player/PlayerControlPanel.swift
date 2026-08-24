@@ -296,11 +296,14 @@ struct PlayerControlPanel: View {
                 }
 
             // Takes whatever the track column leaves rather than a width of
-            // its own: at a fixed 720 the last value was clipped by the card's
-            // edge, and the row's width depends on how the six labels
-            // measure, which is not a number worth guessing.
+            // its own, and declares itself a focus section. The Audio tab does
+            // not need to: its left column is a list of focusable rows, so
+            // there is always something directly under the tab. This card's
+            // left column is a summary line, so without the section Down from
+            // the tab finds nothing below it and focus never enters the card.
             videoOptions
                 .frame(maxWidth: .infinity, alignment: .topLeading)
+                .focusSection()
         }
         #else
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
@@ -322,61 +325,42 @@ struct PlayerControlPanel: View {
         }
     }
 
+    /// Shaped exactly like the Audio tab's delay row — label, value, a pair
+    /// of steppers — because it is the same kind of control: one value from a
+    /// short ordered scale. Six selectable options made the card either tall
+    /// (stacked) or wide (a row), and neither earned the space for something
+    /// that is almost always left at 1×.
     private var videoOptions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            cardHeader("Playback Speed")
-            #if os(iOS)
-            // Six values do not fit across the narrowest phone. tvOS must not
-            // get this: a ScrollView there would take the focus movement that
-            // walks the row.
-            ScrollView(.horizontal, showsIndicators: false) {
-                speedOptionsRow
-            }
-            #else
-            speedOptionsRow
-            #endif
-        }
-    }
-
-    private var speedOptionsRow: some View {
-        HStack(spacing: Metrics.Space.xs) {
-                ForEach(PlaybackRatePolicy.supported, id: \.self) { rate in
-                    Button {
-                        onSetPlaybackRate(rate)
-                    } label: {
-                        HStack(spacing: Metrics.Space.xs) {
-                            // Rendered only on the selected value rather than
-                            // held at zero opacity: in a row this short, six
-                            // permanent checkmark gutters is most of the width.
-                            if playbackRate == rate {
-                                Image(systemName: "checkmark")
-                                    .font(.caption2.bold())
-                            }
-                            Text(PlaybackRatePolicy.title(rate))
-                                .font(.callout.monospacedDigit())
-                                .lineLimit(1)
-                        }
-                        .fixedSize()
-                    }
-                    // The system's own dial for control metrics, so the focus
-                    // lozenge stays native while the row stays compact.
-                    .controlSize(.small)
-                    .focused(focus, equals: .track(Self.speedRowID(rate)))
-                    .accessibilityIdentifier(
-                        "player.playbackRate.\(PlaybackRatePolicy.identifier(rate))"
-                    )
+            cardHeader("Options")
+            HStack(spacing: Metrics.Space.m) {
+                Text("Playback Speed")
+                    .font(.callout)
+                    .fixedSize()
+                    .layoutPriority(1)
+                Spacer()
+                Button {
+                    onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: -1))
+                } label: {
+                    Image(systemName: "minus")
                 }
-            Spacer(minLength: 0)
+                .accessibilityIdentifier("player.playbackRate.decrease")
+                Text(PlaybackRatePolicy.title(playbackRate))
+                    .font(.callout.monospacedDigit())
+                    // Dimmed at the default, exactly as a zero delay is: it
+                    // says "nothing to see here" without hiding the value.
+                    .foregroundStyle(playbackRate == 1 ? .secondary : .primary)
+                    .fixedSize()
+                    .layoutPriority(1)
+                    .accessibilityIdentifier("player.playbackRate.value")
+                Button {
+                    onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: 1))
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityIdentifier("player.playbackRate.increase")
+            }
         }
-        .padding(.horizontal, rowFocusInset)
-        .padding(.vertical, rowFocusInset)
-        .padding(.horizontal, -rowFocusInset)
-    }
-
-    /// Focus identity for one speed option, in the panel's `track` namespace
-    /// so it walks with the other rows.
-    static func speedRowID(_ rate: Double) -> String {
-        "playback-rate-\(PlaybackRatePolicy.identifier(rate))"
     }
 
     private var subtitleCard: some View {

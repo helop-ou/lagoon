@@ -339,7 +339,7 @@ struct PlayerSystemIntegrationTests {
         #expect(ContentIcon.library(collectionType: nil) == ContentIcon.movies)
     }
 
-    @Test func playbackRateTitlesAndIdentifiersAreStable() {
+    @Test func playbackRateStepsAndRendersFromOnePlace() {
         // The panel's rows, the readout beside the player's title and the UI
         // test's accessibility queries all read from these, so they cannot
         // drift apart.
@@ -349,6 +349,16 @@ struct PlayerSystemIntegrationTests {
         // Remote Command Center can hand the engine a value outside the set;
         // it is still rendered, and still clamped.
         #expect(PlaybackRatePolicy.title(99) == "2×")
+
+        // Stepping is clamped, not wrapped: a plus at 2x that landed on 0.5x
+        // would read as a bug.
+        #expect(PlaybackRatePolicy.stepped(from: 1, by: 1) == 1.25)
+        #expect(PlaybackRatePolicy.stepped(from: 1, by: -1) == 0.75)
+        #expect(PlaybackRatePolicy.stepped(from: 2, by: 1) == 2)
+        #expect(PlaybackRatePolicy.stepped(from: 0.5, by: -1) == 0.5)
+        // A value the engine accepts but the set does not contain still steps.
+        #expect(PlaybackRatePolicy.stepped(from: 1.1, by: 1) == 1.25)
+        #expect(PlaybackRatePolicy.stepped(from: 1.1, by: -1) == 1)
 
         #expect(PlaybackRatePolicy.identifier(1) == "1")
         #expect(PlaybackRatePolicy.identifier(1.25) == "1_25")
