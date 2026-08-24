@@ -510,6 +510,37 @@ struct ApplePlaybackAlignmentTests {
         #expect(reduced.transcodingProfiles.first?.videoCodec == "h264")
     }
 
+    @Test func aProfileLeftWithNoVideoCodecIsDroppedRatherThanBlanked() {
+        // Jellyfin reads both an absent and an empty codec list as "no
+        // constraint", so a profile whose every codec was HEVC cannot be
+        // blanked — that would offer strictly more than the full envelope.
+        let hevcOnly = DeviceProfile.Profile(
+            maxStreamingBitrate: 1,
+            maxStaticBitrate: 1,
+            directPlayProfiles: [
+                DeviceProfile.DirectPlayProfile(
+                    container: "mkv",
+                    type: "Video",
+                    videoCodec: "hevc",
+                    audioCodec: "aac"
+                ),
+                DeviceProfile.DirectPlayProfile(container: "mp3", type: "Audio"),
+            ],
+            transcodingProfiles: [],
+            codecProfiles: [],
+            subtitleProfiles: []
+        )
+        let reduced = DeviceProfile.subtractingUnsupported(
+            hevcOnly,
+            for: PlaybackCapabilities(hardwareHEVC: false)
+        )
+
+        #expect(reduced.directPlayProfiles.count == 1)
+        // The audio profile has no video codec to lose and must survive.
+        #expect(reduced.directPlayProfiles.first?.type == "Audio")
+        #expect(!reduced.directPlayProfiles.contains { $0.videoCodec == nil && $0.type == "Video" })
+    }
+
     @Test func aDeviceWithoutHEVCIsNotAskedToPlay4KH264Instead() {
         // Subtracting HEVC has a sharp edge without this: a 4K HEVC film stops
         // direct-playing and the server is asked for H.264 at 4K, because

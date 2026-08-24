@@ -416,21 +416,37 @@ nonisolated enum DeviceProfile {
     /// device just said it cannot decode — a fallback that lands back on the
     /// same failure.
     static func profile(for capabilities: PlaybackCapabilities) -> Profile {
-        var directPlayProfiles = everything.directPlayProfiles
-        var transcodingProfiles = everything.transcodingProfiles
-        var codecProfiles = everything.codecProfiles
+        subtractingUnsupported(everything, for: capabilities)
+    }
+
+    /// The transform itself, over any envelope, so it can be exercised
+    /// against shapes the shipping literal does not currently take.
+    static func subtractingUnsupported(
+        _ envelope: Profile,
+        for capabilities: PlaybackCapabilities
+    ) -> Profile {
+        var directPlayProfiles = envelope.directPlayProfiles
+        var transcodingProfiles = envelope.transcodingProfiles
+        var codecProfiles = envelope.codecProfiles
 
         if !capabilities.hardwareHEVC {
-            directPlayProfiles = directPlayProfiles.map { profile in
+            // A profile whose every video codec was HEVC is dropped outright,
+            // not blanked. Both an absent and an empty codec list read as *no
+            // constraint* to Jellyfin, so blanking one would come back
+            // offering strictly more than the full envelope did.
+            directPlayProfiles = directPlayProfiles.compactMap { profile in
+                guard let videoCodec = profile.videoCodec else { return profile }
+                guard let kept = withoutHEVC(videoCodec) else { return nil }
                 var reduced = profile
-                reduced.videoCodec = profile.videoCodec.flatMap(withoutHEVC)
+                reduced.videoCodec = kept
                 return reduced
             }
-            transcodingProfiles = transcodingProfiles.map { profile in
-                TranscodingProfile(
+            transcodingProfiles = transcodingProfiles.compactMap { profile in
+                guard let videoCodec = withoutHEVC(profile.videoCodec) else { return nil }
+                return TranscodingProfile(
                     container: profile.container,
                     type: profile.type,
-                    videoCodec: withoutHEVC(profile.videoCodec) ?? profile.videoCodec,
+                    videoCodec: videoCodec,
                     audioCodec: profile.audioCodec,
                     context: profile.context,
                     protocol: profile.protocol,
@@ -448,12 +464,12 @@ nonisolated enum DeviceProfile {
         }
 
         return Profile(
-            maxStreamingBitrate: everything.maxStreamingBitrate,
-            maxStaticBitrate: everything.maxStaticBitrate,
+            maxStreamingBitrate: envelope.maxStreamingBitrate,
+            maxStaticBitrate: envelope.maxStaticBitrate,
             directPlayProfiles: directPlayProfiles,
             transcodingProfiles: transcodingProfiles,
             codecProfiles: codecProfiles,
-            subtitleProfiles: everything.subtitleProfiles
+            subtitleProfiles: envelope.subtitleProfiles
         )
     }
 
@@ -494,8 +510,9 @@ nonisolated enum DeviceProfile {
         )
     }
 
-    /// nil when nothing would be left — an empty codec list means "no
-    /// constraint" to Jellyfin, which is the opposite of what removal means.
+    /// nil when nothing would be left. Callers drop the profile rather than
+    /// send an empty or absent codec list, either of which Jellyfin reads as
+    /// "no constraint" — the opposite of what removal means.
     private static func withoutHEVC(_ codecs: String) -> String? {
         let kept = codecs.split(separator: ",").filter { $0 != "hevc" }
         return kept.isEmpty ? nil : kept.joined(separator: ",")
