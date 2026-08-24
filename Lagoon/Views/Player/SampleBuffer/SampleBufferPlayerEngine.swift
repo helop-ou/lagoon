@@ -12,9 +12,11 @@ import OSLog
 ///
 /// The app's only playback engine since 2026-08-16 (Jaagop's call: one
 /// player for everything). Envelope: h264 video passed through compressed;
-/// HEVC is hardware-decoded ahead with VideoToolbox; VC-1 is software-decoded
-/// into Core Video frames; aac/mp3/ac3/eac3 audio passed through compressed and
-/// dts/truehd/flac/opus/vorbis decoded to LPCM via libavcodec (M4);
+/// HEVC and hardware-supported AV1 are decoded ahead with VideoToolbox;
+/// AV1 otherwise, VP9, and the legacy video codecs are software-decoded into
+/// NV12/P010 Core Video frames; aac/mp3/ac3/eac3 audio passes through
+/// compressed and dts/truehd/flac/opus/vorbis decodes to LPCM via libavcodec
+/// (M4);
 /// embedded + external subtitles as an overlay (M5) —
 /// `DeviceProfile.lagoon` advertises exactly this, so anything outside it
 /// arrives as an fMP4 HLS transcode that libavformat demuxes back into
@@ -1341,7 +1343,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             Task { @MainActor in self.onError?(failure) }
             return
         }
-        if demuxer.videoStream?.codecName == "hevc",
+        if let codecName = demuxer.videoStream?.codecName,
+           codecName == "hevc" || codecName == "av1",
+           !demuxer.outputsDecodedVideo,
            let description = demuxer.videoStream?.formatDescription {
             do {
                 videoDecoder = try VideoToolboxDecoder(

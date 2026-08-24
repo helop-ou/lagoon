@@ -17,7 +17,8 @@ nonisolated private let ec3JOCFormatID = AudioFormatID(0x6563_2B33) // 'ec+3'
 /// h264/hevc exactly like mp4 (avcC/hvcC extradata, length-prefixed NALs),
 /// so demuxed packets can be wrapped as compressed CMSampleBuffers without a
 /// payload copy. The display layer decodes H.264; Lagoon's VideoToolbox stage
-/// decodes HEVC ahead. Same for aac/ac3/eac3 audio: CoreAudio decodes the
+/// decodes HEVC and hardware-supported AV1 ahead. Same for aac/ac3/eac3 audio:
+/// CoreAudio decodes the
 /// compressed packets handed to AVSampleBufferAudioRenderer.
 nonisolated enum SampleBufferFactory {
     static func videoFormatDescription(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> CMFormatDescription? {
@@ -30,6 +31,9 @@ nonisolated enum SampleBufferFactory {
         case AV_CODEC_ID_HEVC:
             codecType = kCMVideoCodecType_HEVC
             atomKey = "hvcC"
+        case AV_CODEC_ID_AV1:
+            codecType = kCMVideoCodecType_AV1
+            atomKey = "av1C"
         default:
             return nil
         }

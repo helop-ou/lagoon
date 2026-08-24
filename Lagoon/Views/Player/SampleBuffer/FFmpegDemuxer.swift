@@ -84,6 +84,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     private var formatContext: UnsafeMutablePointer<AVFormatContext>?
+    private let capabilities: PlaybackCapabilities
     private var cachedIO: FFmpegCachedIO?
     private var hlsCache: HLSPlaybackCacheScope?
     private let childIOLock = NSLock()
@@ -147,6 +148,27 @@ nonisolated final class FFmpegDemuxer {
         softwareVideoDecoder?.gridDescription ?? videoTimeline?.gridDescription
     }
     var outputsDecodedVideo: Bool { softwareVideoDecoder != nil }
+
+    init(capabilities: PlaybackCapabilities = .current) {
+        self.capabilities = capabilities
+    }
+
+    /// Whether packets remain compressed for an Apple decoder. AV1 only
+    /// enters that path when VideoToolbox reports hardware support; otherwise
+    /// libdav1d produces P010/NV12 image buffers. VP9 is always software here.
+    static func usesCompressedVideoPath(
+        codecID: AVCodecID,
+        capabilities: PlaybackCapabilities
+    ) -> Bool {
+        switch codecID {
+        case AV_CODEC_ID_H264, AV_CODEC_ID_HEVC:
+            true
+        case AV_CODEC_ID_AV1:
+            capabilities.hardwareAV1
+        default:
+            false
+        }
+    }
 
     func outputsDecodedAudio(streamIndex: Int32) -> Bool {
         audioDecoders[streamIndex] != nil
@@ -285,7 +307,14 @@ nonisolated final class FFmpegDemuxer {
         if guessedRate.num > 0, guessedRate.den > 0 {
             videoFrameRate = Double(guessedRate.num) / Double(guessedRate.den)
         }
-        var videoDescription = SampleBufferFactory.videoFormatDescription(codecpar: videoPar)
+        var videoDescription: CMFormatDescription? = if Self.usesCompressedVideoPath(
+            codecID: videoPar.pointee.codec_id,
+            capabilities: capabilities
+        ) {
+            SampleBufferFactory.videoFormatDescription(codecpar: videoPar)
+        } else {
+            nil
+        }
         if videoDescription == nil, SoftwareVideoDecoder.supports(codecID: videoPar.pointee.codec_id) {
             let decoder = try SoftwareVideoDecoder(
                 codecpar: videoPar,

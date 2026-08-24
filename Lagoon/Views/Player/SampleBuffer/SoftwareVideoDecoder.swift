@@ -7,17 +7,15 @@ import _LagoonFFmpeg
 
 /// Software video fallback for codecs Apple does not expose through
 /// VideoToolbox — VC-1/WMV3, MPEG-4 Part 2 (the Xvid/DivX envelope AVI
-/// rips carry), and progressive MPEG-2. Each is decoded by Lagoon's pinned
-/// libavcodec, copied into
+/// rips carry), progressive MPEG-2, VP9, and AV1 on devices without an AV1
+/// hardware decoder. Each is decoded by Lagoon's pinned libavcodec, copied into
 /// renderer-recommended Core Video buffers, and wrapped as ready image sample
 /// buffers. AVFoundation still owns presentation, color conversion, A/V sync,
 /// display matching, and output.
 ///
-/// This intentionally supports only 8-bit 4:2:0 output, which is all these
-/// codecs produce inside Lagoon's advertised progressive envelope — MPEG-4
-/// Part 2 Simple and Advanced Simple Profiles have no other pixel format by
-/// specification. A different decoded pixel format fails closed instead of
-/// silently presenting incorrect color.
+/// The accepted output is deliberately narrow: 8-bit planar/NV12 becomes
+/// NV12, while little-endian 10-bit planar/P010 becomes Core Video P010.
+/// Anything else fails closed instead of silently presenting incorrect color.
 nonisolated final class SoftwareVideoDecoder {
     enum DecoderError: LocalizedError {
         case codecSetup(String)
@@ -60,7 +58,7 @@ nonisolated final class SoftwareVideoDecoder {
     private let timeBase: AVRational
     private let width: Int
     private let height: Int
-    private let pixelFormat: OSType
+    private let outputBitDepth: Int
     private let pixelBufferPool: CVPixelBufferPool
     private let colorProperties: ColorProperties
     private let pixelAspectRatio: (horizontal: Int32, vertical: Int32)?
@@ -74,6 +72,8 @@ nonisolated final class SoftwareVideoDecoder {
             || codecID == AV_CODEC_ID_WMV3
             || codecID == AV_CODEC_ID_MPEG4
             || codecID == AV_CODEC_ID_MPEG2VIDEO
+            || codecID == AV_CODEC_ID_AV1
+            || codecID == AV_CODEC_ID_VP9
     }
 
     init(
@@ -110,9 +110,35 @@ nonisolated final class SoftwareVideoDecoder {
             throw DecoderError.codecSetup("invalid frame dimensions")
         }
 
-        let outputPixelFormat: OSType = codecpar.pointee.color_range == AVCOL_RANGE_JPEG
-            ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        let probedPixelFormat = AVPixelFormat(rawValue: codecpar.pointee.format)
+        let contextPixelFormat = context.pointee.pix_fmt
+        let sourcePixelFormat = probedPixelFormat == AV_PIX_FMT_NONE
+            ? contextPixelFormat
+            : probedPixelFormat
+        guard let resolvedBitDepth = Self.outputBitDepth(
+            pixelFormat: sourcePixelFormat,
+            bitsPerRawSample: codecpar.pointee.bits_per_raw_sample,
+            bitsPerCodedSample: codecpar.pointee.bits_per_coded_sample,
+            codecID: codecpar.pointee.codec_id
+        ) else {
+            var framePointer: UnsafeMutablePointer<AVFrame>? = decodedFrame
+            av_frame_free(&framePointer)
+            var contextPointer: UnsafeMutablePointer<AVCodecContext>? = context
+            avcodec_free_context(&contextPointer)
+            let name = av_get_pix_fmt_name(sourcePixelFormat).map(String.init(cString:))
+                ?? "pixel-format \(sourcePixelFormat.rawValue)"
+            throw DecoderError.codecSetup("unsupported \(name)")
+        }
+        let fullRange = codecpar.pointee.color_range == AVCOL_RANGE_JPEG
+        let outputPixelFormat: OSType = if resolvedBitDepth == 10 {
+            fullRange
+                ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+                : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+        } else {
+            fullRange
+                ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        }
         var attributes = VideoToolboxDecoder.resolvedPixelBufferAttributes(
             recommended: recommendedPixelBufferAttributes
         ).rawAttributes
@@ -178,7 +204,7 @@ nonisolated final class SoftwareVideoDecoder {
         self.timeBase = timeBase
         width = resolvedWidth
         height = resolvedHeight
-        pixelFormat = outputPixelFormat
+        outputBitDepth = resolvedBitDepth
         pixelBufferPool = createdPool
         colorProperties = properties
         pixelAspectRatio = aspect
@@ -224,9 +250,16 @@ nonisolated final class SoftwareVideoDecoder {
 
     private func makeSampleBuffer() throws -> CMSampleBuffer {
         let decodedFormat = AVPixelFormat(rawValue: frame.pointee.format)
-        guard decodedFormat == AV_PIX_FMT_YUV420P
+        let isSupported8Bit = outputBitDepth == 8 && (
+            decodedFormat == AV_PIX_FMT_YUV420P
                 || decodedFormat == AV_PIX_FMT_YUVJ420P
-                || decodedFormat == AV_PIX_FMT_NV12,
+                || decodedFormat == AV_PIX_FMT_NV12
+        )
+        let isSupported10Bit = outputBitDepth == 10 && (
+            decodedFormat == AV_PIX_FMT_YUV420P10LE
+                || decodedFormat == AV_PIX_FMT_P010LE
+        )
+        guard isSupported8Bit || isSupported10Bit,
               Int(frame.pointee.width) == width,
               Int(frame.pointee.height) == height else {
             let name = av_get_pix_fmt_name(decodedFormat).map(String.init(cString:)) ?? "\(frame.pointee.format)"
@@ -250,14 +283,58 @@ nonisolated final class SoftwareVideoDecoder {
               let destinationUV = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1)?.assumingMemoryBound(to: UInt8.self) else {
             throw DecoderError.unsupportedPixelFormat("missing image planes")
         }
-        Self.copyRows(
-            source: sourceY,
-            sourceStride: planeStride(0),
-            destination: destinationY,
-            destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
-            rowBytes: width,
-            rows: height
-        )
+        if decodedFormat == AV_PIX_FMT_YUV420P10LE {
+            Self.shift10BitPlaneToP010(
+                source: UnsafeRawPointer(sourceY).assumingMemoryBound(to: UInt16.self),
+                sourceStride: planeStride(0),
+                destination: UnsafeMutableRawPointer(destinationY).assumingMemoryBound(to: UInt16.self),
+                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
+                width: width,
+                rows: height
+            )
+            guard let sourceU = planePointer(1), let sourceV = planePointer(2) else {
+                throw DecoderError.unsupportedPixelFormat("missing 10-bit planar chroma")
+            }
+            Self.interleave420Chroma10BitToP010(
+                sourceU: UnsafeRawPointer(sourceU).assumingMemoryBound(to: UInt16.self),
+                sourceUStride: planeStride(1),
+                sourceV: UnsafeRawPointer(sourceV).assumingMemoryBound(to: UInt16.self),
+                sourceVStride: planeStride(2),
+                destination: UnsafeMutableRawPointer(destinationUV).assumingMemoryBound(to: UInt16.self),
+                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
+                width: width,
+                rows: height / 2
+            )
+        } else if decodedFormat == AV_PIX_FMT_P010LE {
+            guard let sourceUV = planePointer(1) else {
+                throw DecoderError.unsupportedPixelFormat("missing P010 chroma plane")
+            }
+            Self.copyRows(
+                source: sourceY,
+                sourceStride: planeStride(0),
+                destination: destinationY,
+                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
+                rowBytes: width * MemoryLayout<UInt16>.stride,
+                rows: height
+            )
+            Self.copyRows(
+                source: sourceUV,
+                sourceStride: planeStride(1),
+                destination: destinationUV,
+                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
+                rowBytes: width * MemoryLayout<UInt16>.stride,
+                rows: height / 2
+            )
+        } else {
+            Self.copyRows(
+                source: sourceY,
+                sourceStride: planeStride(0),
+                destination: destinationY,
+                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
+                rowBytes: width,
+                rows: height
+            )
+        }
 
         if decodedFormat == AV_PIX_FMT_NV12 {
             guard let sourceUV = planePointer(1) else {
@@ -271,7 +348,7 @@ nonisolated final class SoftwareVideoDecoder {
                 rowBytes: width,
                 rows: height / 2
             )
-        } else {
+        } else if decodedFormat == AV_PIX_FMT_YUV420P || decodedFormat == AV_PIX_FMT_YUVJ420P {
             guard let sourceU = planePointer(1), let sourceV = planePointer(2) else {
                 throw DecoderError.unsupportedPixelFormat("missing planar chroma")
             }
@@ -344,6 +421,35 @@ nonisolated final class SoftwareVideoDecoder {
         }
     }
 
+    /// Resolves the storage contract before Core Video creates its fixed-format
+    /// pool. Stream probing normally supplies the pixel format; the bit-depth
+    /// fields cover containers that only declare depth. Legacy codecs are
+    /// intrinsically 8-bit inside Lagoon's advertised envelope.
+    static func outputBitDepth(
+        pixelFormat: AVPixelFormat,
+        bitsPerRawSample: Int32,
+        bitsPerCodedSample: Int32,
+        codecID: AVCodecID
+    ) -> Int? {
+        switch pixelFormat {
+        case AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVJ420P, AV_PIX_FMT_NV12:
+            return 8
+        case AV_PIX_FMT_YUV420P10LE, AV_PIX_FMT_P010LE:
+            return 10
+        default:
+            let declared = bitsPerRawSample > 0 ? bitsPerRawSample : bitsPerCodedSample
+            if declared > 0, declared <= 8 { return 8 }
+            if declared > 8, declared <= 10 { return 10 }
+            if codecID == AV_CODEC_ID_VC1
+                || codecID == AV_CODEC_ID_WMV3
+                || codecID == AV_CODEC_ID_MPEG4
+                || codecID == AV_CODEC_ID_MPEG2VIDEO {
+                return 8
+            }
+            return nil
+        }
+    }
+
     static func copyRows(
         source: UnsafePointer<UInt8>,
         sourceStride: Int,
@@ -381,6 +487,67 @@ nonisolated final class SoftwareVideoDecoder {
             ? sourceV
             : sourceV.advanced(by: (rows - 1) * -sourceVStride)
         LagoonPixelConversion.interleave420Chroma(
+            sourceU: firstU,
+            sourceUStride: sourceUStride,
+            sourceV: firstV,
+            sourceVStride: sourceVStride,
+            destination: destination,
+            destinationStride: destinationStride,
+            width: width,
+            rows: rows
+        )
+    }
+
+    static func shift10BitPlaneToP010(
+        source: UnsafePointer<UInt16>,
+        sourceStride: Int,
+        destination: UnsafeMutablePointer<UInt16>,
+        destinationStride: Int,
+        width: Int,
+        rows: Int
+    ) {
+        let firstSource: UnsafePointer<UInt16> = if sourceStride >= 0 {
+            source
+        } else {
+            UnsafeRawPointer(source)
+                .advanced(by: (rows - 1) * -sourceStride)
+                .assumingMemoryBound(to: UInt16.self)
+        }
+        LagoonPixelConversion.shift10BitPlaneToP010(
+            source: firstSource,
+            sourceStride: sourceStride,
+            destination: destination,
+            destinationStride: destinationStride,
+            width: width,
+            rows: rows
+        )
+    }
+
+    static func interleave420Chroma10BitToP010(
+        sourceU: UnsafePointer<UInt16>,
+        sourceUStride: Int,
+        sourceV: UnsafePointer<UInt16>,
+        sourceVStride: Int,
+        destination: UnsafeMutablePointer<UInt16>,
+        destinationStride: Int,
+        width: Int,
+        rows: Int
+    ) {
+        let firstU: UnsafePointer<UInt16> = if sourceUStride >= 0 {
+            sourceU
+        } else {
+            UnsafeRawPointer(sourceU)
+                .advanced(by: (rows - 1) * -sourceUStride)
+                .assumingMemoryBound(to: UInt16.self)
+        }
+        let firstV: UnsafePointer<UInt16> = if sourceVStride >= 0 {
+            sourceV
+        } else {
+            UnsafeRawPointer(sourceV)
+                .advanced(by: (rows - 1) * -sourceVStride)
+                .assumingMemoryBound(to: UInt16.self)
+        }
+        LagoonPixelConversion.interleave420Chroma10BitToP010(
             sourceU: firstU,
             sourceUStride: sourceUStride,
             sourceV: firstV,

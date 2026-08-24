@@ -17,8 +17,9 @@ shells instead of 27.
 `PlaybackController.start` runs the standard Jellyfin negotiation:
 
 1. `POST Items/{id}/PlaybackInfo?UserId=` with `DeviceProfile.lagoon` — a
-   capability profile mirroring exactly what the engine can play: h264/hevc
-   video plus progressive SDR 8-bit VC-1, MPEG-4 Part 2, and MPEG-2 up to 1080p,
+   capability profile mirroring exactly what the engine can play: h264/hevc,
+   capability-routed AV1, and progressive VP9 plus SDR 8-bit VC-1, MPEG-4
+   Part 2, and MPEG-2 up to 1080p,
    square or anamorphic, with
    aac/mp3/ac3/eac3 (passthrough) plus dts/truehd/flac/opus/
    vorbis/PCM (libavcodec-decoded, M4) audio in mkv/webm/mp4/m4v/mov/avi,
@@ -49,15 +50,18 @@ cannot decode, and it is what gets sent. The subtraction is deliberately a
 short transform over the literal rather than a second literal, so the envelope
 stays the single statement of what the engine supports.
 
-Exactly one capability is consulted, and the reason is specific:
+Two hardware capabilities are consulted, and the reasons are specific:
 `VideoToolboxDecoder` creates its session with
 `kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder`, so
 without a hardware decoder HEVC does not degrade — it fails outright with
--12906. Everything else in the envelope survives a missing hardware decoder:
+-12906. AV1 uses that same compressed VideoToolbox path when hardware support
+is present, but unlike HEVC it has a bounded libdav1d software path when it is
+not. Everything else in the envelope survives a missing hardware decoder:
 H.264 reaches `AVSampleBufferVideoRenderer` compressed and may be decoded in
-software, and VC-1 and MPEG-4 Part 2 are libavcodec on the CPU.
+software, while VP9 and the legacy codecs are libavcodec on the CPU.
 
-**Do not gate more on `VTIsHardwareDecodeSupported` than that.** It reports
+**Do not gate more on `VTIsHardwareDecodeSupported` than those routing
+decisions.** It reports
 hardware alone: on the tvOS simulator it answers false for *every* codec,
 including the H.264 the simulator plainly plays. Gating wholesale would strip
 the profile to nothing.
@@ -89,8 +93,9 @@ direct-plays under both.
 On the hardware Lagoon targets (tvOS 26 / iOS 26) HEVC decoders are expected
 everywhere, so this is defensive rather than load-bearing today; where it
 already shows is the simulator, which now negotiates H.264 on its own. Its
-real payoff is the mechanism: AV1 support genuinely varies by device, which is
-what HEL-103 needs.
+real payoff is AV1: A17/M3-class devices can take the compressed hardware path,
+while older devices remain inside the same honest direct-play envelope through
+the software fallback.
 
 ### When playback fails: the delivery ladder (HEL-100)
 
@@ -156,9 +161,10 @@ full, zero stalls.
 libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +
 `AVSampleBufferAudioRenderer` under one `AVSampleBufferRenderSynchronizer`.
 This is the app's only player. H.264 and supported audio codecs stay
-compressed; HEVC is decoded ahead by a hardware-only VideoToolbox session;
-VC-1 and MPEG-4 Part 2 are software-decoded by libavcodec into
-renderer-recommended NV12 Core Video buffers;
+compressed; HEVC and hardware-supported AV1 are decoded ahead by a
+hardware-only VideoToolbox session; AV1 without that capability, VP9, VC-1,
+MPEG-4 Part 2, and MPEG-2 are software-decoded by libavcodec into
+renderer-recommended NV12/P010 Core Video buffers;
 unsupported compressed audio is decoded to LPCM by libavcodec. AVFoundation
 still owns color management, presentation, synchronization, and audio output.
 
@@ -394,6 +400,22 @@ composition cost is more representative than Simulator timing.
   that path. Integer/float PCM variants, Blu-ray LPCM, and DVD LPCM use the
   existing libavcodec → Float32 LPCM audio renderer path; DVB bitmap subtitles
   use the same paletted-rectangle decoder and overlay as PGS and VobSub.
+- **10-bit AV1 and VP9** (HEL-103): progressive AV1 Main and VP9 profiles 0/2
+  direct-play at up to 10-bit. AV1 routing and negotiation are
+  capability-aware:
+  VideoToolbox receives compressed AV1 plus its `av1C` configuration on
+  hardware that reports an AV1 decoder and retains the full-resolution
+  profile; otherwise the pinned dav1d decoder is used and the profile is capped
+  at 1920×1080. VP9 always uses the software path and the same 1080p cap.
+  FFmpeg's 8-bit planar/NV12 output becomes Core Video NV12. Its little-endian
+  planar 10-bit output is shifted
+  from low-bit words to P010's high-bit layout and U/V is interleaved by an
+  ARM NEON primitive (with scalar fallback); native P010 output is copied
+  stride-aware. Color primaries, transfer function, YCbCr matrix, range,
+  chroma location, pixel aspect, and exact presentation timing propagate on
+  both paths. The software 1080p ceiling is intentional for the first release:
+  widen it only after the physical-device frame-loss and memory benches show
+  enough CPU and jetsam headroom.
 - **Anamorphic / non-square pixels**: `SampleBufferFactory` attaches
   `kCMFormatDescriptionExtension_PixelAspectRatio` from the stream's
   `sample_aspect_ratio`, and `SoftwareVideoDecoder` attaches the matching

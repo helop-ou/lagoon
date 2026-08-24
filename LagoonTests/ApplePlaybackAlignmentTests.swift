@@ -144,6 +144,150 @@ struct ApplePlaybackAlignmentTests {
         #expect(output == [10, 50, 20, 60, 0xFF, 0xFF, 30, 70, 40, 80, 0xFF, 0xFF])
     }
 
+    @Test func planar10BitFramesAreShiftedAndInterleavedIntoP010() {
+        let y: [UInt16] = [
+            0, 1, 512, 1023, 77,
+            10, 20, 30, 40, 88,
+        ]
+        var outputY = [UInt16](repeating: 0xFFFF, count: 12)
+        y.withUnsafeBufferPointer { source in
+            outputY.withUnsafeMutableBufferPointer { destination in
+                SoftwareVideoDecoder.shift10BitPlaneToP010(
+                    source: source.baseAddress!,
+                    sourceStride: 5 * MemoryLayout<UInt16>.stride,
+                    destination: destination.baseAddress!,
+                    destinationStride: 6 * MemoryLayout<UInt16>.stride,
+                    width: 4,
+                    rows: 2
+                )
+            }
+        }
+        #expect(outputY == [
+            0, 64, 32_768, 65_472, 0xFFFF, 0xFFFF,
+            640, 1_280, 1_920, 2_560, 0xFFFF, 0xFFFF,
+        ])
+
+        let u: [UInt16] = [1, 512, 77, 2, 100, 88]
+        let v: [UInt16] = [1023, 0, 77, 500, 700, 88]
+        var outputUV = [UInt16](repeating: 0xFFFF, count: 12)
+        u.withUnsafeBufferPointer { sourceU in
+            v.withUnsafeBufferPointer { sourceV in
+                outputUV.withUnsafeMutableBufferPointer { destination in
+                    SoftwareVideoDecoder.interleave420Chroma10BitToP010(
+                        sourceU: sourceU.baseAddress!,
+                        sourceUStride: 3 * MemoryLayout<UInt16>.stride,
+                        sourceV: sourceV.baseAddress!,
+                        sourceVStride: 3 * MemoryLayout<UInt16>.stride,
+                        destination: destination.baseAddress!,
+                        destinationStride: 6 * MemoryLayout<UInt16>.stride,
+                        width: 4,
+                        rows: 2
+                    )
+                }
+            }
+        }
+        #expect(outputUV == [
+            64, 65_472, 32_768, 0, 0xFFFF, 0xFFFF,
+            128, 32_000, 6_400, 44_800, 0xFFFF, 0xFFFF,
+        ])
+    }
+
+    @Test func av1AndVP9AreBoundedToTheTenBitSoftwareEnvelope() {
+        let directVideo = DeviceProfile.everything.directPlayProfiles.first { $0.type == "Video" }
+        let codecs = directVideo?.videoCodec?.split(separator: ",") ?? []
+        #expect(codecs.contains("av1"))
+        #expect(codecs.contains("vp9"))
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_AV1))
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_VP9))
+        #expect(avcodec_find_decoder(AV_CODEC_ID_AV1) != nil)
+        #expect(avcodec_find_decoder_by_name("libdav1d") != nil)
+        #expect(avcodec_find_decoder(AV_CODEC_ID_VP9) != nil)
+
+        let softwareProfile = DeviceProfile.profile(
+            for: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
+        )
+        for codec in ["av1", "vp9"] {
+            let profile = (codec == "av1" ? softwareProfile : DeviceProfile.everything)
+                .codecProfiles.first { $0.codec == codec }
+            #expect(profile?.conditions.contains {
+                $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "10"
+            } == true)
+            #expect(profile?.conditions.contains {
+                $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == "1920"
+            } == true)
+            #expect(profile?.conditions.contains {
+                $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == "1080"
+            } == true)
+            #expect(profile?.conditions.contains {
+                $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+            } == true)
+        }
+        let hardwareAV1 = DeviceProfile.profile(
+            for: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        ).codecProfiles.first { $0.codec == "av1" }
+        #expect(hardwareAV1?.conditions.contains { $0.property == "Width" } == false)
+        #expect(hardwareAV1?.conditions.contains { $0.property == "Height" } == false)
+
+        #expect(SoftwareVideoDecoder.outputBitDepth(
+            pixelFormat: AV_PIX_FMT_YUV420P10LE,
+            bitsPerRawSample: 0,
+            bitsPerCodedSample: 0,
+            codecID: AV_CODEC_ID_AV1
+        ) == 10)
+        #expect(SoftwareVideoDecoder.outputBitDepth(
+            pixelFormat: AV_PIX_FMT_YUV420P,
+            bitsPerRawSample: 0,
+            bitsPerCodedSample: 0,
+            codecID: AV_CODEC_ID_VP9
+        ) == 8)
+    }
+
+    @Test func AV1CompressedRoutingRequiresHardwareSupport() {
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_AV1,
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
+        ))
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_AV1,
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        ))
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_VP9,
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        ))
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_H264,
+            capabilities: PlaybackCapabilities(hardwareHEVC: false, hardwareAV1: false)
+        ))
+    }
+
+    @Test func av1FixtureProducesReadyP010Frames() throws {
+        try assertTenBitSoftwareFixture(
+            environmentKey: "LAGOON_AV1_FIXTURE_URL",
+            codecName: "av1"
+        )
+        guard let rawURL = ProcessInfo.processInfo.environment["LAGOON_AV1_FIXTURE_URL"],
+              !rawURL.isEmpty else { return }
+        let demuxer = FFmpegDemuxer(
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        )
+        defer { demuxer.close() }
+        try demuxer.open(
+            url: rawURL,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        #expect(!demuxer.outputsDecodedVideo)
+        let subtype = demuxer.videoStream?.formatDescription.map(CMFormatDescriptionGetMediaSubType)
+        #expect(subtype == kCMVideoCodecType_AV1)
+    }
+
+    @Test func vp9FixtureProducesReadyP010Frames() throws {
+        try assertTenBitSoftwareFixture(
+            environmentKey: "LAGOON_VP9_FIXTURE_URL",
+            codecName: "vp9"
+        )
+    }
+
     /// Opt-in real-bitstream check used by the playback verification command.
     /// Keeping the fixture URL outside the repository avoids shipping a large
     /// third-party media file while still exercising libavformat → VC-1 decode
@@ -350,6 +494,8 @@ struct ApplePlaybackAlignmentTests {
         let directVideo = reduced.directPlayProfiles.first { $0.type == "Video" }
         let codecs = directVideo?.videoCodec?.split(separator: ",") ?? []
         #expect(codecs.contains("h264"))
+        #expect(codecs.contains("av1"))
+        #expect(codecs.contains("vp9"))
         #expect(codecs.contains("vc1"))
         #expect(codecs.contains("mpeg4"))
         #expect(reduced.codecProfiles.contains { $0.codec == "h264" })
@@ -398,7 +544,9 @@ struct ApplePlaybackAlignmentTests {
         // encodings of the same value are equal as JSON but not as data.
         let full = try JSONSerialization.jsonObject(
             with: JellyfinClient.encoder.encode(
-                DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: true))
+                DeviceProfile.profile(
+                    for: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+                )
             )
         ) as? NSDictionary
         let envelope = try JSONSerialization.jsonObject(
@@ -595,6 +743,49 @@ struct ApplePlaybackAlignmentTests {
             videoIsSoftwareDecoded: true
         ) == 42)
         #expect(StallRecoveryPolicy.confirmationDelay == .seconds(1))
+    }
+
+    private func assertTenBitSoftwareFixture(
+        environmentKey: String,
+        codecName: String
+    ) throws {
+        guard let rawURL = ProcessInfo.processInfo.environment[environmentKey],
+              !rawURL.isEmpty else { return }
+        let demuxer = FFmpegDemuxer(
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
+        )
+        defer { demuxer.close() }
+        try demuxer.open(
+            url: rawURL,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        #expect(demuxer.videoStream?.codecName == codecName)
+        #expect(demuxer.outputsDecodedVideo)
+
+        var decodedFrames = 0
+        var reads = 0
+        readLoop: while decodedFrames < 12, reads < 1_000 {
+            reads += 1
+            switch demuxer.readNext() {
+            case .video(let buffer):
+                #expect(CMSampleBufferDataIsReady(buffer))
+                let image = try #require(CMSampleBufferGetImageBuffer(buffer))
+                let format = CVPixelBufferGetPixelFormatType(image)
+                #expect(
+                    format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+                        || format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+                )
+                decodedFrames += 1
+            case .failed(let message):
+                Issue.record("\(codecName) fixture failed: \(message)")
+                break readLoop
+            case .endOfFile:
+                break readLoop
+            default:
+                continue
+            }
+        }
+        #expect(decodedFrames == 12)
     }
 
 }

@@ -3,8 +3,9 @@ import Foundation
 // Capability profile sent with PlaybackInfo so the server can decide between
 // direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
 // what the Lagoon sample-buffer engine can play: h264 stays compressed,
-// hevc is hardware-decoded ahead, and progressive 8-bit VC-1, MPEG-4
-// Part 2, and MPEG-2 up to 1080p are software-decoded into Core Video buffers;
+// hevc is hardware-decoded ahead, AV1 uses hardware when available, and
+// progressive AV1/VP9 (up to 10-bit) plus 8-bit VC-1, MPEG-4 Part 2, and
+// MPEG-2 up to 1080p are software-decoded into Core Video buffers;
 // aac/mp3/ac3/eac3 audio stays compressed plus
 // non-square pixels carried through as a PixelAspectRatio extension, so
 // anamorphic sources (PAL DVD rips at 720x576 with a 16:15 pixel aspect)
@@ -72,7 +73,7 @@ nonisolated enum DeviceProfile {
             DirectPlayProfile(
                 container: "mkv,webm,mp4,m4v,mov,avi,mpg,mpeg,ts,mpegts,m2ts,vob",
                 type: "Video",
-                videoCodec: "hevc,h264,vc1,mpeg4,mpeg2video",
+                videoCodec: "hevc,h264,av1,vp9,vc1,mpeg4,mpeg2video",
                 audioCodec: "aac,mp3,ac3,eac3,dts,truehd,flac,opus,vorbis,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_f64le,pcm_s16be,pcm_s24be,pcm_s32be,pcm_f32be,pcm_f64be,pcm_bluray,pcm_dvd"
             ),
             DirectPlayProfile(container: "mp3", type: "Audio"),
@@ -166,6 +167,88 @@ nonisolated enum DeviceProfile {
                         property: "IsInterlaced",
                         value: "true",
                         isRequired: false
+                    ),
+                ]
+            ),
+            // AV1 remains direct play on every supported device: recent
+            // Apple silicon takes the compressed stream through VideoToolbox,
+            // while older hardware uses the pinned libdav1d decoder and
+            // presents NV12/P010 through the same renderer. The capability
+            // transform below applies the initial 1080p ceiling only to that
+            // software fallback; hardware AV1 keeps the full envelope.
+            CodecProfile(
+                type: "Video",
+                codec: "av1",
+                conditions: [
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoProfile",
+                        value: "main",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoRangeType",
+                        value: "SDR|HDR10|HLG|HDR10Plus",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "10",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "NotEquals",
+                        property: "IsInterlaced",
+                        value: "true",
+                        isRequired: true
+                    ),
+                ]
+            ),
+            // Apple exposes no public VP9 VideoToolbox path on tvOS. Profiles
+            // 0 and 2 cover 8- and 10-bit 4:2:0 respectively; libavcodec emits
+            // those as NV12/P010-ready frames within the same conservative
+            // 1080p software ceiling as AV1.
+            CodecProfile(
+                type: "Video",
+                codec: "vp9",
+                conditions: [
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoProfile",
+                        value: "profile 0|profile 2",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "EqualsAny",
+                        property: "VideoRangeType",
+                        value: "SDR|HDR10|HLG|HDR10Plus",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "10",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Width",
+                        value: "1920",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "Height",
+                        value: "1080",
+                        isRequired: true
+                    ),
+                    ProfileCondition(
+                        condition: "NotEquals",
+                        property: "IsInterlaced",
+                        value: "true",
+                        isRequired: true
                     ),
                 ]
             ),
@@ -324,8 +407,8 @@ nonisolated enum DeviceProfile {
     /// statement of what the engine can play and this stays a short, testable
     /// transform over it.
     ///
-    /// HEVC is the only thing capability can remove today, and it has to come
-    /// out in three places, not one. The direct-play list is the obvious one.
+    /// HEVC has to come out in three places, not one. The direct-play list is
+    /// the obvious one.
     /// The codec profile has to go too, or the server sees conditions for a
     /// codec it is not being offered. And the **transcoding** profile matters
     /// most: left listing `hevc,h264` it lets a server answer a transcode
@@ -333,16 +416,17 @@ nonisolated enum DeviceProfile {
     /// device just said it cannot decode — a fallback that lands back on the
     /// same failure.
     static func profile(for capabilities: PlaybackCapabilities) -> Profile {
-        guard !capabilities.hardwareHEVC else { return everything }
-        return Profile(
-            maxStreamingBitrate: everything.maxStreamingBitrate,
-            maxStaticBitrate: everything.maxStaticBitrate,
-            directPlayProfiles: everything.directPlayProfiles.map { profile in
+        var directPlayProfiles = everything.directPlayProfiles
+        var transcodingProfiles = everything.transcodingProfiles
+        var codecProfiles = everything.codecProfiles
+
+        if !capabilities.hardwareHEVC {
+            directPlayProfiles = directPlayProfiles.map { profile in
                 var reduced = profile
                 reduced.videoCodec = profile.videoCodec.flatMap(withoutHEVC)
                 return reduced
-            },
-            transcodingProfiles: everything.transcodingProfiles.map { profile in
+            }
+            transcodingProfiles = transcodingProfiles.map { profile in
                 TranscodingProfile(
                     container: profile.container,
                     type: profile.type,
@@ -354,15 +438,27 @@ nonisolated enum DeviceProfile {
                     minSegments: profile.minSegments,
                     breakOnNonKeyFrames: profile.breakOnNonKeyFrames
                 )
-            },
-            codecProfiles: everything.codecProfiles
+            }
+            codecProfiles = codecProfiles
                 .filter { $0.codec != "hevc" }
-                .map(boundedToHD),
+                .map { boundedToHD($0, codec: "h264") }
+        }
+        if !capabilities.hardwareAV1 {
+            codecProfiles = codecProfiles.map { boundedToHD($0, codec: "av1") }
+        }
+
+        return Profile(
+            maxStreamingBitrate: everything.maxStreamingBitrate,
+            maxStaticBitrate: everything.maxStaticBitrate,
+            directPlayProfiles: directPlayProfiles,
+            transcodingProfiles: transcodingProfiles,
+            codecProfiles: codecProfiles,
             subtitleProfiles: everything.subtitleProfiles
         )
     }
 
-    /// Caps H.264 at 1080p for a device with no HEVC decoder.
+    /// Caps one codec at 1080p when it has to use a conservative fallback:
+    /// H.264 for a device without HEVC, or AV1 for software libdav1d decode.
     ///
     /// Without this the subtraction has a sharp edge: a 4K HEVC film stops
     /// direct-playing and the server is asked for H.264 instead — at 4K,
@@ -370,13 +466,14 @@ nonisolated enum DeviceProfile {
     /// for a device that has no chance of decoding it, and it was observed
     /// doing exactly that (the player sat at 0 s with empty queues while the
     /// server worked). Hardware that cannot decode HEVC is not going to manage
-    /// 4K H.264 either, so the honest ceiling is HD.
+    /// 4K H.264 either. AV1 is the second use of this transform: hardware AV1
+    /// keeps the full profile, while the CPU fallback starts at HD.
     ///
     /// A heuristic, not a measurement: VideoToolbox answers per codec, never
     /// per resolution, so there is no API that would make this exact. It errs
     /// toward a stream that plays.
-    private static func boundedToHD(_ profile: CodecProfile) -> CodecProfile {
-        guard profile.codec == "h264" else { return profile }
+    private static func boundedToHD(_ profile: CodecProfile, codec: String) -> CodecProfile {
+        guard profile.codec == codec else { return profile }
         return CodecProfile(
             type: profile.type,
             codec: profile.codec,
