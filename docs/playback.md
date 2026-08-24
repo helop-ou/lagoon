@@ -628,8 +628,16 @@ not introduce a second player to get it:
   setting still decides, and over HDMI to a receiver it changes nothing.
   A test pins both defaults, so if a future SDK closes the gap it says so and
   the override can go.
-- **Playback speed** (HEL-106). The Video panel offers 0.5× through 2× and the
-  transport shows the selected non-default rate. Pausing, seeking, buffering,
+- **Playback speed** (HEL-106). 0.5× through 2×, from a control at the right
+  end of the transport's title row, directly above the scrubber — where the
+  reference player (and the `AVPlayerViewController` it is built on) keeps its
+  transport buttons. On tvOS **Up** steps through the speeds; the control is
+  deliberately *not* focusable, because taking focus would move `onMoveCommand`
+  off the surface and kill scrubbing while it is up (HEL-63, the same reason
+  the skip prompt is not focusable), and Up was the one direction the remote
+  grammar had left. It shows the current rate rather than an icon, so it is
+  also the readout — there is no second label to keep in sync. On iOS it is a
+  button in the transport row that was already there. Pausing, seeking, buffering,
   renderer recovery, delivery fallback and next-episode handoff all preserve
   it. Every audio renderer uses the time-domain pitch algorithm, including a
   replacement after media-services reset. Stall recovery, the delivered-PTS

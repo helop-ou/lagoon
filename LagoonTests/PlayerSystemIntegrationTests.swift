@@ -313,6 +313,23 @@ struct PlayerSystemIntegrationTests {
         #expect(engine.rate == 1)
     }
 
+    @Test func playbackRateStepsThroughTheSupportedSetAndWraps() {
+        // The transport control is one button, so stepping is the only way
+        // through the set and it must never dead-end at either extreme.
+        #expect(PlaybackRatePolicy.next(after: 1) == 1.25)
+        #expect(PlaybackRatePolicy.next(after: 0.5) == 0.75)
+        #expect(PlaybackRatePolicy.next(after: 2) == 0.5)
+        // Remote Command Center can hand the engine a value that is not in
+        // the list; the button still has to step on from it.
+        #expect(PlaybackRatePolicy.next(after: 1.1) == 1.25)
+        #expect(PlaybackRatePolicy.next(after: 99) == 0.5)
+        #expect(PlaybackRatePolicy.next(after: .nan) == 1.25)
+
+        #expect(PlaybackRatePolicy.title(1) == "1×")
+        #expect(PlaybackRatePolicy.title(1.25) == "1.25×")
+        #expect(PlaybackRatePolicy.title(0.5) == "0.5×")
+    }
+
     @Test func stallRecoveryKeepsItsWallClockCushionAtFasterRates() {
         #expect(StallRecoveryPolicy.decision(
             elapsed: .seconds(1),

@@ -11,8 +11,8 @@ import SwiftUI
 /// tvOS focus invariants: the surface is focusable at all times (Menu
 /// would quit the app from an unfocusable screen). Remote grammar:
 /// play/pause toggles anywhere; on the surface left/right seek ±10 s while
-/// playing and walk the scrub playhead while paused (HEL-39 slice 2), and
-/// down opens the panel; in the panel left/right walk the tabs (selection
+/// playing and walk the scrub playhead while paused (HEL-39 slice 2), up
+/// steps playback speed and down opens the panel; in the panel left/right walk the tabs (selection
 /// follows focus), down enters the track rows. Menu/Escape is intercepted
 /// at the UIKit press layer by `MenuPressGate` — scrubbing cancels back to
 /// the live position, else panel open closes the panel, otherwise the
@@ -404,6 +404,8 @@ struct CustomPlayerView<Surface: View>: View {
                     jumpChapter(direction: -1)
                 case .down:
                     openPanel()
+                case .up:
+                    engine.setRate(PlaybackRatePolicy.next(after: engine.rate))
                 default:
                     break
                 }
@@ -918,6 +920,14 @@ struct CustomPlayerView<Surface: View>: View {
                     Image(systemName: "info.circle")
                 }
                 Button {
+                    engine.setRate(PlaybackRatePolicy.next(after: engine.rate))
+                } label: {
+                    Text(PlaybackRatePolicy.title(engine.rate))
+                        .font(.callout.monospacedDigit().weight(.semibold))
+                }
+                .accessibilityLabel("Playback Speed")
+                .accessibilityIdentifier("player.playbackRate")
+                Button {
                     engine.togglePause()
                 } label: {
                     Image(systemName: engine.isPaused ? "play.fill" : "pause.fill")
@@ -941,12 +951,16 @@ struct CustomPlayerView<Surface: View>: View {
                             .font(.title2.bold())
                     }
                     Spacer()
-                    if engine.rate != 1 {
-                        Text(String(format: "%g×", engine.rate))
-                            .font(.callout.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("player.playbackRate.value")
-                    }
+                    #if os(tvOS)
+                    // Placed where the reference player puts its transport
+                    // buttons: the right end of the title row, directly above
+                    // the scrubber. Not focusable — taking focus would move
+                    // `onMoveCommand` off the surface and kill scrubbing while
+                    // it is up (HEL-63, same reason as the skip prompt) — so
+                    // Up drives it, which is the one direction the remote
+                    // grammar had left.
+                    PlayerSpeedControl(rate: engine.rate)
+                    #endif
                     if engine.isPaused {
                         Image(systemName: "pause.fill")
                             .font(.headline)
@@ -1575,6 +1589,36 @@ private extension SubtitleTextColor {
             blue: Double(blue) / 255,
             opacity: Double(alpha) / 255
         )
+    }
+}
+
+/// Playback speed, sitting where the reference player keeps its transport
+/// buttons: the right end of the title row, above the scrubber.
+///
+/// It shows the current rate rather than an icon, so it doubles as the
+/// indicator — there is no separate readout to keep in sync. The chevron is
+/// the same idiom as "Swipe down for Info" at the top of the screen: it says
+/// which direction on the remote acts on this.
+struct PlayerSpeedControl: View {
+    let rate: Double
+    var accessibilityIdentifier = "player.playbackRate"
+
+    var body: some View {
+        HStack(spacing: Metrics.Space.xs) {
+            Image(systemName: "chevron.compact.up")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white.opacity(0.6))
+            Text(PlaybackRatePolicy.title(rate))
+                .font(.callout.monospacedDigit().weight(.semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, Metrics.Space.m)
+        .padding(.vertical, Metrics.Space.s)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.22), lineWidth: 1))
+        .accessibilityLabel("Playback Speed")
+        .accessibilityValue(PlaybackRatePolicy.title(rate))
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
