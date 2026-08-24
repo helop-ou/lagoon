@@ -2120,14 +2120,23 @@ nonisolated enum DemuxBackpressurePolicy {
         let safePlaybackRate = PlaybackRatePolicy.clamped(playbackRate)
         let baseVideoHighWater = videoIsSoftwareDecoded ? 30 : (videoIsDecoded ? 18 : 90)
         let baseVideoLowWater = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 72)
+        // Scale both watermarks with the rate, then clamp them as a pair.
+        // Clamping the low water against the *already clamped* high water
+        // collapses the drain batch to a single frame once the scaled high
+        // water saturates: 41/40 for software decode and 119/118 for
+        // compressed h264 at 2x. The batched drain below then degenerates
+        // into a read-one/wait-one handshake and the decoded queue parks one
+        // frame under the hard limit — ~254 MB of 1080p P010 surfaces.
+        let drainBatch = max(baseVideoHighWater - baseVideoLowWater, 1)
         let videoHighWater = min(
             Int(ceil(Double(baseVideoHighWater) * safePlaybackRate)),
             max(videoHardWater - 1, 1)
         )
-        let videoLowWater = min(
+        let scaledVideoLowWater = min(
             Int(ceil(Double(baseVideoLowWater) * safePlaybackRate)),
-            max(videoHighWater - 1, 1)
+            videoHighWater - drainBatch
         )
+        let videoLowWater = max(min(scaledVideoLowWater, videoHighWater - 1), 1)
         let safeFrameRate = videoFrameRate.isFinite && videoFrameRate >= 1
             ? videoFrameRate
             : 24

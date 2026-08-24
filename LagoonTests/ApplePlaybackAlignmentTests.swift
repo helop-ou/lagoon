@@ -771,6 +771,70 @@ struct ApplePlaybackAlignmentTests {
         #expect(faster == .read)
     }
 
+    @Test func fasterPlaybackKeepsItsBatchedDrainWindow() {
+        // Both watermarks scale with the rate, but each is separately capped
+        // so the queue cannot reach its hard limit. Clamping the low water
+        // against the already-capped high water collapsed the gap between
+        // them to one frame at 2x: the batched drain became a
+        // read-one/wait-one handshake, and the decoded queue parked one frame
+        // under the hard limit instead of oscillating well below it.
+        func drainTarget(
+            videoIsDecoded: Bool,
+            videoIsSoftwareDecoded: Bool,
+            playbackRate: Double
+        ) -> Int? {
+            let hardLimit = DemuxBackpressurePolicy.videoHardLimit(
+                videoIsDecoded: videoIsDecoded,
+                videoIsSoftwareDecoded: videoIsSoftwareDecoded
+            )
+            // One under the hard limit is above every scaled high water, so
+            // the policy always answers with the low water it would drain to.
+            guard case .waitForVideo(let below) = DemuxBackpressurePolicy.decision(
+                videoCount: hardLimit - 1,
+                audioCount: 0,
+                audioBufferedSeconds: 0,
+                videoFrameRate: 24,
+                videoIsDecoded: videoIsDecoded,
+                videoIsSoftwareDecoded: videoIsSoftwareDecoded,
+                hasAudio: false,
+                playbackRate: playbackRate
+            ) else { return nil }
+            return below
+        }
+
+        // Software-decoded video drains 30 -> 24 at 1x. Six frames, and at 2x
+        // the high water saturates at 41 of its 42-frame hard limit, so the
+        // batch has to be carved out below that rather than above it.
+        #expect(drainTarget(
+            videoIsDecoded: true,
+            videoIsSoftwareDecoded: true,
+            playbackRate: 1
+        ) == 24)
+        #expect(drainTarget(
+            videoIsDecoded: true,
+            videoIsSoftwareDecoded: true,
+            playbackRate: 2
+        ) == 35)
+
+        // Compressed h264 drains 90 -> 72: eighteen frames, and its high
+        // water saturates at 119 from 1.5x upward.
+        #expect(drainTarget(
+            videoIsDecoded: false,
+            videoIsSoftwareDecoded: false,
+            playbackRate: 1
+        ) == 72)
+        #expect(drainTarget(
+            videoIsDecoded: false,
+            videoIsSoftwareDecoded: false,
+            playbackRate: 1.5
+        ) == 101)
+        #expect(drainTarget(
+            videoIsDecoded: false,
+            videoIsSoftwareDecoded: false,
+            playbackRate: 2
+        ) == 101)
+    }
+
     @Test func demuxDoesNotWaitForAudioOnSilentVideo() {
         let decision = DemuxBackpressurePolicy.decision(
             videoCount: 90,
