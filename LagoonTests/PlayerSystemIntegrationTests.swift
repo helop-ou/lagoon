@@ -69,6 +69,65 @@ struct PlayerSystemIntegrationTests {
         #expect(choices.count < SubtitlePreferencesStore.allLanguageChoices.count)
     }
 
+    @Test func subtitleFailuresKeepTheCauseTheViewerCanActOn() {
+        // The whole point of HEL-91: a 403 is a server permission, not an
+        // exhausted provider quota, and the two need different answers.
+        #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 403)) == .notPermitted)
+        #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 401)) == .sessionExpired)
+        #expect(SubtitleDownloadError.classify(JellyfinError.unauthorized) == .sessionExpired)
+        #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 429)) == .rateLimited)
+        #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 502)) == .providerUnavailable)
+        #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 404)) == .server(404))
+        #expect(SubtitleDownloadError.classify(URLError(.timedOut)) == .timedOut)
+        #expect(SubtitleDownloadError.classify(URLError(.notConnectedToInternet)) == .offline)
+        #expect(SubtitleDownloadError.classify(SubtitleDownloadError.unsupportedFile) == .unsupportedFile)
+
+        let permission = try? #require(SubtitleDownloadError.notPermitted.errorDescription)
+        #expect(permission?.contains("Subtitle Management") == true)
+        // The quota wording must not appear on failures that are not quota.
+        #expect(SubtitleDownloadError.notPermitted.errorDescription?.contains("download limit") == false)
+        #expect(SubtitleDownloadError.timedOut.errorDescription?.contains("download limit") == false)
+    }
+
+    @Test func subtitleRetriesOnlyCoverFastFailingTransientErrors() {
+        // Retrying a 90 s timeout would leave a spinner up for minutes, and
+        // retrying a rate limit inside seconds only spends more quota.
+        #expect(SubtitleDownloadError.offline.isRetryable)
+        #expect(SubtitleDownloadError.providerUnavailable.isRetryable)
+        #expect(!SubtitleDownloadError.timedOut.isRetryable)
+        #expect(!SubtitleDownloadError.rateLimited.isRetryable)
+        #expect(!SubtitleDownloadError.notPermitted.isRetryable)
+        #expect(!SubtitleDownloadError.sessionExpired.isRetryable)
+        #expect(!SubtitleDownloadError.unsupportedFile.isRetryable)
+
+        #expect(SubtitleRetryPolicy.shouldRetry(.offline, afterAttempt: 1))
+        #expect(SubtitleRetryPolicy.shouldRetry(.offline, afterAttempt: 2))
+        #expect(!SubtitleRetryPolicy.shouldRetry(.offline, afterAttempt: 3))
+        #expect(!SubtitleRetryPolicy.shouldRetry(.notPermitted, afterAttempt: 1))
+    }
+
+    @Test @MainActor func aPermissionFailureOutranksWhicheverLanguageFailedFirst() {
+        // Concurrent language searches complete out of order; a 403 explains
+        // every sibling failure, so it must not be masked by a stray timeout.
+        #expect(SubtitleSearchCoordinator.mostActionable([.timedOut, .notPermitted]) == .notPermitted)
+        #expect(SubtitleSearchCoordinator.mostActionable([.server(500), .sessionExpired]) == .sessionExpired)
+        #expect(SubtitleSearchCoordinator.mostActionable([.timedOut, .offline]) == .timedOut)
+        #expect(SubtitleSearchCoordinator.mostActionable([]) == nil)
+    }
+
+    @Test func administratorsPassSubtitleManagementWithoutAnExplicitFlag() throws {
+        let decode = { (json: String) in
+            try JellyfinClient.decoder.decode(UserPolicy.self, from: Data(json.utf8))
+        }
+        #expect(try decode(#"{"EnableSubtitleManagement": true}"#).allowsSubtitleManagement)
+        #expect(try !decode(#"{"EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
+        // Administrators satisfy the policy implicitly.
+        #expect(try decode(#"{"IsAdministrator": true}"#).allowsSubtitleManagement)
+        #expect(try !decode(#"{"IsAdministrator": false}"#).allowsSubtitleManagement)
+        // An explicit denial still wins over the administrator shortcut.
+        #expect(try !decode(#"{"IsAdministrator": true, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
+    }
+
     @Test @MainActor func downloadedSubtitleWaitsForRefreshAndMatchesRequestedLanguage() async throws {
         let stale = try playbackInfo(#"""
         { "MediaSources": [{
@@ -417,6 +476,84 @@ struct PlayerSystemIntegrationTests {
         })
     }
 
+    @Test @MainActor func anAccountWithoutSubtitleManagementIsToldSoBeforeAnyRequest() async throws {
+        SubtitleDownloadURLProtocol.reset(subtitleManagement: false)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
+        let client = JellyfinClient(
+            deviceId: "subtitle-permission-test",
+            sessionConfiguration: configuration
+        )
+        client.configure(serverURL: URL(string: "https://subtitle.test")!)
+        client.activateSession(token: "test-token", userId: "user-1")
+
+        let coordinator = SubtitleSearchCoordinator()
+        coordinator.configure(
+            client: client,
+            engine: SampleBufferPlayerEngine(),
+            itemID: "item-1",
+            mediaSourceID: "source-1",
+            streams: [],
+            preferredLanguages: ["en", "fr"],
+            missingMode: .ask,
+            hasSuitableLocalTrack: false,
+            onTrackAdded: { _ in }
+        )
+        coordinator.startSearch()
+        try await waitUntil { coordinator.phase != .searching }
+
+        // Jellyfin answers 403 to every remote subtitle endpoint without this
+        // permission. Asking once means the viewer is told what is actually
+        // wrong, and no provider request is spent discovering it.
+        #expect(coordinator.phase == .notPermitted)
+        #expect(coordinator.results.isEmpty)
+        #expect(!SubtitleDownloadURLProtocol.requests.contains {
+            $0.path.contains("RemoteSearch")
+        })
+    }
+
+    @Test @MainActor func aForbiddenProviderFetchNeverRetriesThroughJellyfin() async throws {
+        SubtitleDownloadURLProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
+        let client = JellyfinClient(
+            deviceId: "subtitle-forbidden-test",
+            sessionConfiguration: configuration
+        )
+        client.configure(serverURL: URL(string: "https://subtitle.test")!)
+        client.activateSession(token: "test-token", userId: "user-1")
+
+        let engine = SampleBufferPlayerEngine()
+        let coordinator = SubtitleSearchCoordinator(
+            downloadedSubtitlePoller: DownloadedSubtitlePoller(refreshDelays: [.zero])
+        )
+        coordinator.configure(
+            client: client,
+            engine: engine,
+            itemID: "item-1",
+            mediaSourceID: "source-1",
+            streams: [],
+            preferredLanguages: ["en"],
+            missingMode: .ask,
+            hasSuitableLocalTrack: false,
+            onTrackAdded: { _ in }
+        )
+        let forbidden = try JellyfinClient.decoder.decode(
+            RemoteSubtitleInfo.self,
+            from: Data(#"{ "Id": "forbidden-file", "Name": "Forbidden", "ThreeLetterISOLanguageName": "eng", "ProviderName": "Test Provider", "Format": "srt" }"#.utf8)
+        )
+        coordinator.startDownload(forbidden)
+        try await waitUntil { coordinator.phase == .notPermitted }
+
+        // Jellyfin's save path fetches from the provider a second time, so it
+        // must not run for a failure no retry could fix: that only spends the
+        // provider's download quota on the way to the same 403.
+        #expect(!SubtitleDownloadURLProtocol.requests.contains {
+            $0.method == "POST" && $0.path.contains("RemoteSearch")
+        })
+        #expect(engine.subtitleTracks.isEmpty)
+    }
+
     @Test @MainActor func missingProviderFileExplainsRemovalOrDownloadLimit() async throws {
         SubtitleDownloadURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -504,9 +641,14 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
         return recordedRequests
     }
 
-    static func reset() {
+    /// Mirrors Jellyfin's own default: a non-administrator has subtitle
+    /// management switched off unless someone turns it on.
+    private nonisolated(unsafe) static var userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": true } }"#
+
+    static func reset(subtitleManagement: Bool = true) {
         lock.lock()
         recordedRequests = []
+        userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": \#(subtitleManagement) } }"#
         lock.unlock()
     }
 
@@ -576,6 +718,12 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
         case ("GET", "/Providers/Subtitles/Subtitles/missing-provider-file"):
             payload = Data()
             status = 404
+        case ("GET", "/Providers/Subtitles/Subtitles/forbidden-file"):
+            payload = Data()
+            status = 403
+        case ("GET", "/Users/Me"):
+            payload = Data(Self.userPolicyPayload.utf8)
+            status = 200
         case ("POST", "/Items/item-1/RemoteSearch/Subtitles/missing-provider-file"):
             // Jellyfin 10.11 returns 204 even when its internal provider
             // operation throws; PlaybackInfo remains stale below.
