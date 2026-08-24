@@ -1,18 +1,18 @@
 {
   "images" : [
     {
-      "filename" : "back.png",
+      "filename" : "Back.png",
       "idiom" : "tv",
       "scale" : "1x"
     },
     {
-      "filename" : "back@2x.png",
+      "filename" : "Back@2x.png",
       "idiom" : "tv",
       "scale" : "2x"
     }
   ],
   "info" : {
-    "author" : "generate-artwork",
+    "author" : "xcode",
     "version" : 1
   }
 }
