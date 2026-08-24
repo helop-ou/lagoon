@@ -696,7 +696,13 @@ engine's own cushion is only the sample queues (~4 s of compressed video), so
 that state was permanent rebuffering roughly an hour into a large movie. The
 window keeps `byteLimit / 8` (at most 256 MiB) behind the playhead for ordinary
 backwards scrubbing and spends the rest ahead of it, freeing the islands
-furthest from the playhead when a request needs room. `preferredPrefetchOffset`
+furthest from the playhead when a request needs room. The reserve is clamped to
+what actually exists behind the playhead, so the window is a whole cap's worth
+of file wherever it sits: near the start it stays `[0, cap]` and only begins to
+slide once the playhead has passed the reserve distance. Without that clamp its
+lower half hung off the front of the file and that capacity went unspent — a
+viewer who paused a minute in buffered up to 256 MiB less than the cache was
+allowed to hold (HEL-99). `preferredPrefetchOffset`
 follows every foreground read, so a backwards seek re-centres the window on its
 next demux read and the bytes now far *ahead* become the eviction candidates;
 anything evicted is simply refetched, because the range set is the sole
@@ -738,6 +744,14 @@ open fallback is both faster and safer. Reaching the disk cap no longer ends
 proactive fill for a windowed title — "nothing to fetch" means the read-ahead
 is full, so the controller waits for the playhead to make room rather than
 giving up on the rest of the movie.
+
+Pausing freezes the window rather than the fill. The demuxer parks on its queue
+watermarks, so `preferredPrefetchOffset` stops moving and low-priority prefetch
+never advances it; the fill loop meanwhile drops its throttle entirely while
+paused, because no foreground demux request is competing for the link. The
+result is a full-speed fill up to the window's edge followed by an idle 2 s
+poll, and **nothing is evicted**: eviction only runs from a read that is short
+of capacity, so an idle cache never trims itself.
 
 Cache ownership is part of the player lifecycle, never an offline-download
 feature. There is one active scope and at most one staged successor. Dismissal,

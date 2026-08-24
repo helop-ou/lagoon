@@ -1068,18 +1068,21 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         min(byteLimit / 8, 256 * 1_024 * 1_024)
     }
 
-    /// At least one request: the window has to contain the fetch being issued
-    /// right now, or eviction would drop the bytes it just paid for.
-    private var retainAheadLocked: Int64 {
-        max(byteLimit - retainBehindLocked, requestSize)
-    }
-
+    /// A whole cap's worth of file, positioned around the playhead. Only the
+    /// bytes that actually exist behind the playhead count against the
+    /// reserve: near the start of a title the lower half of the window would
+    /// otherwise hang off the front of the file, and that capacity simply
+    /// went unused — a viewer who paused a minute in buffered up to 256 MiB
+    /// less than the cache was allowed to hold. Read-ahead takes whatever the
+    /// reserve does not need, so the window stays [0, cap] until the playhead
+    /// has passed the reserve distance and only then begins to slide.
     private var hotWindowLocked: PlaybackByteRange {
         let playhead = max(preferredPrefetchOffset, 0)
-        return PlaybackByteRange(
-            max(playhead - retainBehindLocked, 0),
-            playhead + retainAheadLocked
-        )
+        let behind = min(retainBehindLocked, playhead)
+        // At least one request: the window has to contain the fetch being
+        // issued right now, or eviction would drop the bytes it just paid for.
+        let ahead = max(byteLimit - behind, requestSize)
+        return PlaybackByteRange(playhead - behind, playhead + ahead)
     }
 
     /// Disk the sparse file actually occupies. The logical range set is not

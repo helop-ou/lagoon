@@ -304,6 +304,46 @@ struct PlaybackCacheTests {
         #expect(loader.requestCount == 12)
     }
 
+    @Test func pausingNearTheStartFillsTheWholeCapAndThenStopsFetching() async throws {
+        let requestSize: Int64 = 64 * 1_024
+        let byteLimit = 16 * requestSize
+        let payload = PlaybackCacheTests.pattern(byteCount: Int(64 * requestSize))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-paused",
+            sourceURL: URL(string: "https://media.test/remux.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: byteLimit,
+            requestSize: requestSize,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+        #expect(scope.metrics.isWindowed)
+
+        // The demuxer reads the opening chunk and the viewer pauses, so the
+        // playhead stops one request in — nearer the start than the reserve
+        // behind it. That reserve has nothing to hold, and read-ahead must
+        // get it: the window used to hang off the front of the file and leave
+        // that much of the cap unspent.
+        _ = try scope.read(offset: 0, length: Int(requestSize))
+        var chunks = 0
+        while chunks < 64, await scope.prefetchNextChunk() { chunks += 1 }
+
+        let filled = scope.metrics
+        #expect(filled.cachedBytes == byteLimit)
+        #expect(filled.evictionCount == 0)
+
+        // Full, with nothing outside the window to give back: proactive fill
+        // has to stop rather than spend requests it cannot keep.
+        let requests = loader.requestCount
+        let advanced = await scope.prefetchNextChunk()
+        #expect(!advanced)
+        #expect(loader.requestCount == requests)
+    }
+
     @Test func seekingBackwardsRecentresTheWindowAndNeverReadsAPunchedHole() throws {
         let requestSize: Int64 = 64 * 1_024
         let byteLimit = 4 * requestSize
