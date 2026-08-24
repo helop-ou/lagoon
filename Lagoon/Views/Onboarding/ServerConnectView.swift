@@ -13,22 +13,12 @@ struct ServerConnectView: View {
 
             // Atmosphere, and only here. The brand package restricts the
             // jellyfish to "punctuation in loading, empty-state, or
-            // atmospheric moments" — putting it on all three onboarding
-            // screens would make it a motif instead, which is the thing it
-            // says not to do. This is the app's first screen and the one with
-            // room to spare.
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    LagoonJellyfishAccent()
-                        // The gutter keeps it inside the TV safe area; the
-                        // extra step stops it reading as pinned to the corner
-                        // on a phone, where the gutter is only 20pt.
-                        .padding(.trailing, Metrics.screenGutter + Metrics.Space.l)
-                        .padding(.bottom, Metrics.screenGutter + Metrics.Space.l)
-                }
-            }
+            // atmospheric moments" — putting it on every onboarding screen
+            // would make it a motif instead, which is the thing it says not
+            // to do. This is the app's first screen and the one with room to
+            // spare. The animals stay low-contrast, one-colour, and clear of
+            // the centre column.
+            JellyfishSwimLayer()
 
             VStack(spacing: Metrics.Space.l) {
                 LagoonLockup()
