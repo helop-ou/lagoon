@@ -115,6 +115,32 @@ nonisolated struct PlaybackByteRangeSet: Equatable, Sendable {
         ranges = output
         return byteCount - before
     }
+
+    /// Drops a byte interval, splitting any island it lands inside. Eviction
+    /// is the only caller: a windowed cache has to give bytes back before it
+    /// can take new ones, and `ranges` is the sole authority on what a read
+    /// may take from the file, so a removed interval is immediately a miss
+    /// rather than a hole that could be read back as zeros.
+    @discardableResult
+    mutating func remove(_ range: PlaybackByteRange) -> Int64 {
+        guard range.count > 0 else { return 0 }
+        let before = byteCount
+        var output: [PlaybackByteRange] = []
+        for existing in ranges {
+            if existing.upperBound <= range.lowerBound || existing.lowerBound >= range.upperBound {
+                output.append(existing)
+                continue
+            }
+            if existing.lowerBound < range.lowerBound {
+                output.append(PlaybackByteRange(existing.lowerBound, range.lowerBound))
+            }
+            if existing.upperBound > range.upperBound {
+                output.append(PlaybackByteRange(range.upperBound, existing.upperBound))
+            }
+        }
+        ranges = output
+        return before - byteCount
+    }
 }
 
 /// A sparse cached byte island normalized onto the player timeline. Direct
@@ -148,6 +174,10 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     let cachedByteRanges: [PlaybackByteRange]
     let playheadPrefetchCount: Int
     let timelineAnchor: PlaybackTimelineAnchor?
+    /// True when the title is larger than the cap, so the cache holds a
+    /// window that travels with the playhead instead of accumulating the
+    /// whole file. Proactive fill never finishes in that mode.
+    let isWindowed: Bool
 
     init(
         cachedBytes: Int64,
@@ -162,7 +192,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         contentLength: Int64? = nil,
         cachedByteRanges: [PlaybackByteRange] = [],
         playheadPrefetchCount: Int = 0,
-        timelineAnchor: PlaybackTimelineAnchor? = nil
+        timelineAnchor: PlaybackTimelineAnchor? = nil,
+        isWindowed: Bool = false
     ) {
         self.cachedBytes = cachedBytes
         self.networkBytes = networkBytes
@@ -177,6 +208,7 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         self.cachedByteRanges = cachedByteRanges
         self.playheadPrefetchCount = playheadPrefetchCount
         self.timelineAnchor = timelineAnchor
+        self.isWindowed = isWindowed
     }
 
     var bufferedFraction: Double? {
@@ -252,7 +284,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
             contiguousCachedBytes: contiguousCachedBytes + other.contiguousCachedBytes,
             contentLength: nil,
             playheadPrefetchCount: playheadPrefetchCount + other.playheadPrefetchCount,
-            timelineAnchor: nil
+            timelineAnchor: nil,
+            isWindowed: isWindowed || other.isWindowed
         )
     }
 
@@ -270,7 +303,8 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
             contentLength: contentLength,
             cachedByteRanges: cachedByteRanges,
             playheadPrefetchCount: playheadPrefetchCount,
-            timelineAnchor: timelineAnchor
+            timelineAnchor: timelineAnchor,
+            isWindowed: isWindowed
         )
     }
 }
@@ -666,9 +700,11 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     let itemID: String
     let sourceURL: URL
     let fileURL: URL
+    /// Bytes one cache miss fetches. FFmpeg's AVIO buffer is sized to match
+    /// so a single demux read is at most a single network request.
+    let requestSize: Int64
 
     private let byteLimit: Int64
-    private let requestSize: Int64
     private let loader: PlaybackRangeLoading
     private let cancelsLoaderOnRemoval: Bool
     private let storageBudget: PlaybackCacheStorageBudget?
@@ -691,6 +727,15 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     private var preferredPrefetchOffset: Int64 = 0
     private var playheadPrefetchCount = 0
     private var timelineAnchor: PlaybackTimelineAnchor?
+    /// Sparse-file granularity. Blocks are the only unit the filesystem can
+    /// give back, so eviction punches the block-aligned interior of a range
+    /// and leaves the ragged edges cached.
+    private let blockSize: Int64
+    private var evictionCount = 0
+    /// Set the first time F_PUNCHHOLE fails. Without hole punching the file
+    /// can only grow, so the window is abandoned and the scope falls back to
+    /// a fixed cap plus unamplified reads.
+    private var holePunchingUnavailable = false
 
     init(
         itemID: String,
@@ -719,6 +764,10 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             throw PlaybackCacheError.storageUnavailable
         }
         self.file = file
+        var fileSystem = statfs()
+        blockSize = fstatfs(file.fileDescriptor, &fileSystem) == 0 && fileSystem.f_bsize > 0
+            ? Int64(fileSystem.f_bsize)
+            : 4_096
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         var mutableDirectory = directory
@@ -751,13 +800,15 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             cacheHitBytes: cacheHitBytes,
             requestCount: requestCount,
             networkRequestSeconds: networkRequestSeconds,
+            evictionCount: evictionCount,
             resourceCount: 1,
             capacityBytes: byteLimit,
             contiguousCachedBytes: cached.contiguousUpperBound,
             contentLength: knownLength,
             cachedByteRanges: cached.ranges,
             playheadPrefetchCount: playheadPrefetchCount,
-            timelineAnchor: timelineAnchor
+            timelineAnchor: timelineAnchor,
+            isWindowed: isWindowedLocked
         )
     }
 
@@ -844,10 +895,16 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             return try read(offset: offset, length: length, priority: priority)
         }
 
-        let fetchEnd = min(
-            max(requested.upperBound, requested.lowerBound + requestSize),
-            knownLength ?? Int64.max
-        )
+        // Make room before deciding how much to ask for. A read whose bytes
+        // cannot be kept must fetch only what the caller asked for: pulling a
+        // whole request to satisfy one AVIO buffer and discarding the rest
+        // multiplies both bandwidth and round trips by the ratio between them,
+        // which is what turned a full cache into permanent rebuffering.
+        makeRoomLocked(for: requestSize)
+        let readAheadEnd = storableCapacityLocked() > 0
+            ? max(requested.upperBound, requested.lowerBound + requestSize)
+            : requested.upperBound
+        let fetchEnd = min(readAheadEnd, knownLength ?? Int64.max)
         let fetchRange = PlaybackByteRange(requested.lowerBound, fetchEnd)
         let fetchID = UUID()
         inFlight[fetchID] = (fetchRange, priority)
@@ -879,7 +936,8 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         if let total = response.totalLength, total > 0 { knownLength = total }
         networkBytes += response.transferredBytes
 
-        let remainingCapacity = storageDisabled ? 0 : max(byteLimit - cached.byteCount, 0)
+        makeRoomLocked(for: Int64(response.data.count))
+        let remainingCapacity = storableCapacityLocked()
         let desiredCount = min(Int64(response.data.count), remainingCapacity)
         let storableCount = storageBudget?.reserve(upTo: desiredCount) ?? desiredCount
         if storableCount > 0, let file {
@@ -941,8 +999,28 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     private func nextPrefetchWindow() -> (offset: Int64, count: Int) {
         lock.lock()
         defer { lock.unlock() }
+        guard !storageDisabled else { return (0, 0) }
+
+        if isWindowedLocked {
+            // Read-ahead only, and only as far as the window reaches. Closing
+            // a hole behind the window would be evicted by the next request,
+            // and clamping the search to the first `byteLimit` bytes — as the
+            // whole-file scheduler below does — would stop buffering entirely
+            // once the playhead passed the cap.
+            let window = hotWindowLocked
+            let upperBound = min(window.upperBound, knownLength ?? window.upperBound)
+            let start = min(max(preferredPrefetchOffset, 0), upperBound)
+            guard let range = cached.firstUncachedRange(
+                startingAt: start,
+                endingBefore: upperBound,
+                maximumCount: requestSize
+            ) else { return (0, 0) }
+            playheadPrefetchCount += 1
+            return (range.lowerBound, Int(range.count))
+        }
+
         let upperBound = min(knownLength ?? byteLimit, byteLimit)
-        guard !storageDisabled, cached.byteCount < byteLimit, upperBound > 0 else {
+        guard cached.byteCount < byteLimit, upperBound > 0 else {
             return (0, 0)
         }
 
@@ -967,6 +1045,144 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             maximumCount: requestSize
         ) else { return (0, 0) }
         return (range.lowerBound, Int(range.count))
+    }
+
+    // MARK: - Sliding window
+
+    /// A cache large enough for the whole title keeps its original behaviour:
+    /// nothing is evicted and proactive fill converges on a complete file.
+    /// A title larger than the cap cannot do that — filling to the cap and
+    /// stopping leaves the rest of the movie uncached, and every later read
+    /// then pays a network round trip. Those titles get a window that travels
+    /// with the playhead instead.
+    private var isWindowedLocked: Bool {
+        guard byteLimit > 0, !holePunchingUnavailable else { return false }
+        guard let knownLength else { return true }
+        return knownLength > byteLimit
+    }
+
+    /// Bytes kept behind the playhead so ordinary backwards scrubbing stays
+    /// local. Everything else buffers ahead, which is what actually protects
+    /// playback from network jitter.
+    private var retainBehindLocked: Int64 {
+        min(byteLimit / 8, 256 * 1_024 * 1_024)
+    }
+
+    /// At least one request: the window has to contain the fetch being issued
+    /// right now, or eviction would drop the bytes it just paid for.
+    private var retainAheadLocked: Int64 {
+        max(byteLimit - retainBehindLocked, requestSize)
+    }
+
+    private var hotWindowLocked: PlaybackByteRange {
+        let playhead = max(preferredPrefetchOffset, 0)
+        return PlaybackByteRange(
+            max(playhead - retainBehindLocked, 0),
+            playhead + retainAheadLocked
+        )
+    }
+
+    /// Disk the sparse file actually occupies. The logical range set is not
+    /// enough on its own: punching a hole is the only way to hand blocks
+    /// back, so if the filesystem refuses, real allocation is what has to
+    /// hold the cap. A few blocks of slack absorb the difference between
+    /// byte-exact bookkeeping and block-granular allocation.
+    private func allocatedBytesLocked() -> Int64 {
+        guard let file else { return 0 }
+        var status = stat()
+        guard fstat(file.fileDescriptor, &status) == 0 else { return 0 }
+        return max(Int64(status.st_blocks) * 512 - 4 * blockSize, 0)
+    }
+
+    /// Bytes that may still be written before the cap binds, measured against
+    /// whichever of the two accountings is currently worse.
+    private func storableCapacityLocked() -> Int64 {
+        guard !storageDisabled else { return 0 }
+        return max(byteLimit - max(cached.byteCount, allocatedBytesLocked()), 0)
+    }
+
+    /// Deallocates the block-aligned interior of a range and returns exactly
+    /// what was freed. Partial blocks at either edge still hold bytes the
+    /// cache is keeping, so they stay in the range set.
+    private func punchLocked(_ range: PlaybackByteRange) -> PlaybackByteRange? {
+        guard let file, blockSize > 0, !holePunchingUnavailable else { return nil }
+        let lower = ((range.lowerBound + blockSize - 1) / blockSize) * blockSize
+        let upper = (range.upperBound / blockSize) * blockSize
+        guard upper > lower else { return nil }
+        var request = fpunchhole_t(
+            fp_flags: 0,
+            reserved: 0,
+            fp_offset: off_t(lower),
+            fp_length: off_t(upper - lower)
+        )
+        let punched = withUnsafeMutablePointer(to: &request) {
+            fcntl(file.fileDescriptor, F_PUNCHHOLE, UnsafeMutableRawPointer($0)) == 0
+        }
+        guard punched else {
+            // Without reclaimable space the window cannot hold the cap.
+            // Fall back to a fixed cap; reads stay unamplified because they
+            // stop asking for bytes they are not allowed to keep.
+            holePunchingUnavailable = true
+            return nil
+        }
+        return PlaybackByteRange(lower, upper)
+    }
+
+    /// Frees room for `byteCount` by dropping cached islands furthest from
+    /// the playhead first, and only ever from outside the retained window.
+    /// `preferredPrefetchOffset` follows every foreground read, so a
+    /// backwards seek re-centres the window on its next demux read and the
+    /// bytes that are now far *ahead* become the eviction candidates.
+    private func makeRoomLocked(for byteCount: Int64) {
+        guard byteCount > 0, isWindowedLocked else { return }
+        var shortfall = byteCount - storableCapacityLocked()
+        guard shortfall > 0 else { return }
+
+        let window = hotWindowLocked
+        let playhead = max(preferredPrefetchOffset, 0)
+        var candidates: [PlaybackByteRange] = []
+        for range in cached.ranges {
+            if range.lowerBound < window.lowerBound {
+                candidates.append(
+                    PlaybackByteRange(range.lowerBound, min(range.upperBound, window.lowerBound))
+                )
+            }
+            if range.upperBound > window.upperBound {
+                candidates.append(
+                    PlaybackByteRange(max(range.lowerBound, window.upperBound), range.upperBound)
+                )
+            }
+        }
+        candidates.sort {
+            Self.distance(of: $0, from: playhead) > Self.distance(of: $1, from: playhead)
+        }
+
+        for candidate in candidates {
+            guard shortfall > 0 else { break }
+            // Give back only what is needed, taken from the end of the island
+            // furthest from the playhead. Dropping a whole island to make room
+            // for one request would throw away read-ahead that is still worth
+            // more than the bytes replacing it.
+            let trimmed = candidate.lowerBound >= playhead
+                ? PlaybackByteRange(max(candidate.upperBound - shortfall, candidate.lowerBound), candidate.upperBound)
+                : PlaybackByteRange(candidate.lowerBound, min(candidate.lowerBound + shortfall, candidate.upperBound))
+            guard let punched = punchLocked(trimmed) else {
+                if holePunchingUnavailable { return }
+                continue
+            }
+            let removed = cached.remove(punched)
+            guard removed > 0 else { continue }
+            reservedBytes = max(reservedBytes - removed, 0)
+            storageBudget?.release(removed)
+            shortfall -= removed
+            evictionCount += 1
+        }
+    }
+
+    private static func distance(of range: PlaybackByteRange, from playhead: Int64) -> Int64 {
+        if range.upperBound <= playhead { return playhead - range.upperBound }
+        if range.lowerBound >= playhead { return range.lowerBound - playhead }
+        return 0
     }
 
     func cancelAndRemove() {
@@ -1459,7 +1675,9 @@ final class PlaybackCacheCoordinator {
             forPath: caches.path
         )
         let available = (volumeAttributes?[.systemFreeSize] as? NSNumber)?.int64Value
-        self.byteLimit = byteLimit ?? Self.recommendedByteLimit(availableBytes: available)
+        self.byteLimit = byteLimit
+            ?? Self.debugByteLimitOverride()
+            ?? Self.recommendedByteLimit(availableBytes: available)
         self.isEnabled = isEnabled
         self.allowsTranscodeCaching = allowsTranscodeCaching
         removeStaleScopes()
@@ -1565,6 +1783,18 @@ final class PlaybackCacheCoordinator {
         guard let availableBytes else { return unknownVolumeFallback }
         guard availableBytes >= safetyReserve + minimum else { return 0 }
         return max(minimum, (availableBytes - safetyReserve) / 2)
+    }
+
+    /// A device only reaches the windowed path after buffering gigabytes, so
+    /// `debug.playbackCacheCapMB` forces a small cap and makes the sliding
+    /// window observable within a minute of ordinary playback.
+    private static func debugByteLimitOverride() -> Int64? {
+        #if DEBUG
+        let megabytes = UserDefaults.standard.integer(forKey: "debug.playbackCacheCapMB")
+        return megabytes > 0 ? Int64(megabytes) * 1_024 * 1_024 : nil
+        #else
+        return nil
+        #endif
     }
 
     private func removeStaleScopes() {

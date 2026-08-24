@@ -194,7 +194,7 @@ struct PlaybackCacheTests {
         #expect(scope.metrics.cachedBytes == 64)
     }
 
-    @Test func diskUsageNeverExceedsTheConfiguredCap() throws {
+    @Test func aFullCacheStopsReadingAheadInsteadOfDiscardingMostOfEveryFetch() throws {
         let payload = Data(repeating: 0xAB, count: 256)
         let loader = PlaybackCacheLoaderStub(payload: payload)
         let directory = FileManager.default.temporaryDirectory
@@ -210,10 +210,18 @@ struct PlaybackCacheTests {
         )
         defer { scope.cancelAndRemove() }
 
+        // The first read may still buffer a whole request ahead. The second
+        // cannot store anything — the cap is reached and these byte ranges are
+        // too small for the filesystem to punch back out — so it must ask for
+        // the 16 bytes it needs rather than a full request it would discard.
         #expect(try scope.read(offset: 0, length: 16).count == 16)
         #expect(try scope.read(offset: 128, length: 16).count == 16)
         #expect(scope.metrics.cachedBytes == 32)
-        #expect(scope.metrics.networkBytes == 128)
+        #expect(loader.requestedRanges == [
+            PlaybackByteRange(0, 64),
+            PlaybackByteRange(128, 144),
+        ])
+        #expect(scope.metrics.networkBytes == 80)
     }
 
     @Test func cancellationStopsRequestsAndRejectsLaterReads() throws {

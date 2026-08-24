@@ -913,8 +913,11 @@ final class PlaybackController {
 
                 let before = session.metrics
                 self.publishBufferMetrics(before)
-                if before.bufferedFraction == 1
-                    || before.cachedBytes >= before.capacityBytes {
+                // A title that fits under the cap finishes and the loop ends.
+                // A larger one is buffered through a window that travels with
+                // the playhead, so reaching capacity is its steady state, not
+                // its end: the loop has to keep running for the whole title.
+                if before.bufferedFraction == 1 {
                     return
                 }
 
@@ -947,7 +950,19 @@ final class PlaybackController {
                     after.playheadPrefetchCount,
                     engine.stallCount
                 )
-                guard advanced else { return }
+                if !advanced {
+                    // Nothing to fetch right now. For a windowed cache that
+                    // means the read-ahead is full and the loop waits for the
+                    // playhead to make room rather than giving up on the rest
+                    // of the movie.
+                    guard after.isWindowed else { return }
+                    do {
+                        try await Task.sleep(for: .seconds(2))
+                    } catch {
+                        return
+                    }
+                    continue
+                }
 
                 if !engine.isPaused {
                     // Keep proactive traffic at roughly <=20% of the link
