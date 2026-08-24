@@ -174,10 +174,10 @@ private struct GenreCard: View {
     private var fallbackGradient: some View {
         let palettes: [(Color, Color)] = [
             (.indigo.opacity(0.9), .black),
-            (.teal.opacity(0.75), Color.lagoonDeep),
+            (.teal.opacity(0.75), Color.lagoonNavy),
             (.purple.opacity(0.8), .black),
             (.orange.opacity(0.65), .black),
-            (.blue.opacity(0.75), Color.lagoonDeep),
+            (.blue.opacity(0.75), Color.lagoonNavy),
         ]
         let paletteIndex = genre.name.utf8.reduce(0) {
             ($0 * 31 + Int($1)) % palettes.count

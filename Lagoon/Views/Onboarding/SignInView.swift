@@ -19,6 +19,11 @@ struct SignInView: View {
 
             ScrollView {
                 VStack(spacing: Metrics.Space.l) {
+                    LagoonLockup(
+                        layout: .horizontal,
+                        symbolHeight: Metrics.lockupHeaderSymbolHeight
+                    )
+                    .padding(.bottom, Metrics.Space.s)
                     Text("Sign In")
                         .font(.largeTitle.bold())
                     Text(session.serverName ?? "Jellyfin")

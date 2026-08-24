@@ -34,7 +34,7 @@ nonisolated enum Changelog {
             headline: "Play at your own speed.",
             changes: [
                 "Playback speed, from half to double, in the Video tab of the playback panel. Voices keep their pitch, and the speed you pick carries into the next episode.",
-                "Lagoon has a new app icon and new Top Shelf artwork.",
+                "Lagoon has a new look: a new app icon and Top Shelf artwork, and the mark now carries through the setup and sign-in screens instead of stopping at the home screen.",
                 "Subtitles authored with a place on screen — signs, captions over artwork, two people talking at once — now appear where they were meant to, in their own colour, bold and italic, instead of being stacked at the bottom.",
                 "10-bit AV1 and VP9 now play directly instead of being re-encoded by your server — up to 1080p on hardware with no AV1 decoder of its own.",
                 "MPEG-2 video, LPCM soundtracks and DVB subtitles play directly too, which covers most DVD rips and recorded television. Interlaced recordings still go through your server, because that is what deinterlaces them.",

@@ -67,7 +67,7 @@ one has a job:
 
 `.system(size:)` appears nowhere in a screen. The only legitimate escapes are
 SF Symbols used as artwork and display type that is effectively a logo, and
-those are named in `Typography` (`glyph`, `largeGlyph`, `wordmark`,
+those are named in `Typography` (`glyph`, `largeGlyph`,
 `quickConnectCode`). Adding a raw size to a view is the smell — it means a new
 one-off is being invented. Symbols sized with a semantic style (a small
 placeholder glyph at `.title`) are fine and aren't part of this table.
@@ -77,10 +77,43 @@ styles — it was that a *synopsis* was set three different ways: `.body` on the
 detail page, `.callout` in the hero, `.subheadline` in the player's info card.
 Same content, three sizes, no reason. All three are `.callout` now.
 
-Brand colors — **only** for branding (wordmark, progress fills, onboarding
-wash): `.lagoonTeal` `#4AD1C7`, `.lagoonDeep` `#082E44`. Everything else uses
-`.primary`/`.secondary`/`.tertiary`, `.fill.tertiary`, and materials. The app
-is locked dark at the `WindowGroup` root.
+## Brand
+
+The Twin Shores identity, from the `lagoon-branding` package. Three colors,
+and **only** for branding — the lockup, progress fills, selection markers, the
+onboarding wash. Everything else uses `.primary`/`.secondary`/`.tertiary`,
+`.fill.tertiary`, and materials. The app is locked dark at the `WindowGroup`
+root and its backgrounds stay black.
+
+| token | hex | package name | role |
+| --- | --- | --- | --- |
+| `.lagoonAqua` | `#2ED4C7` | Aqua | the mark's lower shore; the only brand color bright enough to accent against black |
+| `.lagoonShore` | `#0D4A57` | **Lagoon Teal** | the mark's upper shore |
+| `.lagoonNavy` | `#0B1D28` | Deep Navy | the wash under onboarding, over black |
+
+The names deliberately diverge from the package. What it calls "Lagoon Teal"
+is the dark `#0D4A57`, while this codebase has always used `lagoonTeal` for the
+bright accent — one word for two colors is a trap, so the roles are named after
+the mark instead. `AccentColor` in the catalogue is Aqua.
+
+`LagoonLockup` composes the mark rather than shipping one asset, because the
+package has no dark-background lockup: its color lockup sets the wordmark in
+Ink `#07161D`, invisible on black, and its white lockup flattens the two shores
+into one silhouette. Color symbol + Light wordmark keeps both. Its proportions
+are measured from the package's own lockups, which do not agree with each other
+— the horizontal one sets the wordmark nearly twice as large relative to the
+mark as the stacked one does, and centres it on cap height rather than on its
+ink box.
+
+`scripts/import-brand-vectors.swift` brings the marks in and crops each PDF to
+its ink, so a `.frame(height:)` sizes the mark and not the page's padding.
+Re-run it, and re-measure the ratios, if the artwork changes shape.
+
+The jellyfish (`LagoonJellyfishAccent`) is the secondary accent, and the
+package restricts it: "only as punctuation in loading, empty-state, or
+atmospheric moments … small, one-color, and low contrast." It appears on the
+connect screen and nowhere else — on every onboarding screen it would be a
+motif, which is the thing that rule forbids.
 
 ## Focus strategy
 

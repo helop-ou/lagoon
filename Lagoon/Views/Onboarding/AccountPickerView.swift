@@ -23,8 +23,14 @@ struct AccountPickerView: View {
             BrandBackgroundGradient()
 
             VStack(spacing: Metrics.Space.section) {
-                Text("Who's watching?")
-                    .font(.largeTitle.bold())
+                VStack(spacing: Metrics.Space.l) {
+                    LagoonLockup(
+                        layout: .horizontal,
+                        symbolHeight: Metrics.lockupHeaderSymbolHeight
+                    )
+                    Text("Who's watching?")
+                        .font(.largeTitle.bold())
+                }
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Metrics.cardSpacing) {

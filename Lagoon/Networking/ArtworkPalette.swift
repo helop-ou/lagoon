@@ -5,7 +5,7 @@ import UIKit
 nonisolated struct ArtworkPalette: Equatable {
     let colors: [Color]
 
-    static let fallback = ArtworkPalette(colors: [.lagoonTeal, .lagoonDeep, Color(red: 0.16, green: 0.1, blue: 0.35)])
+    static let fallback = ArtworkPalette(colors: [.lagoonAqua, .lagoonNavy, Color(red: 0.16, green: 0.1, blue: 0.35)])
 
     /// Pure-Swift 4-bit-per-channel RGB histogram, ranked by
     /// `bucketSize × (saturation + 0.05) × (brightness + 0.1)`. The floors

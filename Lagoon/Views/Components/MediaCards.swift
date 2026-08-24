@@ -160,7 +160,7 @@ struct ItemProgressBar: View {
             ZStack(alignment: .leading) {
                 Rectangle().fill(Color.black.opacity(0.6))
                 Rectangle()
-                    .fill(Color.lagoonTeal)
+                    .fill(Color.lagoonAqua)
                     .frame(width: proxy.size.width * progress)
             }
         }

@@ -163,9 +163,15 @@ struct ChangelogView: View {
         // sheet's single blurred surface. Laid out in sequence, each part
         // gets its own space and the whole panel shares one background.
         VStack(spacing: 0) {
-            Text("Changelog")
-                .font(.title3.bold())
-                .padding(Metrics.Space.l)
+            HStack(spacing: Metrics.Space.m) {
+                LagoonLockup(
+                    layout: .horizontal,
+                    symbolHeight: Metrics.lockupHeaderSymbolHeight
+                )
+                Text("Changelog")
+                    .font(.title3.bold())
+            }
+            .padding(Metrics.Space.l)
 
             notes
 

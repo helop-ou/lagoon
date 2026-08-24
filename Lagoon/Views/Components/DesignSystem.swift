@@ -41,6 +41,12 @@ enum Metrics {
     static let heroTextInset: CGFloat = 56
     /// Square avatar tile in the account picker (HEL-38).
     static let accountTileSize: CGFloat = 220
+    /// The brand symbol's height in the onboarding lockup. Sized to read as
+    /// a mark across a room without competing with the screen's heading.
+    static let lockupSymbolHeight: CGFloat = 150
+    /// A smaller lockup for a screen that already has a title of its own.
+    static let lockupHeaderSymbolHeight: CGFloat = 64
+    static let jellyfishAccentHeight: CGFloat = 88
     /// Identity column in Settings — avatar, user, server. Sized so the
     /// settings list beside it still gets the larger half.
     static let settingsIdentityWidth: CGFloat = 460
@@ -75,6 +81,9 @@ enum Metrics {
     static let heroLogoHeight: CGFloat = 54
     static let heroTextWidth: CGFloat = .infinity
     static let heroTextInset: CGFloat = 20
+    static let lockupSymbolHeight: CGFloat = 78
+    static let lockupHeaderSymbolHeight: CGFloat = 34
+    static let jellyfishAccentHeight: CGFloat = 38
     #endif
 
     /// The spacing scale (HEL-51). Every gap and inset *inside* a screen
@@ -153,8 +162,6 @@ enum Typography {
     static let glyph: Font = .system(size: 48)
     /// The same idea where it carries a whole screen.
     static let largeGlyph: Font = .system(size: 56)
-    /// The Lagoon wordmark on the connect screen.
-    static let wordmark: Font = .system(size: 52, weight: .bold)
     /// Quick Connect's code: monospaced so the digits don't jitter as it
     /// polls, and large enough to read across a room.
     static let quickConnectCode: Font = .system(size: 42, weight: .bold, design: .monospaced)
@@ -167,11 +174,24 @@ enum Motion {
     static let crossfade: TimeInterval = 0.8  // backdrop / ambient-glow crossfade
 }
 
-// Brand colors are only for genuine branding: progress fills, the wordmark,
+// Brand colors are only for genuine branding: progress fills, the lockup,
 // selection markers. Everything else uses system semantic styles.
+//
+// These are the Twin Shores palette from the brand package, and the names
+// deliberately do **not** follow it. The package calls #0D4A57 "Lagoon Teal",
+// which is the dark upper shore — while this codebase has always used
+// `lagoonTeal` for the bright accent. Keeping that name would leave one word
+// meaning two colors, so the roles are named after the mark instead: aqua is
+// the lower shore, shore the upper one, navy the ground they sit on.
 extension Color {
-    nonisolated static let lagoonTeal = Color(red: 74 / 255, green: 209 / 255, blue: 199 / 255)
-    nonisolated static let lagoonDeep = Color(red: 8 / 255, green: 46 / 255, blue: 68 / 255)
+    /// Aqua — the lower shore, and the only brand color bright enough to
+    /// carry an accent against black.
+    nonisolated static let lagoonAqua = Color(red: 0x2E / 255, green: 0xD4 / 255, blue: 0xC7 / 255)
+    /// Deep Navy — the brand's ground. Lagoon keeps true black behind its
+    /// content, so this is a wash over black rather than a background.
+    nonisolated static let lagoonNavy = Color(red: 0x0B / 255, green: 0x1D / 255, blue: 0x28 / 255)
+    /// Lagoon Teal in the brand package — the mark's upper shore.
+    nonisolated static let lagoonShore = Color(red: 0x0D / 255, green: 0x4A / 255, blue: 0x57 / 255)
 }
 
 extension View {
@@ -186,14 +206,17 @@ extension View {
     }
 }
 
-/// Brand wash for the onboarding screens only.
+/// Brand wash for the onboarding screens only. Black stays the ground — this
+/// is Deep Navy lifted off it from the bottom, which is dark enough that the
+/// screens still read as black while the shore colors have something to sit
+/// against.
 struct BrandBackgroundGradient: View {
     var body: some View {
         LinearGradient(
             stops: [
-                .init(color: Color.lagoonDeep.opacity(0.9), location: 0),
-                .init(color: Color.lagoonDeep.opacity(0.55), location: 0.4),
-                .init(color: Color.lagoonDeep.opacity(0.2), location: 0.8),
+                .init(color: Color.lagoonNavy, location: 0),
+                .init(color: Color.lagoonNavy.opacity(0.6), location: 0.4),
+                .init(color: Color.lagoonNavy.opacity(0.2), location: 0.8),
                 .init(color: .clear, location: 1),
             ],
             startPoint: .bottom,
@@ -201,5 +224,115 @@ struct BrandBackgroundGradient: View {
         )
         .background(Color.black)
         .ignoresSafeArea()
+    }
+}
+
+/// The Twin Shores lockup: the two-tone symbol beside or above the wordmark.
+///
+/// Composed here rather than shipped as one asset because the brand package
+/// has no dark-background lockup. Its color lockup sets the wordmark in Ink
+/// (#07161D), which is invisible on black, and its white lockup flattens the
+/// two shores into a single silhouette — losing the one idea the mark is
+/// carrying. Pairing the color symbol with the Light wordmark keeps both.
+///
+/// The proportions are not invented. They are measured off the package's own
+/// `Lagoon_Lockup_Stacked_Color` and `_Horizontal_Color`, which do not agree
+/// with each other — the horizontal lockup sets the wordmark nearly twice as
+/// large relative to the mark, because beside it rather than beneath it the
+/// word has to hold its own. `import-brand-vectors.swift` crops both assets to
+/// their ink, so these ratios apply to the frames directly.
+struct LagoonLockup: View {
+    enum Layout {
+        /// Symbol above wordmark, for a screen that is mostly lockup.
+        case stacked
+        /// Symbol beside wordmark, for a header.
+        case horizontal
+
+        /// Wordmark height as a fraction of the symbol's.
+        var wordmarkRatio: CGFloat {
+            switch self {
+            case .stacked: 0.264
+            case .horizontal: 0.481
+            }
+        }
+
+        /// Gap between the two, likewise relative to the symbol.
+        var gapRatio: CGFloat {
+            switch self {
+            case .stacked: 0.174
+            case .horizontal: 0.195
+            }
+        }
+    }
+
+    var layout: Layout = .stacked
+    /// Height of the symbol. Everything else is derived from it, so a call
+    /// site sizes the lockup with one number.
+    var symbolHeight: CGFloat = Metrics.lockupSymbolHeight
+
+    private var wordmarkHeight: CGFloat { symbolHeight * layout.wordmarkRatio }
+    private var gap: CGFloat { symbolHeight * layout.gapRatio }
+
+    var body: some View {
+        Group {
+            switch layout {
+            case .stacked:
+                VStack(spacing: gap) {
+                    symbol
+                    wordmark
+                }
+            case .horizontal:
+                HStack(spacing: gap) {
+                    symbol
+                    // The package centres the wordmark's *cap height* on the
+                    // symbol, not its ink box. Centring the box instead would
+                    // hang the whole word low by the depth of the g's
+                    // descender, which is what makes an assembled lockup look
+                    // assembled.
+                    wordmark.offset(y: -symbolHeight * 0.053)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Lagoon")
+    }
+
+    private var symbol: some View {
+        Image("LagoonSymbol")
+            .resizable()
+            .scaledToFit()
+            .frame(height: symbolHeight)
+    }
+
+    private var wordmark: some View {
+        Image("LagoonWordmark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: wordmarkHeight)
+    }
+}
+
+/// The secondary jellyfish, used the way the brand package restricts it:
+/// "only as punctuation in loading, empty-state, or atmospheric moments …
+/// small, one-color, and low contrast." It is a template image, so the tint
+/// comes from the call site rather than from the artwork.
+struct LagoonJellyfishAccent: View {
+    var height: CGFloat = Metrics.jellyfishAccentHeight
+
+    var body: some View {
+        Image("LagoonJellyfish")
+            .renderable(template: true)
+            .scaledToFit()
+            .frame(height: height)
+            .foregroundStyle(Color.lagoonAqua.opacity(0.35))
+            .accessibilityHidden(true)
+    }
+}
+
+private extension Image {
+    /// `.resizable()` plus the template intent in one place, so the accent's
+    /// one-color rule is not restated at every call site.
+    func renderable(template: Bool) -> some View {
+        renderingMode(template ? .template : .original).resizable()
     }
 }
