@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "54",
+            released: "August 2026",
+            headline: "Playback recovers instead of giving up.",
+            changes: [
+                "A film that won't play no longer ends at an error screen: Lagoon asks your server to send it another way and picks up where it stopped — without making the server re-encode unless nothing else works.",
+                "If the sound stops partway through a film, Lagoon rebuilds the audio and keeps playing rather than running on in silence.",
+                "Pausing near the start of a film now buffers as far ahead as the cache allows, instead of stopping short of it.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "53",
             released: "August 2026",
             headline: "Subtitle errors say what the server said.",
