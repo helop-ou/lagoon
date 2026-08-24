@@ -369,7 +369,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 guard let response = try? await URLSession.shared.data(from: track.url) else { return }
                 data = response.0
             }
-            let cues = await Task.detached { SubtitleParser.cues(from: data) }.value
+            // The track's language is the only reliable signal for a
+            // non-UTF-8 sidecar, so it has to reach the decoder (HEL-92).
+            let languageHint = track.language
+            let cues = await Task.detached {
+                SubtitleParser.cues(from: data, languageHint: languageHint)
+            }.value
             guard let self, self.externalLoadToken == token else { return }
             self.subtitleStore.replaceAll(cues)
         }

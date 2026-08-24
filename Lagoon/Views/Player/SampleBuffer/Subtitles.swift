@@ -88,12 +88,10 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
 /// Parses the external subtitle files Jellyfin delivers (vtt per the
 /// device profile; srt tolerated since the timestamp shapes overlap).
 nonisolated enum SubtitleParser {
-    static func cues(from data: Data) -> [SubtitleCue] {
-        guard let content = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .utf16)
-            ?? String(data: data, encoding: .utf16LittleEndian)
-            ?? String(data: data, encoding: .utf16BigEndian)
-            ?? String(data: data, encoding: .isoLatin1) else { return [] }
+    static func cues(from data: Data, languageHint: String? = nil) -> [SubtitleCue] {
+        guard let content = SubtitleTextDecoder.text(from: data, languageHint: languageHint) else {
+            return []
+        }
         var result: [SubtitleCue] = []
 
         let blocks = content
@@ -131,5 +129,121 @@ nonisolated enum SubtitleParser {
             total = total * 60 + value
         }
         return total
+    }
+}
+
+/// Turns subtitle bytes into text without silently inventing them.
+///
+/// The previous chain ended in `isoLatin1`, which cannot fail — it maps every
+/// byte — so a Windows-1251 Cyrillic file decoded to mojibake and rendered as
+/// garbage with no error anywhere. Jellyfin converts to UTF-8 on its way out,
+/// which hid this; a provider fetched directly does not (HEL-92).
+///
+/// The language is the strongest available signal for a legacy file, since a
+/// codepage cannot be recovered from the bytes alone: a Cyrillic subtitle is
+/// almost certainly Windows-1251 and a Baltic one Windows-1257. Every
+/// candidate is still sanity-checked, so a wrong hint degrades to the next
+/// option rather than to nonsense.
+nonisolated enum SubtitleTextDecoder {
+    static func text(from data: Data, languageHint: String? = nil) -> String? {
+        guard !data.isEmpty else { return nil }
+        if let viaBOM = decodeUsingBOM(data) { return viaBOM }
+        // Valid UTF-8 is never accidental at any real length, so it wins
+        // outright and needs no plausibility check.
+        if let utf8 = String(data: data, encoding: .utf8) { return utf8 }
+
+        var candidates: [String.Encoding] = []
+        if let legacy = legacyEncoding(forLanguage: languageHint) {
+            candidates.append(legacy)
+        }
+        candidates.append(contentsOf: [.windowsCP1252, .isoLatin1])
+
+        var fallback: String?
+        for encoding in candidates {
+            guard let decoded = String(data: data, encoding: encoding) else { continue }
+            if isPlausibleSubtitleText(decoded) { return decoded }
+            if fallback == nil { fallback = decoded }
+        }
+        // Nothing looked like prose. Returning the first decodable form still
+        // beats dropping the file: the caller validates that cues parsed out
+        // of it, which is the check that actually protects playback.
+        return fallback
+    }
+
+    private static func decodeUsingBOM(_ data: Data) -> String? {
+        let bytes = [UInt8](data.prefix(3))
+        if bytes.starts(with: [0xEF, 0xBB, 0xBF]) {
+            return String(data: data.dropFirst(3), encoding: .utf8)
+        }
+        if bytes.starts(with: [0xFF, 0xFE]) {
+            return String(data: data.dropFirst(2), encoding: .utf16LittleEndian)
+        }
+        if bytes.starts(with: [0xFE, 0xFF]) {
+            return String(data: data.dropFirst(2), encoding: .utf16BigEndian)
+        }
+        return nil
+    }
+
+    /// The single-byte codepage a subtitle in this language is written in when
+    /// it is not UTF-8. Mapped from ISO 639 through Lagoon's existing
+    /// normalisation so both two- and three-letter forms resolve.
+    static func legacyEncoding(forLanguage language: String?) -> String.Encoding? {
+        guard let language,
+              let code = JellyfinSubtitleLanguageCode.twoLetter(for: language) else { return nil }
+        switch code {
+        case "ru", "uk", "bg", "be", "sr", "mk":
+            return encoding(.windowsCyrillic)
+        case "cs", "pl", "hu", "ro", "hr", "sk", "sl", "sq", "bs":
+            return encoding(.windowsLatin2)
+        case "el":
+            return encoding(.windowsGreek)
+        case "tr":
+            return encoding(.windowsLatin5)
+        case "he", "yi":
+            return encoding(.windowsHebrew)
+        case "ar", "fa", "ur":
+            return encoding(.windowsArabic)
+        case "et", "lv", "lt":
+            return encoding(.windowsBalticRim)
+        case "vi":
+            return encoding(.windowsVietnamese)
+        case "th":
+            return encoding(.dosThai)
+        default:
+            return nil
+        }
+    }
+
+    /// Only a handful of these have `String.Encoding` constants; going through
+    /// CoreFoundation keeps the whole table in one shape.
+    private static func encoding(_ value: CFStringEncodings) -> String.Encoding {
+        String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(
+            CFStringEncoding(value.rawValue)
+        ))
+    }
+
+    /// Subtitle text is prose: letters, digits, punctuation and whitespace.
+    /// A codepage applied to the wrong bytes produces a scatter of symbols and
+    /// control characters instead, which this is enough to notice.
+    static func isPlausibleSubtitleText(_ text: String) -> Bool {
+        var plausible = 0
+        var implausible = 0
+        for scalar in text.unicodeScalars.prefix(4_000) {
+            if scalar == "\u{FFFD}" {
+                implausible += 1
+            } else if CharacterSet.alphanumerics.contains(scalar)
+                || CharacterSet.punctuationCharacters.contains(scalar)
+                || CharacterSet.whitespacesAndNewlines.contains(scalar)
+                || CharacterSet.symbols.contains(scalar) {
+                plausible += 1
+            } else if CharacterSet.controlCharacters.contains(scalar) {
+                implausible += 1
+            } else {
+                implausible += 1
+            }
+        }
+        let total = plausible + implausible
+        guard total > 0 else { return false }
+        return Double(implausible) / Double(total) < 0.05
     }
 }
