@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "51",
+            released: "August 2026",
+            headline: "Seerr signs itself in.",
+            changes: [
+                "If your Seerr uses Jellyfin accounts, Discover now just works — no second login to type, since you are already signed in to Jellyfin.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "50",
             released: "August 2026",
             headline: "Playback, subtitles and requests.",
