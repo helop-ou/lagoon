@@ -301,3 +301,36 @@ resolves against whichever side of that it lands on.
 
 Always pass a sensible `maxPixelSize` — requesting full-size art on a rail
 card is the difference between smooth and stuttering focus scrolling.
+
+
+## App artwork
+
+Two paths, both writing the same catalogue:
+
+- `scripts/generate-artwork.swift` draws the marks from code.
+- `scripts/import-artwork.swift` takes supplied artwork and produces every
+  asset from it. Use this when the design comes from outside.
+
+```sh
+scripts/import-artwork.swift --icon art/icon.png
+scripts/import-artwork.swift --icon art/icon.png --topshelf art/banner.png
+scripts/import-artwork.swift --back art/back.png --middle art/mid.png \
+                            --front art/front.png --icon art/icon.png
+```
+
+**What to ask for when commissioning the art:**
+
+| asset | size | notes |
+| --- | --- | --- |
+| iOS icon | 1024x1024 square | opaque; the system applies its own mask, so no rounded corners in the art |
+| tvOS icon | **2560x1536 (5:3)** | tvOS icons are *not* square. A square source is fitted and centred on the palette background, which leaves a visible edge — supply 5:3 to avoid it |
+| tvOS parallax layers | 2560x1536 each, **alpha** | optional. Back is the opaque scene; Middle and Front must be transparent apart from what should lift on focus |
+| Top Shelf | 3840x1440 | wide banner, aspect-filled |
+| Top Shelf Wide | 4640x1440 | ditto, wider still |
+
+Everything is aspect-filled or fitted, never squashed. Layers are the only way
+to get the tvOS focus parallax: a single flat image gives a valid but static
+icon.
+
+Keep the sources under `art/` (gitignored) and commit only the generated
+catalogue, so the repository does not carry both.

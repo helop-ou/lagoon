@@ -13,3 +13,6 @@ xcuserdata/
 
 # Claude Code
 .claude/settings.local.json
+
+# Supplied artwork sources (see docs/design-system.md)
+art/
