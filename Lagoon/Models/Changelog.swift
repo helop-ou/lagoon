@@ -49,14 +49,24 @@ nonisolated enum Changelog {
         bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
     }
 
+    /// The comparison takes plain strings so it can be exercised without
+    /// standing up a bundle whose Info.plist says what a test needs.
+    static func isRunning(_ entry: ChangelogEntry, version: String, build: String) -> Bool {
+        entry.version == version && entry.build == build
+    }
+
     static func isRunning(_ entry: ChangelogEntry, bundle: Bundle = .main) -> Bool {
-        entry.version == version(from: bundle) && entry.build == build(from: bundle)
+        isRunning(entry, version: version(from: bundle), build: build(from: bundle))
     }
 
     /// TestFlight increments the build number at upload, so the running build
     /// routinely has no entry yet. Saying so is better than showing a list
     /// that quietly omits the build the viewer is actually on.
+    static func isListed(version: String, build: String) -> Bool {
+        entries.contains { isRunning($0, version: version, build: build) }
+    }
+
     static func runningBuildIsListed(bundle: Bundle = .main) -> Bool {
-        entries.contains { isRunning($0, bundle: bundle) }
+        isListed(version: version(from: bundle), build: build(from: bundle))
     }
 }
