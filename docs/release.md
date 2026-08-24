@@ -163,6 +163,20 @@ scripts/bump-build.sh --set 60 # jump to a specific number
 It refuses to go backwards and refuses to run if the configurations have
 drifted apart. Commit the bump together with the changelog entry.
 
+**Bump when a build is about to go out, not when a change lands.** A build
+number names something that shipped; minting one per change produces a
+changelog full of builds nobody ever ran, which is worse than a single entry
+listing everything in the build that did. Land the work, then bump once with
+one entry covering it.
+
+If a number *has* been minted and not uploaded, it can be reclaimed: nothing
+outside the repository knows about it yet. `bump-build.sh` deliberately will
+not do this — its refusal to go backwards exists because reusing a number that
+App Store Connect already holds fails only at upload, minutes later — so edit
+`CURRENT_PROJECT_VERSION` by hand (it appears once per configuration), fold the
+orphaned changelog entries into the one you are keeping, and check App Store
+Connect first if there is any doubt about what was uploaded.
+
 `ChangelogTests.theBuildThisProjectDeclaresHasChangelogNotes` fails when the
 declared version and build have no entry, so a build cannot reach TestFlight
 without someone having written what changed in it. `LagoonTests` is app-hosted,
