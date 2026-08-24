@@ -746,12 +746,42 @@ struct CustomPlayerView<Surface: View>: View {
                             y: videoRect.minY + videoRect.height * cue.rect.midY
                         )
                 }
-                if let text = engine.currentSubtitleText {
+                let textCues = engine.currentSubtitleCues
+                if !textCues.isEmpty,
+                   textCues.allSatisfy({ $0.usesDefaultPlacement && $0.usesDefaultStyle }),
+                   let text = engine.currentSubtitleText {
+                    // Preserve the exact pre-HEL-107 path for ordinary SRT,
+                    // WebVTT and unstyled dialogue.
                     VStack {
                         Spacer()
                         PlayerSubtitleText(text: text, style: subtitleStyle)
                     }
                     .frame(maxWidth: .infinity)
+                } else if !textCues.isEmpty {
+                    let defaultCues = textCues.filter(\.usesDefaultPlacement)
+                    if !defaultCues.isEmpty {
+                        VStack(spacing: Metrics.Space.xs) {
+                            Spacer()
+                            ForEach(Array(defaultCues.enumerated()), id: \.offset) { _, cue in
+                                PlayerStyledSubtitleText(cue: cue, style: subtitleStyle)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, subtitleStyle.bottomPadding)
+                    }
+                    ForEach(
+                        Array(textCues.filter { !$0.usesDefaultPlacement }.enumerated()),
+                        id: \.offset
+                    ) { _, cue in
+                        PositionedSubtitleLayout(
+                            position: cue.position,
+                            alignment: cue.alignment ?? .bottomCenter
+                        ) {
+                            PlayerStyledSubtitleText(cue: cue, style: subtitleStyle)
+                        }
+                        .frame(width: videoRect.width, height: videoRect.height)
+                        .position(x: videoRect.midX, y: videoRect.midY)
+                    }
                 }
             }
         }
@@ -896,6 +926,12 @@ struct CustomPlayerView<Surface: View>: View {
                             .font(.title2.bold())
                     }
                     Spacer()
+                    if engine.rate != 1 {
+                        Text(String(format: "%g×", engine.rate))
+                            .font(.callout.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("player.playbackRate.value")
+                    }
                     if engine.isPaused {
                         Image(systemName: "pause.fill")
                             .font(.headline)
@@ -1399,6 +1435,127 @@ struct PlayerSubtitleText: View {
             )
             .padding(.bottom, style.bottomPadding)
             .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+/// Renders the small inline-style subset retained from ASS override blocks.
+/// Placement is owned by `PositionedSubtitleLayout`; this view deliberately
+/// has no dialogue-shelf padding of its own.
+struct PlayerStyledSubtitleText: View {
+    let cue: SubtitleTextCue
+    let style: SubtitleRenderStyle
+
+    var body: some View {
+        styledText
+            .font(style.font)
+            .multilineTextAlignment(cue.alignment?.textAlignment ?? .center)
+            .foregroundStyle(style.foregroundColor)
+            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
+            .padding(.horizontal, Metrics.Space.l)
+            .padding(.vertical, Metrics.Space.s)
+            .background(
+                style.backgroundColor.opacity(style.backgroundOpacity),
+                in: RoundedRectangle(cornerRadius: 10)
+            )
+            .accessibilityLabel(cue.text)
+            .accessibilityIdentifier("player.subtitle.text")
+    }
+
+    private var styledText: Text {
+        cue.runs.reduce(Text("")) { partial, run in
+            var fragment = Text(run.text)
+            if run.isBold { fragment = fragment.bold() }
+            if run.isItalic { fragment = fragment.italic() }
+            if let color = run.primaryColor {
+                fragment = fragment.foregroundColor(color.swiftUIColor)
+            }
+            return Text("\(partial)\(fragment)")
+        }
+    }
+}
+
+/// Places one authored cue inside the aspect-fit video rect. `Layout` can
+/// place a subview by an arbitrary anchor, which is the semantic difference
+/// between ASS `\an1` and `\an3` at the same `\pos` coordinate.
+private struct PositionedSubtitleLayout: Layout {
+    let position: SubtitleTextPosition?
+    let alignment: SubtitleTextAlignment
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard let subview = subviews.first else { return }
+        let point = position ?? alignment.defaultPosition
+        let proposedWidth = max(bounds.width * 0.9, 1)
+        let size = subview.sizeThatFits(ProposedViewSize(width: proposedWidth, height: nil))
+        subview.place(
+            at: CGPoint(
+                x: bounds.minX + bounds.width * CGFloat(point.x),
+                y: bounds.minY + bounds.height * CGFloat(point.y)
+            ),
+            anchor: alignment.unitPoint,
+            proposal: ProposedViewSize(width: min(size.width, proposedWidth), height: size.height)
+        )
+    }
+}
+
+private extension SubtitleTextAlignment {
+    var unitPoint: UnitPoint {
+        switch self {
+        case .bottomLeft: .bottomLeading
+        case .bottomCenter: .bottom
+        case .bottomRight: .bottomTrailing
+        case .middleLeft: .leading
+        case .middleCenter: .center
+        case .middleRight: .trailing
+        case .topLeft: .topLeading
+        case .topCenter: .top
+        case .topRight: .topTrailing
+        }
+    }
+
+    var textAlignment: TextAlignment {
+        switch self {
+        case .bottomLeft, .middleLeft, .topLeft: .leading
+        case .bottomCenter, .middleCenter, .topCenter: .center
+        case .bottomRight, .middleRight, .topRight: .trailing
+        }
+    }
+
+    var defaultPosition: SubtitleTextPosition {
+        let x: Double = switch self {
+        case .bottomLeft, .middleLeft, .topLeft: 0.04
+        case .bottomCenter, .middleCenter, .topCenter: 0.5
+        case .bottomRight, .middleRight, .topRight: 0.96
+        }
+        let y: Double = switch self {
+        case .topLeft, .topCenter, .topRight: 0.04
+        case .middleLeft, .middleCenter, .middleRight: 0.5
+        case .bottomLeft, .bottomCenter, .bottomRight: 0.96
+        }
+        return SubtitleTextPosition(x: x, y: y)
+    }
+}
+
+private extension SubtitleTextColor {
+    var swiftUIColor: Color {
+        Color(
+            red: Double(red) / 255,
+            green: Double(green) / 255,
+            blue: Double(blue) / 255,
+            opacity: Double(alpha) / 255
+        )
     }
 }
 

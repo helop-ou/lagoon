@@ -510,11 +510,13 @@ private final class PlayerPanelPreviewEngine: PlayerEngine {
     var currentSubtitleText: String?
     var currentSubtitleImages: [SubtitleImage] = []
     var audioDelay = 0.0
+    var rate = 1.0
     var displayMatchRequest: DisplayMatchRequest?
 
     func play() { isPaused = false }
     func pause() { isPaused = true }
     func togglePause() { isPaused.toggle() }
+    func setRate(_ rate: Double) { self.rate = PlaybackRatePolicy.clamped(rate) }
     func seek(by seconds: Double) { seek(to: timePosition + seconds) }
     func seek(to seconds: Double) { timePosition = min(max(seconds, 0), duration) }
 

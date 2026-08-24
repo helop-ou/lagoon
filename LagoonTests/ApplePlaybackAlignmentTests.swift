@@ -654,6 +654,54 @@ struct ApplePlaybackAlignmentTests {
         }
     }
 
+    @Test func embeddedASSFlowsThroughFFmpegWithItsScriptPlaneAndOverrides() throws {
+        guard let fixture = ProcessInfo.processInfo.environment["LAGOON_ASS_FIXTURE_URL"],
+              !fixture.isEmpty else { return }
+        let demuxer = FFmpegDemuxer()
+        defer { demuxer.close() }
+        try demuxer.open(
+            url: fixture,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        let stream = try #require(demuxer.subtitleStreams.first)
+        demuxer.selectSubtitle(streamIndex: stream.streamIndex)
+
+        var decoded: SubtitleTextCue?
+        for _ in 0..<200 {
+            switch demuxer.readNext() {
+            case .subtitle(let events, _):
+                for event in events {
+                    if case .cue(let cue) = event, let text = cue.textCues.first {
+                        decoded = text
+                        break
+                    }
+                }
+            case .failed(let message):
+                Issue.record("ASS fixture failed: \(message)")
+                return
+            case .endOfFile:
+                break
+            default:
+                continue
+            }
+            if decoded != nil { break }
+        }
+
+        let cue = try #require(decoded)
+        #expect(cue.text == "Top sign")
+        #expect(cue.alignment == .topLeft)
+        #expect(abs((cue.position?.x ?? 0) - (2.0 / 3.0)) < 0.000_001)
+        #expect(abs((cue.position?.y ?? 0) - (1.0 / 6.0)) < 0.000_001)
+        #expect(cue.runs.first?.isBold == true)
+        #expect(cue.runs.first?.isItalic == true)
+        #expect(cue.runs.first?.primaryColor == SubtitleTextColor(
+            red: 0x11,
+            green: 0x22,
+            blue: 0x33,
+            alpha: 0xFF
+        ))
+    }
+
     @Test func playbackEndUsesObservedSamplesWithoutContainerDuration() {
         #expect(PlaybackEndBoundary.endTime(sampledEnd: 42.25, declaredDuration: 0) == 42.25)
         #expect(PlaybackEndBoundary.endTime(sampledEnd: 41.5, declaredDuration: 99) == 41.5)
@@ -698,6 +746,29 @@ struct ApplePlaybackAlignmentTests {
         )
 
         #expect(decision == .waitForVideo(below: 72))
+    }
+
+    @Test func fasterPlaybackRetainsMoreVideoBeforeBackpressure() {
+        let ordinary = DemuxBackpressurePolicy.decision(
+            videoCount: 20,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: false
+        )
+        let faster = DemuxBackpressurePolicy.decision(
+            videoCount: 20,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: false,
+            playbackRate: 1.5
+        )
+
+        #expect(ordinary == .waitForVideo(below: 12))
+        #expect(faster == .read)
     }
 
     @Test func demuxDoesNotWaitForAudioOnSilentVideo() {

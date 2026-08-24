@@ -450,7 +450,7 @@ composition cost is more representative than Simulator timing.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
-  everything past the 8th comma, `{\…}` override tags stripped — and
+  everything past the 8th comma — and
   PGS/VobSub to paletted rects converted to CGImages, positioned on the
   codec's graphics plane). External Jellyfin streams (vtt delivery)
   download and parse into the same cue store. Every subtitle stream is
@@ -468,6 +468,16 @@ composition cost is more representative than Simulator timing.
   side-load/select the authenticated external file without restarting the
   video. Not covered: an embedded subtitle rendition inside an HLS master
   (remote downloads arrive as external files and do work).
+- **ASS/SSA authored placement** (HEL-107): `ASSSubtitleTextParser` keeps each
+  decoded text composition separate rather than joining simultaneous speakers
+  into one bottom-centre block. It reads `PlayResX/Y` from FFmpeg's subtitle
+  header, normalizes `\pos(x,y)` onto the presentation rect, uses `\an1…9` as
+  the authored anchor, and retains inline primary colour, bold and italic
+  runs. All other override commands remain deliberately ignored: this is the
+  useful signs/dialogue subset, not a libass replacement. A cue with none of
+  those supported overrides takes the exact old `PlayerSubtitleText` path, so
+  ordinary SRT/WebVTT and plain ASS dialogue keep the viewer's caption font,
+  edge, background and vertical position unchanged.
 - **Two subtitle sources** (HEL-92): Jellyfin's routes require the account's
   `EnableSubtitleManagement` permission, which is off by default for every
   non-administrator — the common case on a shared server. Those accounts fall
@@ -609,6 +619,15 @@ not introduce a second player to get it:
   setting still decides, and over HDMI to a receiver it changes nothing.
   A test pins both defaults, so if a future SDK closes the gap it says so and
   the override can go.
+- **Playback speed** (HEL-106). The Video panel offers 0.5× through 2× and the
+  transport shows the selected non-default rate. Pausing, seeking, buffering,
+  renderer recovery, delivery fallback and next-episode handoff all preserve
+  it. Every audio renderer uses the time-domain pitch algorithm, including a
+  replacement after media-services reset. Stall recovery, the delivered-PTS
+  margin, initial priming and demux watermarks scale their media-time cushion
+  by rate while retaining the decoded-frame hard limits. Now Playing publishes
+  the real rate and `changePlaybackRateCommand` exposes the same choices to
+  Control Center, headset and system clients.
 - **An engine that has shut down must never be revived** (HEL-110).
   `attach(displayLayer:)` guards on `shutdownRequested`, not only on the
   renderer being empty. `finishRendererShutdown` nils `videoRenderer`, so the
@@ -659,9 +678,9 @@ not introduce a second player to get it:
 - `NowPlayingCoordinator` publishes a stable Jellyfin item identifier,
   title/episode line, poster, duration, elapsed time, rate, and playback
   state. It registers play, pause, toggle, ±10 s, absolute position, and
-  audio/subtitle language-option commands. Handlers hop to the main actor
-  because MediaPlayer doesn't promise a callback queue; all targets and
-  Now Playing state are removed on teardown.
+  playback-rate and audio/subtitle language-option commands. Handlers hop to
+  the main actor because MediaPlayer doesn't promise a callback queue; all
+  targets and Now Playing state are removed on teardown.
 - PiP uses `AVPictureInPictureController.ContentSource` with the existing
   `AVSampleBufferDisplayLayer` and a
   `AVPictureInPictureSampleBufferPlaybackDelegate`. Its play/pause/skip

@@ -300,6 +300,34 @@ struct PlayerSystemIntegrationTests {
         #expect(!engine.isPaused)
     }
 
+    @Test @MainActor func playbackRateSurvivesPauseAndIsBounded() {
+        let engine = SampleBufferPlayerEngine()
+        engine.setRate(1.5)
+        #expect(engine.rate == 1.5)
+        engine.pause()
+        engine.play()
+        #expect(engine.rate == 1.5)
+        engine.setRate(99)
+        #expect(engine.rate == PlaybackRatePolicy.maximum)
+        engine.setRate(.nan)
+        #expect(engine.rate == 1)
+    }
+
+    @Test func stallRecoveryKeepsItsWallClockCushionAtFasterRates() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: 12,
+            videoQueueFinished: false,
+            playbackRate: 1.5
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: 18,
+            videoQueueFinished: false,
+            playbackRate: 1.5
+        ) == .resume)
+    }
+
     @Test @MainActor func everyAudioRendererSpatializesStereoTheWayAVPlayerDoes() {
         // Apple's two players disagree on the default, and the sample-buffer
         // one is the stingier: `AVPlayerItem` documents
@@ -312,6 +340,62 @@ struct PlayerSystemIntegrationTests {
             SampleBufferPlayerEngine.makeAudioRenderer().allowedAudioSpatializationFormats
                 == .monoStereoAndMultichannel
         )
+        #expect(SampleBufferPlayerEngine.makeAudioRenderer().audioTimePitchAlgorithm == .timeDomain)
+    }
+
+    @Test func assOverrideSubsetPreservesPlacementAndInlineStyle() throws {
+        let resolution = ASSSubtitleTextParser.playResolution(from: """
+        [Script Info]
+        PlayResX: 1920
+        PlayResY: 1080
+        """)
+        #expect(resolution == ASSPlayResolution(width: 1920, height: 1080))
+
+        let cue = try #require(ASSSubtitleTextParser.cue(
+            from: #"0,0,Default,,0,0,0,,{\an7\pos(1280,180)\b1\i1\c&H332211&}Top{\b0\i0} sign"#,
+            playResolution: resolution
+        ))
+        #expect(cue.alignment == .topLeft)
+        #expect(abs((cue.position?.x ?? 0) - (2.0 / 3.0)) < 0.000_001)
+        #expect(abs((cue.position?.y ?? 0) - (1.0 / 6.0)) < 0.000_001)
+        #expect(cue.text == "Top sign")
+        #expect(cue.runs.count == 2)
+        #expect(cue.runs[0] == SubtitleTextRun(
+            text: "Top",
+            primaryColor: SubtitleTextColor(red: 0x11, green: 0x22, blue: 0x33, alpha: 0xFF),
+            isBold: true,
+            isItalic: true
+        ))
+        #expect(cue.runs[1].text == " sign")
+        #expect(!cue.runs[1].isBold)
+        #expect(!cue.runs[1].isItalic)
+    }
+
+    @Test func ordinaryASSDialogueKeepsTheLegacyBottomCentrePresentation() throws {
+        let cue = try #require(ASSSubtitleTextParser.cue(
+            from: #"0,0,Default,,0,0,0,,Hello\Nworld"#
+        ))
+        #expect(cue.text == "Hello\nworld")
+        #expect(cue.usesDefaultPlacement)
+        #expect(cue.usesDefaultStyle)
+    }
+
+    @Test func subtitleStoreKeepsSimultaneousAuthoredCompositionsSeparate() {
+        let store = SubtitleStore()
+        let left = SubtitleTextCue(
+            runs: [SubtitleTextRun(text: "Left")],
+            alignment: .middleLeft,
+            position: nil
+        )
+        let right = SubtitleTextCue(
+            runs: [SubtitleTextRun(text: "Right")],
+            alignment: .middleRight,
+            position: nil
+        )
+        store.add(SubtitleCue(start: 1, end: 3, textCues: [left], images: []))
+        store.add(SubtitleCue(start: 1, end: 3, textCues: [right], images: []))
+
+        #expect(store.active(at: 2).textCues == [left, right])
     }
 
     @Test @MainActor func aShutDownEngineCannotBeBroughtBackToLife() async {

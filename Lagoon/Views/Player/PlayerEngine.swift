@@ -14,6 +14,9 @@ protocol PlayerEngine: AnyObject, Observable {
     var duration: Double { get }
     var isPaused: Bool { get }
     var isBuffering: Bool { get }
+    /// Requested media-time rate. Pausing stops the clock without discarding
+    /// this value, so Play resumes at the viewer's selected speed.
+    var rate: Double { get }
     /// Number of renderer underruns recovered during this playback session.
     /// Exposed for the debug regression probe and component preview only.
     var stallCount: Int { get }
@@ -31,6 +34,10 @@ protocol PlayerEngine: AnyObject, Observable {
     /// and/or decoded bitmap rects, rendered by the player UI as an
     /// overlay. Empty/nil when no cue is active.
     var currentSubtitleText: String? { get }
+    /// Individually authored text compositions. Plain subtitles use the
+    /// default bottom-centre cue; ASS/SSA can carry independent placement
+    /// and inline formatting for simultaneous speakers and signs.
+    var currentSubtitleCues: [SubtitleTextCue] { get }
     var currentSubtitleImages: [SubtitleImage] { get }
     /// mpv convention (M6): positive delays the audio relative to video.
     var audioDelay: Double { get }
@@ -46,6 +53,7 @@ protocol PlayerEngine: AnyObject, Observable {
     func play()
     func pause()
     func togglePause()
+    func setRate(_ rate: Double)
     func seek(by seconds: Double)
     /// Absolute seek, clamped by the engine. Both seeks are optimistic:
     /// `timePosition` lands on the target the instant they're called, so
@@ -64,6 +72,23 @@ extension PlayerEngine {
     var audioOutputPathDiagnostic: String { "unknown" }
     var audioRendererRecoveryCount: Int { 0 }
     var mediaServicesResetRecoveryCount: Int { 0 }
+    var currentSubtitleCues: [SubtitleTextCue] {
+        currentSubtitleText.map { [.plain($0)] } ?? []
+    }
+}
+
+/// The rates Lagoon exposes to its own controls and to Remote Command
+/// Center. The engine accepts any finite value inside the same envelope so
+/// system integrations do not have to round a supported event twice.
+nonisolated enum PlaybackRatePolicy {
+    static let supported: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 2]
+    static let minimum = 0.5
+    static let maximum = 2.0
+
+    static func clamped(_ rate: Double) -> Double {
+        guard rate.isFinite else { return 1 }
+        return min(max(rate, minimum), maximum)
+    }
 }
 
 /// What the physical display should be switched to for the current video

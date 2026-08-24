@@ -37,6 +37,7 @@ struct PlayerControlPanel: View {
     let audioTracks: [PlayerTrack]
     let subtitleTracks: [PlayerTrack]
     let audioDelay: Double
+    let playbackRate: Double
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
@@ -44,6 +45,7 @@ struct PlayerControlPanel: View {
     let onSelectAudioTrack: (Int?) -> Void
     let onSelectSubtitleTrack: (Int?) -> Void
     let onSetAudioDelay: (Double) -> Void
+    let onSetPlaybackRate: (Double) -> Void
     var onDismiss: (() -> Void)? = nil
 
     private static var subtitleOffID: String { "subtitle-off" }
@@ -274,7 +276,7 @@ struct PlayerControlPanel: View {
     }
 
     private var videoCard: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
             cardHeader("Track")
             HStack(spacing: Metrics.Space.s) {
                 Image(systemName: "checkmark")
@@ -282,7 +284,44 @@ struct PlayerControlPanel: View {
                 Text(info.videoSummary ?? String(localized: "Unknown video track"))
                     .font(.callout)
             }
+
+            Divider()
+
+            cardHeader("Playback Speed")
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 84), spacing: Metrics.Space.m)],
+                alignment: .leading,
+                spacing: Metrics.Space.m
+            ) {
+                ForEach(PlaybackRatePolicy.supported, id: \.self) { rate in
+                    Button {
+                        onSetPlaybackRate(rate)
+                    } label: {
+                        HStack(spacing: Metrics.Space.xs) {
+                            Image(systemName: "checkmark")
+                                .font(.caption.bold())
+                                .opacity(playbackRate == rate ? 1 : 0)
+                            Text(Self.rateTitle(rate))
+                                .monospacedDigit()
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                    .focused(focus, equals: .track("playback-rate-\(Self.rateIdentifier(rate))"))
+                    .accessibilityIdentifier("player.playbackRate.\(Self.rateIdentifier(rate))")
+                }
+            }
         }
+    }
+
+    private static func rateTitle(_ rate: Double) -> String {
+        rate == rate.rounded()
+            ? String(format: "%.0f×", rate)
+            : String(format: "%g×", rate)
+    }
+
+    private static func rateIdentifier(_ rate: Double) -> String {
+        String(format: "%g", rate).replacingOccurrences(of: ".", with: "_")
     }
 
     private var subtitleCard: some View {
@@ -579,6 +618,7 @@ struct PlayerControlPanelHost: View, Equatable {
             audioTracks: engine.audioTracks,
             subtitleTracks: engine.subtitleTracks,
             audioDelay: engine.audioDelay,
+            playbackRate: engine.rate,
             subtitleSearch: subtitleSearch,
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
@@ -586,6 +626,7 @@ struct PlayerControlPanelHost: View, Equatable {
             onSelectAudioTrack: engine.selectAudioTrack,
             onSelectSubtitleTrack: engine.selectSubtitleTrack,
             onSetAudioDelay: engine.setAudioDelay,
+            onSetPlaybackRate: engine.setRate,
             onDismiss: onDismiss
         )
     }

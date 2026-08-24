@@ -216,8 +216,8 @@ final class NowPlayingCoordinator {
         guard let engine else { return }
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = engine.duration
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = engine.timePosition
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = engine.isPaused ? 0.0 : 1.0
-        nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = engine.isPaused ? 0.0 : engine.rate
+        nowPlayingInfo[MPNowPlayingInfoPropertyDefaultPlaybackRate] = engine.rate
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = nowPlayingInfo
         center.playbackState = engine.isPaused ? .paused : .playing
@@ -295,6 +295,14 @@ final class NowPlayingCoordinator {
         add(center.changePlaybackPositionCommand) { [weak self] event in
             guard let position = event as? MPChangePlaybackPositionCommandEvent else { return }
             self?.engine?.seek(to: position.positionTime)
+            self?.updateTimeline()
+        }
+        center.changePlaybackRateCommand.supportedPlaybackRates = PlaybackRatePolicy.supported.map {
+            NSNumber(value: $0)
+        }
+        add(center.changePlaybackRateCommand) { [weak self] event in
+            guard let event = event as? MPChangePlaybackRateCommandEvent else { return }
+            self?.engine?.setRate(Double(event.playbackRate))
             self?.updateTimeline()
         }
         add(center.enableLanguageOptionCommand) { [weak self] event in

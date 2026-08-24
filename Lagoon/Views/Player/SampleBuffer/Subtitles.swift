@@ -16,13 +16,115 @@ nonisolated struct SubtitleImage: Equatable {
     }
 }
 
+/// An authored ASS/SSA alignment, using the format's numeric-keypad layout.
+/// The value is kept independent of SwiftUI so parsing remains testable and
+/// safe on the demux queue.
+nonisolated enum SubtitleTextAlignment: Int, Equatable, Sendable {
+    case bottomLeft = 1
+    case bottomCenter = 2
+    case bottomRight = 3
+    case middleLeft = 4
+    case middleCenter = 5
+    case middleRight = 6
+    case topLeft = 7
+    case topCenter = 8
+    case topRight = 9
+}
+
+/// A point on the ASS script plane, normalized before it crosses from the
+/// decoder to the UI. The overlay can therefore map it onto the displayed
+/// presentation rect, including anamorphic sources.
+nonisolated struct SubtitleTextPosition: Equatable, Sendable {
+    let x: Double
+    let y: Double
+}
+
+/// ASS primary colour after its BGR/inverted-alpha representation has been
+/// converted to ordinary RGBA bytes.
+nonisolated struct SubtitleTextColor: Equatable, Sendable {
+    let red: UInt8
+    let green: UInt8
+    let blue: UInt8
+    let alpha: UInt8
+}
+
+/// One inline-styled span. Keeping formatting on runs rather than on the
+/// whole event preserves mid-line emphasis without taking on a full libass
+/// renderer, karaoke timing, drawing commands, or transforms.
+nonisolated struct SubtitleTextRun: Equatable, Sendable {
+    let text: String
+    let primaryColor: SubtitleTextColor?
+    let isBold: Bool
+    let isItalic: Bool
+
+    init(
+        text: String,
+        primaryColor: SubtitleTextColor? = nil,
+        isBold: Bool = false,
+        isItalic: Bool = false
+    ) {
+        self.text = text
+        self.primaryColor = primaryColor
+        self.isBold = isBold
+        self.isItalic = isItalic
+    }
+}
+
+/// A text composition that must stay independent from simultaneous cues.
+/// Joining these into one string is what used to stack left/right speakers
+/// and move authored signs to the dialogue shelf (HEL-107).
+nonisolated struct SubtitleTextCue: Equatable, Sendable {
+    let runs: [SubtitleTextRun]
+    let alignment: SubtitleTextAlignment?
+    let position: SubtitleTextPosition?
+
+    static func plain(_ text: String) -> SubtitleTextCue {
+        SubtitleTextCue(
+            runs: [SubtitleTextRun(text: text)],
+            alignment: nil,
+            position: nil
+        )
+    }
+
+    var text: String { runs.map(\.text).joined() }
+
+    var usesDefaultStyle: Bool {
+        runs.allSatisfy { $0.primaryColor == nil && !$0.isBold && !$0.isItalic }
+    }
+
+    var usesDefaultPlacement: Bool { alignment == nil && position == nil }
+}
+
 nonisolated struct SubtitleCue {
     let start: Double
     /// `.infinity` marks an open-ended cue (the PGS norm: display until
     /// the next composition event) — the store closes it on the next event.
     var end: Double
-    let text: String?
+    let textCues: [SubtitleTextCue]
     let images: [SubtitleImage]
+
+    /// Compatibility projection for parsers/tests and accessibility. The
+    /// renderer consumes `textCues` so authored compositions stay separate.
+    var text: String? {
+        let joined = textCues.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n")
+        return joined.isEmpty ? nil : joined
+    }
+
+    init(start: Double, end: Double, text: String?, images: [SubtitleImage]) {
+        self.init(
+            start: start,
+            end: end,
+            textCues: text.map { [.plain($0)] } ?? [],
+            images: images
+        )
+    }
+
+    init(start: Double, end: Double, textCues: [SubtitleTextCue], images: [SubtitleImage]) {
+        self.start = start
+        self.end = end
+        self.textCues = textCues
+        self.images = images
+    }
 }
 
 /// What one demuxed subtitle packet decodes to.
@@ -64,23 +166,233 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
         lock.unlock()
     }
 
-    func active(at seconds: Double) -> (text: String?, images: [SubtitleImage]) {
+    func active(at seconds: Double) -> (textCues: [SubtitleTextCue], images: [SubtitleImage]) {
         lock.lock()
         defer { lock.unlock() }
-        var lines: [String] = []
+        var textCues: [SubtitleTextCue] = []
         var images: [SubtitleImage] = []
         for cue in cues where cue.start <= seconds && seconds < cue.end {
-            if let text = cue.text {
-                lines.append(text)
-            }
+            textCues.append(contentsOf: cue.textCues)
             images.append(contentsOf: cue.images)
         }
-        return (lines.isEmpty ? nil : lines.joined(separator: "\n"), images)
+        return (textCues, images)
     }
 
     private func closeOpenCuesLocked(at seconds: Double) {
         for index in cues.indices where cues[index].end == .infinity && cues[index].start < seconds {
             cues[index].end = seconds
+        }
+    }
+}
+
+nonisolated struct ASSPlayResolution: Equatable, Sendable {
+    let width: Double
+    let height: Double
+
+    /// ASS historically defaults to this script plane when the header omits
+    /// PlayRes. Real authored files nearly always supply both dimensions.
+    static let fallback = ASSPlayResolution(width: 384, height: 288)
+}
+
+/// The intentionally small ASS/SSA subset Lagoon renders. Positioning,
+/// alignment, primary colour, bold and italic cover signs and simultaneous
+/// speakers; unsupported tags are consumed and ignored so plain dialogue
+/// retains today's presentation.
+nonisolated enum ASSSubtitleTextParser {
+    private struct Style: Equatable {
+        var primaryColor: SubtitleTextColor?
+        var isBold = false
+        var isItalic = false
+    }
+
+    static func playResolution(from header: String?) -> ASSPlayResolution {
+        guard let header else { return .fallback }
+        let width = firstCapture(#"(?im)^\s*PlayResX\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$"#, in: header)
+            .flatMap(Double.init)
+        let height = firstCapture(#"(?im)^\s*PlayResY\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$"#, in: header)
+            .flatMap(Double.init)
+        guard let width, width > 0, let height, height > 0 else { return .fallback }
+        return ASSPlayResolution(width: width, height: height)
+    }
+
+    /// `payload` is FFmpeg's normalized ASS event:
+    /// ReadOrder,Layer,Style,Name,MarginL,MarginR,MarginV,Effect,Text.
+    static func cue(
+        from payload: String,
+        playResolution: ASSPlayResolution = .fallback
+    ) -> SubtitleTextCue? {
+        let fields = payload.split(separator: ",", maxSplits: 8, omittingEmptySubsequences: false)
+        let raw = fields.count == 9 ? String(fields[8]) : payload
+        var alignment: SubtitleTextAlignment?
+        var position: SubtitleTextPosition?
+        var style = Style()
+        var runs: [SubtitleTextRun] = []
+        var cursor = raw.startIndex
+
+        func appendText(_ fragment: Substring) {
+            guard !fragment.isEmpty else { return }
+            let text = String(fragment)
+                .replacingOccurrences(of: "\\N", with: "\n")
+                .replacingOccurrences(of: "\\n", with: "\n")
+                .replacingOccurrences(of: "\\h", with: " ")
+            guard !text.isEmpty else { return }
+            let run = SubtitleTextRun(
+                text: text,
+                primaryColor: style.primaryColor,
+                isBold: style.isBold,
+                isItalic: style.isItalic
+            )
+            if let last = runs.last,
+               last.primaryColor == run.primaryColor,
+               last.isBold == run.isBold,
+               last.isItalic == run.isItalic {
+                runs[runs.count - 1] = SubtitleTextRun(
+                    text: last.text + run.text,
+                    primaryColor: run.primaryColor,
+                    isBold: run.isBold,
+                    isItalic: run.isItalic
+                )
+            } else {
+                runs.append(run)
+            }
+        }
+
+        while cursor < raw.endIndex,
+              let open = raw[cursor...].firstIndex(of: "{") {
+            appendText(raw[cursor..<open])
+            guard let close = raw[raw.index(after: open)...].firstIndex(of: "}") else {
+                appendText(raw[open...])
+                cursor = raw.endIndex
+                break
+            }
+            let block = String(raw[raw.index(after: open)..<close])
+            apply(
+                block: block,
+                playResolution: playResolution,
+                alignment: &alignment,
+                position: &position,
+                style: &style
+            )
+            cursor = raw.index(after: close)
+        }
+        if cursor < raw.endIndex {
+            appendText(raw[cursor...])
+        }
+
+        trimOuterWhitespace(from: &runs)
+        guard !runs.isEmpty, !runs.map(\.text).joined().isEmpty else { return nil }
+        return SubtitleTextCue(runs: runs, alignment: alignment, position: position)
+    }
+
+    private static func apply(
+        block: String,
+        playResolution: ASSPlayResolution,
+        alignment: inout SubtitleTextAlignment?,
+        position: inout SubtitleTextPosition?,
+        style: inout Style
+    ) {
+        // \r or \rStyle resets inline state. The named style table remains
+        // deliberately out of scope; subsequent supported overrides in the
+        // same block are still applied below.
+        if block.range(of: #"\\r(?:[^\\}]*)"#, options: .regularExpression) != nil {
+            style = Style()
+        }
+        if let raw = lastCapture(#"\\an([1-9])"#, in: block),
+           let value = Int(raw),
+           let parsed = SubtitleTextAlignment(rawValue: value) {
+            alignment = parsed
+        }
+        if let captures = lastCaptures(
+            #"\\pos\(\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*,\s*(-?(?:\d+(?:\.\d*)?|\.\d+))\s*\)"#,
+            count: 2,
+            in: block
+        ), let x = Double(captures[0]), let y = Double(captures[1]) {
+            position = SubtitleTextPosition(
+                x: x / playResolution.width,
+                y: y / playResolution.height
+            )
+        }
+        if let raw = lastCapture(#"\\b(-?\d+)"#, in: block), let value = Int(raw) {
+            style.isBold = value != 0
+        }
+        if let raw = lastCapture(#"\\i(-?\d+)"#, in: block), let value = Int(raw) {
+            style.isItalic = value != 0
+        }
+        if let raw = lastCapture(#"\\(?:1)?c&H([0-9A-Fa-f]{6,8})&"#, in: block) {
+            style.primaryColor = color(fromASSHex: raw)
+        }
+    }
+
+    private static func color(fromASSHex raw: String) -> SubtitleTextColor? {
+        guard let value = UInt32(raw, radix: 16) else { return nil }
+        let alpha: UInt8 = raw.count == 8
+            ? 255 &- UInt8((value >> 24) & 0xFF)
+            : 255
+        return SubtitleTextColor(
+            red: UInt8(value & 0xFF),
+            green: UInt8((value >> 8) & 0xFF),
+            blue: UInt8((value >> 16) & 0xFF),
+            alpha: alpha
+        )
+    }
+
+    private static func trimOuterWhitespace(from runs: inout [SubtitleTextRun]) {
+        while !runs.isEmpty {
+            let first = runs[0]
+            let text = first.text.drop(while: { $0.isWhitespace })
+            if text.isEmpty {
+                runs.removeFirst()
+            } else {
+                runs[0] = SubtitleTextRun(
+                    text: String(text),
+                    primaryColor: first.primaryColor,
+                    isBold: first.isBold,
+                    isItalic: first.isItalic
+                )
+                break
+            }
+        }
+        while !runs.isEmpty {
+            let lastIndex = runs.count - 1
+            let last = runs[lastIndex]
+            let text = last.text.reversed().drop(while: { $0.isWhitespace }).reversed()
+            if text.isEmpty {
+                runs.removeLast()
+            } else {
+                runs[lastIndex] = SubtitleTextRun(
+                    text: String(text),
+                    primaryColor: last.primaryColor,
+                    isBold: last.isBold,
+                    isItalic: last.isItalic
+                )
+                break
+            }
+        }
+    }
+
+    private static func firstCapture(_ pattern: String, in text: String) -> String? {
+        captures(pattern, count: 1, in: text).first?.first
+    }
+
+    private static func lastCapture(_ pattern: String, in text: String) -> String? {
+        captures(pattern, count: 1, in: text).last?.first
+    }
+
+    private static func lastCaptures(_ pattern: String, count: Int, in text: String) -> [String]? {
+        captures(pattern, count: count, in: text).last
+    }
+
+    private static func captures(_ pattern: String, count: Int, in text: String) -> [[String]] {
+        guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return expression.matches(in: text, range: range).compactMap { match in
+            guard match.numberOfRanges > count else { return nil }
+            var result: [String] = []
+            for index in 1...count {
+                guard let range = Range(match.range(at: index), in: text) else { return nil }
+                result.append(String(text[range]))
+            }
+            return result
         }
     }
 }

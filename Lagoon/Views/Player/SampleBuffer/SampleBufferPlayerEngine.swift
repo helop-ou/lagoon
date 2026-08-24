@@ -31,10 +31,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var duration: Double = 0
     private(set) var isPaused = false
     private(set) var isBuffering = true
+    private(set) var rate: Double = 1
     private(set) var videoSize: CGSize?
     private(set) var audioTracks: [PlayerTrack] = []
     private(set) var subtitleTracks: [PlayerTrack] = []
     private(set) var currentSubtitleText: String?
+    private(set) var currentSubtitleCues: [SubtitleTextCue] = []
     private(set) var currentSubtitleImages: [SubtitleImage] = []
     /// mpv convention (M6): positive delays the audio.
     private(set) var audioDelay: Double = 0
@@ -284,6 +286,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     static func makeAudioRenderer() -> AVSampleBufferAudioRenderer {
         let renderer = AVSampleBufferAudioRenderer()
         renderer.allowedAudioSpatializationFormats = .monoStereoAndMultichannel
+        // The sample-buffer renderer otherwise changes pitch with rate.
+        // Time-domain processing keeps speech natural at 1.25x/1.5x and is
+        // applied here so media-service and failure replacements inherit it.
+        renderer.audioTimePitchAlgorithm = .timeDomain
         return renderer
     }
 
@@ -293,9 +299,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard isPaused || synchronizer.rate == 0 else { return }
         isPaused = false
         // A buffering engine resumes when its queue gate is satisfied;
-        // forcing rate 1 here would run its timebase ahead of the samples.
+        // forcing the clock here would run its timebase ahead of the samples.
         if !isBuffering {
-            synchronizer.rate = 1
+            synchronizer.rate = Float(rate)
         }
         rearmBench(at: timePosition)
     }
@@ -316,6 +322,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         // Touching the transport ends a controlled measurement window;
         // the bench re-arms from wherever playback continues.
+    }
+
+    func setRate(_ requestedRate: Double) {
+        let requestedRate = PlaybackRatePolicy.clamped(requestedRate)
+        guard rate != requestedRate else { return }
+        rate = requestedRate
+        shared.withLock { $0.playbackRate = requestedRate }
+        if !isPaused, !isBuffering {
+            synchronizer.rate = Float(requestedRate)
+        }
+        rearmBench(at: timePosition)
     }
 
     func seek(by seconds: Double) {
@@ -359,6 +376,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         externalLoadToken += 1
         subtitleStore.removeAll()
         currentSubtitleText = nil
+        currentSubtitleCues = []
         currentSubtitleImages = []
         subtitleTracks = subtitleTracks.map {
             PlayerTrack(
@@ -664,6 +682,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             subtitleStore.removeAll()
         }
         currentSubtitleText = nil
+        currentSubtitleCues = []
         currentSubtitleImages = []
     }
 
@@ -689,7 +708,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 CMClockGetTime(CMClockGetHostTimeClock()),
                 CMTime(seconds: 0.1, preferredTimescale: 1_000_000_000)
             )
-            synchronizer.setRate(1, time: time, atHostTime: hostTime)
+            synchronizer.setRate(Float(rate), time: time, atHostTime: hostTime)
         }
         kickPumps()
         rearmBench(at: time.seconds)
@@ -1180,7 +1199,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 let decision = StallRecoveryPolicy.decision(
                     elapsed: ContinuousClock.now - recoveryStarted,
                     videoQueueCount: self.videoQueue.count,
-                    videoQueueFinished: self.videoQueue.isFinished
+                    videoQueueFinished: self.videoQueue.isFinished,
+                    playbackRate: self.rate
                 )
                 switch decision {
                 case .wait:
@@ -1199,7 +1219,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         )
                     }
                     if !self.isPaused {
-                        self.synchronizer.rate = 1
+                        self.synchronizer.rate = Float(self.rate)
                     }
                     return
                 case .reprime:
@@ -1271,13 +1291,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             && !videoQueue.isFinished
             && videoQueue.count == 0
             && (duration <= 0 || seconds < duration - 1)
-            && shared.withLock({ $0.videoBufferedTo }) - seconds < 0.2
+            // Preserve the same wall-clock margin at faster playback. The
+            // buffered timestamps are media time, which drains `rate` times
+            // faster than real time.
+            && shared.withLock({ $0.videoBufferedTo }) - seconds < 0.2 * rate
     }
 
     private func refreshSubtitles(at seconds: Double) {
         let active = subtitleStore.active(at: seconds)
-        if active.text != currentSubtitleText {
-            currentSubtitleText = active.text
+        if active.textCues != currentSubtitleCues {
+            currentSubtitleCues = active.textCues
+            let text = active.textCues.map(\.text).filter { !$0.isEmpty }.joined(separator: "\n")
+            currentSubtitleText = text.isEmpty ? nil : text
         }
         if active.images != currentSubtitleImages {
             currentSubtitleImages = active.images
@@ -1538,7 +1563,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 videoFrameRate: demuxer.videoFrameRate,
                 videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
                 videoIsSoftwareDecoded: demuxer.outputsDecodedVideo,
-                hasAudio: !demuxer.audioStreams.isEmpty
+                hasAudio: !demuxer.audioStreams.isEmpty,
+                playbackRate: shared.withLock { $0.playbackRate }
             ) {
             case .read:
                 performDemuxStep()
@@ -1708,8 +1734,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
             videoIsSoftwareDecoded: demuxer.outputsDecodedVideo
         )
-        let minimumVideoReserve = demuxer.outputsDecodedVideo ? 18 : 12
-        while (videoQueue.count < minimumVideoReserve || (hasAudio && audioQueue.bufferedDuration < 1.25)),
+        let playbackRate = shared.withLock { $0.playbackRate }
+        let baseVideoReserve = demuxer.outputsDecodedVideo ? 18 : 12
+        let minimumVideoReserve = min(
+            Int(ceil(Double(baseVideoReserve) * playbackRate)),
+            max(videoHardLimit - 1, 1)
+        )
+        let minimumAudioReserve = 1.25 * playbackRate
+        while (videoQueue.count < minimumVideoReserve || (hasAudio && audioQueue.bufferedDuration < minimumAudioReserve)),
               videoQueue.count < videoHardLimit,
               !videoQueue.isFinished,
               !shared.withLock({ $0.cancelled }) {
@@ -1958,9 +1990,13 @@ nonisolated enum StallRecoveryPolicy {
     static func decision(
         elapsed: Duration,
         videoQueueCount: Int,
-        videoQueueFinished: Bool
+        videoQueueFinished: Bool,
+        playbackRate: Double = 1
     ) -> StallRecoveryDecision {
-        if videoQueueCount >= resumeVideoCount || videoQueueFinished {
+        let requiredVideoCount = Int(ceil(
+            Double(resumeVideoCount) * PlaybackRatePolicy.clamped(playbackRate)
+        ))
+        if videoQueueCount >= requiredVideoCount || videoQueueFinished {
             return .resume
         }
         if elapsed >= reprimeAfter {
@@ -1996,6 +2032,9 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// uses this as the renderer boundary even without container duration.
         var mediaEndSeconds: Double = 0
         var audioDelaySeconds: Double = 0
+        /// Media seconds consumed per wall-clock second. Demux watermarks
+        /// use it to retain the same real-time cushion above 1x.
+        var playbackRate: Double = 1
         /// First sample actually accepted by the renderer after attach/flush.
         var firstEnqueuedVideoPTS: CMTime?
     }
@@ -2071,13 +2110,23 @@ nonisolated enum DemuxBackpressurePolicy {
         videoFrameRate: Double,
         videoIsDecoded: Bool,
         videoIsSoftwareDecoded: Bool = false,
-        hasAudio: Bool
+        hasAudio: Bool,
+        playbackRate: Double = 1
     ) -> DemuxBackpressureDecision {
-        let videoHighWater = videoIsSoftwareDecoded ? 30 : (videoIsDecoded ? 18 : 90)
-        let videoLowWater = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 72)
         let videoHardWater = videoHardLimit(
             videoIsDecoded: videoIsDecoded,
             videoIsSoftwareDecoded: videoIsSoftwareDecoded
+        )
+        let safePlaybackRate = PlaybackRatePolicy.clamped(playbackRate)
+        let baseVideoHighWater = videoIsSoftwareDecoded ? 30 : (videoIsDecoded ? 18 : 90)
+        let baseVideoLowWater = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 72)
+        let videoHighWater = min(
+            Int(ceil(Double(baseVideoHighWater) * safePlaybackRate)),
+            max(videoHardWater - 1, 1)
+        )
+        let videoLowWater = min(
+            Int(ceil(Double(baseVideoLowWater) * safePlaybackRate)),
+            max(videoHighWater - 1, 1)
         )
         let safeFrameRate = videoFrameRate.isFinite && videoFrameRate >= 1
             ? videoFrameRate
@@ -2086,7 +2135,7 @@ nonisolated enum DemuxBackpressurePolicy {
         if videoCount >= videoHighWater {
             let drainSeconds = Double(max(videoCount - videoLowWater, 0)) / safeFrameRate
             let audioCanCoverDrain = !hasAudio
-                || audioBufferedSeconds >= audioSafetySeconds + drainSeconds
+                || audioBufferedSeconds >= audioSafetySeconds * safePlaybackRate + drainSeconds
             if audioCanCoverDrain {
                 return .waitForVideo(below: videoLowWater)
             }
@@ -2100,7 +2149,11 @@ nonisolated enum DemuxBackpressurePolicy {
         }
 
         if hasAudio, audioCount >= audioHighWater {
-            let videoSafetyCount = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 36)
+            let baseVideoSafetyCount = videoIsSoftwareDecoded ? 24 : (videoIsDecoded ? 12 : 36)
+            let videoSafetyCount = min(
+                Int(ceil(Double(baseVideoSafetyCount) * safePlaybackRate)),
+                max(videoHardWater - 1, 1)
+            )
             if videoCount >= videoSafetyCount {
                 return .waitForAudio(below: audioLowWater)
             }

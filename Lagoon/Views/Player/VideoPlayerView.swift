@@ -441,6 +441,10 @@ final class PlaybackController {
             }
 
             let engine = SampleBufferPlayerEngine()
+            // Episode handoff and delivery fallback replace the engine while
+            // the viewer remains in one player session. Carry their chosen
+            // speed across that internal swap.
+            engine.setRate(self.engine?.rate ?? 1)
             engine.prepare(
                 url: playbackURL,
                 cacheSession: transportCache,
@@ -1049,6 +1053,10 @@ final class PlaybackController {
               nextPreparationTask == nil,
               let engine else { return }
         startBufferFill(session: playbackCache.current, engine: engine)
+    }
+
+    func updateNowPlayingTimeline() {
+        nowPlaying.updateTimeline()
     }
 
     private func startProgressLoop() {
@@ -1781,6 +1789,10 @@ struct VideoPlayerView: View {
         }
         .onChange(of: controller.engine?.isPaused) { _, _ in
             pictureInPicture.invalidatePlaybackState()
+        }
+        .onChange(of: controller.engine?.rate) { _, _ in
+            pictureInPicture.invalidatePlaybackState()
+            controller.updateNowPlayingTimeline()
         }
         .onChange(of: controller.engine?.duration) { _, _ in
             pictureInPicture.invalidatePlaybackState()

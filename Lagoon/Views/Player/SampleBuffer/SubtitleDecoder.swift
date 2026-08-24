@@ -10,6 +10,7 @@ import Libavutil
 nonisolated final class SubtitleDecoder {
     private let codecContext: UnsafeMutablePointer<AVCodecContext>
     private let timeBase: AVRational
+    private let playResolution: ASSPlayResolution
 
     init?(codecpar: UnsafeMutablePointer<AVCodecParameters>, timeBase: AVRational) {
         guard let codec = avcodec_find_decoder(codecpar.pointee.codec_id),
@@ -25,6 +26,9 @@ nonisolated final class SubtitleDecoder {
         context.pointee.pkt_timebase = timeBase
         codecContext = context
         self.timeBase = timeBase
+        playResolution = ASSSubtitleTextParser.playResolution(
+            from: Self.subtitleHeader(from: context)
+        )
     }
 
     deinit {
@@ -54,18 +58,22 @@ nonisolated final class SubtitleDecoder {
             return [.clear(at: start)]
         }
 
-        var textLines: [String] = []
+        var textCues: [SubtitleTextCue] = []
         var images: [SubtitleImage] = []
         for index in 0..<Int(subtitle.num_rects) {
             guard let rect = rects[index] else { continue }
             switch rect.pointee.type {
             case SUBTITLE_ASS:
-                if let ass = rect.pointee.ass, let text = Self.text(fromASSPayload: String(cString: ass)) {
-                    textLines.append(text)
+                if let ass = rect.pointee.ass,
+                   let cue = ASSSubtitleTextParser.cue(
+                       from: String(cString: ass),
+                       playResolution: playResolution
+                   ) {
+                    textCues.append(cue)
                 }
             case SUBTITLE_TEXT:
                 if let raw = rect.pointee.text, let text = Self.cleaned(String(cString: raw)) {
-                    textLines.append(text)
+                    textCues.append(.plain(text))
                 }
             case SUBTITLE_BITMAP:
                 if let image = bitmap(from: rect) {
@@ -75,7 +83,7 @@ nonisolated final class SubtitleDecoder {
                 break
             }
         }
-        guard !textLines.isEmpty || !images.isEmpty else { return [.clear(at: start)] }
+        guard !textCues.isEmpty || !images.isEmpty else { return [.clear(at: start)] }
 
         // Bitmap events routinely leave the end open (0 or sentinel) and
         // clear via a later empty composition; text without a duration
@@ -92,7 +100,7 @@ nonisolated final class SubtitleDecoder {
         return [.cue(SubtitleCue(
             start: start,
             end: end,
-            text: textLines.isEmpty ? nil : textLines.joined(separator: "\n"),
+            textCues: textCues,
             images: images
         ))]
     }
@@ -103,13 +111,6 @@ nonisolated final class SubtitleDecoder {
 
     // MARK: - Text
 
-    /// ASS event payload: "ReadOrder,Layer,Style,Name,MarginL,MarginR,
-    /// MarginV,Effect,Text" — the text is everything past the 8th comma.
-    private static func text(fromASSPayload payload: String) -> String? {
-        let fields = payload.split(separator: ",", maxSplits: 8, omittingEmptySubsequences: false)
-        return cleaned(fields.count == 9 ? String(fields[8]) : payload)
-    }
-
     private static func cleaned(_ raw: String) -> String? {
         let text = raw
             .replacingOccurrences(of: "\\N", with: "\n")
@@ -118,6 +119,14 @@ nonisolated final class SubtitleDecoder {
             .replacingOccurrences(of: "\\{[^}]*\\}", with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text
+    }
+
+    private static func subtitleHeader(
+        from context: UnsafeMutablePointer<AVCodecContext>
+    ) -> String? {
+        let count = Int(context.pointee.subtitle_header_size)
+        guard count > 0, let bytes = context.pointee.subtitle_header else { return nil }
+        return String(decoding: UnsafeBufferPointer(start: bytes, count: count), as: UTF8.self)
     }
 
     // MARK: - Bitmap
