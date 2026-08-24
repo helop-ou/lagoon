@@ -628,35 +628,11 @@ not introduce a second player to get it:
   setting still decides, and over HDMI to a receiver it changes nothing.
   A test pins both defaults, so if a future SDK closes the gap it says so and
   the override can go.
-- **Playback speed** (HEL-106). 0.5× through 2×, from a control at the right
-  end of the transport's title row, directly above the scrubber — where the
-  reference player (and the `AVPlayerViewController` it is built on) keeps its
-  transport buttons. It is a `speedometer` icon, so the transport stays a row
-  of icons the way the reference has it — with the rate joining the icon only
-  once it is *not* 1×. An icon alone cannot say how fast you are going, and the
-  one moment that matters is when you have changed it and might forget; so the
-  button is still the readout, without a permanent number sitting in the
-  chrome.
-
-  On tvOS **Up** moves focus from the surface to it and Select opens the list
-  of speeds; Menu closes the list, and Down hands focus back to the surface,
-  which has to own it for the arrows to scrub (HEL-63). It is the only
-  focusable thing in the transport, which is why that overlay no longer
-  refuses hit testing outright, and why the auto-hide will not fire while the
-  control holds focus — hiding it would strand focus on a disabled control.
-
-  The list is built from native buttons rather than a SwiftUI `Menu`:
-  **`Menu` never presents inside the tvOS fullScreenCover here.** The button
-  takes focus and Select does nothing at all — verified on device, then
-  replaced. Same class of tvOS-26 fullScreenCover gap as the one
-  `MenuPressGate` exists for. Focus visuals are still entirely native; only
-  the list's placement is ours.
-
-  `testPlaybackSpeedMenuOpensFromTheTransportAndAppliesARate` drives the whole
-  path with real remote presses: Up reaches it, Select lists all six, a choice
-  applies, Down returns focus, and the arrows still scrub afterwards.
-
-  On iOS it is a button in the transport row that was already there. Pausing, seeking, buffering,
+- **Playback speed** (HEL-106). 0.5× through 2×, from the playback panel's
+  **Video** tab, built exactly like the Audio and Subtitles track lists: plain
+  buttons, a checkmark for the current rate, the tvOS focus lozenge as the only
+  chrome. The transport shows the selected rate beside the title whenever it is
+  not 1×. Pausing, seeking, buffering,
   renderer recovery, delivery fallback and next-episode handoff all preserve
   it. Every audio renderer uses the time-domain pitch algorithm, including a
   replacement after media-services reset. Stall recovery, the delivered-PTS
@@ -664,6 +640,11 @@ not introduce a second player to get it:
   by rate while retaining the decoded-frame hard limits. Now Playing publishes
   the real rate and `changePlaybackRateCommand` exposes the same choices to
   Control Center, headset and system clients.
+
+  It briefly lived in the transport instead, as a button above the scrubber
+  that opened a menu. That was reverted — see **Putting controls in the
+  transport** below, which is the useful part of the exercise.
+
 - **An engine that has shut down must never be revived** (HEL-110).
   `attach(displayLayer:)` guards on `shutdownRequested`, not only on the
   renderer being empty. `finishRendererShutdown` nils `videoRenderer`, so the
@@ -1147,6 +1128,64 @@ and-forget (`try?` — reporting must never interrupt playback):
 Detail screens re-fetch the item in `fullScreenCover`'s `onDismiss`, and
 HomeView re-fetches its Resume/Next Up rails in `onAppear`, so the UI
 reflects the new position immediately.
+
+## Putting controls in the transport (tvOS)
+
+The area around the scrubber is the obvious home for shortcut buttons —
+subtitles, audio, speed, whatever comes next — and the reference player puts
+its buttons exactly there. Before writing one, read this: playback speed was
+built there and reverted, and the cost was mostly in rediscovering the
+constraints below.
+
+**Nothing in the transport is focusable today, and that is deliberate.** The
+overlay sets `allowsHitTesting(false)` on tvOS and the surface owns focus at
+all times. `onMoveCommand` lives *on the surface*, so the moment focus leaves
+it the arrows stop scrubbing (HEL-63). The skip prompt and the Up Next card are
+visible-but-not-focusable for that reason and are driven by Select instead.
+
+**The remote grammar is fully allocated except Up.** Left/right seek or walk
+the scrub playhead, down opens the panel, Menu cancels/closes/exits, Play/Pause
+toggles. Up (when not scrubbing) is the only free direction, and it is what a
+transport control would have to be reached by.
+
+A focusable control there needs *all* of the following, and the first three are
+not optional:
+
+1. The overlay must become hit-testable (`allowsHitTesting(transportVisible)`).
+2. Focusability must be gated on `transportVisible`, or focus walks into an
+   invisible control while the transport is hidden.
+3. The four-second auto-hide must not fire while it holds focus, or focus is
+   stranded on a control that is then disabled.
+4. It needs a way back: down should return `playerFocus = .surface`, because
+   the surface must own focus for the arrows to scrub.
+
+### Platform limits found the hard way
+
+These are all verified on device, not inferred:
+
+- **SwiftUI `Menu` never presents inside the player's `fullScreenCover`.** The
+  button takes focus and Select does nothing at all — no popup, no error, the
+  player keeps playing. Same class of tvOS-26 fullScreenCover gap that
+  `MenuPressGate` exists for. Apple's HIG agrees from the other direction: the
+  pop-up button, which is the component this would be, is documented as *"Not
+  supported in tvOS or watchOS."* A menu has to be built from ordinary buttons.
+- **Focusable buttons nested inside another `Button`'s overlay stop taking
+  focus entirely.** Anchoring a popup to a button therefore has to be done from
+  *outside* it — publish the button's corner with `anchorPreference` and place
+  the popup as a sibling.
+- **A default tvOS button enforces its own minimum height**, around 66pt.
+  Neither a smaller font nor an explicit `.frame(height:)` moves it.
+  `.controlSize(.small)` is the only lever short of drawing the focus lozenge
+  by hand, which this codebase does not do.
+- **Do not ask for `.buttonStyle(.glass)`.** On tvOS, per Apple, "certain
+  interface elements, like image views and buttons, adopt Liquid Glass **when
+  they gain focus**" — a plain button already becomes glass at the moment it
+  should. Asking for it makes every option permanently glass, against "use
+  Liquid Glass effects sparingly … limit these effects to the most important
+  functional elements". It also tints the label with the accent, which is
+  white, so on a bright backdrop the labels disappear into their own pills.
+  That is exactly how the first speed control shipped, and it is why the panel
+  rows are plain buttons.
 
 ## Player view gotchas (learned the hard way on tvOS)
 

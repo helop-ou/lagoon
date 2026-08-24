@@ -11,8 +11,8 @@ import SwiftUI
 /// tvOS focus invariants: the surface is focusable at all times (Menu
 /// would quit the app from an unfocusable screen). Remote grammar:
 /// play/pause toggles anywhere; on the surface left/right seek ±10 s while
-/// playing and walk the scrub playhead while paused (HEL-39 slice 2), up
-/// steps playback speed and down opens the panel; in the panel left/right walk the tabs (selection
+/// playing and walk the scrub playhead while paused (HEL-39 slice 2), and
+/// down opens the panel; in the panel left/right walk the tabs (selection
 /// follows focus), down enters the track rows. Menu/Escape is intercepted
 /// at the UIKit press layer by `MenuPressGate` — scrubbing cancels back to
 /// the live position, else panel open closes the panel, otherwise the
@@ -66,10 +66,6 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     @State private var controlsVisible = true
-    /// The transport's speed list. SwiftUI's `Menu` never presents inside a
-    /// tvOS fullScreenCover here — the button focuses and Select does nothing
-    /// — so the list is drawn like the panel is, from native buttons.
-    @State private var speedListOpen = false
     @State private var interactionToken = 0
     @State private var panelOpen = false
     @State private var selectedTab: PlayerPanelTab = .info
@@ -140,8 +136,6 @@ struct CustomPlayerView<Surface: View>: View {
                 // unanswered and Menu still means "leave".
                 nextUpDismissed = true
                 onCancelNextUp?()
-            } else if speedListOpen {
-                closeSpeedList()
             } else if panelOpen {
                 closePanel()
             } else {
@@ -193,11 +187,11 @@ struct CustomPlayerView<Surface: View>: View {
                 // video (and the button row taps). tvOS is never touched —
                 // Select goes to the focused surface — so nothing down
                 // there may take a press at all.
-                // Only the speed control takes a press here; everything
-                // else in the transport sets `allowsHitTesting(false)` on
-                // itself, so Select still reaches the surface whenever the
-                // surface is what holds focus.
+                #if os(tvOS)
+                .allowsHitTesting(false)
+                #else
                 .allowsHitTesting(transportVisible)
+                #endif
                 // Asymmetric: target-state-conditional animation — fast
                 // in, gentle out.
                 .animation(
@@ -215,10 +209,6 @@ struct CustomPlayerView<Surface: View>: View {
             // between two frames 0.04 s apart. A plain value change does
             // survive, so the slide is an offset. Disabled while closed so
             // its buttons stay out of the focus engine's reach.
-            #if os(tvOS)
-            speedList
-            #endif
-
             panel
                 #if os(tvOS)
                 .focusScope(panelFocusScope)
@@ -250,11 +240,7 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
-            // Hiding the transport while its speed control holds focus would
-            // strand focus on an invisible, then disabled, control — tvOS
-            // hands it back to nowhere in particular.
-            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing,
-                  !speedListOpen, playerFocus != .speed else { return }
+            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing else { return }
             controlsVisible = false
         }
         // The spinner only earns screen time when buffering persists —
@@ -418,11 +404,6 @@ struct CustomPlayerView<Surface: View>: View {
                     jumpChapter(direction: -1)
                 case .down:
                     openPanel()
-                // Up hands focus to the transport's speed control. Down
-                // still belongs to the panel.
-                case .up:
-                    pokeControls()
-                    playerFocus = .speed
                 default:
                     break
                 }
@@ -457,20 +438,6 @@ struct CustomPlayerView<Surface: View>: View {
                 }
                 #endif
             }
-    }
-
-    /// Focus identity for one rate in the list.
-    static func speedRow(_ rate: Double) -> String {
-        "playback-rate-\(PlaybackRatePolicy.identifier(rate))"
-    }
-
-    private func closeSpeedList() {
-        speedListOpen = false
-        // Back to the button that opened it, not to the surface: Menu means
-        // "close this", and losing the whole transport with it would be a
-        // second, unasked-for step.
-        playerFocus = .speed
-        pokeControls()
     }
 
     private func pokeControls() {
@@ -521,7 +488,7 @@ struct CustomPlayerView<Surface: View>: View {
     private var isScrubbing: Bool { scrubTarget != nil }
 
     private var transportVisible: Bool {
-        (controlsVisible || engine.isPaused || isScrubbing || speedListOpen) && !panelOpen
+        (controlsVisible || engine.isPaused || isScrubbing) && !panelOpen
     }
 
     /// Walking a virtual playhead needs a known duration to walk along;
@@ -951,14 +918,6 @@ struct CustomPlayerView<Surface: View>: View {
                     Image(systemName: "info.circle")
                 }
                 Button {
-                    engine.setRate(PlaybackRatePolicy.next(after: engine.rate))
-                } label: {
-                    Text(PlaybackRatePolicy.title(engine.rate))
-                        .font(.callout.monospacedDigit().weight(.semibold))
-                }
-                .accessibilityLabel("Playback Speed")
-                .accessibilityIdentifier("player.playbackRate")
-                Button {
                     engine.togglePause()
                 } label: {
                     Image(systemName: engine.isPaused ? "play.fill" : "pause.fill")
@@ -982,35 +941,12 @@ struct CustomPlayerView<Surface: View>: View {
                             .font(.title2.bold())
                     }
                     Spacer()
-                    #if os(tvOS)
-                    // Where the reference player keeps its transport buttons:
-                    // the right end of the title row, above the scrubber. Up
-                    // from the surface moves focus here; Select opens the list.
-                    //
-                    // This is the one focusable thing in the transport, and it
-                    // is why the overlay can no longer refuse hit testing
-                    // wholesale. Scrubbing is safe because focus only comes
-                    // here when nothing is being scrubbed, and Down hands it
-                    // straight back to the surface — `onMoveCommand` is on the
-                    // surface, so it has to own focus for the arrows to scrub
-                    // (HEL-63).
-                    PlayerSpeedButton(rate: engine.rate) {
-                        speedListOpen = true
-                        // Land on the rate already playing, so Select twice is
-                        // a no-op rather than a surprise.
-                        playerFocus = .track(Self.speedRow(engine.rate))
-                        pokeControls()
+                    if engine.rate != 1 {
+                        Text(PlaybackRatePolicy.title(engine.rate))
+                            .font(.callout.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("player.playbackRate.value")
                     }
-                    .focused($playerFocus, equals: .speed)
-                    // Never focusable while it cannot be seen, or focus would
-                    // walk into an invisible control.
-                    .disabled(!transportVisible)
-                    .onMoveCommand { direction in
-                        // Down hands focus back to the surface, which has to
-                        // own it for the arrows to scrub (HEL-63).
-                        if direction == .down { playerFocus = .surface }
-                    }
-                    #endif
                     if engine.isPaused {
                         Image(systemName: "pause.fill")
                             .font(.headline)
@@ -1046,71 +982,6 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .foregroundStyle(.white)
     }
-
-    #if os(tvOS)
-    /// The speed choices, anchored under the button that opened them.
-    ///
-    /// Native buttons in a stack, so the tvOS focus lozenge is the selection
-    /// visual exactly as it is in the panel's track lists — the list is
-    /// hand-placed, the focus never is.
-    ///
-    /// No `.buttonStyle` on the rows, deliberately. Apple: "Certain interface
-    /// elements, like image views and buttons, adopt Liquid Glass **when they
-    /// gain focus**" on tvOS — so a default button already turns to glass at
-    /// the moment it should, while asking for glass outright would make all
-    /// six permanently glass, against "use Liquid Glass effects sparingly …
-    /// limit these effects to the most important functional elements". Six
-    /// mutually exclusive speeds are also a coherent set, and the button
-    /// guidance is explicit that such a set shares one style: "When you use
-    /// buttons of the same size to offer two or more options, you signal that
-    /// the options form a coherent set of choices.
-    @ViewBuilder
-    private var speedList: some View {
-        if speedListOpen {
-            VStack(spacing: PlayerSpeedMetrics.listRowSpacing) {
-                ForEach(PlaybackRatePolicy.supported, id: \.self) { option in
-                    Button {
-                        engine.setRate(option)
-                        closeSpeedList()
-                    } label: {
-                        HStack(spacing: Metrics.Space.s) {
-                            Image(systemName: "checkmark")
-                                .font(PlayerSpeedMetrics.listFont.bold())
-                                .opacity(option == engine.rate ? 1 : 0)
-                            Text(PlaybackRatePolicy.title(option))
-                                .font(PlayerSpeedMetrics.listFont.monospacedDigit())
-                                // "0.75×" and "1.25×" are the widest labels and
-                                // wrapped to two lines at the first width tried,
-                                // which left the rows different heights.
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                            Spacer(minLength: 0)
-                        }
-                        .frame(width: PlayerSpeedMetrics.listWidth)
-                    }
-                    .focused($playerFocus, equals: .track(Self.speedRow(option)))
-                    .accessibilityIdentifier("player.playbackRate.\(PlaybackRatePolicy.identifier(option))")
-                }
-            }
-            // `.controlSize` is the system's own dial for this, so the focus
-            // lozenge stays native while the metrics come down — the one way
-            // to shrink a tvOS button that is not drawing focus by hand.
-            .controlSize(.small)
-            .padding(PlayerSpeedMetrics.listPadding)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: PlayerSpeedMetrics.listCornerRadius))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.trailing, Metrics.screenGutter)
-            .padding(.bottom, PlayerSpeedMetrics.listBottomInset)
-            // Up/down walk the options natively; Menu closes, through the
-            // same gate that closes the panel. Nothing intercepts the arrows
-            // here — a down handler left over from a horizontal draft did, and
-            // it silently ate the press that should have moved to the next
-            // speed.
-            .focusSection()
-            .transition(.opacity)
-        }
-    }
-    #endif
 
     /// Infuse/AVKit-style flat rail: played and buffered ranges stay inside
     /// the line, while a slim vertical marker appears only during scrubbing.
@@ -1383,7 +1254,6 @@ struct CustomPlayerView<Surface: View>: View {
         let skippableEnd: Double = skippable?.end ?? -1
         let focusDescription: String = switch playerFocus {
         case .surface: "surface"
-        case .speed: "speed"
         case .tab(let tab): "tab-\(String(describing: tab))"
         case .track(let id): "track-\(id)"
         case nil: "none"
@@ -1706,78 +1576,6 @@ private extension SubtitleTextColor {
             blue: Double(blue) / 255,
             opacity: Double(alpha) / 255
         )
-    }
-}
-
-/// A menu, per Apple's own definition: a vertical list of mutually exclusive
-/// options with a checkmark on the one in effect. Its *pop-up button* — the
-/// component this would otherwise be — is documented as "not supported in
-/// tvOS", which is the same gap that stops SwiftUI's `Menu` presenting inside
-/// this fullScreenCover, so the list is built here.
-///
-/// Everything below is smaller than the panel's equivalent on purpose. A
-/// default tvOS button pads itself for a full-width track row, which is far
-/// too much for six short numbers; `.controlSize(.small)` is the system's own
-/// dial for that, and the only one that moves the metrics without drawing the
-/// focus lozenge by hand. A smaller font and an explicit `.frame(height:)`
-/// were both tried first and neither shifted the button's minimum.
-nonisolated enum PlayerSpeedMetrics {
-    #if os(tvOS)
-    /// Fits "✓ 0.75×" — the widest label — and nothing more.
-    static let listWidth: CGFloat = 146
-    /// Clears the transport's title row, scrubber and time labels.
-    static let listBottomInset: CGFloat = 260
-    static let listFont: Font = .footnote
-    static let listRowSpacing: CGFloat = Metrics.Space.hair
-    static let listPadding: CGFloat = Metrics.Space.s
-    /// Tighter than `Metrics.panelCornerRadius`: that radius belongs to a
-    /// full-width sheet, and on a box this small it reads as a blob.
-    static let listCornerRadius: CGFloat = 18
-    #else
-    static let listWidth: CGFloat = 104
-    static let listBottomInset: CGFloat = 120
-    static let listFont: Font = .footnote
-    static let listRowSpacing: CGFloat = Metrics.Space.hair
-    static let listPadding: CGFloat = Metrics.Space.s
-    static let listCornerRadius: CGFloat = 14
-    #endif
-}
-
-/// Playback speed, sitting where the reference player keeps its transport
-/// buttons: the right end of the title row, above the scrubber.
-///
-/// A plain `Button`, so the tvOS focus lozenge is the whole selection visual
-/// — no chrome of its own.
-///
-/// The icon carries it at 1×, which keeps the transport a row of icons the way
-/// the reference player has it. The rate joins the icon only once it is *not*
-/// 1×: an icon alone cannot say how fast you are going, and the one moment
-/// that matters is when you have changed it and might forget. So the button is
-/// still the readout, without a permanent number sitting in the chrome.
-struct PlayerSpeedButton: View {
-    let rate: Double
-    let onOpen: () -> Void
-    var accessibilityIdentifier = "player.playbackRate"
-
-    private var isDefaultRate: Bool { abs(rate - 1) < 0.001 }
-
-    var body: some View {
-        Button(action: onOpen) {
-            HStack(spacing: Metrics.Space.xs) {
-                // Same size as its own label, and as the pause glyph across
-                // the row. `.title3` is 38pt on tvOS — larger than either, and
-                // in a transport that is meant to stay out of the way.
-                Image(systemName: "speedometer")
-                    .font(.callout.weight(.semibold))
-                if !isDefaultRate {
-                    Text(PlaybackRatePolicy.title(rate))
-                        .font(.callout.monospacedDigit().weight(.semibold))
-                }
-            }
-        }
-        .accessibilityLabel("Playback Speed")
-        .accessibilityValue(PlaybackRatePolicy.title(rate))
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 

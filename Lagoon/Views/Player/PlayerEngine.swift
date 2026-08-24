@@ -91,8 +91,8 @@ nonisolated enum PlaybackRatePolicy {
     }
 
     /// How a rate is written for the viewer: no trailing zeros, always a
-    /// multiplication sign. Lives here so the transport control and anything
-    /// else reporting a rate cannot drift apart.
+    /// multiplication sign. Lives here so the panel's rows and the readout
+    /// beside the player's title cannot drift apart.
     static func title(_ rate: Double) -> String {
         String(format: "%g×", clamped(rate))
     }
@@ -100,19 +100,6 @@ nonisolated enum PlaybackRatePolicy {
     /// Stable identifier for a rate, for accessibility and UI tests.
     static func identifier(_ rate: Double) -> String {
         String(format: "%g", clamped(rate)).replacingOccurrences(of: ".", with: "_")
-    }
-
-    /// The next rate up, wrapping back to the slowest past the top. The
-    /// transport control is a single button rather than a list, so stepping
-    /// is how the viewer moves through the set — and wrapping means the
-    /// button is never a dead end at either extreme.
-    static func next(after rate: Double) -> Double {
-        let current = clamped(rate)
-        // Nearest supported value first: the engine accepts anything inside
-        // the envelope (Remote Command Center can hand it 1.1), so the button
-        // has to be able to step on from a value that is not in the list.
-        let index = supported.firstIndex { $0 > current + 0.001 }
-        return index.map { supported[$0] } ?? supported[0]
     }
 }
 

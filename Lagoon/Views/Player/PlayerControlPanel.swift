@@ -23,9 +23,6 @@ enum PlayerPanelTab: CaseIterable, Hashable {
 /// closing it can hand focus back to the video surface without a dead frame.
 enum PlayerControlFocus: Hashable {
     case surface
-    /// The transport's speed control. It lives outside the panel, so it is
-    /// its own case rather than a `track`.
-    case speed
     case tab(PlayerPanelTab)
     case track(String)
 }
@@ -40,6 +37,7 @@ struct PlayerControlPanel: View {
     let audioTracks: [PlayerTrack]
     let subtitleTracks: [PlayerTrack]
     let audioDelay: Double
+    let playbackRate: Double
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
@@ -47,6 +45,7 @@ struct PlayerControlPanel: View {
     let onSelectAudioTrack: (Int?) -> Void
     let onSelectSubtitleTrack: (Int?) -> Void
     let onSetAudioDelay: (Double) -> Void
+    let onSetPlaybackRate: (Double) -> Void
     var onDismiss: (() -> Void)? = nil
 
     private static var subtitleOffID: String { "subtitle-off" }
@@ -285,7 +284,48 @@ struct PlayerControlPanel: View {
                 Text(info.videoSummary ?? String(localized: "Unknown video track"))
                     .font(.callout)
             }
+
+            Divider()
+
+            cardHeader("Playback Speed")
+            // Built exactly like the audio and subtitle track lists: plain
+            // buttons, the checkmark as the selection, the focus lozenge as
+            // the only chrome. A first attempt made these `.buttonStyle(.glass)`
+            // pills, which is wrong twice over — it made them the one filled
+            // thing in a panel of plain rows, and a glass button tints its
+            // label with the accent, which is white, so on a bright backdrop
+            // the labels vanished into their own pills.
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                ForEach(PlaybackRatePolicy.supported, id: \.self) { rate in
+                    Button {
+                        onSetPlaybackRate(rate)
+                    } label: {
+                        HStack(spacing: Metrics.Space.s) {
+                            Image(systemName: "checkmark")
+                                .font(.caption.bold())
+                                .opacity(playbackRate == rate ? 1 : 0)
+                            Text(PlaybackRatePolicy.title(rate))
+                                .monospacedDigit()
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .focused(focus, equals: .track(Self.speedRowID(rate)))
+                    .accessibilityIdentifier(
+                        "player.playbackRate.\(PlaybackRatePolicy.identifier(rate))"
+                    )
+                }
+            }
+            .padding(.horizontal, rowFocusInset)
+            .padding(.vertical, rowFocusInset)
+            .padding(.horizontal, -rowFocusInset)
         }
+    }
+
+    /// Focus identity for one speed row, in the panel's `track` namespace so
+    /// it walks with the other rows.
+    static func speedRowID(_ rate: Double) -> String {
+        "playback-rate-\(PlaybackRatePolicy.identifier(rate))"
     }
 
     private var subtitleCard: some View {
@@ -582,6 +622,7 @@ struct PlayerControlPanelHost: View, Equatable {
             audioTracks: engine.audioTracks,
             subtitleTracks: engine.subtitleTracks,
             audioDelay: engine.audioDelay,
+            playbackRate: engine.rate,
             subtitleSearch: subtitleSearch,
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
@@ -589,6 +630,7 @@ struct PlayerControlPanelHost: View, Equatable {
             onSelectAudioTrack: engine.selectAudioTrack,
             onSelectSubtitleTrack: engine.selectSubtitleTrack,
             onSetAudioDelay: engine.setAudioDelay,
+            onSetPlaybackRate: engine.setRate,
             onDismiss: onDismiss
         )
     }

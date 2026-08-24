@@ -66,45 +66,41 @@ final class PlayerRegressionUITests: XCTestCase {
         exerciseSubtitles(in: app)
     }
 
-    /// The speed control is the only focusable thing in the transport, so
-    /// this covers the whole interaction: Up reaches it from the surface,
-    /// Select opens the native list, a choice applies, and Down hands focus
-    /// back to the surface — which has to own it for the arrows to scrub.
-    func testPlaybackSpeedMenuOpensFromTheTransportAndAppliesARate() throws {
+    /// Playback speed lives in the panel's Video tab, so this drives the
+    /// route a viewer actually takes: down into the panel, across to Video,
+    /// down into the rows, and pick one.
+    func testPlaybackSpeedIsChosenFromTheVideoTab() throws {
         let app = launchPlayer(title: "The Great Train Robbery", simulatorTranscode: false)
         try requireRegressionFixture(in: app)
         waitForState(in: app, timeout: 45) { $0.int("ready") == 1 }
         XCTAssertEqual(state(in: app).string("rate"), "1")
 
-        remote.press(.up)
-        let focused = waitForState(in: app, timeout: 5) { $0.string("focus") == "speed" }
-        XCTAssertEqual(focused.string("focus"), "speed", "Up should reach the transport's speed control")
+        // Down opens the panel; left/right walk the tabs.
+        remote.press(.down)
+        waitForState(in: app, timeout: 5) { $0.int("panel") == 1 }
+        remote.press(.right)
+        waitForState(in: app, timeout: 5) { $0.string("tab") == "video" }
 
-        remote.press(.select)
+        // Down again drops into the card's rows.
+        remote.press(.down)
         for rate in ["0_5", "0_75", "1", "1_25", "1_5", "2"] {
             let option = app.descendants(matching: .any)["player.playbackRate.\(rate)"]
             XCTAssertTrue(
                 option.waitForExistence(timeout: 5),
-                "the speed list should offer \(rate)"
+                "the Video tab should offer \(rate)"
             )
         }
 
-        // The list is vertical, so down steps to the next speed. Take
-        // whatever it lands on: the assertion is that choosing from the list
-        // changes the rate, not which row tvOS highlights first.
+        // Take whatever the next row is: the assertion is that choosing from
+        // the list changes the rate, not which row tvOS lands on first.
         remote.press(.down)
         remote.press(.select)
         let applied = waitForState(in: app, timeout: 8) { $0.string("rate") != "1" }
-        XCTAssertNotEqual(applied.string("rate"), "1", "picking from the list should change the rate")
+        XCTAssertNotEqual(applied.string("rate"), "1", "picking a row should change the rate")
 
-        // Choosing closes the list and returns focus to the button, and Down
-        // from there must return focus to the surface — the transport must
-        // not have hidden underneath any of it.
-        remote.press(.down)
-        let returned = waitForState(in: app, timeout: 5) { $0.string("focus") == "surface" }
-        XCTAssertEqual(returned.string("focus"), "surface", "Down should hand focus back to the surface")
-
-        // And scrubbing still works once the surface owns focus again.
+        // Menu closes the panel, and the arrows still scrub afterwards.
+        remote.press(.menu)
+        waitForState(in: app, timeout: 5) { $0.int("panel") == 0 }
         remote.press(.right)
         let scrubbing = waitForState(in: app, timeout: 5) { $0.int("scrubbing") == 1 }
         XCTAssertEqual(scrubbing.int("scrubbing"), 1, "the surface must still own the arrows")
