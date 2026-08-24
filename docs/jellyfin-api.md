@@ -109,11 +109,40 @@ code knows whether a result came from OpenSubtitles or another plugin.
 | Persist fetched file | `POST Videos/{itemId}/Subtitles` | uploads the already validated bytes as base64, avoiding a second provider download |
 | Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | retained for provider formats Lagoon cannot parse directly |
 
-Preferred languages are searched in order and each provider's returned
-ranking is retained. A failure for one language no longer discards successful
-results from another. Empty results, absent-provider 404s, transport failures,
-and download failures are distinct UI states. Automatic mode searches when
-no suitable local track exists but never downloads silently.
+**Every one of those routes requires the per-user `EnableSubtitleManagement`
+permission, and it is off by default for every non-administrator** (Jellyfin
+10.9+). Without it all four answer `403` with an HTML body — verified on both
+fixture 10.11.11 and the public demo server, whose accounts are both
+non-admin with the flag unset. On a shared server that is the common case, so
+Lagoon reads `User.Policy.EnableSubtitleManagement` (free in the
+`AuthenticateByName` response, lazily from `Users/Me` for a restored token)
+and says so up front instead of failing one result at a time. An unreachable
+server resolves to *permitted*: a network problem must never be reported as a
+permissions problem. Administrators satisfy the policy implicitly.
+
+Preferred languages are searched **concurrently** and the results re-sorted
+into request order so each provider's ranking is retained. A failure for one
+language does not discard successful results from another, and a permission or
+session failure outranks whichever language happened to fail first. Empty
+results, missing permission, absent-provider 404s, transport failures, and
+download failures are distinct UI states. Automatic mode searches when no
+suitable local track exists but never downloads silently.
+
+Failures are classified rather than collapsed (HEL-91): 403 is a permission,
+401 an expired session, 429 rate limiting, 5xx a provider fault, and a timeout
+a timeout. The "provider could not supply this file / download limit" wording
+is reserved for the case that earns it — the provider answered 404 for the
+file itself *and* Jellyfin's save then attached nothing. Retries cover only
+fast-failing transient errors: a timeout is excluded because the provider
+budget is already 90 s, and rate limiting is excluded because retrying inside
+seconds cannot clear a limit measured in minutes and only spends more of the
+provider's quota getting there.
+
+Provider calls carry a 90 s timeout rather than the 30 s client default, since
+a search makes the *server* fan out to third-party services. A 401 or 403 on
+the direct fetch never falls through to the compatibility endpoint: that would
+make Jellyfin fetch from the provider a second time on the way to the same
+error, spending quota to learn nothing.
 
 Jellyfin 10.11's `DownloadRemoteSubtitles` controller catches its internal
 provider/save exception and still returns HTTP 204, so a successful status is
