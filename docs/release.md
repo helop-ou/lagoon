@@ -23,16 +23,24 @@ testers minutes after processing. Tracked under HEL-44.
 Once per platform (the multiplatform target archives separately for
 tvOS and iOS):
 
+0. **Bump and write the changelog first** (see *Build numbers* below):
+   `scripts/bump-build.sh`, then add the matching `ChangelogEntry`. The build
+   cannot be archived without one — `ChangelogTests` fails.
 1. Select an **Any tvOS Device** destination → Product → **Archive**.
-2. Organizer → Distribute App → **TestFlight Internal Only**.
+2. Organizer → Distribute App → **Custom** → **TestFlight Internal Only**, and
+   **uncheck "Manage version and build number"**. Only the Custom method shows
+   that checkbox; every other tile answers the options pages for you with it
+   on.
 3. Repeat with an **Any iOS Device** destination.
 
-**Build numbers bump themselves at upload** — Xcode's distribute flow
-manages the version/build number against App Store Connect and stamps the
-next free build number onto the upload. `CURRENT_PROJECT_VERSION` in the
-project stays at `1` on purpose (exactly like moony-weather); don't hand-bump
-it. Marketing version changes are deliberate and manual:
-`xcrun agvtool new-marketing-version 0.2` (or edit `MARKETING_VERSION`).
+**Lagoon owns its build number; Xcode must not touch it.** This used to say the
+opposite, because it did: until HEL-94 the project stayed at
+`CURRENT_PROJECT_VERSION = 1` and the distribute flow stamped whatever number
+came next. That is what left roughly 43 tvOS builds and 20 iOS builds on two
+silently diverged sequences with nothing tying a changelog entry to any of
+them. Bump in the repository, keep the checkbox off. Marketing version changes
+are deliberate and manual: `xcrun agvtool new-marketing-version 0.2` (or edit
+`MARKETING_VERSION`).
 
 ## Facts already encoded in the project
 

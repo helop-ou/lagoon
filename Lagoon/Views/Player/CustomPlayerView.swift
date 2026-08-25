@@ -1489,7 +1489,9 @@ struct PlayerStyledSubtitleText: View {
             if let color = run.primaryColor {
                 fragment = fragment.foregroundColor(color.swiftUIColor)
             }
-            return partial + fragment
+            // Interpolation, not `+`: tvOS 26 deprecates `Text.+` and its
+            // fix-it points here. Reads like a style choice, is not one.
+            return Text("\(partial)\(fragment)")
         }
     }
 }
