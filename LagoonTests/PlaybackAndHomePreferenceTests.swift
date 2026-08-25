@@ -218,6 +218,50 @@ struct HomeRowPreferenceTests {
         #expect(choices.map(\.title).contains("Show Genres"))
     }
 
+    /// The one that catches the next row someone adds.
+    ///
+    /// A Home row that never reaches this list is a row nobody can turn off,
+    /// and the mistake is invisible: the row renders, Settings simply never
+    /// mentions it. Asserting against the identifier constants rather than a
+    /// hand-copied list means a new row fails here the moment it has an id
+    /// and before it has a screen (HEL-122).
+    @Test func everyRowWithAnIdentifierIsOfferedInSettings() {
+        let offered = Set(HomeSectionPreferenceResolver.nativeChoices.map(\.id))
+        let owned = [
+            HomeCuratedRows.ID.becauseYouWatched,
+            HomeCuratedRows.ID.highlyRated,
+            HomeCuratedRows.ID.inFourK,
+            HomeCuratedRows.ID.genreSpotlight,
+            HomeCuratedRows.ID.decadeSpotlight,
+            HomeCuratedRows.ID.unstartedSeries,
+            HomeCuratedRows.ID.readyToBinge,
+            HomeCuratedRows.ID.surpriseMe,
+            CollectionShelf.rowID,
+        ]
+
+        for id in owned {
+            #expect(offered.contains(id), "\(id) draws a row but Settings never lists it")
+        }
+    }
+
+    @Test func noTwoRowsShareAnIdentifier() {
+        // Two rows on one id is one toggle governing both, and the row list
+        // is identified in SwiftUI — a duplicate is a runtime problem there
+        // as well as a preferences one.
+        let ids = HomeSectionPreferenceResolver.nativeChoices.map(\.id)
+
+        #expect(Set(ids).count == ids.count)
+    }
+
+    @Test func collectionsAreOfferedAndOnByDefault() {
+        let choices = HomeSectionPreferenceResolver.nativeChoices
+        let collections = choices.first { $0.id == CollectionShelf.rowID }
+
+        #expect(collections?.title == "Collections")
+        #expect(collections?.source == .lagoon)
+        #expect(HomeSectionPreferenceValues().isNativeEnabled(CollectionShelf.rowID))
+    }
+
     @Test func savedLayoutsFromBeforeNativeTogglesKeepEveryNativeRowVisible() throws {
         let legacy = Data(#"{"isConfigured":true,"rows":[]}"#.utf8)
         let values = try JSONDecoder().decode(HomeSectionPreferenceValues.self, from: legacy)
