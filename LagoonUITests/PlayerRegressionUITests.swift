@@ -773,7 +773,15 @@ final class PlayerRegressionUITests: XCTestCase {
         homeRowsScreenshot.name = "Lagoon native and Home Screen Sections plugin rows"
         homeRowsScreenshot.lifetime = .keepAlways
         add(homeRowsScreenshot)
-        moveFocus(to: myList, maxPresses: 12) { remote.press(.down) }
+        // Reaching the plugin section means crossing every native row, so a
+        // fixed budget rots the moment one is added: the eight curated rows
+        // (HEL-120) and Collections (HEL-122) both landed after this was
+        // written, and 12 presses had quietly stopped being enough. Size it
+        // from what is actually on the screen so the next row costs nothing.
+        let homeRowCount = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "settings.home.")
+        ).count
+        moveFocus(to: myList, maxPresses: homeRowCount + 4) { remote.press(.down) }
         let previousVisibility = myList.valueDescription
         remote.press(.select)
         XCTAssertNotEqual(myList.valueDescription, previousVisibility)
