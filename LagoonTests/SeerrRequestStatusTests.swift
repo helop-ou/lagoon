@@ -175,3 +175,57 @@ struct SeerrRequestStatusTests {
         }
     }
 }
+
+@Suite("Seerr quality profiles")
+struct SeerrQualityProfileTests {
+    /// `MediaRequest` carries the profile as a number; the names come from
+    /// `service/{radarr,sonarr}/{id}`. Both have to decode defensively,
+    /// because neither is guaranteed to be present on an older server.
+    @Test @MainActor func aRequestCarriesTheProfileAndServerItWasMadeAgainst() throws {
+        let request = try JSONDecoder().decode(
+            SeerrMediaRequest.self,
+            from: Data(#"{"id":1,"status":1,"type":"movie","profileId":4,"serverId":0}"#.utf8)
+        )
+        #expect(request.profileId == 4)
+        #expect(request.serverId == 0)
+    }
+
+    @Test @MainActor func aRequestWithoutAProfileStillDecodes() throws {
+        let request = try JSONDecoder().decode(
+            SeerrMediaRequest.self,
+            from: Data(#"{"id":1,"status":1,"type":"movie"}"#.utf8)
+        )
+        #expect(request.profileId == nil)
+        #expect(request.serverId == nil)
+    }
+
+    /// The exact shape `service/radarr/0` returns on the test server.
+    @Test @MainActor func theServiceProfilesDecode() throws {
+        let json = """
+        {"server":{"id":0},"rootFolders":[{"id":1,"path":"/movies"}],"tags":[],
+         "profiles":[{"id":1,"name":"Any"},{"id":4,"name":"HD-1080p"},{"id":7,"name":"HD/UHD"}]}
+        """
+        let details = try JSONDecoder().decode(SeerrServiceDetails.self, from: Data(json.utf8))
+        #expect(details.profiles.count == 3)
+        #expect(details.profiles.first { $0.id == 7 }?.name == "HD/UHD")
+    }
+
+    /// The shape `service/radarr` returns, used to find the default server
+    /// when a request does not name one.
+    @Test @MainActor func theServiceListDecodesAndMarksTheDefault() throws {
+        let json = """
+        [{"id":0,"name":"Radarr","is4k":false,"isDefault":true,"activeProfileId":7,"activeTags":[]}]
+        """
+        let services = try JSONDecoder().decode([SeerrService].self, from: Data(json.utf8))
+        #expect(services.count == 1)
+        #expect(services[0].isDefault)
+        #expect(!services[0].is4k)
+        #expect(services[0].name == "Radarr")
+    }
+
+    @Test @MainActor func aServiceMissingItsFieldsDoesNotThrow() throws {
+        let services = try JSONDecoder().decode([SeerrService].self, from: Data("[{}]".utf8))
+        #expect(services[0].id == 0)
+        #expect(!services[0].isDefault)
+    }
+}

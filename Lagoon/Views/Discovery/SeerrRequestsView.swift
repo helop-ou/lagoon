@@ -351,6 +351,7 @@ struct SeerrRequestDetailView: View {
     @State private var errorMessage: String?
     @State private var confirmation: Confirmation?
     @State private var isShowingProgressDetail = false
+    @State private var qualityProfile: String?
 
     init(request: SeerrMediaRequest) {
         self.request = request
@@ -475,6 +476,8 @@ struct SeerrRequestDetailView: View {
                 : String(localized: "Seasons \(numbers)"))
         }
         if currentRequest.is4k == true { tokens.append("4K") }
+        // What an approver is actually agreeing to fetch (HEL-118).
+        if let qualityProfile { tokens.append(qualityProfile) }
         if let year = details?.year { tokens.append(year) }
         return tokens
     }
@@ -582,9 +585,45 @@ struct SeerrRequestDetailView: View {
                 details = try await seerr.client.details(id: tmdbID, mediaType: currentRequest.resolvedMediaType)
             }
             await resolveJellyfinItem()
+            await resolveQualityProfile()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Names the quality profile the request was made against. `MediaRequest`
+    /// carries only a `profileId`, so the name comes from the Radarr/Sonarr
+    /// service; when the request does not say which server, the default one
+    /// is the server that would have taken it (HEL-118).
+    ///
+    /// Best-effort throughout: a missing profile is one absent token, never
+    /// an error on a page that is about the request.
+    private func resolveQualityProfile() async {
+        let mediaType = currentRequest.resolvedMediaType
+        guard mediaType != .person else {
+            qualityProfile = nil
+            return
+        }
+        let services = (try? await seerr.client.services(mediaType)) ?? []
+        let wants4k = currentRequest.is4k == true
+        // The server the request names, else the default one for its
+        // resolution, which is the server that would have taken it.
+        let service = services.first { $0.id == currentRequest.serverId }
+            ?? services.first { $0.isDefault && $0.is4k == wants4k }
+            ?? services.first(where: \.isDefault)
+
+        // `profileId` is only set when the requester explicitly chose one,
+        // which needs REQUEST_ADVANCED and is rare. Everything else inherits
+        // the server's active profile, and *that* is what an approver is
+        // agreeing to fetch.
+        guard let profileID = currentRequest.profileId ?? service?.activeProfileId,
+              let serverID = service?.id
+        else {
+            qualityProfile = nil
+            return
+        }
+        let profiles = (try? await seerr.client.qualityProfiles(mediaType, serverID: serverID)) ?? []
+        qualityProfile = profiles.first { $0.id == profileID }?.name
     }
 
     /// A request whose title has arrived should be playable from here rather

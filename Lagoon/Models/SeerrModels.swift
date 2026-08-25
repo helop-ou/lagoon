@@ -521,6 +521,11 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let updatedAt: String?
     let is4k: Bool?
     let seasons: [SeerrRequestedSeason]?
+    /// Which Radarr/Sonarr quality profile the request was made against, and
+    /// on which server. Numbers only: the names live on the service, not on
+    /// the request (HEL-118).
+    let profileId: Int?
+    let serverId: Int?
 
     var requestStatus: SeerrRequestStatus { .init(apiValue: status) }
 
@@ -576,6 +581,58 @@ nonisolated struct SeerrQuickConnect: Decodable, Equatable {
 
 nonisolated struct SeerrQuickConnectState: Decodable, Equatable {
     let authenticated: Bool
+}
+
+/// A configured Radarr/Sonarr server as `service/{radarr,sonarr}` lists them.
+nonisolated struct SeerrService: Decodable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let is4k: Bool
+    let isDefault: Bool
+    /// The profile this server applies when a request does not name one,
+    /// which is every request Lagoon makes and most made anywhere else.
+    let activeProfileId: Int?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        is4k = try container.decodeIfPresent(Bool.self, forKey: .is4k) ?? false
+        isDefault = try container.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
+        activeProfileId = try container.decodeIfPresent(Int.self, forKey: .activeProfileId)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, is4k, isDefault, activeProfileId
+    }
+}
+
+nonisolated struct SeerrQualityProfile: Decodable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name
+    }
+}
+
+nonisolated struct SeerrServiceDetails: Decodable, Hashable {
+    let profiles: [SeerrQualityProfile]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profiles = try container.decodeIfPresent([SeerrQualityProfile].self, forKey: .profiles) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case profiles
+    }
 }
 
 nonisolated struct SeerrCreateRequest: Encodable, Equatable {

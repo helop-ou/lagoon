@@ -260,6 +260,27 @@ final class SeerrClient {
         )
     }
 
+    // MARK: - Radarr / Sonarr
+
+    /// The configured servers for a media type. Readable without admin — the
+    /// request detail uses it to name the profile a request was made against
+    /// (HEL-118).
+    func services(_ mediaType: SeerrMediaType) async throws -> [SeerrService] {
+        try await get("service/\(mediaType == .movie ? "radarr" : "sonarr")")
+    }
+
+    /// One server's quality profiles. `MediaRequest` carries only a
+    /// `profileId`; the names live here.
+    func qualityProfiles(
+        _ mediaType: SeerrMediaType,
+        serverID: Int
+    ) async throws -> [SeerrQualityProfile] {
+        let details: SeerrServiceDetails = try await get(
+            "service/\(mediaType == .movie ? "radarr" : "sonarr")/\(serverID)"
+        )
+        return details.profiles
+    }
+
     /// Lifts an administrator's block on a title. Jellyseerr removes the
     /// media row along with the blocklist entry, so the title goes back to
     /// being simply not-requested and can be asked for again. `mediaType` is
