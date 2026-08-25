@@ -222,6 +222,14 @@ struct HomeView: View {
     /// deliberate, so absence here means "this server had nothing worth a
     /// row" and the block simply closes up. That is what keeps the order
     /// readable on a small library, where several of these will never appear.
+    ///
+    /// **No `playAction`.** These are discovery rails, and every one of them
+    /// selects into the item's detail page. Handing them the resume rails'
+    /// play action — which is how they first shipped — was wrong twice over:
+    /// a movie you have never seen started playing instead of telling you
+    /// what it was, and a series has no stream at all, so "Series You
+    /// Haven't Started" answered the click with the server's 500 from
+    /// PlaybackInfo on a folder.
     @ViewBuilder
     private func curatedRail(_ id: String) -> some View {
         if isNativeRowEnabled(id), let rail = viewModel.curatedRails[id] {
@@ -229,7 +237,6 @@ struct HomeView: View {
                 title: rail.title,
                 items: rail.items,
                 style: .landscape,
-                playAction: { playerItem = PlayerItem(media: $0) },
                 onUserDataChange: refreshUserData
             )
         }
