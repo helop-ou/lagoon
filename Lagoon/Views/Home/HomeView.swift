@@ -63,25 +63,17 @@ struct HomeView: View {
                             )
                         }
 
-                        // New. What the server has just taken in, before any
-                        // of the curated blocks, because "what changed since
-                        // last time" outranks "what you might like".
-                        if isNativeRowEnabled("lagoon.recentlyAdded") {
-                            ForEach(viewModel.latestRails) { rail in
-                                MediaRail(
-                                    title: rail.title,
-                                    items: rail.items,
-                                    style: .landscape,
-                                    onUserDataChange: refreshUserData
-                                )
-                            }
-                        }
-
-                        // Movies, as one block. Each block closes with its
-                        // own genre shelf, which is the browse exit for
-                        // someone none of the rows above reached — a native
-                        // discovery path that works on every Jellyfin server,
-                        // independent of optional plugins (HEL-84).
+                        // Movies, uninterrupted, ending with the genre shelf
+                        // as the browse exit for anyone none of the rows
+                        // reached — a native discovery path that works on
+                        // every Jellyfin server, independent of optional
+                        // plugins (HEL-84).
+                        //
+                        // Recently Added sits inside its own block rather
+                        // than in a "new" block of its own, which is what
+                        // Discover does and what keeps a run of movies from
+                        // being split by a row of television.
+                        recentlyAddedRails(collectionType: "movies")
                         curatedRail(HomeCuratedRows.ID.highlyRated)
                         curatedRail(HomeCuratedRows.ID.inFourK)
                         curatedRail(HomeCuratedRows.ID.genreSpotlight)
@@ -95,7 +87,8 @@ struct HomeView: View {
                             )
                         }
 
-                        // Shows, as one block, closing the same way.
+                        // Shows, uninterrupted, closing the same way.
+                        recentlyAddedRails(collectionType: "tvshows")
                         curatedRail(HomeCuratedRows.ID.unstartedSeries)
                         curatedRail(HomeCuratedRows.ID.readyToBinge)
                         if isNativeRowEnabled("lagoon.showGenres") {
@@ -106,6 +99,10 @@ struct HomeView: View {
                                 identifier: "shows"
                             )
                         }
+
+                        // Any library that is neither, so a server with a
+                        // third kind of collection does not lose its rail.
+                        recentlyAddedRails(collectionType: nil)
 
                         // Anything at all, last: the row that knows least
                         // about you sits furthest from where you started.
@@ -191,6 +188,32 @@ struct HomeView: View {
 
     private func isNativeRowEnabled(_ id: String) -> Bool {
         savedHomePreferences.isNativeEnabled(id)
+    }
+
+    /// The Recently Added rails belonging to one kind of library, so each one
+    /// lands inside its own block rather than in a run of its own.
+    ///
+    /// A nil `collectionType` collects whatever is neither movies nor shows.
+    /// `load` only keeps those two today, so it draws nothing — but a rail
+    /// silently vanishing is a worse way to find that out than a rail
+    /// appearing in an odd place.
+    @ViewBuilder
+    private func recentlyAddedRails(collectionType: String?) -> some View {
+        if isNativeRowEnabled("lagoon.recentlyAdded") {
+            let rails = viewModel.latestRails.filter {
+                collectionType == nil
+                    ? !["movies", "tvshows"].contains($0.collectionType ?? "")
+                    : $0.collectionType == collectionType
+            }
+            ForEach(rails) { rail in
+                MediaRail(
+                    title: rail.title,
+                    items: rail.items,
+                    style: .landscape,
+                    onUserDataChange: refreshUserData
+                )
+            }
+        }
     }
 
     /// One curated row, or nothing at all (HEL-120).

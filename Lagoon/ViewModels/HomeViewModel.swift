@@ -7,6 +7,11 @@ final class HomeViewModel {
         let id: String
         let title: String
         let items: [MediaItem]
+        /// The Jellyfin collection type this rail came from, so Home can file
+        /// it under movies or shows (HEL-120). Nil for rails that are neither
+        /// — the curated rows carry their own placement, and a plugin rail is
+        /// whatever the server decided it is.
+        var collectionType: String?
     }
 
     /// Plugin sections whose content Lagoon already draws with a rail of its
@@ -90,7 +95,12 @@ final class HomeViewModel {
                     group.addTask {
                         guard let items = try? await client.latest(parentId: library.id) else { return nil }
                         let title = "Recently Added" + (library.name.map { " in \($0)" } ?? "")
-                        return (index, LibraryRail(id: library.id, title: title, items: items))
+                        return (index, LibraryRail(
+                            id: library.id,
+                            title: title,
+                            items: items,
+                            collectionType: library.collectionType
+                        ))
                     }
                 }
                 var collected: [(Int, LibraryRail)] = []
@@ -228,8 +238,9 @@ final class HomeViewModel {
         async let similar = similarRail(seeds: played, client: client)
         async let highlyRated = rail(
             id: HomeCuratedRows.ID.highlyRated,
-            title: "Highly Rated, Unseen",
+            title: "Great Movies You Haven't Seen",
             client: client,
+            includeTypes: [.movie],
             sortBy: "CommunityRating",
             sortOrder: "Descending",
             filters: ["IsUnplayed"],
@@ -237,8 +248,9 @@ final class HomeViewModel {
         )
         async let fourK = rail(
             id: HomeCuratedRows.ID.inFourK,
-            title: "In 4K",
+            title: "Movies in 4K",
             client: client,
+            includeTypes: [.movie],
             sortBy: "DateCreated",
             sortOrder: "Descending",
             is4K: true
@@ -264,10 +276,13 @@ final class HomeViewModel {
             filters: ["IsUnplayed"],
             seriesStatus: "Ended"
         )
+        // The one row that is deliberately both, which is why it sits below
+        // the movie and show blocks rather than inside either.
         async let surprise = rail(
             id: HomeCuratedRows.ID.surpriseMe,
             title: "Surprise Me",
             client: client,
+            includeTypes: [.movie, .series],
             sortBy: "Random",
             filters: ["IsUnplayed"]
         )
@@ -296,8 +311,11 @@ final class HomeViewModel {
         guard let genre else { return nil }
         return await rail(
             id: HomeCuratedRows.ID.genreSpotlight,
-            title: "More \(genre)",
+            // Named for what it holds rather than "More Comedy": Home draws
+            // no block headings, so a row title is all the context there is.
+            title: "\(genre) Movies",
             client: client,
+            includeTypes: [.movie],
             sortBy: "Random",
             genres: [genre],
             filters: ["IsUnplayed"]
@@ -349,7 +367,7 @@ final class HomeViewModel {
         id: String,
         title: String,
         client: JellyfinClient,
-        includeTypes: [MediaItemType] = [.movie, .series],
+        includeTypes: [MediaItemType],
         sortBy: String,
         sortOrder: String = "Descending",
         genres: [String] = [],

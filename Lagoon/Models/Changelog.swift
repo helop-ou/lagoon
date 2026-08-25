@@ -33,8 +33,8 @@ nonisolated enum Changelog {
             released: "August 2026",
             headline: "Eight new rows on Home, in an order that reads.",
             changes: [
-                "Home has eight new rows. Because You Watched, named after the last thing you finished. Highly Rated, Unseen. In 4K, which is the row for deciding what to put on the good television. A genre and a decade that change daily, drawn from what you actually watch. Series You Haven't Started, Ready to Binge for series that have finished airing, and Surprise Me at the bottom.",
-                "The rows are also in a different order. Everything about you comes first, then what your server has just taken in, then a run of movie rows, then a run of show rows, each ending with its genre shelf. The genre shelves used to sit in the middle and interrupt.",
+                "Home has eight new rows. Because You Watched, named after the last thing you finished. Great Movies You Haven't Seen. Movies in 4K, which is the row for deciding what to put on the good television. A genre and a decade that change daily, drawn from what you actually watch. Series You Haven't Started, Ready to Binge for series that have finished airing, and Surprise Me at the bottom.",
+                "The rows are also in a different order. What you were watching comes first, then every movie row together, then every show row together, each run ending with its genre shelf. The genre shelves used to sit in the middle and interrupt, and movies and shows used to alternate.",
                 "Any row with too little behind it hides rather than showing you three posters and a lot of space, so a smaller library gets a shorter Home rather than a patchy one.",
                 "The new rows are all listed in Settings, Home Rows, and can be turned off individually like the existing ones.",
                 "Lagoon was drawing all of its Top Shelf artwork on the same thread that runs the interface. On a Mac that finishes before you notice; on an Apple TV it is long enough to stall the app, which is why nothing ever reached the shelf. The drawing now happens out of the way.",
