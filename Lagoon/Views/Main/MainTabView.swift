@@ -91,6 +91,23 @@ struct MainTabView: View {
                 deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
             }
         }
+        // The carousel's More Info button, which has to open the detail page
+        // rather than start playback (HEL-119). Home owns the stack because
+        // that is where Continue Watching lives.
+        .task(id: "\(deepLinks.pendingDetailItemID ?? ""):\(deepLinkRetry)") {
+            guard let id = deepLinks.pendingDetailItemID else { return }
+            do {
+                let item = try await session.client.item(id: id)
+                guard !Task.isCancelled, deepLinks.pendingDetailItemID == id else { return }
+                homeNavigationPath.append(ContentNavigationRoute.item(item))
+                deepLinks.pendingDetailItemID = nil
+                deepLinkError = nil
+            } catch is CancellationError {
+            } catch {
+                guard deepLinks.pendingDetailItemID == id else { return }
+                deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
+            }
+        }
         .alert("Couldn't Open Item", isPresented: Binding(
             get: { deepLinkError != nil },
             set: { if !$0 { deepLinkError = nil } }
@@ -102,6 +119,7 @@ struct MainTabView: View {
             Button("Cancel", role: .cancel) {
                 deepLinkError = nil
                 deepLinks.pendingItemID = nil
+                deepLinks.pendingDetailItemID = nil
             }
         } message: {
             Text(deepLinkError ?? "The item couldn't be loaded.")

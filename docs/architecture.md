@@ -122,6 +122,40 @@ content, **not** the `NavigationStack`, or the field is drawn over pushed
 detail pages; and the stack is a heterogeneous `NavigationPath`, because
 results carry both route identities.
 
+### Top Shelf is a full-screen carousel
+
+`TVTopShelfCarouselItem` has **no `title` property**. It inherits only
+`playAction`, `displayAction` and `setImageURL` from `TVTopShelfItem`, and
+adds `contextTitle`, `summary`, `genre` and `duration`; the `title` that
+`TVTopShelfSectionedItem` has does not exist here. **The name of the title
+must therefore be part of the artwork**, which is also how the Apple TV app
+does it (HEL-119).
+
+So the app composes and the extension only reads. `TopShelfArtwork` draws the
+backdrop, a scrim over the corner the text occupies, and then either
+Jellyfin's logo art or the title set in type when a title has no logo — the
+same fallback `TitleArtImage` makes. The results are written into the shared
+App Group container as JPEGs at 3840x2160 and 1920x1080, and the extension
+addresses them by file name resolved against **its own** container URL, never
+an absolute path handed over by another process.
+
+This keeps HEL-37's rule intact: the extension holds no credentials and does
+no networking. It also fixes the old sizing, which asked Jellyfin for 800px
+and set that one URL for both `.screenScale1x` and `.screenScale2x` — under
+half the width a 16:9 item needs at @2x.
+
+Composed artwork is cleaned on every publish and wiped on sign-out along with
+the snapshot: a 4K still of what someone was watching is the same privacy
+leak as the title list.
+
+The carousel's two buttons must do two different things, so the `lagoon://`
+contract has two hosts: `play/{id}` resumes and `item/{id}` opens the detail
+page. `DeepLinkRouterTests` is the only thing holding that contract together
+across the two targets, which cannot import each other.
+
+**Top Shelf content only appears when the app is in the top row of the tvOS
+Home screen.** An empty shelf usually means that, not a bug.
+
 ### Seerr status numbers are a contract
 
 Two enums are wire contracts with Jellyseerr's `server/constants/media.ts`,
