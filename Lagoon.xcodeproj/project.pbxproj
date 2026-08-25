@@ -177,7 +177,7 @@
 			name = LagoonTopShelf;
 			productName = LagoonTopShelf;
 			productReference = 4C41474F4F4E000000000024 /* LagoonTopShelf.appex */;
-			productType = "com.apple.product-type.tv-app-extension";
+			productType = "com.apple.product-type.app-extension";
 		};
 		4C41474F4F4E000000000032 /* LagoonTests */ = {
 			isa = PBXNativeTarget;
@@ -363,7 +363,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -426,7 +426,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -552,6 +552,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				OTHER_LDFLAGS = "-framework TVServices";
 				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -578,6 +579,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				OTHER_LDFLAGS = "-framework TVServices";
 				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;

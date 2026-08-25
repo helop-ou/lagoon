@@ -156,6 +156,42 @@ across the two targets, which cannot import each other.
 **Top Shelf content only appears when the app is in the top row of the tvOS
 Home screen.** An empty shelf usually means that, not a bug.
 
+#### The extension target's product type is load-bearing (HEL-119)
+
+`LagoonTopShelf` must be `com.apple.product-type.app-extension`. It was
+`com.apple.product-type.tv-app-extension` for its first seven weeks, and
+**no line of Lagoon code in the extension ever ran** in that time — on any
+simulator or on hardware.
+
+`tv-app-extension` is the legacy tvOS 9 TVML "TV App" extension. Apple's own
+spec (`tvOSShared.xcspec`) gives it `LD_ENTRY_POINT = _TVExtensionMain`, so
+the appex booted through TVServices' TVML entry point instead of
+`_NSExtensionMain`, and never stood up the NSExtension XPC service that
+`com.apple.tv-top-shelf` requires. The system then reported the plugin with
+pid 0, failed to acquire a process assertion, killed it, and fell back to the
+static brand image — which looks exactly like "the shelf is empty".
+
+The tell is in the binary, and it is one command:
+
+```sh
+nm -m Lagoon.app/PlugIns/LagoonTopShelf.appex/LagoonTopShelf | grep -i extensionmain
+# must say _NSExtensionMain (from Foundation), never _TVExtensionMain
+```
+
+Everything else was already correct and cost three sessions to re-verify:
+entitlements, app group, `NSExtensionPointIdentifier`, principal class,
+`CFBundlePackageType`, signing, embedding, architecture. Check the entry
+point *first*. The `ENABLE_DEBUG_DYLIB = NO` difference against the reference app that
+looked significant was a side effect of the same wrong product type, not a
+second problem.
+
+`tv-app-extension` also supplied `-framework TVServices` for free, so the
+target now carries `OTHER_LDFLAGS = "-framework TVServices"` explicitly.
+
+Nothing about Top Shelf needs configuration in App Store Connect. The only
+portal requirement is the App Group on both App IDs, which signing already
+enforces.
+
 ### Seerr status numbers are a contract
 
 Two enums are wire contracts with Jellyseerr's `server/constants/media.ts`,

@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "57",
+            released: "August 2026",
+            headline: "The Top Shelf works.",
+            changes: [
+                "Put Lagoon in the top row of the Apple TV Home screen and what you were watching now fills the screen above it, one title at a time, with its own artwork, a summary and how long is left.",
+                "Play picks up where you stopped. More Info opens the title in Lagoon instead, which is what the second button is for.",
+                "The artwork is composed at the size a 4K television actually asks for, rather than a smaller image stretched to fit.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "56",
             released: "August 2026",
             headline: "Search moves out, and Discover fills the screen.",
