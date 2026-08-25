@@ -48,7 +48,11 @@ private struct TopShelfItem: Codable {
 class ContentProvider: TVTopShelfContentProvider {
     private let appGroupID = "group.ee.helop.lagoon"
     private let itemsKey = "topShelf.continueWatching"
-    private let artworkDirectory = "TopShelf"
+    /// Mirrors `TopShelfArtwork.containerSubpath`, which explains why it is
+    /// under Caches: tvOS gives an app 500 KB of persistent local storage and
+    /// requires everything else to be purgeable, so a real Apple TV refuses
+    /// the write anywhere else. Change one, change the other.
+    private let artworkDirectory = "Library/Caches/TopShelf"
 
     override func loadTopShelfContent() async -> (any TVTopShelfContent)? {
         // First line, so the log distinguishes "the extension never ran" from

@@ -452,11 +452,19 @@ struct SettingsView: View {
             }
 
             #if os(tvOS)
+            let status = TopShelfStore.status()
             TVSettingsSection(
                 "Top Shelf",
-                footer: "What Lagoon has handed to the Apple TV Home screen. The shelf itself only appears when Lagoon is in the top row. If titles are published here but the shelf stays on the Lagoon banner, the problem is the shelf rather than the app."
+                // The result carries an underlying error where there is one,
+                // and a row truncates to a single line — which is how "could
+                // not write to the shared container" reached us without the
+                // reason attached to it. A footer wraps.
+                footer: """
+                Last result: \(status.lastResult ?? "not run yet").
+
+                What Lagoon has handed to the Apple TV Home screen. The shelf itself only appears when Lagoon is in the top row. If titles are published here but the shelf stays on the Lagoon banner, the problem is the shelf rather than the app.
+                """
             ) {
-                let status = TopShelfStore.status()
                 TVSettingsActionLabel(
                     "Shared Container",
                     value: status.containerAvailable ? "Available" : "Unavailable"
@@ -475,7 +483,6 @@ struct SettingsView: View {
                         $0.formatted(date: .abbreviated, time: .shortened)
                     } ?? "Never"
                 )
-                TVSettingsActionLabel("Last Result", value: status.lastResult ?? "Not run yet")
             }
             #endif
         }

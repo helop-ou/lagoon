@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "61",
+            released: "August 2026",
+            headline: "Top Shelf artwork is kept where an Apple TV allows it.",
+            changes: [
+                "Lagoon was saving its Top Shelf pictures somewhere an Apple TV does not let apps keep things, so the last build drew all eight and then could not save any of them. They now go in the cache, which is where a television expects something it can rebuild.",
+                "Settings, Advanced puts the last result underneath the section instead of on one line, so a long reason is readable rather than cut off.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "60",
             released: "August 2026",
             headline: "The Top Shelf artwork can be drawn on an HDR television.",

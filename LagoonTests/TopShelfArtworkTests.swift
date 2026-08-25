@@ -61,6 +61,21 @@ struct TopShelfArtworkTests {
         #expect(composed.size == CGSize(width: 3840, height: 2160))
     }
 
+    @Test func artworkLivesSomewhereTvOSWillLetItBeWritten() {
+        // An Apple TV allows an app 500 KB of persistent local storage and
+        // requires the rest to be purgeable, so writing composites at the
+        // container root is refused on device while every simulator, whose
+        // container is a plain directory on a Mac, accepts them. Build 60
+        // reported "could not write to the shared container" for all eight.
+        #expect(TopShelfArtwork.containerSubpath.hasPrefix("Library/Caches/"))
+
+        // LagoonTopShelf/ContentProvider.swift resolves this same path by
+        // hand against its own container, because an app extension cannot
+        // import the app's module. This is the only thing holding the two in
+        // step, so it pins the literal rather than the shape.
+        #expect(TopShelfArtwork.containerSubpath == "Library/Caches/TopShelf")
+    }
+
     @Test func artworkIsThrownAwayWhenTheLayoutChanges() {
         // The cache is keyed by item id and reused forever, so the version is
         // the only thing that can invalidate a redraw.

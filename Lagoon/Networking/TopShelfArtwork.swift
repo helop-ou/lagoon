@@ -20,10 +20,9 @@ nonisolated enum TopShelfArtwork {
     static let scale2x = CGSize(width: 3840, height: 2160)
     static let scale1x = CGSize(width: 1920, height: 1080)
 
-    /// Where composed images live inside the App Group container. Kept apart
-    /// so the whole directory can be replaced on each publish without
-    /// touching anything else shared.
-    static let directoryName = "TopShelf"
+    // Composed images live in their own directory, so the whole set can be
+    // replaced on each publish without touching anything else shared. See
+    // `containerSubpath` for where that directory is and why.
 
     /// Bumped whenever `compose` would draw the same inputs differently.
     ///
@@ -184,14 +183,46 @@ nonisolated enum TopShelfArtwork {
     }
     #endif
 
+    /// Where composed artwork lives inside the App Group container.
+    ///
+    /// **`Library/Caches`, because tvOS allows nothing else.** An Apple TV
+    /// gives an app 500 KB of persistent local storage, through
+    /// `NSUserDefaults`, and everything beyond that has to be purgeable by
+    /// the system. Sixteen 4K-class JPEGs at the container's root is not
+    /// purgeable, and a real device refuses the write: build 60 reported
+    /// "could not write to the shared container" for all eight titles while
+    /// every simulator wrote them happily, because a simulator's container is
+    /// a directory on a Mac and honours none of this (HEL-119).
+    ///
+    /// Purgeable is also the honest description. The artwork is derived,
+    /// keyed by item id, and cheap to rebuild, and `publishIfEmpty` already
+    /// redraws it when the directory comes back empty — which is exactly what
+    /// happens after tvOS reclaims the space.
+    ///
+    /// **Mirrored by `ContentProvider.artworkDirectory`.** The extension
+    /// resolves the same path against its own container, and the two are
+    /// hand-kept: change one, change the other.
+    static let containerSubpath = "Library/Caches/TopShelf"
+
     /// The shared directory, created on demand. Nil when the App Group is not
-    /// provisioned, which is the same no-op path `TopShelfStore` takes.
+    /// provisioned or the directory cannot be made, both of which leave
+    /// `TopShelfStore` on its no-op path with something to report.
     static func directoryURL(appGroupID: String) -> URL? {
         guard let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupID
         ) else { return nil }
-        let directory = container.appending(path: directoryName)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let directory = container.appending(path: containerSubpath)
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            // Swallowed with `try?` until now, which meant a container that
+            // could not be written to still handed back a usable-looking URL
+            // and failed one layer further down.
+            return nil
+        }
         return directory
     }
 
