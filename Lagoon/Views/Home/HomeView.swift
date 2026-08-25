@@ -122,7 +122,15 @@ struct HomeView: View {
             }
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
-        .fullScreenCover(item: $playerItem) { item in
+        // `refreshProgress` is documented as running on returning from
+        // playback, and `onAppear` above was assumed to deliver that. It does
+        // not: dismissing a `fullScreenCover` never re-appears the view
+        // underneath it, so the one moment Continue Watching is most likely
+        // to have changed — you just watched something — was the one moment
+        // neither the rail nor the Top Shelf refreshed (HEL-119).
+        .fullScreenCover(item: $playerItem, onDismiss: {
+            Task { await refreshUserData() }
+        }) { item in
             VideoPlayerView(playerItem: item)
                 .preferredColorScheme(.dark)
         }

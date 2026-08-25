@@ -36,6 +36,7 @@ nonisolated enum Changelog {
                 "The Top Shelf did not appear in the last build, despite what its notes claimed. Lagoon now hands each title over as it is ready instead of all of them at once, so a slow or interrupted first run leaves you with the titles it managed rather than nothing at all.",
                 "Settings, Advanced now reports what Lagoon has handed to the Home screen: how many titles, how much artwork, and when it last did it. If that says titles are published and the shelf still shows the Lagoon banner, the fault is not in the app.",
                 "Top Shelf artwork drawn by an older version of Lagoon is redrawn rather than kept, so upgrading no longer leaves you looking at the previous layout.",
+                "Continue Watching now updates when you come out of something you were watching. It used to wait until you left the Home screen and came back, so the row, and the Top Shelf with it, could still be offering you the episode you had just finished.",
             ]
         ),
         ChangelogEntry(
