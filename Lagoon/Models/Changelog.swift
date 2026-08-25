@@ -29,6 +29,23 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "56",
+            released: "August 2026",
+            headline: "Search moves out, and Discover fills the screen.",
+            changes: [
+                "Search has a tab of its own. Discover used to open behind a full keyboard that took the top third of the screen, and now opens on artwork instead.",
+                "The Search screen remembers what you looked for, so searching for it again is one click rather than spelling it out on the keyboard a second time.",
+                "Discover opens on a hero banner and carries eight rows where it had four, including Upcoming Shows, your watchlist, and browsable movie and show genres. The rows follow the order your Seerr administrator arranged on their own Discover page, and each one opens a full list.",
+                "Requests that are finished no longer claim to be pending. A request now says whether it is waiting for approval, downloading, importing, or ready to watch, and a title that was removed from your library says that rather than looking stuck.",
+                "A request that is downloading shows how far along it is and how long is left, and the icon animates while you are looking at it.",
+                "A request whose title has arrived opens straight into Lagoon to play it, instead of only offering to remove itself.",
+                "If you manage your Seerr blocklist, a blocked title can be unblocked from Lagoon rather than only from the web interface.",
+                "Settings takes the app's own black background instead of the system's default grey.",
+                "This changelog is now a row per build that you open, rather than one long list to scroll.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "55",
             released: "August 2026",
             headline: "Play at your own speed.",
