@@ -75,19 +75,24 @@ struct SeerrMediaCard: View {
 struct SeerrMediaRail: View {
     let title: String
     let items: [SeerrDiscoverResult]
-    /// When the rail is backed by a paged list, the heading opens it. Every
-    /// Discover rail is (HEL-114); the search results rails are not.
+    /// When the rail is backed by a paged list, a card at the end of it opens
+    /// the full list. Every Discover rail is (HEL-114); the search result
+    /// rails are not.
     var destination: SeerrNavigationRoute?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            heading
+            Text(title)
+                .font(.headline)
                 .padding(.horizontal, Metrics.screenGutter)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: Metrics.cardSpacing) {
                     ForEach(requestableItems) { item in
                         SeerrMediaCard(item: item)
+                    }
+                    if let destination, !requestableItems.isEmpty {
+                        SeerrSeeAllCard(destination: destination, title: title)
                     }
                 }
                 .padding(.horizontal, Metrics.screenGutter)
@@ -98,30 +103,45 @@ struct SeerrMediaRail: View {
         }
     }
 
-    @ViewBuilder
-    private var heading: some View {
-        if let destination {
-            NavigationLink(value: destination) {
-                HStack(spacing: Metrics.Space.s) {
-                    Text(title)
-                        .font(.headline)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                }
-            }
-            // Plain, not a card: the heading is a label you can act on, and
-            // the system's card treatment belongs to the artwork below it.
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
     private var requestableItems: [SeerrDiscoverResult] {
         items.filter { $0.mediaType == .movie || $0.mediaType == .tv }
+    }
+}
+
+/// Ends a rail rather than sitting above it. A focusable heading put a stop
+/// between every pair of rails, so moving down the page meant passing through
+/// one for each — clunky on a remote (Jaagop). Here it is just the last thing
+/// in the row you were already scrolling.
+private struct SeerrSeeAllCard: View {
+    let destination: SeerrNavigationRoute
+    let title: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+            NavigationLink(value: destination) {
+                ZStack {
+                    Color.white.opacity(0.07)
+                    VStack(spacing: Metrics.Space.m) {
+                        Image(systemName: "arrow.forward")
+                            .font(.title2)
+                        Text("See All")
+                            .font(.callout.weight(.medium))
+                    }
+                }
+                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            }
+            // The system card treatment, like every other card in the rail:
+            // the focus visual is never ours to draw.
+            .cardButtonStyle()
+            .accessibilityLabel("See all \(title)")
+            .accessibilityIdentifier("seerr.seeAll")
+
+            // Keeps the row's baseline: the poster cards below reserve this
+            // much for their title and year.
+            Color.clear
+                .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight)
+        }
+        .frame(width: Metrics.posterWidth)
     }
 }
