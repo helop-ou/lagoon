@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "59",
+            released: "August 2026",
+            headline: "The Top Shelf, drawn off the main thread.",
+            changes: [
+                "Lagoon was drawing all of its Top Shelf artwork on the same thread that runs the interface. On a Mac that finishes before you notice; on an Apple TV it is long enough to stall the app, which is why nothing ever reached the shelf. The drawing now happens out of the way.",
+                "If the Top Shelf has nothing on it, Lagoon now notices when you open the app and fills it in, instead of only ever doing so as a side effect of the Home screen loading.",
+                "Settings, Advanced now also says when Lagoon last tried and how that attempt ended, so an empty shelf gives you a reason rather than four zeroes.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "58",
             released: "August 2026",
             headline: "Still chasing the Top Shelf.",

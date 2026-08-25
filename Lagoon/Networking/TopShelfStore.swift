@@ -55,6 +55,22 @@ enum TopShelfStore {
     static let appGroupID = "group.ee.helop.lagoon"
     private static let itemsKey = "topShelf.continueWatching"
     private static let publishedAtKey = "topShelf.publishedAt"
+    private static let attemptedAtKey = "topShelf.attemptedAt"
+    private static let lastResultKey = "topShelf.lastResult"
+
+    /// Records how a publish attempt ended, successfully or not.
+    ///
+    /// Every failure in this file is a silent early return, and on the Home
+    /// screen they all look identical: the static brand image. Writing the
+    /// reason where Settings can read it is the difference between "the shelf
+    /// is empty" and knowing which of six conditions was not met, without a
+    /// Mac attached to the Apple TV (HEL-119).
+    private static func record(_ result: String) {
+        guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
+        defaults.set(result, forKey: lastResultKey)
+        defaults.set(Date.now.timeIntervalSince1970, forKey: attemptedAtKey)
+    }
+
     /// The HIG's "three to eight" is guidance for a **scrolling banner**, not
     /// this layout, and neither the HIG nor `TVTopShelfCarouselContent` puts a
     /// number on a carousel. Eight is chosen for the reason Apple gives for
@@ -64,8 +80,8 @@ enum TopShelfStore {
     private static let limit = 8
 
     #if os(tvOS)
-    /// Composes artwork and publishes the snapshot. Runs off the main actor:
-    /// five 3840x2160 composites is not work to do while the UI waits.
+    /// Composes artwork and publishes the snapshot. The expensive part runs
+    /// off the main actor; see `render`.
     static func publish(_ items: [MediaItem], client: JellyfinClient) {
         let sources = Array(items.prefix(limit))
         guard !sources.isEmpty else {
@@ -73,10 +89,45 @@ enum TopShelfStore {
             // shelf correctly falls back to the static brand image — but it
             // looks identical to a broken extension from the sofa, so say so.
             log.info("nothing to publish: Continue Watching is empty")
+            record("Continue Watching is empty")
             return
         }
         Task.detached(priority: .utility) {
             await build(sources, client: client)
+        }
+    }
+
+    /// Publishes if the shelf has nothing to show, fetching Continue Watching
+    /// itself rather than waiting to be handed it.
+    ///
+    /// Every other path here hangs off Home: `load` publishes only if it got
+    /// all the way through without throwing, and `refreshProgress` gives up
+    /// early unless a load already succeeded. So a single failed load on a
+    /// cold start left the shelf empty until something happened to drive Home
+    /// again, and nothing retried. This runs on activation and is a no-op the
+    /// moment there is anything published, which is the common case.
+    static func publishIfEmpty(client: JellyfinClient) {
+        let current = status()
+        guard current.containerAvailable else {
+            log.error("cannot self-heal: no App Group container")
+            record("Shared container unavailable")
+            return
+        }
+        guard current.publishedCount == 0 || current.artworkCount == 0 else { return }
+        log.info("shelf is empty (\(current.publishedCount) titles, \(current.artworkCount) files); fetching")
+        Task.detached(priority: .utility) {
+            do {
+                let resume = try await client.resumeItems()
+                guard !resume.isEmpty else {
+                    log.info("self-heal found nothing in Continue Watching")
+                    record("Continue Watching is empty")
+                    return
+                }
+                await build(Array(resume.prefix(limit)), client: client)
+            } catch {
+                log.error("self-heal could not reach the server: \(error, privacy: .public)")
+                record("Could not reach the server: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -87,8 +138,10 @@ enum TopShelfStore {
         }
         guard let directory = TopShelfArtwork.directoryURL(appGroupID: appGroupID) else {
             log.error("no App Group container — entitlement missing?")
+            record("Shared container unavailable")
             return
         }
+        record("Started for \(items.count) titles")
         // A layout change makes every previously composed image wrong, and
         // the cache below would otherwise serve build 56's bottom-left
         // artwork forever to anyone upgrading.
@@ -140,10 +193,12 @@ enum TopShelfStore {
 
         guard !payload.isEmpty else {
             log.error("nothing publishable out of \(items.count) items")
+            record("No artwork could be built for any of \(items.count) titles")
             return
         }
         TopShelfArtwork.removeArtwork(notIn: written, appGroupID: appGroupID)
         defaults.set(Date.now.timeIntervalSince1970, forKey: publishedAtKey)
+        record("Published \(payload.count) of \(items.count) titles, \(composed) newly drawn")
         TVTopShelfContentProvider.topShelfContentDidChange()
         log.info("published \(payload.count) of \(items.count) items, \(composed) newly composed")
     }
@@ -175,22 +230,49 @@ enum TopShelfStore {
             kind: .backdrop,
             maxWidth: Int(TopShelfArtwork.scale2x.width)
         )
-        guard let backdropURL, let backdrop = await image(at: backdropURL) else { return false }
-        var logo: UIImage?
+        guard let backdropURL, let backdrop = await data(at: backdropURL) else { return false }
+        var logo: Data?
         if let logoURL = client.imageURL(for: item, kind: .logo, maxWidth: 1200) {
-            logo = await image(at: logoURL)
+            logo = await data(at: logoURL)
         }
+        // Read on this actor, since MediaItem's helpers are isolated too.
+        let title = item.railTitle
+
+        return await Task.detached(priority: .utility) {
+            render(backdrop: backdrop, logo: logo, title: title, as: names, into: directory)
+        }.value
+    }
+
+    /// Decodes the source images, draws both composites and writes them.
+    ///
+    /// `nonisolated`, and called through `Task.detached`, because this is a
+    /// second or more of synchronous CPU work per title: a 4K backdrop decode
+    /// plus a 3840x2160 and a 1920x1080 render. The target builds with
+    /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so everything in this file
+    /// is main-actor isolated unless it says otherwise — which meant the
+    /// `Task.detached` above hopped straight back and did all of it on the
+    /// main thread. That is invisible on a Mac and long enough on an Apple TV
+    /// to stall the UI and interest the watchdog (HEL-119).
+    nonisolated private static func render(
+        backdrop: Data,
+        logo: Data?,
+        title: String,
+        as names: (twoX: String, oneX: String),
+        into directory: URL
+    ) -> Bool {
+        guard let backdropImage = UIImage(data: backdrop) else { return false }
+        let logoImage = logo.flatMap { UIImage(data: $0) }
 
         for (name, size) in [(names.twoX, TopShelfArtwork.scale2x), (names.oneX, TopShelfArtwork.scale1x)] {
             let composed = TopShelfArtwork.compose(
-                backdrop: backdrop,
-                logo: logo,
-                title: item.railTitle,
+                backdrop: backdropImage,
+                logo: logoImage,
+                title: title,
                 size: size
             )
-            guard let data = composed.jpegData(compressionQuality: 0.9) else { return false }
+            guard let jpeg = composed.jpegData(compressionQuality: 0.9) else { return false }
             do {
-                try data.write(to: directory.appending(path: name), options: .atomic)
+                try jpeg.write(to: directory.appending(path: name), options: .atomic)
             } catch {
                 return false
             }
@@ -198,11 +280,14 @@ enum TopShelfStore {
         return true
     }
 
-    private static func image(at url: URL) async -> UIImage? {
+    /// Bytes rather than a `UIImage`: decoding belongs with the rendering, off
+    /// this actor. The download itself suspends rather than blocks, so it is
+    /// no burden here.
+    private static func data(at url: URL) async -> Data? {
         guard let (data, response) = try? await URLSession.shared.data(from: url),
               (response as? HTTPURLResponse)?.statusCode == 200
         else { return nil }
-        return UIImage(data: data)
+        return data
     }
     #else
     static func publish(_ items: [MediaItem], client: JellyfinClient) {}
@@ -227,6 +312,10 @@ enum TopShelfStore {
         let publishedCount: Int
         let artworkCount: Int
         let lastPublished: Date?
+        let lastAttempt: Date?
+        /// How the last attempt ended. Nil when none has run in this install,
+        /// which is itself the answer: nothing is calling `publish`.
+        let lastResult: String?
     }
 
     static func status() -> Status {
@@ -237,18 +326,23 @@ enum TopShelfStore {
                 containerAvailable: false,
                 publishedCount: 0,
                 artworkCount: 0,
-                lastPublished: nil
+                lastPublished: nil,
+                lastAttempt: nil,
+                lastResult: nil
             )
         }
         let published = (defaults.data(forKey: itemsKey)
             .flatMap { try? JSONDecoder().decode([Item].self, from: $0) } ?? []).count
         let artwork = (try? FileManager.default.contentsOfDirectory(atPath: directory.path))?.count ?? 0
-        let stamp = defaults.double(forKey: publishedAtKey)
+        let publishedStamp = defaults.double(forKey: publishedAtKey)
+        let attemptedStamp = defaults.double(forKey: attemptedAtKey)
         return Status(
             containerAvailable: true,
             publishedCount: published,
             artworkCount: artwork,
-            lastPublished: stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+            lastPublished: publishedStamp > 0 ? Date(timeIntervalSince1970: publishedStamp) : nil,
+            lastAttempt: attemptedStamp > 0 ? Date(timeIntervalSince1970: attemptedStamp) : nil,
+            lastResult: defaults.string(forKey: lastResultKey)
         )
     }
 

@@ -15,7 +15,7 @@ import UIKit
 /// The app composes and the extension only reads, which keeps HEL-37's rule
 /// that the extension holds no credentials and does no networking: these are
 /// finished JPEGs in the shared container, addressed by file URL.
-enum TopShelfArtwork {
+nonisolated enum TopShelfArtwork {
     /// Full screen at @2x. tvOS lays out in 1920x1080 points.
     static let scale2x = CGSize(width: 3840, height: 2160)
     static let scale1x = CGSize(width: 1920, height: 1080)

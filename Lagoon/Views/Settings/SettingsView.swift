@@ -469,6 +469,13 @@ struct SettingsView: View {
                         $0.formatted(date: .abbreviated, time: .shortened)
                     } ?? "Never"
                 )
+                TVSettingsActionLabel(
+                    "Last Attempt",
+                    value: status.lastAttempt.map {
+                        $0.formatted(date: .abbreviated, time: .shortened)
+                    } ?? "Never"
+                )
+                TVSettingsActionLabel("Last Result", value: status.lastResult ?? "Not run yet")
             }
             #endif
         }
