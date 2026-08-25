@@ -152,6 +152,18 @@ struct SeerrRequestStatusTests {
         #expect(!user(permissions: 0).canManageBlocklist)
     }
 
+    /// Only states that are still going somewhere animate. A finished or
+    /// refused request is a fact, and a fact that wobbles reads as an error.
+    @Test @MainActor func onlyUnsettledStatesAnimate() {
+        #expect(SeerrRequestProgress.processing.motion == .rotate)
+        #expect(SeerrRequestProgress.pending.motion == .pulse)
+        for settled: SeerrRequestProgress in [
+            .available, .partiallyAvailable, .declined, .failed, .removed, .blocked, .unknown,
+        ] {
+            #expect(settled.motion == .still, "\(settled) should not animate")
+        }
+    }
+
     @Test @MainActor func everyProgressCaseHasATitleAndASymbol() {
         let all: [SeerrRequestProgress] = [
             .pending, .declined, .failed, .processing, .partiallyAvailable,

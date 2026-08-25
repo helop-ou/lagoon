@@ -100,15 +100,17 @@ struct SeerrMediaDetailView: View {
                     symbol: progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle",
                     message: progress.downloadCount > 1
                         ? "\(progress.summary). \(progress.downloadCount) downloads."
-                        : progress.summary
+                        : progress.summary,
+                    motion: .bounce
                 )
             } else {
                 statusButton(
                     title: availability.title,
-                    symbol: "clock",
+                    symbol: availability == .pending ? "clock" : "arrow.triangle.2.circlepath",
                     message: availability == .pending
                         ? "This request is waiting for approval."
-                        : "This title has been approved and is being added to your library."
+                        : "This title has been approved and is being added to your library.",
+                    motion: availability == .pending ? .pulse : .rotate
                 )
             }
         case .partiallyAvailable:
@@ -190,11 +192,16 @@ struct SeerrMediaDetailView: View {
         }
     }
 
-    private func statusButton(title: String, symbol: String, message: String) -> some View {
+    private func statusButton(
+        title: String,
+        symbol: String,
+        message: String,
+        motion: SeerrStatusMotion = .still
+    ) -> some View {
         Button {
             popup = Popup(title: title, message: message)
         } label: {
-            Label(title, systemImage: symbol)
+            SeerrStatusLabel(title: title, symbol: symbol, motion: motion)
         }
         .buttonStyle(.glass)
     }

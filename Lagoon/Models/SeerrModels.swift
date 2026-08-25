@@ -181,6 +181,19 @@ nonisolated enum SeerrRequestStatus: Int, Hashable {
 /// that the media's availability does. Keeping both in one value is what
 /// stops an approved-and-available title reading as "Approved" while it is
 /// sitting in the library ready to play (HEL-115).
+/// How a status glyph animates while its row or button holds focus. Named
+/// here beside the symbols it belongs to; the effect itself is applied in the
+/// view layer (HEL-117).
+nonisolated enum SeerrStatusMotion: Hashable {
+    case still
+    /// The refresh arrows turning — the literal reading of the symbol.
+    case rotate
+    /// A down-arrow falling, for a transfer that is moving.
+    case bounce
+    /// A slow fade, for waiting rather than working.
+    case pulse
+}
+
 nonisolated enum SeerrRequestProgress: Hashable {
     case pending
     case declined
@@ -219,6 +232,18 @@ nonisolated enum SeerrRequestProgress: Hashable {
         case .removed: "trash"
         case .blocked: "hand.raised"
         case .unknown: "questionmark.circle"
+        }
+    }
+
+    /// Only the states that are still *going somewhere* animate. A finished
+    /// or refused request is a fact, and a fact that wobbles reads as an
+    /// error (HEL-117).
+    var motion: SeerrStatusMotion {
+        switch self {
+        case .pending: .pulse
+        case .processing: .rotate
+        case .declined, .failed, .partiallyAvailable, .available,
+             .removed, .blocked, .unknown: .still
         }
     }
 

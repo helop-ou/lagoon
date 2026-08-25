@@ -265,6 +265,15 @@ private struct SeerrRequestCard: View {
         return progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle"
     }
 
+    /// A transfer that is actually moving gets the falling arrow; everything
+    /// else takes the state's own motion.
+    private var badgeMotion: SeerrStatusMotion {
+        guard request.progress == .processing, request.downloadProgress != nil else {
+            return request.progress.motion
+        }
+        return .bounce
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.xl) {
             NavigationLink(value: SeerrNavigationRoute.request(request)) {
@@ -290,7 +299,7 @@ private struct SeerrRequestCard: View {
                     // One word, like the availability badges on the Discover
                     // cards. The full "Pending Approval" wrapped to two lines
                     // and covered a third of the artwork.
-                    Label(badgeTitle, systemImage: badgeSymbol)
+                    SeerrStatusLabel(title: badgeTitle, symbol: badgeSymbol, motion: badgeMotion)
                         .font(.caption2.bold())
                         .labelStyle(.titleAndIcon)
                         .lineLimit(1)
@@ -341,6 +350,7 @@ struct SeerrRequestDetailView: View {
     @State private var isMutating = false
     @State private var errorMessage: String?
     @State private var confirmation: Confirmation?
+    @State private var isShowingProgressDetail = false
 
     init(request: SeerrMediaRequest) {
         self.request = request
@@ -400,7 +410,50 @@ struct SeerrRequestDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .alert(
+            currentRequest.downloadProgress?.isImporting == true
+                ? String(localized: "Importing")
+                : String(localized: "Downloading"),
+            isPresented: $isShowingProgressDetail
+        ) {
+            Button("OK") { isShowingProgressDetail = false }
+        } message: {
+            Text(progressDetailMessage)
+        }
         .accessibilityIdentifier("seerr.request.detail.\(request.id)")
+    }
+
+    /// What the one-line subtitle has no room for: how many downloads the
+    /// title is spread across, and what the server is actually fetching.
+    private var progressDetailMessage: String {
+        guard let progress = currentRequest.downloadProgress else {
+            return String(localized: "This title has been approved and is being added to your library.")
+        }
+        var lines = [progress.summary]
+        if progress.downloadCount > 1 {
+            lines.append(String(localized: "\(progress.downloadCount) downloads."))
+        }
+        return lines.joined(separator: " ")
+    }
+
+    /// The short form. The subtitle above already carries the full sentence,
+    /// and repeating it here put the same words on screen twice.
+    private var processingBadgeTitle: String {
+        guard let progress = currentRequest.downloadProgress else {
+            return currentRequest.progress.title
+        }
+        return progress.isImporting ? String(localized: "Importing") : progress.percentText
+    }
+
+    private var processingSymbol: String {
+        guard let progress = currentRequest.downloadProgress else {
+            return currentRequest.progress.symbol
+        }
+        return progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle"
+    }
+
+    private var processingMotion: SeerrStatusMotion {
+        currentRequest.downloadProgress == nil ? currentRequest.progress.motion : .bounce
     }
 
     private var detailSubtitle: String {
@@ -437,6 +490,22 @@ struct SeerrRequestDetailView: View {
             ProgressView()
         } else {
             HStack(spacing: Metrics.Space.m) {
+                // A title still on its way has nothing to act on, so this is
+                // the one thing worth focusing — and the glyph animates while
+                // it is (HEL-117).
+                if currentRequest.progress == .processing {
+                    Button {
+                        isShowingProgressDetail = true
+                    } label: {
+                        SeerrStatusLabel(
+                            title: processingBadgeTitle,
+                            symbol: processingSymbol,
+                            motion: processingMotion
+                        )
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("seerr.request.progress")
+                }
                 // Watching it is the point of having requested it, so this
                 // leads.
                 if let jellyfinItem {

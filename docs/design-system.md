@@ -234,6 +234,29 @@ rather than a tab.
 the running OS: a missing one renders as nothing at all — no crash, no warning,
 just a hole in the tab bar.
 
+## Status glyph motion
+
+Seerr's unsettled states animate their SF Symbol **while the thing they sit in
+holds focus** (HEL-117): Processing turns its refresh arrows (`.rotate`),
+a moving download bounces its arrow (`.bounce`), Pending fades (`.pulse`).
+Settled states — available, declined, failed, removed, blocked — do not move.
+A fact that wobbles reads as an error.
+
+Focus-gated on purpose: twenty request cards animating at once is noise, one
+animating because you are looking at it is the tvOS idiom. `SeerrStatusLabel`
+reads `\.isFocused`, which reports the nearest focusable ancestor, so it works
+unchanged inside a card's label and inside a button.
+
+**Symbol effects are not assumed to honour Reduce Motion.** `SeerrStatusLabel`
+gates on `accessibilityReduceMotion` itself, the same way `HeroSection` gates
+its carousel. Verified by diffing screenshot bursts of the focused badge: five
+of six frames differ with the setting off, one of six with it on, against a
+static control region that never changes.
+
+Symbol-effect availability on tvOS, if you reach for another one: `pulse`,
+`bounce`, `variableColor` and `scale` are tvOS 17; `rotate`, `breathe` and
+`wiggle` are tvOS 18; `drawOn`/`drawOff` are tvOS 26.
+
 ## Focus strategy
 
 **No custom focus scaling anywhere.** Cards rely on the system `.card` button
