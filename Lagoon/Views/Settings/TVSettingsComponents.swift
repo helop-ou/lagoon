@@ -85,6 +85,12 @@ struct TVSettingsPage<Content: View>: View {
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // The same black the rest of the app plays content against. Without
+        // it a settings page inherits the system's default backing, which is
+        // a lifted grey, so Settings read as a different app from every other
+        // tab. Every settings screen routes through here, so this and the
+        // list's own background cover the whole hierarchy.
+        .background(Color.black.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .onExitCommand { dismiss() }
     }

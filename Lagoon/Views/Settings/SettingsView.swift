@@ -88,6 +88,10 @@ struct SettingsView: View {
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Matches `TVSettingsPage`, so the settings root and every page
+        // pushed from it sit on the app's black rather than the system's
+        // lifted grey.
+        .background(Color.black.ignoresSafeArea())
     }
 
     private var identityPanel: some View {

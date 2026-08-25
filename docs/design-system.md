@@ -85,6 +85,16 @@ onboarding wash. Everything else uses `.primary`/`.secondary`/`.tertiary`,
 `.fill.tertiary`, and materials. The app is locked dark at the `WindowGroup`
 root and its backgrounds stay black.
 
+**Black has to be stated, not inherited.** `.preferredColorScheme(.dark)` gets
+you the system's dark backing, which on tvOS is a lifted grey that also picks
+up a colour cast from whatever sits behind it: measured at rgb(47, 45, 42) on
+the Settings pages against rgb(0, 0, 0) everywhere else, which is why Settings
+read as belonging to a different app. Any screen not covered edge to edge by
+its own content needs an explicit `.background(Color.black.ignoresSafeArea())`.
+`TVSettingsPage` and `SettingsView.splitLayout` carry it between them for the
+whole settings hierarchy, including every page pushed from it; onboarding uses
+`BrandBackground` instead.
+
 | token | hex | package name | role |
 | --- | --- | --- | --- |
 | `.lagoonAqua` | `#2ED4C7` | Aqua | the mark's lower shore; the only brand color bright enough to accent against black |

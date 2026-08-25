@@ -862,7 +862,7 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.select)
         let hud = app.descendants(matching: .any)["settings.diagnostics.hud"]
         XCTAssertTrue(hud.waitForExistence(timeout: 5))
-        XCTAssertEqual(hud.label, "Playback HUD")
+        XCTAssertEqual(hud.label, "Show Playback Details")
         let previousHUDValue = hud.valueDescription
         remote.press(.right)
         remote.press(.select)
