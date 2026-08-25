@@ -450,6 +450,27 @@ struct SettingsView: View {
                 settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
             }
+
+            #if os(tvOS)
+            TVSettingsSection(
+                "Top Shelf",
+                footer: "What Lagoon has handed to the Apple TV Home screen. The shelf itself only appears when Lagoon is in the top row. If titles are published here but the shelf stays on the Lagoon banner, the problem is the shelf rather than the app."
+            ) {
+                let status = TopShelfStore.status()
+                TVSettingsActionLabel(
+                    "Shared Container",
+                    value: status.containerAvailable ? "Available" : "Unavailable"
+                )
+                TVSettingsActionLabel("Titles Published", value: "\(status.publishedCount)")
+                TVSettingsActionLabel("Artwork Files", value: "\(status.artworkCount)")
+                TVSettingsActionLabel(
+                    "Last Published",
+                    value: status.lastPublished.map {
+                        $0.formatted(date: .abbreviated, time: .shortened)
+                    } ?? "Never"
+                )
+            }
+            #endif
         }
     }
 

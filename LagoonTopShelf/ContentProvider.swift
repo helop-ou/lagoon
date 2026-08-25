@@ -1,4 +1,15 @@
+import OSLog
 import TVServices
+
+/// Shares `ee.helop.lagoon`/`topshelf` with the app, so one predicate on a
+/// real Apple TV shows the app publishing and this process reading:
+///
+///     log stream --predicate 'subsystem == "ee.helop.lagoon"'
+///
+/// Permanent rather than debug scaffolding. This process has no UI, runs only
+/// when the Home screen asks, and every failure path here returns nil — which
+/// looks exactly like an empty Continue Watching from the sofa.
+private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
 /// Full-screen Top Shelf carousel for Continue Watching (HEL-37, HEL-119).
 ///
@@ -40,14 +51,25 @@ class ContentProvider: TVTopShelfContentProvider {
     private let artworkDirectory = "TopShelf"
 
     override func loadTopShelfContent() async -> (any TVTopShelfContent)? {
+        // First line, so the log distinguishes "the extension never ran" from
+        // "it ran and had nothing" — the whole of HEL-119 turned on that.
+        log.info("loadTopShelfContent")
+
         let items = loadItems()
         // Returning nil leaves the static brand image in place, which is the
         // right look for a signed-out or freshly installed app and better
         // than an empty carousel.
-        guard !items.isEmpty else { return nil }
+        guard !items.isEmpty else {
+            log.info("no snapshot: signed out, or the app has not published yet")
+            return nil
+        }
 
         let carouselItems = items.compactMap(carouselItem(for:))
-        guard !carouselItems.isEmpty else { return nil }
+        guard !carouselItems.isEmpty else {
+            log.error("\(items.count) items in the snapshot, none usable")
+            return nil
+        }
+        log.info("returning \(carouselItems.count) of \(items.count) items")
 
         // `.details` over `.actions`: Lagoon has a summary, a genre and a
         // runtime to show, and withholding them to keep the frame clean
@@ -58,7 +80,10 @@ class ContentProvider: TVTopShelfContentProvider {
     private func carouselItem(for item: TopShelfItem) -> TVTopShelfCarouselItem? {
         guard let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupID
-        ) else { return nil }
+        ) else {
+            log.error("no App Group container — entitlement missing on the extension?")
+            return nil
+        }
         let directory = container.appending(path: artworkDirectory)
 
         let entry = TVTopShelfCarouselItem(identifier: item.id)
@@ -80,13 +105,23 @@ class ContentProvider: TVTopShelfContentProvider {
         // File URLs resolved against this process's own container: an
         // absolute path handed over by another process is not something to
         // trust, and the container id differs per install anyway.
+        //
+        // Existence is checked rather than assumed. The app writes the
+        // snapshot and the images separately, so a run interrupted between
+        // the two leaves a name pointing at nothing, and handing tvOS a URL
+        // to a missing file draws a blank frame instead of falling back.
         var hasImage = false
-        if let name = item.artwork2x {
-            entry.setImageURL(directory.appending(path: name), for: .screenScale2x)
-            hasImage = true
-        }
-        if let name = item.artwork1x {
-            entry.setImageURL(directory.appending(path: name), for: .screenScale1x)
+        for (name, scale) in [
+            (item.artwork2x, TVTopShelfItem.ImageTraits.screenScale2x),
+            (item.artwork1x, TVTopShelfItem.ImageTraits.screenScale1x),
+        ] {
+            guard let name else { continue }
+            let url = directory.appending(path: name)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                log.error("\(name, privacy: .public) is in the snapshot but not on disk")
+                continue
+            }
+            entry.setImageURL(url, for: scale)
             hasImage = true
         }
         // Without artwork there is no title either, since the title lives in
@@ -105,10 +140,18 @@ class ContentProvider: TVTopShelfContentProvider {
     }
 
     private func loadItems() -> [TopShelfItem] {
-        guard let defaults = UserDefaults(suiteName: appGroupID),
-              let data = defaults.data(forKey: itemsKey),
-              let items = try? JSONDecoder().decode([TopShelfItem].self, from: data)
-        else { return [] }
-        return items
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            log.error("no App Group defaults — entitlement missing on the extension?")
+            return []
+        }
+        guard let data = defaults.data(forKey: itemsKey) else { return [] }
+        do {
+            return try JSONDecoder().decode([TopShelfItem].self, from: data)
+        } catch {
+            // The app redeclares this shape by hand in TopShelfStore.Item.
+            // If the two ever drift, this is where it shows.
+            log.error("snapshot did not decode: \(error, privacy: .public)")
+            return []
+        }
     }
 }

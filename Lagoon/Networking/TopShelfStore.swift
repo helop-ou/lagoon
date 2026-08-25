@@ -1,8 +1,18 @@
 import Foundation
+import OSLog
 #if os(tvOS)
 import TVServices
 import UIKit
 #endif
+
+/// Both halves of the Top Shelf log to `ee.helop.lagoon`/`topshelf`, so one
+/// predicate on a real Apple TV shows the app publishing and the extension
+/// reading. This is not debug scaffolding: the shelf is only observable on
+/// hardware, in a process with no UI, and three rounds of HEL-119 were spent
+/// guessing at silent nil returns.
+///
+///     log stream --predicate 'subsystem == "ee.helop.lagoon"'
+private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
 /// Publishes a Continue Watching snapshot for the Top Shelf extension
 /// (HEL-37), now as a full-screen carousel (HEL-119).
@@ -44,6 +54,7 @@ enum TopShelfStore {
 
     static let appGroupID = "group.ee.helop.lagoon"
     private static let itemsKey = "topShelf.continueWatching"
+    private static let publishedAtKey = "topShelf.publishedAt"
     /// The HIG's "three to eight" is guidance for a **scrolling banner**, not
     /// this layout, and neither the HIG nor `TVTopShelfCarouselContent` puts a
     /// number on a carousel. Eight is chosen for the reason Apple gives for
@@ -57,19 +68,35 @@ enum TopShelfStore {
     /// five 3840x2160 composites is not work to do while the UI waits.
     static func publish(_ items: [MediaItem], client: JellyfinClient) {
         let sources = Array(items.prefix(limit))
-        guard !sources.isEmpty else { return }
+        guard !sources.isEmpty else {
+            // Nothing in Continue Watching is a legitimate state, and the
+            // shelf correctly falls back to the static brand image — but it
+            // looks identical to a broken extension from the sofa, so say so.
+            log.info("nothing to publish: Continue Watching is empty")
+            return
+        }
         Task.detached(priority: .utility) {
             await build(sources, client: client)
         }
     }
 
     private static func build(_ items: [MediaItem], client: JellyfinClient) async {
-        guard let defaults = UserDefaults(suiteName: appGroupID),
-              let directory = TopShelfArtwork.directoryURL(appGroupID: appGroupID)
-        else { return }
+        guard let defaults = UserDefaults(suiteName: appGroupID) else {
+            log.error("no App Group defaults for \(appGroupID, privacy: .public) — entitlement missing?")
+            return
+        }
+        guard let directory = TopShelfArtwork.directoryURL(appGroupID: appGroupID) else {
+            log.error("no App Group container — entitlement missing?")
+            return
+        }
+        // A layout change makes every previously composed image wrong, and
+        // the cache below would otherwise serve build 56's bottom-left
+        // artwork forever to anyone upgrading.
+        TopShelfArtwork.discardArtworkFromEarlierLayouts(defaults: defaults, appGroupID: appGroupID)
 
         var payload: [Item] = []
         var written: Set<String> = []
+        var composed = 0
 
         for item in items {
             let names = artworkNames(for: item.id)
@@ -80,7 +107,11 @@ enum TopShelfStore {
             // payload below is still rebuilt each time, which is what keeps
             // "42 min left" honest.
             if !artworkExists(names, in: directory) {
-                guard await compose(item, client: client, as: names, into: directory) else { continue }
+                guard await compose(item, client: client, as: names, into: directory) else {
+                    log.error("no artwork composed for \(item.id, privacy: .public); leaving it off the shelf")
+                    continue
+                }
+                composed += 1
             }
             written.insert(names.twoX)
             written.insert(names.oneX)
@@ -98,12 +129,23 @@ enum TopShelfStore {
                     mediaOptions: item.topShelfMediaOptions
                 )
             )
+            // Written after **every** item rather than once at the end. A
+            // first run on a real Apple TV is eight backdrop downloads and
+            // sixteen 4K-class renders inside a detached utility task, and if
+            // the app is suspended or jetsammed part way through, publishing
+            // only at the end would leave the shelf with nothing at all
+            // instead of the titles already finished.
+            defaults.set(try? JSONEncoder().encode(payload), forKey: itemsKey)
         }
 
-        guard !payload.isEmpty else { return }
+        guard !payload.isEmpty else {
+            log.error("nothing publishable out of \(items.count) items")
+            return
+        }
         TopShelfArtwork.removeArtwork(notIn: written, appGroupID: appGroupID)
-        defaults.set(try? JSONEncoder().encode(payload), forKey: itemsKey)
+        defaults.set(Date.now.timeIntervalSince1970, forKey: publishedAtKey)
         TVTopShelfContentProvider.topShelfContentDidChange()
+        log.info("published \(payload.count) of \(items.count) items, \(composed) newly composed")
     }
 
     private static func artworkNames(for id: String) -> (twoX: String, oneX: String) {
@@ -172,8 +214,47 @@ enum TopShelfStore {
     /// privacy leak — and HEL-38 made switching easy, which makes it
     /// reachable. The composed artwork goes with it, since a 4K still of what
     /// someone was watching is the same leak in picture form.
+    /// What the app has actually put in the shared container, for Settings →
+    /// Advanced.
+    ///
+    /// The Top Shelf is only observable on a real Apple TV, from the Home
+    /// screen, and an empty shelf looks identical whether Continue Watching
+    /// is empty, the app never finished publishing, or the App Group is not
+    /// provisioned. Reading this from the sofa separates those without a Mac
+    /// attached (HEL-119).
+    nonisolated struct Status {
+        let containerAvailable: Bool
+        let publishedCount: Int
+        let artworkCount: Int
+        let lastPublished: Date?
+    }
+
+    static func status() -> Status {
+        guard let defaults = UserDefaults(suiteName: appGroupID),
+              let directory = TopShelfArtwork.directoryURL(appGroupID: appGroupID)
+        else {
+            return Status(
+                containerAvailable: false,
+                publishedCount: 0,
+                artworkCount: 0,
+                lastPublished: nil
+            )
+        }
+        let published = (defaults.data(forKey: itemsKey)
+            .flatMap { try? JSONDecoder().decode([Item].self, from: $0) } ?? []).count
+        let artwork = (try? FileManager.default.contentsOfDirectory(atPath: directory.path))?.count ?? 0
+        let stamp = defaults.double(forKey: publishedAtKey)
+        return Status(
+            containerAvailable: true,
+            publishedCount: published,
+            artworkCount: artwork,
+            lastPublished: stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
+        )
+    }
+
     static func clear() {
         UserDefaults(suiteName: appGroupID)?.removeObject(forKey: itemsKey)
+        UserDefaults(suiteName: appGroupID)?.removeObject(forKey: publishedAtKey)
         TopShelfArtwork.removeArtwork(notIn: [], appGroupID: appGroupID)
         #if os(tvOS)
         TVTopShelfContentProvider.topShelfContentDidChange()

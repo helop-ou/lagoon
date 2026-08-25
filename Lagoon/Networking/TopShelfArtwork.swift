@@ -25,6 +25,23 @@ enum TopShelfArtwork {
     /// touching anything else shared.
     static let directoryName = "TopShelf"
 
+    /// Bumped whenever `compose` would draw the same inputs differently.
+    ///
+    /// Artwork is cached by item id and reused forever, so without this a
+    /// viewer upgrading from a build with a different layout keeps the old
+    /// pictures indefinitely — the file name never changes, only what is
+    /// inside it. 1 was the bottom-left title; 2 is the top-left one.
+    static let layoutVersion = 2
+    private static let layoutVersionKey = "topShelf.artworkLayoutVersion"
+
+    /// Throws away everything composed by an earlier layout. A no-op on the
+    /// common path, since the version matches after the first publish.
+    static func discardArtworkFromEarlierLayouts(defaults: UserDefaults, appGroupID: String) {
+        guard defaults.integer(forKey: layoutVersionKey) != layoutVersion else { return }
+        removeArtwork(notIn: [], appGroupID: appGroupID)
+        defaults.set(layoutVersion, forKey: layoutVersionKey)
+    }
+
     #if os(tvOS)
     /// Composes one carousel image: the backdrop, a scrim heavy enough for
     /// text to survive over any still, and the title as artwork.
