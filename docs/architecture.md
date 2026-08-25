@@ -21,7 +21,7 @@ Lagoon/
     Library/               Paged poster grid
     Discovery/             Seerr browse, details, requests, moderation
     Detail/                Movie/episode + series detail
-    Search/                Debounced library search
+    Search/                The app's one search screen: library + Seerr, recents
     Player/                Unified sample-buffer playback + progress reporting
     Settings/
 ```
@@ -104,15 +104,26 @@ attempt can't stall them.
 ## Navigation
 
 `MainTabView` builds tabs dynamically: Home, Discover, one tab per
-`movies`/`tvshows` library from `userViews()`, and Settings. Discover owns the
-single app-wide search field and presents Jellyfin library matches and Seerr
-catalogue matches as separate rails. Each tab owns its own `NavigationStack`;
-`MediaItem` is the content navigation value
+`movies`/`tvshows` library from `userViews()`, Search, and Settings. Each tab
+owns its own `NavigationStack`; `MediaItem` is the content navigation value
 (Hashable by id), routed by `ItemDetailRouter` — `.series` →
 `SeriesDetailView`, everything else → `ItemDetailView`.
 
-Discover uses a heterogeneous `NavigationPath` with both
-`SeerrNavigationRoute` and `ContentNavigationRoute`, because its two result
+`SearchView` is the app's single search location, presenting Jellyfin
+library matches and Seerr catalogue matches as separate rails, with recent
+terms (`RecentSearchStore`) below the keyboard when the field is empty. It is
+a **tab of its own** rather than a fixture on Discover: on tvOS `.searchable`
+draws a resident search field and full A-Z keyboard and expects to own the
+screen, which is what the HIG means by "a search screen is a specialized
+keyboard screen". Carrying one on Discover pushed that screen's content below
+the fold (HEL-111), and HEL-36 had folded search in there while unifying the
+two result sets. Two rules keep it working: `.searchable` goes on the
+content, **not** the `NavigationStack`, or the field is drawn over pushed
+detail pages; and the stack is a heterogeneous `NavigationPath`, because
+results carry both route identities.
+
+Discover and Search both use a heterogeneous `NavigationPath` with
+`SeerrNavigationRoute` and `ContentNavigationRoute`, because their result
 rails deliberately preserve their respective identities. TMDB ids remain in
 the Seerr model layer; an available title is opened in Lagoon only after an
 exact `AnyProviderIdEquals=tmdb.{id}` lookup returns a Jellyfin item. This
@@ -139,3 +150,7 @@ and AVKit are not alternate playback engines. See [playback.md](playback.md).
   replaced by a spinner) so the layout doesn't collapse and yank focus.
 - The hero's CTA button lives **outside** the `.id()`-keyed transitioning
   subtree so focus survives slide changes.
+- `.searchable` belongs only on `SearchView`, and on its **content** rather
+  than its `NavigationStack`. On a browse screen it costs the top third of
+  the display to a keyboard nobody asked for; on the stack it draws the field
+  over pushed detail pages.

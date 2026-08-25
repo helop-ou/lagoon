@@ -240,6 +240,11 @@ nonisolated enum ContentIcon {
     /// at 0.28 ink, which is what a sparkle is — forcing it heavier would make
     /// it something else.
     static let discover = "sparkle"
+    /// A stroke by construction, like `sparkle` beside it: SF Symbols has no
+    /// filled magnifier, and the circled variants read as a button rather
+    /// than a tab. `Tab(role: .search)` may substitute the system's own
+    /// glyph here, which is the outcome we want either way.
+    static let search = "magnifyingglass"
     static let settings = "gearshape.fill"
 
     /// Jellyfin's collection type for a library, as a glyph.

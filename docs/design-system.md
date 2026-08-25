@@ -218,13 +218,17 @@ both directions. The set is now 1.00–1.13 wide.
 | Shows | `rectangle.stack.badge.play.fill` | 1.10 | 0.65 |
 | Movies | `movieclapper.fill` | 1.04 | 0.73 |
 | Libraries | `square.grid.2x2.fill` | 1.00 | 0.81 |
+| Search | `magnifyingglass` | 0.99 | 0.26 |
 | Settings | `gearshape.fill` | 1.00 | 0.56 |
 
 Shows is a stack because a series is a pile of episodes, which is also what
 tells it apart from Movies at a glance; Libraries is therefore a grid rather
-than a stack, so the two cannot be confused. Discover stays the lightest glyph
-in the bar at 0.28 — that is what a sparkle *is*, and forcing it heavier would
-make it something else.
+than a stack, so the two cannot be confused. Discover and Search are the two
+light glyphs in the bar at 0.28 and 0.26 — that is what a sparkle and a
+magnifier *are*, and forcing either heavier would make it something else.
+Search is also the one navigation glyph with no filled variant to choose:
+SF Symbols draws no solid magnifier, and the circled forms read as a button
+rather than a tab.
 
 `everyContentIconResolvesToARealSymbol` asserts each name is a real symbol on
 the running OS: a missing one renders as nothing at all — no crash, no warning,

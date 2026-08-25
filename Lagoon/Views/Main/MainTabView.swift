@@ -16,6 +16,9 @@ struct MainTabView: View {
     // carry both route types. NavigationPath keeps those identities separate
     // while still allowing a local result and a Seerr result to share a page.
     @State private var discoverNavigationPath = NavigationPath()
+    // Search presents the same two result sets, so its stack is heterogeneous
+    // for the same reason (HEL-111).
+    @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
 
     var body: some View {
@@ -32,6 +35,10 @@ struct MainTabView: View {
             libraryNavigationPaths.removeAll()
             libraryPickerPath.removeAll()
             discoverNavigationPath = NavigationPath()
+            searchNavigationPath = NavigationPath()
+            // A shared TV should not hand the next viewer the last one's
+            // searches.
+            RecentSearchStore.shared.clear()
         }
         // Headless hardware harness: resolve a named library item through
         // the app's existing signed-in client, then present the same player
@@ -136,6 +143,17 @@ struct MainTabView: View {
                                     .contentNavigationDestinations()
                             }
                     }
+                }
+            }
+
+            // Search is a destination of its own, not a fixture on a browse
+            // screen: on tvOS `.searchable` draws a resident keyboard and
+            // expects to own the screen (HEL-111).
+            Tab("Search", systemImage: ContentIcon.search, role: .search) {
+                NavigationStack(path: $searchNavigationPath) {
+                    SearchView()
+                        .seerrNavigationDestinations()
+                        .contentNavigationDestinations()
                 }
             }
 

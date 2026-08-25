@@ -37,25 +37,14 @@ struct DiscoverView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = DiscoverViewModel()
-    @State private var librarySearch = SearchViewModel()
-    @State private var searchText = ""
-    @State private var searchResults: [SeerrDiscoverResult] = []
-    @State private var isSearching = false
-    @State private var searchError: String?
     @State private var reloadID = 0
-    @State private var searchRetryID = 0
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 pageHeader
 
-                // Library search remains useful when Seerr is disconnected
-                // or still restoring its cookie, so a query always wins over
-                // the connection state below.
-                if !normalizedSearch.isEmpty {
-                    searchSections
-                } else if seerr.isLoading {
+                if seerr.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                         .accessibilityLabel("Loading Discover")
@@ -77,14 +66,9 @@ struct DiscoverView: View {
         }
         .scrollClipDisabled()
         .background(Color.black.ignoresSafeArea())
-        .searchable(text: $searchText, prompt: "Search your library and Seerr")
-        .overlay { SearchDismissalObserver() }
         .refreshable {
-            guard seerr.isConnected, normalizedSearch.isEmpty else { return }
+            guard seerr.isConnected else { return }
             await viewModel.load(client: seerr.client)
-        }
-        .onChange(of: searchText) { _, newValue in
-            librarySearch.search(newValue, client: session.client)
         }
         // A viewer already signed in to Jellyfin should not meet a second
         // login. This uses the Jellyfin session Lagoon holds to sign in to
@@ -97,11 +81,7 @@ struct DiscoverView: View {
             guard seerr.isConnected else { return }
             await viewModel.load(client: seerr.client)
         }
-        .task(id: "\(seerr.user?.id ?? -1):\(normalizedSearch):\(searchRetryID)") {
-            await performSearch()
-        }
         .accessibilityIdentifier("seerr.discover")
-        .accessibilityValue("\(librarySearch.results.count) library, \(searchResults.count) Seerr results")
     }
 
     private var connectionState: some View {
@@ -166,88 +146,6 @@ struct DiscoverView: View {
         SeerrMediaRail(title: "Upcoming Movies", items: viewModel.upcoming)
     }
 
-    @ViewBuilder
-    private var searchSections: some View {
-        librarySearchSection
-        seerrSearchSection
-    }
-
-    @ViewBuilder
-    private var librarySearchSection: some View {
-        if !librarySearch.results.isEmpty {
-            MediaRail(title: "In Your Library", items: librarySearch.results)
-        } else {
-            searchStatusSection(
-                title: "In Your Library",
-                isLoading: librarySearch.isSearching,
-                message: librarySearch.errorMessage ?? "No matching movies or shows in your library.",
-                canRetry: librarySearch.errorMessage != nil
-            ) {
-                librarySearch.search(searchText, client: session.client)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var seerrSearchSection: some View {
-        if !seerr.isConnected {
-            VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                Text("From Seerr")
-                    .font(.headline)
-                Text(seerr.isLoading
-                     ? "Connecting to Seerr…"
-                     : "Connect Seerr to find titles outside your library.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if !seerr.isLoading {
-                    NavigationLink(value: SeerrNavigationRoute.settings) {
-                        Text(seerr.isConfigured ? "Sign In to Seerr" : "Set Up Seerr")
-                    }
-                    .buttonStyle(.glass)
-                }
-            }
-            .padding(.horizontal, Metrics.screenGutter)
-        } else if !requestableSearchResults.isEmpty {
-            SeerrMediaRail(title: "From Seerr", items: requestableSearchResults)
-        } else {
-            searchStatusSection(
-                title: "From Seerr",
-                isLoading: isSearching,
-                message: searchError ?? "No matching movies or shows on Seerr.",
-                canRetry: searchError != nil
-            ) {
-                searchRetryID += 1
-            }
-        }
-    }
-
-    private func searchStatusSection(
-        title: String,
-        isLoading: Bool,
-        message: String,
-        canRetry: Bool,
-        retry: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            Text(title)
-                .font(.headline)
-            if isLoading {
-                ProgressView()
-                    .accessibilityLabel("Searching \(title)")
-            } else {
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                if canRetry {
-                    Button("Try Again", action: retry)
-                        .buttonStyle(.glass)
-                }
-            }
-        }
-        .padding(.horizontal, Metrics.screenGutter)
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
-    }
-
     private var pageHeader: some View {
         Text("Discover")
             .font(.largeTitle.bold())
@@ -257,47 +155,10 @@ struct DiscoverView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var normalizedSearch: String {
-        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private var requestsTitle: String {
         seerr.user?.canViewAllRequests == true ? "All Requests" : "My Requests"
     }
 
-    private var requestableSearchResults: [SeerrDiscoverResult] {
-        searchResults.filter { $0.mediaType == .movie || $0.mediaType == .tv }
-    }
-
-    private func performSearch() async {
-        let term = normalizedSearch
-        guard !term.isEmpty else {
-            searchResults = []
-            searchError = nil
-            isSearching = false
-            return
-        }
-        guard seerr.isConnected else {
-            searchResults = []
-            searchError = nil
-            isSearching = false
-            return
-        }
-        isSearching = true
-        searchError = nil
-        do {
-            try await Task.sleep(for: .milliseconds(350))
-            let page = try await seerr.client.search(query: term)
-            guard !Task.isCancelled, normalizedSearch == term else { return }
-            searchResults = page.results
-        } catch is CancellationError {
-        } catch {
-            guard normalizedSearch == term else { return }
-            searchError = error.localizedDescription
-            searchResults = []
-        }
-        if normalizedSearch == term { isSearching = false }
-    }
 }
 
 @Observable
@@ -397,18 +258,5 @@ struct SeerrCatalogView: View {
 
     private var catalogTitle: String {
         mediaType == .movie ? "Discover Movies" : "Discover Shows"
-    }
-}
-
-/// Keeps tvOS search presentation from surviving after Discover leaves the
-/// hierarchy. The dismiss action is available only below `.searchable`.
-private struct SearchDismissalObserver: View {
-    @Environment(\.dismissSearch) private var dismissSearch
-
-    var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .allowsHitTesting(false)
-            .onDisappear { dismissSearch() }
     }
 }

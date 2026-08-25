@@ -1347,7 +1347,7 @@ final class PlayerRegressionUITests: XCTestCase {
         var libraryTabs: [XCUIElement] = []
         for _ in 0..<40 {
             libraryTabs = app.tabBars.buttons.allElementsBoundByIndex.filter {
-                !["Home", "Discover", "Settings"].contains($0.label)
+                !["Home", "Discover", "Search", "Settings"].contains($0.label)
             }
             if !libraryTabs.isEmpty { break }
             Thread.sleep(forTimeInterval: 0.25)
@@ -1424,19 +1424,77 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(focusedPoster.hasFocus, "Library focus was not restored after two details")
     }
 
-    func testDiscoverOwnsSearchWithoutASeparateSearchTab() {
+    /// Search is a tab of its own, and Discover browses without a keyboard
+    /// over it. On tvOS `.searchable` renders a resident search field and
+    /// full A–Z keyboard — correct on a search screen, and the reason
+    /// Discover's content sat below the fold while it carried one (HEL-111).
+    func testDiscoverBrowsesWithoutASearchFieldAndSearchHasItsOwnTab() {
         let app = launchNavigationRegressionApp()
         let homeTab = app.tabBars.buttons["Home"]
         let discoverTab = app.tabBars.buttons["Discover"]
         XCTAssertTrue(discoverTab.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.tabBars.buttons["Search"].exists, "Search lost its tab")
         moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
         moveFocus(to: discoverTab, maxPresses: 4) { remote.press(.right) }
         remote.press(.select)
 
         let discover = app.descendants(matching: .any)["seerr.discover"]
         XCTAssertTrue(discover.waitForExistence(timeout: 8))
-        XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.tabBars.buttons["Search"].exists)
+        XCTAssertFalse(
+            app.searchFields.firstMatch.exists,
+            "Discover is browsing behind a keyboard again"
+        )
+    }
+
+    /// Restored with the Search tab it covers (HEL-111): Back from a result
+    /// must return to the same result list, with focus on the poster that
+    /// was opened, rather than rebuilding the search.
+    func testSearchDetailBackStackPreservesResultsAndFocus() {
+        let app = launchNavigationRegressionApp()
+        let homeTab = app.tabBars.buttons["Home"]
+        let searchTab = app.tabBars.buttons["Search"]
+        XCTAssertTrue(searchTab.waitForExistence(timeout: 20))
+        moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
+        moveFocus(to: searchTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let search = app.descendants(matching: .any)["search.view"]
+        XCTAssertTrue(search.waitForExistence(timeout: 8))
+        expectation(
+            for: NSPredicate(format: "NOT (value BEGINSWITH '0 library')"),
+            evaluatedWith: search
+        )
+        waitForExpectations(timeout: 20)
+        let resultCount = search.valueDescription
+
+        let posters = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
+        )
+        var focusedPoster: XCUIElement?
+        for _ in 0..<8 {
+            focusedPoster = posters.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedPoster != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard let focusedPoster else {
+            XCTFail("No Search result received focus")
+            return
+        }
+        let itemID = focusedPoster.identifier.replacingOccurrences(of: "media.poster.", with: "")
+        remote.press(.select)
+
+        let detail = app.descendants(matching: .any)["detail.item.\(itemID)"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 8))
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertTrue(detail.exists, "Search detail did not remain the top route")
+        // The search field is scoped to the content, not the NavigationStack,
+        // so it must not be drawn over a pushed detail page.
+        XCTAssertFalse(app.searchFields.firstMatch.exists, "Search field overlaid the detail page")
+        remote.press(.menu)
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertEqual(search.valueDescription, resultCount, "Search results were rebuilt on Back")
+        XCTAssertTrue(focusedPoster.hasFocus, "Search focus was not restored to the selected result")
     }
 
     func testDiscoverSetupNavigationAndBackFocus() {

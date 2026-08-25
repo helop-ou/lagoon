@@ -324,6 +324,7 @@ struct PlayerSystemIntegrationTests {
             ContentIcon.movies,
             ContentIcon.shows,
             ContentIcon.libraries,
+            ContentIcon.search,
             ContentIcon.settings,
             ContentIcon.library(collectionType: "tvshows"),
             ContentIcon.library(collectionType: "movies"),
