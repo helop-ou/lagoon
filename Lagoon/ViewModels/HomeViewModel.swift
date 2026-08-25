@@ -33,6 +33,10 @@ final class HomeViewModel {
     var movieGenreShelf: [GenreShelfItem] = []
     var showGenreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
+    /// The curated rows (HEL-120), each carrying its own title because two of
+    /// them name what they are about: the title they are similar to, and the
+    /// genre or decade the rotation landed on today.
+    var curatedRails: [String: LibraryRail] = [:]
     var isLoading = true
     var errorMessage: String?
 
@@ -130,6 +134,12 @@ final class HomeViewModel {
                     .shuffled()
                     .prefix(6)
             )
+            // Deliberately not awaited. These are discovery rather than the
+            // reason anyone opened Lagoon, and awaiting them here would hold
+            // `isLoading` — and so the entire screen, hero included — behind
+            // eight queries for rows that are below the fold anyway. They
+            // appear as they resolve.
+            Task { await loadCuratedRails(client: client, generation: generation) }
         } catch {
             guard generation == loadGeneration else { return }
             hasLoaded = false
@@ -190,6 +200,180 @@ final class HomeViewModel {
     /// still advertises Books, Music and Jellyseerr rows. Measured against a
     /// real server, all 28 sections resolve in under two seconds
     /// concurrently, and the empty ones answer in ~0.1 s each.
+    /// The curated rows (HEL-120), fetched together and published together.
+    ///
+    /// Every one of these is discovery: nice to have, never the reason
+    /// someone opened Lagoon. They are fetched concurrently and applied in
+    /// one assignment after the rails that matter are already on screen, and
+    /// any that fails simply does not appear — an unreachable row must cost a
+    /// row, not the screen.
+    private func loadCuratedRails(client: JellyfinClient, generation: Int) async {
+        // What they actually watch, which decides the genre spotlight.
+        let played = (try? await client.items(
+            includeTypes: [.movie, .series],
+            sortBy: "DatePlayed",
+            sortOrder: "Descending",
+            limit: 60,
+            filters: ["IsPlayed"]
+        ))?.items ?? []
+        guard generation == loadGeneration else { return }
+
+        let today = Date.now
+        let genre = HomeRotation.genre(
+            rankedByWatchHistory: HomeRotation.rankGenres(byWatchHistory: played),
+            for: today
+        )
+        let decade = HomeRotation.decade(for: today)
+
+        async let similar = similarRail(seeds: played, client: client)
+        async let highlyRated = rail(
+            id: HomeCuratedRows.ID.highlyRated,
+            title: "Highly Rated, Unseen",
+            client: client,
+            sortBy: "CommunityRating",
+            sortOrder: "Descending",
+            filters: ["IsUnplayed"],
+            minCommunityRating: HomeCuratedRows.minimumCommunityRating
+        )
+        async let fourK = rail(
+            id: HomeCuratedRows.ID.inFourK,
+            title: "In 4K",
+            client: client,
+            sortBy: "DateCreated",
+            sortOrder: "Descending",
+            is4K: true
+        )
+        async let genreRail = spotlightRail(genre: genre, client: client)
+        async let decadeRail = spotlightRail(decade: decade, client: client)
+        async let unstarted = rail(
+            id: HomeCuratedRows.ID.unstartedSeries,
+            title: "Series You Haven't Started",
+            client: client,
+            includeTypes: [.series],
+            sortBy: "DateCreated",
+            sortOrder: "Descending",
+            filters: ["IsUnplayed"]
+        )
+        async let binge = rail(
+            id: HomeCuratedRows.ID.readyToBinge,
+            title: "Ready to Binge",
+            client: client,
+            includeTypes: [.series],
+            sortBy: "CommunityRating",
+            sortOrder: "Descending",
+            filters: ["IsUnplayed"],
+            seriesStatus: "Ended"
+        )
+        async let surprise = rail(
+            id: HomeCuratedRows.ID.surpriseMe,
+            title: "Surprise Me",
+            client: client,
+            sortBy: "Random",
+            filters: ["IsUnplayed"]
+        )
+
+        let resolved = await [
+            similar,
+            highlyRated,
+            fourK,
+            genreRail,
+            decadeRail,
+            unstarted,
+            binge,
+            surprise,
+        ].compactMap(\.self)
+
+        guard generation == loadGeneration else { return }
+        curatedRails = Dictionary(
+            resolved.map { ($0.id, $0) },
+            uniquingKeysWith: { current, _ in current }
+        )
+    }
+
+    /// Today's genre, or nothing when the viewer has watched too little for
+    /// the rotation to have an opinion.
+    private func spotlightRail(genre: String?, client: JellyfinClient) async -> LibraryRail? {
+        guard let genre else { return nil }
+        return await rail(
+            id: HomeCuratedRows.ID.genreSpotlight,
+            title: "More \(genre)",
+            client: client,
+            sortBy: "Random",
+            genres: [genre],
+            filters: ["IsUnplayed"]
+        )
+    }
+
+    /// Movies only: a decade of television is a different proposition, and
+    /// mixing them makes the row about nothing in particular.
+    private func spotlightRail(decade year: Int?, client: JellyfinClient) async -> LibraryRail? {
+        guard let year else { return nil }
+        return await rail(
+            id: HomeCuratedRows.ID.decadeSpotlight,
+            title: HomeRotation.decadeTitle(startingIn: year),
+            client: client,
+            includeTypes: [.movie],
+            sortBy: "CommunityRating",
+            years: Array(year..<(year + 10))
+        )
+    }
+
+    /// "Because You Watched X". The title names its own reason, which is the
+    /// whole point of the row — an unexplained shelf of vaguely related films
+    /// is what every other client already has.
+    ///
+    /// Seeds are tried in the order they were watched, skipping anything too
+    /// short to have been a viewing, and the first that returns a full rail
+    /// wins. See `minimumSeedRuntime` for what that filter is really for.
+    private func similarRail(seeds: [MediaItem], client: JellyfinClient) async -> LibraryRail? {
+        let candidates = seeds
+            .filter { HomeCuratedRows.isSubstantialSeed($0) }
+            .prefix(HomeCuratedRows.seedAttempts)
+
+        for seed in candidates {
+            guard let items = try? await client.similarItems(itemId: seed.id, limit: 16),
+                  items.count >= HomeCuratedRows.minimumItems
+            else { continue }
+            return LibraryRail(
+                id: HomeCuratedRows.ID.becauseYouWatched,
+                title: "Because You Watched \(seed.railTitle)",
+                items: items
+            )
+        }
+        return nil
+    }
+
+    /// Nil rather than an empty rail when a query fails or returns too little
+    /// to look deliberate, so the caller never has to decide what counts.
+    private func rail(
+        id: String,
+        title: String,
+        client: JellyfinClient,
+        includeTypes: [MediaItemType] = [.movie, .series],
+        sortBy: String,
+        sortOrder: String = "Descending",
+        genres: [String] = [],
+        filters: [String] = [],
+        years: [Int] = [],
+        is4K: Bool? = nil,
+        minCommunityRating: Double? = nil,
+        seriesStatus: String? = nil
+    ) async -> LibraryRail? {
+        guard let page = try? await client.items(
+            includeTypes: includeTypes,
+            sortBy: sortBy,
+            sortOrder: sortOrder,
+            genres: genres,
+            limit: 16,
+            filters: filters,
+            years: years,
+            is4K: is4K,
+            minCommunityRating: minCommunityRating,
+            seriesStatus: seriesStatus
+        ), page.items.count >= HomeCuratedRows.minimumItems else { return nil }
+        return LibraryRail(id: id, title: title, items: page.items)
+    }
+
     private func loadPluginRails(
         client: JellyfinClient,
         preferences: HomeSectionPreferenceValues
@@ -235,6 +419,9 @@ final class HomeViewModel {
         pluginRails = []
         latestRails = []
         heroItems = []
+        // Otherwise the previous account's "Because You Watched" survives the
+        // switch, which names a title on someone else's screen.
+        curatedRails = [:]
         errorMessage = nil
     }
 }

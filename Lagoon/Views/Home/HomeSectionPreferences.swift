@@ -101,6 +101,56 @@ nonisolated enum HomeSectionPreferenceResolver {
                 isEnabled: true,
                 source: .lagoon
             ),
+            // The curated rows (HEL-120), listed in the order Home draws them
+            // so this screen reads as a map of that one.
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.becauseYouWatched,
+                title: "Because You Watched",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.highlyRated,
+                title: "Highly Rated, Unseen",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.inFourK,
+                title: "In 4K",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.genreSpotlight,
+                title: "Genre Spotlight",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.decadeSpotlight,
+                title: "Decade Spotlight",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.unstartedSeries,
+                title: "Series You Haven't Started",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.readyToBinge,
+                title: "Ready to Binge",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.surpriseMe,
+                title: "Surprise Me",
+                isEnabled: true,
+                source: .lagoon
+            ),
         ]
     }
 

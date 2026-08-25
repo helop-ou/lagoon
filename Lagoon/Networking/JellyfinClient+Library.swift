@@ -12,6 +12,9 @@ extension JellyfinClient {
         return page.items
     }
 
+    /// One browse query, shared by the library screens and by Home's curated
+    /// rows (HEL-120). The filter arguments are all optional and all omitted
+    /// from the URL when unset, so a caller pays only for what it asks for.
     func items(
         parentId: String? = nil,
         includeTypes: [MediaItemType] = [],
@@ -22,7 +25,15 @@ extension JellyfinClient {
         searchTerm: String? = nil,
         startIndex: Int = 0,
         limit: Int = 100,
-        fields: String? = nil
+        fields: String? = nil,
+        /// `ItemFilter` values, e.g. `IsUnplayed`. Spelled by the caller
+        /// because Jellyfin's own names are the clearest thing to read here.
+        filters: [String] = [],
+        years: [Int] = [],
+        is4K: Bool? = nil,
+        minCommunityRating: Double? = nil,
+        /// `Continuing`, `Ended`, or `Unreleased`.
+        seriesStatus: String? = nil
     ) async throws -> ItemsPage {
         let userId = try requireUserId()
         var query = [
@@ -34,6 +45,21 @@ extension JellyfinClient {
             URLQueryItem(name: "Fields", value: fields ?? Self.defaultFields),
             URLQueryItem(name: "ImageTypeLimit", value: "1"),
         ]
+        if !filters.isEmpty {
+            query.append(URLQueryItem(name: "Filters", value: filters.joined(separator: ",")))
+        }
+        if !years.isEmpty {
+            query.append(URLQueryItem(name: "Years", value: years.map(String.init).joined(separator: ",")))
+        }
+        if let is4K {
+            query.append(URLQueryItem(name: "Is4K", value: is4K ? "true" : "false"))
+        }
+        if let minCommunityRating {
+            query.append(URLQueryItem(name: "MinCommunityRating", value: String(minCommunityRating)))
+        }
+        if let seriesStatus {
+            query.append(URLQueryItem(name: "SeriesStatus", value: seriesStatus))
+        }
         if let parentId {
             query.append(URLQueryItem(name: "ParentId", value: parentId))
         }

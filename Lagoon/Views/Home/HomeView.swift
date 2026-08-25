@@ -48,9 +48,12 @@ struct HomeView: View {
                                 onUserDataChange: refreshUserData
                             )
                         }
-                        // Above Recently Added: things you deliberately
-                        // starred outrank things the server happened to
-                        // ingest, and the rail hides itself when empty.
+                        // Names the title it is drawn from, so the row says
+                        // why it exists rather than being one more shelf.
+                        curatedRail(HomeCuratedRows.ID.becauseYouWatched)
+                        // Things you deliberately starred outrank things the
+                        // server happened to ingest, and the rail hides
+                        // itself when empty.
                         if isNativeRowEnabled("lagoon.favorites") {
                             MediaRail(
                                 title: "Favorites",
@@ -59,25 +62,10 @@ struct HomeView: View {
                                 onUserDataChange: refreshUserData
                             )
                         }
-                        // A native discovery path that works on every
-                        // Jellyfin server, independent of optional Home
-                        // Screen Sections plugins (HEL-84).
-                        if isNativeRowEnabled("lagoon.movieGenres") {
-                            GenreRail(
-                                title: "Movie Genres",
-                                genres: viewModel.movieGenreShelf,
-                                includeTypes: [.movie],
-                                identifier: "movies"
-                            )
-                        }
-                        if isNativeRowEnabled("lagoon.showGenres") {
-                            GenreRail(
-                                title: "Show Genres",
-                                genres: viewModel.showGenreShelf,
-                                includeTypes: [.series],
-                                identifier: "shows"
-                            )
-                        }
+
+                        // New. What the server has just taken in, before any
+                        // of the curated blocks, because "what changed since
+                        // last time" outranks "what you might like".
                         if isNativeRowEnabled("lagoon.recentlyAdded") {
                             ForEach(viewModel.latestRails) { rail in
                                 MediaRail(
@@ -88,6 +76,41 @@ struct HomeView: View {
                                 )
                             }
                         }
+
+                        // Movies, as one block. Each block closes with its
+                        // own genre shelf, which is the browse exit for
+                        // someone none of the rows above reached — a native
+                        // discovery path that works on every Jellyfin server,
+                        // independent of optional plugins (HEL-84).
+                        curatedRail(HomeCuratedRows.ID.highlyRated)
+                        curatedRail(HomeCuratedRows.ID.inFourK)
+                        curatedRail(HomeCuratedRows.ID.genreSpotlight)
+                        curatedRail(HomeCuratedRows.ID.decadeSpotlight)
+                        if isNativeRowEnabled("lagoon.movieGenres") {
+                            GenreRail(
+                                title: "Movie Genres",
+                                genres: viewModel.movieGenreShelf,
+                                includeTypes: [.movie],
+                                identifier: "movies"
+                            )
+                        }
+
+                        // Shows, as one block, closing the same way.
+                        curatedRail(HomeCuratedRows.ID.unstartedSeries)
+                        curatedRail(HomeCuratedRows.ID.readyToBinge)
+                        if isNativeRowEnabled("lagoon.showGenres") {
+                            GenreRail(
+                                title: "Show Genres",
+                                genres: viewModel.showGenreShelf,
+                                includeTypes: [.series],
+                                identifier: "shows"
+                            )
+                        }
+
+                        // Anything at all, last: the row that knows least
+                        // about you sits furthest from where you started.
+                        curatedRail(HomeCuratedRows.ID.surpriseMe)
+
                         // Whatever the server's Home Screen Sections plugin
                         // adds on top (HEL-47) — nothing at all without it.
                         ForEach(viewModel.pluginRails) { rail in
@@ -168,5 +191,24 @@ struct HomeView: View {
 
     private func isNativeRowEnabled(_ id: String) -> Bool {
         savedHomePreferences.isNativeEnabled(id)
+    }
+
+    /// One curated row, or nothing at all (HEL-120).
+    ///
+    /// The view model only publishes a rail once it has enough items to look
+    /// deliberate, so absence here means "this server had nothing worth a
+    /// row" and the block simply closes up. That is what keeps the order
+    /// readable on a small library, where several of these will never appear.
+    @ViewBuilder
+    private func curatedRail(_ id: String) -> some View {
+        if isNativeRowEnabled(id), let rail = viewModel.curatedRails[id] {
+            MediaRail(
+                title: rail.title,
+                items: rail.items,
+                style: .landscape,
+                playAction: { playerItem = PlayerItem(media: $0) },
+                onUserDataChange: refreshUserData
+            )
+        }
     }
 }

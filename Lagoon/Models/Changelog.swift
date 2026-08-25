@@ -31,8 +31,12 @@ nonisolated enum Changelog {
             version: "0.1",
             build: "59",
             released: "August 2026",
-            headline: "The Top Shelf, drawn off the main thread.",
+            headline: "Eight new rows on Home, in an order that reads.",
             changes: [
+                "Home has eight new rows. Because You Watched, named after the last thing you finished. Highly Rated, Unseen. In 4K, which is the row for deciding what to put on the good television. A genre and a decade that change daily, drawn from what you actually watch. Series You Haven't Started, Ready to Binge for series that have finished airing, and Surprise Me at the bottom.",
+                "The rows are also in a different order. Everything about you comes first, then what your server has just taken in, then a run of movie rows, then a run of show rows, each ending with its genre shelf. The genre shelves used to sit in the middle and interrupt.",
+                "Any row with too little behind it hides rather than showing you three posters and a lot of space, so a smaller library gets a shorter Home rather than a patchy one.",
+                "The new rows are all listed in Settings, Home Rows, and can be turned off individually like the existing ones.",
                 "Lagoon was drawing all of its Top Shelf artwork on the same thread that runs the interface. On a Mac that finishes before you notice; on an Apple TV it is long enough to stall the app, which is why nothing ever reached the shelf. The drawing now happens out of the way.",
                 "If the Top Shelf has nothing on it, Lagoon now notices when you open the app and fills it in, instead of only ever doing so as a side effect of the Home screen loading.",
                 "Settings, Advanced now also says when Lagoon last tried and how that attempt ended, so an empty shelf gives you a reason rather than four zeroes.",
