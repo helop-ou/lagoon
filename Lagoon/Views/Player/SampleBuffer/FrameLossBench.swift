@@ -57,6 +57,23 @@ nonisolated struct FrameLossBench: Equatable {
             frames > 0 ? Double(dropped) / Double(frames) * 100 : 0
         }
 
+        /// One line for the HUD *and* for the `player.regression.frameLoss`
+        /// probe, which `FrameLossRegressionResult` in the UI tests parses.
+        /// Every field named here is part of that contract; removing one
+        /// silently stops the regression reading its own result, which is how
+        /// HEL-109 broke `testVC1DirectPlayMaintainsContinuousAudioAndVideo`
+        /// by dropping `corrupt` and `aGaps` to make room for the memory
+        /// figures. `regressionSummaryIsParseable` pins it.
+        var regressionSummary: String {
+            String(
+                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aGaps %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
+                lossPercent, dropped, frames,
+                corrupted, stalls, audioGaps, minVideoQueue,
+                peakFootprintMB, footprintGrowthMB,
+                startPosition, windowSeconds
+            )
+        }
+
         var peakFootprintMB: Double { Double(peakFootprintBytes) / 1_048_576 }
         var footprintGrowthMB: Double {
             Double(max(peakFootprintBytes - startingFootprintBytes, 0)) / 1_048_576

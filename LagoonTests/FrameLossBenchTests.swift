@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Lagoon
 
@@ -87,6 +88,42 @@ struct FrameLossBenchTests {
         #expect(result.footprintGrowthMB == 520)
         #expect(result.minimumAvailableMB == 300)
         #expect(abs(result.lossPercent - 9.0 / 1450 * 100) < 0.0001)
+    }
+
+    /// The bench's summary is also the value of the
+    /// `player.regression.frameLoss` probe, and `FrameLossRegressionResult` in
+    /// LagoonUITests parses it with this exact regex. Dropping a field from
+    /// the summary stops the VC-1 continuity regression reading a window it
+    /// actually finished, which is a timeout that looks like a playback
+    /// failure and is not one. HEL-109 did exactly that.
+    @Test func regressionSummaryIsParseable() {
+        let result = FrameLossBench.Result(
+            startPosition: 310,
+            windowSeconds: 60,
+            frames: 1_450,
+            dropped: 9,
+            corrupted: 1,
+            stalls: 2,
+            audioGaps: 100,
+            minVideoQueue: 40,
+            optimizedFrames: 0,
+            accumulatedDelay: 0,
+            startingFootprintBytes: 100 * 1_048_576,
+            peakFootprintBytes: 620 * 1_048_576,
+            minimumAvailableBytes: 300 * 1_048_576
+        )
+        let summary = result.regressionSummary
+        let pattern = #"([0-9.]+)% \(([0-9]+)/([0-9]+)\).*corrupt ([0-9]+).*stalls ([0-9]+).*aGaps ([0-9]+)"#
+        let expression = try? NSRegularExpression(pattern: pattern)
+        let match = expression?.firstMatch(
+            in: summary,
+            range: NSRange(summary.startIndex..., in: summary)
+        )
+        #expect(match != nil, "the UI regression can no longer parse: \(summary)")
+        #expect(match?.numberOfRanges == 7)
+        // The memory figures HEL-109 added have to survive too.
+        #expect(summary.contains("peak"))
+        #expect(summary.contains("minQ"))
     }
 
     @Test func decoded4KMain10SurfaceEstimateMatchesP010Storage() {

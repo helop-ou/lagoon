@@ -1100,13 +1100,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             availableBytes: memory.availableBytes
         )
         if let result = bench!.record(sample) {
-            benchStatus = String(
-                format: "%.2f%% (%d/%d) · stalls %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
-                result.lossPercent, result.dropped, result.frames,
-                result.stalls, result.minVideoQueue,
-                result.peakFootprintMB, result.footprintGrowthMB,
-                result.startPosition, result.windowSeconds
-            )
+            benchStatus = result.regressionSummary
             // Plain stdout beside the signpost: `devicectl ... --console`
             // streams this from a real device, where the unified log is
             // out of reach for a headless harness (HEL-64). Carries the
