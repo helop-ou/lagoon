@@ -29,6 +29,19 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "62",
+            released: "August 2026",
+            headline: "Collections, and the new Home rows open the title you picked.",
+            changes: [
+                "Picking something out of one of the new Home rows opens it, rather than starting to play it there and then. The rows made of series behaved worse still: they answered a press with an error from your server, because a series is not a thing that can be played.",
+                "Home has a Collections row, and a collection opens a page of everything in it, in the order the films came out.",
+                "Search finds collections as well as titles, so typing a franchise name reaches the franchise.",
+                "Collections holding nothing, or holding one title, are left out of both. A server invents a collection for a whole franchise the moment you own a single film from it, so most of what it lists is empty, and on the library this was built against that is 155 of 173.",
+                "The Collections row can be switched off in Settings, Home Rows, like every other row there.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "61",
             released: "August 2026",
             headline: "Top Shelf artwork is kept where an Apple TV allows it.",
