@@ -66,9 +66,13 @@ struct SeerrMediaCard: View {
         .media(id: item.id, type: mediaType)
     }
 
+    /// No badge for a title nobody has asked for yet — including one whose
+    /// media record was deleted, which reads the same way to a viewer. A
+    /// blocklisted title *does* get one, since "you cannot have this" is
+    /// worth saying (HEL-115).
     private var visibleStatus: SeerrAvailabilityStatus? {
         let status = item.mediaInfo?.availability ?? .unknown
-        return status == .unknown || status == .deleted ? nil : status
+        return status.allowsRequesting ? nil : status
     }
 }
 

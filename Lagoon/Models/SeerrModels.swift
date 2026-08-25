@@ -88,13 +88,19 @@ nonisolated enum SeerrMediaType: String, Codable, Hashable, CaseIterable, Identi
     }
 }
 
+/// Jellyseerr's `MediaStatus`. The numbers are the contract, so they are
+/// spelled out rather than left to `case` order — 6 was previously read as
+/// "deleted" when it is *blocklisted*, which offered a Request button for a
+/// title the server would refuse, and pushed the real deleted value (7) into
+/// the unknown fallback (HEL-115).
 nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
     case unknown = 1
     case pending = 2
     case processing = 3
     case partiallyAvailable = 4
     case available = 5
-    case deleted = 6
+    case blocklisted = 6
+    case deleted = 7
 
     init(apiValue: Int?) {
         self = apiValue.flatMap(Self.init(rawValue:)) ?? .unknown
@@ -107,18 +113,42 @@ nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
         case .processing: "Processing"
         case .partiallyAvailable: "Partially Available"
         case .available: "Available"
-        case .deleted: "Unavailable"
+        case .blocklisted: "Blocked"
+        // The media record is gone, so as far as a viewer is concerned the
+        // title is simply not in the library and can be asked for again.
+        case .deleted: "Not Requested"
         }
+    }
+
+    /// Deleted media can be requested afresh; blocklisted media cannot, and
+    /// offering the button anyway only earns a rejection from the server.
+    var allowsRequesting: Bool {
+        self == .unknown || self == .deleted
+    }
+
+    /// Whether the title is in the library to any degree.
+    var isPlayable: Bool {
+        self == .available || self == .partiallyAvailable
     }
 }
 
+/// Jellyseerr's `MediaRequestStatus`. Lagoon knew only 1-3 and read anything
+/// else as `.pending`, so a **completed** request — what an approved request
+/// becomes once the title lands in the library — reported "Pending Approval"
+/// forever, and a failed one did too (HEL-115).
+///
+/// An unrecognised value is now its own case rather than a fourth way to say
+/// pending: claiming a state we do not understand is what caused that bug.
 nonisolated enum SeerrRequestStatus: Int, Hashable {
     case pending = 1
     case approved = 2
     case declined = 3
+    case failed = 4
+    case completed = 5
+    case unknown = -1
 
     init(apiValue: Int) {
-        self = Self(rawValue: apiValue) ?? .pending
+        self = Self(rawValue: apiValue) ?? .unknown
     }
 
     var title: String {
@@ -126,6 +156,76 @@ nonisolated enum SeerrRequestStatus: Int, Hashable {
         case .pending: "Pending Approval"
         case .approved: "Approved"
         case .declined: "Declined"
+        case .failed: "Failed"
+        case .completed: "Completed"
+        case .unknown: "Unknown"
+        }
+    }
+
+    /// Approved and completed both mean "the server said yes"; only the
+    /// library tells you whether it has arrived yet.
+    var isGranted: Bool {
+        self == .approved || self == .completed
+    }
+}
+
+/// What a viewer actually wants to know about a request: not where it sits in
+/// Jellyseerr's approval bookkeeping, but whether they can watch it yet.
+///
+/// The request's own status answers that only until it is approved; after
+/// that the media's availability does. Keeping both in one value is what
+/// stops an approved-and-available title reading as "Approved" while it is
+/// sitting in the library ready to play (HEL-115).
+nonisolated enum SeerrRequestProgress: Hashable {
+    case pending
+    case declined
+    case failed
+    case processing
+    case partiallyAvailable
+    case available
+    case unknown
+
+    var title: String {
+        switch self {
+        case .pending: "Pending"
+        case .declined: "Declined"
+        case .failed: "Failed"
+        case .processing: "Processing"
+        case .partiallyAvailable: "Partly Available"
+        case .available: "Available"
+        case .unknown: "Unknown"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .pending: "clock"
+        case .declined: "xmark.circle"
+        case .failed: "exclamationmark.triangle"
+        case .processing: "arrow.triangle.2.circlepath"
+        case .partiallyAvailable: "circle.lefthalf.filled"
+        case .available: "checkmark.circle"
+        case .unknown: "questionmark.circle"
+        }
+    }
+
+    static func resolve(
+        request: SeerrRequestStatus,
+        availability: SeerrAvailabilityStatus
+    ) -> SeerrRequestProgress {
+        switch request {
+        case .pending: .pending
+        case .declined: .declined
+        case .failed: .failed
+        case .unknown: .unknown
+        case .approved, .completed:
+            switch availability {
+            case .available: .available
+            case .partiallyAvailable: .partiallyAvailable
+            // Granted but not in the library yet, whatever bookkeeping state
+            // the media row happens to be in.
+            default: .processing
+            }
         }
     }
 }
@@ -278,6 +378,16 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let seasons: [SeerrRequestedSeason]?
 
     var requestStatus: SeerrRequestStatus { .init(apiValue: status) }
+
+    /// What to show for this request: its approval state until it is granted,
+    /// and the library's answer after that (HEL-115).
+    var progress: SeerrRequestProgress {
+        .resolve(
+            request: requestStatus,
+            availability: media?.availability(is4k: is4k == true) ?? .unknown
+        )
+    }
+
     var resolvedMediaType: SeerrMediaType {
         type ?? media?.mediaType ?? (media?.tvdbId == nil ? .movie : .tv)
     }
@@ -292,6 +402,14 @@ nonisolated struct SeerrRequestMedia: Decodable, Hashable {
     let status: Int?
     let status4k: Int?
     let externalServiceId: Int?
+
+    var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
+
+    /// A 4K request is satisfied by the 4K copy, not by the 1080p one that
+    /// may already be sitting in the library.
+    func availability(is4k: Bool) -> SeerrAvailabilityStatus {
+        .init(apiValue: is4k ? status4k : status)
+    }
 }
 
 nonisolated struct SeerrQuickConnect: Decodable, Equatable {

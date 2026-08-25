@@ -273,7 +273,7 @@ private struct SeerrRequestCard: View {
                     // One word, like the availability badges on the Discover
                     // cards. The full "Pending Approval" wrapped to two lines
                     // and covered a third of the artwork.
-                    Label(statusBadge, systemImage: statusIcon)
+                    Label(request.progress.title, systemImage: request.progress.symbol)
                         .font(.caption2.bold())
                         .labelStyle(.titleAndIcon)
                         .lineLimit(1)
@@ -287,7 +287,7 @@ private struct SeerrRequestCard: View {
             }
             .cardButtonStyle()
             .accessibilityLabel(details?.displayTitle ?? "Request \(request.id)")
-            .accessibilityValue(request.requestStatus.title)
+            .accessibilityValue(request.progress.title)
             .accessibilityIdentifier("seerr.request.\(request.id)")
 
             VStack(alignment: .leading, spacing: Metrics.Space.hair) {
@@ -310,30 +310,16 @@ private struct SeerrRequestCard: View {
             details = try? await seerr.client.details(id: tmdbID, mediaType: request.resolvedMediaType)
         }
     }
-
-    private var statusBadge: String {
-        switch request.requestStatus {
-        case .pending: String(localized: "Pending")
-        case .approved: String(localized: "Approved")
-        case .declined: String(localized: "Declined")
-        }
-    }
-
-    private var statusIcon: String {
-        switch request.requestStatus {
-        case .pending: "clock"
-        case .approved: "checkmark.circle"
-        case .declined: "xmark.circle"
-        }
-    }
 }
 
 struct SeerrRequestDetailView: View {
     let request: SeerrMediaRequest
     @Environment(\.dismiss) private var dismiss
     @Environment(SeerrSessionStore.self) private var seerr
+    @Environment(SessionStore.self) private var session
     @State private var currentRequest: SeerrMediaRequest
     @State private var details: SeerrMediaDetails?
+    @State private var jellyfinItem: MediaItem?
     @State private var isLoading = true
     @State private var isMutating = false
     @State private var errorMessage: String?
@@ -359,7 +345,7 @@ struct SeerrRequestDetailView: View {
                     backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: 1280)
                 ) {
                     DetailMetadataHeader(
-                        subtitle: currentRequest.requestStatus.title,
+                        subtitle: currentRequest.progress.title,
                         factTokens: factTokens,
                         genres: details?.genres?.map(\.name) ?? [],
                         overview: details?.overview
@@ -427,6 +413,15 @@ struct SeerrRequestDetailView: View {
             ProgressView()
         } else {
             HStack(spacing: Metrics.Space.m) {
+                // Watching it is the point of having requested it, so this
+                // leads.
+                if let jellyfinItem {
+                    NavigationLink(value: SeerrNavigationRoute.jellyfinItem(jellyfinItem)) {
+                        Label("Open in Lagoon", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("seerr.request.open")
+                }
                 if currentRequest.requestStatus == .pending, canModerate {
                     Button("Approve") { confirmation = .approve }
                         .buttonStyle(.glass)
@@ -493,8 +488,31 @@ struct SeerrRequestDetailView: View {
             if let tmdbID = currentRequest.tmdbID {
                 details = try await seerr.client.details(id: tmdbID, mediaType: currentRequest.resolvedMediaType)
             }
+            await resolveJellyfinItem()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// A request whose title has arrived should be playable from here rather
+    /// than only removable — the same match `SeerrMediaDetailView` makes, and
+    /// on the same terms: the Jellyfin id Seerr recorded when it can, an
+    /// exact TMDB lookup when it cannot (HEL-115).
+    private func resolveJellyfinItem() async {
+        guard currentRequest.progress == .available || currentRequest.progress == .partiallyAvailable else {
+            jellyfinItem = nil
+            return
+        }
+        let jellyfinID = details?.mediaInfo?.jellyfinMediaId
+        if let jellyfinID, !jellyfinID.isEmpty {
+            jellyfinItem = try? await session.client.item(id: jellyfinID)
+        } else if let tmdbID = currentRequest.tmdbID {
+            jellyfinItem = try? await session.client.item(
+                tmdbID: tmdbID,
+                mediaType: currentRequest.resolvedMediaType
+            )
+        } else {
+            jellyfinItem = nil
         }
     }
 

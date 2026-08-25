@@ -109,6 +109,12 @@ struct SeerrMediaDetailView: View {
                     message: "Some of this title is already available in your Jellyfin library."
                 )
             }
+        case .blocklisted:
+            statusButton(
+                title: availability.title,
+                symbol: "hand.raised",
+                message: "The server administrator has blocked this title, so it cannot be requested."
+            )
         case .unknown, .deleted:
             if seerr.user?.canRequest(mediaType) == true {
                 if mediaType == .movie {

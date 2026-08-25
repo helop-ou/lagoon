@@ -122,6 +122,31 @@ content, **not** the `NavigationStack`, or the field is drawn over pushed
 detail pages; and the stack is a heterogeneous `NavigationPath`, because
 results carry both route identities.
 
+### Seerr status numbers are a contract
+
+Two enums are wire contracts with Jellyseerr's `server/constants/media.ts`,
+and both were wrong at once (HEL-115), so they are now spelled out with
+explicit raw values and pinned in `SeerrRequestStatusTests`:
+
+- `MediaRequestStatus` is `PENDING=1, APPROVED, DECLINED, FAILED, COMPLETED`.
+  Lagoon knew only 1-3 and read anything else as *pending*, so a completed
+  request — what an approved one becomes once the title arrives — claimed
+  "Pending Approval" forever. An unrecognised value is now `.unknown`, never
+  a real state.
+- `MediaStatus` is `UNKNOWN=1, PENDING, PROCESSING, PARTIALLY_AVAILABLE,
+  AVAILABLE, BLOCKLISTED=6, DELETED=7`. Lagoon had `deleted = 6`, so a
+  blocklisted title offered a Request button the server would refuse, and a
+  deleted one fell into the unknown fallback and looked untouched.
+
+**Never show a request's own status alone.** It answers "can I watch this?"
+only until the request is granted; after that the media's availability does.
+`SeerrRequestProgress` combines them, and reads `status4k` for a 4K request —
+a 4K request is not satisfied by the 1080p copy already in the library.
+
+Adding a case to either enum means adding it to those tests, which assert the
+numbers literally: a wrong one is invisible until someone reads a badge that
+is quietly lying.
+
 ### Discover's layout comes from the server
 
 Discover opens on the same `HeroSection` Home uses and then draws its rails in
