@@ -104,6 +104,20 @@ struct HomeView: View {
                         // third kind of collection does not lose its rail.
                         recentlyAddedRails(collectionType: nil)
 
+                        // The last browse shelf, and the only one that spans
+                        // both blocks: a collection is a franchise, which is
+                        // usually films but is not promised to be (HEL-122).
+                        // It sits with the genre shelves in spirit — a way
+                        // out into the library rather than something picked
+                        // for you — so it closes the browse exits before the
+                        // final content row.
+                        if isNativeRowEnabled(CollectionShelf.rowID) {
+                            CollectionRail(
+                                title: "Collections",
+                                collections: viewModel.collections
+                            )
+                        }
+
                         // Anything at all, last: the row that knows least
                         // about you sits furthest from where you started.
                         curatedRail(HomeCuratedRows.ID.surpriseMe)

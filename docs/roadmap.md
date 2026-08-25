@@ -11,7 +11,9 @@
 - Playback: direct play or server-decided HLS transcode, resume, and progress
   reporting round-trip (originally AVPlayer; now superseded by the single
   Lagoon sample-buffer engine documented below)
-- Debounced search, settings (sign out / change server)
+- Debounced search (titles and collections), settings (sign out / change server)
+- Collections: a Home row of the franchises that actually hold something, and
+  a collection page listing its titles in release order (HEL-122)
 - Seerr/Jellyseerr discovery, per-user Quick Connect, title and season
   requests, request history, and permission-gated moderation
 - iOS builds from the same target with scaled-down metrics

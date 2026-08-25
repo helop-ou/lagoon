@@ -146,6 +146,12 @@ nonisolated enum HomeSectionPreferenceResolver {
                 source: .lagoon
             ),
             HomeSectionChoice(
+                id: CollectionShelf.rowID,
+                title: "Collections",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
                 id: HomeCuratedRows.ID.surpriseMe,
                 title: "Surprise Me",
                 isEnabled: true,

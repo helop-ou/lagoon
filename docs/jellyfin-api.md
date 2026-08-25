@@ -50,11 +50,39 @@ Authorization: MediaBrowser Client="Lagoon", Device="Apple TV",
 | Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one (HEL-66) |
+| Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s** — see below (HEL-122) |
+| What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order |
 
 List calls pass `Fields=Overview,Genres,…,OriginalLanguage`
 (`JellyfinClient.defaultFields`) because the server omits those from list
 payloads by default. `OriginalLanguage` is also read from the full item
 request that already supplies chapters and trickplay at playback start.
+
+## Collections are folders, and folders are expensive (HEL-122)
+
+Two things about `BoxSet` items are not obvious until a real library is in
+front of you, and both were measured against the reference server's 173
+collections:
+
+- **Listing them costs 38.6 s with user data and 0.25 s without.** A
+  collection's `UserData` carries `UnplayedItemCount`, which the server can
+  only answer by walking that collection's children — roughly a quarter of a
+  second each. Nothing else moved the number: dropping `Fields`, naming the
+  Collections library as `ParentId` instead of `Recursive=true`, and asking
+  for 20 rows instead of 200 all still took about 40 s. `EnableUserData=false`
+  is the whole fix, and it is safe here because a collection's own watched
+  flags are not drawn anywhere; the titles *inside* one are a separate query
+  that keeps its user data and answers in 50 ms.
+- **Most collections are empty.** A metadata scrape creates a collection for a
+  film's entire franchise the moment the library holds one entry in it, so of
+  those 173, 35 contain anything at all and 18 contain more than one title.
+  `ChildCount` rides along in the list response — it survives
+  `EnableUserData=false` — so the stubs can be dropped without a request per
+  collection. `CollectionShelf.minimumTitles` is that floor.
+
+Artwork is patchy for the same reason: 11 of those 18 real collections have no
+landscape image of their own, so Home borrows one from the first title inside
+(`CollectionShelf.artworkSource`). Their contents are fully illustrated.
 
 ## Playback language defaults (HEL-81)
 

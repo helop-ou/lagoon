@@ -24,12 +24,12 @@ final class SearchViewModel {
                 try await Task.sleep(for: .milliseconds(400))
                 try Task.checkCancellation()
                 let page = try await client.items(
-                    includeTypes: [.movie, .series],
+                    includeTypes: [.movie, .series, .boxSet],
                     searchTerm: trimmed,
                     limit: 60
                 )
                 try Task.checkCancellation()
-                results = page.items
+                results = Self.presentable(page.items)
                 isSearching = false
             } catch is CancellationError {
                 // A newer query owns all visible state.
@@ -40,6 +40,16 @@ final class SearchViewModel {
                 errorMessage = "Couldn't search your library."
             }
         }
+    }
+
+    /// Drops the collections not worth offering (HEL-122).
+    ///
+    /// Searching a franchise name matches the collection *and* every film in
+    /// it, so the stubs a metadata scrape leaves behind would otherwise put a
+    /// dead end at the top of the results — a library holds far more empty
+    /// collections than real ones. The same floor Home's row uses.
+    static func presentable(_ items: [MediaItem]) -> [MediaItem] {
+        items.filter { $0.type != .boxSet || ($0.childCount ?? 0) >= CollectionShelf.minimumTitles }
     }
 
     #if DEBUG

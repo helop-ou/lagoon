@@ -596,6 +596,8 @@ struct ItemDetailRouter: View {
             switch item.type {
             case .series:
                 SeriesDetailView(item: item)
+            case .boxSet:
+                CollectionDetailView(item: item)
             default:
                 ItemDetailView(item: item)
             }

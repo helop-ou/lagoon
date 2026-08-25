@@ -33,7 +33,11 @@ extension JellyfinClient {
         is4K: Bool? = nil,
         minCommunityRating: Double? = nil,
         /// `Continuing`, `Ended`, or `Unreleased`.
-        seriesStatus: String? = nil
+        seriesStatus: String? = nil,
+        /// Watched flags and resume positions. Leave them on for anything a
+        /// card draws progress for; turn them off for a list of *folders*,
+        /// where they are ruinously expensive — see `collections()`.
+        enableUserData: Bool = true
     ) async throws -> ItemsPage {
         let userId = try requireUserId()
         var query = [
@@ -59,6 +63,9 @@ extension JellyfinClient {
         }
         if let seriesStatus {
             query.append(URLQueryItem(name: "SeriesStatus", value: seriesStatus))
+        }
+        if !enableUserData {
+            query.append(URLQueryItem(name: "EnableUserData", value: "false"))
         }
         if let parentId {
             query.append(URLQueryItem(name: "ParentId", value: parentId))
@@ -163,6 +170,55 @@ extension JellyfinClient {
             URLQueryItem(name: "Fields", value: Self.defaultFields),
         ])
         return page.items
+    }
+
+    /// Every collection (a Jellyfin `BoxSet`) this user can see.
+    ///
+    /// **Expect most of them to be empty.** A metadata scrape creates a
+    /// collection for a film's entire franchise whether or not the library
+    /// holds the rest of it, so the reference server answers this with 173
+    /// collections of which 35 contain anything at all and 18 contain more
+    /// than one title. `ChildCount` rides in `defaultFields` precisely so a
+    /// caller can drop the stubs without a request per collection — see
+    /// `CollectionShelf.minimumTitles`.
+    ///
+    /// **`EnableUserData=false` is what makes this query usable, not a
+    /// micro-optimisation.** A collection's `UserData` carries
+    /// `UnplayedItemCount`, which the server can only answer by walking that
+    /// collection's children — about a quarter-second each. Measured against
+    /// the reference server's 173 collections: **38.6 s with user data and
+    /// 0.25 s without**, and the cost tracks the number of collections rather
+    /// than anything the query asks for (dropping `Fields`, naming the
+    /// Collections library as `ParentId`, and asking for 20 instead of 200
+    /// each changed nothing). Nothing here needs the flags: the row draws a
+    /// name and a count, and the contents of one collection are a separate,
+    /// cheap request that keeps its user data.
+    func collections(limit: Int = 200) async throws -> [MediaItem] {
+        try await items(
+            includeTypes: [.boxSet],
+            sortBy: "SortName",
+            limit: limit,
+            enableUserData: false
+        ).items
+    }
+
+    /// What is inside one collection, in release order.
+    ///
+    /// Release order is the order a franchise reads in and `SortName` is not:
+    /// alphabetically *Aliens vs Predator: Requiem* opens the AVP collection
+    /// and *Alien 3* precedes *Aliens*. `PremiereDate` fixes both, with
+    /// `SortName` behind it for the titles a server has no date for.
+    ///
+    /// Not recursive and not paged: collection membership is direct, and a
+    /// franchise that needs a second page of two hundred does not exist.
+    func collectionItems(collectionId: String, limit: Int = 200) async throws -> [MediaItem] {
+        try await items(
+            parentId: collectionId,
+            recursive: false,
+            sortBy: "PremiereDate,SortName",
+            sortOrder: "Ascending",
+            limit: limit
+        ).items
     }
 
     /// The Favorites rail (HEL-40). `Filters=IsFavorite` does the picking

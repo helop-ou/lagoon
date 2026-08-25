@@ -42,6 +42,9 @@ final class HomeViewModel {
     /// them name what they are about: the title they are similar to, and the
     /// genre or decade the rotation landed on today.
     var curatedRails: [String: LibraryRail] = [:]
+    /// The collections worth showing (HEL-122). Empty on a library with no
+    /// collections, and on one whose collections are all franchise stubs.
+    var collections: [CollectionShelfItem] = []
     var isLoading = true
     var errorMessage: String?
 
@@ -150,6 +153,7 @@ final class HomeViewModel {
             // eight queries for rows that are below the fold anyway. They
             // appear as they resolve.
             Task { await loadCuratedRails(client: client, generation: generation) }
+            Task { await loadCollections(client: client, generation: generation) }
         } catch {
             guard generation == loadGeneration else { return }
             hasLoaded = false
@@ -305,6 +309,45 @@ final class HomeViewModel {
         )
     }
 
+    /// The Collections row (HEL-122).
+    ///
+    /// Two passes, because one is not enough and one per collection is far
+    /// too many. The first asks for every collection and keeps the ones that
+    /// hold more than a single title — `ChildCount` rides along in the list
+    /// response, so filtering 173 franchise stubs down to 18 real collections
+    /// costs nothing. The second fetches the contents of only those survivors
+    /// that have no landscape artwork of their own, to borrow a card picture
+    /// from the first film inside; on the reference library that is 11 small
+    /// concurrent requests, and on a library whose collections are all
+    /// illustrated it is none at all.
+    private func loadCollections(client: JellyfinClient, generation: Int) async {
+        guard let all = try? await client.collections() else { return }
+        guard generation == loadGeneration else { return }
+
+        let ranked = CollectionShelf.ranked(all)
+        guard !ranked.isEmpty else { return }
+
+        let needsArtwork = ranked.filter { !CollectionShelf.hasLandscapeArtwork($0) }
+        var borrowed: [String: MediaItem] = [:]
+        await withTaskGroup(of: (String, MediaItem?).self) { group in
+            for collection in needsArtwork {
+                group.addTask {
+                    let contents = (try? await client.collectionItems(
+                        collectionId: collection.id,
+                        limit: 8
+                    )) ?? []
+                    return (collection.id, CollectionShelf.artworkSource(from: contents))
+                }
+            }
+            for await (id, artwork) in group {
+                borrowed[id] = artwork
+            }
+        }
+
+        guard generation == loadGeneration else { return }
+        collections = CollectionShelf.shelf(ranked, borrowedArtwork: borrowed)
+    }
+
     /// Today's genre, or nothing when the viewer has watched too little for
     /// the rotation to have an opinion.
     private func spotlightRail(genre: String?, client: JellyfinClient) async -> LibraryRail? {
@@ -440,6 +483,7 @@ final class HomeViewModel {
         // Otherwise the previous account's "Because You Watched" survives the
         // switch, which names a title on someone else's screen.
         curatedRails = [:]
+        collections = []
         errorMessage = nil
     }
 }
