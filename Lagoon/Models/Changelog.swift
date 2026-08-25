@@ -39,6 +39,7 @@ nonisolated enum Changelog {
                 "Requests that are finished no longer claim to be pending. A request now says whether it is waiting for approval, downloading, importing, or ready to watch, and a title that was removed from your library says that rather than looking stuck.",
                 "A request that is downloading shows how far along it is and how long is left, and the icon animates while you are looking at it.",
                 "A request whose title has arrived opens straight into Lagoon to play it, instead of only offering to remove itself.",
+                "A request now shows the quality it will be fetched at, so approving one tells you what you are agreeing to.",
                 "If you manage your Seerr blocklist, a blocked title can be unblocked from Lagoon rather than only from the web interface.",
                 "Settings takes the app's own black background instead of the system's default grey.",
                 "This changelog is now a row per build that you open, rather than one long list to scroll.",
