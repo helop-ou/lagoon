@@ -138,6 +138,13 @@ explicit raw values and pinned in `SeerrRequestStatusTests`:
   blocklisted title offered a Request button the server would refuse, and a
   deleted one fell into the unknown fallback and looked untouched.
 
+`BLOCKLISTED` and `DELETED` are not interchangeable. Deleted media can be
+requested afresh and reads as "Not Requested"; blocklisted media cannot, and
+an administrator holding `MANAGE_BLOCKLIST` gets an Unblock button on the
+detail page — Jellyseerr drops the media row with the blocklist entry, so the
+reload afterwards shows the ordinary Request button. Lagoon can lift a block
+but does not add one.
+
 **Never show a request's own status alone.** It answers "can I watch this?"
 only until the request is granted; after that the media's availability does.
 `SeerrRequestProgress` combines them, and reads `status4k` for a 4K request —

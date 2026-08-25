@@ -41,6 +41,9 @@ nonisolated struct SeerrUser: Decodable, Hashable, Identifiable {
     }
 
     var canManageRequests: Bool { hasPermission(.manageRequests) }
+    /// Lifting a block is an administrator's job; `hasPermission` already
+    /// treats the admin flag as an override (HEL-115).
+    var canManageBlocklist: Bool { hasPermission(.manageBlocklist) }
     var canViewAllRequests: Bool {
         hasPermission(.manageRequests) || hasPermission(.requestView)
     }
@@ -71,6 +74,8 @@ nonisolated enum SeerrPermission: Int, Hashable {
     case requestView = 16384
     case requestMovie = 262_144
     case requestTV = 524_288
+    case manageBlocklist = 268_435_456
+    case viewBlocklist = 1_073_741_824
 }
 
 nonisolated enum SeerrMediaType: String, Codable, Hashable, CaseIterable, Identifiable {
@@ -183,6 +188,10 @@ nonisolated enum SeerrRequestProgress: Hashable {
     case processing
     case partiallyAvailable
     case available
+    /// Granted, arrived, and since removed from the library.
+    case removed
+    /// Granted, then blocked by an administrator.
+    case blocked
     case unknown
 
     var title: String {
@@ -193,6 +202,8 @@ nonisolated enum SeerrRequestProgress: Hashable {
         case .processing: "Processing"
         case .partiallyAvailable: "Partly Available"
         case .available: "Available"
+        case .removed: "Removed"
+        case .blocked: "Blocked"
         case .unknown: "Unknown"
         }
     }
@@ -205,6 +216,8 @@ nonisolated enum SeerrRequestProgress: Hashable {
         case .processing: "arrow.triangle.2.circlepath"
         case .partiallyAvailable: "circle.lefthalf.filled"
         case .available: "checkmark.circle"
+        case .removed: "trash"
+        case .blocked: "hand.raised"
         case .unknown: "questionmark.circle"
         }
     }
@@ -219,12 +232,21 @@ nonisolated enum SeerrRequestProgress: Hashable {
         case .failed: .failed
         case .unknown: .unknown
         case .approved, .completed:
+            // Exhaustive on purpose. A `default:` here is what produced the
+            // original bug in the first place: it quietly reported a specific,
+            // reassuring state for one nobody had thought about. Adding a case
+            // to `SeerrAvailabilityStatus` should fail this switch and make
+            // someone decide (HEL-115).
             switch availability {
             case .available: .available
             case .partiallyAvailable: .partiallyAvailable
-            // Granted but not in the library yet, whatever bookkeeping state
-            // the media row happens to be in.
-            default: .processing
+            // Jellyseerr models this as its own filter — a completed request
+            // whose media has since been removed. It is finished, not still
+            // arriving.
+            case .deleted: .removed
+            case .blocklisted: .blocked
+            // Granted, not in the library yet.
+            case .unknown, .pending, .processing: .processing
             }
         }
     }

@@ -127,9 +127,35 @@ struct SeerrRequestStatusTests {
         #expect(decoded.progress == .processing)
     }
 
+    /// A granted request whose media was removed or blocked afterwards is
+    /// finished, not still arriving. These used to fall into a `default:` and
+    /// report "Processing" forever — the same shape as the original bug.
+    @Test @MainActor func aGrantedRequestWhoseMediaWentAwaySaysSo() {
+        #expect(SeerrRequestProgress.resolve(request: .completed, availability: .deleted) == .removed)
+        #expect(SeerrRequestProgress.resolve(request: .approved, availability: .deleted) == .removed)
+        #expect(SeerrRequestProgress.resolve(request: .completed, availability: .blocklisted) == .blocked)
+    }
+
+    /// Lifting a block is gated on MANAGE_BLOCKLIST, and the admin flag is an
+    /// override, matching Jellyseerr's own permission check.
+    @Test @MainActor func onlyBlocklistManagersAndAdminsCanUnblock() {
+        func user(permissions: Int) -> SeerrUser {
+            try! JSONDecoder().decode(
+                SeerrUser.self,
+                from: Data(#"{"id":1,"permissions":\#(permissions)}"#.utf8)
+            )
+        }
+        #expect(SeerrPermission.manageBlocklist.rawValue == 268_435_456)
+        #expect(user(permissions: 268_435_456).canManageBlocklist)
+        #expect(user(permissions: 2).canManageBlocklist, "admin overrides every permission")
+        #expect(!user(permissions: 32).canManageBlocklist)
+        #expect(!user(permissions: 0).canManageBlocklist)
+    }
+
     @Test @MainActor func everyProgressCaseHasATitleAndASymbol() {
         let all: [SeerrRequestProgress] = [
-            .pending, .declined, .failed, .processing, .partiallyAvailable, .available, .unknown,
+            .pending, .declined, .failed, .processing, .partiallyAvailable,
+            .available, .removed, .blocked, .unknown,
         ]
         for progress in all {
             #expect(!progress.title.isEmpty)

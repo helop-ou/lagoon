@@ -260,6 +260,19 @@ final class SeerrClient {
         )
     }
 
+    /// Lifts an administrator's block on a title. Jellyseerr removes the
+    /// media row along with the blocklist entry, so the title goes back to
+    /// being simply not-requested and can be asked for again. `mediaType` is
+    /// required — the route answers 400 without it.
+    func removeFromBlocklist(tmdbID: Int, mediaType: SeerrMediaType) async throws {
+        _ = try await data(
+            path: "blocklist/\(tmdbID)",
+            method: "DELETE",
+            query: [URLQueryItem(name: "mediaType", value: mediaType.rawValue)],
+            authenticated: true
+        )
+    }
+
     private func postVoid(_ path: String) async throws {
         _ = try await data(path: path, method: "POST", authenticated: true)
     }

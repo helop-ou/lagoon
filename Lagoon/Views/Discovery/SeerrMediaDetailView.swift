@@ -53,6 +53,12 @@ struct SeerrMediaDetailView: View {
                     popup = nil
                     requestMovie()
                 }
+            } else if popup?.confirmsUnblock == true {
+                Button("Cancel", role: .cancel) { popup = nil }
+                Button("Unblock") {
+                    popup = nil
+                    unblock()
+                }
             } else {
                 Button("OK") { popup = nil }
             }
@@ -110,11 +116,34 @@ struct SeerrMediaDetailView: View {
                 )
             }
         case .blocklisted:
-            statusButton(
-                title: availability.title,
-                symbol: "hand.raised",
-                message: "The server administrator has blocked this title, so it cannot be requested."
-            )
+            // An administrator who can lift the block should be able to do it
+            // here rather than reaching for the web UI (HEL-115). Jellyseerr
+            // drops the media row along with the blocklist entry, so the
+            // reload afterwards shows the ordinary Request button.
+            if seerr.user?.canManageBlocklist == true {
+                Button {
+                    popup = Popup(
+                        title: "Unblock \(details.displayTitle)?",
+                        message: "This lifts the block so the title can be requested again.",
+                        confirmsUnblock: true
+                    )
+                } label: {
+                    if isRequesting {
+                        ProgressView()
+                    } else {
+                        Label("Unblock", systemImage: "hand.raised.slash")
+                    }
+                }
+                .buttonStyle(.glass)
+                .disabled(isRequesting)
+                .accessibilityIdentifier("seerr.detail.unblock")
+            } else {
+                statusButton(
+                    title: availability.title,
+                    symbol: "hand.raised",
+                    message: "The server administrator has blocked this title, so it cannot be requested."
+                )
+            }
         case .unknown, .deleted:
             if seerr.user?.canRequest(mediaType) == true {
                 if mediaType == .movie {
@@ -185,6 +214,24 @@ struct SeerrMediaDetailView: View {
         }
     }
 
+    private func unblock() {
+        isRequesting = true
+        Task {
+            defer { isRequesting = false }
+            do {
+                try await seerr.client.removeFromBlocklist(tmdbID: mediaID, mediaType: mediaType)
+                // The media row goes with the block, so re-reading is what
+                // turns the page back into an ordinary requestable title.
+                reloadID += 1
+            } catch {
+                popup = Popup(
+                    title: String(localized: "Couldn't Unblock"),
+                    message: error.localizedDescription
+                )
+            }
+        }
+    }
+
     private func requestMovie() {
         guard !isRequesting else { return }
         isRequesting = true
@@ -232,6 +279,7 @@ struct SeerrMediaDetailView: View {
         let title: String
         let message: String
         var confirmsMovieRequest = false
+        var confirmsUnblock = false
     }
 }
 
