@@ -212,15 +212,24 @@ instead of timing out when those assets are absent. To run every fixture-backed
 journey against a private regression library without committing credentials:
 
 ```sh
-LAGOON_REGRESSION_SERVER='https://example.test' \
-LAGOON_REGRESSION_USER='Regression' \
-LAGOON_REGRESSION_PASS='…' \
+TEST_RUNNER_LAGOON_REGRESSION_SERVER='https://example.test' \
+TEST_RUNNER_LAGOON_REGRESSION_USER='Regression' \
+TEST_RUNNER_LAGOON_REGRESSION_PASS='…' \
 xcodebuild test -project Lagoon.xcodeproj -scheme LagoonHardwareRegression \
   -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest'
 ```
 
-The test runner passes these values to the DEBUG-only bootstrap through the
-app launch environment; they are never persisted by Lagoon or compiled into a
+**The `TEST_RUNNER_` prefix is not decoration.** `xcodebuild` does not hand
+its own environment to the XCTest runner process; it forwards exactly the
+variables prefixed this way, stripping the prefix on the way in. Without it
+the runner sees nothing, `launchPlayer` forwards nothing, and the app quietly
+falls back to the public demo — so the fixture-backed tests run against a
+server that has no fixtures and fail as though the player were broken. This
+page documented the unprefixed form until 2026-08-26, which cost an afternoon
+of chasing four "player" failures that were one missing prefix.
+
+The runner passes these values to the DEBUG-only bootstrap through the app
+launch environment; they are never persisted by Lagoon or compiled into a
 Release build.
 
 Release builds also emit a `Player Panel Reveal` interval in the existing

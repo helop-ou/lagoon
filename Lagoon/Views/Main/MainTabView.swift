@@ -232,20 +232,37 @@ struct MainTabView: View {
            UserDefaults.standard.bool(forKey: "debug.regressionFindVC1InSeries"),
            let requestedSeries,
            !requestedSeries.isEmpty {
+            // "This server has no such series" and "the request failed" are
+            // different answers and the harness treats them differently:
+            // `missing:` skips the journey, `error:` fails it. Collapsing
+            // them reported a library without the fixture as a broken
+            // player, which is the most expensive kind of wrong a test
+            // suite can be.
             guard let seriesPage = try? await session.client.items(
                 includeTypes: [.series],
                 searchTerm: requestedSeries,
                 limit: 20
-            ),
-            let series = seriesPage.items.first(where: {
+            ) else {
+                print("RegressionResolve failed VC-1 series search=\"\(requestedSeries)\"")
+                regressionResolution = "error:VC-1 series search failed"
+                return
+            }
+            guard let series = seriesPage.items.first(where: {
                 $0.name?.compare(
                     requestedSeries,
                     options: [.caseInsensitive, .diacriticInsensitive]
                 ) == .orderedSame
-            }),
-            let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
-                print("RegressionResolve failed VC-1 series=\"\(requestedSeries)\"")
-                regressionResolution = "error:VC-1 series lookup failed"
+            }) else {
+                print("RegressionResolve no VC-1 series named \"\(requestedSeries)\"")
+                regressionResolution = "missing:series \(requestedSeries)"
+                return
+            }
+            guard let episodes = try? await session.client.episodes(
+                seriesId: series.id,
+                seasonId: nil
+            ) else {
+                print("RegressionResolve failed VC-1 episode list for \"\(requestedSeries)\"")
+                regressionResolution = "error:VC-1 episode list failed"
                 return
             }
             for episode in episodes {
