@@ -252,6 +252,98 @@ nonisolated enum SeerrRequestProgress: Hashable {
     }
 }
 
+/// One entry in Radarr/Sonarr's queue, as Jellyseerr relays it on
+/// `mediaInfo.downloadStatus` (HEL-116).
+nonisolated struct SeerrDownloadItem: Decodable, Hashable, Identifiable {
+    let downloadId: String
+    let title: String
+    /// Radarr/Sonarr's own queue word — "downloading", "completed", "queued".
+    /// Kept as the string it is: it is theirs to extend, not ours to enumerate.
+    let status: String
+    let size: Int64
+    let sizeLeft: Int64
+    let timeLeft: String?
+
+    var id: String { downloadId }
+
+    /// 0 when the size is unknown rather than a division by zero.
+    var fractionComplete: Double {
+        guard size > 0 else { return 0 }
+        return min(1, max(0, Double(size - sizeLeft) / Double(size)))
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        downloadId = try container.decodeIfPresent(String.self, forKey: .downloadId) ?? ""
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? ""
+        size = try container.decodeIfPresent(Int64.self, forKey: .size) ?? 0
+        sizeLeft = try container.decodeIfPresent(Int64.self, forKey: .sizeLeft) ?? 0
+        timeLeft = try container.decodeIfPresent(String.self, forKey: .timeLeft)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case downloadId, title, status, size, sizeLeft, timeLeft
+    }
+}
+
+/// What the queue adds up to for one title.
+///
+/// **Deduplicated by `downloadId`.** A season pack is one download that
+/// Sonarr reports once per episode, each row carrying the pack's full size —
+/// ten rows of 7.15 GB for a single 7.15 GB download on the test server.
+/// Summing the rows would claim 71 GB and a nonsense percentage (HEL-116).
+nonisolated struct SeerrDownloadProgress: Hashable {
+    let fraction: Double
+    let downloadCount: Int
+    let timeLeft: String?
+    /// Everything has finished downloading but the title is not in the
+    /// library yet — Radarr/Sonarr is importing it. Without this, a finished
+    /// download sits at "100%" looking stuck.
+    let isImporting: Bool
+
+    init?(items: [SeerrDownloadItem]) {
+        var seen = Set<String>()
+        let unique = items.filter { item in
+            // An entry with no id cannot be deduplicated, so it is kept:
+            // over-counting is better than dropping the only thing happening.
+            guard !item.downloadId.isEmpty else { return true }
+            return seen.insert(item.downloadId).inserted
+        }
+        guard !unique.isEmpty else { return nil }
+
+        let totalSize = unique.reduce(Int64(0)) { $0 + $1.size }
+        let totalLeft = unique.reduce(Int64(0)) { $0 + $1.sizeLeft }
+        fraction = totalSize > 0
+            ? min(1, max(0, Double(totalSize - totalLeft) / Double(totalSize)))
+            : 0
+        downloadCount = unique.count
+        isImporting = unique.allSatisfy { $0.sizeLeft <= 0 }
+        // The one still running is the one worth quoting; a finished entry
+        // reports "00:00:00".
+        timeLeft = unique
+            .filter { $0.sizeLeft > 0 }
+            .compactMap(\.timeLeft)
+            .filter { !$0.isEmpty && $0 != "00:00:00" }
+            .max()
+    }
+
+    var percentText: String {
+        "\(Int((fraction * 100).rounded()))%"
+    }
+
+    /// One line for a detail page. The badge on a card uses `percentText`.
+    var summary: String {
+        if isImporting {
+            return String(localized: "Downloaded, adding to your library")
+        }
+        if let timeLeft {
+            return String(localized: "Downloading \(percentText) · \(timeLeft) left")
+        }
+        return String(localized: "Downloading \(percentText)")
+    }
+}
+
 nonisolated struct SeerrDiscoverPage: Decodable, Equatable {
     let page: Int
     let totalPages: Int
@@ -347,8 +439,14 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
     let jellyfinMediaId4k: String?
     let requests: [SeerrRequestReference]?
     let seasons: [SeerrMediaSeasonStatus]?
+    let downloadStatus: [SeerrDownloadItem]?
+    let downloadStatus4k: [SeerrDownloadItem]?
 
     var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
+
+    func downloadProgress(is4k: Bool = false) -> SeerrDownloadProgress? {
+        SeerrDownloadProgress(items: (is4k ? downloadStatus4k : downloadStatus) ?? [])
+    }
 }
 
 nonisolated struct SeerrMediaSeasonStatus: Decodable, Hashable, Identifiable {
@@ -410,6 +508,12 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
         )
     }
 
+    /// Only meaningful while `progress` is `.processing`; a title that has
+    /// arrived has nothing in the queue.
+    var downloadProgress: SeerrDownloadProgress? {
+        media?.downloadProgress(is4k: is4k == true)
+    }
+
     var resolvedMediaType: SeerrMediaType {
         type ?? media?.mediaType ?? (media?.tvdbId == nil ? .movie : .tv)
     }
@@ -424,6 +528,8 @@ nonisolated struct SeerrRequestMedia: Decodable, Hashable {
     let status: Int?
     let status4k: Int?
     let externalServiceId: Int?
+    let downloadStatus: [SeerrDownloadItem]?
+    let downloadStatus4k: [SeerrDownloadItem]?
 
     var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
 
@@ -431,6 +537,10 @@ nonisolated struct SeerrRequestMedia: Decodable, Hashable {
     /// may already be sitting in the library.
     func availability(is4k: Bool) -> SeerrAvailabilityStatus {
         .init(apiValue: is4k ? status4k : status)
+    }
+
+    func downloadProgress(is4k: Bool) -> SeerrDownloadProgress? {
+        SeerrDownloadProgress(items: (is4k ? downloadStatus4k : downloadStatus) ?? [])
     }
 }
 

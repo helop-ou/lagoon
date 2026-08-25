@@ -248,6 +248,23 @@ private struct SeerrRequestCard: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var details: SeerrMediaDetails?
 
+    /// "Processing" says nothing about whether anything is happening. When
+    /// the server knows how far the download has got, say that instead
+    /// (HEL-116).
+    private var badgeTitle: String {
+        guard request.progress == .processing, let progress = request.downloadProgress else {
+            return request.progress.title
+        }
+        return progress.isImporting ? String(localized: "Importing") : progress.percentText
+    }
+
+    private var badgeSymbol: String {
+        guard request.progress == .processing, let progress = request.downloadProgress else {
+            return request.progress.symbol
+        }
+        return progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.xl) {
             NavigationLink(value: SeerrNavigationRoute.request(request)) {
@@ -273,7 +290,7 @@ private struct SeerrRequestCard: View {
                     // One word, like the availability badges on the Discover
                     // cards. The full "Pending Approval" wrapped to two lines
                     // and covered a third of the artwork.
-                    Label(request.progress.title, systemImage: request.progress.symbol)
+                    Label(badgeTitle, systemImage: badgeSymbol)
                         .font(.caption2.bold())
                         .labelStyle(.titleAndIcon)
                         .lineLimit(1)
@@ -287,7 +304,7 @@ private struct SeerrRequestCard: View {
             }
             .cardButtonStyle()
             .accessibilityLabel(details?.displayTitle ?? "Request \(request.id)")
-            .accessibilityValue(request.progress.title)
+            .accessibilityValue(badgeTitle)
             .accessibilityIdentifier("seerr.request.\(request.id)")
 
             VStack(alignment: .leading, spacing: Metrics.Space.hair) {
@@ -345,7 +362,7 @@ struct SeerrRequestDetailView: View {
                     backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: 1280)
                 ) {
                     DetailMetadataHeader(
-                        subtitle: currentRequest.progress.title,
+                        subtitle: detailSubtitle,
                         factTokens: factTokens,
                         genres: details?.genres?.map(\.name) ?? [],
                         overview: details?.overview
@@ -384,6 +401,13 @@ struct SeerrRequestDetailView: View {
             Button("Cancel", role: .cancel) {}
         }
         .accessibilityIdentifier("seerr.request.detail.\(request.id)")
+    }
+
+    private var detailSubtitle: String {
+        if currentRequest.progress == .processing, let progress = currentRequest.downloadProgress {
+            return progress.summary
+        }
+        return currentRequest.progress.title
     }
 
     private var factTokens: [String] {

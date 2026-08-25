@@ -145,6 +145,14 @@ detail page — Jellyseerr drops the media row with the blocklist entry, so the
 reload afterwards shows the ordinary Request button. Lagoon can lift a block
 but does not add one.
 
+`mediaInfo.downloadStatus` carries Radarr/Sonarr's queue, and it is what
+turns a bare "Processing" into "62%" or "Importing" (HEL-116). **Deduplicate
+by `downloadId` before aggregating**: a season pack is one download that
+Sonarr reports once per episode, each row carrying the pack's full size, so
+summing the rows claims ten times the bytes and a meaningless percentage.
+Nothing polls it — the value is a snapshot from whatever response the screen
+already fetched.
+
 **Never show a request's own status alone.** It answers "can I watch this?"
 only until the request is granted; after that the media's availability does.
 `SeerrRequestProgress` combines them, and reads `status4k` for a 4K request —

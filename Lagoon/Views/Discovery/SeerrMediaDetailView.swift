@@ -92,13 +92,25 @@ struct SeerrMediaDetailView: View {
                 )
             }
         case .pending, .processing:
-            statusButton(
-                title: availability.title,
-                symbol: "clock",
-                message: availability == .pending
-                    ? "This request is waiting for approval."
-                    : "This title has been approved and is being added to your library."
-            )
+            // When the server knows how far the download has got, the button
+            // says so rather than a bare "Processing" (HEL-116).
+            if availability == .processing, let progress = details.mediaInfo?.downloadProgress() {
+                statusButton(
+                    title: progress.isImporting ? String(localized: "Importing") : progress.percentText,
+                    symbol: progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle",
+                    message: progress.downloadCount > 1
+                        ? "\(progress.summary). \(progress.downloadCount) downloads."
+                        : progress.summary
+                )
+            } else {
+                statusButton(
+                    title: availability.title,
+                    symbol: "clock",
+                    message: availability == .pending
+                        ? "This request is waiting for approval."
+                        : "This title has been approved and is being added to your library."
+                )
+            }
         case .partiallyAvailable:
             if mediaType == .tv, seerr.user?.canRequest(.tv) == true {
                 Button {
