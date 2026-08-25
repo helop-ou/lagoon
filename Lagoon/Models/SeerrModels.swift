@@ -184,6 +184,21 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
 nonisolated struct SeerrGenre: Decodable, Hashable, Identifiable {
     let id: Int
     let name: String
+    /// Only `discover/genreslider/*` sends these — a handful of TMDB backdrop
+    /// paths to draw the genre with. A detail page's genres carry none, so
+    /// this is empty there rather than absent (HEL-114).
+    let backdrops: [String]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        backdrops = try container.decodeIfPresent([String].self, forKey: .backdrops) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, backdrops
+    }
 }
 
 nonisolated struct SeerrSeason: Decodable, Hashable, Identifiable {
@@ -305,4 +320,58 @@ nonisolated enum SeerrRequestFilter: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
+}
+
+// MARK: - Discover layout
+
+/// The slider types Jellyseerr's own Discover page is built from. The server
+/// sends `settings/discover` as bare type numbers with `title: null` for
+/// built-ins, so the meaning of each number lives here and the wording is
+/// ours — the same arrangement Jellyseerr's web client uses.
+nonisolated enum SeerrDiscoverSliderType: Int, Decodable, Hashable {
+    case recentlyAdded = 1
+    case recentRequests
+    case watchlist
+    case trending
+    case popularMovies
+    case movieGenres
+    case upcomingMovies
+    case studios
+    case popularTV
+    case tvGenres
+    case upcomingTV
+    case networks
+    case tmdbMovieKeyword
+    case tmdbMovieGenre
+    case tmdbTVKeyword
+    case tmdbTVGenre
+    case tmdbSearch
+    case tmdbStudio
+    case tmdbNetwork
+    case tmdbMovieStreamingServices
+    case tmdbTVStreamingServices
+}
+
+nonisolated struct SeerrDiscoverSlider: Decodable, Hashable, Identifiable {
+    let id: Int
+    /// Unknown to this build when nil: a newer Jellyseerr can add slider
+    /// types, and one Lagoon has never heard of must be skipped rather than
+    /// fail the whole layout.
+    let type: SeerrDiscoverSliderType?
+    let order: Int
+    let enabled: Bool
+    let title: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
+        type = try? container.decodeIfPresent(SeerrDiscoverSliderType.self, forKey: .type)
+        order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, type, order, enabled, title
+    }
 }

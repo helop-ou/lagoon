@@ -347,7 +347,25 @@ struct TitleArtView: View {
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        if let url = session.client.imageURL(for: item, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)) {
+        TitleArtImage(
+            url: session.client.imageURL(for: item, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)),
+            title: item.name ?? "",
+            maxHeight: maxHeight
+        )
+    }
+}
+
+/// A title's logo where there is one, and the title set in type where there
+/// is not. Split out of `TitleArtView` so the hero can use it for sources
+/// that resolve their own artwork — Seerr serves no logo images at all, so
+/// Discover's hero always takes the type path (HEL-114).
+struct TitleArtImage: View {
+    let url: URL?
+    let title: String
+    var maxHeight: CGFloat = Metrics.logoMaxHeight
+
+    var body: some View {
+        if let url {
             CachedAsyncImage(url: url, maxPixelSize: Int(Metrics.logoMaxWidth * 2)) { image in
                 image
                     .resizable()
@@ -364,7 +382,7 @@ struct TitleArtView: View {
     }
 
     private var titleText: some View {
-        Text(item.name ?? "")
+        Text(title)
             .font(.largeTitle.bold())
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)

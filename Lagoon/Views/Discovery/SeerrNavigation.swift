@@ -2,7 +2,7 @@ import SwiftUI
 
 nonisolated enum SeerrNavigationRoute: Hashable {
     case settings
-    case catalog(SeerrMediaType)
+    case catalog(SeerrCatalogSource)
     case media(id: Int, type: SeerrMediaType)
     case requests
     case request(SeerrMediaRequest)
@@ -16,8 +16,8 @@ private struct SeerrNavigationDestination: View {
         switch route {
         case .settings:
             SeerrSettingsView()
-        case .catalog(let type):
-            SeerrCatalogView(mediaType: type)
+        case .catalog(let source):
+            SeerrCatalogView(source: source)
         case .media(let id, let type):
             SeerrMediaDetailView(mediaID: id, mediaType: type)
         case .requests:

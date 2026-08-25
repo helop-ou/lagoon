@@ -75,11 +75,13 @@ struct SeerrMediaCard: View {
 struct SeerrMediaRail: View {
     let title: String
     let items: [SeerrDiscoverResult]
+    /// When the rail is backed by a paged list, the heading opens it. Every
+    /// Discover rail is (HEL-114); the search results rails are not.
+    var destination: SeerrNavigationRoute?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.headline)
+            heading
                 .padding(.horizontal, Metrics.screenGutter)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -93,6 +95,29 @@ struct SeerrMediaRail: View {
                 .padding(.bottom, Metrics.railBottomPadding)
             }
             .scrollClipDisabled()
+        }
+    }
+
+    @ViewBuilder
+    private var heading: some View {
+        if let destination {
+            NavigationLink(value: destination) {
+                HStack(spacing: Metrics.Space.s) {
+                    Text(title)
+                        .font(.headline)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // Plain, not a card: the heading is a label you can act on, and
+            // the system's card treatment belongs to the artwork below it.
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            Text(title)
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

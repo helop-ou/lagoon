@@ -19,7 +19,7 @@ Lagoon/
     Main/                  MainTabView + detail routing
     Home/                  Home screen, hero carousel
     Library/               Paged poster grid
-    Discovery/             Seerr browse, details, requests, moderation
+    Discovery/             Seerr browse (hero + server-ordered rails), details, requests
     Detail/                Movie/episode + series detail
     Search/                The app's one search screen: library + Seerr, recents
     Player/                Unified sample-buffer playback + progress reporting
@@ -121,6 +121,49 @@ two result sets. Two rules keep it working: `.searchable` goes on the
 content, **not** the `NavigationStack`, or the field is drawn over pushed
 detail pages; and the stack is a heterogeneous `NavigationPath`, because
 results carry both route identities.
+
+### Discover's layout comes from the server
+
+Discover opens on the same `HeroSection` Home uses and then draws its rails in
+the order the **server owner** arranged them. `settings/discover` returns
+Jellyseerr's own slider list — bare type numbers, an order, and `title: null`,
+because the client is expected to name them — so `SeerrDiscoverLayout` maps
+those numbers onto rows and Lagoon agrees with their Jellyseerr web page
+instead of inventing a second layout. Re-ordering sliders there re-orders
+Discover here.
+
+Four of the twelve built-in types are deliberately skipped: `recentlyAdded`
+and `recentRequests` duplicate Home's rails and the Requests chip, and
+`studios`/`networks` are curated brand-logo shelves in Jellyseerr's web client
+rather than anything the API serves. A type this build has never heard of is
+skipped the same way, so a newer Jellyseerr cannot break the page. When
+nothing renderable comes back — an older server, a hidden endpoint — the
+layout falls back to Jellyseerr's default order minus those four.
+
+**Every rail fetches itself.** `SeerrDiscoverRail` owns its own state, so one
+dead endpoint costs one rail rather than the screen, and a rail below the fold
+costs nothing until it is scrolled near. Two consequences worth knowing:
+
+- A rail must never render to zero height while it is still loading. A
+  zero-height row inside a `LazyVStack` is never realised, so its `.task` never
+  runs and it stays empty forever — the placeholder is what gets the row built.
+- A rail that loaded and came back *empty* draws nothing at all. An empty
+  watchlist is the ordinary case, not a fault.
+
+Every rail is backed by a `SeerrCatalogSource`, which is also what its heading
+opens, so a "see all" always shows the same list the rail was drawn from.
+
+`HeroSection` is generic over its navigation route and takes `HeroItem`s, so
+Home feeds it Jellyfin items and Discover feeds it Seerr results without
+either losing its own route identity. Seerr serves **no logo artwork
+anywhere** — not in discover results, not in details — so Discover's hero
+always falls back to the title in type, which is the same fallback
+`TitleArtImage` makes for a Jellyfin item without a logo.
+
+TMDB serves a fixed set of image widths and answers 400 for anything else, so
+`SeerrClient.imageURL` snaps a requested width up to a real rendition. Ask for
+the width the layout needs; do not hand it an arbitrary number and assume it
+resolves.
 
 Discover and Search both use a heterogeneous `NavigationPath` with
 `SeerrNavigationRoute` and `ContentNavigationRoute`, because their result

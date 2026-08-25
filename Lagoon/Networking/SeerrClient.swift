@@ -120,11 +120,39 @@ final class SeerrClient {
         return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
     }
 
-    func upcomingMovies(page: Int = 1) async throws -> SeerrDiscoverPage {
-        try await get(
-            "discover/movies/upcoming",
-            query: [URLQueryItem(name: "page", value: String(page))]
-        )
+    func upcoming(_ mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
+        let path = mediaType == .movie ? "discover/movies/upcoming" : "discover/tv/upcoming"
+        return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
+    }
+
+    /// The viewer's own watchlist. Named `PLEX_WATCHLIST` in the slider enum
+    /// Jellyseerr inherited from Overseerr; on a Jellyfin server it is the
+    /// local watchlist, and the route is the same either way.
+    func watchlist(page: Int = 1) async throws -> SeerrDiscoverPage {
+        try await get("discover/watchlist", query: [URLQueryItem(name: "page", value: String(page))])
+    }
+
+    func genres(_ mediaType: SeerrMediaType) async throws -> [SeerrGenre] {
+        let path = mediaType == .movie ? "discover/genreslider/movie" : "discover/genreslider/tv"
+        return try await get(path)
+    }
+
+    func discover(
+        _ mediaType: SeerrMediaType,
+        genreID: Int,
+        page: Int = 1
+    ) async throws -> SeerrDiscoverPage {
+        let path = mediaType == .movie
+            ? "discover/movies/genre/\(genreID)"
+            : "discover/tv/genre/\(genreID)"
+        return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
+    }
+
+    /// The rows the server owner arranged for their own Discover page. Only
+    /// the type number and order come back for built-ins; the titles are the
+    /// client's to supply.
+    func discoverSliders() async throws -> [SeerrDiscoverSlider] {
+        try await get("settings/discover")
     }
 
     func search(query term: String, page: Int = 1) async throws -> SeerrDiscoverPage {
@@ -188,10 +216,18 @@ final class SeerrClient {
 
     // MARK: - Artwork
 
+    /// TMDB serves a fixed set of widths and answers 400 for anything else —
+    /// `w720` is not a rendition, it is a broken link. The requested width is
+    /// therefore snapped up to the next size TMDB actually has, so a caller
+    /// can ask for the width its layout needs without knowing the list
+    /// (HEL-114).
+    nonisolated static let tmdbImageWidths = [92, 154, 185, 342, 500, 780, 1280]
+
     nonisolated static func imageURL(path: String?, width: Int) -> URL? {
         guard let path, !path.isEmpty else { return nil }
         let normalizedPath = path.hasPrefix("/") ? path : "/\(path)"
-        return URL(string: "https://image.tmdb.org/t/p/w\(width)\(normalizedPath)")
+        let size = tmdbImageWidths.first { $0 >= width }.map { "w\($0)" } ?? "original"
+        return URL(string: "https://image.tmdb.org/t/p/\(size)\(normalizedPath)")
     }
 
     // MARK: - HTTP

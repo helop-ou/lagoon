@@ -1,18 +1,34 @@
 import SwiftUI
 
+/// What the hero needs of a title, independent of where the title came from.
+///
+/// Home builds these from Jellyfin items and Discover from Seerr results
+/// (HEL-114); `route` is generic so each keeps its own navigation identity
+/// rather than both being flattened into one erased value. Seerr has no logo
+/// artwork anywhere in its API, so `logoURL` is nil there and the panel falls
+/// back to the title in type — the same fallback `TitleArtView` already makes
+/// for a Jellyfin item without a logo.
+nonisolated struct HeroItem<Route: Hashable>: Identifiable {
+    let id: String
+    let title: String
+    let overview: String?
+    let backdropURL: URL?
+    let logoURL: URL?
+    let route: Route
+}
+
 /// Contained hero panel: material base, backdrop masked into it from the
 /// trailing edge, ambient glow bleeding out behind. Auto-advances every 7s,
 /// pre-warming the next backdrop and palette so the crossfade never lands
 /// on an empty texture.
-struct HeroSection: View {
-    let items: [MediaItem]
-    @Environment(SessionStore.self) private var session
+struct HeroSection<Route: Hashable>: View {
+    let items: [HeroItem<Route>]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var index = 0
     @State private var palette: ArtworkPalette = .fallback
 
-    private var current: MediaItem? {
+    private var current: HeroItem<Route>? {
         items.indices.contains(index) ? items[index] : nil
     }
 
@@ -29,7 +45,7 @@ struct HeroSection: View {
         }
     }
 
-    private func heroBody(for current: MediaItem, width: CGFloat) -> some View {
+    private func heroBody(for current: HeroItem<Route>, width: CGFloat) -> some View {
         ZStack {
             AmbientGlowView(palette: palette)
                 // Negative gutter: the glow is meant to bleed past the
@@ -40,16 +56,16 @@ struct HeroSection: View {
             // and you get the detail page for whatever is on screen. A
             // "See more" button inside it was a second thing to aim at for
             // the one thing the banner already means.
-            NavigationLink(value: ContentNavigationRoute.item(current)) {
+            NavigationLink(value: current.route) {
                 panel(for: current, width: width)
             }
             .cardButtonStyle()
-            .accessibilityLabel(current.name ?? "")
+            .accessibilityLabel(current.title)
             .accessibilityIdentifier("home.hero.\(current.id)")
         }
     }
 
-    private func panel(for item: MediaItem, width: CGFloat) -> some View {
+    private func panel(for item: HeroItem<Route>, width: CGFloat) -> some View {
         ZStack(alignment: .leading) {
             Color.clear.background(.thinMaterial)
 
@@ -64,7 +80,11 @@ struct HeroSection: View {
 
             VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    TitleArtView(item: item, maxHeight: Metrics.heroLogoHeight)
+                    TitleArtImage(
+                        url: item.logoURL,
+                        title: item.title,
+                        maxHeight: Metrics.heroLogoHeight
+                    )
                     if let overview = item.overview {
                         Text(overview)
                             .font(.callout)
@@ -115,9 +135,9 @@ struct HeroSection: View {
         #endif
     }
 
-    private func backdrop(for item: MediaItem) -> some View {
+    private func backdrop(for item: HeroItem<Route>) -> some View {
         CachedAsyncImage(
-            url: backdropURL(for: item),
+            url: item.backdropURL,
             maxPixelSize: 1920
         ) { image in
             image.resizable().scaledToFill()
@@ -155,10 +175,6 @@ struct HeroSection: View {
         }
     }
 
-    private func backdropURL(for item: MediaItem) -> URL? {
-        session.client.imageURL(for: item, kind: .backdrop, maxWidth: 1920)
-    }
-
     private func cycle() async {
         index = 0
         await updatePalette()
@@ -170,7 +186,7 @@ struct HeroSection: View {
             try? await Task.sleep(for: .seconds(7))
             if Task.isCancelled { return }
             let next = (index + 1) % items.count
-            if let url = backdropURL(for: items[next]) {
+            if let url = items[next].backdropURL {
                 _ = await ImageCache.shared.load(url, maxPixelSize: 1920)
                 _ = await ArtworkPaletteCache.shared.palette(for: url)
             }
@@ -184,7 +200,7 @@ struct HeroSection: View {
     }
 
     private func updatePalette() async {
-        guard let item = current, let url = backdropURL(for: item) else {
+        guard let url = current?.backdropURL else {
             palette = .fallback
             return
         }

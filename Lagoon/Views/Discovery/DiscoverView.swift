@@ -1,12 +1,14 @@
 import SwiftUI
 import Observation
 
+/// Discover's own state is now only the two things the page as a whole
+/// needs: which rows to draw, and what fills the hero. Every rail fetches
+/// itself (`SeerrDiscoverRail`), so a slow or dead endpoint no longer holds
+/// up or discards the rest of the screen (HEL-114).
 @Observable
 private final class DiscoverViewModel {
-    var trending: [SeerrDiscoverResult] = []
-    var movies: [SeerrDiscoverResult] = []
-    var shows: [SeerrDiscoverResult] = []
-    var upcoming: [SeerrDiscoverResult] = []
+    var rows: [SeerrDiscoverRow] = []
+    var hero: [SeerrDiscoverResult] = []
     var isLoading = false
     var errorMessage: String?
 
@@ -15,19 +17,27 @@ private final class DiscoverViewModel {
         isLoading = true
         defer { isLoading = false }
         errorMessage = nil
+
+        // The layout is the server owner's own arrangement where they have
+        // one. It is never worth failing the page over: a server that will
+        // not answer still gets Jellyseerr's default order.
+        let sliders = (try? await client.discoverSliders()) ?? []
+        guard !Task.isCancelled else { return }
+        rows = SeerrDiscoverLayout.rows(for: sliders)
+
         do {
-            async let trendingPage = client.trending()
-            async let moviePage = client.discover(.movie)
-            async let showPage = client.discover(.tv)
-            async let upcomingPage = client.upcomingMovies()
-            let pages = try await (trendingPage, moviePage, showPage, upcomingPage)
+            let trending = try await client.trending()
             guard !Task.isCancelled else { return }
-            trending = pages.0.results
-            movies = pages.1.results
-            shows = pages.2.results
-            upcoming = pages.3.results
+            hero = Array(
+                trending.results
+                    .filter { $0.mediaType == .movie || $0.mediaType == .tv }
+                    .filter { $0.backdropPath != nil }
+                    .prefix(5)
+            )
         } catch is CancellationError {
         } catch {
+            // Trending is also the hero's source, so failing it is the one
+            // fetch that leaves the page with nothing to show at the top.
             errorMessage = error.localizedDescription
         }
     }
@@ -42,24 +52,39 @@ struct DiscoverView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                pageHeader
-
                 if seerr.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                         .accessibilityLabel("Loading Discover")
                 } else if !seerr.isConnected {
+                    pageHeader
                     connectionState
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                } else if viewModel.isLoading, viewModel.trending.isEmpty {
+                } else if viewModel.isLoading, viewModel.hero.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                         .accessibilityLabel("Loading Discover")
-                } else if let error = viewModel.errorMessage, viewModel.trending.isEmpty {
+                } else if let error = viewModel.errorMessage, viewModel.hero.isEmpty {
+                    pageHeader
                     ErrorStateView(message: error) { reloadID += 1 }
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
-                    discoverySections
+                    // Artwork first, like Home. The title used to be the
+                    // whole top of the screen.
+                    HeroSection(items: heroItems)
+                        .padding(.top, Metrics.Space.s)
+                        .padding(.bottom, Metrics.Space.xl)
+
+                    chips
+
+                    ForEach(viewModel.rows) { row in
+                        switch row {
+                        case .media(let source):
+                            SeerrDiscoverRail(source: source)
+                        case .genres(let mediaType):
+                            SeerrGenreRail(mediaType: mediaType, title: row.title)
+                        }
+                    }
                 }
             }
             .padding(.bottom, Metrics.Space.section)
@@ -82,6 +107,22 @@ struct DiscoverView: View {
             await viewModel.load(client: seerr.client)
         }
         .accessibilityIdentifier("seerr.discover")
+    }
+
+    /// Seerr's half of the shared hero. There is no logo artwork anywhere in
+    /// its API, so `logoURL` is nil and the panel sets the title in type.
+    private var heroItems: [HeroItem<SeerrNavigationRoute>] {
+        viewModel.hero.compactMap { item in
+            guard let type = item.mediaType else { return nil }
+            return HeroItem(
+                id: "\(item.id)",
+                title: item.displayTitle,
+                overview: item.overview,
+                backdropURL: SeerrClient.imageURL(path: item.backdropPath, width: 1920),
+                logoURL: nil,
+                route: .media(id: item.id, type: type)
+            )
+        }
     }
 
     private var connectionState: some View {
@@ -116,16 +157,17 @@ struct DiscoverView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    @ViewBuilder
-    private var discoverySections: some View {
+    /// Movies, Shows and Requests as destinations, kept above the rails
+    /// where they are reachable without scrolling past eight of them.
+    private var chips: some View {
         HStack(spacing: Metrics.Space.m) {
-            NavigationLink(value: SeerrNavigationRoute.catalog(.movie)) {
+            NavigationLink(value: SeerrNavigationRoute.catalog(.popular(.movie))) {
                 Label("Movies", systemImage: ContentIcon.movies)
             }
             .buttonStyle(.glass)
             .accessibilityIdentifier("seerr.catalog.movies")
 
-            NavigationLink(value: SeerrNavigationRoute.catalog(.tv)) {
+            NavigationLink(value: SeerrNavigationRoute.catalog(.popular(.tv))) {
                 Label("Shows", systemImage: ContentIcon.shows)
             }
             .buttonStyle(.glass)
@@ -139,11 +181,6 @@ struct DiscoverView: View {
         }
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.bottom, Metrics.Space.xl)
-
-        SeerrMediaRail(title: "Trending", items: viewModel.trending)
-        SeerrMediaRail(title: "Popular Movies", items: viewModel.movies)
-        SeerrMediaRail(title: "Popular Shows", items: viewModel.shows)
-        SeerrMediaRail(title: "Upcoming Movies", items: viewModel.upcoming)
     }
 
     private var pageHeader: some View {
@@ -169,7 +206,7 @@ private final class SeerrCatalogViewModel {
     var isLoading = false
     var errorMessage: String?
 
-    func loadNext(mediaType: SeerrMediaType, client: SeerrClient, reset: Bool = false) async {
+    func loadNext(source: SeerrCatalogSource, client: SeerrClient, reset: Bool = false) async {
         guard !isLoading else { return }
         if reset {
             items = []
@@ -181,7 +218,7 @@ private final class SeerrCatalogViewModel {
         defer { isLoading = false }
         errorMessage = nil
         do {
-            let result = try await client.discover(mediaType, page: page + 1)
+            let result = try await client.page(for: source, page: page + 1)
             guard !Task.isCancelled else { return }
             let existing = Set(items.map(\.id))
             items += result.results.filter { !existing.contains($0.id) }
@@ -195,7 +232,7 @@ private final class SeerrCatalogViewModel {
 }
 
 struct SeerrCatalogView: View {
-    let mediaType: SeerrMediaType
+    let source: SeerrCatalogSource
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = SeerrCatalogViewModel()
 
@@ -215,7 +252,7 @@ struct SeerrCatalogView: View {
                         .accessibilityLabel("Loading \(catalogTitle)")
                 } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
                     ErrorStateView(message: error) {
-                        Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true) }
+                        Task { await viewModel.loadNext(source: source, client: seerr.client, reset: true) }
                     }
                     .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
@@ -224,7 +261,7 @@ struct SeerrCatalogView: View {
                             SeerrMediaCard(item: item)
                                 .onAppear {
                                     guard item.id == viewModel.items.suffix(5).first?.id else { return }
-                                    Task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client) }
+                                    Task { await viewModel.loadNext(source: source, client: seerr.client) }
                                 }
                         }
                         if viewModel.isLoading {
@@ -236,7 +273,7 @@ struct SeerrCatalogView: View {
                         InlineRetryView(message: error) {
                             Task {
                                 await viewModel.loadNext(
-                                    mediaType: mediaType,
+                                    source: source,
                                     client: seerr.client
                                 )
                             }
@@ -250,13 +287,11 @@ struct SeerrCatalogView: View {
         .scrollClipDisabled()
         .background(Color.black.ignoresSafeArea())
         .refreshable {
-            await viewModel.loadNext(mediaType: mediaType, client: seerr.client, reset: true)
+            await viewModel.loadNext(source: source, client: seerr.client, reset: true)
         }
-        .task { await viewModel.loadNext(mediaType: mediaType, client: seerr.client) }
-        .accessibilityIdentifier("seerr.catalog.\(mediaType.rawValue)")
+        .task { await viewModel.loadNext(source: source, client: seerr.client) }
+        .accessibilityIdentifier("seerr.catalog.\(source.id)")
     }
 
-    private var catalogTitle: String {
-        mediaType == .movie ? "Discover Movies" : "Discover Shows"
-    }
+    private var catalogTitle: String { source.title }
 }

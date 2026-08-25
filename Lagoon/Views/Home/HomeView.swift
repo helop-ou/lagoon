@@ -24,7 +24,7 @@ struct HomeView: View {
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        HeroSection(items: viewModel.heroItems)
+                        HeroSection(items: heroItems)
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
@@ -133,6 +133,25 @@ struct HomeView: View {
     /// re-fetched rather than guessing which one moved.
     private func refreshUserData() async {
         await viewModel.refreshProgress(client: session.client)
+    }
+
+    /// Jellyfin's half of the shared hero: artwork and logo resolve through
+    /// the session's client, and the route keeps the item's own identity.
+    private var heroItems: [HeroItem<ContentNavigationRoute>] {
+        viewModel.heroItems.map { item in
+            HeroItem(
+                id: item.id,
+                title: item.name ?? "",
+                overview: item.overview,
+                backdropURL: session.client.imageURL(for: item, kind: .backdrop, maxWidth: 1920),
+                logoURL: session.client.imageURL(
+                    for: item,
+                    kind: .logo,
+                    maxWidth: Int(Metrics.logoMaxWidth * 2)
+                ),
+                route: .item(item)
+            )
+        }
     }
 
     private var savedHomePreferences: HomeSectionPreferenceValues {
