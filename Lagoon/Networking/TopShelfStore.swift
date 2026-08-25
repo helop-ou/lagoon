@@ -19,8 +19,14 @@ enum TopShelfStore {
     /// other.**
     nonisolated struct Item: Codable {
         let id: String
+        /// What the artwork says. The extension never draws it — the title is
+        /// burned into the image — but a payload of nothing but hashes is
+        /// unreadable when something goes wrong, and this is the field that
+        /// says which title a row is.
         let title: String
-        let subtitle: String?
+        /// The line above the title: why this is on the shelf, and which
+        /// episode or how much is left.
+        let context: String?
         /// File name inside the shared container's `TopShelf` directory, at
         /// @2x. The extension resolves it against its own container URL
         /// rather than trusting an absolute path from another process.
@@ -30,15 +36,21 @@ enum TopShelfStore {
         let genre: String?
         /// Seconds, for the carousel's duration badge.
         let duration: Double?
-        /// 0...1, or nil when the item has no resume position.
-        let progress: Double?
+        /// Raw `TVTopShelfCarouselItem.MediaOptions`. Resolved here because
+        /// the extension has no library access and no business deciding what
+        /// counts as 4K.
+        let mediaOptions: UInt?
     }
 
     static let appGroupID = "group.ee.helop.lagoon"
     private static let itemsKey = "topShelf.continueWatching"
-    /// Apple asks for three to eight in a banner sequence, and each one costs
-    /// a 4K composite, so this stays at the low end of useful.
-    private static let limit = 5
+    /// The HIG's "three to eight" is guidance for a **scrolling banner**, not
+    /// this layout, and neither the HIG nor `TVTopShelfCarouselContent` puts a
+    /// number on a carousel. Eight is chosen for the reason Apple gives for
+    /// the banner ceiling — the carousel is swipe-navigated and wraps, so a
+    /// long one buries the title you wanted — and artwork is now reused
+    /// between publishes, so the extra items cost nothing on a repeat visit.
+    private static let limit = 8
 
     #if os(tvOS)
     /// Composes artwork and publishes the snapshot. Runs off the main actor:
@@ -60,26 +72,16 @@ enum TopShelfStore {
         var written: Set<String> = []
 
         for item in items {
-            let backdropURL = client.imageURL(
-                for: item,
-                kind: .backdrop,
-                maxWidth: Int(TopShelfArtwork.scale2x.width)
-            )
-            let logoURL = client.imageURL(for: item, kind: .logo, maxWidth: 1200)
-            // A title with no backdrop cannot make a full-screen image worth
-            // showing, so it is left out rather than rendered onto black.
-            guard let backdropURL, let backdrop = await image(at: backdropURL) else { continue }
-            var logo: UIImage?
-            if let logoURL { logo = await image(at: logoURL) }
-
-            let names = write(
-                backdrop: backdrop,
-                logo: logo,
-                title: item.railTitle,
-                id: item.id,
-                into: directory
-            )
-            guard let names else { continue }
+            let names = artworkNames(for: item.id)
+            // Composing is two 4K-class renders and two image downloads, and
+            // `publish` runs on every return to Home, not just on a change.
+            // Artwork for a given title never varies, so anything already in
+            // the container is reused and the work is skipped entirely. The
+            // payload below is still rebuilt each time, which is what keeps
+            // "42 min left" honest.
+            if !artworkExists(names, in: directory) {
+                guard await compose(item, client: client, as: names, into: directory) else { continue }
+            }
             written.insert(names.twoX)
             written.insert(names.oneX)
 
@@ -87,13 +89,13 @@ enum TopShelfStore {
                 Item(
                     id: item.id,
                     title: item.railTitle,
-                    subtitle: item.railSubtitle,
+                    context: item.topShelfContext,
                     artwork2x: names.twoX,
                     artwork1x: names.oneX,
                     summary: item.overview,
                     genre: item.genres?.first,
                     duration: item.runTimeTicks.map(Ticks.seconds),
-                    progress: item.playbackProgress
+                    mediaOptions: item.topShelfMediaOptions
                 )
             )
         }
@@ -104,32 +106,54 @@ enum TopShelfStore {
         TVTopShelfContentProvider.topShelfContentDidChange()
     }
 
-    private static func write(
-        backdrop: UIImage,
-        logo: UIImage?,
-        title: String,
-        id: String,
+    private static func artworkNames(for id: String) -> (twoX: String, oneX: String) {
+        ("\(id)@2x.jpg", "\(id)@1x.jpg")
+    }
+
+    private static func artworkExists(
+        _ names: (twoX: String, oneX: String),
+        in directory: URL
+    ) -> Bool {
+        let manager = FileManager.default
+        return manager.fileExists(atPath: directory.appending(path: names.twoX).path)
+            && manager.fileExists(atPath: directory.appending(path: names.oneX).path)
+    }
+
+    /// Fetches the source images and writes both scales. False when the title
+    /// cannot make a full-screen image worth showing, in which case it is left
+    /// off the shelf rather than rendered onto black.
+    private static func compose(
+        _ item: MediaItem,
+        client: JellyfinClient,
+        as names: (twoX: String, oneX: String),
         into directory: URL
-    ) -> (twoX: String, oneX: String)? {
-        let sizes = [
-            ("\(id)@2x.jpg", TopShelfArtwork.scale2x),
-            ("\(id)@1x.jpg", TopShelfArtwork.scale1x),
-        ]
-        for (name, size) in sizes {
+    ) async -> Bool {
+        let backdropURL = client.imageURL(
+            for: item,
+            kind: .backdrop,
+            maxWidth: Int(TopShelfArtwork.scale2x.width)
+        )
+        guard let backdropURL, let backdrop = await image(at: backdropURL) else { return false }
+        var logo: UIImage?
+        if let logoURL = client.imageURL(for: item, kind: .logo, maxWidth: 1200) {
+            logo = await image(at: logoURL)
+        }
+
+        for (name, size) in [(names.twoX, TopShelfArtwork.scale2x), (names.oneX, TopShelfArtwork.scale1x)] {
             let composed = TopShelfArtwork.compose(
                 backdrop: backdrop,
                 logo: logo,
-                title: title,
+                title: item.railTitle,
                 size: size
             )
-            guard let data = composed.jpegData(compressionQuality: 0.9) else { return nil }
+            guard let data = composed.jpegData(compressionQuality: 0.9) else { return false }
             do {
                 try data.write(to: directory.appending(path: name), options: .atomic)
             } catch {
-                return nil
+                return false
             }
         }
-        return (sizes[0].0, sizes[1].0)
+        return true
     }
 
     private static func image(at url: URL) async -> UIImage? {
@@ -156,3 +180,69 @@ enum TopShelfStore {
         #endif
     }
 }
+
+#if os(tvOS)
+extension MediaItem {
+    /// The carousel's one line of app-supplied text, above the title that
+    /// lives in the artwork.
+    ///
+    /// `contextTitle` is documented as "why this item is being shown", so the
+    /// framing stays and the identifying detail is appended. Episodes name the
+    /// episode, because `railTitle` is the *series* for an episode and without
+    /// this the shelf cannot say which one you are part way through. Anything
+    /// else says how much is left, which is the fact a resume shelf exists to
+    /// answer.
+    var topShelfContext: String {
+        let framing = "Continue Watching"
+        if let episodeLabel { return "\(framing) · \(episodeLabel)" }
+        if let remaining = topShelfTimeRemaining { return "\(framing) · \(remaining)" }
+        return framing
+    }
+
+    private var topShelfTimeRemaining: String? {
+        guard let runTimeTicks, let progress = playbackProgress else { return nil }
+        let minutes = Int(Ticks.seconds(runTimeTicks) * (1 - progress) / 60)
+        guard minutes > 0 else { return nil }
+        if minutes >= 60 { return "\(minutes / 60) h \(minutes % 60) min left" }
+        return "\(minutes) min left"
+    }
+
+    /// The capability badges tvOS draws for a carousel item, from the same
+    /// stream facts the detail page and the player's Info panel read, so all
+    /// three agree on what counts as 4K or Dolby Vision (HEL-46).
+    ///
+    /// Nil rather than zero when the server told us nothing about the streams,
+    /// so an empty set is never mistaken for "checked, and it is plain SDR".
+    var topShelfMediaOptions: UInt? {
+        guard let streams = mediaSources?.first?.mediaStreams, !streams.isEmpty else { return nil }
+        var options: TVTopShelfCarouselItem.MediaOptions = []
+
+        if let video = streams.first(where: { $0.type == "Video" }) {
+            if let width = video.width {
+                // Apple offers only HD and 4K, so 720p and 1080p both land on
+                // HD and anything below earns no badge at all.
+                switch MediaQuality.resolutionClass(width: width) {
+                case "4K": options.insert(.videoResolution4K)
+                case "1080p", "720p": options.insert(.videoResolutionHD)
+                default: break
+                }
+            }
+            switch video.videoRangeType {
+            case let range? where range.hasPrefix("DOVI"): options.insert(.videoColorSpaceDolbyVision)
+            case let range? where range != "SDR": options.insert(.videoColorSpaceHDR)
+            default: break
+            }
+        }
+
+        let audio = streams.filter { $0.type == "Audio" }
+        if audio.contains(where: { $0.profile?.localizedCaseInsensitiveContains("atmos") == true }) {
+            options.insert(.audioDolbyAtmos)
+        }
+        if streams.contains(where: { $0.type == "Subtitle" && $0.isHearingImpaired == true }) {
+            options.insert(.audioTranscriptionSDH)
+        }
+
+        return options.rawValue
+    }
+}
+#endif

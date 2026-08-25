@@ -24,13 +24,14 @@ import TVServices
 private struct TopShelfItem: Codable {
     let id: String
     let title: String
-    let subtitle: String?
+    let context: String?
     let artwork2x: String?
     let artwork1x: String?
     let summary: String?
     let genre: String?
     let duration: Double?
-    let progress: Double?
+    /// Raw `TVTopShelfCarouselItem.MediaOptions`, resolved by the app.
+    let mediaOptions: UInt?
 }
 
 class ContentProvider: TVTopShelfContentProvider {
@@ -61,13 +62,19 @@ class ContentProvider: TVTopShelfContentProvider {
         let directory = container.appending(path: artworkDirectory)
 
         let entry = TVTopShelfCarouselItem(identifier: item.id)
-        // The line above the title, which is the app's own framing rather
-        // than the title's.
-        entry.contextTitle = "Continue Watching"
+        // The line above the title. The app composes it, because which
+        // episode this is and how much of it is left are library facts and
+        // this process deliberately has no library.
+        entry.contextTitle = item.context
         entry.summary = item.summary
         entry.genre = item.genre
         if let duration = item.duration, duration > 0 {
             entry.duration = duration
+        }
+        // 4K, HDR, Dolby Vision, Atmos. tvOS draws these itself; the app
+        // resolved them from the media streams.
+        if let options = item.mediaOptions {
+            entry.mediaOptions = TVTopShelfCarouselItem.MediaOptions(rawValue: options)
         }
 
         // File URLs resolved against this process's own container: an

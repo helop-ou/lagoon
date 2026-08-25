@@ -33,8 +33,10 @@ nonisolated enum Changelog {
             released: "August 2026",
             headline: "The Top Shelf works.",
             changes: [
-                "Put Lagoon in the top row of the Apple TV Home screen and what you were watching now fills the screen above it, one title at a time, with its own artwork, a summary and how long is left.",
+                "Put Lagoon in the top row of the Apple TV Home screen and what you were watching now fills the screen above it, up to eight titles you swipe through, each with its own artwork, a summary and how much is left.",
                 "Play picks up where you stopped. More Info opens the title in Lagoon instead, which is what the second button is for.",
+                "A part-watched episode says which episode it is, rather than only naming the series.",
+                "Titles carry their 4K, HDR, Dolby Vision and Atmos badges up there, the same ones the Apple TV app shows.",
                 "The artwork is composed at the size a 4K television actually asks for, rather than a smaller image stretched to fit.",
             ]
         ),

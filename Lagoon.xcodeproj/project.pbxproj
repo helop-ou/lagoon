@@ -552,7 +552,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				OTHER_LDFLAGS = "-framework TVServices";
+				OTHER_LDFLAGS = (
+					"-framework",
+					TVServices,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -579,7 +582,10 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				OTHER_LDFLAGS = "-framework TVServices";
+				OTHER_LDFLAGS = (
+					"-framework",
+					TVServices,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = ee.helop.lagoon.topshelf;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;

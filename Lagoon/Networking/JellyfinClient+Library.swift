@@ -92,12 +92,17 @@ extension JellyfinClient {
         }
     }
 
+    /// Continue Watching. `MediaSources` rides along because this is the one
+    /// query that feeds the Top Shelf, and the carousel shows 4K, HDR and
+    /// Atmos badges from the streams (HEL-119). Asking here costs one larger
+    /// response on a query that already runs; the alternative was a second
+    /// round trip inside `TopShelfStore.publish` for the same facts.
     func resumeItems(limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Users/\(userId)/Items/Resume", query: [
             URLQueryItem(name: "Limit", value: String(limit)),
             URLQueryItem(name: "MediaTypes", value: "Video"),
-            URLQueryItem(name: "Fields", value: Self.defaultFields),
+            URLQueryItem(name: "Fields", value: "\(Self.defaultFields),MediaSources"),
         ])
         return page.items
     }

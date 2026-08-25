@@ -153,6 +153,49 @@ contract has two hosts: `play/{id}` resumes and `item/{id}` opens the detail
 page. `DeepLinkRouterTests` is the only thing holding that contract together
 across the two targets, which cannot import each other.
 
+#### Eight items, and why artwork is only composed once
+
+The cap is **8**. The HIG's often-quoted "three to eight" is guidance for a
+**scrolling banner**, a different layout style; neither the HIG nor
+`TVTopShelfCarouselContent` puts any number on a carousel. Eight is taken
+from the reason Apple gives for the banner ceiling, which does transfer: the
+carousel is swipe-navigated and wraps, so a long one buries the title you
+wanted.
+
+That cap is only affordable because **artwork is composed once per title and
+reused**. `publish` runs on every `onAppear` of `HomeView` — returning from
+playback, backing out of a detail page, switching tabs — not merely when
+Continue Watching changes. Composing is two 4K-class renders and two image
+downloads per item, so recomposing every time cost ~16 renders and ~19 MB of
+churn per visit. `build` now skips any title whose two files are already in
+the container.
+
+The **payload is still rewritten on every publish**, which is what keeps
+"32 min left" honest while the images stay put. The trade is that artwork
+never refreshes if a backdrop changes server-side; `removeArtwork(notIn:)`
+still prunes anything that falls off the shelf.
+
+#### What the app derives, because the extension cannot
+
+The extension has no library and no credentials, so anything needing Jellyfin
+is resolved app-side and written into the snapshot:
+
+- **`context`** is the carousel's one line of app-supplied text, above the
+  title that lives in the artwork. It keeps `contextTitle`'s documented job
+  ("why this item is being shown") and appends the identifying detail:
+  an episode names the episode, because `railTitle` is the *series* for an
+  episode and the shelf otherwise cannot say which one you are part way
+  through; everything else says how much is left.
+- **`mediaOptions`** are the 4K / HDR / Dolby Vision / Atmos badges tvOS draws
+  itself, resolved from the media streams through the same `MediaQuality`
+  thresholds the detail page and the player's Info panel use, so all three
+  agree (HEL-46). `resumeItems` asks for `MediaSources` for exactly this
+  reason. Nil rather than zero when the server sent no streams, so an empty
+  set is never mistaken for "checked, and it is plain SDR".
+
+`TopShelfPayloadTests` pins both, plus the JSON key names the extension
+mirrors by hand.
+
 **Top Shelf content only appears when the app is in the top row of the tvOS
 Home screen.** An empty shelf usually means that, not a bug.
 
