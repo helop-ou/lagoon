@@ -134,10 +134,11 @@ nonisolated enum CollectionShelf {
 
 /// The Collections row (HEL-122).
 ///
-/// Its own view rather than a `MediaRail` because a collection card is not a
-/// title card: the artwork is usually borrowed from one film inside, so
-/// without the collection's name written across it the *Greenland Collection*
-/// card is indistinguishable from the film *Greenland*.
+/// Its own view rather than a `MediaRail` because a collection card needs to
+/// say what it is. The artwork is often borrowed from one film inside, so an
+/// unlabelled *Greenland Collection* card is indistinguishable from the film
+/// *Greenland* — but the label goes underneath, not across (see
+/// `CollectionCard`).
 struct CollectionRail: View {
     let title: String
     let collections: [CollectionShelfItem]
@@ -165,37 +166,56 @@ struct CollectionRail: View {
     }
 }
 
+/// The name sits **under** the artwork, for the reason a poster's does
+/// (Jaagop, 2026-08-17; confirmed again here 2026-08-26): a headline across
+/// the bottom of the picture covers the part its designer cared about.
+///
+/// Collections make the case twice over. Where the artwork is the
+/// collection's own, a metadata provider has usually already written the name
+/// into it — *Sinister Collection* and *The Jack Ryan Collection* both arrive
+/// with their titles painted across the image — so an overlay lands a second
+/// title on top of the first. And a caption has room to wrap, where an
+/// overlay was truncating "Spider-Man (MCU) Colle…" inside a card that had
+/// space to spare underneath it.
 private struct CollectionCard: View {
     let collection: CollectionShelfItem
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        NavigationLink(value: ContentNavigationRoute.item(collection.collection)) {
-            ZStack(alignment: .bottomLeading) {
+        // Same gap a poster leaves: the `.card` focus lift scales the artwork
+        // about a tenth, and a tighter caption gets landed on.
+        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+            NavigationLink(value: ContentNavigationRoute.item(collection.collection)) {
                 background
-
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.85)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                    Text(collection.name)
-                        .font(.title3.bold())
-                        .lineLimit(2)
-                    Text(CollectionShelf.countLabel(collection.titleCount))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(Metrics.Space.xl)
+                    .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
-            .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            .cardButtonStyle()
+            .accessibilityLabel("\(collection.name), \(CollectionShelf.countLabel(collection.titleCount))")
+            .accessibilityIdentifier("home.collection.\(collection.id)")
+
+            caption
         }
-        .cardButtonStyle()
-        .accessibilityLabel("\(collection.name), \(CollectionShelf.countLabel(collection.titleCount))")
-        .accessibilityIdentifier("home.collection.\(collection.id)")
+        .frame(width: Metrics.landscapeWidth)
+    }
+
+    /// Fixed height so a one-line name and a two-line one leave every card in
+    /// the row sitting on the same baseline.
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+            Text(collection.name)
+                .font(.caption.weight(.medium))
+                .lineLimit(2)
+            Text(CollectionShelf.countLabel(collection.titleCount))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .frame(
+            width: Metrics.landscapeWidth,
+            height: Metrics.landscapeCaptionHeight,
+            alignment: .topLeading
+        )
     }
 
     @ViewBuilder
@@ -220,9 +240,12 @@ private struct CollectionCard: View {
         }
     }
 
-    /// Same trick the genre cards use: a stable colour per name, so a
-    /// collection with no artwork anywhere still gets a card of its own
-    /// rather than one more grey rectangle in a row of them.
+    /// A collection with no artwork anywhere gets a colour of its own rather
+    /// than one more grey rectangle in a row of them — the same trick the
+    /// genre cards use. Those still write their name across the tile, because
+    /// a genre's picture is a film that says nothing about the genre; a
+    /// collection's says the collection.
+
     private var fallbackGradient: some View {
         let palettes: [(Color, Color)] = [
             (.indigo.opacity(0.9), .black),

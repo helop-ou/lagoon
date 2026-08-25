@@ -14,6 +14,10 @@ enum Metrics {
     static let gridRowSpacing: CGFloat = 72
     /// Room under a poster for its title and year.
     static let posterCaptionHeight: CGFloat = 58
+    /// Room under a landscape card for a name and a count. Taller than a
+    /// poster's because the names that need it are collections, and
+    /// "Spider-Man (MCU) Collection" does not fit on one line (HEL-122).
+    static let landscapeCaptionHeight: CGFloat = 96
     static let railTopPadding: CGFloat = 40    // headroom for the system focus lift
     static let railBottomPadding: CGFloat = 80
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
@@ -60,6 +64,7 @@ enum Metrics {
     static let gridColumns = 3
     static let gridRowSpacing: CGFloat = 28
     static let posterCaptionHeight: CGFloat = 38
+    static let landscapeCaptionHeight: CGFloat = 60
     static let railTopPadding: CGFloat = 6
     static let railBottomPadding: CGFloat = 10
     static let accountTileSize: CGFloat = 110
