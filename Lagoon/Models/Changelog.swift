@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "60",
+            released: "August 2026",
+            headline: "The Top Shelf artwork can be drawn on an HDR television.",
+            changes: [
+                "Lagoon was asking the television what kind of picture to draw, and on an HDR set the answer was one that cannot be saved as a JPEG. Every Top Shelf image failed at the last step, which is why the last build could fetch your titles and still show you nothing. Lagoon now picks the format itself.",
+                "When something does go wrong, Settings, Advanced now names the step that failed rather than saying only that nothing could be built.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "59",
             released: "August 2026",
             headline: "Eight new rows on Home, in an order that reads.",

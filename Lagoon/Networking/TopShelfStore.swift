@@ -150,6 +150,7 @@ enum TopShelfStore {
         var payload: [Item] = []
         var written: Set<String> = []
         var composed = 0
+        var lastFailure: String?
 
         for item in items {
             let names = artworkNames(for: item.id)
@@ -160,8 +161,9 @@ enum TopShelfStore {
             // payload below is still rebuilt each time, which is what keeps
             // "42 min left" honest.
             if !artworkExists(names, in: directory) {
-                guard await compose(item, client: client, as: names, into: directory) else {
-                    log.error("no artwork composed for \(item.id, privacy: .public); leaving it off the shelf")
+                if let failure = await compose(item, client: client, as: names, into: directory) {
+                    log.error("\(item.id, privacy: .public): \(failure, privacy: .public)")
+                    lastFailure = failure
                     continue
                 }
                 composed += 1
@@ -193,7 +195,7 @@ enum TopShelfStore {
 
         guard !payload.isEmpty else {
             log.error("nothing publishable out of \(items.count) items")
-            record("No artwork could be built for any of \(items.count) titles")
+            record("No artwork for any of \(items.count) titles: \(lastFailure ?? "unknown")")
             return
         }
         TopShelfArtwork.removeArtwork(notIn: written, appGroupID: appGroupID)
@@ -219,18 +221,25 @@ enum TopShelfStore {
     /// Fetches the source images and writes both scales. False when the title
     /// cannot make a full-screen image worth showing, in which case it is left
     /// off the shelf rather than rendered onto black.
+    /// Nil on success, or the step that failed.
+    ///
+    /// Named steps rather than a bool, because every one of these is
+    /// invisible from the sofa and "no artwork could be built" was one round
+    /// of diagnosis short of an answer (HEL-119).
     private static func compose(
         _ item: MediaItem,
         client: JellyfinClient,
         as names: (twoX: String, oneX: String),
         into directory: URL
-    ) async -> Bool {
-        let backdropURL = client.imageURL(
+    ) async -> String? {
+        guard let backdropURL = client.imageURL(
             for: item,
             kind: .backdrop,
             maxWidth: Int(TopShelfArtwork.scale2x.width)
-        )
-        guard let backdropURL, let backdrop = await data(at: backdropURL) else { return false }
+        ) else { return "no backdrop image on the server" }
+        guard let backdrop = await data(at: backdropURL) else {
+            return "backdrop would not download"
+        }
         var logo: Data?
         if let logoURL = client.imageURL(for: item, kind: .logo, maxWidth: 1200) {
             logo = await data(at: logoURL)
@@ -259,8 +268,10 @@ enum TopShelfStore {
         title: String,
         as names: (twoX: String, oneX: String),
         into directory: URL
-    ) -> Bool {
-        guard let backdropImage = UIImage(data: backdrop) else { return false }
+    ) -> String? {
+        guard let backdropImage = UIImage(data: backdrop) else {
+            return "backdrop would not decode"
+        }
         let logoImage = logo.flatMap { UIImage(data: $0) }
 
         for (name, size) in [(names.twoX, TopShelfArtwork.scale2x), (names.oneX, TopShelfArtwork.scale1x)] {
@@ -270,14 +281,18 @@ enum TopShelfStore {
                 title: title,
                 size: size
             )
-            guard let jpeg = composed.jpegData(compressionQuality: 0.9) else { return false }
+            // Nil here is what an extended-range bitmap produces, which is
+            // how the HDR format bug presented.
+            guard let jpeg = composed.jpegData(compressionQuality: 0.9) else {
+                return "composite would not encode as JPEG"
+            }
             do {
                 try jpeg.write(to: directory.appending(path: name), options: .atomic)
             } catch {
-                return false
+                return "could not write to the shared container: \(error.localizedDescription)"
             }
         }
-        return true
+        return nil
     }
 
     /// Bytes rather than a `UIImage`: decoding belongs with the rendering, off

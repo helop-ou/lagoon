@@ -64,12 +64,32 @@ nonisolated enum TopShelfArtwork {
         }
     }
 
+    /// A format that depends on nothing outside this function.
+    ///
+    /// This used to be `UIGraphicsImageRendererFormat.preferred()`, and
+    /// Apple's header is explicit that `preferred` reads *the main screen's
+    /// current configuration* — for `scale`, and for the extended-range
+    /// setting. Both are wrong here.
+    ///
+    /// On an Apple TV attached to an HDR television, `preferred` returns an
+    /// extended-range format, and **`jpegData` returns nil for an
+    /// extended-range image** — so every composite failed and the shelf
+    /// reported "no artwork could be built for any of 8 titles" (HEL-119).
+    /// The simulator's screen is SDR, which is why it never showed there.
+    /// Reading the main screen from `render`'s background thread was a second
+    /// problem in the same call.
+    ///
+    /// Nothing was gained by asking: `scale` and `opaque` were overridden
+    /// immediately, and the range is one Lagoon should be choosing rather
+    /// than inheriting, because the output is a JPEG in a shared container
+    /// and not something drawn to this screen.
     private static func opaqueFormat() -> UIGraphicsImageRendererFormat {
-        let format = UIGraphicsImageRendererFormat.preferred()
+        let format = UIGraphicsImageRendererFormat()
         // The renderer is already working in pixels; letting it apply the
         // screen scale again would quadruple a 3840x2160 bitmap.
         format.scale = 1
         format.opaque = true
+        format.preferredRange = .standard
         return format
     }
 
