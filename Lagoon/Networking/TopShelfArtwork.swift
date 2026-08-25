@@ -76,9 +76,9 @@ enum TopShelfArtwork {
         ))
     }
 
-    /// Darkens the bottom-left corner the title occupies and leaves the rest
-    /// of the still alone, the same reasoning as the hero's wash: the picture
-    /// is the point, the scrim only has to make the text legible.
+    /// Darkens the top-left corner the title occupies and leaves the rest of
+    /// the still alone, the same reasoning as the hero's wash: the picture is
+    /// the point, the scrim only has to make the text legible.
     private static func drawScrim(in size: CGSize, context: CGContext) {
         let colors = [
             UIColor.black.withAlphaComponent(0.85).cgColor,
@@ -90,20 +90,23 @@ enum TopShelfArtwork {
             colors: colors,
             locations: [0, 0.45, 1]
         ) else { return }
+        // The renderer's context is UIKit-oriented, so y grows downwards and
+        // the top of the image is y = 0.
         context.drawLinearGradient(
             gradient,
-            start: CGPoint(x: 0, y: size.height),
-            end: CGPoint(x: 0, y: size.height * 0.35),
+            start: CGPoint(x: 0, y: 0),
+            end: CGPoint(x: 0, y: size.height * 0.65),
             options: []
         )
     }
 
     private static func drawTitle(logo: UIImage?, title: String, in size: CGSize) {
-        // The tvOS title-safe area is 5% in from every edge; the carousel's
-        // own buttons sit below this, so the title sits above them.
+        // The tvOS title-safe area is 5% in from every edge. The title hangs
+        // from the top edge rather than sitting on the bottom one, which also
+        // keeps it clear of the carousel's own buttons.
         let inset = size.width * 0.06
         let maxWidth = size.width * 0.5
-        let bottom = size.height - size.height * 0.16
+        let top = size.height * 0.08
 
         if let logo, logo.size.width > 0, logo.size.height > 0 {
             let maxHeight = size.height * 0.18
@@ -111,7 +114,7 @@ enum TopShelfArtwork {
             let drawn = CGSize(width: logo.size.width * scale, height: logo.size.height * scale)
             logo.draw(in: CGRect(
                 x: inset,
-                y: bottom - drawn.height,
+                y: top,
                 width: drawn.width,
                 height: drawn.height
             ))
@@ -133,7 +136,7 @@ enum TopShelfArtwork {
         (title as NSString).draw(
             with: CGRect(
                 x: inset,
-                y: bottom - rect.height,
+                y: top,
                 width: bounding.width,
                 height: rect.height
             ),
