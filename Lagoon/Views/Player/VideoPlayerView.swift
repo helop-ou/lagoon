@@ -1571,7 +1571,19 @@ final class PlaybackController {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
         }
         let depths = engine.queueDepths
-        lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
+        // Audio carries its buffered seconds as well as its count: the
+        // renderer drains this queue itself, so a count near zero does not by
+        // itself distinguish a starved feed from one being taken as fast as it
+        // arrives. The seconds are also the figure the backpressure policy
+        // actually gates on.
+        lines.append(String(
+            format: "Queues:  V %d · A %d (%.1fs) · stalls %d · aGaps %d",
+            depths.video,
+            depths.audio,
+            engine.audioBufferedSeconds,
+            engine.stallCount,
+            engine.audioTimingGapCount
+        ))
         // Audio thrown away in the demuxer, which no other counter can show:
         // dropped packets never reach the renderer, so aGaps above reads 0
         // through exactly the failure this line exists to catch.
