@@ -136,6 +136,25 @@ nonisolated final class FFmpegDemuxer {
         return stripStats
     }
 
+    /// Compressed audio packets `PassthroughAudioTimeline` rejected as
+    /// overlapping. These never reach a renderer, so `AudioContinuityMonitor`
+    /// cannot see them and `aGaps` stays 0 however many are lost — this is
+    /// the only place the loss is visible. `worstOverlap` in packet-multiples
+    /// is what says which failure it is: under 1 is the boundary repeat the
+    /// guard was written for, far above it is a real discontinuity being
+    /// muted rather than re-anchored.
+    var audioPacketDropStats: (packets: Int, worstOverlapSeconds: Double, packetSeconds: Double)? {
+        audioDropLock.lock()
+        defer { audioDropLock.unlock() }
+        guard audioDroppedPackets > 0 else { return nil }
+        return (audioDroppedPackets, worstAudioOverlapSeconds, droppedAudioPacketSeconds)
+    }
+
+    private let audioDropLock = NSLock()
+    nonisolated(unsafe) private var audioDroppedPackets = 0
+    nonisolated(unsafe) private var worstAudioOverlapSeconds: Double = 0
+    nonisolated(unsafe) private var droppedAudioPacketSeconds: Double = 0
+
     private(set) var videoStream: DemuxedStream?
     private(set) var audioStreams: [DemuxedStream] = []
     private(set) var subtitleStreams: [DemuxedStream] = []
@@ -657,7 +676,12 @@ nonisolated final class FFmpegDemuxer {
                 ? nil
                 : Double(ptsValue) * Double(timeBase.num) / Double(max(timeBase.den, 1))
             let timing = passthroughTimelines[streamIndex]?.timing(containerSeconds: containerSeconds)
-            if passthroughTimelines[streamIndex]?.lastPacketWasOverlapping == true {
+            if let timeline = passthroughTimelines[streamIndex], timeline.lastPacketWasOverlapping {
+                audioDropLock.lock()
+                audioDroppedPackets += 1
+                worstAudioOverlapSeconds = max(worstAudioOverlapSeconds, timeline.lastOverlapSeconds)
+                droppedAudioPacketSeconds = timeline.packetSeconds
+                audioDropLock.unlock()
                 return .skipped
             }
             guard let buffer = SampleBufferFactory.sampleBuffer(
