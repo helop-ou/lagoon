@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "64",
+            released: "August 2026",
+            headline: "Two new switches for chasing down a title that stutters or loses its sound.",
+            changes: [
+                "Settings, Playback Diagnostics has a new Buffer Transcoded Playback switch. When your server has to convert a film rather than send it as it is, Lagoon currently holds nothing back in reserve, so a slow moment on the network or the server reaches you as sound cutting out. Turning this on keeps a reserve. It is off by default and worth trying only on a title that misbehaves, because whether it helps is exactly what we are trying to find out.",
+                "Playback Details now shows how many seconds of sound are waiting, not just how many pieces. A count near zero could mean either a starved film or a perfectly healthy one, which made the number useless for telling those apart.",
+                "Nothing here changes how a film plays unless you turn one of these on.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "63",
             released: "August 2026",
             headline: "Control Center stops blanking the picture, and more of your files play untouched.",
