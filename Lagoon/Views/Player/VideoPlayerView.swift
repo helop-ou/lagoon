@@ -1819,8 +1819,15 @@ struct VideoPlayerView: View {
             case .inactive:
                 // Control Center, route pickers, permission alerts, and the
                 // first phase of automatic PiP all make a scene inactive.
-                // None means the user asked playback to stop.
-                applyDisplayMatch(nil)
+                // None means the user asked playback to stop — and the
+                // display is deliberately *kept* for the same reason. Handing
+                // it back here cost two HDMI renegotiations for an overlay
+                // that never interrupted the film: the TV blanked to its idle
+                // mode on the way in and blanked again re-matching on the way
+                // out. Only `.background` releases it. AVPlayerViewController,
+                // which DisplayModeMatcher hand-rolls, does not blink here
+                // either; nothing in preferredDisplayCriteria asks it to.
+                break
             case .active:
                 subtitlePreferences.refreshSystemAppearance()
                 controller.resumeBufferFill()
