@@ -98,10 +98,19 @@ final class RecentSearchStore {
 
     /// Records a term that actually ran. Most recent first, folded against
     /// case and surrounding space so "Dune" typed twice is one entry.
+    ///
+    /// The terms it was spelled through go with it. On tvOS a search is
+    /// entered a letter at a time against an on-screen keyboard, and every
+    /// prefix is a search that genuinely ran, so one "dune" otherwise leaves
+    /// "d", "du", "dun" and "dune" sitting in the row. Folding here rather
+    /// than leaning on the debounce is what makes it hold: the gap between
+    /// two presses on a remote is far longer than any debounce worth having.
     func record(_ term: String) {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        var updated = terms.filter { !$0.matchesSearchTerm(trimmed) }
+        var updated = terms.filter {
+            !$0.matchesSearchTerm(trimmed) && !$0.isSearchPrefix(of: trimmed)
+        }
         updated.insert(trimmed, at: 0)
         terms = Array(updated.prefix(Self.limit))
         persist()
@@ -131,6 +140,22 @@ extension String {
         let rhs = other.trimmingCharacters(in: .whitespacesAndNewlines)
         return lhs.compare(rhs, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
+
+    /// Whether this term is one somebody typed through on the way to
+    /// `other` — "du" against "dune" — folded the same way
+    /// `matchesSearchTerm` folds it, so "DU" counts as well.
+    ///
+    /// One-directional on purpose: recording "the" must not evict an earlier
+    /// "the matrix", because a short term is a legitimate search of its own.
+    func isSearchPrefix(of other: String) -> Bool {
+        let lhs = trimmingCharacters(in: .whitespacesAndNewlines)
+        let rhs = other.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !lhs.isEmpty, lhs.count < rhs.count else { return false }
+        return rhs.range(
+            of: lhs,
+            options: [.caseInsensitive, .diacriticInsensitive, .anchored]
+        ) != nil
+    }
 }
 
 /// The app's one search screen. On tvOS `.searchable` is not a bar you summon:
@@ -147,6 +172,10 @@ struct SearchView: View {
     @State private var isSearching = false
     @State private var searchError: String?
     @State private var searchRetryID = 0
+
+    /// How long a term has to stand still before it counts as a search worth
+    /// running against Seerr and worth remembering.
+    private static let debounceMilliseconds = 350
 
     var body: some View {
         ScrollView {
@@ -327,19 +356,24 @@ struct SearchView: View {
             searchResults = []
             searchError = nil
             isSearching = false
-            // The library half still ran, so the term was still a search.
+            // The library half still ran, so the term was still a search --
+            // but wait out the same debounce the Seerr path does rather than
+            // writing an entry on every keystroke.
+            try? await Task.sleep(for: .milliseconds(Self.debounceMilliseconds))
+            guard !Task.isCancelled, normalizedSearch == term else { return }
             recents.record(term)
             return
         }
         isSearching = true
         searchError = nil
         do {
-            try await Task.sleep(for: .milliseconds(350))
+            try await Task.sleep(for: .milliseconds(Self.debounceMilliseconds))
             let page = try await seerr.client.search(query: term)
             guard !Task.isCancelled, normalizedSearch == term else { return }
             searchResults = page.results
-            // Recorded after the debounce survives, so typing "dune" leaves
-            // one entry rather than "d", "du", "dun", "dune".
+            // The debounce only keeps this off every keystroke; folding in
+            // RecentSearchStore is what makes "dune" one entry rather than
+            // "d", "du", "dun", "dune".
             recents.record(term)
         } catch is CancellationError {
         } catch {
