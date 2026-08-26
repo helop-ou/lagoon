@@ -71,6 +71,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         (videoQueue.count, audioQueue.count)
     }
 
+    /// Seconds of audio waiting ahead of the renderer. This, not the packet
+    /// count, is what `DemuxBackpressurePolicy` gates on, and a count alone
+    /// cannot say whether a queue near zero is starved or merely being drained
+    /// as fast as the renderer will take it. Playback will not start until it
+    /// reaches `minimumAudioReserve`, so a healthy stream should hold a
+    /// cushion here rather than hover at zero.
+    var audioBufferedSeconds: Double { audioQueue.bufferedDuration }
+
     /// Timestamp discontinuities in the audio feed — the measurable form
     /// of "the audio crackles" (HEL-64). Should read 0 during untouched
     /// playback; steady growth means the renderer is being handed a
