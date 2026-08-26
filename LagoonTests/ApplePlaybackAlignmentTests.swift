@@ -119,6 +119,55 @@ struct ApplePlaybackAlignmentTests {
         ))
     }
 
+    /// WMV3 shares VC-1's decoder path and has always been in
+    /// `SoftwareVideoDecoder.supports`; only the profile omitted it, so every
+    /// WMV3 file took a server transcode for a decoder already present
+    /// (HEL-125). Same envelope as VC-1, for the same reasons.
+    @Test func wmv3DirectPlayIsBoundedToTheSameEnvelopeAsVC1() {
+        let directVideo = DeviceProfile.everything.directPlayProfiles.first {
+            $0.type == "Video"
+        }
+        let wmv3Profile = DeviceProfile.everything.codecProfiles.first {
+            $0.type == "Video" && $0.codec == "wmv3"
+        }
+
+        #expect(directVideo?.videoCodec?.split(separator: ",").contains("wmv3") == true)
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_WMV3))
+
+        let vc1Profile = DeviceProfile.everything.codecProfiles.first {
+            $0.type == "Video" && $0.codec == "vc1"
+        }
+        // Pinned as a pair rather than by repeating the literals: the two
+        // ride one decoder, so an envelope change to either that does not
+        // reach the other is the bug this catches.
+        #expect(wmv3Profile?.conditions.count == vc1Profile?.conditions.count)
+        for property in ["Width", "Height", "IsInterlaced", "VideoBitDepth", "VideoRangeType"] {
+            let wmv3Condition = wmv3Profile?.conditions.first { $0.property == property }
+            let vc1Condition = vc1Profile?.conditions.first { $0.property == property }
+            #expect(wmv3Condition?.value == vc1Condition?.value, "wmv3/vc1 differ on \(property)")
+            #expect(wmv3Condition?.condition == vc1Condition?.condition, "wmv3/vc1 differ on \(property)")
+        }
+    }
+
+    /// Both decode through `AudioDecoder`'s generic `avcodec_find_decoder`
+    /// path, so the only thing that kept them transcoding was the profile
+    /// not naming them (HEL-125). MP2 matters because the containers it
+    /// lives in — mpg, ts, vob — are all already advertised.
+    @Test func mp2AndALACAreOfferedInVideoContainers() {
+        let directVideo = DeviceProfile.everything.directPlayProfiles.first {
+            $0.type == "Video"
+        }
+        let audioCodecs = directVideo?.audioCodec?.split(separator: ",").map(String.init) ?? []
+
+        #expect(audioCodecs.contains("mp2"))
+        #expect(audioCodecs.contains("alac"))
+        // The containers that make MP2 worth advertising at all.
+        let containers = directVideo?.container.split(separator: ",").map(String.init) ?? []
+        #expect(containers.contains("mpg"))
+        #expect(containers.contains("ts"))
+        #expect(containers.contains("vob"))
+    }
+
     @Test func planarVC1ChromaIsInterleavedIntoCoreVideoNV12Order() {
         let u: [UInt8] = [10, 20, 30, 40]
         let v: [UInt8] = [50, 60, 70, 80]
