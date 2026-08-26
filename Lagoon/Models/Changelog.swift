@@ -29,6 +29,18 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "63",
+            released: "August 2026",
+            headline: "Control Center stops blanking the picture, and more of your files play untouched.",
+            changes: [
+                "Opening Control Center in the middle of a film no longer blanks the television while it changes picture modes, once on the way in and again on the way out. Lagoon was handing the display back the moment anything appeared over playback, even though the film had not stopped. It now holds the mode until you actually leave.",
+                "Recent searches keep the title you looked for instead of every step on the way to it. Typing on a television happens one letter at a time and each letter ran a search of its own, so looking for Dune left d, du and dun in the row beside it. Searching for something again also clears up what earlier builds left behind.",
+                "Films with WMV3 video, or MP2 or Apple Lossless sound, now play as they are rather than being converted by your server first. Lagoon could always decode all three and simply never said so. MP2 is what DVD rips and recorded broadcasts usually carry, so those stop being converted for no reason.",
+                "Plain .wmv files are still converted. What changed is WMV3 video inside an mkv or an avi.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "62",
             released: "August 2026",
             headline: "Collections, and the new Home rows open the title you picked.",
