@@ -2,8 +2,14 @@ import Foundation
 
 /// Chooses where Lagoon may safely put a cache in the playback path. Direct
 /// files have one stable, seekable resource and can use the sparse AVIO cache.
-/// A Jellyfin HLS transcode has mutable manifests and remains on libavformat's
-/// native transport outside explicit DEBUG coverage.
+/// A Jellyfin HLS transcode has mutable manifests and stays on libavformat's
+/// native transport unless the diagnostic switch is on.
+///
+/// That leaves a transcode with no buffering whatsoever between the network
+/// and the renderers, which is HEL-130: any hitch in segment delivery drains
+/// both demux queues, and audio, having no cushion, goes silent at once.
+/// Whether turning this on fixes that is the open question the switch exists
+/// to answer.
 nonisolated enum PlaybackBufferPolicy {
     static let backgroundBufferingEnabled = true
 
@@ -15,11 +21,14 @@ nonisolated enum PlaybackBufferPolicy {
         case .directPlay, .directStream:
             true
         case .transcode:
-            #if DEBUG
+            // Off by default, so a build nobody has touched behaves exactly
+            // as before. It is readable in Release rather than DEBUG-only
+            // because the only hardware that can answer whether this helps is
+            // an Apple TV, and pairing one to Xcode costs it HDCP 2.2 until
+            // it is unpaired again — so a debug build is not a thing that can
+            // be run there in practice. Settings, Playback Diagnostics
+            // exposes the switch alongside the HUD (HEL-130).
             defaults.bool(forKey: "debug.experimentalPlaybackCache")
-            #else
-            false
-            #endif
         }
     }
 }
