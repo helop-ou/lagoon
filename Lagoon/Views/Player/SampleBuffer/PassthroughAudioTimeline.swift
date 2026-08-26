@@ -24,8 +24,8 @@ import CoreMedia
 /// the container crosses the tolerance and re-anchors rather than accumulating
 /// drift; the supported passthrough codecs otherwise have fixed packet sizes.
 nonisolated struct PassthroughAudioTimeline {
-    private let sampleRate: Int32
-    private let framesPerPacket: Int64
+    let sampleRate: Int32
+    let framesPerPacket: Int64
     /// Half a packet: quantization error (≤ ~2 ms measured) sits far
     /// below it, while a genuinely missing packet — one full duration —
     /// sits far above and must re-anchor, or every later buffer would be
@@ -39,6 +39,15 @@ nonisolated struct PassthroughAudioTimeline {
     /// Lets the demuxer distinguish an intentionally rejected overlapping
     /// packet from the ordinary nil result before the first timestamp.
     private(set) var lastPacketWasOverlapping = false
+    /// How far behind the chain the last rejected packet sat, in seconds.
+    /// The guard exists for boundary repeats a fraction of a packet wide, so
+    /// this is what separates that from a real backward discontinuity the
+    /// guard is muting instead of re-anchoring.
+    private(set) var lastOverlapSeconds: Double = 0
+
+    /// One packet's duration — the unit both the tolerance and any reported
+    /// overlap are worth reading in.
+    var packetSeconds: Double { Double(framesPerPacket) / Double(sampleRate) }
 
     init(sampleRate: Int32, framesPerPacket: Int) {
         self.sampleRate = max(sampleRate, 1)
@@ -72,6 +81,7 @@ nonisolated struct PassthroughAudioTimeline {
                     // expected position fixed until a non-overlapping packet
                     // arrives; a real seek has already called reset().
                     lastPacketWasOverlapping = true
+                    lastOverlapSeconds = -delta
                     return nil
                 }
                 if delta > gapTolerance {
