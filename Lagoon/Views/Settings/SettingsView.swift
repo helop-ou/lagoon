@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
+    @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     @AppStorage("subtitles.source") private var subtitleSourceRaw = SubtitleSourcePreference.automatic.rawValue
@@ -449,6 +450,8 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
+                settingsToggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
+                    .accessibilityIdentifier("settings.diagnostics.transcodeCache")
             }
 
             #if os(tvOS)
