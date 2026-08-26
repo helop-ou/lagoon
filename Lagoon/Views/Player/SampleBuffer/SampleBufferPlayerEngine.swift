@@ -86,6 +86,21 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         return String(format: "%d pkts · %.1f MB removed", stats.units, Double(stats.bytes) / 1_000_000)
     }
 
+    /// Passthrough audio the demuxer discarded before any renderer saw it.
+    /// Nil until something is actually dropped, so the HUD stays quiet on a
+    /// healthy stream. The multiple is the diagnostic: `aGaps` is blind to
+    /// this path by construction, so a silent gap with drops climbing here is
+    /// a different fault from one with `aGaps` climbing.
+    var audioPacketDropInfo: String? {
+        guard let stats = demuxer.audioPacketDropStats, stats.packetSeconds > 0 else { return nil }
+        return String(
+            format: "%d pkts · worst %.1f× packet (%.0f ms)",
+            stats.packets,
+            stats.worstOverlapSeconds / stats.packetSeconds,
+            stats.worstOverlapSeconds * 1000
+        )
+    }
+
     @ObservationIgnored var onFinished: (() -> Void)?
     /// Playback could not continue. The failure carries whether a different
     /// delivery of the same media might work, so the controller can drop to
