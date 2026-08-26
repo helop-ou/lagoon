@@ -31,12 +31,24 @@ enum DisplayModeMatcher {
     private(set) static var modeSwitchCount = 0
     private static var observerInstalled = false
 
+    /// The last request handed to `apply`, so re-stating it is free. Callers
+    /// re-apply on every scene activation and on every engine change, and an
+    /// assignment that reaches the display manager risks a real HDMI round
+    /// trip — a black screen mid-film. Compare before assigning rather than
+    /// trusting AVDisplayManager to notice the criteria did not change.
+    private static var appliedRequest: DisplayMatchRequest??
+
     static func apply(_ request: DisplayMatchRequest?) {
         installObserverIfNeeded()
+        if let appliedRequest, appliedRequest == request { return }
+        // Recorded only past the manager lookup: a request made before any
+        // window exists was never applied and must not be remembered as if
+        // it were, or the real one later would be skipped.
         guard let manager = displayManager() else { return }
         manager.preferredDisplayCriteria = request.map {
             AVDisplayCriteria(refreshRate: $0.frameRate, formatDescription: $0.formatDescription)
         }
+        appliedRequest = request
     }
 
     /// One phrase for the HUD naming which layer answered: "no window" /
