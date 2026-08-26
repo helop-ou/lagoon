@@ -1572,6 +1572,12 @@ final class PlaybackController {
         }
         let depths = engine.queueDepths
         lines.append("Queues:  V \(depths.video) · A \(depths.audio) · stalls \(engine.stallCount) · aGaps \(engine.audioTimingGapCount)")
+        // Audio thrown away in the demuxer, which no other counter can show:
+        // dropped packets never reach the renderer, so aGaps above reads 0
+        // through exactly the failure this line exists to catch.
+        if let drops = engine.audioPacketDropInfo {
+            lines.append("AudDrop: \(drops)")
+        }
         // Only once something has actually been rebuilt. A renderer that
         // failed and was replaced leaves no other trace — playback simply
         // carries on, which is the point (HEL-101).
