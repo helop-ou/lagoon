@@ -682,32 +682,35 @@ composition cost is more representative than Simulator timing.
   oscillated `V 30 A 0` to `V 0 A 0` and video survived only because the
   renderer coasts on frames it already holds.
 
-  `PlaybackStarvationPolicy` now answers `.none`/`.video`/`.audio` from a
-  snapshot, which is what makes it testable without hardware. Three things
-  in it are deliberate:
+  **The first attempt at this shipped in 0.1 (66) and was wrong.** It
+  treated an empty audio queue as a stall and stopped the clock for it,
+  which broke playback on every title with audio: Ted 2 and GTA VI both
+  went from playing correctly to a continuous buffer/play/buffer cycle.
+  Reverted in 67, and the reason is worth keeping:
 
-  - **Audio is judged on buffered seconds, never on packet count.** A count
-    near zero is ambiguous — the renderer drains that queue itself, so it
-    reads the same for a starved feed and a healthy one being taken as fast
-    as it arrives. That ambiguity is what stalled the diagnosis until
-    HEL-123 put the seconds beside the count in the HUD.
-  - **Video wins when both are dry**, because it is the half the viewer can
-    see freeze and the recovery is the same either way.
-  - **Both margins scale with `rate`**, being media time.
+  > **`audioQueue` depth is not a measure of audio starvation.**
+  > `pumpAudio` drains it into `AVSampleBufferAudioRenderer` for as long as
+  > the renderer reports `isReadyForMoreMediaData`, so the buffered seconds
+  > live inside the renderer and Lagoon's queue sits near zero on a
+  > perfectly healthy title.
 
-  `StallRecoveryPolicy` gained the matching condition, and it is the half
-  that stops the cure being worse than the disease: resuming on video alone
-  would restart the clock with audio still empty, since video refills first
-  and pins at its hard limit (HEL-124), starve again a second later, and
-  turn a continuous silence into a picture stuttering once a second. Both
-  cushions must be there. A feed that cannot rebuild one reaches
-  `reprimeAfter` and is repaired by the bounded seek that already existed.
-  The existing one-second confirmation delay doubles as the threshold, so a
-  momentary dip never stops the picture.
+  Switching the reading from packet count to buffered seconds does not
+  rescue it, and that is the trap worth recording, because it looks like it
+  should: the ticket's own text warns that a count near zero cannot
+  distinguish a starved feed from one being drained as fast as it fills,
+  and the seconds are that same queue in different units. Both are the
+  wrong side of the pump. A real audio-starvation signal has to come from
+  the renderer, and finding one is still open.
 
-  Audio-caused stalls are counted separately and reported in the HUD
-  (`stalls N (M audio)`) and the bench (`aStalls`), because a silence that
-  leaves no trace in a bench window is exactly the failure this ticket was.
+  What stands is the reporting, which is the minimum HEL-123 asked for.
+  `PlaybackStarvationPolicy` answers `.none`/`.video`/`.audio` from a
+  snapshot; `.video` confirms and stops the clock exactly as it always did,
+  while `.audio` is counted per episode and shown in the HUD (`aDry`) and
+  the bench (`aStalls`). `StallRecoveryPolicy` is video-only, and gating it
+  on audio as well was the second half of the same mistake: it would have
+  hung every video stall until `reprimeAfter`, since the cushion it waited
+  for is not normally there. Both are pinned by tests so neither comes
+  back.
 - **A stream with no cache gets a bigger demux cushion** (HEL-130). The
   sparse AVIO cache is enabled for direct play and direct stream and off for
   a transcode, because a Jellyfin HLS transcode has mutable manifests and a

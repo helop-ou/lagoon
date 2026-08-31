@@ -1606,13 +1606,13 @@ final class PlaybackController {
         // arrives. The seconds are also the figure the backpressure policy
         // actually gates on.
         lines.append(String(
-            format: "Queues:  V %d · A %d/%d (%.1fs) · stalls %d (%d audio) · aGaps %d",
+            format: "Queues:  V %d · A %d/%d (%.1fs) · stalls %d · aDry %d · aGaps %d",
             depths.video,
             depths.audio,
             engine.audioCushionTarget,
             engine.audioBufferedSeconds,
             engine.stallCount,
-            engine.audioStallCount,
+            engine.audioStarvationCount,
             engine.audioTimingGapCount
         ))
         // Audio thrown away in the demuxer, which no other counter can show:

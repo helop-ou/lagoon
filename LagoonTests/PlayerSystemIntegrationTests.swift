@@ -1179,85 +1179,36 @@ struct PlaybackStarvationTests {
         }) == .none)
     }
 
-    // MARK: - Leaving the stall again
+    // MARK: - Why audio does not stop the clock
 
-    /// Resuming on video alone is what would make an audio stall worse than
-    /// the silence it replaced: video refills first and pins at its hard
-    /// limit, so the clock would restart with audio still empty and starve
-    /// again a second later, turning a continuous silence into a picture
-    /// that stutters once a second.
-    @Test func recoveryWaitsForAudioAsWellAsVideo() {
+    /// The revert, pinned so it is not re-introduced. `audioQueue` is
+    /// drained into the renderer as fast as it fills, so its depth is near
+    /// zero on a healthy title; gating recovery on it hung every video
+    /// stall until `reprimeAfter` and turned playback into buffer/play.
+    @Test func recoveryDependsOnVideoAlone() {
         #expect(StallRecoveryPolicy.decision(
             elapsed: .seconds(1),
             videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
-            videoQueueFinished: false,
-            hasAudio: true,
-            audioBufferedSeconds: 0
+            videoQueueFinished: false
+        ) == .resume)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount - 1,
+            videoQueueFinished: false
         ) == .wait)
-        #expect(StallRecoveryPolicy.decision(
-            elapsed: .seconds(1),
-            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
-            videoQueueFinished: false,
-            hasAudio: true,
-            audioBufferedSeconds: StallRecoveryPolicy.resumeAudioSeconds
-        ) == .resume)
     }
 
-    /// A feed that cannot rebuild an audio cushion still leaves, by the
-    /// bounded seek that already existed, rather than buffering forever.
-    @Test func audioThatNeverRefillsStillReprimes() {
-        #expect(StallRecoveryPolicy.decision(
-            elapsed: StallRecoveryPolicy.reprimeAfter,
-            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
-            videoQueueFinished: false,
-            hasAudio: true,
-            audioBufferedSeconds: 0
-        ) == .reprime)
-    }
-
-    /// A finished audio queue is not a starved one, and neither is a title
-    /// with no audio: both resume on video alone.
-    @Test func recoveryIgnoresAudioThatCannotArrive() {
-        #expect(StallRecoveryPolicy.decision(
-            elapsed: .seconds(1),
-            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
-            videoQueueFinished: false,
-            hasAudio: true,
-            audioQueueFinished: true,
-            audioBufferedSeconds: 0
-        ) == .resume)
-        #expect(StallRecoveryPolicy.decision(
-            elapsed: .seconds(1),
-            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
-            videoQueueFinished: false,
-            hasAudio: false,
-            audioBufferedSeconds: 0
-        ) == .resume)
-    }
-
-    /// Both cushions scale together above 1x.
-    @Test func theAudioResumeCushionScalesWithPlaybackRate() {
-        #expect(StallRecoveryPolicy.decision(
-            elapsed: .seconds(1),
-            videoQueueCount: StallRecoveryPolicy.resumeVideoCount * 2,
-            videoQueueFinished: false,
-            hasAudio: true,
-            audioBufferedSeconds: StallRecoveryPolicy.resumeAudioSeconds,
-            playbackRate: 2
-        ) == .wait)
-        #expect(StallRecoveryPolicy.decision(
-            elapsed: .seconds(1),
-            videoQueueCount: StallRecoveryPolicy.resumeVideoCount * 2,
-            videoQueueFinished: false,
-            hasAudio: true,
-            audioBufferedSeconds: StallRecoveryPolicy.resumeAudioSeconds * 2,
-            playbackRate: 2
-        ) == .resume)
+    /// Audio starvation is still *detected* — the counter and the HUD line
+    /// depend on it — it simply is not a reason to stop the picture.
+    @Test func audioStarvationIsStillReportedEvenThoughItNeverStopsTheClock() {
+        let snapshot = healthy {
+            $0.videoQueueCount = 30
+            $0.audioBufferedSeconds = 0
+        }
+        #expect(PlaybackStarvationPolicy.starvation(snapshot) == .audio)
     }
 }
 
-/// HEL-130: a stream with no playback cache has the demux queues as its
-/// entire cushion between the network and the renderers.
 @Suite("Uncached delivery cushion")
 struct UncachedDeliveryCushionTests {
     /// Audio grows and video does not, which is the whole design: a decoded

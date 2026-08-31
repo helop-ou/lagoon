@@ -47,12 +47,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var audioOutputPathDiagnostic = "compressed"
     private(set) var videoPerformance: VideoPerformanceSnapshot?
     private(set) var stallCount = 0
-    /// How many of those stalls were called on audio rather than video
-    /// (HEL-123). Reported separately because the two mean different
-    /// things: a video stall is a frozen picture the viewer can see, an
-    /// audio stall is the silence they previously got with every counter
-    /// reading healthy.
-    private(set) var audioStallCount = 0
+    /// Episodes of the audio queue running dry (HEL-123). Not a stall: it
+    /// never stops the clock, because the depth of that queue is near zero
+    /// on a healthy title anyway. It is recorded so the condition leaves a
+    /// trace, and so the hardware reading that would show whether it ever
+    /// means anything can be taken.
+    private(set) var audioStarvationCount = 0
     /// Route/output recovery counters are intentionally session-scoped. The
     /// regression probe uses them to prove that an injected AVFoundation
     /// event took the same path as a real notification.
@@ -88,6 +88,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// it, and must never be held in buffering waiting for a cushion that
     /// is never going to arrive (HEL-123).
     private var hasAudioTrack: Bool { !audioTracks.isEmpty }
+    /// Edge tracking for `audioStarvationCount`, which counts episodes
+    /// rather than the 10 Hz observer ticks inside one.
+    @ObservationIgnored private var wasAudioStarved = false
     /// The audio depth the demux loop is aiming for. Shown beside the queue
     /// so the bigger uncached cushion is visible rather than inferred
     /// (HEL-130).
@@ -1091,9 +1094,21 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // demuxer delivered and the queue is dry, but the file isn't over
         // — the network fell behind. Hold the clock instead of freezing
         // frames while it runs.
-        if starvation(at: seconds) != .none {
+        // Only video reaches the recovery path. Audio is counted so a
+        // silence leaves a trace, and deliberately does not stop the clock.
+        switch starvation(at: seconds) {
+        case .video:
+            wasAudioStarved = false
             confirmStallIfPersistent()
-        } else {
+        case .audio:
+            clearPendingStallConfirmation()
+            // Count episodes, not observer ticks: this fires at 10 Hz.
+            if !wasAudioStarved {
+                wasAudioStarved = true
+                audioStarvationCount += 1
+            }
+        case .none:
+            wasAudioStarved = false
             clearPendingStallConfirmation()
         }
         // Bench sampling piggybacks on this observer at ~1 Hz — the same
@@ -1133,7 +1148,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             droppedFrames: snapshot.droppedFrames,
             corruptedFrames: snapshot.corruptedFrames,
             stalls: stallCount,
-            audioStalls: audioStallCount,
+            audioStalls: audioStarvationCount,
             audioGaps: audioContinuity.gapCount,
             videoQueueDepth: videoQueue.count,
             optimizedFrames: snapshot.optimizedCompositingFrames,
@@ -1207,14 +1222,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Pause the synchronizer, then poll until the demuxer has rebuilt a
     /// safe cushion and restart. (The periodic observer stops firing at
     /// rate 0, so recovery needs its own loop.)
-    private func beginStallRecovery(cause: PlaybackStarvation) {
+    private func beginStallRecovery() {
         clearPendingStallConfirmation()
         isBuffering = true
         synchronizer.rate = 0
         stallCount += 1
-        if cause == .audio {
-            audioStallCount += 1
-        }
         if !stallSignpostActive {
             stallSignpostActive = true
             os_signpost(
@@ -1222,10 +1234,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 log: PlaybackPerformance.log,
                 name: "Playback Stall",
                 signpostID: performanceSignpostID,
-                "position=%{public}.3f count=%{public}d cause=%{public}s",
+                "position=%{public}.3f count=%{public}d audioDry=%{public}d",
                 timePosition,
                 stallCount,
-                cause.rawValue
+                audioStarvationCount
             )
         }
         stallRecoveryTask?.cancel()
@@ -1240,9 +1252,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     elapsed: ContinuousClock.now - recoveryStarted,
                     videoQueueCount: self.videoQueue.count,
                     videoQueueFinished: self.videoQueue.isFinished,
-                    hasAudio: self.hasAudioTrack,
-                    audioQueueFinished: self.audioQueue.isFinished,
-                    audioBufferedSeconds: self.audioQueue.bufferedDuration,
                     playbackRate: self.rate
                 )
                 switch decision {
@@ -1316,12 +1325,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                   self.stallConfirmationID == identifier else { return }
             self.stallConfirmationID = nil
             self.stallConfirmationTask = nil
-            // Re-read rather than carrying the cause that armed this: a
-            // second is long enough for a dip to clear, or for audio
-            // starvation to have become video starvation as well.
-            let confirmed = self.starvation(at: self.timePosition)
-            guard confirmed != .none else { return }
-            self.beginStallRecovery(cause: confirmed)
+            // Re-read: a second is long enough for the dip to clear. Only
+            // video confirms, matching what armed the confirmation.
+            guard self.starvation(at: self.timePosition) == .video else { return }
+            self.beginStallRecovery()
         }
     }
 
@@ -2050,12 +2057,34 @@ nonisolated enum PlaybackStarvation: String, Equatable {
     case audio
 }
 
-/// Starvation used to be a video-only question, and that was the defect
-/// behind HEL-123: an audio queue at zero produced no stall, no buffering
-/// state and no counter movement, so a film played on with the picture
-/// running and no sound while every indicator read healthy — `AudDrop`
-/// absent, `aGaps` 0, `stalls` 0. Nothing was being thrown away; nothing
-/// was arriving. An honest buffering state beats silent video.
+/// Video starvation stops the clock. Audio starvation is **only counted**,
+/// and the difference is the whole lesson of HEL-123.
+///
+/// The original defect is real: an audio queue at zero produced no stall,
+/// no buffering state and no counter movement, so a film could play on with
+/// the picture running and no sound while every indicator read healthy.
+/// The first fix treated that as a stall and stopped the clock for it, and
+/// that broke playback for every title with audio — verified against Ted 2
+/// and GTA VI, both of which had been playing correctly.
+///
+/// **`audioQueue` depth is not a measure of audio starvation.** `pumpAudio`
+/// drains it into `AVSampleBufferAudioRenderer` for as long as the renderer
+/// says `isReadyForMoreMediaData`, so the buffered seconds live inside the
+/// renderer and Lagoon's queue sits near zero on a *healthy* title. Reading
+/// it as starvation fires constantly, and stopping the clock for it turns
+/// continuous playback into a buffer/play/buffer cycle.
+///
+/// Switching the reading from packet count to buffered seconds does not fix
+/// that, which is the trap worth recording: this ticket's own text warns
+/// that a count near zero cannot distinguish a starved feed from one being
+/// taken as fast as it arrives, and the seconds are the same queue measured
+/// in different units. Both are the wrong side of the pump. A true audio
+/// starvation signal has to come from the renderer, and finding one is
+/// still open.
+///
+/// So `.audio` is a reported condition and never a recovery trigger. That
+/// is the minimum this ticket asked for — counted and reported — and it is
+/// as far as the evidence supports going.
 ///
 /// Pure so the decision can be pinned by tests rather than reproduced on
 /// hardware: the engine only assembles the snapshot.
@@ -2115,37 +2144,23 @@ nonisolated enum PlaybackStarvationPolicy {
 nonisolated enum StallRecoveryPolicy {
     static let confirmationDelay: Duration = .seconds(1)
     static let resumeVideoCount = 12
-    /// The audio equivalent of `resumeVideoCount`, and deliberately close to
-    /// it in wall time: twelve frames is about half a second at 24 fps.
-    ///
-    /// Resuming on video alone is what makes an audio stall worse than the
-    /// silence it replaces. Video refills first and pins at its hard limit
-    /// (HEL-124), so a video-only test would restart the clock with audio
-    /// still empty, starve again a second later, and turn a continuous
-    /// silence into a picture that stutters once a second. Requiring a
-    /// cushion on both means a feed that cannot rebuild one reaches
-    /// `reprimeAfter` and is repaired by a seek instead.
-    static let resumeAudioSeconds = 0.5
     static let reprimeAfter: Duration = .seconds(5)
 
-    /// `hasAudio` defaults false so a caller with no audio to speak of —
-    /// and the tests that predate this — impose no audio condition.
+    /// Deliberately video-only. Gating this on `audioQueue` as well was
+    /// tried and reverted: that queue is drained into the renderer as fast
+    /// as it fills, so its depth is near zero on a *healthy* title, and
+    /// requiring a cushion there hung every video stall to `reprimeAfter`.
+    /// See `PlaybackStarvationPolicy` for the full account.
     static func decision(
         elapsed: Duration,
         videoQueueCount: Int,
         videoQueueFinished: Bool,
-        hasAudio: Bool = false,
-        audioQueueFinished: Bool = false,
-        audioBufferedSeconds: Double = 0,
         playbackRate: Double = 1
     ) -> StallRecoveryDecision {
-        let clampedRate = PlaybackRatePolicy.clamped(playbackRate)
-        let requiredVideoCount = Int(ceil(Double(resumeVideoCount) * clampedRate))
-        let videoReady = videoQueueCount >= requiredVideoCount || videoQueueFinished
-        let audioReady = !hasAudio
-            || audioQueueFinished
-            || audioBufferedSeconds >= resumeAudioSeconds * clampedRate
-        if videoReady, audioReady {
+        let requiredVideoCount = Int(ceil(
+            Double(resumeVideoCount) * PlaybackRatePolicy.clamped(playbackRate)
+        ))
+        if videoQueueCount >= requiredVideoCount || videoQueueFinished {
             return .resume
         }
         if elapsed >= reprimeAfter {
