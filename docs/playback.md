@@ -173,6 +173,15 @@ something is already broken. Verified on the simulator against fixture: direct
 play at 0:02 → injected failure at 2.1 s → remux rung playing at 0:23, queues
 full, zero stalls.
 
+**A fallback that succeeds used to erase its own explanation.**
+`failure.message` carries the detail that is the whole reason the ladder ran —
+the VideoToolbox status, the renderer error — but it only reaches
+`errorMessage` when the ladder runs *out* of rungs. A descent that then plays
+left a signpost as the only trace, which needs Instruments and therefore a
+paired device; an Apple TV that cannot be paired (HDCP 2.2) could not be asked
+what went wrong. The playback HUD now carries it (`Rung:` / `Fell n:` /
+`Why n:`), appearing only once a rung has actually been descended.
+
 ## The engine (`Lagoon/Views/Player/SampleBuffer/`)
 
 libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +

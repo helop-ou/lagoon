@@ -70,6 +70,16 @@ final class PlaybackController {
     /// the same collapse, and two fallbacks in flight would skip a rung —
     /// straight past the cheap remux to a transcode nobody needed.
     private var isFallingBack = false
+    /// Every rung this item has descended, and the failure that forced it.
+    ///
+    /// The detail inside `failure.message` — the VideoToolbox status or
+    /// renderer error that is the entire reason the ladder ran — reaches
+    /// `errorMessage` only when the ladder runs *out* of rungs. A fallback
+    /// that succeeds therefore throws away the one fact that explains it,
+    /// leaving a signpost as the only trace and Instruments as the only
+    /// reader — which needs a paired device, and an Apple TV that cannot be
+    /// paired has no way to get at it. The HUD carries it instead.
+    private(set) var deliveryFallbacks: [PlaybackDeliveryFallbackRecord] = []
     private var itemId = ""
     private var mediaSourceId = ""
     private var playSessionId: String?
@@ -219,6 +229,7 @@ final class PlaybackController {
             // failures say nothing about this file.
             deliveryItemId = media.id
             delivery = .negotiated
+            deliveryFallbacks = []
             resumeOverride = nil
         }
         itemId = media.id
@@ -1279,6 +1290,7 @@ final class PlaybackController {
         defer { isFallingBack = false }
         guard !isClosed, let client, let media = currentMedia else { return }
         let resumeAt = engine?.timePosition ?? lastKnownPosition
+        let cause = failure.cause == .undecodable ? "undecodable" : "delivery"
         os_signpost(
             .event,
             log: PlaybackPerformance.log,
@@ -1287,9 +1299,13 @@ final class PlaybackController {
             "from=%{public}s to=%{public}s cause=%{public}s position=%{public}.3f",
             delivery.rawValue,
             next.rawValue,
-            failure.cause == .undecodable ? "undecodable" : "delivery",
+            cause,
             resumeAt
         )
+        deliveryFallbacks.append(PlaybackDeliveryFallbackRecord(
+            transition: "\(delivery.rawValue)→\(next.rawValue) · \(cause)",
+            message: failure.message
+        ))
         // Same teardown the episode handoff uses, and for the same reason:
         // keeping the display layer mounted lets the successor attach to the
         // surface that is already there. Tearing it down instead left the
@@ -1501,7 +1517,7 @@ final class PlaybackController {
                 if let milliseconds = self.lastHandoffMilliseconds {
                     live.insert(String(format: "Handoff: %.0f ms to ready", milliseconds), at: 0)
                 }
-                self.hudLines = negotiated + live
+                self.hudLines = negotiated + live + self.deliveryFallbackHUDLines
             }
         }
     }
@@ -1552,6 +1568,19 @@ final class PlaybackController {
             outcome,
             milliseconds
         )
+    }
+
+    /// Why this rung is in force, and nothing at all when it is the one the
+    /// server picked unaided — the `Method:` line above already says that,
+    /// and a ladder that never ran has nothing to explain.
+    private var deliveryFallbackHUDLines: [String] {
+        guard !deliveryFallbacks.isEmpty else { return [] }
+        var lines = ["Rung:    \(delivery.rawValue)"]
+        for (index, fallback) in deliveryFallbacks.enumerated() {
+            lines.append("Fell \(index + 1):  \(fallback.transition)")
+            lines.append("Why \(index + 1):   \(fallback.message)")
+        }
+        return lines
     }
 
     private static func liveHUDLines(

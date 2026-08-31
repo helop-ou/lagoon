@@ -99,6 +99,18 @@ nonisolated struct PlaybackDeliveryFlags: Equatable {
     let allowAudioStreamCopy: Bool
 }
 
+/// One descent of the ladder, kept for the playback HUD.
+///
+/// Two pieces rather than one string because the message is the only
+/// unbounded part: a VideoToolbox status can run long enough to wrap the
+/// overlay, so the HUD gives it a line of its own.
+nonisolated struct PlaybackDeliveryFallbackRecord: Equatable {
+    /// `negotiated→transcode · undecodable`
+    let transition: String
+    /// The engine's own account of what failed.
+    let message: String
+}
+
 /// Which rung to try after a failure, or nil when the ladder is spent.
 ///
 /// Descending one rung at a time is deliberate: a transcode is minutes of
