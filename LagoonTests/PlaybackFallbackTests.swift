@@ -28,6 +28,39 @@ struct PlaybackFallbackTests {
         )
     }
 
+    @Test func aDiscIsNeverOfferedTheRungItCannotBePlayedFrom() throws {
+        // Jellyfin describes WALL·E's Blu-ray image as container `ts` with
+        // direct play available, then serves 64 GB of UDF that libavformat
+        // cannot open. `VideoType` is the only field that gives it away, so
+        // it has to survive decoding (HEL-133).
+        let image = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
+        {
+          "Id":"disc", "Container":"ts", "VideoType":"Iso", "IsoType":"BluRay",
+          "SupportsDirectPlay":true, "SupportsDirectStream":true
+        }
+        """#.utf8))
+        #expect(image.videoType == "Iso")
+        #expect(image.isoType == "BluRay")
+        #expect(PlaybackSourceLayout(videoType: image.videoType) == .image)
+        #expect(PlaybackFallbackPolicy.start(for: .image) == .remux)
+        #expect(PlaybackFallbackPolicy.start(for: .discFolder) == .remux)
+        #expect(PlaybackSourceLayout.image.directPlayRefusal != nil)
+    }
+
+    @Test func onlyAPlainFileIsTriedAtTheNegotiatedRung() {
+        #expect(PlaybackSourceLayout(videoType: nil) == .file)
+        #expect(PlaybackSourceLayout(videoType: "VideoFile") == .file)
+        #expect(PlaybackSourceLayout(videoType: "iso") == .image)
+        #expect(PlaybackSourceLayout(videoType: "BluRay") == .discFolder)
+        #expect(PlaybackSourceLayout(videoType: "Dvd") == .discFolder)
+        // An unrecognised value stays a file: one failed open and a rung of
+        // ladder is a smaller price than silently forcing a server transcode
+        // on something that might have played.
+        #expect(PlaybackSourceLayout(videoType: "HoloDisc") == .file)
+        #expect(PlaybackFallbackPolicy.start(for: .file) == .negotiated)
+        #expect(PlaybackSourceLayout.file.directPlayRefusal == nil)
+    }
+
     @Test func theLadderAlwaysTerminates() {
         // Whatever the failure, following `next` from any rung has to reach
         // nil: an engine that fails every way must end in the error overlay,
