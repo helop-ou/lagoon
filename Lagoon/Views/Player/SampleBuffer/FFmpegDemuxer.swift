@@ -214,6 +214,7 @@ nonisolated final class FFmpegDemuxer {
     func open(
         url: String,
         cacheSession: PlaybackCacheSession? = nil,
+        disc: DiscPlaybackRequest? = nil,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) throws {
         avformat_network_init()
@@ -227,8 +228,30 @@ nonisolated final class FFmpegDemuxer {
             },
             opaque: Unmanaged.passUnretained(self).toOpaque()
         )
-        if let cacheScope = cacheSession?.directScope {
-            let cachedIO = try FFmpegCachedIO(scope: cacheScope)
+        if let disc, let cacheScope = cacheSession?.directScope {
+            // A disc image is a filesystem, not a stream. Mount it, choose
+            // the title, and hand libavformat that title's clips laid end to
+            // end — it never learns the image was a disc. Every failure here
+            // is a delivery failure, so a disc this cannot read falls to the
+            // server remux exactly as it did before any of this existed
+            // (HEL-133).
+            do {
+                let volume = try UDFVolume(source: PlaybackCacheDiscSource(source: cacheScope))
+                let title = try BlurayDisc.mainTitle(
+                    in: volume,
+                    runtimeSeconds: disc.runtimeSeconds
+                )
+                let cachedIO = try FFmpegCachedIO(
+                    source: DiscImageStream(source: cacheScope, map: title.stream)
+                )
+                allocated.pointee.pb = cachedIO.context
+                allocated.pointee.flags |= customIOFlag
+                self.cachedIO = cachedIO
+            } catch let error as DiscImageError {
+                throw DemuxError.openFailed(error.errorDescription ?? "unreadable disc image")
+            }
+        } else if let cacheScope = cacheSession?.directScope {
+            let cachedIO = try FFmpegCachedIO(source: cacheScope)
             allocated.pointee.pb = cachedIO.context
             allocated.pointee.flags |= customIOFlag
             self.cachedIO = cachedIO
@@ -843,7 +866,7 @@ nonisolated final class FFmpegDemuxer {
             // FFmpeg holds several segment contexts open at once, and a
             // whole segment fits under the per-resource cap, so these keep the
             // small buffer: there is no unstorable-read case to amortize here.
-            let io = try FFmpegCachedIO(scope: lease.scope, bufferSize: 64 * 1_024)
+            let io = try FFmpegCachedIO(source: lease.scope, bufferSize: 64 * 1_024)
             guard let context = io.context else {
                 lease.close()
                 return nativeOpen()
