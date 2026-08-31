@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "67",
+            released: "August 2026",
+            headline: "Undoes the constant buffering the last build introduced on anything with sound.",
+            changes: [
+                "Films with sound stopped and buffered every few seconds in 0.1 (66). That was a mistake in the last build and it is undone here. Lagoon had started watching how much sound was waiting in its own queue and treating a low reading as the sound having run out, when a low reading there is simply what a healthy film looks like: the sound has already been handed on to the part of the system that plays it, so very little is ever waiting.",
+                "Lagoon still notices and records when that queue empties, and Playback Details shows it, because the original problem it was meant to catch is real. It just no longer stops a film over it.",
+                "Everything else from the last build stands, including 4K films that previously refused to start.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "66",
             released: "August 2026",
             headline: "Some 4K films now start instead of being handed to your server, and a film that loses its sound says so.",
