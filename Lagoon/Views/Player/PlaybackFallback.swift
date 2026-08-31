@@ -111,6 +111,50 @@ nonisolated struct PlaybackDeliveryFallbackRecord: Equatable {
     let message: String
 }
 
+/// What the server is holding, as far as the delivery ladder cares.
+///
+/// A disc is the case Jellyfin describes accurately and then contradicts:
+/// `VideoType` says `Iso`, `Container` reports the format probed *inside*
+/// the disc (`ts` for a Blu-ray), and `SupportsDirectPlay` still comes back
+/// true. What the static stream then serves is the image or the folder
+/// itself — 64 GB of UDF for an image — and libavformat has no filesystem to
+/// walk it with, so the open fails with `invalid data` every time (HEL-133).
+nonisolated enum PlaybackSourceLayout: Equatable {
+    /// One file, whose served bytes are the bytes to demux.
+    case file
+    /// A disc image: `VideoType` `Iso`.
+    case image
+    /// A rip on the server's filesystem: `VideoType` `BluRay` or `Dvd`.
+    case discFolder
+
+    init(videoType: String?) {
+        switch videoType?.lowercased() {
+        case "iso": self = .image
+        case "bluray", "dvd": self = .discFolder
+        // An unrecognised value stays a file. The ladder already recovers
+        // from an open that fails, which costs one attempt; assuming a disc
+        // would silently spend a server transcode on something that might
+        // have played perfectly.
+        default: self = .file
+        }
+    }
+
+    var isDisc: Bool { self != .file }
+
+    /// Why direct play is not worth attempting, for the playback HUD — nil
+    /// for a file, which has no such reason.
+    var directPlayRefusal: (cause: String, message: String)? {
+        switch self {
+        case .file:
+            nil
+        case .image:
+            ("disc image", "A disc image is served whole, and there is no filesystem here to read one with.")
+        case .discFolder:
+            ("disc rip", "A disc rip is served as its folder, which has no single stream to open.")
+        }
+    }
+}
+
 /// Which rung to try after a failure, or nil when the ladder is spent.
 ///
 /// Descending one rung at a time is deliberate: a transcode is minutes of
@@ -122,6 +166,15 @@ nonisolated struct PlaybackDeliveryFallbackRecord: Equatable {
 /// the engine cannot demux subtitles out of a Jellyfin transcode. One more
 /// reason the ladder is only ever descended after a real failure.
 nonisolated enum PlaybackFallbackPolicy {
+    /// The best rung a source can be *tried* at, before anything has failed.
+    /// Only a plain file can be played from the bytes the negotiated rung
+    /// serves; a disc has to be rebuilt by the server, so starting there
+    /// spends an open that cannot succeed and a second negotiation to learn
+    /// what `VideoType` already said (HEL-133).
+    static func start(for layout: PlaybackSourceLayout) -> PlaybackDelivery {
+        layout.isDisc ? .remux : .negotiated
+    }
+
     static func next(
         after delivery: PlaybackDelivery,
         cause: PlaybackEngineFailure.Cause
