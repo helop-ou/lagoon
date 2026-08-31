@@ -97,6 +97,52 @@ real payoff is AV1: A17/M3-class devices can take the compressed hardware path,
 while older devices remain inside the same honest direct-play envelope through
 the software fallback.
 
+### What a metered path is offered (HEL-108)
+
+`DeviceProfile` advertised 120 Mbps on every device and every network path,
+so an 89 Mbps remux was offered as **direct play over cellular** — unwatchable
+and expensive at once. The playback cache already drew this distinction one
+layer down (proactive range fills set `allowsExpensiveNetworkAccess` and
+`allowsConstrainedNetworkAccess` false); the profile simply never asked.
+
+`NetworkPathObserver` watches `NWPathMonitor` and `cappedForMeteredPath`
+bounds the profile when the path is expensive (cellular, personal hotspot) or
+constrained (Low Data Mode). Verified against 10.11 with an 89.1 Mbps 4K
+source: unmetered direct-plays, metered returns
+`MaxWidth=1280 MaxHeight=720 VideoBitrate=2552000` with direct play refused.
+
+Four things are deliberate:
+
+- **iOS only.** An Apple TV is a wired or strong-Wi-Fi appliance that Apple
+  has no reason to call expensive, so applying it there would be dead code
+  that could only ever surprise. Widening it is a one-line change if a tvOS
+  device on a hotspot ever turns out to matter.
+- **`maxStaticBitrate` comes down with `maxStreamingBitrate`.** The static
+  ceiling is the one the server checks before offering the original file, so
+  capping only the streaming figure would let the remux direct-play anyway.
+- **A resolution ceiling rides along**, which the ticket did not ask for and
+  measurement argued for: capping bitrate alone leaves `MaxWidth` absent, so
+  the server answers a 4K source with a 4K re-encode at 3 Mbps — a picture
+  nobody wants, minutes of server CPU to make it, on a phone that cannot show
+  it. 720p is the conventional cellular rendition and makes the encode cheap.
+- **The viewer can override it** (Settings → Cellular → Full Quality on
+  Cellular). Apple reports that a path is *expensive*, never that it is
+  *slow*, and a fast tethered 5G connection is indistinguishable from a
+  throttled hotspot from inside the app.
+
+Two known limits, both deliberate. The profile is built once per
+`PlaybackInfo` call, so a path changing mid-title does not re-negotiate —
+the alternative is tearing down a working stream because a phone moved
+between access points. And until `NWPathMonitor` has reported, the observer
+answers "unrestricted", so a first negotiation on a cold launch over cellular
+can miss the cap once; that errs toward the behaviour that existed before.
+
+`boundedTo(_:width:height:)` resolves two geometry bounds by **tightening**
+rather than by skipping, because there are now two transforms that ask for one
+and they no longer ask for the same number: the fallback bounds are 1080p and
+the metered cap is 720p. Whichever applies second, the smaller ceiling
+survives.
+
 ### When the container describes no bitstream (HEL-131)
 
 Matroska and MP4 are supposed to carry HEVC's VPS/SPS/PPS in the

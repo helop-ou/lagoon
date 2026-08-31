@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
+    @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     @AppStorage("subtitles.source") private var subtitleSourceRaw = SubtitleSourcePreference.automatic.rawValue
@@ -587,6 +588,22 @@ struct SettingsView: View {
                     pendingAccountAction = .signOut
                 }
             }
+
+            #if os(iOS)
+            Section {
+                Toggle("Full Quality on Cellular", isOn: $allowFullQualityOnMetered)
+                    .accessibilityIdentifier("settings.playback.fullQualityOnMetered")
+            } header: {
+                Text("Cellular")
+            } footer: {
+                Text("""
+                On cellular or a personal hotspot Lagoon asks your server for a \
+                smaller version of a film rather than the full file, which can be \
+                tens of gigabytes. Turn this on if the connection is one you know \
+                is fast and unmetered.
+                """)
+            }
+            #endif
 
             Section("Skip Intros & Recaps") {
                 Picker("When one starts", selection: $skipModeRaw) {

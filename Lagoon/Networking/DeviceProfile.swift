@@ -455,9 +455,61 @@ nonisolated enum DeviceProfile {
     /// What this device is offered for one rung of the delivery ladder
     /// (HEL-100). Only the bottom rung differs, and only because that is
     /// the one rung where the server re-encodes.
+    ///
+    /// The metered cap is applied after the rung, so a constrained path
+    /// bounds the transcode rung too rather than being overwritten by it.
     static func lagoon(for delivery: PlaybackDelivery) -> Profile {
-        delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
+        let forRung = delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
+        return cappedForMeteredPath(forRung)
     }
+
+    /// Bounds a profile to what a metered path should be asked to carry
+    /// (HEL-108), or returns it untouched on an ordinary one.
+    ///
+    /// **iOS only.** An Apple TV is a wired or strong-Wi-Fi appliance and
+    /// Apple has no reason to report its path as expensive, so applying this
+    /// there would be dead code that could only ever surprise. Widening it
+    /// later is a one-line change if a tvOS device on a hotspot ever turns
+    /// out to matter.
+    static func cappedForMeteredPath(
+        _ profile: Profile,
+        cost: NetworkPathCost = NetworkPathObserver.shared.current,
+        allowFullQuality: Bool = UserDefaults.standard.bool(forKey: meteredOverrideKey)
+    ) -> Profile {
+        #if os(iOS)
+        guard MeteredPathPolicy.applies(cost: cost, allowFullQuality: allowFullQuality) else {
+            return profile
+        }
+        let bitrate = MeteredPathPolicy.maxStreamingBitrate(
+            unrestricted: profile.maxStreamingBitrate,
+            cost: cost,
+            allowFullQuality: allowFullQuality
+        )
+        return Profile(
+            maxStreamingBitrate: bitrate,
+            // The static ceiling has to come down with it. It is the one the
+            // server checks before offering the original file, so leaving it
+            // at 100 Mbps would let an 89 Mbps remux direct-play over
+            // cellular no matter what the streaming figure said.
+            maxStaticBitrate: min(profile.maxStaticBitrate, bitrate),
+            directPlayProfiles: profile.directPlayProfiles,
+            transcodingProfiles: profile.transcodingProfiles,
+            codecProfiles: profile.codecProfiles.map {
+                boundedTo(
+                    $0,
+                    width: MeteredPathPolicy.maxWidth,
+                    height: MeteredPathPolicy.maxHeight
+                )
+            },
+            subtitleProfiles: profile.subtitleProfiles
+        )
+        #else
+        return profile
+        #endif
+    }
+
+    /// The defaults key behind Settings → Playback → Full Quality on Cellular.
+    static let meteredOverrideKey = "playback.allowFullQualityOnMetered"
 
     /// The ceiling the transcode rung asks for. The envelope's 120 Mbps is
     /// a direct-play figure — the bitrate of an untouched file this device
@@ -588,29 +640,40 @@ nonisolated enum DeviceProfile {
     /// written with instead of collecting a duplicate set, which matters
     /// once two transforms can each ask for one.
     private static func boundedToHD(_ profile: CodecProfile) -> CodecProfile {
+        boundedTo(profile, width: 1920, height: 1080)
+    }
+
+    /// One geometry bound, applied to a video codec profile.
+    ///
+    /// Not idempotent by skipping, but by *tightening*: a codec the envelope
+    /// already bounds keeps the smaller of the two ceilings rather than
+    /// carrying a contradictory pair. That matters now that two transforms
+    /// can each ask for one and they no longer ask for the same number —
+    /// the metered cap is 720p and the fallback bounds are 1080p.
+    static func boundedTo(_ profile: CodecProfile, width: Int, height: Int) -> CodecProfile {
         guard profile.type == "Video" else { return profile }
-        let alreadyBounded = profile.conditions.contains {
-            $0.property == "Width" || $0.property == "Height"
+        var conditions = profile.conditions.filter {
+            !($0.property == "Width" || $0.property == "Height")
         }
-        guard !alreadyBounded else { return profile }
-        return CodecProfile(
-            type: profile.type,
-            codec: profile.codec,
-            conditions: profile.conditions + [
-                ProfileCondition(
-                    condition: "LessThanEqual",
-                    property: "Width",
-                    value: "1920",
-                    isRequired: true
-                ),
-                ProfileCondition(
-                    condition: "LessThanEqual",
-                    property: "Height",
-                    value: "1080",
-                    isRequired: true
-                ),
-            ]
-        )
+        let existingWidth = profile.conditions
+            .first { $0.property == "Width" }
+            .flatMap { Int($0.value) }
+        let existingHeight = profile.conditions
+            .first { $0.property == "Height" }
+            .flatMap { Int($0.value) }
+        conditions.append(ProfileCondition(
+            condition: "LessThanEqual",
+            property: "Width",
+            value: String(min(width, existingWidth ?? width)),
+            isRequired: true
+        ))
+        conditions.append(ProfileCondition(
+            condition: "LessThanEqual",
+            property: "Height",
+            value: String(min(height, existingHeight ?? height)),
+            isRequired: true
+        ))
+        return CodecProfile(type: profile.type, codec: profile.codec, conditions: conditions)
     }
 
     /// nil when nothing would be left. Callers drop the profile rather than

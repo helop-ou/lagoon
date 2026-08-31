@@ -4,6 +4,14 @@ import SwiftUI
 struct LagoonApp: App {
     @State private var deepLinks = DeepLinkRouter()
 
+    init() {
+        // The path has to be under observation before the first negotiation
+        // asks what it costs (HEL-108). Until the monitor has reported,
+        // `NetworkPathObserver` answers "unrestricted", which is the
+        // behaviour that existed before the cap.
+        NetworkPathObserver.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

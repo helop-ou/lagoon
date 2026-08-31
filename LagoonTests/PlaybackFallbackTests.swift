@@ -175,3 +175,108 @@ struct PlaybackFallbackTests {
         }
     }
 }
+
+/// HEL-108: the profile advertised 120 Mbps on every path, so an 80 Mbps
+/// remux was offered as direct play over cellular.
+@Suite("Metered path cap")
+struct MeteredPathTests {
+    private let cellular = NetworkPathCost(isExpensive: true, isConstrained: false)
+    private let lowData = NetworkPathCost(isExpensive: false, isConstrained: true)
+
+    @Test func onlyAMeteredPathIsCapped() {
+        #expect(MeteredPathPolicy.applies(cost: .unrestricted, allowFullQuality: false) == false)
+        #expect(MeteredPathPolicy.applies(cost: cellular, allowFullQuality: false))
+        #expect(MeteredPathPolicy.applies(cost: lowData, allowFullQuality: false))
+    }
+
+    /// Both flags mean the same thing here: do not pull the original over
+    /// this path.
+    @Test func eitherFlagIsEnough() {
+        #expect(NetworkPathCost.unrestricted.isMetered == false)
+        #expect(cellular.isMetered)
+        #expect(lowData.isMetered)
+        #expect(NetworkPathCost(isExpensive: true, isConstrained: true).isMetered)
+    }
+
+    /// The viewer's override wins, because Apple can report that a path is
+    /// expensive but never that it is slow.
+    @Test func theOverrideRestoresFullQuality() {
+        #expect(MeteredPathPolicy.maxStreamingBitrate(
+            unrestricted: 120_000_000,
+            cost: cellular,
+            allowFullQuality: true
+        ) == 120_000_000)
+        #expect(MeteredPathPolicy.maxStreamingBitrate(
+            unrestricted: 120_000_000,
+            cost: cellular,
+            allowFullQuality: false
+        ) == MeteredPathPolicy.maxBitrate)
+    }
+
+    /// Never raises a ceiling that was already lower — the transcode rung
+    /// asks for 20 Mbps and a metered path must not undo that.
+    @Test func theCapOnlyEverLowers() {
+        #expect(MeteredPathPolicy.maxStreamingBitrate(
+            unrestricted: 1_000_000,
+            cost: cellular,
+            allowFullQuality: false
+        ) == 1_000_000)
+    }
+
+    /// The static ceiling has to come down with the streaming one: it is
+    /// what the server checks before offering the original file, so leaving
+    /// it high would let an 89 Mbps remux direct-play over cellular anyway.
+    @Test func theStaticCeilingComesDownToo() {
+        let capped = DeviceProfile.cappedForMeteredPath(
+            DeviceProfile.everything,
+            cost: cellular,
+            allowFullQuality: false
+        )
+        #if os(iOS)
+        #expect(capped.maxStreamingBitrate == MeteredPathPolicy.maxBitrate)
+        #expect(capped.maxStaticBitrate <= MeteredPathPolicy.maxBitrate)
+        #else
+        // tvOS is a wired appliance; the cap is deliberately not applied.
+        #expect(capped.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
+        #endif
+    }
+
+    @Test func anOrdinaryPathIsUntouched() {
+        let same = DeviceProfile.cappedForMeteredPath(
+            DeviceProfile.everything,
+            cost: .unrestricted,
+            allowFullQuality: false
+        )
+        #expect(same.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
+        #expect(same.maxStaticBitrate == DeviceProfile.everything.maxStaticBitrate)
+    }
+
+    /// Two transforms can now each ask for a geometry bound and they no
+    /// longer ask for the same number. The tighter one has to survive, or a
+    /// metered 720p cap would be undone by a 1080p fallback bound.
+    @Test func twoGeometryBoundsResolveToTheTighter() {
+        let hd = DeviceProfile.boundedTo(
+            DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }!,
+            width: 1920,
+            height: 1080
+        )
+        let both = DeviceProfile.boundedTo(hd, width: 1280, height: 720)
+        let widths = both.conditions.filter { $0.property == "Width" }
+        let heights = both.conditions.filter { $0.property == "Height" }
+        #expect(widths.count == 1)
+        #expect(heights.count == 1)
+        #expect(widths.first?.value == "1280")
+        #expect(heights.first?.value == "720")
+        // And the order does not matter.
+        let reversed = DeviceProfile.boundedTo(
+            DeviceProfile.boundedTo(
+                DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }!,
+                width: 1280,
+                height: 720
+            ),
+            width: 1920,
+            height: 1080
+        )
+        #expect(reversed.conditions.first { $0.property == "Width" }?.value == "1280")
+    }
+}
