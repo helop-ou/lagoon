@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "71",
+            released: "September 2026",
+            headline: "A film from a disc starts at the beginning, and the scrubber works.",
+            changes: [
+                "Playing a Blu-ray or DVD image opened as though an hour of it had already gone by, and the progress bar could not be dragged anywhere useful. A disc counts time from wherever its own clock happens to start, which for one disc here was 70 minutes in. Lagoon counts from the start of the film now, like it does for everything else.",
+                "The same applies to any recording whose timestamps do not start at zero, which is common for anything captured off the air.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "70",
             released: "September 2026",
             headline: "Disc images play from the disc, Blu-ray and DVD alike.",
