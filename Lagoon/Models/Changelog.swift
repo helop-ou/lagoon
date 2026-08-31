@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "68",
+            released: "August 2026",
+            headline: "On an iPhone or iPad, cellular no longer means downloading the whole film.",
+            changes: [
+                "On a cellular connection or a personal hotspot, Lagoon used to ask your server for the original file. For a 4K film that can be tens of gigabytes, so it started slowly, looked no better for it, and spent a data allowance in minutes. It now asks for a smaller version instead.",
+                "If the connection is one you know is fast and unmetered, Settings has a new Full Quality on Cellular switch. Your device can tell Lagoon that a connection is metered but never that it is slow, so this one is your call rather than a guess.",
+                "Nothing changes on Apple TV, or on Wi-Fi anywhere. This applies only where the connection itself is metered.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "67",
             released: "August 2026",
             headline: "Undoes the constant buffering the last build introduced on anything with sound.",
