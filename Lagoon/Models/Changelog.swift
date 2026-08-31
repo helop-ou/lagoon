@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "72",
+            released: "September 2026",
+            headline: "Video Lagoon decodes itself now uses the whole device, not one core.",
+            changes: [
+                "Anything Lagoon decodes in software was running on a single processor core, because of a default nobody had noticed. That covers AV1, VC-1, MPEG-2, VP9 and older MPEG-4 files. Decoding a 4K AV1 episode measured eight times faster with the rest of the cores put to work.",
+                "Nothing about which files play changes here, only how quickly they decode. The formats your device decodes in hardware, which is most of them, were never affected.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "71",
             released: "September 2026",
             headline: "A film from a disc starts at the beginning, and the scrubber works.",
