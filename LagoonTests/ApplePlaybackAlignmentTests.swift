@@ -262,13 +262,17 @@ struct ApplePlaybackAlignmentTests {
                 $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "10"
             } == true)
             #expect(profile?.conditions.contains {
-                $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == "1920"
-            } == true)
-            #expect(profile?.conditions.contains {
-                $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == "1080"
-            } == true)
-            #expect(profile?.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+            } == true)
+            // AV1 reaches 4K on the software path now that dav1d is allowed
+            // more than one core; VP9 keeps the HD bound it was written with,
+            // since nothing has measured it above that.
+            let bound = codec == "av1" ? ("3840", "2160") : ("1920", "1080")
+            #expect(profile?.conditions.contains {
+                $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == bound.0
+            } == true)
+            #expect(profile?.conditions.contains {
+                $0.property == "Height" && $0.condition == "LessThanEqual" && $0.value == bound.1
             } == true)
         }
         let hardwareAV1 = DeviceProfile.profile(
