@@ -243,6 +243,62 @@ private func makeFixture(playlist: [UInt8]) -> [UInt8] {
     return image.bytes
 }
 
+
+/// A DVD-shaped image: one physical partition, no metadata indirection, and
+/// `VIDEO_TS` instead of `BDMV`. Real DVD images are UDF 1.02, which is this
+/// reader minus the part 2.50 adds, so both shapes are worth pinning.
+private func makeDVDFixture() -> [UInt8] {
+    var image = DiscImageFixture()
+    typealias F = DiscImageFixture
+
+    image.u16(2, sector: 256, 0)
+    image.u32(UInt32(3 * F.sectorSize), sector: 256, 16)
+    image.u32(260, sector: 256, 20)
+
+    image.u16(5, sector: 260, 0)
+    image.u32(UInt32(F.partitionStart), sector: 260, 188)
+
+    image.u16(6, sector: 261, 0)
+    image.u32(UInt32(F.sectorSize), sector: 261, 212)
+    image.longAD(sector: 261, 248, length: 2_048, block: 0, partition: 0)
+    image.u32(1, sector: 261, 268)                    // one partition map
+    image.u8(1, sector: 261, 440)                     // physical
+    image.u8(6, sector: 261, 441)
+
+    image.u16(8, sector: 262, 0)
+
+    // File set, root, VIDEO_TS - all in the physical partition.
+    image.u16(256, sector: F.physical(0), 0)
+    image.longAD(sector: F.physical(0), 400, length: 2_048, block: 1, partition: 0)
+    image.fileEntry(
+        sector: F.physical(1),
+        descriptorType: 3,
+        descriptors: F.identifier(name: "VIDEO_TS", block: 2, partition: 0, isDirectory: true)
+    )
+    image.fileEntry(
+        sector: F.physical(2),
+        descriptorType: 3,
+        descriptors: F.identifier(name: "VIDEO_TS.VOB", block: 3, partition: 0, isDirectory: false)
+            + F.identifier(name: "VTS_01_0.VOB", block: 4, partition: 0, isDirectory: false)
+            + F.identifier(name: "VTS_01_1.VOB", block: 5, partition: 0, isDirectory: false)
+            + F.identifier(name: "VTS_01_2.VOB", block: 6, partition: 0, isDirectory: false)
+            + F.identifier(name: "VTS_02_1.VOB", block: 7, partition: 0, isDirectory: false)
+    )
+    // The disc menu and the title set's own menu, neither of which is film.
+    image.fileEntry(sector: F.physical(3), descriptorType: 0, descriptors: F.short(length: 4_096, block: 50))
+    image.fileEntry(sector: F.physical(4), descriptorType: 0, descriptors: F.short(length: 4_096, block: 60))
+    // Title set 1, the larger, in two parts and with the first fragmented.
+    image.fileEntry(
+        sector: F.physical(5),
+        descriptorType: 0,
+        descriptors: F.short(length: 4_096, block: 70) + F.short(length: 4_096, block: 80)
+    )
+    image.fileEntry(sector: F.physical(6), descriptorType: 0, descriptors: F.short(length: 4_096, block: 90))
+    // Title set 2, smaller.
+    image.fileEntry(sector: F.physical(7), descriptorType: 0, descriptors: F.short(length: 2_048, block: 100))
+    return image.bytes
+}
+
 @Suite("Disc images")
 struct DiscImageTests {
     @Test func aUDFVolumeResolvesNamesThroughTheMetadataPartition() throws {
@@ -311,6 +367,37 @@ struct DiscImageTests {
         // Two play items over one fragmented clip: four extents, in order.
         #expect(title.stream.extents.count == 4)
         #expect(title.stream.length == 2 * (4_096 + 2_048))
+    }
+
+
+    @Test func aDVDImageMountsWithoutTheMetadataPartitionBluRayNeeds() throws {
+        let volume = try UDFVolume(source: InMemoryDiscSource(makeDVDFixture()))
+        #expect(try volume.entry(at: "VIDEO_TS") != nil)
+        #expect(try volume.entry(at: "BDMV") == nil)
+        #expect(DVDDisc.isDVD(volume))
+        #expect(!BlurayDisc.isBluray(volume))
+    }
+
+    @Test func aDVDTitleIsItsLargestTitleSetInOrder() throws {
+        let volume = try UDFVolume(source: InMemoryDiscSource(makeDVDFixture()))
+        let title = try DiscTitle.mainTitle(in: volume, runtimeSeconds: nil)
+        // A DVD has no playlist to name.
+        #expect(title.playlist == nil)
+        // Title set 1 (12 KiB across two parts, the first fragmented) beats
+        // title set 2, and neither menu is included.
+        #expect(title.stream.length == 12_288)
+        let sector = Int64(DiscImageFixture.sectorSize)
+        #expect(title.stream.extents.map(\.offset) == [70, 80, 90].map { Int64($0 + DiscImageFixture.partitionStart) * sector })
+    }
+
+    @Test func aMenuIsNeverMistakenForTheFilm() {
+        // Part 0 is the title set's menu and VIDEO_TS.VOB is the disc's own.
+        #expect(DVDDisc.titleSetPart(of: "VTS_01_1.VOB")?.titleSet == 1)
+        #expect(DVDDisc.titleSetPart(of: "VTS_01_1.VOB")?.part == 1)
+        #expect(DVDDisc.titleSetPart(of: "vts_12_3.vob")?.titleSet == 12)
+        #expect(DVDDisc.titleSetPart(of: "VTS_01_0.VOB") == nil)
+        #expect(DVDDisc.titleSetPart(of: "VIDEO_TS.VOB") == nil)
+        #expect(DVDDisc.titleSetPart(of: "VTS_01_0.IFO") == nil)
     }
 
     @Test func aStreamMapTranslatesEveryOffsetOntoTheImage() {
