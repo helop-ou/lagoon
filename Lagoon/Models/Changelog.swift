@@ -29,6 +29,19 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "70",
+            released: "September 2026",
+            headline: "Disc images play from the disc, Blu-ray and DVD alike.",
+            changes: [
+                "Blu-ray images did not actually play in the last build. Lagoon read the disc correctly and then stopped at the final step with a decoder error, because a Blu-ray describes its video in a way nothing else Lagoon plays uses. It plays now, with the soundtrack the disc was mastered with rather than a converted one.",
+                "DVD images play from the disc as well, instead of being rebuilt by your server. Lagoon picks the main title set and plays it.",
+                "Interlaced video no longer has to go to your server to be made watchable. Lagoon can now deinterlace MPEG-2 itself, which is what DVDs and most older recordings are. A still shot keeps its full detail, and movement is interpolated rather than left with the comb-toothed edges interlacing leaves behind.",
+                "This covers a disc stored as one image file. A disc kept as a folder of files still plays through your server, because Jellyfin gives an app no way to reach inside one, and interlaced video in other formats still goes to the server too.",
+                "A DVD that keeps several episodes in one title will play them one after another. Choosing a single episode off a disc like that is not there yet.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "69",
             released: "September 2026",
             headline: "A film kept as a Blu-ray disc image now plays straight from the disc.",
