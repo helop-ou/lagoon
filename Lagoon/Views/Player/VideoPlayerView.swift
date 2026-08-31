@@ -268,7 +268,10 @@ final class PlaybackController {
                 // ladder steps past it before an attempt rather than after
                 // one (HEL-133). No engine starts, but the HUD still gets a
                 // record of why the rung below is in force.
-                let layout = PlaybackSourceLayout(videoType: resolvedSource.videoType)
+                let layout = PlaybackSourceLayout(
+                    videoType: resolvedSource.videoType,
+                    isoType: resolvedSource.isoType
+                )
                 if delivery == .negotiated, let refusal = layout.directPlayRefusal {
                     skipDelivery(to: PlaybackFallbackPolicy.start(for: layout), refusal: refusal)
                     negotiated = try await client.playbackInfo(itemId: media.id, delivery: delivery)
@@ -285,6 +288,19 @@ final class PlaybackController {
             mediaSourceId = source.id
             playSessionId = info.playSessionId
             playMethod = method
+            // A Blu-ray image is played by reading the disc, not by asking
+            // the server to rebuild it — but only when the bytes on offer are
+            // the image itself. A transcode of the same title is an ordinary
+            // stream and must stay one (HEL-133).
+            let discRequest: DiscPlaybackRequest? = method == .directPlay
+                && PlaybackSourceLayout(
+                    videoType: source.videoType,
+                    isoType: source.isoType
+                ) == .blurayImage
+                ? DiscPlaybackRequest(
+                    runtimeSeconds: source.runTimeTicks.map(Ticks.seconds)
+                )
+                : nil
             let cacheSession = playbackCache.activate(
                 itemID: media.id,
                 url: streamURL,
@@ -476,6 +492,7 @@ final class PlaybackController {
             engine.prepare(
                 url: playbackURL,
                 cacheSession: transportCache,
+                disc: discRequest,
                 startSeconds: resumeSeconds,
                 initialAudioOrdinal: initialAudioOrdinal,
                 initialSubtitleOrdinal: initialSubtitleOrdinal,
@@ -791,7 +808,11 @@ final class PlaybackController {
                 // Warming a disc would download the opening megabytes of an
                 // image nothing here can read, and the successor negotiates
                 // its own rung when it starts anyway (HEL-133).
-                guard !PlaybackSourceLayout(videoType: source.videoType).isDisc else { return nil }
+                let layout = PlaybackSourceLayout(
+                    videoType: source.videoType,
+                    isoType: source.isoType
+                )
+                guard !layout.isDisc else { return nil }
                 let (url, method) = try client.streamURL(itemId: next.id, source: source)
                 guard !Task.isCancelled, self.nextUp?.id == next.id else { return nil }
                 let scope = self.playbackCache.stageNext(
