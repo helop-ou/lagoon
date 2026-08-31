@@ -55,12 +55,27 @@ nonisolated enum SampleBufferFactory {
         return sawSPS && sawPPS
     }
 
-    /// `hevcParameterSets` replaces the container's record when it turned
-    /// out to describe nothing: VPS, SPS and PPS harvested from the
-    /// bitstream itself, in that order.
+    /// Parameter sets that supersede the container's record, in decoder
+    /// order, together with the framing of the samples they describe.
+    ///
+    /// Two containers need this and for different reasons: one that declares
+    /// no parameter sets at all and repeats them in-band (HEL-131), and one
+    /// that declares them in a framing Apple's decoders do not read, which is
+    /// every MPEG-TS the disc reader opens (HEL-133).
+    nonisolated struct BitstreamParameterSets {
+        let sets: [Data]
+        /// Bytes prefixing each NAL in the samples, not in these sets.
+        let nalUnitHeaderLength: Int32
+
+        init(sets: [Data], nalUnitHeaderLength: Int32) {
+            self.sets = sets
+            self.nalUnitHeaderLength = nalUnitHeaderLength
+        }
+    }
+
     static func videoFormatDescription(
         codecpar: UnsafeMutablePointer<AVCodecParameters>,
-        hevcParameterSets: [Data]? = nil
+        parameterSets: BitstreamParameterSets? = nil
     ) -> CMFormatDescription? {
         var codecType: CMVideoCodecType
         let atomKey: String
@@ -77,12 +92,19 @@ nonisolated enum SampleBufferFactory {
         default:
             return nil
         }
-        guard let extradata = codecpar.pointee.extradata, codecpar.pointee.extradata_size > 0 else {
-            return nil
+        let containerRecord: Data? = if let extradata = codecpar.pointee.extradata,
+                                         codecpar.pointee.extradata_size > 0 {
+            Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size))
+        } else {
+            nil
         }
-        var atoms: [String: Data] = [
-            atomKey: Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size)),
-        ]
+        // A container that describes nothing is still openable when the
+        // parameter sets arrive from the bitstream instead.
+        guard containerRecord != nil || parameterSets != nil else { return nil }
+        var atoms: [String: Data] = [:]
+        if let containerRecord {
+            atoms[atomKey] = containerRecord
+        }
         var extensions: [CFString: Any] = [:]
 
         // HEL-48 M3: colorimetry tags. The display pipeline only engages
@@ -157,19 +179,23 @@ nonisolated enum SampleBufferFactory {
         // is not worth more trust than its parameter sets were. The base
         // layer still presents as HDR10 off the tags, which is already the
         // documented ceiling for the dual-layer profiles.
-        if let hevcParameterSets,
-           !hevcParameterSets.isEmpty,
-           codecpar.pointee.codec_id == AV_CODEC_ID_HEVC,
-           let extradata = codecpar.pointee.extradata,
-           codecpar.pointee.extradata_size > 0,
-           let lengthSize = HEVCEnhancementLayerFilter.nalLengthSize(
-               hvcc: Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size))
-           ) {
-            return hevcFormatDescription(
-                parameterSets: hevcParameterSets,
-                nalUnitHeaderLength: Int32(lengthSize),
-                extensions: extensions
-            )
+        if let parameterSets, !parameterSets.sets.isEmpty {
+            switch codecpar.pointee.codec_id {
+            case AV_CODEC_ID_HEVC:
+                return hevcFormatDescription(
+                    parameterSets: parameterSets.sets,
+                    nalUnitHeaderLength: parameterSets.nalUnitHeaderLength,
+                    extensions: extensions
+                )
+            case AV_CODEC_ID_H264:
+                return h264FormatDescription(
+                    parameterSets: parameterSets.sets,
+                    nalUnitHeaderLength: parameterSets.nalUnitHeaderLength,
+                    extensions: extensions
+                )
+            default:
+                break
+            }
         }
 
         extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] = atoms
@@ -183,6 +209,86 @@ nonisolated enum SampleBufferFactory {
             formatDescriptionOut: &description
         )
         return status == noErr ? description : nil
+    }
+
+    /// Runs `body` with the parameter sets flattened into one contiguous
+    /// buffer: CoreMedia takes pointers into memory it does not own, so they
+    /// have to outlive the call and sit next to each other.
+    private static func withFlattened<T>(
+        _ parameterSets: [Data],
+        _ body: (UnsafeBufferPointer<UnsafePointer<UInt8>>, UnsafeBufferPointer<Int>) -> T?
+    ) -> T? {
+        var flattened: [UInt8] = []
+        var sizes: [Int] = []
+        for set in parameterSets {
+            sizes.append(set.count)
+            flattened.append(contentsOf: set)
+        }
+        return flattened.withUnsafeBufferPointer { bytes -> T? in
+            guard let base = bytes.baseAddress else { return nil }
+            var pointers: [UnsafePointer<UInt8>] = []
+            var offset = 0
+            for size in sizes {
+                pointers.append(base.advanced(by: offset))
+                offset += size
+            }
+            return pointers.withUnsafeBufferPointer { pointerBuffer in
+                sizes.withUnsafeBufferPointer { sizeBuffer in
+                    body(pointerBuffer, sizeBuffer)
+                }
+            }
+        }
+    }
+
+    /// A copy of `description` carrying `extensions` alongside its own.
+    ///
+    /// The H.264 creator takes no extensions of its own, and colorimetry that
+    /// never reaches the description renders BT.2020 PQ as washed-out SDR, so
+    /// it is grafted on rather than dropped.
+    private static func withExtensions(
+        _ description: CMFormatDescription,
+        _ extensions: [CFString: Any]
+    ) -> CMFormatDescription? {
+        guard !extensions.isEmpty else { return description }
+        var merged = (CMFormatDescriptionGetExtensions(description) as? [CFString: Any]) ?? [:]
+        for (key, value) in extensions {
+            merged[key] = value
+        }
+        let dimensions = CMVideoFormatDescriptionGetDimensions(description)
+        var updated: CMFormatDescription?
+        let status = CMVideoFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault,
+            codecType: CMFormatDescriptionGetMediaSubType(description),
+            width: dimensions.width,
+            height: dimensions.height,
+            extensions: merged as CFDictionary,
+            formatDescriptionOut: &updated
+        )
+        // Keeping the untagged description beats losing the decoder over a
+        // colour tag.
+        return status == noErr ? updated : description
+    }
+
+    private static func h264FormatDescription(
+        parameterSets: [Data],
+        nalUnitHeaderLength: Int32,
+        extensions: [CFString: Any]
+    ) -> CMFormatDescription? {
+        withFlattened(parameterSets) { pointers, sizes in
+            var description: CMFormatDescription?
+            let status = CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                allocator: kCFAllocatorDefault,
+                parameterSetCount: pointers.count,
+                parameterSetPointers: pointers.baseAddress!,
+                parameterSetSizes: sizes.baseAddress!,
+                nalUnitHeaderLength: nalUnitHeaderLength,
+                formatDescriptionOut: &description
+            )
+            guard status == noErr, let description else { return nil }
+            // CMVideoFormatDescriptionCreateFromH264ParameterSets takes no
+            // extensions, so the colorimetry has to be grafted on afterwards.
+            return withExtensions(description, extensions)
+        }
     }
 
     /// Flattened so the parameter sets stay alive, and contiguous, for the
