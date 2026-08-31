@@ -388,10 +388,11 @@ nonisolated enum DeviceProfile {
                 ]
             ),
             // MPEG-2 uses the same 8-bit planar 4:2:0 software path as the
-            // other legacy codecs. Progressive DVD/recording sources can
-            // therefore remain Direct Play, while the required interlace
-            // guard keeps the much larger interlaced part of the format on
-            // Jellyfin's deinterlacing transcode until Lagoon owns one.
+            // other legacy codecs, and that path now deinterlaces what it
+            // decodes, so the interlace guard this profile used to carry is
+            // gone: an interlaced DVD or recording is Direct Play like any
+            // other MPEG-2 (HEL-127). The guard stays on every codec that
+            // decodes in hardware, where there is no deinterlacing stage.
             CodecProfile(
                 type: "Video",
                 codec: "mpeg2video",
@@ -418,12 +419,6 @@ nonisolated enum DeviceProfile {
                         condition: "LessThanEqual",
                         property: "Height",
                         value: "1080",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsInterlaced",
-                        value: "true",
                         isRequired: true
                     ),
                 ]
