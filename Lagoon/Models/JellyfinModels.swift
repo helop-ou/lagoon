@@ -204,6 +204,14 @@ nonisolated struct MediaSource: Decodable, Identifiable {
     let id: String
     let name: String?
     let container: String?
+    /// `VideoFile`, `Iso`, `BluRay` or `Dvd`. Jellyfin reports the container
+    /// it probed *inside* a disc — `ts` for a Blu-ray — and still answers
+    /// `SupportsDirectPlay = true`, so this is the only field that says the
+    /// static stream would arrive as a disc image or a folder rather than as
+    /// something a demuxer can open (HEL-133).
+    let videoType: String?
+    /// `BluRay` or `Dvd` when `videoType` is `Iso`; nil otherwise.
+    let isoType: String?
     let supportsDirectPlay: Bool?
     let supportsDirectStream: Bool?
     let supportsTranscoding: Bool?
