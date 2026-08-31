@@ -188,6 +188,10 @@ video packet and builds through
 - A remux does **not** repair such a file: `ffmpeg -c copy` carries the empty
   record straight over. Rebuilding it needs the video pushed through annex-B
   and re-muxed.
+- **The same refusal has a second cause**, found later and from the opposite
+  direction: a container whose record is not a configuration record at all.
+  See *Disc images* below, where MPEG-TS hands over Annex-B in the field an
+  `hvcC` arrives in.
 
 ### When playback fails: the delivery ladder (HEL-100)
 
@@ -273,6 +277,111 @@ left a signpost as the only trace, which needs Instruments and therefore a
 paired device; an Apple TV that cannot be paired (HDCP 2.2) could not be asked
 what went wrong. The playback HUD now carries it (`Rung:` / `Fell n:` /
 `Why n:`), appearing only once a rung has actually been descended.
+
+### Disc images (HEL-133)
+
+A disc image is a filesystem, not a stream, and Jellyfin describes one
+accurately and then contradicts itself: `VideoType` says `Iso`, `Container`
+reports the format probed *inside* the disc (`ts` for a Blu-ray), and
+`SupportsDirectPlay` still comes back true. Take the last at face value and
+the static stream delivers the image itself, which libavformat cannot open —
+stock `ffprobe` fails on the same URL with `Invalid data found when
+processing input`. `MediaSource` therefore decodes `VideoType`/`IsoType`, and
+`PlaybackSourceLayout` turns them into what the ladder needs: a file, a
+Blu-ray image, a DVD image, an image the server did not type, or a folder
+rip.
+
+**A folder rip cannot be read by any client.** Jellyfin's `Video.cs` returns
+the *folder* for a disc, and `MediaSourceInfo` exposes no property naming the
+files inside one — Emby's `PlayableStreamFileNames` is gone. A rip's honest
+outcome is therefore the server remux, chosen deliberately rather than
+discovered through a failed open. Infuse handles rips because it is usually
+reading SMB/NFS rather than Jellyfin.
+
+**An image is read here.** `UDFVolume` resolves a name to its extents and
+`DiscStreamMap` presents a title's extents to the demuxer as one linear
+stream, through the byte-range AVIO the playback cache already provided.
+Mounting WALL·E costs 15 range requests and 960 KiB, in 0.17 s.
+
+Four things about that were not obvious:
+
+- **UDF 2.50 hides every file entry inside a metadata partition** — a file in
+  the physical partition that the volume then addresses as a partition of its
+  own — while the data those entries describe stays outside it. A reader that
+  resolves every allocation descriptor in the entry's own partition finds
+  empty directories, which is exactly what the first draft did.
+- **A DVD image needs no second filesystem.** It is UDF 1.02, which is the
+  same reader minus the metadata partition, and it mounted an authored image
+  unchanged. No ISO9660 reader was written.
+- **The longest playlist is usually a menu loop.** WALL·E's `00020.mpls`
+  plays two clips 303 times and reports 323 minutes, more film than the image
+  physically holds; counting each clip once collapses it to 2 minutes. Four
+  real candidates then sit between 98.2 and 98.7 minutes, and the only thing
+  separating them is the runtime the server already probed (98.11) — a signal
+  only a client talking to a media server has. Ties break by name so the
+  choice cannot wobble between mounts.
+- **A title is not one file.** Seamless branching splits WALL·E's into 42
+  clips and the filesystem fragments some of those again: 71 extents,
+  44.53 GB. A DVD title is its largest title set's VOBs in numeric order,
+  part 0 excluded because that is the menu.
+
+The concatenated title's duration agrees with Jellyfin's probed runtime to
+within a third of a second, so the presentation timeline stays continuous
+across every clip boundary.
+
+#### Two failures that cost a build each
+
+Both looked like something they were not, and neither is visible to any tool
+that probes the disc: ffprobe, Jellyfin and libavcodec all handle both
+without comment. Only Apple's decoder and Lagoon's own timeline cared.
+
+**MPEG-TS is Annex-B; every other container Lagoon plays is
+length-prefixed.** 0.1 (69) mounted the disc correctly and then failed at
+`VTDecompressionSessionCreate` with "could not create a hardware decoder".
+libavformat synthesises `extradata` for MPEG-TS out of the in-band parameter
+sets and hands it over still in Annex-B; read as an `hvcC` it describes a
+stream that does not exist. The samples carry start codes as well, which
+VideoToolbox cannot decode whatever the description says. Verified against
+Apple's decoder with the disc's own 118 bytes:
+
+| built from | session |
+| --- | --- |
+| the record, read as `hvcC` | refused, -4 |
+| the parameter sets read out of it | created, 3840x2160 |
+
+`AnnexBStream` reads the parameter sets out of a start-code record and
+rewrites every payload with four-byte lengths, for H.264 as well as HEVC; the
+enhancement-layer filter runs after that conversion so it and VideoToolbox
+see one framing. This is HEL-131's failure reached from the other side: a
+description that builds successfully and a decoder that refuses it.
+
+**A container's clock is not the film's clock.** 0.1 (70) played but opened
+reading 1:10:00 with a scrubber that would not move. MPEG-TS starts at
+whatever timestamp the muxer chose, and this disc's streams begin at
+4198.333333 s, which is 377850000 at 90 kHz. Every packet carried that origin
+into the renderers, and every seek asked for a timestamp 70 minutes before
+the first frame, which the demuxer clamped to the start. `ContainerTimeline`
+now removes the format's origin from packets as they are read and adds it
+back onto seeks. Measured origins, which is why this had never come up:
+
+| path | origin |
+| --- | --- |
+| MKV direct play | 0 |
+| Jellyfin HLS transcode | -0.042667 s (encoder delay, negative, ignored) |
+| Jellyfin HLS remux | +0.005 s |
+| DVD image | +0.54 s |
+| Blu-ray image | +4198.33 s |
+
+Taking the *format's* origin rather than each stream's own is deliberate:
+this disc starts its video and first audio track together and a second audio
+track two thirds of a second later, and that offset is content, not clock.
+
+#### Untested
+
+Dolby Vision profile 7 discs, where the enhancement-layer filter keys off a
+DoVi record that may not survive MPEG-TS; H.264 Blu-rays, meaning everything
+before 4K; and any real DVD image, since the DVD path is verified against a
+disc authored with `dvdauthor` for the purpose and fixture holds none.
 
 ## The engine (`Lagoon/Views/Player/SampleBuffer/`)
 
@@ -479,8 +588,9 @@ composition cost is more representative than Simulator timing.
   Metal-compatible NV12 buffers, carries colorimetry and exact frame timing,
   and wraps each image with `CMSampleBufferCreateReadyWithImageBuffer` for the
   existing render synchronizer. The advertised profile is capped at 1080p
-  and excludes interlaced video because Lagoon has no deinterlacing stage;
-  anything outside that envelope still uses the server transcode fallback.
+  and excludes interlaced video, which for every codec but MPEG-2 still goes
+  to the server (HEL-127); anything outside that envelope still uses the
+  server transcode fallback.
   Keeping eligible files in one original stream also removes the short HLS
   fragment boundary that caused the reported repeating audio cut-outs. The
   affected VC-1 + AC-3 pairing decodes AC-3 locally to LPCM before enqueueing
@@ -521,12 +631,31 @@ composition cost is more representative than Simulator timing.
 - **MPEG-2, PCM and DVB subtitles** (HEL-104): these already had decoders in
   the pinned FFmpeg build; the missing piece was the profile that allowed the
   server to send them. Progressive SDR MPEG-2 uses the bounded 8-bit 4:2:0
-  software-video path at up to 1080p. Interlaced MPEG-2 still transcodes
-  because Lagoon has no deinterlacer. MPEG program/transport-stream and VOB
+  software-video path at up to 1080p. Interlaced MPEG-2 direct-plays as well
+  as of HEL-127, below. MPEG program/transport-stream and VOB
   containers are included so DVD and recorded-TV sources can actually reach
   that path. Integer/float PCM variants, Blu-ray LPCM, and DVD LPCM use the
   existing libavcodec → Float32 LPCM audio renderer path; DVB bitmap subtitles
   use the same paletted-rectangle decoder and overlay as PGS and VobSub.
+- **Deinterlacing** (HEL-127): the software decode path makes an interlaced
+  frame progressive before it copies it out, so MPEG-2 no longer has to be
+  sent to the server to be made watchable. Written rather than linked:
+  deinterlacing normally means libavfilter's yadif, and libavfilter is not
+  among the pinned FFmpeg artifacts, so reaching for it is a dependency
+  decision rather than a filter call. `Deinterlacer` does the useful half of
+  yadif's spatial pass — predict along whichever direction the image runs,
+  and keep the original sample wherever the two fields already agree. What it
+  gives up is yadif's temporal half; the per-pixel agreement test stands in
+  for it, so a still shot survives at full vertical resolution and only
+  motion is interpolated. Measured against yadif on a real interlaced frame:
+  0.34 levels per pixel apart out of 255, at 1.61 ms per frame at 720x576.
+  Two things are deliberate. The frame is made writable first, because what
+  the decoder hands over may still be a reference frame later pictures are
+  predicted from. And only MPEG-2's `IsInterlaced` guard came out of the
+  profile: every codec that decodes in hardware keeps it, since there is no
+  stage there to hand a field pair to. That also turns out to be what makes a
+  DVD image playable at all — with the guard in place Jellyfin answers an
+  interlaced disc with a transcode and the image never reaches the client.
 - **10-bit AV1 and VP9** (HEL-103): progressive AV1 Main and VP9 profiles 0/2
   direct-play at up to 10-bit. AV1 routing and negotiation are
   capability-aware:
@@ -581,8 +710,10 @@ composition cost is more representative than Simulator timing.
   presents 1024x576 (filling the 16:9 frame instead of pillarboxed and
   squished), the software path's 710x480 SAR 8:9 presents 631x480, and a
   square 1920x1080 h264 still reports 1920x1080 with 0 dropped frames.
-  The device profile no longer excludes `IsAnamorphic`; interlaced still
-  transcodes, because there is still no deinterlacing stage.
+  The device profile no longer excludes `IsAnamorphic`, and no longer
+  excludes interlaced MPEG-2 (HEL-127). Interlaced content in every codec
+  that decodes in hardware still transcodes, because the deinterlacing stage
+  lives on the software path.
 - **Subtitles** (M5): rendered as a SwiftUI overlay, never through the
   renderers. Embedded streams decode via `avcodec_decode_subtitle2`
   (normalizes srt/ass/ssa/mov_text to ASS event payloads — text is
@@ -757,6 +888,22 @@ composition cost is more representative than Simulator timing.
   hung every video stall until `reprimeAfter`, since the cushion it waited
   for is not normally there. Both are pinned by tests so neither comes
   back.
+
+  **The cutouts themselves were never Lagoon's**, confirmed on hardware in
+  0.1 (71). The 64.5 Mbps source "the server was transcoding" was the server
+  rebuilding a 64.8 GB Blu-ray image in real time, because Lagoon could not
+  open the image itself. Reading the disc directly (HEL-133) removed the
+  transcode and the audio drops with it: same Apple TV, same network, same
+  cache, same title, no cutouts. The starvation was upstream delivery, and
+  the `Buffer:`/`Cache:` reading nobody ever captured is moot for this title
+  because there is no longer a cutout to capture it during.
+
+  The defect is still open, and is worth keeping apart from the symptom. A
+  genuinely starved audio path can still play on with the picture running and
+  no sound while every counter reads healthy. What changed is that the only
+  title anyone could reproduce it on no longer does, so verifying a fix will
+  need a deliberately starved feed: a throttled connection, or a transcode
+  paused server-side mid-playback.
 - **A stream with no cache gets a bigger demux cushion** (HEL-130). The
   sparse AVIO cache is enabled for direct play and direct stream and off for
   a transcode, because a Jellyfin HLS transcode has mutable manifests and a
