@@ -31,11 +31,13 @@ nonisolated enum Changelog {
             version: "0.1",
             build: "66",
             released: "August 2026",
-            headline: "Some 4K films refused to start and were quietly handed to your server to convert.",
+            headline: "Some 4K films now start instead of being handed to your server, and a film that loses its sound says so.",
             changes: [
                 "A film can now start even when its file does not describe its own video properly. Some 4K releases leave that description out of the file and repeat it inside the picture data instead, which is allowed, and Lagoon was reading only the first place. It could not set up a decoder, so it fell back on asking your server to convert the film, which is slow and looks worse than the file you already own. Lagoon now reads the second place too.",
                 "Nothing about this was visible while it happened. Every other tool reads that information from inside the picture data, so the file looked perfectly healthy on your server and in any other player, and the failure looked like your Apple TV refusing the film rather than the file being described oddly.",
                 "If a title has been converting for no obvious reason, it is worth another try.",
+                "When the sound runs out because the film is not reaching your Apple TV fast enough, Lagoon now shows that it is buffering instead of carrying on with the picture and no sound. Nothing reported this before. The picture kept moving, every reading in Playback Details looked normal, and the only sign anything was wrong was the silence itself.",
+                "That is honesty rather than a cure. A film whose sound keeps running out is still a film arriving too slowly, and there is more to do there, but it now tells you instead of hiding it.",
             ]
         ),
         ChangelogEntry(
