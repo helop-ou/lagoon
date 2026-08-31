@@ -12,6 +12,26 @@ item below is a hypothesis with a named way to test it, never a result —
 CLAUDE.md's rule about casual frame-loss comparison applies to all of them,
 and HEL-64 already retracted two fixes that skipped it.
 
+**Since this audit** (noted September 1, 2026, at 0.1 (71)). The findings
+below are left exactly as they were written; this says which of them moved.
+
+* **B4, interlaced content** — half closed. MPEG-2 deinterlaces locally as of
+  HEL-127 and its `IsInterlaced` guard is out of the profile; every codec that
+  decodes in hardware still goes to the server. The audit's inference that
+  this needed a filter-graph stage did not hold: libavfilter is not in the
+  pinned build, and `Deinterlacer` does yadif's spatial pass directly on the
+  decoded planes instead, at 1.61 ms per frame at 720x576.
+* **Order item 1, HEL-123** — the reported symptom is gone; the defect is not.
+  The cutouts were the server rebuilding a 64.8 GB Blu-ray image in real time
+  because Lagoon could not open the image itself. It reads the disc now
+  (HEL-133), and the drops went with the transcode. A starved audio path can
+  still play on silently, and now has no reproduction.
+* **Order item 2, HEL-124** — untouched.
+* **Not in this audit at all: disc images.** Lagoon could not open one when
+  this was written, and the resulting failure was being read as a transcode
+  problem rather than as the client never having been in the path. See *Disc
+  images* in `docs/playback.md`.
+
 ## How the pipeline routes, in one paragraph
 
 `DeviceProfile.everything` is the envelope the engine can play;
