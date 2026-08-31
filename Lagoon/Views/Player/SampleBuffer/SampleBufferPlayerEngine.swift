@@ -88,6 +88,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// it, and must never be held in buffering waiting for a cushion that
     /// is never going to arrive (HEL-123).
     private var hasAudioTrack: Bool { !audioTracks.isEmpty }
+    /// The audio depth the demux loop is aiming for. Shown beside the queue
+    /// so the bigger uncached cushion is visible rather than inferred
+    /// (HEL-130).
+    var audioCushionTarget: Int {
+        DemuxBackpressurePolicy.audioCushionTarget(
+            deliveryIsCached: shared.withLock { $0.deliveryIsCached }
+        )
+    }
 
     /// Timestamp discontinuities in the audio feed — the measurable form
     /// of "the audio crackles" (HEL-64). Should read 0 during untouched
@@ -1386,6 +1394,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         defer {
             PlaybackLifecycleDiagnostics.demuxEnded(lifecycleID)
         }
+        // Whether this stream ended up with a cache, which is what decides
+        // how much cushion the demux queues have to be (HEL-130). Keyed on
+        // the cache rather than on the play method so the two compose: a
+        // transcode with the experimental cache switched on is no longer
+        // uncached, and a direct play that fell back to the native
+        // transport is.
+        var deliveryIsCached = cacheSession != nil
         do {
             do {
                 try demuxer.open(
@@ -1395,6 +1410,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 )
             } catch where cacheSession != nil {
                 demuxer.close()
+                deliveryIsCached = false
                 Task { @MainActor in self.onPlaybackCacheFallback?() }
                 try demuxer.open(
                     url: url.absoluteString,
@@ -1411,6 +1427,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             Task { @MainActor in self.onError?(failure) }
             return
         }
+        shared.withLock { $0.deliveryIsCached = deliveryIsCached }
         if let codecName = demuxer.videoStream?.codecName,
            codecName == "hevc" || codecName == "av1",
            !demuxer.outputsDecodedVideo,
@@ -1607,6 +1624,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
                 videoIsSoftwareDecoded: demuxer.outputsDecodedVideo,
                 hasAudio: !demuxer.audioStreams.isEmpty,
+                deliveryIsCached: deliveryIsCached,
                 playbackRate: shared.withLock { $0.playbackRate }
             ) {
             case .read:
@@ -2159,6 +2177,9 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var externalSubtitles: [ExternalSubtitleTrack] = []
         /// Highest video pts the demuxer has delivered (M6 stall detection).
         var videoBufferedTo: Double = 0
+        /// Whether the stream got a playback cache. Read on the main actor
+        /// so the HUD can show which demux cushion is in force (HEL-130).
+        var deliveryIsCached = true
         /// Furthest presentation end observed across audio and video. EOF
         /// uses this as the renderer boundary even without container duration.
         var mediaEndSeconds: Double = 0
@@ -2226,6 +2247,38 @@ nonisolated enum DemuxBackpressurePolicy {
     private static let audioHardWater = 270
     private static let audioSafetySeconds = 1.25
 
+    // A stream arriving without a playback cache has nothing between the
+    // network and the renderers: no sparse cache, no proactive range fill,
+    // no playhead prefetch. The demux queues are the entire cushion, so
+    // they are asked to be a bigger one (HEL-130).
+    //
+    // **Only audio grows, and the asymmetry is the whole point.** Video's
+    // queue holds decoded frames — 24.9 MB each at 4K 10-bit, which is why
+    // its hard limit is 30 and why HEL-126 exists — while audio holds
+    // compressed packets at roughly 80 KB a second. Doubling the audio
+    // cushion costs about 1.5 MB against a video queue already permitted
+    // 746 MB. Even the worst case, a locally decoded 8-channel track held
+    // as float LPCM, is about 26 MB.
+    //
+    // Audio is also the half that has no cushion of its own. The video
+    // renderer coasts on frames it already holds, which is why a starved
+    // transcode reaches the viewer as silence over a moving picture rather
+    // than as a freeze (HEL-123).
+    private static let uncachedAudioHighWater = 360
+    private static let uncachedAudioLowWater = 288
+    private static let uncachedAudioHardWater = 540
+    /// The margin video must leave audio covered for before it may park on
+    /// its own high water. Larger without a cache, because the drain it has
+    /// to survive is however long the network takes to deliver the next
+    /// segment rather than a cache read.
+    private static let uncachedAudioSafetySeconds = 3.0
+
+    /// The audio depth being aimed for, so the HUD can show which profile
+    /// is in force rather than leaving its absence to be inferred.
+    static func audioCushionTarget(deliveryIsCached: Bool) -> Int {
+        deliveryIsCached ? audioHighWater : uncachedAudioHighWater
+    }
+
     static func videoHardLimit(
         videoIsDecoded: Bool,
         videoIsSoftwareDecoded: Bool = false
@@ -2234,6 +2287,8 @@ nonisolated enum DemuxBackpressurePolicy {
         return videoIsDecoded ? 30 : 120
     }
 
+    /// `deliveryIsCached` defaults true, which is the shape every caller had
+    /// before the uncached profile existed.
     static func decision(
         videoCount: Int,
         audioCount: Int,
@@ -2242,8 +2297,15 @@ nonisolated enum DemuxBackpressurePolicy {
         videoIsDecoded: Bool,
         videoIsSoftwareDecoded: Bool = false,
         hasAudio: Bool,
+        deliveryIsCached: Bool = true,
         playbackRate: Double = 1
     ) -> DemuxBackpressureDecision {
+        let audioHighWater = deliveryIsCached ? Self.audioHighWater : uncachedAudioHighWater
+        let audioLowWater = deliveryIsCached ? Self.audioLowWater : uncachedAudioLowWater
+        let audioHardWater = deliveryIsCached ? Self.audioHardWater : uncachedAudioHardWater
+        let audioSafetySeconds = deliveryIsCached
+            ? Self.audioSafetySeconds
+            : uncachedAudioSafetySeconds
         let videoHardWater = videoHardLimit(
             videoIsDecoded: videoIsDecoded,
             videoIsSoftwareDecoded: videoIsSoftwareDecoded

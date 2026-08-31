@@ -1255,3 +1255,112 @@ struct PlaybackStarvationTests {
         ) == .resume)
     }
 }
+
+/// HEL-130: a stream with no playback cache has the demux queues as its
+/// entire cushion between the network and the renderers.
+@Suite("Uncached delivery cushion")
+struct UncachedDeliveryCushionTests {
+    /// Audio grows and video does not, which is the whole design: a decoded
+    /// 4K frame is 24.9 MB and a second of compressed audio is about 80 KB.
+    @Test func onlyTheAudioCushionGrowsWithoutACache() {
+        #expect(
+            DemuxBackpressurePolicy.audioCushionTarget(deliveryIsCached: false)
+                > DemuxBackpressurePolicy.audioCushionTarget(deliveryIsCached: true)
+        )
+        // Video's hard limit is not a function of delivery at all.
+        #expect(DemuxBackpressurePolicy.videoHardLimit(videoIsDecoded: true) == 30)
+        #expect(DemuxBackpressurePolicy.videoHardLimit(videoIsDecoded: false) == 120)
+    }
+
+    /// The cached profile is unchanged, so a direct play behaves exactly as
+    /// it did before this existed. Video has to be off the floor first:
+    /// the policy never parks on audio while video is the starved one.
+    @Test func aCachedStreamKeepsTheWatermarksItAlwaysHad() {
+        #expect(DemuxBackpressurePolicy.audioCushionTarget(deliveryIsCached: true) == 180)
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 12,
+            audioCount: 180,
+            audioBufferedSeconds: 6,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .waitForAudio(below: 144))
+    }
+
+    /// The same queue depth that parks a cached stream keeps reading on an
+    /// uncached one, which is the cushion actually being built.
+    @Test func anUncachedStreamKeepsReadingWhereACachedOneParks() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 12,
+            audioCount: 180,
+            audioBufferedSeconds: 6,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .read)
+    }
+
+    /// Video may not park on its own high water while audio is short of the
+    /// drain it would have to survive, and without a cache that margin is
+    /// larger because the drain is a network round trip rather than a cache
+    /// read.
+    @Test func videoWaitsLongerForAudioWithoutACache() {
+        // 18 frames of 24 fps video drains to 12 in 0.25 s; a cached stream
+        // needs 1.25 s + that, an uncached one 3 s + that.
+        let betweenTheTwo = 2.0
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 18,
+            audioCount: 40,
+            audioBufferedSeconds: betweenTheTwo,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .waitForVideo(below: 12))
+        // The same state, uncached, keeps reading to build audio instead.
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 18,
+            audioCount: 40,
+            audioBufferedSeconds: betweenTheTwo,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .read)
+    }
+
+    /// The absolute bound still holds: a deeper cushion is not an unbounded
+    /// one, and video's hard limit is untouched by any of this.
+    @Test func theHardLimitsStillBound() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 40,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .waitForVideo(below: 30))
+        // Audio parks at its own high water once video is off the floor,
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 12,
+            audioCount: 360,
+            audioBufferedSeconds: 12,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .waitForAudio(below: 288))
+        // and is stopped by the absolute bound even when video is starved
+        // and the loop would otherwise keep reading for it.
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 0,
+            audioCount: 540,
+            audioBufferedSeconds: 20,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .waitForAudio(below: 540))
+    }
+}

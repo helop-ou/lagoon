@@ -708,6 +708,43 @@ composition cost is more representative than Simulator timing.
   Audio-caused stalls are counted separately and reported in the HUD
   (`stalls N (M audio)`) and the bench (`aStalls`), because a silence that
   leaves no trace in a bench window is exactly the failure this ticket was.
+- **A stream with no cache gets a bigger demux cushion** (HEL-130). The
+  sparse AVIO cache is enabled for direct play and direct stream and off for
+  a transcode, because a Jellyfin HLS transcode has mutable manifests and a
+  byte-range cache over a playlist that changes underneath it is not
+  something to ship. That reasoning is sound, but "no byte-range cache"
+  became "no buffering of any kind": no sparse cache, no proactive range
+  fill, no playhead prefetch, with the demux queues the only thing between
+  the network and the renderers. A hitch in segment delivery therefore
+  stalls the read directly, both queues drain, and audio goes silent at once.
+
+  The queues are now asked to be a bigger cushion when there is no cache.
+  Three things about that are deliberate:
+
+  - **It keys on the cache, not the play method**, so the two compose: a
+    transcode with `debug.experimentalPlaybackCache` on is not uncached, and
+    a direct play that fell back to the native transport is.
+  - **Only audio grows.** Video's queue holds decoded frames — 24.9 MB each
+    at 4K 10-bit, which is why its hard limit is 30 and why HEL-126 exists —
+    while audio holds compressed packets at roughly 80 KB a second. Doubling
+    the audio cushion costs about 1.5 MB against a video queue already
+    permitted 746 MB; the worst case, a locally decoded 8-channel track held
+    as float LPCM, is about 26 MB. Audio is also the half with no cushion of
+    its own, which is why a starved transcode reaches the viewer as silence
+    over a moving picture rather than as a freeze.
+  - **The safety margin grows too** (1.25 s to 3 s). That is the margin video
+    must leave audio covered for before it may park on its own high water,
+    and without a cache the drain it has to survive is a network round trip
+    rather than a cache read. It is the half that actually keeps the loop
+    reading for audio instead of parking on video.
+
+  The HUD shows the depth being aimed for (`A 200/360`), so which profile is
+  in force is visible rather than inferred from a missing line.
+
+  This does not answer whether the HLS cache scope is sound enough to enable
+  outside DEBUG. That still needs the hardware A/B the shipped switch exists
+  for, and the two are independent: a cushion helps a stream that has no
+  cache, and turning the cache on is what would stop it being one.
 - **Audio delay** (M6): mpv convention, positive delays audio; applied
   by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
   and re-demuxing from the current position on change. Lives in the
