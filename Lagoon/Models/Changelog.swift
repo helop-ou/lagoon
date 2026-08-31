@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "66",
+            released: "August 2026",
+            headline: "Some 4K films refused to start and were quietly handed to your server to convert.",
+            changes: [
+                "A film can now start even when its file does not describe its own video properly. Some 4K releases leave that description out of the file and repeat it inside the picture data instead, which is allowed, and Lagoon was reading only the first place. It could not set up a decoder, so it fell back on asking your server to convert the film, which is slow and looks worse than the file you already own. Lagoon now reads the second place too.",
+                "Nothing about this was visible while it happened. Every other tool reads that information from inside the picture data, so the file looked perfectly healthy on your server and in any other player, and the failure looked like your Apple TV refusing the film rather than the file being described oddly.",
+                "If a title has been converting for no obvious reason, it is worth another try.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "65",
             released: "August 2026",
             headline: "A film your server has to convert now keeps playing instead of stalling every few seconds.",
