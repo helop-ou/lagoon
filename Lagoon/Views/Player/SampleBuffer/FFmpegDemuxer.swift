@@ -240,7 +240,7 @@ nonisolated final class FFmpegDemuxer {
             // (HEL-133).
             do {
                 let volume = try UDFVolume(source: PlaybackCacheDiscSource(source: cacheScope))
-                let title = try BlurayDisc.mainTitle(
+                let title = try DiscTitle.mainTitle(
                     in: volume,
                     runtimeSeconds: disc.runtimeSeconds
                 )
