@@ -124,6 +124,9 @@ nonisolated final class FFmpegDemuxer {
     var markDroppableFrames = false
     /// Non-nil = stripping armed; demux-queue use only.
     private var videoNALLengthSize: Int?
+    /// Set when the video track arrives start-code delimited, which is every
+    /// MPEG-TS and so every Blu-ray clip the disc reader opens (HEL-133).
+    private var videoUsesStartCodes = false
     // Written per-packet on the demux queue, read by the HUD from the main
     // actor — proof the experiment engaged (the retraction lesson: verify
     // the gate before trusting the A/B).
@@ -357,13 +360,36 @@ nonisolated final class FFmpegDemuxer {
         // before the description is built, not after: the description is
         // created successfully either way and only the decoder refuses
         // (HEL-131).
-        let harvestedParameterSets = usesCompressedVideo
+        // MPEG-TS describes its parameter sets in Annex-B, which is not an
+        // hvcC however much the field it arrives in says otherwise. Taken at
+        // face value it builds a description no decoder accepts, and the
+        // refusal arrives as "no hardware decoder" rather than as anything
+        // about framing (HEL-133).
+        let annexBParameterSets = usesCompressedVideo
+            ? annexBParameterSets(codecpar: videoPar)
+            : nil
+        videoUsesStartCodes = annexBParameterSets != nil
+        let harvestedParameterSets = usesCompressedVideo && annexBParameterSets == nil
             ? harvestedHEVCParameterSets(ctx: ctx, streamIndex: bestVideo, codecpar: videoPar)
             : nil
         var videoDescription: CMFormatDescription? = if usesCompressedVideo {
             SampleBufferFactory.videoFormatDescription(
                 codecpar: videoPar,
-                hevcParameterSets: harvestedParameterSets
+                parameterSets: annexBParameterSets ?? harvestedParameterSets.map {
+                    SampleBufferFactory.BitstreamParameterSets(
+                        sets: $0,
+                        nalUnitHeaderLength: Int32(
+                            videoPar.pointee.extradata.flatMap { extradata in
+                                HEVCEnhancementLayerFilter.nalLengthSize(
+                                    hvcc: Data(
+                                        bytes: extradata,
+                                        count: Int(videoPar.pointee.extradata_size)
+                                    )
+                                )
+                            } ?? 4
+                        )
+                    )
+                }
             )
         } else {
             nil
@@ -387,14 +413,22 @@ nonisolated final class FFmpegDemuxer {
                 frameRateDen: guessedRate.den
             )
         }
+        // Once a start-code stream is converted every NAL carries a
+        // four-byte length, whatever the container's own record claimed.
+        let filterNALLengthSize: Int? = videoUsesStartCodes
+            ? Int(AnnexBStream.nalUnitHeaderLength)
+            : videoPar.pointee.extradata.flatMap { extradata in
+                videoPar.pointee.extradata_size > 0
+                    ? HEVCEnhancementLayerFilter.nalLengthSize(
+                        hvcc: Data(bytes: extradata, count: Int(videoPar.pointee.extradata_size))
+                    )
+                    : nil
+            }
         if stripEnhancementLayer,
            videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
            let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),
            dovi.el_present_flag != 0,
-           let extradata = videoPar.pointee.extradata, videoPar.pointee.extradata_size > 0,
-           let lengthSize = HEVCEnhancementLayerFilter.nalLengthSize(
-               hvcc: Data(bytes: extradata, count: Int(videoPar.pointee.extradata_size))
-           ) {
+           let lengthSize = filterNALLengthSize {
             videoNALLengthSize = lengthSize
             stripStatsLock.lock()
             stripStats = (0, 0)
@@ -522,6 +556,32 @@ nonisolated final class FFmpegDemuxer {
     /// this only has to cover whatever audio and subtitle packets happen to
     /// be interleaved ahead of the first video one.
     private static let parameterSetProbeLimit = 64
+
+    /// Parameter sets read out of a start-code delimited container record.
+    ///
+    /// nil for every length-prefixed container, which is all of them but
+    /// MPEG-TS, so nothing that worked before this reaches a new path.
+    private func annexBParameterSets(
+        codecpar: UnsafeMutablePointer<AVCodecParameters>
+    ) -> SampleBufferFactory.BitstreamParameterSets? {
+        let codec: AnnexBStream.Codec
+        switch codecpar.pointee.codec_id {
+        case AV_CODEC_ID_HEVC: codec = .hevc
+        case AV_CODEC_ID_H264: codec = .h264
+        default: return nil
+        }
+        guard let extradata = codecpar.pointee.extradata,
+              codecpar.pointee.extradata_size > 0 else { return nil }
+        let record = Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size))
+        guard AnnexBStream.usesStartCodes(record),
+              let sets = AnnexBStream.parameterSets(inAnnexB: record, codec: codec) else {
+            return nil
+        }
+        return SampleBufferFactory.BitstreamParameterSets(
+            sets: sets,
+            nalUnitHeaderLength: AnnexBStream.nalUnitHeaderLength
+        )
+    }
 
     /// VPS, SPS and PPS taken from the bitstream, for an HEVC track whose
     /// container declared none of its own (HEL-131).
@@ -729,19 +789,40 @@ nonisolated final class FFmpegDemuxer {
                 : .video(pendingDecodedVideo.removeFirst())
         }
         if streamIndex == videoStreamIndex, let description = videoStream?.formatDescription {
+            // Start codes become length prefixes before anything downstream
+            // sees the payload, so the filter below and VideoToolbox itself
+            // read one framing (HEL-133).
             var strippedPayload: Data?
-            if let lengthSize = videoNALLengthSize, let data = packet.pointee.data {
-                strippedPayload = HEVCEnhancementLayerFilter.strippingEnhancementLayer(
-                    from: UnsafeRawBufferPointer(start: data, count: Int(packet.pointee.size)),
-                    lengthSize: lengthSize
+            if videoUsesStartCodes, let data = packet.pointee.data {
+                strippedPayload = AnnexBStream.lengthPrefixed(
+                    UnsafeRawBufferPointer(start: data, count: Int(packet.pointee.size))
                 )
-                if let strippedPayload {
+            }
+            if let lengthSize = videoNALLengthSize {
+                let sizeBefore = strippedPayload?.count ?? Int(packet.pointee.size)
+                let filtered: Data? = if let converted = strippedPayload {
+                    converted.withUnsafeBytes {
+                        HEVCEnhancementLayerFilter.strippingEnhancementLayer(
+                            from: $0,
+                            lengthSize: lengthSize
+                        )
+                    }
+                } else if let data = packet.pointee.data {
+                    HEVCEnhancementLayerFilter.strippingEnhancementLayer(
+                        from: UnsafeRawBufferPointer(start: data, count: Int(packet.pointee.size)),
+                        lengthSize: lengthSize
+                    )
+                } else {
+                    nil
+                }
+                if let filtered {
                     stripStatsLock.lock()
                     var stats = stripStats ?? (0, 0)
                     stats.units += 1
-                    stats.bytes += Int64(Int(packet.pointee.size) - strippedPayload.count)
+                    stats.bytes += Int64(sizeBefore - filtered.count)
                     stripStats = stats
                     stripStatsLock.unlock()
+                    strippedPayload = filtered
                 }
             }
             // Snap the presentation stamp onto the exact frame grid;
