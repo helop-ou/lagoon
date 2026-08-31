@@ -28,11 +28,11 @@ struct PlaybackFallbackTests {
         )
     }
 
-    @Test func aDiscIsNeverOfferedTheRungItCannotBePlayedFrom() throws {
+    @Test func aBlurayImageIsRecognisedFromTheFieldsThatGiveItAway() throws {
         // Jellyfin describes WALL·E's Blu-ray image as container `ts` with
-        // direct play available, then serves 64 GB of UDF that libavformat
-        // cannot open. `VideoType` is the only field that gives it away, so
-        // it has to survive decoding (HEL-133).
+        // direct play available, then serves 64 GB of UDF. VideoType and
+        // IsoType are the only fields that say so, and both have to survive
+        // decoding (HEL-133).
         let image = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
         {
           "Id":"disc", "Container":"ts", "VideoType":"Iso", "IsoType":"BluRay",
@@ -41,24 +41,43 @@ struct PlaybackFallbackTests {
         """#.utf8))
         #expect(image.videoType == "Iso")
         #expect(image.isoType == "BluRay")
-        #expect(PlaybackSourceLayout(videoType: image.videoType) == .image)
-        #expect(PlaybackFallbackPolicy.start(for: .image) == .remux)
-        #expect(PlaybackFallbackPolicy.start(for: .discFolder) == .remux)
-        #expect(PlaybackSourceLayout.image.directPlayRefusal != nil)
+        let layout = PlaybackSourceLayout(videoType: image.videoType, isoType: image.isoType)
+        #expect(layout == .blurayImage)
+        // This one Lagoon opens itself, so the negotiated rung is where it
+        // belongs and there is nothing for the HUD to explain.
+        #expect(PlaybackFallbackPolicy.start(for: layout) == .negotiated)
+        #expect(layout.directPlayRefusal == nil)
+    }
+
+    @Test func everyOtherDiscStartsAtTheRungTheServerRebuildsItFrom() {
+        // A DVD image needs a VIDEO_TS reader this client does not have, and
+        // a rip is served as its folder, which Jellyfin gives no way to read
+        // inside of. Both belong to the server, and neither should cost a
+        // failed open to discover.
+        let dvd = PlaybackSourceLayout(videoType: "Iso", isoType: "Dvd")
+        let rip = PlaybackSourceLayout(videoType: "BluRay", isoType: nil)
+        #expect(dvd == .discImage)
+        #expect(rip == .discFolder)
+        for layout in [dvd, rip] {
+            #expect(PlaybackFallbackPolicy.start(for: layout) == .remux)
+            #expect(layout.directPlayRefusal != nil)
+            #expect(layout.isDisc)
+        }
+        #expect(PlaybackSourceLayout(videoType: "Dvd", isoType: nil) == .discFolder)
+        // An image the server did not type is not assumed to be readable.
+        #expect(PlaybackSourceLayout(videoType: "Iso", isoType: nil) == .discImage)
     }
 
     @Test func onlyAPlainFileIsTriedAtTheNegotiatedRung() {
-        #expect(PlaybackSourceLayout(videoType: nil) == .file)
-        #expect(PlaybackSourceLayout(videoType: "VideoFile") == .file)
-        #expect(PlaybackSourceLayout(videoType: "iso") == .image)
-        #expect(PlaybackSourceLayout(videoType: "BluRay") == .discFolder)
-        #expect(PlaybackSourceLayout(videoType: "Dvd") == .discFolder)
+        #expect(PlaybackSourceLayout(videoType: nil, isoType: nil) == .file)
+        #expect(PlaybackSourceLayout(videoType: "VideoFile", isoType: nil) == .file)
         // An unrecognised value stays a file: one failed open and a rung of
         // ladder is a smaller price than silently forcing a server transcode
         // on something that might have played.
-        #expect(PlaybackSourceLayout(videoType: "HoloDisc") == .file)
+        #expect(PlaybackSourceLayout(videoType: "HoloDisc", isoType: nil) == .file)
         #expect(PlaybackFallbackPolicy.start(for: .file) == .negotiated)
         #expect(PlaybackSourceLayout.file.directPlayRefusal == nil)
+        #expect(!PlaybackSourceLayout.file.isDisc)
     }
 
     @Test func theLadderAlwaysTerminates() {
