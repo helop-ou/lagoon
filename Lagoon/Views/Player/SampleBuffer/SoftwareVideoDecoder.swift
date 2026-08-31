@@ -276,6 +276,15 @@ nonisolated final class SoftwareVideoDecoder {
             throw DecoderError.unsupportedPixelFormat(name)
         }
 
+        // An interlaced frame is made progressive before it is copied out,
+        // so nothing downstream ever sees a field pair (HEL-127). Ten-bit
+        // formats are left alone: interlaced content at that depth is not
+        // something this engine has met, and guessing at one is worse than
+        // the transcode the profile still asks for.
+        if isSupported8Bit, frame.pointee.flags & Self.interlacedFrameFlag != 0 {
+            deinterlaceInPlace(decodedFormat: decodedFormat)
+        }
+
         var pixelBuffer: CVPixelBuffer?
         let pixelStatus = CVPixelBufferPoolCreatePixelBuffer(
             kCFAllocatorDefault,
@@ -415,6 +424,57 @@ nonisolated final class SoftwareVideoDecoder {
             throw DecoderError.outputSample(sampleStatus)
         }
         return output
+    }
+
+    /// libavutil declares these as macros, which do not reach Swift.
+    private static let interlacedFrameFlag: Int32 = 1 << 3
+    private static let topFieldFirstFlag: Int32 = 1 << 4
+
+    /// Deinterlaces the decoded frame in place, before it is copied out.
+    ///
+    /// Only the software path has this. It is where MPEG-2 is decoded and so
+    /// where DVD lives; the hardware path has no deinterlacing stage, which is
+    /// why the device profile still asks the server to handle interlaced
+    /// content in every other codec (HEL-127).
+    ///
+    /// The frame is made writable first. What the decoder handed over may
+    /// still be a reference frame that later pictures are predicted from, and
+    /// editing that in place would corrupt everything that follows it.
+    private func deinterlaceInPlace(decodedFormat: AVPixelFormat) {
+        guard av_frame_make_writable(frame) >= 0 else { return }
+        let topFieldFirst = frame.pointee.flags & Self.topFieldFirstFlag != 0
+        guard let luma = planePointer(0) else { return }
+        Deinterlacer.plane(
+            base: UnsafeMutablePointer(mutating: luma),
+            stride: planeStride(0),
+            width: width,
+            height: height,
+            keepingTopField: topFieldFirst
+        )
+        if decodedFormat == AV_PIX_FMT_NV12 {
+            guard let chroma = planePointer(1) else { return }
+            // Interleaved chroma: a prediction steps two bytes at a time so
+            // it never mixes a U sample with a V one.
+            Deinterlacer.plane(
+                base: UnsafeMutablePointer(mutating: chroma),
+                stride: planeStride(1),
+                width: width,
+                height: height / 2,
+                componentStride: 2,
+                keepingTopField: topFieldFirst
+            )
+            return
+        }
+        for plane in 1...2 {
+            guard let chroma = planePointer(plane) else { return }
+            Deinterlacer.plane(
+                base: UnsafeMutablePointer(mutating: chroma),
+                stride: planeStride(plane),
+                width: width / 2,
+                height: height / 2,
+                keepingTopField: topFieldFirst
+            )
+        }
     }
 
     private func planePointer(_ index: Int) -> UnsafePointer<UInt8>? {
