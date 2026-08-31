@@ -288,15 +288,15 @@ final class PlaybackController {
             mediaSourceId = source.id
             playSessionId = info.playSessionId
             playMethod = method
-            // A Blu-ray image is played by reading the disc, not by asking
-            // the server to rebuild it — but only when the bytes on offer are
-            // the image itself. A transcode of the same title is an ordinary
-            // stream and must stay one (HEL-133).
+            // A disc image Lagoon can read is played by reading it, not by
+            // asking the server to rebuild it — but only when the bytes on
+            // offer are the image itself. A transcode of the same title is an
+            // ordinary stream and must stay one (HEL-133).
             let discRequest: DiscPlaybackRequest? = method == .directPlay
                 && PlaybackSourceLayout(
                     videoType: source.videoType,
                     isoType: source.isoType
-                ) == .blurayImage
+                ).isReadableDisc
                 ? DiscPlaybackRequest(
                     runtimeSeconds: source.runTimeTicks.map(Ticks.seconds)
                 )
