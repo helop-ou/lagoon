@@ -11,7 +11,7 @@ nonisolated private let avIOErrorIO: Int32 = -5
 /// range cache. The object is retained by FFmpegDemuxer for longer than the
 /// AVIOContext; the callback's unmanaged reference is therefore unretained.
 nonisolated final class FFmpegCachedIO {
-    private let scope: PlaybackCacheScope
+    private let source: any FFmpegByteSource
     private var position: Int64 = 0
     private(set) var context: UnsafeMutablePointer<AVIOContext>?
 
@@ -19,10 +19,10 @@ nonisolated final class FFmpegCachedIO {
     /// smaller costs a whole network request per buffer whenever the bytes
     /// cannot be stored — a full window, or storage disabled — because the
     /// remainder of each fetch is then discarded instead of cached.
-    init(scope: PlaybackCacheScope, bufferSize: Int32? = nil) throws {
+    init(source: any FFmpegByteSource, bufferSize: Int32? = nil) throws {
         let bufferSize = bufferSize
-            ?? Int32(min(max(scope.requestSize, 64 * 1_024), 1_024 * 1_024))
-        self.scope = scope
+            ?? Int32(min(max(source.requestSize, 64 * 1_024), 1_024 * 1_024))
+        self.source = source
         guard let buffer = av_malloc(Int(bufferSize))?.assumingMemoryBound(to: UInt8.self) else {
             throw PlaybackCacheError.storageUnavailable
         }
@@ -87,7 +87,7 @@ nonisolated final class FFmpegCachedIO {
               seconds.isFinite,
               duration.isFinite,
               duration > 0 else { return }
-        scope.setTimelineAnchor(
+        source.setTimelineAnchor(
             byteOffset: max(byteOffset, 0),
             timeFraction: seconds / duration
         )
@@ -95,7 +95,11 @@ nonisolated final class FFmpegCachedIO {
 
     private func read(into buffer: UnsafeMutablePointer<UInt8>, size: Int32) -> Int32 {
         do {
-            let data = try scope.read(offset: position, length: Int(size))
+            let data = try source.read(
+                offset: position,
+                length: Int(size),
+                priority: URLSessionTask.highPriority
+            )
             guard !data.isEmpty else { return avIOErrorEOF }
             data.copyBytes(to: buffer, count: data.count)
             position += Int64(data.count)
@@ -112,7 +116,7 @@ nonisolated final class FFmpegCachedIO {
 
     private func seek(offset: Int64, whence: Int32) -> Int64 {
         if whence & avSeekSize != 0 {
-            return scope.contentLength ?? -1
+            return source.contentLength ?? -1
         }
         let origin = whence & ~(avSeekForce)
         let target: Int64
@@ -122,7 +126,7 @@ nonisolated final class FFmpegCachedIO {
         case Int32(SEEK_CUR):
             target = position + offset
         case Int32(SEEK_END):
-            guard let length = scope.contentLength else { return -1 }
+            guard let length = source.contentLength else { return -1 }
             target = length + offset
         default:
             return -1
