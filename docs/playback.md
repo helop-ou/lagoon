@@ -661,8 +661,11 @@ composition cost is more representative than Simulator timing.
   capability-aware:
   VideoToolbox receives compressed AV1 plus its `av1C` configuration on
   hardware that reports an AV1 decoder and retains the full-resolution
-  profile; otherwise the pinned dav1d decoder is used and the profile is capped
-  at 1920×1080. VP9 always uses the software path and the same 1080p cap.
+  profile; otherwise the pinned dav1d decoder is used, bounded at 3840×2160.
+  That bound was 1920×1080 until the threading fix below, and the HD figure
+  was quietly assuming a single core: 30 s of 4K HDR10+ AV1 decodes in 1.66 s
+  threaded against 13.26 s on one. 8K stays out, unmeasured. VP9 always uses
+  the software path and keeps the 1080p cap it was written with.
   FFmpeg's 8-bit planar/NV12 output becomes Core Video NV12. Its little-endian
   planar 10-bit output is shifted
   from low-bit words to P010's high-bit layout and U/V is interleaved by an
