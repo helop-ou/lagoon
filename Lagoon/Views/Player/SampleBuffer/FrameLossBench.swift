@@ -23,6 +23,8 @@ nonisolated struct FrameLossBench: Equatable {
         var droppedFrames: Int
         var corruptedFrames: Int
         var stalls: Int
+        /// Of those, the ones called on audio (HEL-123).
+        var audioStalls: Int = 0
         var audioGaps: Int
         var videoQueueDepth: Int
         var optimizedFrames = 0
@@ -40,6 +42,9 @@ nonisolated struct FrameLossBench: Equatable {
         var dropped: Int
         var corrupted: Int
         var stalls: Int
+        /// Of those, the ones called on audio running dry rather than
+        /// video. Silence used to leave no trace in a bench window at all.
+        var audioStalls: Int = 0
         var audioGaps: Int
         var minVideoQueue: Int
         /// Frames that took the direct-display path inside the window —
@@ -66,9 +71,9 @@ nonisolated struct FrameLossBench: Equatable {
         /// figures. `regressionSummaryIsParseable` pins it.
         var regressionSummary: String {
             String(
-                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aGaps %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
+                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aStalls %d · aGaps %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
                 lossPercent, dropped, frames,
-                corrupted, stalls, audioGaps, minVideoQueue,
+                corrupted, stalls, audioStalls, audioGaps, minVideoQueue,
                 peakFootprintMB, footprintGrowthMB,
                 startPosition, windowSeconds
             )
@@ -140,6 +145,7 @@ nonisolated struct FrameLossBench: Equatable {
                 dropped: sample.droppedFrames - start.droppedFrames,
                 corrupted: sample.corruptedFrames - start.corruptedFrames,
                 stalls: sample.stalls - start.stalls,
+                audioStalls: sample.audioStalls - start.audioStalls,
                 audioGaps: sample.audioGaps - start.audioGaps,
                 minVideoQueue: minVideoQueue,
                 optimizedFrames: sample.optimizedFrames - start.optimizedFrames,

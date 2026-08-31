@@ -672,6 +672,42 @@ composition cost is more representative than Simulator timing.
   the render synchronizer's boundary observer. It therefore waits for
   AVFoundation's internal queues and also completes streams whose container
   duration is unknown; it is not inferred early from app queue depth.
+- **Starvation is a question about both queues, not just video** (HEL-123).
+  Stall detection originally tested `videoQueue` alone. An audio queue at
+  zero therefore produced no stall, no buffering state and no counter
+  movement: the film played on with the picture running and no sound while
+  every indicator read healthy — `AudDrop` absent, `aGaps` 0, `stalls` 0.
+  Nothing was being discarded; nothing was arriving. Reported on hardware
+  against a 64.5 Mbps source the server was transcoding, where both queues
+  oscillated `V 30 A 0` to `V 0 A 0` and video survived only because the
+  renderer coasts on frames it already holds.
+
+  `PlaybackStarvationPolicy` now answers `.none`/`.video`/`.audio` from a
+  snapshot, which is what makes it testable without hardware. Three things
+  in it are deliberate:
+
+  - **Audio is judged on buffered seconds, never on packet count.** A count
+    near zero is ambiguous — the renderer drains that queue itself, so it
+    reads the same for a starved feed and a healthy one being taken as fast
+    as it arrives. That ambiguity is what stalled the diagnosis until
+    HEL-123 put the seconds beside the count in the HUD.
+  - **Video wins when both are dry**, because it is the half the viewer can
+    see freeze and the recovery is the same either way.
+  - **Both margins scale with `rate`**, being media time.
+
+  `StallRecoveryPolicy` gained the matching condition, and it is the half
+  that stops the cure being worse than the disease: resuming on video alone
+  would restart the clock with audio still empty, since video refills first
+  and pins at its hard limit (HEL-124), starve again a second later, and
+  turn a continuous silence into a picture stuttering once a second. Both
+  cushions must be there. A feed that cannot rebuild one reaches
+  `reprimeAfter` and is repaired by the bounded seek that already existed.
+  The existing one-second confirmation delay doubles as the threshold, so a
+  momentary dip never stops the picture.
+
+  Audio-caused stalls are counted separately and reported in the HUD
+  (`stalls N (M audio)`) and the bench (`aStalls`), because a silence that
+  leaves no trace in a bench window is exactly the failure this ticket was.
 - **Audio delay** (M6): mpv convention, positive delays audio; applied
   by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
   and re-demuxing from the current position on change. Lives in the

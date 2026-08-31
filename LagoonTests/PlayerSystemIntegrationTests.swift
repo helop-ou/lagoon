@@ -1075,3 +1075,183 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
         return String(data: data, encoding: .utf8)
     }
 }
+
+/// The starvation half of HEL-123: an audio queue at zero used to produce no
+/// stall, no buffering state and no counter movement, so a film played on
+/// with the picture running and no sound while every indicator read healthy.
+@Suite("Playback starvation")
+struct PlaybackStarvationTests {
+    private func healthy(
+        _ mutate: (inout PlaybackStarvationPolicy.Snapshot) -> Void = { _ in }
+    ) -> PlaybackStarvationPolicy.Snapshot {
+        var snapshot = PlaybackStarvationPolicy.Snapshot()
+        snapshot.position = 100
+        snapshot.duration = 6_000
+        snapshot.rate = 1
+        snapshot.videoQueueCount = 30
+        snapshot.videoBufferedTo = 130
+        snapshot.hasAudio = true
+        snapshot.audioBufferedSeconds = 2
+        mutate(&snapshot)
+        return snapshot
+    }
+
+    @Test func healthyPlaybackIsNotStarved() {
+        #expect(PlaybackStarvationPolicy.starvation(healthy()) == .none)
+    }
+
+    /// The reported shape: video full off its own buffer, audio empty.
+    /// Before HEL-123 this returned nothing at all.
+    @Test func anEmptyAudioQueueIsStarvationEvenWithVideoFull() {
+        let snapshot = healthy {
+            $0.videoQueueCount = 30
+            $0.audioBufferedSeconds = 0
+        }
+        #expect(PlaybackStarvationPolicy.starvation(snapshot) == .audio)
+    }
+
+    /// Audio is judged on seconds, not count: a queue being drained as fast
+    /// as it fills is healthy, and a count would call it starved.
+    @Test func audioIsJudgedOnSecondsNotCount() {
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.audioBufferedSeconds = PlaybackStarvationPolicy.audioFloorSeconds + 0.01
+        }) == .none)
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.audioBufferedSeconds = PlaybackStarvationPolicy.audioFloorSeconds - 0.01
+        }) == .audio)
+    }
+
+    /// Both dry reports video: it is the half the viewer can see freeze,
+    /// and the recovery wanted is the same either way.
+    @Test func videoWinsWhenBothAreDry() {
+        let snapshot = healthy {
+            $0.videoQueueCount = 0
+            $0.videoBufferedTo = $0.position
+            $0.audioBufferedSeconds = 0
+        }
+        #expect(PlaybackStarvationPolicy.starvation(snapshot) == .video)
+    }
+
+    /// A silent film cannot starve for sound, and must not be held in
+    /// buffering waiting for a cushion that will never arrive.
+    @Test func aTitleWithoutAudioNeverStarvesOnIt() {
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.hasAudio = false
+            $0.audioBufferedSeconds = 0
+        }) == .none)
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.audioQueueFinished = true
+            $0.audioBufferedSeconds = 0
+        }) == .none)
+    }
+
+    /// The margin is media time, so it has to scale with rate to keep the
+    /// same wall-clock cushion.
+    @Test func theAudioFloorScalesWithPlaybackRate() {
+        let justOverAt1x = PlaybackStarvationPolicy.audioFloorSeconds + 0.01
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.audioBufferedSeconds = justOverAt1x
+        }) == .none)
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.rate = 2
+            $0.audioBufferedSeconds = justOverAt1x
+        }) == .audio)
+    }
+
+    /// Nothing is starving while paused, buffering, finished, or within a
+    /// second of the end.
+    @Test func statesThatCannotStarve() {
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.isPaused = true
+            $0.audioBufferedSeconds = 0
+        }) == .none)
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.isBuffering = true
+            $0.audioBufferedSeconds = 0
+        }) == .none)
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.didFinish = true
+            $0.audioBufferedSeconds = 0
+        }) == .none)
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.position = $0.duration - 0.5
+            $0.audioBufferedSeconds = 0
+        }) == .none)
+    }
+
+    // MARK: - Leaving the stall again
+
+    /// Resuming on video alone is what would make an audio stall worse than
+    /// the silence it replaced: video refills first and pins at its hard
+    /// limit, so the clock would restart with audio still empty and starve
+    /// again a second later, turning a continuous silence into a picture
+    /// that stutters once a second.
+    @Test func recoveryWaitsForAudioAsWellAsVideo() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            hasAudio: true,
+            audioBufferedSeconds: 0
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            hasAudio: true,
+            audioBufferedSeconds: StallRecoveryPolicy.resumeAudioSeconds
+        ) == .resume)
+    }
+
+    /// A feed that cannot rebuild an audio cushion still leaves, by the
+    /// bounded seek that already existed, rather than buffering forever.
+    @Test func audioThatNeverRefillsStillReprimes() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: StallRecoveryPolicy.reprimeAfter,
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            hasAudio: true,
+            audioBufferedSeconds: 0
+        ) == .reprime)
+    }
+
+    /// A finished audio queue is not a starved one, and neither is a title
+    /// with no audio: both resume on video alone.
+    @Test func recoveryIgnoresAudioThatCannotArrive() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            hasAudio: true,
+            audioQueueFinished: true,
+            audioBufferedSeconds: 0
+        ) == .resume)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            hasAudio: false,
+            audioBufferedSeconds: 0
+        ) == .resume)
+    }
+
+    /// Both cushions scale together above 1x.
+    @Test func theAudioResumeCushionScalesWithPlaybackRate() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount * 2,
+            videoQueueFinished: false,
+            hasAudio: true,
+            audioBufferedSeconds: StallRecoveryPolicy.resumeAudioSeconds,
+            playbackRate: 2
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount * 2,
+            videoQueueFinished: false,
+            hasAudio: true,
+            audioBufferedSeconds: StallRecoveryPolicy.resumeAudioSeconds * 2,
+            playbackRate: 2
+        ) == .resume)
+    }
+}
