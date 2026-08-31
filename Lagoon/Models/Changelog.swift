@@ -29,6 +29,18 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "69",
+            released: "September 2026",
+            headline: "A film kept as a Blu-ray disc image now plays straight from the disc.",
+            changes: [
+                "A film your server stores as a Blu-ray disc image had to be rebuilt by the server before it could play, and that rebuild flattened a Dolby TrueHD or Atmos soundtrack down to Dolby Digital. Lagoon now reads the disc itself and plays the main feature as it was mastered, with the soundtrack it came with.",
+                "Choosing the feature off a disc is not as obvious as it sounds: a Blu-ray can carry sixty or more playlists, and the longest one is often a menu loop rather than the film. Lagoon picks using the running time your server already knows.",
+                "If a disc turns out to be one Lagoon cannot read, playback goes through your server exactly as it did before, so nothing that used to play stops playing.",
+                "This covers Blu-ray images. A DVD image, or a disc kept as a folder of files rather than as one image, still plays through your server, and now goes there directly rather than trying and failing first, so it starts sooner.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "68",
             released: "August 2026",
             headline: "On an iPhone or iPad, cellular no longer means downloading the whole film.",
