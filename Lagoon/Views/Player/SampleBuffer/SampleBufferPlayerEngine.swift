@@ -199,6 +199,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored nonisolated(unsafe) private var pendingCacheSession: PlaybackCacheSession?
+    @ObservationIgnored nonisolated(unsafe) private var pendingDisc: DiscPlaybackRequest?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
 
     init() {
@@ -212,6 +213,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func prepare(
         url: URL,
         cacheSession: PlaybackCacheSession? = nil,
+        disc: DiscPlaybackRequest? = nil,
         startSeconds: Double,
         initialAudioOrdinal: Int?,
         initialSubtitleOrdinal: Int? = nil,
@@ -221,6 +223,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     ) {
         pendingURL = url
         pendingCacheSession = cacheSession
+        pendingDisc = disc
         pendingStartSeconds = startSeconds
         self.externalSubtitles = externalSubtitles
         shared.withLock {
@@ -293,6 +296,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         let startURL = url
         let startCacheSession = pendingCacheSession
+        let startDisc = pendingDisc
         let recommendedPixelBufferAttributes = video.recommendedPixelBufferAttributes
         PlaybackLifecycleDiagnostics.demuxStarted(lifecycleID)
         let demuxLifecycleID = lifecycleID
@@ -307,6 +311,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             self.runDemuxLoop(
                 url: startURL,
                 cacheSession: startCacheSession,
+                disc: startDisc,
                 recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
             )
         }
@@ -1396,6 +1401,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     nonisolated private func runDemuxLoop(
         url: URL,
         cacheSession: PlaybackCacheSession?,
+        disc: DiscPlaybackRequest?,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) {
         defer {
@@ -1413,9 +1419,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 try demuxer.open(
                     url: url.absoluteString,
                     cacheSession: cacheSession,
+                    disc: disc,
                     recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
                 )
-            } catch where cacheSession != nil {
+            // A disc has no native-transport retry to fall back on: without
+            // the cache there is nothing to read the filesystem through, and
+            // handing libavformat the raw image is the failure this whole
+            // path exists to avoid (HEL-133).
+            } catch where cacheSession != nil && disc == nil {
                 demuxer.close()
                 deliveryIsCached = false
                 Task { @MainActor in self.onPlaybackCacheFallback?() }
