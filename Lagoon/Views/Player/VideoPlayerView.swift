@@ -258,10 +258,27 @@ final class PlaybackController {
                 streamURL = prepared.streamURL
                 method = prepared.method
             } else {
-                info = try await client.playbackInfo(itemId: media.id, delivery: delivery)
-                guard info.errorCode == nil, let resolvedSource = info.mediaSources.first else {
+                var negotiated = try await client.playbackInfo(itemId: media.id, delivery: delivery)
+                guard negotiated.errorCode == nil,
+                      var resolvedSource = negotiated.mediaSources.first else {
                     throw JellyfinError.unplayable
                 }
+                // A disc cannot be played from the bytes this rung serves,
+                // whatever the server answers about direct play, so the
+                // ladder steps past it before an attempt rather than after
+                // one (HEL-133). No engine starts, but the HUD still gets a
+                // record of why the rung below is in force.
+                let layout = PlaybackSourceLayout(videoType: resolvedSource.videoType)
+                if delivery == .negotiated, let refusal = layout.directPlayRefusal {
+                    skipDelivery(to: PlaybackFallbackPolicy.start(for: layout), refusal: refusal)
+                    negotiated = try await client.playbackInfo(itemId: media.id, delivery: delivery)
+                    guard negotiated.errorCode == nil,
+                          let lowered = negotiated.mediaSources.first else {
+                        throw JellyfinError.unplayable
+                    }
+                    resolvedSource = lowered
+                }
+                info = negotiated
                 source = resolvedSource
                 (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
             }
@@ -771,6 +788,10 @@ final class PlaybackController {
                 guard !Task.isCancelled,
                       info.errorCode == nil,
                       let source = info.mediaSources.first else { return nil }
+                // Warming a disc would download the opening megabytes of an
+                // image nothing here can read, and the successor negotiates
+                // its own rung when it starts anyway (HEL-133).
+                guard !PlaybackSourceLayout(videoType: source.videoType).isDisc else { return nil }
                 let (url, method) = try client.streamURL(itemId: next.id, source: source)
                 guard !Task.isCancelled, self.nextUp?.id == next.id else { return nil }
                 let scope = self.playbackCache.stageNext(
@@ -1273,6 +1294,21 @@ final class PlaybackController {
         }
     }
     #endif
+
+    /// Records a rung the ladder stepped past without trying it, so the
+    /// HUD's `Rung:`/`Fell n:` lines still account for where playback ended
+    /// up. `fallBack` cannot serve here: nothing has started yet, so there is
+    /// no engine to retire and no position to resume from.
+    private func skipDelivery(
+        to next: PlaybackDelivery,
+        refusal: (cause: String, message: String)
+    ) {
+        deliveryFallbacks.append(PlaybackDeliveryFallbackRecord(
+            transition: "\(delivery.rawValue)→\(next.rawValue) · \(refusal.cause)",
+            message: refusal.message
+        ))
+        delivery = next
+    }
 
     /// Asks the server to deliver the same media a different way and starts
     /// over where the failure landed (HEL-100).
