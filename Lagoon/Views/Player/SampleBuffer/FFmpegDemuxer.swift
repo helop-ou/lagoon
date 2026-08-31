@@ -10,6 +10,29 @@ import Libavutil
 //
 // FFmpeg imports as raw C: pointers, manual unref, sentinel values. The
 // sentinels are redefined locally because their macros don't import.
+/// Where a container decides its own timeline begins.
+///
+/// MP4, Matroska and Jellyfin's fMP4 all start at zero, so this never came up
+/// until a disc did: MPEG-TS begins at whatever timestamp the muxer felt
+/// like, and WALL·E's Blu-ray starts at 4198 s. Everything above the demuxer
+/// expects media time to start at zero, so the container's origin is
+/// subtracted from every packet and added back onto every seek (HEL-133).
+nonisolated enum ContainerTimeline {
+    /// AV_TIME_BASE, the unit `AVFormatContext.start_time` is expressed in.
+    static let microsecondsPerSecond = 1_000_000.0
+
+    /// How much to take off a stream's timestamps, in that stream's own time
+    /// base. Zero when the container starts where everything expects it to,
+    /// which keeps every source that worked before this on identical
+    /// arithmetic.
+    static func startOffset(startTime: Int64, timeBase: AVRational) -> Int64 {
+        guard startTime != Int64.min, startTime > 0,
+              timeBase.den > 0, timeBase.num > 0 else { return 0 }
+        let seconds = Double(startTime) / microsecondsPerSecond
+        return Int64((seconds * Double(timeBase.den) / Double(timeBase.num)).rounded())
+    }
+}
+
 nonisolated private let avNoPTS = Int64.min // AV_NOPTS_VALUE
 nonisolated private let avTimeBase = 1_000_000.0 // AV_TIME_BASE
 nonisolated private let seekBackwardFlag: Int32 = 1 // AVSEEK_FLAG_BACKWARD
@@ -127,6 +150,9 @@ nonisolated final class FFmpegDemuxer {
     /// Set when the video track arrives start-code delimited, which is every
     /// MPEG-TS and so every Blu-ray clip the disc reader opens (HEL-133).
     private var videoUsesStartCodes = false
+    /// Per stream, the container origin to subtract from its timestamps.
+    /// Empty for every container that already starts at zero.
+    private var streamStartOffsets: [Int32: Int64] = [:]
     // Written per-packet on the demux queue, read by the HUD from the main
     // actor — proof the experiment engaged (the retraction lesson: verify
     // the gate before trusting the A/B).
@@ -322,6 +348,23 @@ nonisolated final class FFmpegDemuxer {
 
         if ctx.pointee.duration > 0 {
             durationSeconds = Double(ctx.pointee.duration) / avTimeBase
+        }
+
+        // A container that does not start at zero has its origin recorded per
+        // stream here, and removed from packets as they are read. Taking the
+        // format's origin rather than each stream's own preserves the offsets
+        // between them: WALL·E's disc starts video and one audio track
+        // together and a second audio track two thirds of a second later,
+        // which is content, not clock (HEL-133).
+        for index in 0..<Int(ctx.pointee.nb_streams) {
+            guard let stream = ctx.pointee.streams[index] else { continue }
+            let offset = ContainerTimeline.startOffset(
+                startTime: ctx.pointee.start_time,
+                timeBase: stream.pointee.time_base
+            )
+            if offset != 0 {
+                streamStartOffsets[stream.pointee.index] = offset
+            }
         }
 
         let bestVideo = av_find_best_stream(ctx, AVMEDIA_TYPE_VIDEO, -1, -1, nil, 0)
@@ -668,9 +711,11 @@ nonisolated final class FFmpegDemuxer {
         // expose a separate audio rendition as its default stream; seeking
         // with stream_index -1 then moves audio correctly while video keeps
         // reading from its prior playlist position.
+        // Back into the container's own clock, which is where the seek has
+        // to land even though everything above this counts from zero.
         let timestamp = Int64(
             seconds * Double(videoTimeBase.den) / Double(max(videoTimeBase.num, 1))
-        )
+        ) + (streamStartOffsets[videoStreamIndex] ?? 0)
         // The legacy single-stream seek can leave split HLS audio/video
         // inputs at different playlist positions (observed as a full audio
         // queue and zero video after a backward scrub). The newer API seeks
@@ -761,6 +806,16 @@ nonisolated final class FFmpegDemuxer {
             return .failed(Self.errorText(status))
         }
         defer { av_packet_unref(packet) }
+        // Before anything reads them: the timeline, the renderers, the cache
+        // anchor and the progress report all speak media time from zero.
+        if let offset = streamStartOffsets[packet.pointee.stream_index] {
+            if packet.pointee.pts != avNoPTS {
+                packet.pointee.pts -= offset
+            }
+            if packet.pointee.dts != avNoPTS {
+                packet.pointee.dts -= offset
+            }
+        }
         let streamIndex = packet.pointee.stream_index
 
         if streamIndex == videoStreamIndex {
