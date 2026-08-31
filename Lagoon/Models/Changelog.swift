@@ -33,8 +33,9 @@ nonisolated enum Changelog {
             released: "September 2026",
             headline: "Video Lagoon decodes itself now uses the whole device, not one core.",
             changes: [
-                "Anything Lagoon decodes in software was running on a single processor core, because of a default nobody had noticed. That covers AV1, VC-1, MPEG-2, VP9 and older MPEG-4 files. Decoding a 4K AV1 episode measured eight times faster with the rest of the cores put to work.",
-                "Nothing about which files play changes here, only how quickly they decode. The formats your device decodes in hardware, which is most of them, were never affected.",
+                "4K AV1 plays on the device now, on hardware with no AV1 chip of its own. Lagoon used to hand those files to your server to convert, which is slow to start and can time out before anything appears. It decodes them itself instead.",
+                "That became possible because of the second half of this build: anything Lagoon decodes in software was running on a single processor core, because of a default nobody had noticed. Decoding a 4K AV1 episode measured eight times faster with the rest of the cores put to work. The same applies to VC-1, MPEG-2, VP9 and older MPEG-4 files.",
+                "Formats your device decodes in hardware, which is most of them, were never affected and are unchanged.",
             ]
         ),
         ChangelogEntry(
