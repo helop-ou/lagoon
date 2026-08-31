@@ -465,9 +465,12 @@ struct ApplePlaybackAlignmentTests {
         #expect(mpeg2?.conditions.contains {
             $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "8"
         } == true)
+        // MPEG-2 no longer carries an interlace guard: the software path
+        // that decodes it deinterlaces what it decodes, so an interlaced DVD
+        // or off-air recording is Direct Play like any other (HEL-127).
         #expect(mpeg2?.conditions.contains {
-            $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
-        } == true)
+            $0.property == "IsInterlaced"
+        } == false)
 
         // Representative PCM variants cover ordinary little-endian files,
         // big-endian sources, and Blu-ray LPCM. All reach AudioDecoder's
@@ -642,13 +645,20 @@ struct ApplePlaybackAlignmentTests {
         for profile in DeviceProfile.everything.codecProfiles {
             #expect(!profile.conditions.contains { $0.property == "IsAnamorphic" })
         }
-        // Interlaced still transcodes — there is no deinterlacing stage.
-        let interlacedGuards = DeviceProfile.everything.codecProfiles.filter { profile in
+        // Interlaced content still goes to the server for everything that
+        // decodes in hardware, where there is no deinterlacing stage. MPEG-2
+        // is the exception, because it decodes in software and that path
+        // deinterlaces (HEL-127).
+        let guarded = DeviceProfile.everything.codecProfiles.filter { profile in
             profile.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
             }
         }
-        #expect(interlacedGuards.count == DeviceProfile.everything.codecProfiles.count)
+        let unguarded = DeviceProfile.everything.codecProfiles.filter { profile in
+            !profile.conditions.contains { $0.property == "IsInterlaced" }
+        }
+        #expect(guarded.count + unguarded.count == DeviceProfile.everything.codecProfiles.count)
+        #expect(unguarded.map(\.codec) == ["mpeg2video"])
     }
 
     /// Point `LAGOON_MPEG4_FIXTURE_URL` at a Jellyfin direct-play URL for an
