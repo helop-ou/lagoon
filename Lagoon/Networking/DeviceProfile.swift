@@ -596,7 +596,7 @@ nonisolated enum DeviceProfile {
                 .map { boundedToHD($0, codec: "h264") }
         }
         if !capabilities.hardwareAV1 {
-            codecProfiles = codecProfiles.map { boundedToHD($0, codec: "av1") }
+            codecProfiles = codecProfiles.map { boundedTo4K($0, codec: "av1") }
         }
 
         return Profile(
@@ -618,8 +618,8 @@ nonisolated enum DeviceProfile {
     /// for a device that has no chance of decoding it, and it was observed
     /// doing exactly that (the player sat at 0 s with empty queues while the
     /// server worked). Hardware that cannot decode HEVC is not going to manage
-    /// 4K H.264 either. AV1 is the second use of this transform: hardware AV1
-    /// keeps the full profile, while the CPU fallback starts at HD.
+    /// 4K H.264 either. AV1 no longer uses this transform: its software path
+    /// is bounded at 4K by `boundedTo4K` instead, since dav1d keeps up there.
     ///
     /// A heuristic, not a measurement: VideoToolbox answers per codec, never
     /// per resolution, so there is no API that would make this exact. It errs
@@ -627,6 +627,21 @@ nonisolated enum DeviceProfile {
     private static func boundedToHD(_ profile: CodecProfile, codec: String) -> CodecProfile {
         guard profile.codec == codec else { return profile }
         return boundedToHD(profile)
+    }
+
+    /// What software AV1 is allowed to reach for.
+    ///
+    /// 4K rather than the HD this used to bound: dav1d decodes 3840x2160 AV1
+    /// comfortably once it is allowed more than one core, which it was not
+    /// until HEL-103's threading fix. Measured on a 4K HDR10+ episode, 30 s of
+    /// video decoded in 1.66 s threaded against 13.26 s on a single core, and
+    /// the single-core figure is what this bound was quietly assuming.
+    ///
+    /// Still a ceiling rather than no bound at all. 8K AV1 exists, nothing has
+    /// measured it here, and its frames are four times the size of these.
+    private static func boundedTo4K(_ profile: CodecProfile, codec: String) -> CodecProfile {
+        guard profile.codec == codec else { return profile }
+        return boundedTo(profile, width: 3840, height: 2160)
     }
 
     /// The bound itself, over any video codec profile. Idempotent: the
