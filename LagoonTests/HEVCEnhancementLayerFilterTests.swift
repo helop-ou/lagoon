@@ -87,4 +87,65 @@ struct HEVCEnhancementLayerFilterTests {
         #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: hvcc) == 2)
         #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: Data(count: 10)) == nil)
     }
+
+    // MARK: - Parameter sets the container may or may not carry (HEL-131)
+
+    /// A well-formed record: 22 bytes of header, numOfArrays, then one
+    /// array per parameter-set type.
+    private func hvcC(arrays: [(type: UInt8, length: Int)]) -> Data {
+        var data = Data(count: 22)
+        data[21] = 0xFF // lengthSizeMinusOne = 3
+        data.append(UInt8(arrays.count))
+        for array in arrays {
+            data.append(array.type)             // array_completeness | nal type
+            data.append(contentsOf: [0x00, 0x01]) // numNalus = 1
+            data.append(UInt8((array.length >> 8) & 0xFF))
+            data.append(UInt8(array.length & 0xFF))
+            data.append(contentsOf: repeatElement(0xAB, count: array.length))
+        }
+        return data
+    }
+
+    /// The exact 23-byte record from the file that found this: an hvcC whose
+    /// header is entirely valid and which declares no parameter sets at all.
+    /// The decoder cannot be configured from it, and nothing says so until
+    /// VTDecompressionSessionCreate refuses.
+    @Test func anEmptyParameterSetListIsRecognised() {
+        let empty = Data([
+            0x01, 0x02, 0x20, 0x00, 0x00, 0x00, 0x90, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x96, 0xf0, 0x00, 0xfc,
+            0xfd, 0xfa, 0xfa, 0x00, 0x00, 0x0f, 0x00,
+        ])
+        #expect(empty.count == 23)
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(empty) == false)
+        // The length prefix is still described correctly, which is what the
+        // harvest relies on to walk the packets.
+        #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: empty) == 4)
+    }
+
+    @Test func aRecordCarryingSPSAndPPSIsAccepted() {
+        let full = hvcC(arrays: [(32, 24), (33, 58), (34, 7)])
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(full))
+    }
+
+    /// Both have to be there. A VPS on its own configures nothing.
+    @Test func aRecordMissingEitherHalfIsRejected() {
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(hvcC(arrays: [(32, 24)])) == false)
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(
+            hvcC(arrays: [(32, 24), (33, 58)])
+        ) == false)
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(
+            hvcC(arrays: [(33, 58), (34, 7)])
+        ))
+    }
+
+    /// A record that lies about its own lengths is treated as carrying
+    /// nothing rather than read past its end.
+    @Test func aTruncatedRecordIsRejectedRatherThanOverread() {
+        var truncated = hvcC(arrays: [(32, 24), (33, 58), (34, 7)])
+        truncated = truncated.prefix(30)
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(truncated) == false)
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(Data(count: 10)) == false)
+        #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(Data()) == false)
+    }
 }

@@ -97,6 +97,52 @@ real payoff is AV1: A17/M3-class devices can take the compressed hardware path,
 while older devices remain inside the same honest direct-play envelope through
 the software fallback.
 
+### When the container describes no bitstream (HEL-131)
+
+Matroska and MP4 are supposed to carry HEVC's VPS/SPS/PPS in the
+`CodecPrivate`/`hvcC` record, and `SampleBufferFactory.videoFormatDescription`
+builds the format description from it. hev1-style muxing is legal and does
+not: it leaves `numOfArrays = 0` and repeats the parameter sets in-band
+instead. Found on a 4K WEBDL whose entire `hvcC` was 23 bytes of header.
+
+Nothing complains at the time. `CMVideoFormatDescriptionCreate` builds a
+description around the empty record and returns `noErr`; the refusal arrives
+later, from `VTDecompressionSessionCreate`, as -4. Verified against Apple's
+decoder with Lagoon's own construction:
+
+| built from | description | session |
+| --- | --- | --- |
+| container `hvcC`, `numOfArrays = 0` | `noErr` | **-4** |
+| the bitstream's own VPS/SPS/PPS | `noErr`, 3840x2160 | `noErr` |
+
+So it reads as a hardware fault and is a container one, which is exactly how
+it was first misread. Every other tool disagrees for the same reason: ffprobe,
+Jellyfin's probe and libavcodec all parse parameter sets in-band, so the file
+looks healthy everywhere except the one place the client trusts the container.
+
+`FFmpegDemuxer` therefore checks the record before building anything
+(`SampleBufferFactory.hevcExtradataCarriesParameterSets`) and, when it
+describes nothing, harvests VPS/SPS/PPS from the opening NALs of the first
+video packet and builds through
+`CMVideoFormatDescriptionCreateFromHEVCParameterSets`. Notes worth keeping:
+
+- **The header stays valid even with no arrays behind it**, so
+  `lengthSizeMinusOne` still describes the packets correctly and the harvest
+  can walk them. On the file this was found with, the first video packet is
+  AUD, VPS, SPS, PPS, SEI, then the IDR slices, so the read-ahead ends on
+  packet one; it is bounded at 64 regardless.
+- **The context is rewound afterwards.** `open()` runs before the demux loop,
+  which still owes the renderers every packet from the beginning. A failed
+  rewind costs the opening packets and is deliberately not fatal, because that
+  is worth less than the decoder the harvest buys.
+- **Dolby Vision atoms are not attached on this path.** A container that
+  failed to describe its own bitstream has not earned trust in its DoVi
+  signalling either, and the base layer still presents as HDR10 off the colour
+  tags, which is already the documented ceiling for the dual-layer profiles.
+- A remux does **not** repair such a file: `ffmpeg -c copy` carries the empty
+  record straight over. Rebuilding it needs the video pushed through annex-B
+  and re-muxed.
+
 ### When playback fails: the delivery ladder (HEL-100)
 
 Negotiation happens once, before the first frame, so a direct play that the

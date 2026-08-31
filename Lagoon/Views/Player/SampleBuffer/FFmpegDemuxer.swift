@@ -326,11 +326,22 @@ nonisolated final class FFmpegDemuxer {
         if guessedRate.num > 0, guessedRate.den > 0 {
             videoFrameRate = Double(guessedRate.num) / Double(guessedRate.den)
         }
-        var videoDescription: CMFormatDescription? = if Self.usesCompressedVideoPath(
+        let usesCompressedVideo = Self.usesCompressedVideoPath(
             codecID: videoPar.pointee.codec_id,
             capabilities: capabilities
-        ) {
-            SampleBufferFactory.videoFormatDescription(codecpar: videoPar)
+        )
+        // A container that describes no parameter sets has to be caught
+        // before the description is built, not after: the description is
+        // created successfully either way and only the decoder refuses
+        // (HEL-131).
+        let harvestedParameterSets = usesCompressedVideo
+            ? harvestedHEVCParameterSets(ctx: ctx, streamIndex: bestVideo, codecpar: videoPar)
+            : nil
+        var videoDescription: CMFormatDescription? = if usesCompressedVideo {
+            SampleBufferFactory.videoFormatDescription(
+                codecpar: videoPar,
+                hevcParameterSets: harvestedParameterSets
+            )
         } else {
             nil
         }
@@ -480,6 +491,89 @@ nonisolated final class FFmpegDemuxer {
         for stream in subtitleStreams {
             ctx.pointee.streams[Int(stream.streamIndex)]?.pointee.discard =
                 stream.streamIndex == streamIndex ? AVDISCARD_DEFAULT : AVDISCARD_ALL
+        }
+    }
+
+    /// How far to read looking for parameter sets. They are the opening
+    /// NALs of the first access unit in every file that muxes this way, so
+    /// this only has to cover whatever audio and subtitle packets happen to
+    /// be interleaved ahead of the first video one.
+    private static let parameterSetProbeLimit = 64
+
+    /// VPS, SPS and PPS taken from the bitstream, for an HEVC track whose
+    /// container declared none of its own (HEL-131).
+    ///
+    /// nil in the ordinary case, so a well-formed `hvcC` keeps the existing
+    /// path and reads no packets at all. When it does run, the context is
+    /// rewound afterwards: the demux loop has not started yet and still owes
+    /// the renderer every packet from the beginning.
+    private func harvestedHEVCParameterSets(
+        ctx: UnsafeMutablePointer<AVFormatContext>,
+        streamIndex: Int32,
+        codecpar: UnsafeMutablePointer<AVCodecParameters>
+    ) -> [Data]? {
+        guard codecpar.pointee.codec_id == AV_CODEC_ID_HEVC,
+              let extradata = codecpar.pointee.extradata,
+              codecpar.pointee.extradata_size > 0 else { return nil }
+        let hvcc = Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size))
+        guard !SampleBufferFactory.hevcExtradataCarriesParameterSets(hvcc),
+              // The header stays valid even with no arrays behind it, so the
+              // NAL length prefix is still described correctly.
+              let lengthSize = HEVCEnhancementLayerFilter.nalLengthSize(hvcc: hvcc),
+              let probe = av_packet_alloc() else { return nil }
+        var owned: UnsafeMutablePointer<AVPacket>? = probe
+        defer { av_packet_free(&owned) }
+
+        var sets: [UInt8: Data] = [:]
+        var packetsRead = 0
+        while packetsRead < Self.parameterSetProbeLimit, sets.count < 3 {
+            guard av_read_frame(ctx, probe) >= 0 else { break }
+            packetsRead += 1
+            if probe.pointee.stream_index == streamIndex, let data = probe.pointee.data {
+                Self.collectParameterSets(
+                    from: UnsafeRawBufferPointer(start: data, count: Int(probe.pointee.size)),
+                    lengthSize: lengthSize,
+                    into: &sets
+                )
+            }
+            av_packet_unref(probe)
+        }
+
+        // Rewind whether or not the harvest worked. A failure here costs the
+        // opening packets, which is worth strictly less than the decoder the
+        // harvest buys, so it is not treated as fatal.
+        if avformat_seek_file(ctx, streamIndex, Int64.min, 0, 0, 0) < 0 {
+            _ = av_seek_frame(ctx, streamIndex, 0, seekBackwardFlag)
+        }
+
+        // VPS, SPS, PPS, in the order the decoder expects them.
+        let ordered = [32, 33, 34].compactMap { sets[UInt8($0)] }
+        return ordered.count == 3 ? ordered : nil
+    }
+
+    /// Walks one length-prefixed packet, keeping the first of each
+    /// parameter-set NAL it finds.
+    private static func collectParameterSets(
+        from payload: UnsafeRawBufferPointer,
+        lengthSize: Int,
+        into sets: inout [UInt8: Data]
+    ) {
+        guard let base = payload.baseAddress, (1...4).contains(lengthSize) else { return }
+        let count = payload.count
+        var offset = 0
+        while offset + lengthSize <= count {
+            var nalLength = 0
+            for index in 0..<lengthSize {
+                nalLength = nalLength << 8 | Int(payload[offset + index])
+            }
+            let start = offset + lengthSize
+            let end = start + nalLength
+            guard nalLength > 0, end <= count else { return }
+            let nalType = (payload[start] >> 1) & 0x3F
+            if (32...34).contains(nalType), sets[nalType] == nil {
+                sets[nalType] = Data(bytes: base.advanced(by: start), count: nalLength)
+            }
+            offset = end
         }
     }
 

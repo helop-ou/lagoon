@@ -21,7 +21,47 @@ nonisolated private let ec3JOCFormatID = AudioFormatID(0x6563_2B33) // 'ec+3'
 /// CoreAudio decodes the
 /// compressed packets handed to AVSampleBufferAudioRenderer.
 nonisolated enum SampleBufferFactory {
-    static func videoFormatDescription(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> CMFormatDescription? {
+    /// Whether an HEVC `hvcC` carries the VPS/SPS/PPS a decoder has to be
+    /// configured with.
+    ///
+    /// hev1-style muxing is legal and leaves the arrays empty, repeating the
+    /// parameter sets in-band instead. Nothing complains at the time:
+    /// `CMVideoFormatDescriptionCreate` builds a description around such a
+    /// record and returns `noErr`, and the refusal only arrives later, when
+    /// `VTDecompressionSessionCreate` declines the session with -4. That
+    /// reads as a hardware fault rather than a container one, which is
+    /// exactly how it was first misread (HEL-131).
+    static func hevcExtradataCarriesParameterSets(_ hvcc: Data) -> Bool {
+        // 22 bytes of fixed header, then numOfArrays and the arrays.
+        guard hvcc.count > 22 else { return false }
+        let base = hvcc.startIndex
+        var offset = base + 23
+        var sawSPS = false
+        var sawPPS = false
+        for _ in 0..<Int(hvcc[base + 22]) {
+            guard offset + 3 <= hvcc.endIndex else { return false }
+            let nalType = hvcc[offset] & 0x3F
+            let count = Int(hvcc[offset + 1]) << 8 | Int(hvcc[offset + 2])
+            offset += 3
+            for _ in 0..<count {
+                guard offset + 2 <= hvcc.endIndex else { return false }
+                let length = Int(hvcc[offset]) << 8 | Int(hvcc[offset + 1])
+                offset += 2 + length
+                guard offset <= hvcc.endIndex else { return false }
+                if nalType == 33 { sawSPS = true }
+                if nalType == 34 { sawPPS = true }
+            }
+        }
+        return sawSPS && sawPPS
+    }
+
+    /// `hevcParameterSets` replaces the container's record when it turned
+    /// out to describe nothing: VPS, SPS and PPS harvested from the
+    /// bitstream itself, in that order.
+    static func videoFormatDescription(
+        codecpar: UnsafeMutablePointer<AVCodecParameters>,
+        hevcParameterSets: [Data]? = nil
+    ) -> CMFormatDescription? {
         var codecType: CMVideoCodecType
         let atomKey: String
         switch codecpar.pointee.codec_id {
@@ -109,6 +149,29 @@ nonisolated enum SampleBufferFactory {
             }
         }
 
+        // Built from the bitstream's own parameter sets, which carry the
+        // geometry and profile the empty container record could not. The
+        // colorimetry above still applies and is passed through; the Dolby
+        // Vision atoms are not, because this path only runs for a container
+        // that failed to describe its own bitstream and its DoVi signalling
+        // is not worth more trust than its parameter sets were. The base
+        // layer still presents as HDR10 off the tags, which is already the
+        // documented ceiling for the dual-layer profiles.
+        if let hevcParameterSets,
+           !hevcParameterSets.isEmpty,
+           codecpar.pointee.codec_id == AV_CODEC_ID_HEVC,
+           let extradata = codecpar.pointee.extradata,
+           codecpar.pointee.extradata_size > 0,
+           let lengthSize = HEVCEnhancementLayerFilter.nalLengthSize(
+               hvcc: Data(bytes: extradata, count: Int(codecpar.pointee.extradata_size))
+           ) {
+            return hevcFormatDescription(
+                parameterSets: hevcParameterSets,
+                nalUnitHeaderLength: Int32(lengthSize),
+                extensions: extensions
+            )
+        }
+
         extensions[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms] = atoms
         var description: CMFormatDescription?
         let status = CMVideoFormatDescriptionCreate(
@@ -119,6 +182,45 @@ nonisolated enum SampleBufferFactory {
             extensions: extensions as CFDictionary,
             formatDescriptionOut: &description
         )
+        return status == noErr ? description : nil
+    }
+
+    /// Flattened so the parameter sets stay alive, and contiguous, for the
+    /// duration of the call.
+    private static func hevcFormatDescription(
+        parameterSets: [Data],
+        nalUnitHeaderLength: Int32,
+        extensions: [CFString: Any]
+    ) -> CMFormatDescription? {
+        var flattened: [UInt8] = []
+        var sizes: [Int] = []
+        for set in parameterSets {
+            sizes.append(set.count)
+            flattened.append(contentsOf: set)
+        }
+        var description: CMFormatDescription?
+        let status: OSStatus = flattened.withUnsafeBufferPointer { bytes in
+            guard let base = bytes.baseAddress else { return errSecParam }
+            var pointers: [UnsafePointer<UInt8>] = []
+            var offset = 0
+            for size in sizes {
+                pointers.append(base.advanced(by: offset))
+                offset += size
+            }
+            return pointers.withUnsafeBufferPointer { pointerBuffer in
+                sizes.withUnsafeBufferPointer { sizeBuffer in
+                    CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                        allocator: kCFAllocatorDefault,
+                        parameterSetCount: pointers.count,
+                        parameterSetPointers: pointerBuffer.baseAddress!,
+                        parameterSetSizes: sizeBuffer.baseAddress!,
+                        nalUnitHeaderLength: nalUnitHeaderLength,
+                        extensions: extensions as CFDictionary,
+                        formatDescriptionOut: &description
+                    )
+                }
+            }
+        }
         return status == noErr ? description : nil
     }
 
