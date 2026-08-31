@@ -37,6 +37,7 @@ nonisolated enum Changelog {
                 "Nothing about this was visible while it happened. Every other tool reads that information from inside the picture data, so the file looked perfectly healthy on your server and in any other player, and the failure looked like your Apple TV refusing the film rather than the file being described oddly.",
                 "If a title has been converting for no obvious reason, it is worth another try.",
                 "When the sound runs out because the film is not reaching your Apple TV fast enough, Lagoon now shows that it is buffering instead of carrying on with the picture and no sound. Nothing reported this before. The picture kept moving, every reading in Playback Details looked normal, and the only sign anything was wrong was the silence itself.",
+                "Lagoon also holds more sound in reserve now when your server is converting a film. Converted films had no reserve at all, so any stumble in delivery reached you immediately as silence, while the picture carried on from what it had already been given. There is more to come here, and the Buffer Transcoded Playback switch in Settings, Playback Diagnostics is still worth trying on a title that misbehaves.",
                 "That is honesty rather than a cure. A film whose sound keeps running out is still a film arriving too slowly, and there is more to do there, but it now tells you instead of hiding it.",
             ]
         ),
