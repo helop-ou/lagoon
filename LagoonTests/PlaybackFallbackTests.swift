@@ -49,23 +49,33 @@ struct PlaybackFallbackTests {
         #expect(layout.directPlayRefusal == nil)
     }
 
-    @Test func everyOtherDiscStartsAtTheRungTheServerRebuildsItFrom() {
-        // A DVD image needs a VIDEO_TS reader this client does not have, and
-        // a rip is served as its folder, which Jellyfin gives no way to read
-        // inside of. Both belong to the server, and neither should cost a
-        // failed open to discover.
+    @Test func aDVDImageIsReadHereToo() {
+        // The same UDF reader mounts it, VIDEO_TS needs no playlist, and the
+        // software decode path deinterlaces what it decodes, so a DVD image
+        // no longer has to be rebuilt by the server either.
         let dvd = PlaybackSourceLayout(videoType: "Iso", isoType: "Dvd")
+        #expect(dvd == .dvdImage)
+        #expect(dvd.isReadableDisc)
+        #expect(PlaybackFallbackPolicy.start(for: dvd) == .negotiated)
+        #expect(dvd.directPlayRefusal == nil)
+    }
+
+    @Test func everyOtherDiscStartsAtTheRungTheServerRebuildsItFrom() {
+        // A rip is served as its folder, which Jellyfin gives no way to read
+        // inside of, and an image the server did not type is not assumed to
+        // be readable. Both belong to the server, and neither should cost a
+        // failed open to discover.
         let rip = PlaybackSourceLayout(videoType: "BluRay", isoType: nil)
-        #expect(dvd == .discImage)
+        let untyped = PlaybackSourceLayout(videoType: "Iso", isoType: nil)
         #expect(rip == .discFolder)
-        for layout in [dvd, rip] {
+        #expect(untyped == .discImage)
+        for layout in [rip, untyped] {
             #expect(PlaybackFallbackPolicy.start(for: layout) == .remux)
             #expect(layout.directPlayRefusal != nil)
             #expect(layout.isDisc)
+            #expect(!layout.isReadableDisc)
         }
         #expect(PlaybackSourceLayout(videoType: "Dvd", isoType: nil) == .discFolder)
-        // An image the server did not type is not assumed to be readable.
-        #expect(PlaybackSourceLayout(videoType: "Iso", isoType: nil) == .discImage)
     }
 
     @Test func onlyAPlainFileIsTriedAtTheNegotiatedRung() {
