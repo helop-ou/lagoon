@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "65",
+            released: "August 2026",
+            headline: "A film your server has to convert now keeps playing instead of stalling every few seconds.",
+            changes: [
+                "When Lagoon cannot play a file as it is and falls back on your server converting it, it now asks for that conversion at 1080p instead of at the film's full 4K. A server without dedicated video hardware manages roughly a third of the speed needed to keep up with 4K, which is why the fallback played for a second, stopped to buffer, played again and stuck. The same server produces 1080p comfortably faster than it needs to.",
+                "This only happens after Lagoon has already failed to play a file directly, which is rare. A title that plays normally is untouched, at 4K or otherwise, and nothing about direct playback changed.",
+                "Playback Details now names the delivery Lagoon settled on and what failed to make it settle there. Lagoon retries a broken film a different way and usually succeeds, which is the behaviour you want, but until now the reason it had to was thrown away the moment the retry worked. On an Apple TV there was then no way to find out what went wrong.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "64",
             released: "August 2026",
             headline: "Two new switches for chasing down a title that stutters or loses its sound.",
