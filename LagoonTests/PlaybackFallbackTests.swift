@@ -109,4 +109,69 @@ struct PlaybackFallbackTests {
             #expect(json["MaxStreamingBitrate"] as? Int == 120_000_000)
         }
     }
+
+    // MARK: - The rung that re-encodes
+
+    /// The bound the transcode rung carries, or nil where it carries none.
+    private func hdBound(
+        _ profile: DeviceProfile.Profile,
+        codec: String
+    ) -> (width: String?, height: String?) {
+        let conditions = profile.codecProfiles.first { $0.codec == codec }?.conditions ?? []
+        return (
+            conditions.first { $0.property == "Width" }?.value,
+            conditions.first { $0.property == "Height" }?.value
+        )
+    }
+
+    /// Left unbounded the bottom rung inherits a direct-play envelope — 4K
+    /// at 120 Mbps — and asks an encoder to produce it. The reference server
+    /// answers that at 9.5 fps for a 30 fps source, so the rescue rung
+    /// rebuffers worse than the failure it was descended to rescue.
+    @Test func theTranscodeRungAsksForSomethingAnEncoderCanKeepUpWith() {
+        let bounded = DeviceProfile.boundedForRealtimeTranscode(DeviceProfile.everything)
+        #expect(bounded.maxStreamingBitrate == DeviceProfile.realtimeTranscodeBitrateCeiling)
+        for codec in ["hevc", "h264", "av1"] {
+            let bound = hdBound(bounded, codec: codec)
+            #expect(bound.width == "1920", "\(codec) width")
+            #expect(bound.height == "1080", "\(codec) height")
+        }
+    }
+
+    /// Only the rung that re-encodes. `remux` stream-copies the video, so a
+    /// resolution condition there would force the very re-encode that rung
+    /// exists to avoid, and `negotiated` has to keep direct-playing 4K.
+    @Test func theRungsThatDoNotReEncodeKeepTheFullEnvelope() {
+        #expect(
+            DeviceProfile.lagoon(for: .negotiated).maxStreamingBitrate
+                == DeviceProfile.everything.maxStreamingBitrate
+        )
+        #expect(
+            DeviceProfile.lagoon(for: .remux).maxStreamingBitrate
+                == DeviceProfile.everything.maxStreamingBitrate
+        )
+        #expect(
+            DeviceProfile.lagoon(for: .transcode).maxStreamingBitrate
+                == DeviceProfile.realtimeTranscodeBitrateCeiling
+        )
+        #expect(hdBound(DeviceProfile.lagoon(for: .remux), codec: "hevc").width == nil)
+    }
+
+    /// vp9, vc1, wmv3, mpeg4 and mpeg2video are written with their own 1080p
+    /// ceiling, and a device without hardware AV1 gets one applied too. Two
+    /// transforms can now each ask for the same bound, and a codec that
+    /// collected both would send Jellyfin a duplicated condition list.
+    @Test func aCodecTheEnvelopeAlreadyBoundsDoesNotCollectADuplicate() {
+        let once = DeviceProfile.boundedForRealtimeTranscode(DeviceProfile.everything)
+        let twice = DeviceProfile.boundedForRealtimeTranscode(once)
+        for codec in ["hevc", "h264", "av1", "vp9", "vc1", "wmv3", "mpeg4", "mpeg2video"] {
+            let first = once.codecProfiles.first { $0.codec == codec }
+            let second = twice.codecProfiles.first { $0.codec == codec }
+            #expect(first?.conditions.count == second?.conditions.count, "\(codec)")
+            #expect(
+                first?.conditions.filter { $0.property == "Width" }.count == 1,
+                "\(codec) width conditions"
+            )
+        }
+    }
 }

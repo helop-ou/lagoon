@@ -452,6 +452,46 @@ nonisolated enum DeviceProfile {
     /// hardware cannot decode.
     static var lagoon: Profile { profile(for: .current) }
 
+    /// What this device is offered for one rung of the delivery ladder
+    /// (HEL-100). Only the bottom rung differs, and only because that is
+    /// the one rung where the server re-encodes.
+    static func lagoon(for delivery: PlaybackDelivery) -> Profile {
+        delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
+    }
+
+    /// The ceiling the transcode rung asks for. The envelope's 120 Mbps is
+    /// a direct-play figure — the bitrate of an untouched file this device
+    /// is willing to pull — and means nothing to an encoder being asked to
+    /// produce a new stream.
+    static let realtimeTranscodeBitrateCeiling = 20_000_000
+
+    /// Bounds the rung that re-encodes, and only that rung.
+    ///
+    /// Left unbounded it inherits the envelope: the server is asked to
+    /// re-encode at the source's own shape, 4K HEVC at up to 120 Mbps.
+    /// A server without a hardware encoder cannot produce that anywhere
+    /// near realtime — 9.5 fps for a 30 fps 4K source on the reference
+    /// server, which stalls and rebuffers indefinitely. That makes the
+    /// rescue rung strictly worse than the failure it exists to rescue,
+    /// since the ladder is only ever descended when playback has already
+    /// broken once.
+    ///
+    /// HD is the same heuristic `boundedToHD` applies for a missing
+    /// hardware decoder, and errs the same way: toward a stream that
+    /// plays. It is deliberately not applied to `remux`, which
+    /// stream-copies the video — a resolution condition there would force
+    /// the very re-encode that rung exists to avoid.
+    static func boundedForRealtimeTranscode(_ profile: Profile) -> Profile {
+        Profile(
+            maxStreamingBitrate: min(profile.maxStreamingBitrate, realtimeTranscodeBitrateCeiling),
+            maxStaticBitrate: profile.maxStaticBitrate,
+            directPlayProfiles: profile.directPlayProfiles,
+            transcodingProfiles: profile.transcodingProfiles,
+            codecProfiles: profile.codecProfiles.map { boundedToHD($0) },
+            subtitleProfiles: profile.subtitleProfiles
+        )
+    }
+
     /// Subtracts rather than rebuilds, so the envelope above stays the single
     /// statement of what the engine can play and this stays a short, testable
     /// transform over it.
@@ -539,6 +579,20 @@ nonisolated enum DeviceProfile {
     /// toward a stream that plays.
     private static func boundedToHD(_ profile: CodecProfile, codec: String) -> CodecProfile {
         guard profile.codec == codec else { return profile }
+        return boundedToHD(profile)
+    }
+
+    /// The bound itself, over any video codec profile. Idempotent: the
+    /// codecs the envelope already writes a ceiling for (vp9, vc1, wmv3,
+    /// mpeg4, mpeg2video) keep the single pair of conditions they were
+    /// written with instead of collecting a duplicate set, which matters
+    /// once two transforms can each ask for one.
+    private static func boundedToHD(_ profile: CodecProfile) -> CodecProfile {
+        guard profile.type == "Video" else { return profile }
+        let alreadyBounded = profile.conditions.contains {
+            $0.property == "Width" || $0.property == "Height"
+        }
+        guard !alreadyBounded else { return profile }
         return CodecProfile(
             type: profile.type,
             codec: profile.codec,

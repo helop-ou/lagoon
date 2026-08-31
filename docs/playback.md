@@ -134,6 +134,23 @@ engine cannot demux subtitles out of a Jellyfin transcode). That is a further
 reason the ladder is only ever descended after a real failure, never
 pre-emptively.
 
+**The bottom rung is bounded to HD, and only the bottom rung**
+(`DeviceProfile.lagoon(for:)` → `boundedForRealtimeTranscode`). Left alone it
+inherited the direct-play envelope and asked the server to re-encode at the
+source's own shape: measured against fixture, `VideoBitrate=119360000` with no
+`MaxWidth`/`MaxHeight` at all, i.e. 4K HEVC at 120 Mbps. That is a figure that
+only ever meant "the bitrate of an untouched file this device will pull", and
+it is meaningless as an instruction to an encoder. A server without a hardware
+encoder answers it at **9.5 fps for a 30 fps source** — the rung meant to
+rescue playback stalls worse than the failure that triggered it. The bound
+sends `MaxWidth=1920 MaxHeight=1080` and a 20 Mbps ceiling instead (verified
+against 10.11: same request, `VideoBitrate=19360000`).
+
+It deliberately does **not** apply to `remux`. That rung stream-copies the
+video, and a resolution condition there would force exactly the re-encode it
+exists to avoid — the negotiated and remux rungs still send the full envelope,
+so 4K direct play is untouched.
+
 The retry reuses the episode-handoff teardown (`preservingPlayerSurface: true`)
 rather than a full one: the viewer keeps the last frame instead of a black
 screen while the next rung negotiates, and it is the path autoplay has hardened.

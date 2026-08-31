@@ -74,12 +74,15 @@ extension JellyfinClient {
         delivery: PlaybackDelivery = .negotiated
     ) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
+        // The rung shapes the profile as well as the flags: the bottom one
+        // is the only place the server re-encodes, and it is bounded so it
+        // asks for something an encoder can actually produce in realtime.
         #if DEBUG && targetEnvironment(simulator)
         let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
             ? DeviceProfile.simulatorRegression
-            : DeviceProfile.lagoon
+            : DeviceProfile.lagoon(for: delivery)
         #else
-        let profile = DeviceProfile.lagoon
+        let profile = DeviceProfile.lagoon(for: delivery)
         #endif
         return try await post(
             "Items/\(itemId)/PlaybackInfo",
