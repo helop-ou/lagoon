@@ -100,6 +100,19 @@ nonisolated final class SoftwareVideoDecoder {
             throw DecoderError.codecSetup("invalid codec parameters")
         }
         context.pointee.pkt_timebase = timeBase
+        // Decode on every core the device has. libavcodec's own default here
+        // is one thread, not auto, which left dav1d decoding 4K AV1 on a
+        // single core while the rest of the SoC idled: 30 s of 3840x2160
+        // AV1 measured 13.26 s of decode single-threaded against 1.66 s with
+        // this set, on the same machine. Zero means auto-detect, so each
+        // decoder takes what it can use and one that cannot thread at all
+        // ignores it. `thread_type` already defaults to frame and slice
+        // threading together, so it is left alone.
+        //
+        // Safe with the rest of this class as written: `drain()` already
+        // flushes the delay frame threading introduces, and `flush()` resets
+        // the decoder on every seek.
+        context.pointee.thread_count = 0
         guard avcodec_open2(context, codec, nil) >= 0, let decodedFrame = av_frame_alloc() else {
             var pointer: UnsafeMutablePointer<AVCodecContext>? = context
             avcodec_free_context(&pointer)
