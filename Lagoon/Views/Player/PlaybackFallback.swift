@@ -126,8 +126,11 @@ nonisolated enum PlaybackSourceLayout: Equatable {
     /// filesystem over the same byte-range transport everything else uses and
     /// plays the main title's clips directly (HEL-133).
     case blurayImage
-    /// An image that is not Blu-ray — a DVD, or one the server did not type.
-    /// `VIDEO_TS` needs a reader this client does not have yet.
+    /// A DVD image, read here as well: the same UDF reader mounts it, and
+    /// `VIDEO_TS` needs no playlist because a title is simply its VOB files
+    /// in order. Interlaced ones are deinterlaced on the way out (HEL-127).
+    case dvdImage
+    /// An image the server did not type, which is not assumed to be readable.
     case discImage
     /// A rip on the server's filesystem: `VideoType` `BluRay` or `Dvd`.
     case discFolder
@@ -135,10 +138,13 @@ nonisolated enum PlaybackSourceLayout: Equatable {
     init(videoType: String?, isoType: String?) {
         switch videoType?.lowercased() {
         case "iso":
-            // Strictly Blu-ray, rather than optimistically: an image the
-            // reader would decline is better sent to the server at once than
-            // discovered a rung later.
-            self = isoType?.lowercased() == "bluray" ? .blurayImage : .discImage
+            // Named kinds only. An image the reader would decline is better
+            // sent to the server at once than discovered a rung later.
+            switch isoType?.lowercased() {
+            case "bluray": self = .blurayImage
+            case "dvd": self = .dvdImage
+            default: self = .discImage
+            }
         case "bluray", "dvd":
             self = .discFolder
         // An unrecognised value stays a file. The ladder already recovers
@@ -152,14 +158,20 @@ nonisolated enum PlaybackSourceLayout: Equatable {
 
     var isDisc: Bool { self != .file }
 
+    /// Whether Lagoon opens this one itself rather than asking the server to
+    /// rebuild it.
+    var isReadableDisc: Bool {
+        self == .blurayImage || self == .dvdImage
+    }
+
     /// Why direct play is not worth attempting, for the playback HUD — nil
     /// for a file, and nil for the one kind of disc this client can open.
     var directPlayRefusal: (cause: String, message: String)? {
         switch self {
-        case .file, .blurayImage:
+        case .file, .blurayImage, .dvdImage:
             nil
         case .discImage:
-            ("disc image", "Only a Blu-ray image can be read here, and this one is not.")
+            ("disc image", "The server did not say what kind of disc this image holds.")
         case .discFolder:
             ("disc rip", "A disc rip is served as its folder, which has no single stream to open.")
         }
@@ -178,14 +190,14 @@ nonisolated enum PlaybackSourceLayout: Equatable {
 /// reason the ladder is only ever descended after a real failure.
 nonisolated enum PlaybackFallbackPolicy {
     /// The best rung a source can be *tried* at, before anything has failed.
-    /// A file plays from the bytes the negotiated rung serves, and so does a
-    /// Blu-ray image now that Lagoon can read one. Every other disc has to be
-    /// rebuilt by the server, and starting above that spends an open which
-    /// cannot succeed plus a second negotiation to learn what `VideoType`
-    /// already said (HEL-133).
+    /// A file plays from the bytes the negotiated rung serves, and so do the
+    /// disc images Lagoon can now read. Anything else has to be rebuilt by
+    /// the server, and starting above that spends an open which cannot
+    /// succeed plus a second negotiation to learn what `VideoType` already
+    /// said (HEL-133).
     static func start(for layout: PlaybackSourceLayout) -> PlaybackDelivery {
         switch layout {
-        case .file, .blurayImage: .negotiated
+        case .file, .blurayImage, .dvdImage: .negotiated
         case .discImage, .discFolder: .remux
         }
     }
