@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "74",
+            released: "September 2026",
+            headline: "The AV1 decoder was not using the chip's video instructions. Now it is.",
+            changes: [
+                "4K AV1 played on an Apple TV with no AV1 chip of its own, but at under half the frame rate it needed. The cause turned out to be the decoder Lagoon ships rather than anything about how Lagoon used it: the prebuilt copy everyone in this corner of the world uses was compiled without the hand-written routines Apple chips provide for video decoding, so every frame took the slow, general path. Lagoon builds its own copy now, with those routines kept.",
+                "This makes AV1 several times cheaper to decode on every device, and it applies to an iPhone and iPad as much as to an Apple TV.",
+                "Nothing about picture quality changes. It is the same decoder and the same version, doing the same work by a faster route.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "73",
             released: "September 2026",
             headline: "Video Lagoon decodes itself is read and decoded at the same time, not in turns.",
