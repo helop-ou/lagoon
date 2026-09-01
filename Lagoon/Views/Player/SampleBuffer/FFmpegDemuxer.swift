@@ -243,7 +243,7 @@ nonisolated final class FFmpegDemuxer {
         case AV_CODEC_ID_H264, AV_CODEC_ID_HEVC:
             true
         case AV_CODEC_ID_AV1:
-            capabilities.hardwareAV1
+            capabilities.decodesAV1WithVideoToolbox
         default:
             false
         }

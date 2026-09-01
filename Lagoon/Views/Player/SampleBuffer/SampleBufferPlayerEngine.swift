@@ -1547,10 +1547,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
            !demuxer.outputsDecodedVideo,
            let description = demuxer.videoStream?.formatDescription {
             do {
+                // AV1 reaches here either because the device has an AV1
+                // decoder in silicon, or because the system-decoder experiment
+                // is on and there is none. Only the first may demand hardware
+                // (HEL-137).
+                let capabilities = PlaybackCapabilities.current
+                let requiresHardware = codecName != "av1" || capabilities.hardwareAV1
                 videoDecoder = try VideoToolboxDecoder(
                     formatDescription: description,
                     recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
                     reportedReorderDepth: demuxer.videoStream?.videoReorderDepth ?? 0,
+                    requiresHardware: requiresHardware,
                     outputHandler: { [weak self] buffer in
                         self?.acceptDecodedVideo(buffer)
                     },
@@ -1648,7 +1655,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         // software path also carries MPEG-4 Part 2.
                         "grid \($0) · libavcodec \(demuxer.videoStream?.codecName ?? "?") SW"
                     } else if let videoDecoder {
-                        "grid \($0) · VideoToolbox HW · reorder \(videoDecoder.reorderDepth)"
+                        // Which kind of VideoToolbox decoder answered is the
+                        // whole point of the AV1 experiment, so name it rather
+                        // than assuming hardware.
+                        "grid \($0) · VideoToolbox \(videoDecoder.requiresHardware ? "HW" : "system")"
+                            + " · reorder \(videoDecoder.reorderDepth)"
                     } else {
                         "grid \($0)"
                     }

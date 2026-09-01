@@ -22,6 +22,8 @@ struct SettingsView: View {
     private var softwareDecodeHighPriority = false
     @AppStorage(SoftwareDecodeThreadPolicy.skipFilmGrainDefaultsKey)
     private var softwareDecodeSkipFilmGrain = false
+    @AppStorage(PlaybackCapabilities.systemAV1DefaultsKey)
+    private var systemAV1 = false
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
@@ -487,6 +489,8 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.diagnostics.softwareDecodePriority")
                 settingsToggle("Skip Film Grain", isOn: $softwareDecodeSkipFilmGrain)
                     .accessibilityIdentifier("settings.diagnostics.softwareDecodeFilmGrain")
+                settingsToggle("Decode AV1 with the System Decoder", isOn: $systemAV1)
+                    .accessibilityIdentifier("settings.diagnostics.systemAV1")
                 settingsToggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
                     .accessibilityIdentifier("settings.diagnostics.transcodeCache")
             }
@@ -791,6 +795,7 @@ struct SettingsView: View {
                 Toggle("Overlap More Decoded Frames", isOn: $softwareDecodeFrameDelay)
                 Toggle("Prioritize Software Decoding", isOn: $softwareDecodeHighPriority)
                 Toggle("Skip Film Grain", isOn: $softwareDecodeSkipFilmGrain)
+                Toggle("Decode AV1 with the System Decoder", isOn: $systemAV1)
             }
         }
     }

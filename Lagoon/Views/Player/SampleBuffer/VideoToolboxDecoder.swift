@@ -35,6 +35,10 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
     typealias ErrorHandler = @Sendable (DecoderError) -> Void
 
     private let formatDescription: CMVideoFormatDescription
+    /// False only for AV1 where the device has no AV1 silicon, so that Apple's
+    /// software decoder is allowed to answer instead of the session being
+    /// refused (HEL-137).
+    let requiresHardware: Bool
     private let imageBufferAttributes: CFDictionary
     private let ambientViewingEnvironment: Data?
     private let outputHandler: OutputHandler
@@ -66,9 +70,11 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
         formatDescription: CMVideoFormatDescription,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes,
         reportedReorderDepth: Int,
+        requiresHardware: Bool = true,
         outputHandler: @escaping OutputHandler,
         errorHandler: @escaping ErrorHandler
     ) throws {
+        self.requiresHardware = requiresHardware
         self.formatDescription = formatDescription
         let resolvedAttributes = Self.resolvedPixelBufferAttributes(
             recommended: recommendedPixelBufferAttributes
@@ -85,6 +91,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
         session = try Self.makeSession(
             formatDescription: formatDescription,
             imageBufferAttributes: imageBufferAttributes,
+            requiresHardware: requiresHardware,
             owner: self
         )
     }
@@ -120,6 +127,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
         session = try Self.makeSession(
             formatDescription: formatDescription,
             imageBufferAttributes: imageBufferAttributes,
+            requiresHardware: requiresHardware,
             owner: self
         )
         stateLock.withLock { acceptingOutput = true }
@@ -152,14 +160,22 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
     private static func makeSession(
         formatDescription: CMVideoFormatDescription,
         imageBufferAttributes: CFDictionary,
+        requiresHardware: Bool,
         owner: VideoToolboxDecoder
     ) throws -> VTDecompressionSession {
         // Failure is preferable to silently moving 4K Main10 onto a software
         // decoder. All video formats Lagoon advertises here are supported by
         // the Apple TV hardware decoder.
-        let decoderSpecification: CFDictionary = [
-            kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder as String: true
-        ] as CFDictionary
+        //
+        // The exception is AV1 on a device with no AV1 silicon (HEL-137).
+        // There the alternative is not a better decoder but libdav1d on the
+        // CPU, so Apple's own software decoder is worth having if it exists,
+        // and requiring hardware would refuse it.
+        let decoderSpecification: CFDictionary? = requiresHardware
+            ? [
+                kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder as String: true
+            ] as CFDictionary
+            : nil
         var callback = VTDecompressionOutputCallbackRecord(
             decompressionOutputCallback: { outputRefcon, _, status, _, imageBuffer, pts, duration in
                 guard let outputRefcon else { return }
