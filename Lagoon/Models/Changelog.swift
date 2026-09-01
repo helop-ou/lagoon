@@ -29,6 +29,18 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "73",
+            released: "September 2026",
+            headline: "Video Lagoon decodes itself is read and decoded at the same time, not in turns.",
+            changes: [
+                "4K AV1 played on an Apple TV with no AV1 chip of its own, but it did not hold a steady frame rate. Lagoon was reading the file and decoding it one after the other on the same thread, so it stopped reading for as long as each frame took to decode, and nothing was waiting for the picture when the time came to show it. Those two now happen at the same time.",
+                "This applies to everything Lagoon decodes itself: AV1 where the device has no hardware for it, VP9, VC-1, MPEG-2 and older MPEG-4. Formats your device decodes in hardware, which is most of them, take a different path and are unchanged.",
+                "A 4K film decoded this way could hold about a gigabyte of finished frames in memory at once, which is more than the system will let an app keep. It is now held to the same ceiling everything else uses.",
+                "Playback details, in Settings then Advanced, now separate decoding from converting from reading the file, so a stutter can be attributed rather than guessed at.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "72",
             released: "September 2026",
             headline: "Video Lagoon decodes itself now uses the whole device, not one core.",
