@@ -1132,6 +1132,11 @@ final class PlaybackController {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, let engine = self.engine else { return }
+                // Whether frames take the direct-display path or are being
+                // composited with UI — readable here with the HUD off, which
+                // the HUD itself never could be (HEL-137).
+                engine.refreshVideoPerformanceMetrics()
+                let performance = engine.videoPerformance
                 let memory = MemorySnapshot.current()
                 let depths = engine.queueDepths
                 print("DecodeTrace"
@@ -1140,6 +1145,9 @@ final class PlaybackController {
                     + String(format: " footprintMB=%.1f availableMB=%.1f",
                         memory.footprintMB, memory.availableMB)
                     + " stalls=\(engine.stallCount)"
+                    + " shown=\(performance?.totalFrames ?? -1)"
+                    + " opt=\(performance?.optimizedCompositingFrames ?? -1)"
+                    + " dropped=\(performance?.droppedFrames ?? -1)"
                     + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\"")
             }
         }

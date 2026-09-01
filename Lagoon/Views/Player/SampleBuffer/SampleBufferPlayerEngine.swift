@@ -142,8 +142,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             stage.pendingCount
         )
         line += " · \(stage.resolvedThreadCount) threads"
-        if stage.forcesSDROutput {
-            line += " · SDR out"
+        if stage.outputsToneMappedSDR {
+            line += " · SDR tone-mapped"
         }
         return line
     }
@@ -169,7 +169,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             readFraction,
             profile.frames,
             stage.resolvedThreadCount,
-            stage.forcesSDROutput ? "yes" : "no"
+            stage.outputsToneMappedSDR ? "tonemapped" : "native"
         )
     }
 

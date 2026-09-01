@@ -12,8 +12,6 @@ struct SettingsView: View {
     /// HEL-137 lever 2, on a device that cannot be paired to Xcode: the only
     /// way to A/B libavcodec's thread count against the performance cluster
     /// is to ship the switch. Read once when the decoder opens.
-    @AppStorage(SoftwareDecodeThreadPolicy.forceSDRDefaultsKey)
-    private var softwareDecodeForceSDR = false
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
@@ -456,8 +454,6 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
-                settingsToggle("Force SDR Output", isOn: $softwareDecodeForceSDR)
-                    .accessibilityIdentifier("settings.diagnostics.softwareDecodeSDR")
                 settingsToggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
                     .accessibilityIdentifier("settings.diagnostics.transcodeCache")
             }
@@ -754,7 +750,6 @@ struct SettingsView: View {
                 Toggle("Show Playback Details", isOn: $showPlaybackHUD)
                 Toggle("Run Playback Performance Test", isOn: $frameLossBench)
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
-                Toggle("Force SDR Output", isOn: $softwareDecodeForceSDR)
             }
         }
     }

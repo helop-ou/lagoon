@@ -1,5 +1,6 @@
 import CoreMedia
 import CoreVideo
+import VideoToolbox
 import Foundation
 import Libavcodec
 import Libavutil
@@ -58,6 +59,25 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         let masteringDisplay: Data?
         let contentLightLevel: Data?
         let ambientViewingEnvironment: Data?
+
+        var isHDR: Bool {
+            transfer == kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ
+                || transfer == kCVImageBufferTransferFunction_ITU_R_2100_HLG
+        }
+
+        /// What the frame is tagged as after the hardware tone-maps it to
+        /// SDR: BT.709 end to end, no HDR metadata to mislead the display.
+        var sdrToneMapped: ColorProperties {
+            ColorProperties(
+                primaries: kCVImageBufferColorPrimaries_ITU_R_709_2,
+                transfer: kCVImageBufferTransferFunction_ITU_R_709_2,
+                matrix: kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+                chromaLocation: chromaLocation,
+                masteringDisplay: nil,
+                contentLightLevel: nil,
+                ambientViewingEnvironment: nil
+            )
+        }
     }
 
     private let codecContext: UnsafeMutablePointer<AVCodecContext>
@@ -67,6 +87,32 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     private let height: Int
     private let outputBitDepth: Int
     private let pixelBufferPool: CVPixelBufferPool
+    /// Non-nil when frames leave here in Apple's lossless-compressed tiled
+    /// format rather than as linear planes (HEL-137).
+    ///
+    /// The display engine will not scan out a linear surface: measured with
+    /// the renderer's `optimized` counter, VideoToolbox's compressed frames
+    /// detach at 87% while every linear frame this pool produced composited
+    /// on the GPU — about 20 ms of a 41.7 ms frame budget at 4K, more than
+    /// decoding costs. `VTPixelTransferSession` is the hardware block that
+    /// converts into that format; probed once at open, and if the probe fails
+    /// the linear path continues exactly as before.
+    private let transferSession: VTPixelTransferSession?
+    private let compressedPool: CVPixelBufferPool?
+    /// What the frames leaving this decoder are tagged as. Identical to
+    /// `colorProperties` except on tvOS for HDR sources, where it is the
+    /// BT.709 result of the hardware tone map (HEL-137).
+    private let outputProperties: ColorProperties
+    /// True when HDR content leaves here as tone-mapped SDR — Infuse's
+    /// behaviour on Apple TV, adopted for the same reason Firecore gives:
+    /// "true HDR output is not available for AV1 videos on the Apple TV".
+    /// Mechanically: HDR-signalled surfaces never take the display engine's
+    /// direct path on this hardware (measured 0% against 87% for SDR, even
+    /// for hardware-decoded Dolby Vision), and the 4K HDR composition that
+    /// forces costs about 20 ms of a 41.7 ms frame budget on the same
+    /// silicon the CPU decoder needs. SDR output detaches at 88% and gives
+    /// the budget back.
+    let outputsToneMappedSDR: Bool
     private let colorProperties: ColorProperties
     private let pixelAspectRatio: (horizontal: Int32, vertical: Int32)?
     private var timeline: VideoFrameTimeline?
@@ -86,7 +132,6 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// what it was asked for: zero means auto and the resolved value is only
     /// legible here (HEL-137).
     let resolvedThreadCount: Int32
-    let forcesSDROutput: Bool
 
     /// Where the software path's time actually goes (HEL-137), separated so
     /// nobody has to guess which stage is the expensive one. Cumulative since
@@ -284,6 +329,15 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         attributes[kCVPixelBufferWidthKey as String] = resolvedWidth
         attributes[kCVPixelBufferHeightKey as String] = resolvedHeight
         attributes[kCVPixelBufferPixelFormatTypeKey as String] = outputPixelFormat
+        // Without this the surface cannot be wrapped as a Metal texture and
+        // the GPU conversion silently falls back to the CPU for every frame.
+        attributes[kCVPixelBufferMetalCompatibilityKey as String] = true
+        // What VideoToolbox's own surfaces carry and ours never did: the flag
+        // that lets Core Animation hand the surface to the display engine
+        // instead of compositing it on the GPU. Measured with the HUD's
+        // `optimized` counter: VT frames detach at 87%, ours at 0%, and the
+        // composition costs ~20 ms of a 41.7 ms frame budget (HEL-137).
+        attributes[kCVPixelBufferIOSurfaceCoreAnimationCompatibilityKey as String] = true
         let poolAttributes: [String: Any] = [
             kCVPixelBufferPoolMinimumBufferCountKey as String: 18,
         ]
@@ -308,23 +362,14 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // tone mapping (HEL-137). Dropping the static metadata with it keeps
         // the display from being told about a master it is no longer being
         // shown in.
-        let forcesSDR = SoftwareDecodeThreadPolicy.forcesSDROutput()
         let properties = ColorProperties(
             primaries: SampleBufferFactory.colorPrimaries(codecpar.pointee.color_primaries),
-            transfer: forcesSDR
-                ? kCVImageBufferTransferFunction_ITU_R_709_2
-                : SampleBufferFactory.transferFunction(codecpar.pointee.color_trc),
+            transfer: SampleBufferFactory.transferFunction(codecpar.pointee.color_trc),
             matrix: SampleBufferFactory.yCbCrMatrix(codecpar.pointee.color_space),
             chromaLocation: SampleBufferFactory.chromaLocation(codecpar.pointee.chroma_location),
-            masteringDisplay: forcesSDR
-                ? nil
-                : SampleBufferFactory.masteringDisplayColorVolume(codecpar),
-            contentLightLevel: forcesSDR
-                ? nil
-                : SampleBufferFactory.contentLightLevel(codecpar),
-            ambientViewingEnvironment: forcesSDR
-                ? nil
-                : SampleBufferFactory.ambientViewingEnvironment(codecpar)
+            masteringDisplay: SampleBufferFactory.masteringDisplayColorVolume(codecpar),
+            contentLightLevel: SampleBufferFactory.contentLightLevel(codecpar),
+            ambientViewingEnvironment: SampleBufferFactory.ambientViewingEnvironment(codecpar)
         )
         var prototype: CVPixelBuffer?
         let prototypeStatus = CVPixelBufferPoolCreatePixelBuffer(
@@ -341,10 +386,83 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
         let aspect = SampleBufferFactory.pixelAspectRatio(codecpar.pointee.sample_aspect_ratio)
         Self.apply(properties, pixelAspectRatio: aspect, to: prototype)
+
+        // Whether HDR leaves here as SDR. tvOS only: an iPhone screen shows
+        // EDR content well and pays composition it can afford, while the
+        // Apple TV cannot scan out an HDR surface from this path at all.
+        #if os(tvOS)
+        let wantsToneMappedSDR = properties.isHDR
+        #else
+        let wantsToneMappedSDR = false
+        #endif
+
+        // The compressed output stage: a session, a pool in the lossless
+        // format, and one probe transfer so a configuration the hardware
+        // refuses falls back to linear before anything is advertised. The
+        // same pass tone-maps to SDR where that was decided above: the
+        // session's destination properties tell the hardware what to convert
+        // to, and it does the colour math along with the tiling.
+        var compressedSetup: (VTPixelTransferSession, CVPixelBufferPool, CVPixelBuffer)?
+        if UserDefaults.standard.object(forKey: "debug.softwareDecodeCompressedOutput") as? Bool ?? true {
+            let compressedFormat: OSType = resolvedBitDepth == 10
+                ? kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange
+                : kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange
+            let compressedAttributes: [String: Any] = [
+                kCVPixelBufferWidthKey as String: resolvedWidth,
+                kCVPixelBufferHeightKey as String: resolvedHeight,
+                kCVPixelBufferPixelFormatTypeKey as String: compressedFormat,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
+            var sessionOut: VTPixelTransferSession?
+            var poolOut: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(
+                kCFAllocatorDefault,
+                [kCVPixelBufferPoolMinimumBufferCountKey as String: 18] as CFDictionary,
+                compressedAttributes as CFDictionary,
+                &poolOut
+            )
+            if let poolOut,
+               VTPixelTransferSessionCreate(
+                   allocator: kCFAllocatorDefault,
+                   pixelTransferSessionOut: &sessionOut
+               ) == noErr,
+               let sessionOut {
+                var sessionUsable = true
+                if wantsToneMappedSDR {
+                    let destination: [(CFString, CFString)] = [
+                        (kVTPixelTransferPropertyKey_DestinationColorPrimaries,
+                         kCVImageBufferColorPrimaries_ITU_R_709_2),
+                        (kVTPixelTransferPropertyKey_DestinationTransferFunction,
+                         kCVImageBufferTransferFunction_ITU_R_709_2),
+                        (kVTPixelTransferPropertyKey_DestinationYCbCrMatrix,
+                         kCVImageBufferYCbCrMatrix_ITU_R_709_2),
+                    ]
+                    for (key, value) in destination
+                    where VTSessionSetProperty(sessionOut, key: key, value: value) != noErr {
+                        sessionUsable = false
+                    }
+                }
+                var probe: CVPixelBuffer?
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, poolOut, &probe)
+                if sessionUsable,
+                   let probe,
+                   VTPixelTransferSessionTransferImage(sessionOut, from: prototype, to: probe) == noErr {
+                    compressedSetup = (sessionOut, poolOut, probe)
+                }
+            }
+        }
+        let resolvedOutputProperties = compressedSetup != nil && wantsToneMappedSDR
+            ? properties.sdrToneMapped
+            : properties
+        if let probe = compressedSetup?.2 {
+            Self.apply(resolvedOutputProperties, pixelAspectRatio: aspect, to: probe)
+        }
+
+        let descriptionSource = compressedSetup?.2 ?? prototype
         var description: CMVideoFormatDescription?
         let descriptionStatus = CMVideoFormatDescriptionCreateForImageBuffer(
             allocator: kCFAllocatorDefault,
-            imageBuffer: prototype,
+            imageBuffer: descriptionSource,
             formatDescriptionOut: &description
         )
         guard descriptionStatus == noErr, let description else {
@@ -355,9 +473,12 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             throw DecoderError.outputFormat(descriptionStatus)
         }
 
+        transferSession = compressedSetup?.0
+        compressedPool = compressedSetup?.1
+        outputProperties = resolvedOutputProperties
+        outputsToneMappedSDR = compressedSetup != nil && wantsToneMappedSDR
         codecContext = context
         resolvedThreadCount = context.pointee.thread_count
-        forcesSDROutput = forcesSDR
         frame = decodedFrame
         self.timeBase = timeBase
         width = resolvedWidth
@@ -596,6 +717,33 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
         Self.apply(colorProperties, pixelAspectRatio: pixelAspectRatio, to: pixelBuffer)
 
+        return try makeReadySample(from: finished(pixelBuffer), timing: resolvedTiming())
+    }
+
+    /// The linear surface, or the compressed copy of it the display engine
+    /// can take without compositing (HEL-137). The transfer is one pass of a
+    /// fixed-function block, synchronous, and does not touch the CPU beyond
+    /// issuing it; the linear buffer goes straight back to its pool.
+    private func finished(_ linear: CVPixelBuffer) -> CVPixelBuffer {
+        guard let transferSession, let compressedPool else { return linear }
+        var compressed: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(
+            kCFAllocatorDefault, compressedPool, &compressed
+        ) == kCVReturnSuccess, let compressed else { return linear }
+        let surfaceStart = Self.now()
+        guard VTPixelTransferSessionTransferImage(
+            transferSession, from: linear, to: compressed
+        ) == noErr else { return linear }
+        let surfaceEnd = Self.now()
+        profileLock.withLock { profileStorage.surfaceSeconds += surfaceEnd - surfaceStart }
+        Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: compressed)
+        return compressed
+    }
+
+    /// Presentation timing for the frame the decoder is holding. Resolved
+    /// before the pixels are converted, so the CPU and GPU paths hand the same
+    /// stamps to the renderer.
+    private func resolvedTiming() -> CMSampleTimingInfo {
         let rawPTS = frame.pointee.best_effort_timestamp != Int64.min
             ? frame.pointee.best_effort_timestamp
             : frame.pointee.pts
@@ -619,11 +767,18 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         } else {
             .invalid
         }
-        var timing = CMSampleTimingInfo(
+        return CMSampleTimingInfo(
             duration: duration,
             presentationTimeStamp: presentationTime,
             decodeTimeStamp: .invalid
         )
+    }
+
+    private func makeReadySample(
+        from pixelBuffer: CVPixelBuffer,
+        timing: CMSampleTimingInfo
+    ) throws -> CMSampleBuffer {
+        var timing = timing
         var output: CMSampleBuffer?
         let sampleStatus = CMSampleBufferCreateReadyWithImageBuffer(
             allocator: kCFAllocatorDefault,

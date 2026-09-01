@@ -87,7 +87,7 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
 
     var decodedFrameBytes: Int64 { decoder.decodedFrameBytes }
     var resolvedThreadCount: Int32 { decoder.resolvedThreadCount }
-    var forcesSDROutput: Bool { decoder.forcesSDROutput }
+    var outputsToneMappedSDR: Bool { decoder.outputsToneMappedSDR }
     var gridDescription: String? { decoder.gridDescription }
     var profile: SoftwareVideoDecoder.Profile { decoder.profile }
 

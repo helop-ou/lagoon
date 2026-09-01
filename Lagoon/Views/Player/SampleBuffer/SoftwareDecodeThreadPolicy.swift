@@ -10,33 +10,6 @@ import Foundation
 /// queue's scheduling band (never the constraint once heat was). Film grain
 /// went too, once the HUD reported that the stream carries none.
 nonisolated enum SoftwareDecodeThreadPolicy {
-    /// Whether software-decoded video is presented without its HDR
-    /// signalling, so tvOS keeps the display in SDR.
-    ///
-    /// Firecore's answer about Infuse: "True HDR output is not available for
-    /// AV1 videos on the Apple TV, so Infuse will (correctly) set the output
-    /// to SDR when playing these. Other apps may be switching your TV to HDR
-    /// (or Dolby Vision) mode, but this is not technically correct." Lagoon is
-    /// one of those other apps: it attaches PQ and HDR10 metadata to
-    /// libdav1d's frames and asks for a matching display mode.
-    ///
-    /// Two things follow, and this toggle is for the second. The first is
-    /// correctness, which is its own question. The second is that compositing
-    /// 4K PQ into an HDR output is GPU and memory-bandwidth work on the same
-    /// chip trying to run dav1d, and heat is exactly what has been eating this
-    /// ticket's margin.
-    ///
-    /// **A measurement, not a mode.** Nothing tone maps, so PQ content
-    /// signalled as BT.709 looks dark and flat. If HDR output turns out to be
-    /// what costs the headroom, the work is to tone map properly.
-    static let forceSDRDefaultsKey = "debug.softwareDecodeForceSDR"
-
-    static func forcesSDROutput(
-        enabled: Bool = UserDefaults.standard.bool(forKey: forceSDRDefaultsKey)
-    ) -> Bool {
-        enabled
-    }
-
     /// Threads for libavcodec, and never its "auto".
     ///
     /// Auto left the resolved value inside the dav1d wrapper, where nothing on
