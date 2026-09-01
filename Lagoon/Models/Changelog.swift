@@ -29,7 +29,7 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
-            build: "74",
+            build: "75",
             released: "September 2026",
             headline: "The AV1 decoder was not using the chip's video instructions. Now it is.",
             changes: [
