@@ -1,4 +1,5 @@
 import Foundation
+import Libavcodec
 import Testing
 @testable import Lagoon
 
@@ -98,6 +99,38 @@ struct SoftwareDecodePipelineTests {
             decodedFrameBytes: frameBytes
         )
         #expect(queuedPlusPending == .waitForVideo(below: 23))
+    }
+
+    @Test func av1TakesTheAppleDecoderWheneverOneMightExist() {
+        // The routing asked VTIsHardwareDecodeSupported, which reports silicon
+        // and nothing else. Apple ships a software AV1 decoder inside
+        // VideoToolbox for devices without it, so a false there never meant
+        // "VideoToolbox cannot decode this" (HEL-137).
+        let noAV1Silicon = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
+        #expect(!noAV1Silicon.decodesAV1WithVideoToolbox)
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_AV1, capabilities: noAV1Silicon
+        ))
+
+        let systemDecoder = PlaybackCapabilities(
+            hardwareHEVC: true, hardwareAV1: false, systemAV1: true
+        )
+        #expect(systemDecoder.decodesAV1WithVideoToolbox)
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_AV1, capabilities: systemDecoder
+        ))
+
+        // Hardware still routes there on its own, as it always did.
+        let silicon = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        #expect(silicon.decodesAV1WithVideoToolbox)
+
+        // And nothing about this moves any other codec.
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_VP9, capabilities: systemDecoder
+        ) == false)
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_H264, capabilities: noAV1Silicon
+        ))
     }
 
     @Test func threadCountIsAlwaysExplicitSoTheDeviceCanReportIt() {
