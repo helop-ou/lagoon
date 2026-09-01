@@ -12,6 +12,7 @@
     <key>CFBundleSignature</key><string>????</string>
     <key>CFBundleSupportedPlatforms</key><array><string>AppleTVSimulator</string></array>
     <key>CFBundleVersion</key><string>1.5.3</string>
-    <key>MinimumOSVersion</key><string>26.0</string>
+    <key>MinimumOSVersion</key><string>100.0</string>
+    <key>NSPrincipalClass</key><string></string>
 </dict>
 </plist>

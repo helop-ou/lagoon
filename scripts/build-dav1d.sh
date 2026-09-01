@@ -223,11 +223,19 @@ framework module Libdav1d [system] {
     export *
 }
 MODULE
-    min="$TVOS_MIN"
-    case "$group" in
-        ios*) min="$IOS_MIN" ;;
-        macos*) min="$MACOS_MIN" ;;
-    esac
+    # MinimumOSVersion is deliberately above any OS that exists, which is
+    # what every sibling artifact in this package declares and what App Store
+    # validation requires (ITMS-90208). The check is "the app's minimum must
+    # not exceed the framework's", and Xcode builds a stub dylib per binary
+    # target using exactly this value, so a framework declaring the app's own
+    # minimum sits on the boundary and is rejected: build 74 was.
+    #
+    # It has no runtime meaning. The stub never loads - dav1d is a static
+    # archive linked into the app binary - and putting the value out of reach
+    # of any real OS also makes this immune to future deployment-target bumps.
+    # The deployment targets above still apply to the code itself, through
+    # -target, which is what actually has to be right.
+    min="100.0"
     cat > "$fw/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -244,6 +252,7 @@ MODULE
     <key>CFBundleSupportedPlatforms</key><array><string>$platform</string></array>
     <key>CFBundleVersion</key><string>$DAV1D_VERSION</string>
     <key>MinimumOSVersion</key><string>$min</string>
+    <key>NSPrincipalClass</key><string></string>
 </dict>
 </plist>
 PLIST
