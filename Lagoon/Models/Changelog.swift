@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "82",
+            released: "September 2026",
+            headline: "A little more of the work of showing 4K AV1 spread across the chip.",
+            changes: [
+                "Preparing each decoded frame for display was being done on a single processor core. It is now split across a few, which is a small part of what 4K AV1 costs on an Apple TV but a real one.",
+                "Playback details now show what a whole frame costs rather than only the decoding part, which was reading comfortably under budget while the total was over it.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "81",
             released: "September 2026",
             headline: "AV1 falls back instead of failing, and the testing options are tidied away.",
