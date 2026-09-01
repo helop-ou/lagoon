@@ -16,7 +16,7 @@ let package = Package(
     products: [
         .library(
             name: "LagoonFFmpeg",
-            targets: ["_LagoonFFmpeg"]
+            targets: ["_LagoonFFmpeg", "LagoonPixelOps"]
         ),
     ],
     targets: [
@@ -48,7 +48,17 @@ let package = Package(
         .target(
             name: "LagoonPixelOps",
             path: "Sources/LagoonPixelOps",
-            publicHeadersPath: "include"
+            publicHeadersPath: "include",
+            cSettings: [
+                // Xcode 26 enables coverage for Swift-package targets even
+                // when the containing app's Release target disables it.
+                // These are the per-pixel hot loops, so make the Release
+                // override explicit at the package boundary (HEL-137).
+                .unsafeFlags(
+                    ["-fno-profile-instr-generate", "-fno-coverage-mapping"],
+                    .when(configuration: .release)
+                ),
+            ]
         ),
         .binaryTarget(
             name: "Libavcodec",
@@ -95,7 +105,7 @@ let package = Package(
         // warning about assembled objects carrying no platform load command,
         // so every AV1 frame ran dav1d's portable C path: 11.4 fps against
         // the 23.976 a 4K HDR10+ episode needs, on an Apple TV. Same dav1d
-        // 1.5.3, same headers, same public API, built by
+        // 1.5.4, same headers, same public API, built by
         // scripts/build-dav1d.sh with the assembly kept and the warning
         // fixed properly by passing -target to the assembler.
         //
