@@ -40,7 +40,7 @@
 #
 set -euo pipefail
 
-DAV1D_VERSION="1.5.3"
+DAV1D_VERSION="1.5.4"
 DAV1D_REPO="https://code.videolan.org/videolan/dav1d.git"
 # Matches the app's own deployment targets; the artifact cannot be used below
 # these.
