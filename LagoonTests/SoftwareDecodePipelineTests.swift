@@ -144,6 +144,48 @@ struct SoftwareDecodePipelineTests {
         ) == 0)
     }
 
+    @Test func costPerFrameSurvivesThrottlingWhereARateDoesNot() {
+        // The lesson of two HEL-137 builds. Once the queues fill, backpressure
+        // holds the decoder at playback rate, so a decoder with headroom and
+        // one with none report the same frames per second. Cost per frame is
+        // what separates them, and the budget at 23.976 fps is 41.7 ms.
+        let comfortable = SoftwareVideoDecoder.Profile(
+            frames: 24, packets: 24, decodeSeconds: 24 * 0.020,
+            conversionSeconds: 24 * 0.001, elapsedSeconds: 1
+        )
+        let struggling = SoftwareVideoDecoder.Profile(
+            frames: 24, packets: 24, decodeSeconds: 24 * 0.055,
+            conversionSeconds: 24 * 0.001, elapsedSeconds: 1
+        )
+
+        // Identical rates, opposite verdicts.
+        #expect(comfortable.framesPerSecond == struggling.framesPerSecond)
+        #expect(abs(comfortable.decodeMilliseconds - 20) < 0.001)
+        #expect(abs(struggling.decodeMilliseconds - 55) < 0.001)
+        #expect(comfortable.decodeBudgetUsed(frameRate: 23.976) < 1)
+        #expect(struggling.decodeBudgetUsed(frameRate: 23.976) > 1)
+
+        // Nothing decoded yet must not read as a free decoder.
+        #expect(SoftwareVideoDecoder.Profile().decodeMilliseconds == 0)
+        #expect(SoftwareVideoDecoder.Profile().decodeBudgetUsed(frameRate: 24) == 0)
+    }
+
+    @Test func frameDelayAndPriorityStayOffUntilAskedFor() {
+        #expect(SoftwareDecodeThreadPolicy.maxFrameDelay(
+            enabled: false, activeProcessors: 6
+        ) == 0)
+        #expect(SoftwareDecodeThreadPolicy.maxFrameDelay(
+            enabled: true, activeProcessors: 6
+        ) == 6)
+        // Every frame in flight is another 4K surface held inside dav1d, on
+        // top of the queue the engine already bounds.
+        #expect(SoftwareDecodeThreadPolicy.maxFrameDelay(
+            enabled: true, activeProcessors: 32
+        ) == 8)
+        #expect(SoftwareDecodeThreadPolicy.decodeQueueQoS(highPriority: false) == .userInitiated)
+        #expect(SoftwareDecodeThreadPolicy.decodeQueueQoS(highPriority: true) == .userInteractive)
+    }
+
     @Test func decodeProfileSeparatesTheThreeCostsAsSharesOfOneCore() {
         // 24 frames in one second of wall time, 0.44 s of it inside
         // libavcodec and 0.12 s converting: the shape HEL-137 is asking the
