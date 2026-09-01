@@ -4,7 +4,7 @@ import VideoToolbox
 import Foundation
 import Libavcodec
 import Libavutil
-import _LagoonFFmpeg
+import LagoonPixelOps
 
 /// Software video fallback for codecs Apple does not expose through
 /// VideoToolbox — VC-1/WMV3, MPEG-4 Part 2 (the Xvid/DivX envelope AVI
@@ -18,6 +18,37 @@ import _LagoonFFmpeg
 /// NV12, while little-endian 10-bit planar/P010 becomes Core Video P010.
 /// Anything else fails closed instead of silently presenting incorrect color.
 nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
+    /// Concrete controls for the HEL-137 output matrix. "Source" preserves
+    /// the decoded color signalling (PQ/BT.2020 for the HDR test title), while
+    /// "SDR" asks VTPixelTransfer to convert to BT.709. Lossless modes use
+    /// Apple's tiled lossless pixel formats; direct/linear modes remain
+    /// ordinary bi-planar Core Video buffers.
+    enum OutputMode: String, CaseIterable, Sendable {
+        case directSource = "direct-source"
+        case losslessSource = "lossless-source"
+        case linearSDR = "linear-sdr"
+        case losslessSDR = "lossless-sdr"
+
+        var usesPixelTransfer: Bool { self != .directSource }
+        var usesLosslessStorage: Bool {
+            self == .losslessSource || self == .losslessSDR
+        }
+        var convertsToSDR: Bool {
+            self == .linearSDR || self == .losslessSDR
+        }
+
+        func diagnosticName(sourceIsHDR: Bool) -> String {
+            switch self {
+            case .directSource:
+                sourceIsHDR ? "direct-pq" : rawValue
+            case .losslessSource:
+                sourceIsHDR ? "lossless-pq" : rawValue
+            case .linearSDR, .losslessSDR:
+                rawValue
+            }
+        }
+    }
+
     enum DecoderError: LocalizedError {
         case codecSetup(String)
         case pixelBufferPool(OSStatus)
@@ -25,6 +56,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         case unsupportedPixelFormat(String)
         case outputFormat(OSStatus)
         case outputSample(OSStatus)
+        case pixelTransfer(OSStatus)
         case decode(Int32)
 
         var errorDescription: String? {
@@ -41,6 +73,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 "Core Media could not describe a software-decoded frame (\(status))."
             case .outputSample(let status):
                 "Core Media could not wrap a software-decoded frame (\(status))."
+            case .pixelTransfer(let status):
+                "VideoToolbox could not prepare a software-decoded frame (\(status))."
             case .decode(let status):
                 "The software video decoder failed (\(status))."
             }
@@ -65,7 +99,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 || transfer == kCVImageBufferTransferFunction_ITU_R_2100_HLG
         }
 
-        /// What the frame is tagged as after the hardware tone-maps it to
+        /// What the frame is tagged as after the transfer session tone-maps it to
         /// SDR: BT.709 end to end, no HDR metadata to mislead the display.
         var sdrToneMapped: ColorProperties {
             ColorProperties(
@@ -90,34 +124,28 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// Non-nil when frames leave here in Apple's lossless-compressed tiled
     /// format rather than as linear planes (HEL-137).
     ///
-    /// The display engine will not scan out a linear surface: measured with
-    /// the renderer's `optimized` counter, VideoToolbox's compressed frames
-    /// detach at 87% while every linear frame this pool produced composited
-    /// on the GPU — about 20 ms of a 41.7 ms frame budget at 4K, more than
-    /// decoding costs. `VTPixelTransferSession` is the hardware block that
-    /// converts into that format; probed once at open, and if the probe fails
-    /// the linear path continues exactly as before.
+    /// The renderer's power-efficient-compositing metric reached about 87%
+    /// for these surfaces and 0% for the linear surfaces on the test Apple TV.
+    /// That is correlation, not proof of where the work runs. A transfer is
+    /// probed once at open; if the device refuses it, the linear path remains
+    /// the fallback.
     private let transferSession: VTPixelTransferSession?
-    private let compressedPool: CVPixelBufferPool?
+    private let transferOutputPool: CVPixelBufferPool?
     /// What the frames leaving this decoder are tagged as. Identical to
     /// `colorProperties` except on tvOS for HDR sources, where it is the
-    /// BT.709 result of the hardware tone map (HEL-137).
+    /// BT.709 result of the transfer-session tone map (HEL-137).
     private let outputProperties: ColorProperties
-    /// True when HDR content leaves here as tone-mapped SDR — Infuse's
-    /// behaviour on Apple TV, adopted for the same reason Firecore gives:
-    /// "true HDR output is not available for AV1 videos on the Apple TV".
-    /// Mechanically: HDR-signalled surfaces never take the display engine's
-    /// direct path on this hardware (measured 0% against 87% for SDR, even
-    /// for hardware-decoded Dolby Vision), and the 4K HDR composition that
-    /// forces costs about 20 ms of a 41.7 ms frame budget on the same
-    /// silicon the CPU decoder needs. SDR output detaches at 88% and gives
-    /// the budget back.
+    /// True when HDR content leaves here as tone-mapped SDR on tvOS. In the
+    /// controlled A/B, this compressed SDR path dropped fewer frames and used
+    /// less memory than direct linear PQ. Its optimized-composition counter
+    /// was also higher, but that metric alone does not establish the cause.
     let outputsToneMappedSDR: Bool
     private let colorProperties: ColorProperties
     private let pixelAspectRatio: (horizontal: Int32, vertical: Int32)?
     private var timeline: VideoFrameTimeline?
     private let profileLock = NSLock()
     private var profileStorage = Profile()
+    private let detailedTimings: PipelineStageTimings
     private var profileStartedAt: Double?
     /// Rolling window, so the HUD can show what the decoder is managing now
     /// rather than an average dragged up by a fast start (HEL-137).
@@ -126,11 +154,21 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     private static let windowSeconds = 2.0
 
     let formatDescription: CMVideoFormatDescription
+    let usesCompressedOutput: Bool
+    /// Resolved rather than merely requested, so every benchmark line proves
+    /// which of the four output controls the device actually accepted.
+    let outputModeName: String
+    let codecName: String
+    let codecLongName: String
+    let lowDelayEnabled: Bool
+    /// Configured dav1d option. Zero asks dav1d to select its normal delay.
+    let maxFrameDelay: Int64?
+    /// Frames libavcodec reports buffering after the decoder is open.
+    let decoderDelay: Int32
     var gridDescription: String? { timeline?.gridDescription }
 
-    /// Threads libavcodec settled on after opening, which is not necessarily
-    /// what it was asked for: zero means auto and the resolved value is only
-    /// legible here (HEL-137).
+    /// Configured libavcodec thread count after opening. Zero means automatic;
+    /// libavcodec does not expose dav1d's resulting worker count here.
     let resolvedThreadCount: Int32
 
     /// Where the software path's time actually goes (HEL-137), separated so
@@ -233,6 +271,12 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         profileLock.withLock { profileStorage }
     }
 
+    var detailedTimingLines: [String] { detailedTimings.summaryLines() }
+
+    func resetDetailedTimings() {
+        detailedTimings.reset()
+    }
+
     static func supports(codecID: AVCodecID) -> Bool {
         codecID == AV_CODEC_ID_VC1
             || codecID == AV_CODEC_ID_WMV3
@@ -242,14 +286,46 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             || codecID == AV_CODEC_ID_VP9
     }
 
+    /// Resolves the new four-way selector while preserving the old boolean
+    /// launch argument for existing scripts. The HDR-oriented aliases are
+    /// accepted because those are the names used in the experiment matrix.
+    static func outputMode(
+        requestedValue: String?,
+        legacyCompressedOutput: Bool?,
+        toneMapHDRByDefault: Bool
+    ) -> OutputMode {
+        if let value = requestedValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() {
+            switch value {
+            case "direct-pq", "direct-source":
+                return .directSource
+            case "lossless-pq", "compressed-pq", "lossless-source", "compressed-source":
+                return .losslessSource
+            case "linear-sdr":
+                return .linearSDR
+            case "lossless-sdr", "compressed-sdr":
+                return .losslessSDR
+            default:
+                break
+            }
+        }
+        if legacyCompressedOutput == false { return .directSource }
+        return toneMapHDRByDefault ? .losslessSDR : .losslessSource
+    }
+
     init(
         codecpar: UnsafeMutablePointer<AVCodecParameters>,
         timeBase: AVRational,
         frameRate: AVRational,
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) throws {
-        guard Self.supports(codecID: codecpar.pointee.codec_id),
-              let codec = avcodec_find_decoder(codecpar.pointee.codec_id),
+        let codecID = codecpar.pointee.codec_id
+        let selectedCodec = codecID == AV_CODEC_ID_AV1
+            ? avcodec_find_decoder_by_name("libdav1d")
+            : avcodec_find_decoder(codecID)
+        guard Self.supports(codecID: codecID),
+              let codec = selectedCodec,
               let context = avcodec_alloc_context3(codec) else {
             throw DecoderError.codecSetup("decoder unavailable")
         }
@@ -259,24 +335,29 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             throw DecoderError.codecSetup("invalid codec parameters")
         }
         context.pointee.pkt_timebase = timeBase
-        // Decode on every core the device has. libavcodec's own default here
-        // is one thread, not auto, which left dav1d decoding 4K AV1 on a
-        // single core while the rest of the SoC idled: 30 s of 3840x2160
-        // AV1 measured 13.26 s of decode single-threaded against 1.66 s with
-        // this set, on the same machine. Zero means auto-detect, so each
-        // decoder takes what it can use and one that cannot thread at all
-        // ignores it. `thread_type` already defaults to frame and slice
-        // threading together, so it is left alone.
-        //
-        // Safe with the rest of this class as written: `drain()` already
-        // flushes the delay frame threading introduces, and `flush()` resets
-        // the decoder on every seek.
-        //
-        // HEL-137 added the one alternative worth measuring behind a toggle:
-        // a count bounded to the performance cluster, for the case where
-        // frame threading across an A15's four efficiency cores costs more in
-        // synchronisation than it returns. Off, this stays zero.
-        context.pointee.thread_count = SoftwareDecodeThreadPolicy.resolvedThreadCount()
+        // The production default is the device's active processor count; the
+        // diagnostic launch argument may request zero to test dav1d auto or a
+        // specific value. `drain()` and `flush()` already handle the delay
+        // frame threading introduces.
+        let requestedThreadCount = SoftwareDecodeThreadPolicy.resolvedThreadCount()
+        context.pointee.thread_count = requestedThreadCount
+        if codecID == AV_CODEC_ID_AV1 {
+            // dav1d's zero/automatic frame delay is ceil(sqrt(n_threads)): only
+            // three frames for the five workers exposed by the test Apple TV.
+            // Exposing the full frame-context limit improved two independent
+            // 4K 10-bit decode-only fixtures by 34-43% in throughput.
+            // This is set on libdav1d's private AVOptions before avcodec_open2,
+            // exactly where FFmpeg copies it into Dav1dSettings.
+            let requestedDelay = SoftwareDecodeThreadPolicy.resolvedMaxFrameDelay(
+                threadCount: requestedThreadCount
+            )
+            guard let privateOptions = context.pointee.priv_data,
+                  av_opt_set_int(privateOptions, "max_frame_delay", requestedDelay, 0) >= 0 else {
+                var pointer: UnsafeMutablePointer<AVCodecContext>? = context
+                avcodec_free_context(&pointer)
+                throw DecoderError.codecSetup("libdav1d max frame delay is unavailable")
+            }
+        }
         guard avcodec_open2(context, codec, nil) >= 0, let decodedFrame = av_frame_alloc() else {
             var pointer: UnsafeMutablePointer<AVCodecContext>? = context
             avcodec_free_context(&pointer)
@@ -332,11 +413,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // Without this the surface cannot be wrapped as a Metal texture and
         // the GPU conversion silently falls back to the CPU for every frame.
         attributes[kCVPixelBufferMetalCompatibilityKey as String] = true
-        // What VideoToolbox's own surfaces carry and ours never did: the flag
-        // that lets Core Animation hand the surface to the display engine
-        // instead of compositing it on the GPU. Measured with the HUD's
-        // `optimized` counter: VT frames detach at 87%, ours at 0%, and the
-        // composition costs ~20 ms of a 41.7 ms frame budget (HEL-137).
+        // Match the Core Animation compatibility hint carried by
+        // VideoToolbox surfaces. It did not make Lagoon's linear buffers enter
+        // the renderer's optimized-composition mode on the test Apple TV, but
+        // remains part of the recommended-compatible surface description.
         attributes[kCVPixelBufferIOSurfaceCoreAnimationCompatibilityKey as String] = true
         let poolAttributes: [String: Any] = [
             kCVPixelBufferPoolMinimumBufferCountKey as String: 18,
@@ -387,38 +467,66 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         let aspect = SampleBufferFactory.pixelAspectRatio(codecpar.pointee.sample_aspect_ratio)
         Self.apply(properties, pixelAspectRatio: aspect, to: prototype)
 
-        // Whether HDR leaves here as SDR. tvOS only: an iPhone screen shows
-        // EDR content well and pays composition it can afford, while the
-        // Apple TV cannot scan out an HDR surface from this path at all.
+        // Production keeps the measured tvOS choice, while the explicit
+        // selector below can separate storage conversion from color
+        // conversion. iOS retains source color by default.
         #if os(tvOS)
-        let wantsToneMappedSDR = properties.isHDR
+        let toneMapHDRByDefault = properties.isHDR
         #else
-        let wantsToneMappedSDR = false
+        let toneMapHDRByDefault = false
         #endif
 
-        // The compressed output stage: a session, a pool in the lossless
-        // format, and one probe transfer so a configuration the hardware
-        // refuses falls back to linear before anything is advertised. The
-        // same pass tone-maps to SDR where that was decided above: the
-        // session's destination properties tell the hardware what to convert
-        // to, and it does the colour math along with the tiling.
-        var compressedSetup: (VTPixelTransferSession, CVPixelBufferPool, CVPixelBuffer)?
-        if UserDefaults.standard.object(forKey: "debug.softwareDecodeCompressedOutput") as? Bool ?? true {
-            let compressedFormat: OSType = resolvedBitDepth == 10
-                ? kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange
-                : kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange
-            let compressedAttributes: [String: Any] = [
-                kCVPixelBufferWidthKey as String: resolvedWidth,
-                kCVPixelBufferHeightKey as String: resolvedHeight,
-                kCVPixelBufferPixelFormatTypeKey as String: compressedFormat,
-                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
-            ]
+        let defaults = UserDefaults.standard
+        let outputModeKey = "debug.softwareDecodeOutputMode"
+        let compressedOutputKey = "debug.softwareDecodeCompressedOutput"
+        let legacyCompressedOutput = defaults.object(forKey: compressedOutputKey) == nil
+            ? nil
+            : defaults.bool(forKey: compressedOutputKey)
+        let requestedOutputMode = Self.outputMode(
+            requestedValue: defaults.string(forKey: outputModeKey),
+            legacyCompressedOutput: legacyCompressedOutput,
+            toneMapHDRByDefault: toneMapHDRByDefault
+        )
+
+        // Every transfer mode gets a distinct destination pool and one probe
+        // transfer. This splits source versus SDR color from ordinary versus
+        // lossless destination storage. Direct-source still differs from all
+        // three controls by having no VT transfer at all; see playback.md for
+        // the comparisons the matrix can and cannot isolate.
+        var transferSetup: (VTPixelTransferSession, CVPixelBufferPool, CVPixelBuffer)?
+        if requestedOutputMode.usesPixelTransfer {
+            var transferAttributes = attributes
+            if requestedOutputMode.usesLosslessStorage {
+                let destinationIsFullRange = fullRange && !requestedOutputMode.convertsToSDR
+                let losslessFormat: OSType = if resolvedBitDepth == 10 {
+                    destinationIsFullRange
+                        ? kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange
+                        : kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange
+                } else {
+                    destinationIsFullRange
+                        ? kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarFullRange
+                        : kCVPixelFormatType_Lossless_420YpCbCr8BiPlanarVideoRange
+                }
+                transferAttributes = [
+                    kCVPixelBufferWidthKey as String: resolvedWidth,
+                    kCVPixelBufferHeightKey as String: resolvedHeight,
+                    kCVPixelBufferPixelFormatTypeKey as String: losslessFormat,
+                    kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+                ]
+            } else if requestedOutputMode.convertsToSDR {
+                // The SDR lossless formats are video-range, so the ordinary
+                // SDR control must use the equivalent range even if the
+                // decoded source happened to be full-range.
+                transferAttributes[kCVPixelBufferPixelFormatTypeKey as String] = resolvedBitDepth == 10
+                    ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+                    : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            }
             var sessionOut: VTPixelTransferSession?
             var poolOut: CVPixelBufferPool?
             CVPixelBufferPoolCreate(
                 kCFAllocatorDefault,
                 [kCVPixelBufferPoolMinimumBufferCountKey as String: 18] as CFDictionary,
-                compressedAttributes as CFDictionary,
+                transferAttributes as CFDictionary,
                 &poolOut
             )
             if let poolOut,
@@ -428,7 +536,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                ) == noErr,
                let sessionOut {
                 var sessionUsable = true
-                if wantsToneMappedSDR {
+                if requestedOutputMode.convertsToSDR {
                     let destination: [(CFString, CFString)] = [
                         (kVTPixelTransferPropertyKey_DestinationColorPrimaries,
                          kCVImageBufferColorPrimaries_ITU_R_709_2),
@@ -447,18 +555,34 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 if sessionUsable,
                    let probe,
                    VTPixelTransferSessionTransferImage(sessionOut, from: prototype, to: probe) == noErr {
-                    compressedSetup = (sessionOut, poolOut, probe)
+                    transferSetup = (sessionOut, poolOut, probe)
+                } else {
+                    VTPixelTransferSessionInvalidate(sessionOut)
                 }
             }
         }
-        let resolvedOutputProperties = compressedSetup != nil && wantsToneMappedSDR
+        if defaults.object(forKey: outputModeKey) != nil,
+           requestedOutputMode.usesPixelTransfer,
+           transferSetup == nil {
+            var framePointer: UnsafeMutablePointer<AVFrame>? = decodedFrame
+            av_frame_free(&framePointer)
+            var contextPointer: UnsafeMutablePointer<AVCodecContext>? = context
+            avcodec_free_context(&contextPointer)
+            throw DecoderError.codecSetup(
+                "requested output mode \(requestedOutputMode.rawValue) is unavailable"
+            )
+        }
+        let resolvedOutputMode: OutputMode = transferSetup == nil
+            ? .directSource
+            : requestedOutputMode
+        let resolvedOutputProperties = resolvedOutputMode.convertsToSDR
             ? properties.sdrToneMapped
             : properties
-        if let probe = compressedSetup?.2 {
+        if let probe = transferSetup?.2 {
             Self.apply(resolvedOutputProperties, pixelAspectRatio: aspect, to: probe)
         }
 
-        let descriptionSource = compressedSetup?.2 ?? prototype
+        let descriptionSource = transferSetup?.2 ?? prototype
         var description: CMVideoFormatDescription?
         let descriptionStatus = CMVideoFormatDescriptionCreateForImageBuffer(
             allocator: kCFAllocatorDefault,
@@ -473,12 +597,26 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             throw DecoderError.outputFormat(descriptionStatus)
         }
 
-        transferSession = compressedSetup?.0
-        compressedPool = compressedSetup?.1
+        transferSession = transferSetup?.0
+        transferOutputPool = transferSetup?.1
+        usesCompressedOutput = resolvedOutputMode.usesLosslessStorage
+        outputModeName = resolvedOutputMode.diagnosticName(sourceIsHDR: properties.isHDR)
         outputProperties = resolvedOutputProperties
-        outputsToneMappedSDR = compressedSetup != nil && wantsToneMappedSDR
+        outputsToneMappedSDR = properties.isHDR && resolvedOutputMode.convertsToSDR
         codecContext = context
         resolvedThreadCount = context.pointee.thread_count
+        codecName = codec.pointee.name.map(String.init(cString:)) ?? "unknown"
+        codecLongName = codec.pointee.long_name.map(String.init(cString:)) ?? codecName
+        lowDelayEnabled = (context.pointee.flags & AV_CODEC_FLAG_LOW_DELAY) != 0
+        var resolvedMaxFrameDelay: Int64 = 0
+        if codecID == AV_CODEC_ID_AV1,
+           let privateOptions = context.pointee.priv_data,
+           av_opt_get_int(privateOptions, "max_frame_delay", 0, &resolvedMaxFrameDelay) >= 0 {
+            maxFrameDelay = resolvedMaxFrameDelay
+        } else {
+            maxFrameDelay = nil
+        }
+        decoderDelay = context.pointee.delay
         frame = decodedFrame
         self.timeBase = timeBase
         width = resolvedWidth
@@ -492,9 +630,22 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             frameRateDen: frameRate.den
         )
         formatDescription = description
+        detailedTimings = PipelineStageTimings(
+            enabled: codecpar.pointee.codec_id == AV_CODEC_ID_AV1
+                && UserDefaults.standard.bool(forKey: "debug.av1PipelineProfile")
+        )
+        if detailedTimings.enabled {
+            print("SoftwareVideoDecoder codec=\"\(codecName)\" longName=\"\(codecLongName)\""
+                + " threads=\(resolvedThreadCount) lowDelay=\(lowDelayEnabled ? "on" : "off")"
+                + " maxFrameDelay=\(maxFrameDelay.map(String.init) ?? "unknown")"
+                + " decoderDelay=\(decoderDelay) output=\"\(outputModeName)\"")
+        }
     }
 
     deinit {
+        if let transferSession {
+            VTPixelTransferSessionInvalidate(transferSession)
+        }
         var framePointer: UnsafeMutablePointer<AVFrame>? = frame
         av_frame_free(&framePointer)
         var contextPointer: UnsafeMutablePointer<AVCodecContext>? = codecContext
@@ -506,6 +657,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         beginProfileIfNeeded(at: sent)
         let status = avcodec_send_packet(codecContext, packet)
         let elapsed = Self.now()
+        detailedTimings.record(.sendPacket, from: sent, to: elapsed)
         recordProfile(at: elapsed) {
             $0.packets += 1
             $0.decodeSeconds += elapsed - sent
@@ -518,6 +670,24 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         let status = avcodec_send_packet(codecContext, nil)
         guard status >= 0 else { throw DecoderError.decode(status) }
         return try receiveFrames()
+    }
+
+    /// Benchmark-only sink for establishing dav1d's ceiling without Core
+    /// Video allocation, P010 conversion, VideoToolbox transfer, sample
+    /// wrapping, or rendering. The normal playback stage never calls this;
+    /// the opt-in fixture benchmark owns a fresh decoder instance so its
+    /// discard run cannot affect presentation state.
+    func decodeDiscardingOutput(packet: UnsafeMutablePointer<AVPacket>) throws -> Int {
+        let status = avcodec_send_packet(codecContext, packet)
+        guard status >= 0 else { throw DecoderError.decode(status) }
+        return receiveFramesDiscardingOutput()
+    }
+
+    /// Flushes delayed pictures for `decodeDiscardingOutput(packet:)`.
+    func drainDiscardingOutput() throws -> Int {
+        let status = avcodec_send_packet(codecContext, nil)
+        guard status >= 0 else { throw DecoderError.decode(status) }
+        return receiveFramesDiscardingOutput()
     }
 
     func flush() {
@@ -541,11 +711,13 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             let waited = Self.now()
             let status = avcodec_receive_frame(codecContext, frame)
             let received = Self.now()
+            detailedTimings.record(.receiveFrame, from: waited, to: received)
             recordProfile(at: received) { $0.decodeSeconds += received - waited }
             guard status >= 0 else { break }
             defer { av_frame_unref(frame) }
             let buffer = try makeSampleBuffer()
             let converted = Self.now()
+            detailedTimings.recordOutput(at: converted)
             recordProfile(at: converted) {
                 $0.frames += 1
                 $0.conversionSeconds += converted - received
@@ -553,6 +725,15 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             output.append(buffer)
         }
         return output
+    }
+
+    private func receiveFramesDiscardingOutput() -> Int {
+        var frames = 0
+        while avcodec_receive_frame(codecContext, frame) >= 0 {
+            frames += 1
+            av_frame_unref(frame)
+        }
+        return frames
     }
 
     /// Monotonic and cheap; `ProcessInfo.systemUptime` reads the same mach
@@ -614,6 +795,11 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         if isSupported8Bit, frame.pointee.flags & Self.interlacedFrameFlag != 0 {
             deinterlaceInPlace(decodedFormat: decodedFormat)
         }
+        // Resolve every property that belongs to the AVFrame before copying
+        // its pixels. Once the copy is complete the dav1d picture can return to
+        // its pool; keeping a 4K 10-bit source referenced through a synchronous
+        // VT transfer needlessly adds one more ~24 MiB live picture.
+        let timing = resolvedTiming()
 
         let surfaceStart = Self.now()
         var pixelBuffer: CVPixelBuffer?
@@ -622,122 +808,160 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             pixelBufferPool,
             &pixelBuffer
         )
+        let surfaceAllocated = Self.now()
+        detailedTimings.record(
+            .pixelBufferAllocation,
+            from: surfaceStart,
+            to: surfaceAllocated
+        )
         guard pixelStatus == kCVReturnSuccess, let pixelBuffer else {
             throw DecoderError.pixelBuffer(pixelStatus)
         }
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+        let lockStarted = Self.now()
+        let lockStatus = CVPixelBufferLockBaseAddress(pixelBuffer, [])
         let surfaceAcquired = Self.now()
+        detailedTimings.record(.pixelBufferLock, from: lockStarted, to: surfaceAcquired)
+        guard lockStatus == kCVReturnSuccess else {
+            throw DecoderError.pixelBuffer(lockStatus)
+        }
         profileLock.withLock { profileStorage.surfaceSeconds += surfaceAcquired - surfaceStart }
 
-        guard let sourceY = planePointer(0),
-              let destinationY = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)?.assumingMemoryBound(to: UInt8.self),
-              let destinationUV = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1)?.assumingMemoryBound(to: UInt8.self) else {
-            throw DecoderError.unsupportedPixelFormat("missing image planes")
-        }
-        if decodedFormat == AV_PIX_FMT_YUV420P10LE {
-            Self.shift10BitPlaneToP010(
-                source: UnsafeRawPointer(sourceY).assumingMemoryBound(to: UInt16.self),
-                sourceStride: planeStride(0),
-                destination: UnsafeMutableRawPointer(destinationY).assumingMemoryBound(to: UInt16.self),
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
-                width: width,
-                rows: height
-            )
-            guard let sourceU = planePointer(1), let sourceV = planePointer(2) else {
-                throw DecoderError.unsupportedPixelFormat("missing 10-bit planar chroma")
+        let conversionStarted = Self.now()
+        let conversionEnded: Double
+        do {
+            // CPU ownership ends at this scope. In particular, the pixel
+            // buffer must be unlocked before VideoToolbox is asked to read it;
+            // holding a base-address lock across GPU/accelerator work can force
+            // synchronization and was the old production behaviour.
+            defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+            guard let sourceY = planePointer(0),
+                  let destinationY = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)?.assumingMemoryBound(to: UInt8.self),
+                  let destinationUV = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1)?.assumingMemoryBound(to: UInt8.self) else {
+                throw DecoderError.unsupportedPixelFormat("missing image planes")
             }
-            Self.interleave420Chroma10BitToP010(
-                sourceU: UnsafeRawPointer(sourceU).assumingMemoryBound(to: UInt16.self),
-                sourceUStride: planeStride(1),
-                sourceV: UnsafeRawPointer(sourceV).assumingMemoryBound(to: UInt16.self),
-                sourceVStride: planeStride(2),
-                destination: UnsafeMutableRawPointer(destinationUV).assumingMemoryBound(to: UInt16.self),
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
-                width: width,
-                rows: height / 2
-            )
-        } else if decodedFormat == AV_PIX_FMT_P010LE {
-            guard let sourceUV = planePointer(1) else {
-                throw DecoderError.unsupportedPixelFormat("missing P010 chroma plane")
+            if decodedFormat == AV_PIX_FMT_YUV420P10LE {
+                guard let sourceU = planePointer(1), let sourceV = planePointer(2) else {
+                    throw DecoderError.unsupportedPixelFormat("missing 10-bit planar chroma")
+                }
+                Self.convertPlanar10BitToP010(
+                    sourceY: UnsafeRawPointer(sourceY).assumingMemoryBound(to: UInt16.self),
+                    sourceYStride: planeStride(0),
+                    sourceU: UnsafeRawPointer(sourceU).assumingMemoryBound(to: UInt16.self),
+                    sourceUStride: planeStride(1),
+                    sourceV: UnsafeRawPointer(sourceV).assumingMemoryBound(to: UInt16.self),
+                    sourceVStride: planeStride(2),
+                    destinationY: UnsafeMutableRawPointer(destinationY).assumingMemoryBound(to: UInt16.self),
+                    destinationYStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
+                    destinationUV: UnsafeMutableRawPointer(destinationUV).assumingMemoryBound(to: UInt16.self),
+                    destinationUVStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
+                    width: width,
+                    height: height
+                )
+            } else if decodedFormat == AV_PIX_FMT_P010LE {
+                guard let sourceUV = planePointer(1) else {
+                    throw DecoderError.unsupportedPixelFormat("missing P010 chroma plane")
+                }
+                Self.copyRows(
+                    source: sourceY,
+                    sourceStride: planeStride(0),
+                    destination: destinationY,
+                    destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
+                    rowBytes: width * MemoryLayout<UInt16>.stride,
+                    rows: height
+                )
+                Self.copyRows(
+                    source: sourceUV,
+                    sourceStride: planeStride(1),
+                    destination: destinationUV,
+                    destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
+                    rowBytes: width * MemoryLayout<UInt16>.stride,
+                    rows: height / 2
+                )
+            } else {
+                Self.copyRows(
+                    source: sourceY,
+                    sourceStride: planeStride(0),
+                    destination: destinationY,
+                    destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
+                    rowBytes: width,
+                    rows: height
+                )
             }
-            Self.copyRows(
-                source: sourceY,
-                sourceStride: planeStride(0),
-                destination: destinationY,
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
-                rowBytes: width * MemoryLayout<UInt16>.stride,
-                rows: height
-            )
-            Self.copyRows(
-                source: sourceUV,
-                sourceStride: planeStride(1),
-                destination: destinationUV,
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
-                rowBytes: width * MemoryLayout<UInt16>.stride,
-                rows: height / 2
-            )
-        } else {
-            Self.copyRows(
-                source: sourceY,
-                sourceStride: planeStride(0),
-                destination: destinationY,
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0),
-                rowBytes: width,
-                rows: height
-            )
-        }
 
-        if decodedFormat == AV_PIX_FMT_NV12 {
-            guard let sourceUV = planePointer(1) else {
-                throw DecoderError.unsupportedPixelFormat("missing NV12 chroma plane")
+            if decodedFormat == AV_PIX_FMT_NV12 {
+                guard let sourceUV = planePointer(1) else {
+                    throw DecoderError.unsupportedPixelFormat("missing NV12 chroma plane")
+                }
+                Self.copyRows(
+                    source: sourceUV,
+                    sourceStride: planeStride(1),
+                    destination: destinationUV,
+                    destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
+                    rowBytes: width,
+                    rows: height / 2
+                )
+            } else if decodedFormat == AV_PIX_FMT_YUV420P || decodedFormat == AV_PIX_FMT_YUVJ420P {
+                guard let sourceU = planePointer(1), let sourceV = planePointer(2) else {
+                    throw DecoderError.unsupportedPixelFormat("missing planar chroma")
+                }
+                Self.interleave420Chroma(
+                    sourceU: sourceU,
+                    sourceUStride: planeStride(1),
+                    sourceV: sourceV,
+                    sourceVStride: planeStride(2),
+                    destination: destinationUV,
+                    destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
+                    width: width,
+                    rows: height / 2
+                )
             }
-            Self.copyRows(
-                source: sourceUV,
-                sourceStride: planeStride(1),
-                destination: destinationUV,
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
-                rowBytes: width,
-                rows: height / 2
-            )
-        } else if decodedFormat == AV_PIX_FMT_YUV420P || decodedFormat == AV_PIX_FMT_YUVJ420P {
-            guard let sourceU = planePointer(1), let sourceV = planePointer(2) else {
-                throw DecoderError.unsupportedPixelFormat("missing planar chroma")
-            }
-            Self.interleave420Chroma(
-                sourceU: sourceU,
-                sourceUStride: planeStride(1),
-                sourceV: sourceV,
-                sourceVStride: planeStride(2),
-                destination: destinationUV,
-                destinationStride: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1),
-                width: width,
-                rows: height / 2
-            )
+            conversionEnded = Self.now()
         }
+        detailedTimings.record(.p010Conversion, from: conversionStarted, to: conversionEnded)
         Self.apply(colorProperties, pixelAspectRatio: pixelAspectRatio, to: pixelBuffer)
 
-        return try makeReadySample(from: finished(pixelBuffer), timing: resolvedTiming())
+        // The source picture is no longer read below this point. Releasing it
+        // before a synchronous transfer reduces decoder-pool residency and can
+        // let dav1d schedule the next frame sooner.
+        av_frame_unref(frame)
+        return try makeReadySample(from: try finished(pixelBuffer), timing: timing)
     }
 
-    /// The linear surface, or the compressed copy of it the display engine
-    /// can take without compositing (HEL-137). The transfer is one pass of a
-    /// fixed-function block, synchronous, and does not touch the CPU beyond
-    /// issuing it; the linear buffer goes straight back to its pool.
-    private func finished(_ linear: CVPixelBuffer) -> CVPixelBuffer {
-        guard let transferSession, let compressedPool else { return linear }
-        var compressed: CVPixelBuffer?
-        guard CVPixelBufferPoolCreatePixelBuffer(
-            kCFAllocatorDefault, compressedPool, &compressed
-        ) == kCVReturnSuccess, let compressed else { return linear }
-        let surfaceStart = Self.now()
-        guard VTPixelTransferSessionTransferImage(
-            transferSession, from: linear, to: compressed
-        ) == noErr else { return linear }
-        let surfaceEnd = Self.now()
-        profileLock.withLock { profileStorage.surfaceSeconds += surfaceEnd - surfaceStart }
-        Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: compressed)
-        return compressed
+    /// The source-linear surface, or the configured transfer destination.
+    /// The call is synchronous from this producer's perspective; its internal
+    /// execution mechanism is private. Once setup selects a transfer format,
+    /// a per-frame failure must not fall back to the source buffer because the
+    /// decoder's fixed format description describes the transfer output.
+    private func finished(_ linear: CVPixelBuffer) throws -> CVPixelBuffer {
+        guard let transferSession, let transferOutputPool else { return linear }
+        var transferred: CVPixelBuffer?
+        let allocationStarted = Self.now()
+        let allocationStatus = CVPixelBufferPoolCreatePixelBuffer(
+            kCFAllocatorDefault, transferOutputPool, &transferred
+        )
+        let allocationEnded = Self.now()
+        detailedTimings.record(
+            .transferOutputBufferAllocation,
+            from: allocationStarted,
+            to: allocationEnded
+        )
+        guard allocationStatus == kCVReturnSuccess, let transferred else {
+            throw DecoderError.pixelBuffer(allocationStatus)
+        }
+        let transferStarted = Self.now()
+        let transferStatus = VTPixelTransferSessionTransferImage(
+            transferSession, from: linear, to: transferred
+        )
+        let transferEnded = Self.now()
+        detailedTimings.record(.pixelTransfer, from: transferStarted, to: transferEnded)
+        guard transferStatus == noErr else {
+            throw DecoderError.pixelTransfer(transferStatus)
+        }
+        profileLock.withLock {
+            profileStorage.surfaceSeconds += transferEnded - allocationStarted
+        }
+        Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: transferred)
+        return transferred
     }
 
     /// Presentation timing for the frame the decoder is holding. Resolved
@@ -780,6 +1004,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     ) throws -> CMSampleBuffer {
         var timing = timing
         var output: CMSampleBuffer?
+        let sampleStarted = Self.now()
         let sampleStatus = CMSampleBufferCreateReadyWithImageBuffer(
             allocator: kCFAllocatorDefault,
             imageBuffer: pixelBuffer,
@@ -787,6 +1012,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             sampleTiming: &timing,
             sampleBufferOut: &output
         )
+        let sampleEnded = Self.now()
+        detailedTimings.record(.sampleBufferCreation, from: sampleStarted, to: sampleEnded)
         guard sampleStatus == noErr, let output else {
             throw DecoderError.outputSample(sampleStatus)
         }
@@ -901,8 +1128,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// cores. Chunks stay well below the core count for the same reason the
     /// gain is small: these threads compete with dav1d's (HEL-137).
     private static let conversionChunks: Int = {
-        let override = UserDefaults.standard.integer(forKey: "debug.softwareDecodeConvertChunks")
-        if override > 0 { return min(override, 8) }
+        let override = SoftwareDecodeThreadPolicy.commandLineInteger(
+            forKey: "debug.softwareDecodeConvertChunks"
+        )
+        if let override, override > 0 { return min(override, 8) }
         return min(max(ProcessInfo.processInfo.activeProcessorCount / 2, 1), 3)
     }()
 
@@ -958,15 +1187,15 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             ? sourceV
             : sourceV.advanced(by: (rows - 1) * -sourceVStride)
         parallelRows(rows) { start, count in
-            LagoonPixelConversion.interleave420Chroma(
-                sourceU: firstU.advanced(by: start * sourceUStride),
-                sourceUStride: sourceUStride,
-                sourceV: firstV.advanced(by: start * sourceVStride),
-                sourceVStride: sourceVStride,
-                destination: destination.advanced(by: start * destinationStride),
-                destinationStride: destinationStride,
-                width: width,
-                rows: count
+            lagoon_interleave_420_chroma(
+                firstU.advanced(by: start * sourceUStride),
+                sourceUStride,
+                firstV.advanced(by: start * sourceVStride),
+                sourceVStride,
+                destination.advanced(by: start * destinationStride),
+                destinationStride,
+                width,
+                count
             )
         }
     }
@@ -987,17 +1216,17 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 .assumingMemoryBound(to: UInt16.self)
         }
         parallelRows(rows) { start, count in
-            LagoonPixelConversion.shift10BitPlaneToP010(
-                source: UnsafeRawPointer(firstSource)
+            lagoon_shift_10bit_plane_to_p010(
+                UnsafeRawPointer(firstSource)
                     .advanced(by: start * sourceStride)
                     .assumingMemoryBound(to: UInt16.self),
-                sourceStride: sourceStride,
-                destination: UnsafeMutableRawPointer(destination)
+                sourceStride,
+                UnsafeMutableRawPointer(destination)
                     .advanced(by: start * destinationStride)
                     .assumingMemoryBound(to: UInt16.self),
-                destinationStride: destinationStride,
-                width: width,
-                rows: count
+                destinationStride,
+                width,
+                count
             )
         }
     }
@@ -1027,22 +1256,112 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 .assumingMemoryBound(to: UInt16.self)
         }
         parallelRows(rows) { start, count in
-            LagoonPixelConversion.interleave420Chroma10BitToP010(
-                sourceU: UnsafeRawPointer(firstU)
+            lagoon_interleave_420_chroma_10bit_to_p010(
+                UnsafeRawPointer(firstU)
                     .advanced(by: start * sourceUStride)
                     .assumingMemoryBound(to: UInt16.self),
-                sourceUStride: sourceUStride,
-                sourceV: UnsafeRawPointer(firstV)
+                sourceUStride,
+                UnsafeRawPointer(firstV)
                     .advanced(by: start * sourceVStride)
                     .assumingMemoryBound(to: UInt16.self),
-                sourceVStride: sourceVStride,
-                destination: UnsafeMutableRawPointer(destination)
+                sourceVStride,
+                UnsafeMutableRawPointer(destination)
                     .advanced(by: start * destinationStride)
                     .assumingMemoryBound(to: UInt16.self),
-                destinationStride: destinationStride,
-                width: width,
-                rows: count
+                destinationStride,
+                width,
+                count
             )
+        }
+    }
+
+    /// Converts all three planar 10-bit source planes into P010 with one
+    /// parallel dispatch. The old path called the luma and chroma helpers
+    /// separately, paying two `concurrentPerform` barriers per 4K frame even
+    /// though both operations are independent and use the same chunk count.
+    /// Keeping both kernels in each worker also reduces scheduler traffic
+    /// while preserving the hand-written NEON loops in `LagoonPixelOps`.
+    static func convertPlanar10BitToP010(
+        sourceY: UnsafePointer<UInt16>,
+        sourceYStride: Int,
+        sourceU: UnsafePointer<UInt16>,
+        sourceUStride: Int,
+        sourceV: UnsafePointer<UInt16>,
+        sourceVStride: Int,
+        destinationY: UnsafeMutablePointer<UInt16>,
+        destinationYStride: Int,
+        destinationUV: UnsafeMutablePointer<UInt16>,
+        destinationUVStride: Int,
+        width: Int,
+        height: Int
+    ) {
+        guard width > 0, height > 0 else { return }
+        let chromaRows = height / 2
+        let firstY: UnsafePointer<UInt16> = if sourceYStride >= 0 {
+            sourceY
+        } else {
+            UnsafeRawPointer(sourceY)
+                .advanced(by: (height - 1) * -sourceYStride)
+                .assumingMemoryBound(to: UInt16.self)
+        }
+        let firstU: UnsafePointer<UInt16> = if sourceUStride >= 0 || chromaRows == 0 {
+            sourceU
+        } else {
+            UnsafeRawPointer(sourceU)
+                .advanced(by: (chromaRows - 1) * -sourceUStride)
+                .assumingMemoryBound(to: UInt16.self)
+        }
+        let firstV: UnsafePointer<UInt16> = if sourceVStride >= 0 || chromaRows == 0 {
+            sourceV
+        } else {
+            UnsafeRawPointer(sourceV)
+                .advanced(by: (chromaRows - 1) * -sourceVStride)
+                .assumingMemoryBound(to: UInt16.self)
+        }
+
+        let chunks = min(conversionChunks, max(height / 128, 1))
+        let convertChunk: (Int) -> Void = { index in
+            let lumaStart = height * index / chunks
+            let lumaEnd = height * (index + 1) / chunks
+            lagoon_shift_10bit_plane_to_p010(
+                UnsafeRawPointer(firstY)
+                    .advanced(by: lumaStart * sourceYStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                sourceYStride,
+                UnsafeMutableRawPointer(destinationY)
+                    .advanced(by: lumaStart * destinationYStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                destinationYStride,
+                width,
+                lumaEnd - lumaStart
+            )
+
+            let chromaStart = chromaRows * index / chunks
+            let chromaEnd = chromaRows * (index + 1) / chunks
+            guard chromaEnd > chromaStart else { return }
+            lagoon_interleave_420_chroma_10bit_to_p010(
+                UnsafeRawPointer(firstU)
+                    .advanced(by: chromaStart * sourceUStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                sourceUStride,
+                UnsafeRawPointer(firstV)
+                    .advanced(by: chromaStart * sourceVStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                sourceVStride,
+                UnsafeMutableRawPointer(destinationUV)
+                    .advanced(by: chromaStart * destinationUVStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                destinationUVStride,
+                width,
+                chromaEnd - chromaStart
+            )
+        }
+        if chunks == 1 {
+            convertChunk(0)
+        } else {
+            DispatchQueue.concurrentPerform(iterations: chunks) { index in
+                convertChunk(index)
+            }
         }
     }
 
@@ -1064,6 +1383,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 ] as CFDictionary,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferPixelAspectRatioKey)
         }
         if let primaries = properties.primaries {
             CVBufferSetAttachment(
@@ -1072,6 +1393,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 primaries,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferColorPrimariesKey)
         }
         if let transfer = properties.transfer {
             CVBufferSetAttachment(
@@ -1080,6 +1403,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 transfer,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferTransferFunctionKey)
         }
         if let matrix = properties.matrix {
             CVBufferSetAttachment(
@@ -1088,6 +1413,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 matrix,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferYCbCrMatrixKey)
         }
         if let chromaLocation = properties.chromaLocation {
             CVBufferSetAttachment(
@@ -1096,6 +1423,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 chromaLocation,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferChromaLocationTopFieldKey)
         }
         // HDR10 static metadata. The transfer function alone is what switches
         // tvOS into HDR, but without these the display tone-maps from its own
@@ -1115,6 +1444,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 masteringDisplay as CFData,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferMasteringDisplayColorVolumeKey)
         }
         if let contentLightLevel = properties.contentLightLevel {
             CVBufferSetAttachment(
@@ -1123,6 +1454,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 contentLightLevel as CFData,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferContentLightLevelInfoKey)
         }
         if let ambientViewingEnvironment = properties.ambientViewingEnvironment {
             // Apple TN3145: custom sample-buffer playback has to carry `amve`
@@ -1133,6 +1466,16 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 ambientViewingEnvironment as CFData,
                 .shouldPropagate
             )
+        } else {
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferAmbientViewingEnvironmentKey)
+        }
+        if properties.transfer == kCVImageBufferTransferFunction_ITU_R_709_2 {
+            // An ICC profile or gamma value can override/conflict with the
+            // explicit BT.709 transfer description. The source path does not
+            // create either, but VT is allowed to propagate unknown source
+            // attachments, so make the SDR contract unambiguous.
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferICCProfileKey)
+            CVBufferRemoveAttachment(pixelBuffer, kCVImageBufferGammaLevelKey)
         }
     }
 }
