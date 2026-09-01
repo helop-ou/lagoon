@@ -34,7 +34,7 @@ nonisolated enum Changelog {
             headline: "Playback details say what decoding a frame actually costs.",
             changes: [
                 "4K AV1 on an Apple TV starts smoothly and slowly loses ground, which is the Apple TV warming up rather than anything about the file. Playback details, in Settings then Advanced, now report what one frame costs to decode against the time available for it, so that can be watched happening instead of guessed at.",
-                "Two new options sit beside it for testing how the decoder is scheduled. Both are off, both are for diagnosing the above, and neither is worth turning on during normal viewing.",
+                "Three new options sit beside it for testing how the decoder is scheduled and how much work it is asked to do. All are off, all are for diagnosing the above, and none is worth turning on during normal viewing. One of them, Skip Film Grain, changes the picture: AV1 can carry grain that the decoder paints back on, and skipping it is a way to measure what that costs rather than a setting to leave on.",
             ]
         ),
         ChangelogEntry(
