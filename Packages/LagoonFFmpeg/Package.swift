@@ -90,10 +90,21 @@ let package = Package(
             url: "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gnutls.xcframework.zip",
             checksum: "3dbec5809339189bf9679e218c6cff387ebf8fb72745927835afc2678f5c9f4d"
         ),
+        // The one artifact Lagoon builds itself (HEL-137). mpvkit's dav1d is
+        // compiled with -Denable_asm=false, to silence an Xcode 15 linker
+        // warning about assembled objects carrying no platform load command,
+        // so every AV1 frame ran dav1d's portable C path: 11.4 fps against
+        // the 23.976 a 4K HDR10+ episode needs, on an Apple TV. Same dav1d
+        // 1.5.3, same headers, same public API, built by
+        // scripts/build-dav1d.sh with the assembly kept and the warning
+        // fixed properly by passing -target to the assembler.
+        //
+        // Vendored rather than fetched: there is nothing upstream to point
+        // at, and a URL that has to outlive the app is a worse dependency
+        // than five megabytes in the repository.
         .binaryTarget(
             name: "Libdav1d",
-            url: "https://github.com/mpvkit/libdav1d-build/releases/download/1.5.3/Libdav1d.xcframework.zip",
-            checksum: "d1a32ae6a1f0193e9f05c44c9176844af7f6d2a58cb33843f6f1b8dfd9224083"
+            path: "Artifacts/Libdav1d.xcframework"
         ),
         .binaryTarget(
             name: "lcms2",
