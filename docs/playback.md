@@ -575,6 +575,30 @@ correctly and merely slowly, so nothing fails, nothing looks wrong, and
 nobody finds out until someone measures 4K on a device with two performance
 cores. That is exactly how this shipped in the first place.
 
+#### Film grain (unresolved)
+
+AV1 film grain synthesis is a per-pixel post-process across the whole frame,
+and dav1d does it on the CPU. At 4K 10-bit it is a large share of what a frame
+costs. It is also how a 13.2 Mbps 4K HDR10+ encode exists at all: grain is
+expensive to code, so the encoder strips it and the decoder puts it back.
+
+Settings → Advanced → **Skip Film Grain** hands the parameters back as side
+data instead of synthesizing (`AV_CODEC_EXPORT_DATA_FILM_GRAIN`), which is
+libavcodec's way of telling its dav1d wrapper not to apply them. Off by
+default, because the grain is in the master and removing it changes the
+picture rather than optimizing it.
+
+The toggle is also the only way to learn whether a stream has grain at all:
+when dav1d applies it, the decoded frame carries no evidence that it did. With
+the toggle on, the HUD reports how many frames asked for grain, so
+`grain skipped (none in this stream)` retires the hypothesis for that file in
+one playback.
+
+If this does turn out to be the cost, skipping it is not the answer — the
+answer is to synthesize it somewhere other than the decode thread. The measured
+`ms/frame` either side of the toggle is what says whether that is worth
+building.
+
 #### Thread count (unresolved)
 
 `AVCodecContext.thread_count` stays at 0, libavcodec's auto, which is what
