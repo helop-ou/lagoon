@@ -133,6 +133,21 @@ struct SoftwareDecodePipelineTests {
         ))
     }
 
+    @Test func capabilitiesFollowTheToggleWithoutRelaunching() {
+        // A cached `current` meant turning the AV1 experiment off did nothing
+        // until the app was force-quit, so every AV1 title kept routing to a
+        // decoder that does not exist. A toggle that cannot be turned off is
+        // worse than no toggle.
+        let key = PlaybackCapabilities.systemAV1DefaultsKey
+        let original = UserDefaults.standard.bool(forKey: key)
+        defer { UserDefaults.standard.set(original, forKey: key) }
+
+        UserDefaults.standard.set(true, forKey: key)
+        #expect(PlaybackCapabilities.current.systemAV1)
+        UserDefaults.standard.set(false, forKey: key)
+        #expect(!PlaybackCapabilities.current.systemAV1)
+    }
+
     @Test func threadCountIsAlwaysExplicitSoTheDeviceCanReportIt() {
         // "Auto" left the resolved value inside libavcodec's dav1d wrapper,
         // where nothing on an Apple TV could read it, so a whole build shipped
