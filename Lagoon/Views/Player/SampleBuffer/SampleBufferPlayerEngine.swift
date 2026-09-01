@@ -140,6 +140,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             readFraction * 100,
             stage.pendingCount
         )
+        line += " · \(stage.resolvedThreadCount) threads"
         // Only says anything while synthesis is skipped: with grain applied,
         // a frame carries no evidence that it had any.
         if stage.skipsFilmGrain {

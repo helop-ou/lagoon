@@ -18,6 +18,15 @@ import Foundation
 /// Xcode and so cannot be profiled any other way.
 nonisolated enum SoftwareDecodeThreadPolicy {
     static let boundToPerformanceCoresDefaultsKey = "debug.softwareDecodePerformanceCores"
+    /// An explicit thread count, or 0 to derive one. Swept from Settings on
+    /// hardware, because an Apple TV cannot be profiled any other way.
+    static let threadCountDefaultsKey = "debug.softwareDecodeThreadCount"
+
+    /// The counts worth trying on the devices Lagoon runs on. An A15 has two
+    /// performance cores and four efficiency ones, so 2, 4 and 6 are the
+    /// interesting shapes and 8 is there to show whether oversubscribing
+    /// helps or hurts.
+    static let selectableThreadCounts = [0, 2, 3, 4, 6, 8]
     /// HEL-137 lever 6. dav1d overlaps this many frames at once; more of them
     /// is more frame-level parallelism, paid for in latency and in decoded
     /// frames held inside the decoder. libavcodec leaves it on dav1d's own
@@ -83,16 +92,31 @@ nonisolated enum SoftwareDecodeThreadPolicy {
     }
 
     /// The current device's answer to the above.
+    ///
+    /// Never returns libavcodec's "auto" any more. Auto meant the resolved
+    /// value lived inside the dav1d wrapper where nothing on the device could
+    /// read it, so a whole build went by without anyone able to say how many
+    /// threads were actually decoding (HEL-137). The default is now every core
+    /// the device reports, which is what auto was believed to be doing, stated
+    /// explicitly so it can be both seen and changed.
     static func resolvedThreadCount(
+        explicit: Int = UserDefaults.standard.integer(forKey: threadCountDefaultsKey),
         boundToPerformanceCores: Bool = UserDefaults.standard.bool(
             forKey: boundToPerformanceCoresDefaultsKey
-        )
+        ),
+        activeProcessors: Int = ProcessInfo.processInfo.activeProcessorCount
     ) -> Int32 {
-        threadCount(
-            performanceCores: performanceCoreCount(),
-            activeProcessors: ProcessInfo.processInfo.activeProcessorCount,
-            boundToPerformanceCores: boundToPerformanceCores
-        )
+        if explicit > 0 {
+            return Int32(min(explicit, max(activeProcessors * 2, 2)))
+        }
+        if boundToPerformanceCores {
+            return threadCount(
+                performanceCores: performanceCoreCount(),
+                activeProcessors: activeProcessors,
+                boundToPerformanceCores: true
+            )
+        }
+        return Int32(max(activeProcessors, 1))
     }
 
     /// Cores in the fastest cluster. Apple silicon numbers its clusters from

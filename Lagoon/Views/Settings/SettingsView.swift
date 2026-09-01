@@ -14,6 +14,8 @@ struct SettingsView: View {
     /// is to ship the switch. Read once when the decoder opens.
     @AppStorage(SoftwareDecodeThreadPolicy.boundToPerformanceCoresDefaultsKey)
     private var softwareDecodePerformanceCores = false
+    @AppStorage(SoftwareDecodeThreadPolicy.threadCountDefaultsKey)
+    private var softwareDecodeThreadCount = 0
     @AppStorage(SoftwareDecodeThreadPolicy.frameDelayDefaultsKey)
     private var softwareDecodeFrameDelay = false
     @AppStorage(SoftwareDecodeThreadPolicy.highPriorityDefaultsKey)
@@ -462,11 +464,17 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
-                settingsToggle(
-                    "Limit Software Decode Threads",
-                    isOn: $softwareDecodePerformanceCores
+                TVSettingsMenuPicker(
+                    title: "Software Decode Threads",
+                    valueTitle: softwareDecodeThreadCount == 0
+                        ? "Every Core"
+                        : "\(softwareDecodeThreadCount)",
+                    accessibilityIdentifier: "settings.diagnostics.softwareDecodeThreads",
+                    selection: $softwareDecodeThreadCount,
+                    options: SoftwareDecodeThreadPolicy.selectableThreadCounts.map {
+                        TVSettingsOption(value: $0, title: $0 == 0 ? "Every Core" : "\($0)")
+                    }
                 )
-                .accessibilityIdentifier("settings.diagnostics.softwareDecodeThreads")
                 settingsToggle(
                     "Overlap More Decoded Frames",
                     isOn: $softwareDecodeFrameDelay
@@ -775,7 +783,11 @@ struct SettingsView: View {
                 Toggle("Show Playback Details", isOn: $showPlaybackHUD)
                 Toggle("Run Playback Performance Test", isOn: $frameLossBench)
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
-                Toggle("Limit Software Decode Threads", isOn: $softwareDecodePerformanceCores)
+                Picker("Software Decode Threads", selection: $softwareDecodeThreadCount) {
+                    ForEach(SoftwareDecodeThreadPolicy.selectableThreadCounts, id: \.self) {
+                        Text($0 == 0 ? "Every Core" : "\($0)").tag($0)
+                    }
+                }
                 Toggle("Overlap More Decoded Frames", isOn: $softwareDecodeFrameDelay)
                 Toggle("Prioritize Software Decoding", isOn: $softwareDecodeHighPriority)
                 Toggle("Skip Film Grain", isOn: $softwareDecodeSkipFilmGrain)
