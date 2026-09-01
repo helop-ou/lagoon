@@ -575,7 +575,13 @@ correctly and merely slowly, so nothing fails, nothing looks wrong, and
 nobody finds out until someone measures 4K on a device with two performance
 cores. That is exactly how this shipped in the first place.
 
-#### Film grain (unresolved)
+#### Film grain (retired)
+
+**Measured on the Apple TV: this stream carries none.** The HUD reported
+`grain skipped (none in this stream)`, which retired the hypothesis in one
+playback without needing a timing comparison at all. The toggle stays, because
+it is the only way to ask the question of the next file: with synthesis on, a
+decoded frame carries no evidence that it ever had grain.
 
 AV1 film grain synthesis is a per-pixel post-process across the whole frame,
 and dav1d does it on the CPU. At 4K 10-bit it is a large share of what a frame
@@ -599,19 +605,38 @@ answer is to synthesize it somewhere other than the decode thread. The measured
 `ms/frame` either side of the toggle is what says whether that is worth
 building.
 
-#### Thread count (unresolved)
+#### Measuring on a box that heats up
 
-`AVCodecContext.thread_count` stays at 0, libavcodec's auto, which is what
-HEL-103 measured at 1.66 s for 30 s of 4K AV1 against 13.26 s single-threaded
-(both on the C path, as it turns out).
-Auto counts every core the SoC reports, which on an A15 is six: two performance
-and four efficiency. Frame threading spread across efficiency cores can cost
-more in synchronisation than it returns, so `SoftwareDecodeThreadPolicy` can
-bound the count to the performance cluster (`hw.perflevel0.logicalcpu`, never
-below two, never above the active processor count) behind Settings → Advanced →
-**Limit Software Decode Threads**. It ships in Release because an Apple TV
-cannot be paired to Xcode and there is no other way to run the A/B. Which is
-faster is a question about a specific device. The one measurement taken so far
+Every comparison has to start from the same thermal state. 4K AV1 measured
+31 ms a frame cold and 45 ms after 30 to 50 seconds, so a run started on a warm
+Apple TV reads worse than the same code on a cold one, by more than any of the
+levers here move it. Back-to-back A/Bs without a cooling gap are not
+comparisons, in the same way that different scenes are not comparisons
+(HEL-64). Leave the device idle for several minutes between runs, and note that
+`ms/frame` resets on seek, so a seek gives a fresh average but not a fresh
+device.
+
+The degradation is not itself the bug. A 45% thermal penalty is survivable from
+a low enough baseline: at 18 ms a frame it lands at 26 ms and never misses the
+41.7 ms budget. The problem is that 31 ms cold is already 76% of budget, so the
+first throttling puts it over. Infuse plays this file on this device, so the
+baseline is what has to come down, not the heat.
+
+#### Thread count
+
+`AVCodecContext.thread_count` is set explicitly, and never to libavcodec's
+auto. Auto left the resolved value inside the dav1d wrapper, where nothing on
+an Apple TV can read it: a whole build shipped with nobody able to say how many
+threads were decoding, and `thread_count` is not written back after
+`avcodec_open2`, so reporting it would have echoed the zero it was asked for.
+The default is now every core the device reports, which is what auto was
+believed to be doing, stated so it can be seen on the HUD and swept from
+Settings → Advanced → Software Decode Threads.
+An A15 has six cores: two performance and four efficiency. Frame threading
+spread across efficiency cores can cost more in synchronisation than it
+returns, so the count is swept rather than assumed. It ships in Release because
+an Apple TV cannot be paired to Xcode and there is no other way to run the A/B.
+Which is faster is a question about a specific device. The one measurement taken so far
 says auto: on the C-path binary, bounding to the performance cluster took
 11.4 fps down to 9.1. That was answering the wrong question, though, and it
 should be re-run now that the decoder has its assembly.
