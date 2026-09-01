@@ -615,12 +615,65 @@ reopens on the software path rather than failing the title. That also covers
 the hardware case Apple warns about, where a decoder "may not be available at
 all times": until this, that would have stranded a title libdav1d could play.
 
+#### Measuring on the device itself
+
+An Apple TV can be paired after all, which changes what is knowable. With
+`xcrun devicectl` the loop is build, install, launch with the regression
+bootstrap, and read a console time series:
+
+```sh
+DEVICECTL_CHILD_LAGOON_REGRESSION_SERVER=... DEVICECTL_CHILD_LAGOON_REGRESSION_USER=... \
+xcrun devicectl device process launch --device <udid> --console --terminate-existing \
+  ee.helop.lagoon -- -debug.playerRegression YES -debug.regressionBootstrapPublicDemo YES \
+  -debug.benchSearchTerm "<title>" -debug.decodeTrace YES
+```
+
+The `--` matters: devicectl's parser reads `-debug.x` as bundled short flags
+without it. `-debug.decodeTrace YES` prints a `DecodeTrace` line every two
+seconds with position, queue depths, footprint and the full decode profile.
+
+Three rules came out of doing this badly first:
+
+**Measure Release.** A Debug build compiles `LagoonPixelOps` at `-O0`, which
+reported conversion at 28 ms a frame against Release's 4.8 ms and made decode
+look cheap by comparison. Every conclusion drawn from that was wrong.
+
+**Compare at a fixed playback position.** Decode cost on this content tracks
+scene complexity: 14 ms a frame at the title, 40 ms in the scene at 40 s. A
+cumulative average read at a different position compares scenes, not settings,
+which invalidated an entire thread-count sweep and a frame-delay A/B.
+
+**Use `convertMs` as the contamination detector.** It cannot depend on any
+decoder setting, so when six back-to-back runs pushed it from 4.8 ms to 9.1 ms
+that was the device degrading under continuous load, not the settings. Leave
+five minutes between runs and discard any run where it is not near 4.8.
+
+#### It is not thermal, and it is not arrangeable
+
+Relaunching on a device hammered for ten minutes reproduced the cold curve
+position for position (28.7 against 28.8 ms at 41.5 s, 34.2 against 34.7 at
+45.5 s). Sustained *testing* contaminates, but playback itself does not
+throttle its way out of budget.
+
+And the work cannot be rearranged into fitting. Conversion used to run on the
+decode queue, so a frame cost decode plus convert; moving it to its own queue
+so a frame costs the larger of the two is the same structural fix that opened
+this ticket, one stage later. Measured twice, it is *worse*: decode rose by
+about what conversion stopped adding, and frames per second went from 22.2 to
+21.2. The device is CPU-saturated, so a second thread takes from dav1d exactly
+what it saves. **Only doing less work can help, not doing it elsewhere.**
+
+Parallelising the conversion across rows was kept because it does less work in
+the same place: 4.8 ms to 4.3 ms. Only that much because the copy is bounded by
+memory bandwidth rather than cores.
+
 #### Where this leaves the ticket
 
-Cold, 4K AV1 costs about 31 ms a frame of a 41.7 ms budget: 76% before
-anything degrades, climbing past 100% within a minute as the box warms. dav1d
-is not underperforming — that is in line with published figures for a 2+4 core
-A15 — and nothing else on the CPU side is unaccounted for.
+Measured on the device, Release, in the demanding scene: decode 39.6 ms,
+conversion 4.3 ms, against a 41.7 ms budget. That is about 22 frames a second
+where 23.976 are needed — **roughly 8% short**, not the factor of two this
+ticket spent days chasing. dav1d is not underperforming; that is in line with
+published figures for a 2+4 core A15.
 
 Infuse plays the same file on the same device, direct play, confirmed in the
 Jellyfin dashboard. So the headroom exists and Lagoon is spending it somewhere
@@ -630,14 +683,18 @@ will (correctly) set the output to SDR when playing these. Other apps may be
 switching your TV to HDR (or Dolby Vision) mode, but this is not technically
 correct." Lagoon is one of those other apps.
 
-That matters twice. It is a correctness question on its own. And compositing
-4K PQ into an HDR output is GPU and memory-bandwidth work on the same chip
-running dav1d, which would not show in `ms/frame` but would show as heat — and
-heat is what has been eating the margin. Settings → Advanced → **Force SDR
-Output** drops the PQ transfer and the HDR10 metadata from software-decoded
-frames so the display stays in SDR, to find out. Nothing tone maps, so the
-picture is dark and flat: it is a measurement, not a mode. If HDR output is
-the cost, the work is to tone map properly, which is what Infuse does.
+Measured: forcing SDR changes nothing about the timing, so HDR output is not
+where the margin goes. Settings → Advanced → **Force SDR Output** remains,
+because the correctness question stands on its own — if Firecore is right, we
+are asking a television for a mode this pipeline cannot honestly deliver.
+
+**The remaining lever is the conversion, on the GPU.** It is 4.3 ms of a
+41.7 ms budget, or about 10%, and the shortfall is 8%. That is lever 3 of this
+ticket, retired earlier on a reading of "2%" that turned out to be a Debug
+build's arithmetic. The GPU is otherwise idle during playback, dav1d's planar
+10-bit output would upload as textures, and a shader can write P010 into the
+IOSurface the renderer already wants. Unlike every other lever tried, it
+removes CPU work rather than moving it.
 
 ### Player panel performance
 
