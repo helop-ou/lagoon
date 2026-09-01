@@ -533,8 +533,21 @@ fast cores hid it; two cannot.
 `Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework` is therefore the one
 artifact Lagoon builds rather than fetches, vendored rather than hosted
 because a URL that has to outlive the app is a worse dependency than eight
-megabytes in the repository. Same dav1d 1.5.3, byte-identical headers, public
-API a strict superset of the artifact it replaces.
+megabytes in the repository. It first shipped as dav1d 1.5.3, matching mpvkit's
+version exactly so that nothing about the result could be attributed to a
+version change rather than to the assembly.
+
+**It is now 1.5.4**, taken once the assembly change had been measured on its
+own. 1.5.4 carries "schedule tile tasks for all passes at once, improving
+threading", which is the part of dav1d this ticket is still stuck on, plus
+build-time quantization tables; its AArch64 work is 8-bit only and so does
+nothing for 10-bit HDR. libavcodec links against it unchanged: same
+`DAV1D_API_VERSION` 7.0.0, no public symbol removed, and the only header
+difference in the whole upgrade is an OS/2 export macro.
+
+Bumping it is `scripts/build-dav1d.sh --version <tag>` and a rebuild. Check
+those three things afterwards, because libavcodec here is a binary compiled
+against a particular dav1d and cannot be rebuilt alongside it.
 
 **arm64 carries assembly; x86_64 deliberately does not.** The simulator and
 macOS slices have to be fat, because a `generic/platform=tvOS Simulator`
