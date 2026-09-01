@@ -55,11 +55,25 @@ nonisolated struct PlaybackCapabilities: Equatable, Sendable {
     /// rather than being decoded by libavcodec.
     var decodesAV1WithVideoToolbox: Bool { hardwareAV1 || systemAV1 }
 
-    /// Resolved once per process. Hardware does not grow a decoder mid-session,
-    /// and the profile is rebuilt on every `PlaybackInfo` call.
-    static let current = PlaybackCapabilities(
-        hardwareHEVC: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC),
-        hardwareAV1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1),
-        systemAV1: UserDefaults.standard.bool(forKey: systemAV1DefaultsKey)
+    /// What the hardware answers, resolved once per process: it does not grow
+    /// a decoder mid-session.
+    private static let hardware = (
+        hevc: VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC),
+        av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
     )
+
+    /// The hardware answer plus whatever the diagnostic toggles currently say.
+    ///
+    /// **Read fresh, not cached.** Caching the whole thing across the process
+    /// made turning the AV1 experiment *off* do nothing until the app was
+    /// force-quit, so every AV1 title kept routing to a decoder that does not
+    /// exist and falling down the delivery ladder to a transcode. A debug
+    /// toggle that cannot be turned off is worse than no toggle.
+    static var current: PlaybackCapabilities {
+        PlaybackCapabilities(
+            hardwareHEVC: hardware.hevc,
+            hardwareAV1: hardware.av1,
+            systemAV1: UserDefaults.standard.bool(forKey: systemAV1DefaultsKey)
+        )
+    }
 }

@@ -1522,6 +1522,38 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             return
         }
         shared.withLock { $0.deliveryIsCached = deliveryIsCached }
+        // An Apple decoder that cannot be created is a reason to decode this
+        // stream some other way, not a reason to fail the title (HEL-137).
+        // AV1 always has libdav1d behind it, so a session refused here -
+        // whether because the system-decoder experiment asked for a decoder
+        // this platform does not have, or because hardware Apple says may be
+        // unavailable at any time actually was - reopens on the software path
+        // instead of stranding playback. Once only, and never for HEVC, which
+        // has no fallback and must still fail loudly.
+        if demuxer.videoStream?.codecName == "av1",
+           !demuxer.outputsDecodedVideo,
+           let description = demuxer.videoStream?.formatDescription,
+           !VideoToolboxDecoder.canDecode(description) {
+            demuxer.close()
+            demuxer.disableVideoToolboxAV1()
+            do {
+                try demuxer.open(
+                    url: url.absoluteString,
+                    cacheSession: deliveryIsCached ? cacheSession : nil,
+                    disc: disc,
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                )
+            } catch {
+                let demuxError = error as? DemuxError
+                let failure = PlaybackEngineFailure(
+                    cause: demuxError?.cause ?? .delivery,
+                    message: demuxError?.errorDescription
+                        ?? "The stream could not be opened."
+                )
+                Task { @MainActor in self.onError?(failure) }
+                return
+            }
+        }
         // The demuxer builds the software decoder (it has the codec
         // parameters) but never drives it: decoding on the demux queue meant
         // reading and decoding took turns, which 4K AV1 cannot afford

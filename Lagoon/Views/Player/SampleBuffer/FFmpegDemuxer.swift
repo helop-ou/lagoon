@@ -110,7 +110,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     private var formatContext: UnsafeMutablePointer<AVFormatContext>?
-    private let capabilities: PlaybackCapabilities
+    private var capabilities: PlaybackCapabilities
     private var cachedIO: FFmpegCachedIO?
     private var hlsCache: HLSPlaybackCacheScope?
     private let childIOLock = NSLock()
@@ -205,6 +205,16 @@ nonisolated final class FFmpegDemuxer {
     /// than as samples for an Apple decoder. Stored rather than derived from
     /// the decoder, which is handed away during open.
     private(set) var outputsDecodedVideo = false
+
+    /// Stops routing AV1 to an Apple decoder, for a reopen after one could
+    /// not be created. Call before `open` (HEL-137).
+    func disableVideoToolboxAV1() {
+        capabilities = PlaybackCapabilities(
+            hardwareHEVC: capabilities.hardwareHEVC,
+            hardwareAV1: false,
+            systemAV1: false
+        )
+    }
 
     /// Transfers the software decoder to its caller, which becomes
     /// responsible for decoding, flushing and draining it. Returns it once.

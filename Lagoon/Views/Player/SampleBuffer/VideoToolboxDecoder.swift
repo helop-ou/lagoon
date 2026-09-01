@@ -62,6 +62,33 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
         stateLock.withLock { recoverableFrameErrorCount }
     }
 
+    /// Whether VideoToolbox will actually give us a decoder for this stream.
+    ///
+    /// Not the question `VTIsHardwareDecodeSupported` answers. That reports
+    /// silicon; this reports whether a session can be created at all, which is
+    /// what the caller actually needs to know before committing a stream to
+    /// the compressed path. The two differ for AV1 on an A15: no hardware, and
+    /// no software decoder behind it either, so the session is refused with
+    /// -12906 whether or not hardware is required (HEL-137).
+    ///
+    /// Asked with no specification and no callback, so it answers for the
+    /// decoder itself rather than for any particular configuration of it.
+    static func canDecode(_ formatDescription: CMVideoFormatDescription) -> Bool {
+        var session: VTDecompressionSession?
+        let status = VTDecompressionSessionCreate(
+            allocator: kCFAllocatorDefault,
+            formatDescription: formatDescription,
+            decoderSpecification: nil,
+            imageBufferAttributes: nil,
+            outputCallback: nil,
+            decompressionSessionOut: &session
+        )
+        if let session {
+            VTDecompressionSessionInvalidate(session)
+        }
+        return status == noErr && session != nil
+    }
+
     static func isRecoverableFrameError(_ status: OSStatus) -> Bool {
         status == kVTVideoDecoderReferenceMissingErr
     }
