@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "78",
+            released: "September 2026",
+            headline: "Playback details say how many processor cores are decoding.",
+            changes: [
+                "Lagoon used to leave the number of cores used for software decoding up to the video library, which meant nobody could find out what it had chosen. It now decides explicitly, defaults to every core the device has, shows the number in playback details, and lets it be changed in Settings then Advanced for testing.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "77",
             released: "September 2026",
             headline: "A way to measure what film grain costs the decoder.",
