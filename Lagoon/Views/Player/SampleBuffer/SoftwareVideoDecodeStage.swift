@@ -88,8 +88,19 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
     var decodedFrameBytes: Int64 { decoder.decodedFrameBytes }
     var resolvedThreadCount: Int32 { decoder.resolvedThreadCount }
     var outputsToneMappedSDR: Bool { decoder.outputsToneMappedSDR }
+    var usesCompressedOutput: Bool { decoder.usesCompressedOutput }
+    var outputModeName: String { decoder.outputModeName }
+    var codecName: String { decoder.codecName }
+    var lowDelayEnabled: Bool { decoder.lowDelayEnabled }
+    var maxFrameDelay: Int64? { decoder.maxFrameDelay }
+    var decoderDelay: Int32 { decoder.decoderDelay }
     var gridDescription: String? { decoder.gridDescription }
     var profile: SoftwareVideoDecoder.Profile { decoder.profile }
+    var detailedTimingLines: [String] { decoder.detailedTimingLines }
+
+    func resetDetailedTimings() {
+        decoder.resetDetailedTimings()
+    }
 
     /// Packets submitted but not yet decoded, including the one in the
     /// decoder right now. The demux loop adds this to the decoded queue's
