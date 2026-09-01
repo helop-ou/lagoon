@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 
 /// How many threads libavcodec is given for software video decode (HEL-137
@@ -17,6 +18,35 @@ import Foundation
 /// Xcode and so cannot be profiled any other way.
 nonisolated enum SoftwareDecodeThreadPolicy {
     static let boundToPerformanceCoresDefaultsKey = "debug.softwareDecodePerformanceCores"
+    /// HEL-137 lever 6. dav1d overlaps this many frames at once; more of them
+    /// is more frame-level parallelism, paid for in latency and in decoded
+    /// frames held inside the decoder. libavcodec leaves it on dav1d's own
+    /// automatic choice, which is derived from the thread count and is
+    /// conservative. Off, nothing is set and dav1d decides.
+    static let frameDelayDefaultsKey = "debug.softwareDecodeFrameDelay"
+    /// Whether the decode queue asks for the scheduling band the renderer
+    /// pump already uses. dav1d's worker threads inherit the queue's class,
+    /// and `userInitiated` leaves the scheduler free to place them on an
+    /// A15's four efficiency cores.
+    static let highPriorityDefaultsKey = "debug.softwareDecodeHighPriority"
+
+    /// Frames dav1d may have in flight, or zero to leave the decision to it.
+    /// Bounded well below dav1d's own ceiling: each frame in flight is another
+    /// 4K surface held inside the decoder, on top of the queue this engine
+    /// already accounts for.
+    static func maxFrameDelay(
+        enabled: Bool = UserDefaults.standard.bool(forKey: frameDelayDefaultsKey),
+        activeProcessors: Int = ProcessInfo.processInfo.activeProcessorCount
+    ) -> Int32 {
+        guard enabled, activeProcessors > 0 else { return 0 }
+        return Int32(min(max(activeProcessors, 2), 8))
+    }
+
+    static func decodeQueueQoS(
+        highPriority: Bool = UserDefaults.standard.bool(forKey: highPriorityDefaultsKey)
+    ) -> DispatchQoS {
+        highPriority ? .userInteractive : .userInitiated
+    }
 
     /// What to write into `AVCodecContext.thread_count`. Zero is libavcodec's
     /// "decide for yourself".

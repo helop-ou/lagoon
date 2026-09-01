@@ -123,11 +123,20 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard profile.elapsedSeconds > 0, profile.frames > 0 else { return nil }
         let io = demuxer.ioProfile
         let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
+        // Cost per frame first, because it is the number that answers whether
+        // the device has the headroom: unlike a rate it does not fall when the
+        // decoder is deliberately throttled, and reading the rate instead is
+        // what left HEL-137 ambiguous for two builds. `budget` is that cost as
+        // a fraction of one frame period, so anything at or above 100% cannot
+        // hold frame rate however the queues are behaving.
+        let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         return String(
-            format: "%.1f fps · decode %.0f%% · convert %.0f%% · read %.0f%% · pending %d",
+            format: "%.1f ms/frame · budget %.0f%% · %.1f fps now (%.1f avg) · conv %.1f ms · read %.0f%% · pending %d",
+            profile.decodeMilliseconds,
+            profile.decodeBudgetUsed(frameRate: frameRate) * 100,
+            profile.recentFramesPerSecond,
             profile.framesPerSecond,
-            profile.decodeFraction * 100,
-            profile.conversionFraction * 100,
+            profile.conversionMilliseconds,
             readFraction * 100,
             stage.pendingCount
         )
@@ -141,14 +150,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard profile.elapsedSeconds > 0, profile.frames > 0 else { return nil }
         let io = demuxer.ioProfile
         let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
+        let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         return String(
-            format: "fps=%.2f decode=%.3f convert=%.3f read=%.3f frames=%d threads=%d",
+            format: "decodeMs=%.2f budget=%.3f fpsNow=%.2f fpsAvg=%.2f convertMs=%.2f read=%.3f frames=%d threads=%d frameDelay=%d qos=%@",
+            profile.decodeMilliseconds,
+            profile.decodeBudgetUsed(frameRate: frameRate),
+            profile.recentFramesPerSecond,
             profile.framesPerSecond,
-            profile.decodeFraction,
-            profile.conversionFraction,
+            profile.conversionMilliseconds,
             readFraction,
             profile.frames,
-            SoftwareDecodeThreadPolicy.resolvedThreadCount()
+            SoftwareDecodeThreadPolicy.resolvedThreadCount(),
+            SoftwareDecodeThreadPolicy.maxFrameDelay(),
+            SoftwareDecodeThreadPolicy.decodeQueueQoS() == .userInteractive ? "interactive" : "initiated"
         )
     }
 

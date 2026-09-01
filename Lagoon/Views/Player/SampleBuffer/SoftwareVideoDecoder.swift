@@ -73,6 +73,11 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     private let profileLock = NSLock()
     private var profileStorage = Profile()
     private var profileStartedAt: Double?
+    /// Rolling window, so the HUD can show what the decoder is managing now
+    /// rather than an average dragged up by a fast start (HEL-137).
+    private var windowStartedAt: Double?
+    private var windowFrames = 0
+    private static let windowSeconds = 2.0
 
     let formatDescription: CMVideoFormatDescription
     var gridDescription: String? { timeline?.gridDescription }
@@ -96,9 +101,36 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         var decodeSeconds = 0.0
         var conversionSeconds = 0.0
         var elapsedSeconds = 0.0
+        /// Frames per second over the last completed rolling window, rather
+        /// than since the seek. See `recentFramesPerSecond`.
+        var recentFramesPerSecond = 0.0
 
+        /// Frames per second since the last seek.
+        ///
+        /// **This cannot tell a healthy pipeline from a struggling one**, and
+        /// two builds of HEL-137 were read wrongly because of it. Once the
+        /// queues fill, backpressure throttles the decoder to playback rate,
+        /// so a decoder with headroom to spare and one with none both settle
+        /// here at the frame rate of the content. Read `decodeMilliseconds`
+        /// for capacity and `recentFramesPerSecond` for what is happening now.
         var framesPerSecond: Double {
             elapsedSeconds > 0 ? Double(frames) / elapsedSeconds : 0
+        }
+
+        /// What one frame costs libavcodec, in milliseconds.
+        ///
+        /// The number that actually answers "does this device have the
+        /// headroom", because unlike a rate it does not move when the decoder
+        /// is deliberately held back. Compare against the frame budget: 41.7 ms
+        /// at 23.976 fps.
+        var decodeMilliseconds: Double {
+            frames > 0 ? decodeSeconds / Double(frames) * 1_000 : 0
+        }
+
+        /// What one frame costs to turn into a renderer surface, in
+        /// milliseconds. Measured at 2% of the budget on an Apple TV.
+        var conversionMilliseconds: Double {
+            frames > 0 ? conversionSeconds / Double(frames) * 1_000 : 0
         }
 
         /// Share of one core spent inside libavcodec.
@@ -109,6 +141,13 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         /// Share of one core spent turning frames into renderer surfaces.
         var conversionFraction: Double {
             elapsedSeconds > 0 ? conversionSeconds / elapsedSeconds : 0
+        }
+
+        /// How much of a frame period the decoder is using, where 1.0 is
+        /// exactly keeping up and nothing above it can hold frame rate.
+        func decodeBudgetUsed(frameRate: Double) -> Double {
+            guard frameRate > 0, decodeMilliseconds > 0 else { return 0 }
+            return decodeMilliseconds / (1_000 / frameRate)
         }
     }
 
@@ -170,6 +209,13 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // frame threading across an A15's four efficiency cores costs more in
         // synchronisation than it returns. Off, this stays zero.
         context.pointee.thread_count = SoftwareDecodeThreadPolicy.resolvedThreadCount()
+        // HEL-137 lever 6, also off by default: how many frames dav1d keeps in
+        // flight. This is a private option on the libdav1d wrapper, so it is
+        // set on priv_data and ignored by every other decoder on this path.
+        let frameDelay = SoftwareDecodeThreadPolicy.maxFrameDelay()
+        if frameDelay > 0, let privateData = context.pointee.priv_data {
+            av_opt_set_int(privateData, "max_frame_delay", Int64(frameDelay), 0)
+        }
         guard avcodec_open2(context, codec, nil) >= 0, let decodedFrame = av_frame_alloc() else {
             var pointer: UnsafeMutablePointer<AVCodecContext>? = context
             avcodec_free_context(&pointer)
@@ -331,6 +377,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         profileLock.withLock {
             profileStorage = Profile()
             profileStartedAt = nil
+            windowStartedAt = nil
+            windowFrames = 0
         }
     }
 
@@ -368,10 +416,22 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
 
     private func recordProfile(at instant: Double, _ body: (inout Profile) -> Void) {
         profileLock.withLock {
+            let before = profileStorage.frames
             body(&profileStorage)
             if let start = profileStartedAt {
                 profileStorage.elapsedSeconds = instant - start
             }
+            guard profileStorage.frames > before else { return }
+            windowFrames += profileStorage.frames - before
+            guard let windowStart = windowStartedAt else {
+                windowStartedAt = instant
+                return
+            }
+            let span = instant - windowStart
+            guard span >= Self.windowSeconds else { return }
+            profileStorage.recentFramesPerSecond = Double(windowFrames) / span
+            windowStartedAt = instant
+            windowFrames = 0
         }
     }
 
