@@ -241,6 +241,119 @@ struct ApplePlaybackAlignmentTests {
         ])
     }
 
+    @Test func fusedPlanar10BitConversionPreservesPlaneStridesAndPadding() {
+        let y: [UInt16] = [
+            0, 1, 512, 1023, 77,
+            10, 20, 30, 40, 88,
+            50, 60, 70, 80, 99,
+            90, 100, 110, 120, 111,
+        ]
+        let u: [UInt16] = [1, 512, 77, 2, 100, 88]
+        let v: [UInt16] = [1023, 0, 77, 500, 700, 88]
+        var outputY = [UInt16](repeating: 0xFFFF, count: 24)
+        var outputUV = [UInt16](repeating: 0xFFFF, count: 12)
+
+        y.withUnsafeBufferPointer { sourceY in
+            u.withUnsafeBufferPointer { sourceU in
+                v.withUnsafeBufferPointer { sourceV in
+                    outputY.withUnsafeMutableBufferPointer { destinationY in
+                        outputUV.withUnsafeMutableBufferPointer { destinationUV in
+                            SoftwareVideoDecoder.convertPlanar10BitToP010(
+                                sourceY: sourceY.baseAddress!,
+                                sourceYStride: 5 * MemoryLayout<UInt16>.stride,
+                                sourceU: sourceU.baseAddress!,
+                                sourceUStride: 3 * MemoryLayout<UInt16>.stride,
+                                sourceV: sourceV.baseAddress!,
+                                sourceVStride: 3 * MemoryLayout<UInt16>.stride,
+                                destinationY: destinationY.baseAddress!,
+                                destinationYStride: 6 * MemoryLayout<UInt16>.stride,
+                                destinationUV: destinationUV.baseAddress!,
+                                destinationUVStride: 6 * MemoryLayout<UInt16>.stride,
+                                width: 4,
+                                height: 4
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        #expect(outputY == [
+            0, 64, 32_768, 65_472, 0xFFFF, 0xFFFF,
+            640, 1_280, 1_920, 2_560, 0xFFFF, 0xFFFF,
+            3_200, 3_840, 4_480, 5_120, 0xFFFF, 0xFFFF,
+            5_760, 6_400, 7_040, 7_680, 0xFFFF, 0xFFFF,
+        ])
+        #expect(outputUV == [
+            64, 65_472, 32_768, 0, 0xFFFF, 0xFFFF,
+            128, 32_000, 6_400, 44_800, 0xFFFF, 0xFFFF,
+        ])
+    }
+
+    @Test func fusedPlanar10BitConversionMatchesNegativeStrideHelpers() {
+        let width = 4
+        let height = 4
+        let y = (0..<(width * height)).map(UInt16.init)
+        let u = (100..<(100 + width * height / 4)).map(UInt16.init)
+        let v = (200..<(200 + width * height / 4)).map(UInt16.init)
+        var expectedY = [UInt16](repeating: 0, count: width * height)
+        var expectedUV = [UInt16](repeating: 0, count: width * height / 2)
+        var fusedY = expectedY
+        var fusedUV = expectedUV
+        let yStride = width * MemoryLayout<UInt16>.stride
+        let chromaStride = width / 2 * MemoryLayout<UInt16>.stride
+
+        y.withUnsafeBufferPointer { sourceY in
+            u.withUnsafeBufferPointer { sourceU in
+                v.withUnsafeBufferPointer { sourceV in
+                    expectedY.withUnsafeMutableBufferPointer { destinationY in
+                        expectedUV.withUnsafeMutableBufferPointer { destinationUV in
+                            SoftwareVideoDecoder.shift10BitPlaneToP010(
+                                source: sourceY.baseAddress!,
+                                sourceStride: -yStride,
+                                destination: destinationY.baseAddress!,
+                                destinationStride: yStride,
+                                width: width,
+                                rows: height
+                            )
+                            SoftwareVideoDecoder.interleave420Chroma10BitToP010(
+                                sourceU: sourceU.baseAddress!,
+                                sourceUStride: -chromaStride,
+                                sourceV: sourceV.baseAddress!,
+                                sourceVStride: -chromaStride,
+                                destination: destinationUV.baseAddress!,
+                                destinationStride: yStride,
+                                width: width,
+                                rows: height / 2
+                            )
+                        }
+                    }
+                    fusedY.withUnsafeMutableBufferPointer { destinationY in
+                        fusedUV.withUnsafeMutableBufferPointer { destinationUV in
+                            SoftwareVideoDecoder.convertPlanar10BitToP010(
+                                sourceY: sourceY.baseAddress!,
+                                sourceYStride: -yStride,
+                                sourceU: sourceU.baseAddress!,
+                                sourceUStride: -chromaStride,
+                                sourceV: sourceV.baseAddress!,
+                                sourceVStride: -chromaStride,
+                                destinationY: destinationY.baseAddress!,
+                                destinationYStride: yStride,
+                                destinationUV: destinationUV.baseAddress!,
+                                destinationUVStride: yStride,
+                                width: width,
+                                height: height
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        #expect(fusedY == expectedY)
+        #expect(fusedUV == expectedUV)
+    }
+
     @Test func av1AndVP9AreBoundedToTheTenBitSoftwareEnvelope() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first { $0.type == "Video" }
         let codecs = directVideo?.videoCodec?.split(separator: ",") ?? []
@@ -340,6 +453,58 @@ struct ApplePlaybackAlignmentTests {
         #expect(!demuxer.outputsDecodedVideo)
         let subtype = demuxer.videoStream?.formatDescription.map(CMFormatDescriptionGetMediaSubType)
         #expect(subtype == kCMVideoCodecType_AV1)
+    }
+
+    /// Opt-in same-process sink ladder for HEL-137. Set
+    /// `LAGOON_AV1_FIXTURE_URL` to a local or remote AV1 file and this reports
+    /// the libdav1d ceiling separately from the complete P010/output path.
+    /// Simulator values compare Lagoon revisions on the same Mac; they do not
+    /// predict A15 throughput or Apple TV display behaviour.
+    @Test func av1FixtureReportsDecodeOnlyAndOutputCeilings() throws {
+        guard let rawURL = ProcessInfo.processInfo.environment["LAGOON_AV1_FIXTURE_URL"],
+              !rawURL.isEmpty else { return }
+        let requestedFrames = ProcessInfo.processInfo.environment["LAGOON_AV1_BENCHMARK_FRAMES"]
+            .flatMap(Int.init) ?? 240
+        let frameLimit = max(requestedFrames, 12)
+
+        let decodeOnly = try benchmarkAV1Fixture(
+            rawURL,
+            frameLimit: frameLimit,
+            discardingOutput: true
+        )
+        let completeOutput = try benchmarkAV1Fixture(
+            rawURL,
+            frameLimit: frameLimit,
+            discardingOutput: false
+        )
+        let conversionScheduling = benchmarkP010Scheduling()
+
+        #expect(decodeOnly.frames >= 12)
+        #expect(completeOutput.frames >= 12)
+        #expect(decodeOnly.threadCount == completeOutput.threadCount)
+        #expect(decodeOnly.maxFrameDelay == completeOutput.maxFrameDelay)
+        #expect(decodeOnly.decoderDelay == completeOutput.decoderDelay)
+        let configuration = "threads=\(completeOutput.threadCount)"
+            + " requestedDelay=\(completeOutput.maxFrameDelay.map(String.init) ?? "unknown")"
+            + " effectiveDelay=\(completeOutput.decoderDelay)"
+        print(configuration + " " + String(
+            format: "AV1FixtureBench frames=%d decodeOnly=%.2ffps/%.3fms output=%.2ffps/%.3fms profileDecode=%.3fms profileConvert=%.3fms",
+            min(decodeOnly.frames, completeOutput.frames),
+            decodeOnly.framesPerSecond,
+            decodeOnly.millisecondsPerFrame,
+            completeOutput.framesPerSecond,
+            completeOutput.millisecondsPerFrame,
+            completeOutput.profile.decodeMilliseconds,
+            completeOutput.profile.conversionMilliseconds
+        ))
+        print(String(
+            format: "P010SchedulingBench separateP50=%.3fms fusedP50=%.3fms change=%.1f%% separateP95=%.3fms fusedP95=%.3fms",
+            conversionScheduling.separateP50 * 1_000,
+            conversionScheduling.fusedP50 * 1_000,
+            (conversionScheduling.fusedP50 / conversionScheduling.separateP50 - 1) * 100,
+            conversionScheduling.separateP95 * 1_000,
+            conversionScheduling.fusedP95 * 1_000
+        ))
     }
 
     @Test func vp9FixtureProducesReadyP010Frames() throws {
@@ -992,27 +1157,38 @@ struct ApplePlaybackAlignmentTests {
             capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
         )
         defer { demuxer.close() }
+        if codecName == "av1" {
+            // AV1 is now offered to VideoToolbox on every platform and only
+            // falls back after session creation fails. This fixture is
+            // specifically the libdav1d contract, so select that route
+            // explicitly instead of relying on a hardware capability flag.
+            demuxer.disableVideoToolboxAV1()
+        }
         try demuxer.open(
             url: rawURL,
             recommendedPixelBufferAttributes: CVPixelBufferAttributes()
         )
         #expect(demuxer.videoStream?.codecName == codecName)
         #expect(demuxer.outputsDecodedVideo)
+        let decoder = try #require(demuxer.takeSoftwareVideoDecoder())
 
         var decodedFrames = 0
         var reads = 0
         readLoop: while decodedFrames < 12, reads < 1_000 {
             reads += 1
             switch demuxer.readNext() {
-            case .video(let buffer):
-                #expect(CMSampleBufferDataIsReady(buffer))
-                let image = try #require(CMSampleBufferGetImageBuffer(buffer))
-                let format = CVPixelBufferGetPixelFormatType(image)
-                #expect(
-                    format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-                        || format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
-                )
-                decodedFrames += 1
+            case .videoPacket(let packet):
+                for buffer in try decoder.decode(packet: packet.packet) {
+                    #expect(CMSampleBufferDataIsReady(buffer))
+                    let image = try #require(CMSampleBufferGetImageBuffer(buffer))
+                    let format = CVPixelBufferGetPixelFormatType(image)
+                    #expect(
+                        format == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+                            || format == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+                    )
+                    decodedFrames += 1
+                    if decodedFrames == 12 { break }
+                }
             case .failed(let message):
                 Issue.record("\(codecName) fixture failed: \(message)")
                 break readLoop
@@ -1023,6 +1199,177 @@ struct ApplePlaybackAlignmentTests {
             }
         }
         #expect(decodedFrames == 12)
+    }
+
+    private struct FixtureBenchmarkResult {
+        let frames: Int
+        let decoderSeconds: Double
+        let profile: SoftwareVideoDecoder.Profile
+        let threadCount: Int32
+        let maxFrameDelay: Int64?
+        let decoderDelay: Int32
+
+        var framesPerSecond: Double {
+            decoderSeconds > 0 ? Double(frames) / decoderSeconds : 0
+        }
+        var millisecondsPerFrame: Double {
+            frames > 0 ? decoderSeconds / Double(frames) * 1_000 : 0
+        }
+    }
+
+    private func benchmarkAV1Fixture(
+        _ rawURL: String,
+        frameLimit: Int,
+        discardingOutput: Bool
+    ) throws -> FixtureBenchmarkResult {
+        let demuxer = FFmpegDemuxer(
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
+        )
+        defer { demuxer.close() }
+        demuxer.disableVideoToolboxAV1()
+        try demuxer.open(
+            url: rawURL,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        #expect(demuxer.videoStream?.codecName == "av1")
+        let decoder = try #require(demuxer.takeSoftwareVideoDecoder())
+
+        var frames = 0
+        var decoderSeconds = 0.0
+        var reads = 0
+        readLoop: while frames < frameLimit, reads < frameLimit * 8 {
+            reads += 1
+            switch demuxer.readNext() {
+            case .videoPacket(let packet):
+                let started = ProcessInfo.processInfo.systemUptime
+                if discardingOutput {
+                    frames += try decoder.decodeDiscardingOutput(packet: packet.packet)
+                } else {
+                    frames += try decoder.decode(packet: packet.packet).count
+                }
+                decoderSeconds += ProcessInfo.processInfo.systemUptime - started
+            case .failed(let message):
+                Issue.record("AV1 benchmark fixture failed: \(message)")
+                break readLoop
+            case .endOfFile:
+                let started = ProcessInfo.processInfo.systemUptime
+                if discardingOutput {
+                    frames += try decoder.drainDiscardingOutput()
+                } else {
+                    frames += try decoder.drain().count
+                }
+                decoderSeconds += ProcessInfo.processInfo.systemUptime - started
+                break readLoop
+            default:
+                continue
+            }
+        }
+        return FixtureBenchmarkResult(
+            frames: frames,
+            decoderSeconds: decoderSeconds,
+            profile: decoder.profile,
+            threadCount: decoder.resolvedThreadCount,
+            maxFrameDelay: decoder.maxFrameDelay,
+            decoderDelay: decoder.decoderDelay
+        )
+    }
+
+    private struct P010SchedulingBenchmarkResult {
+        let separateP50: Double
+        let separateP95: Double
+        let fusedP50: Double
+        let fusedP95: Double
+    }
+
+    /// Compares the retired two-barrier scheduling with the fused production
+    /// call using identical 4K planes and NEON kernels. Alternating ABBA order
+    /// prevents one variant from owning all cold or all warm iterations.
+    private func benchmarkP010Scheduling() -> P010SchedulingBenchmarkResult {
+        let width = 3_840
+        let height = 2_160
+        let chromaWidth = width / 2
+        let chromaHeight = height / 2
+        let sourceY = [UInt16](repeating: 511, count: width * height)
+        let sourceU = [UInt16](repeating: 384, count: chromaWidth * chromaHeight)
+        let sourceV = [UInt16](repeating: 640, count: chromaWidth * chromaHeight)
+        var destinationY = [UInt16](repeating: 0, count: width * height)
+        var destinationUV = [UInt16](repeating: 0, count: width * chromaHeight)
+        var separate: [Double] = []
+        var fused: [Double] = []
+
+        func run(fused useFusedPath: Bool) -> Double {
+            sourceY.withUnsafeBufferPointer { y in
+                sourceU.withUnsafeBufferPointer { u in
+                    sourceV.withUnsafeBufferPointer { v in
+                        destinationY.withUnsafeMutableBufferPointer { outputY in
+                            destinationUV.withUnsafeMutableBufferPointer { outputUV in
+                                let started = ProcessInfo.processInfo.systemUptime
+                                if useFusedPath {
+                                    SoftwareVideoDecoder.convertPlanar10BitToP010(
+                                        sourceY: y.baseAddress!,
+                                        sourceYStride: width * MemoryLayout<UInt16>.stride,
+                                        sourceU: u.baseAddress!,
+                                        sourceUStride: chromaWidth * MemoryLayout<UInt16>.stride,
+                                        sourceV: v.baseAddress!,
+                                        sourceVStride: chromaWidth * MemoryLayout<UInt16>.stride,
+                                        destinationY: outputY.baseAddress!,
+                                        destinationYStride: width * MemoryLayout<UInt16>.stride,
+                                        destinationUV: outputUV.baseAddress!,
+                                        destinationUVStride: width * MemoryLayout<UInt16>.stride,
+                                        width: width,
+                                        height: height
+                                    )
+                                } else {
+                                    SoftwareVideoDecoder.shift10BitPlaneToP010(
+                                        source: y.baseAddress!,
+                                        sourceStride: width * MemoryLayout<UInt16>.stride,
+                                        destination: outputY.baseAddress!,
+                                        destinationStride: width * MemoryLayout<UInt16>.stride,
+                                        width: width,
+                                        rows: height
+                                    )
+                                    SoftwareVideoDecoder.interleave420Chroma10BitToP010(
+                                        sourceU: u.baseAddress!,
+                                        sourceUStride: chromaWidth * MemoryLayout<UInt16>.stride,
+                                        sourceV: v.baseAddress!,
+                                        sourceVStride: chromaWidth * MemoryLayout<UInt16>.stride,
+                                        destination: outputUV.baseAddress!,
+                                        destinationStride: width * MemoryLayout<UInt16>.stride,
+                                        width: width,
+                                        rows: chromaHeight
+                                    )
+                                }
+                                return ProcessInfo.processInfo.systemUptime - started
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for _ in 0..<3 {
+            _ = run(fused: false)
+            _ = run(fused: true)
+        }
+        let order = [false, true, true, false]
+        for _ in 0..<32 {
+            for useFusedPath in order {
+                let duration = run(fused: useFusedPath)
+                if useFusedPath { fused.append(duration) } else { separate.append(duration) }
+            }
+        }
+
+        func percentile(_ values: [Double], _ fraction: Double) -> Double {
+            let sorted = values.sorted()
+            let index = min(Int(ceil(Double(sorted.count) * fraction)) - 1, sorted.count - 1)
+            return sorted[max(index, 0)]
+        }
+        return P010SchedulingBenchmarkResult(
+            separateP50: percentile(separate, 0.50),
+            separateP95: percentile(separate, 0.95),
+            fusedP50: percentile(fused, 0.50),
+            fusedP95: percentile(fused, 0.95)
+        )
     }
 
 }
