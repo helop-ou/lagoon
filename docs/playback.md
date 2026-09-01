@@ -482,10 +482,76 @@ into IOSurface-backed buffers.
 below, nothing else counts: same scene, same media-time window, three or more
 runs, HUD off for the verdict.
 
+#### Lagoon builds dav1d itself, because upstream's had no assembly
+
+The pipeline change above was necessary and was not the fix. On an Apple TV
+the split read: **decode 96-98%, convert 2%, read 0%**, at 11.4 fps against
+the 23.976 a 4K HDR10+ AV1 episode needs. Conversion and delivery were never
+close to being the constraint, which retired levers 3 and 4 of HEL-137
+(GPU conversion, decoding into IOSurfaces) without having to try either.
+
+The arithmetic pointed past threading. HEL-103 measured 720 frames in 1.66 s
+on a 12-performance-core Mac, and 18.4 ms/frame single-threaded. The device
+was taking 88 ms/frame — 4.8x slower than *one thread* on the Mac, which no
+core-count or IPC difference explains. Bounding the count to the performance
+cluster made it worse (9.1 fps), so it was not under-threading either.
+
+It was the binary. `mpvkit/libdav1d-build`, where the artifact came from,
+builds dav1d with:
+
+```
+"-Denable_asm=false",   // disable "No platform load command found" warning after xcode 15
+```
+
+Every AV1 frame Lagoon had ever decoded ran dav1d's portable C path. The
+symbol counts say it plainly, against libavcodec from the same bundle:
+
+| library | NEON symbols |
+| --- | --- |
+| Libavcodec (mpvkit) | 2402 |
+| Libdav1d (mpvkit) | **0** |
+| Libdav1d (`scripts/build-dav1d.sh`) | 2016 |
+
+The warning upstream was silencing is real: meson assembles dav1d's `.S`
+files with the C compiler, and without an explicit `-target` those objects
+carry no platform load command. Passing `-target arm64-apple-tvos26.0` fixes
+it properly and keeps the SIMD, which is what the script does. It also
+retro-explains HEL-103's Mac number: 18x real time across twelve performance
+cores is only 1.5x per core, which is what a C-path dav1d looks like. Twelve
+fast cores hid it; two cannot.
+
+`Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework` is therefore the one
+artifact Lagoon builds rather than fetches, vendored rather than hosted
+because a URL that has to outlive the app is a worse dependency than eight
+megabytes in the repository. Same dav1d 1.5.3, byte-identical headers, public
+API a strict superset of the artifact it replaces.
+
+**arm64 carries assembly; x86_64 deliberately does not.** The simulator and
+macOS slices have to be fat, because a `generic/platform=tvOS Simulator`
+build compiles both architectures and will not link against a slice carrying
+one. x86 assembly comes from nasm, which cannot emit a platform load command,
+so keeping it would print 46 warnings on every clean simulator link for code
+that cannot run on a device and never runs on Apple silicon at all. That is
+the same trade upstream made, and it is only defensible scoped to an
+architecture that never ships.
+
+Re-check the committed artifact at any time:
+
+```sh
+scripts/build-dav1d.sh --verify-only Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework
+```
+
+The build script runs that check itself and fails rather than emit a C-path
+binary. **Never remove it.** A dav1d without its assembly decodes every file
+correctly and merely slowly, so nothing fails, nothing looks wrong, and
+nobody finds out until someone measures 4K on a device with two performance
+cores. That is exactly how this shipped in the first place.
+
 #### Thread count (unresolved)
 
 `AVCodecContext.thread_count` stays at 0, libavcodec's auto, which is what
-HEL-103 measured at 1.66 s for 30 s of 4K AV1 against 13.26 s single-threaded.
+HEL-103 measured at 1.66 s for 30 s of 4K AV1 against 13.26 s single-threaded
+(both on the C path, as it turns out).
 Auto counts every core the SoC reports, which on an A15 is six: two performance
 and four efficiency. Frame threading spread across efficiency cores can cost
 more in synchronisation than it returns, so `SoftwareDecodeThreadPolicy` can
@@ -493,7 +559,10 @@ bound the count to the performance cluster (`hw.perflevel0.logicalcpu`, never
 below two, never above the active processor count) behind Settings → Advanced →
 **Limit Software Decode Threads**. It ships in Release because an Apple TV
 cannot be paired to Xcode and there is no other way to run the A/B. Which is
-faster is a question about a specific device and is currently unanswered.
+faster is a question about a specific device. The one measurement taken so far
+says auto: on the C-path binary, bounding to the performance cluster took
+11.4 fps down to 9.1. That was answering the wrong question, though, and it
+should be re-run now that the decoder has its assembly.
 
 ### Player panel performance
 

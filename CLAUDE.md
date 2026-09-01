@@ -6,7 +6,10 @@ with unit and tvOS UI test targets). Design language adapted from a 2026 streami
 local `Packages/LagoonFFmpeg` package** (HEL-48 M6): it pins exactly the
 FFmpeg static xcframeworks the Lagoon sample-buffer engine links —
 artifacts from MPVKit's 1.0.0 release (FFmpeg 8.1.2) plus their
-transitive static libs (gnutls stack, dav1d, uavs3d, lcms2) — with
+transitive static libs (gnutls stack, uavs3d, lcms2), with **dav1d built
+by this repo** (`scripts/build-dav1d.sh`, vendored under
+`Packages/LagoonFFmpeg/Artifacts/`) because upstream's is compiled without
+its arm64 assembly — see docs/playback.md (HEL-137) — with
 MPVKit/libmpv/MoltenVK/libplacebo out of the project entirely since
 2026-08-17. Don't add other dependencies without serious deliberation.
 
@@ -37,6 +40,10 @@ Quick rules that prevent regressions:
   window, simulator untouched, 3+ runs (HEL-64 retracted two fixes that
   ignored this). Use Settings → Debug → Frame-Loss Bench and
   `scripts/framedrop-bench.sh`; see docs/playback.md.
+- The vendored dav1d must keep its arm64 assembly. `scripts/build-dav1d.sh
+  --verify-only Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework` after
+  ever touching it: without the assembly it still decodes everything
+  correctly, roughly ten times slower, and nothing fails (HEL-137).
 - Use design tokens (`Metrics`/`Motion`), not literals; brand colors
   (`.lagoonTeal`/`.lagoonDeep`) only for branding — system semantics elsewhere.
 - `@Observable` + `@MainActor` default isolation; model types are
