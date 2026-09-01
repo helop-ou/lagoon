@@ -90,6 +90,8 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
     private var failed = false
 
     var decodedFrameBytes: Int64 { decoder.decodedFrameBytes }
+    var resolvedThreadCount: Int32 { decoder.resolvedThreadCount }
+    var skipsFilmGrain: Bool { decoder.skipsFilmGrain }
     var gridDescription: String? { decoder.gridDescription }
     var profile: SoftwareVideoDecoder.Profile { decoder.profile }
 

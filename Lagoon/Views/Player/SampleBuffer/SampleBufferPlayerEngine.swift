@@ -130,7 +130,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // a fraction of one frame period, so anything at or above 100% cannot
         // hold frame rate however the queues are behaving.
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
-        return String(
+        var line = String(
             format: "%.1f ms/frame · budget %.0f%% · %.1f fps now (%.1f avg) · conv %.1f ms · read %.0f%% · pending %d",
             profile.decodeMilliseconds,
             profile.decodeBudgetUsed(frameRate: frameRate) * 100,
@@ -140,6 +140,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             readFraction * 100,
             stage.pendingCount
         )
+        // Only says anything while synthesis is skipped: with grain applied,
+        // a frame carries no evidence that it had any.
+        if stage.skipsFilmGrain {
+            line += profile.framesCarryingFilmGrain > 0
+                ? " · grain skipped (\(profile.framesCarryingFilmGrain)/\(profile.frames) frames had it)"
+                : " · grain skipped (none in this stream)"
+        }
+        return line
     }
 
     /// The same three costs as one field for the bench's self-describing
@@ -152,7 +160,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         return String(
-            format: "decodeMs=%.2f budget=%.3f fpsNow=%.2f fpsAvg=%.2f convertMs=%.2f read=%.3f frames=%d threads=%d frameDelay=%d qos=%@",
+            format: "decodeMs=%.2f budget=%.3f fpsNow=%.2f fpsAvg=%.2f convertMs=%.2f read=%.3f frames=%d threads=%d frameDelay=%d qos=%@ grainSkipped=%@ grainFrames=%d",
             profile.decodeMilliseconds,
             profile.decodeBudgetUsed(frameRate: frameRate),
             profile.recentFramesPerSecond,
@@ -160,9 +168,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             profile.conversionMilliseconds,
             readFraction,
             profile.frames,
-            SoftwareDecodeThreadPolicy.resolvedThreadCount(),
+            stage.resolvedThreadCount,
             SoftwareDecodeThreadPolicy.maxFrameDelay(),
-            SoftwareDecodeThreadPolicy.decodeQueueQoS() == .userInteractive ? "interactive" : "initiated"
+            SoftwareDecodeThreadPolicy.decodeQueueQoS() == .userInteractive ? "interactive" : "initiated",
+            stage.skipsFilmGrain ? "yes" : "no",
+            profile.framesCarryingFilmGrain
         )
     }
 

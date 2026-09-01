@@ -29,6 +29,23 @@ nonisolated enum SoftwareDecodeThreadPolicy {
     /// and `userInitiated` leaves the scheduler free to place them on an
     /// A15's four efficiency cores.
     static let highPriorityDefaultsKey = "debug.softwareDecodeHighPriority"
+    /// Whether dav1d is told to hand film grain parameters over instead of
+    /// synthesizing the grain itself.
+    ///
+    /// AV1 film grain is a per-pixel post-process across the whole frame, and
+    /// at 4K 10-bit it is a large share of what decoding a frame costs. It is
+    /// also how a 13 Mbps 4K HDR10+ encode is possible at all: the encoder
+    /// strips the grain, which is expensive to code, and the decoder puts it
+    /// back. Skipping it is therefore a picture change, not a free win, which
+    /// is why it is a toggle and why the default synthesizes it as the
+    /// bitstream asks.
+    static let skipFilmGrainDefaultsKey = "debug.softwareDecodeSkipFilmGrain"
+
+    static func skipsFilmGrain(
+        enabled: Bool = UserDefaults.standard.bool(forKey: skipFilmGrainDefaultsKey)
+    ) -> Bool {
+        enabled
+    }
 
     /// Frames dav1d may have in flight, or zero to leave the decision to it.
     /// Bounded well below dav1d's own ceiling: each frame in flight is another
