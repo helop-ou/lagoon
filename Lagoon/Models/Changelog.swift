@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "84",
+            released: "September 2026",
+            headline: "More of the Apple TV can work on 4K AV1 at once.",
+            changes: [
+                "Lagoon now lets its AV1 decoder work ahead across more video frames, instead of leaving part of its multicore throughput unused. This produced roughly 40 to 55 percent more frames per second in controlled tests, though the gain still needs confirmation on an Apple TV.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "83",
             released: "September 2026",
             headline: "4K AV1 shows in SDR on Apple TV, the way it has to be.",
