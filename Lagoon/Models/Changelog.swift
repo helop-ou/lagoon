@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "76",
+            released: "September 2026",
+            headline: "Playback details say what decoding a frame actually costs.",
+            changes: [
+                "4K AV1 on an Apple TV starts smoothly and slowly loses ground, which is the Apple TV warming up rather than anything about the file. Playback details, in Settings then Advanced, now report what one frame costs to decode against the time available for it, so that can be watched happening instead of guessed at.",
+                "Two new options sit beside it for testing how the decoder is scheduled. Both are off, both are for diagnosing the above, and neither is worth turning on during normal viewing.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "75",
             released: "September 2026",
             headline: "The AV1 decoder was not using the chip's video instructions. Now it is.",
