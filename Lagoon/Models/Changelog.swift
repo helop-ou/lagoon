@@ -29,12 +29,23 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "77",
+            released: "September 2026",
+            headline: "A way to measure what film grain costs the decoder.",
+            changes: [
+                "AV1 video can carry film grain that the encoder strips out and the decoder paints back on, frame by frame, and doing that is a real share of the work of playing a 4K file. Settings then Advanced now has Skip Film Grain, which measures how much.",
+                "It changes the picture, because the grain is part of how the film was finished. It is there to find out what the grain costs, not to be left on.",
+                "Playback details also say how many frames in what you are watching actually asked for grain, so it is possible to tell whether any of this applies to a given file.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "76",
             released: "September 2026",
             headline: "Playback details say what decoding a frame actually costs.",
             changes: [
                 "4K AV1 on an Apple TV starts smoothly and slowly loses ground, which is the Apple TV warming up rather than anything about the file. Playback details, in Settings then Advanced, now report what one frame costs to decode against the time available for it, so that can be watched happening instead of guessed at.",
-                "Three new options sit beside it for testing how the decoder is scheduled and how much work it is asked to do. All are off, all are for diagnosing the above, and none is worth turning on during normal viewing. One of them, Skip Film Grain, changes the picture: AV1 can carry grain that the decoder paints back on, and skipping it is a way to measure what that costs rather than a setting to leave on.",
+                "Two new options sit beside it for testing how the decoder is scheduled. Both are off, both are for diagnosing the above, and neither is worth turning on during normal viewing.",
             ]
         ),
         ChangelogEntry(
