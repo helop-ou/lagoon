@@ -106,6 +106,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         var packets = 0
         var decodeSeconds = 0.0
         var conversionSeconds = 0.0
+        /// Of the conversion, getting a surface to write into rather than
+        /// writing to it. Measured at 0.06 ms on an Apple TV: the pool
+        /// recycles, so allocation is not a cost worth chasing.
+        var surfaceSeconds = 0.0
         var elapsedSeconds = 0.0
         /// Frames per second over the last completed rolling window, rather
         /// than since the seek. See `recentFramesPerSecond`.
@@ -134,9 +138,22 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
 
         /// What one frame costs to turn into a renderer surface, in
-        /// milliseconds. Measured at 2% of the budget on an Apple TV.
+        /// milliseconds.
         var conversionMilliseconds: Double {
             frames > 0 ? conversionSeconds / Double(frames) * 1_000 : 0
+        }
+
+        /// Of that, acquiring and locking the destination surface.
+        var surfaceMilliseconds: Double {
+            frames > 0 ? surfaceSeconds / Double(frames) * 1_000 : 0
+        }
+
+        /// Everything a frame costs this stage, which is what has to fit
+        /// inside a frame period. Reporting decode alone read 76% of budget
+        /// while the real total was over 100%, and hid the conversion for
+        /// four builds (HEL-137).
+        var frameMilliseconds: Double {
+            decodeMilliseconds + conversionMilliseconds
         }
 
         /// Share of one core spent inside libavcodec.
@@ -152,8 +169,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         /// How much of a frame period the decoder is using, where 1.0 is
         /// exactly keeping up and nothing above it can hold frame rate.
         func decodeBudgetUsed(frameRate: Double) -> Double {
-            guard frameRate > 0, decodeMilliseconds > 0 else { return 0 }
-            return decodeMilliseconds / (1_000 / frameRate)
+            guard frameRate > 0, frameMilliseconds > 0 else { return 0 }
+            return frameMilliseconds / (1_000 / frameRate)
         }
     }
 
@@ -477,6 +494,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             deinterlaceInPlace(decodedFormat: decodedFormat)
         }
 
+        let surfaceStart = Self.now()
         var pixelBuffer: CVPixelBuffer?
         let pixelStatus = CVPixelBufferPoolCreatePixelBuffer(
             kCFAllocatorDefault,
@@ -488,6 +506,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+        let surfaceAcquired = Self.now()
+        profileLock.withLock { profileStorage.surfaceSeconds += surfaceAcquired - surfaceStart }
 
         guard let sourceY = planePointer(0),
               let destinationY = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0)?.assumingMemoryBound(to: UInt8.self),
@@ -712,6 +732,40 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
     }
 
+    /// Splits a plane's rows across cores.
+    ///
+    /// The primitives below are NEON but single-threaded. Row ranges are
+    /// independent — each reads row `n` of the source and writes row `n` of
+    /// the destination — so this needs no coordination beyond the split, and a
+    /// negative stride is not a special case: the caller has already pointed
+    /// the base at the last row, and advancing by `start * stride` walks
+    /// backwards from there exactly as the serial loop does.
+    ///
+    /// Worth 0.5 ms of a 4.8 ms conversion on an Apple TV, measured. Only that
+    /// much because the copy is bounded by memory bandwidth rather than by
+    /// cores. Chunks stay well below the core count for the same reason the
+    /// gain is small: these threads compete with dav1d's (HEL-137).
+    private static let conversionChunks: Int = {
+        let override = UserDefaults.standard.integer(forKey: "debug.softwareDecodeConvertChunks")
+        if override > 0 { return min(override, 8) }
+        return min(max(ProcessInfo.processInfo.activeProcessorCount / 2, 1), 3)
+    }()
+
+    static func parallelRows(_ rows: Int, _ body: (_ start: Int, _ count: Int) -> Void) {
+        // Below a few hundred rows the split costs more than it saves.
+        let chunks = min(conversionChunks, max(rows / 128, 1))
+        guard chunks > 1 else {
+            body(0, rows)
+            return
+        }
+        let perChunk = (rows + chunks - 1) / chunks
+        DispatchQueue.concurrentPerform(iterations: chunks) { index in
+            let start = index * perChunk
+            guard start < rows else { return }
+            body(start, min(perChunk, rows - start))
+        }
+    }
+
     static func copyRows(
         source: UnsafePointer<UInt8>,
         sourceStride: Int,
@@ -748,16 +802,18 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         let firstV = sourceVStride >= 0
             ? sourceV
             : sourceV.advanced(by: (rows - 1) * -sourceVStride)
-        LagoonPixelConversion.interleave420Chroma(
-            sourceU: firstU,
-            sourceUStride: sourceUStride,
-            sourceV: firstV,
-            sourceVStride: sourceVStride,
-            destination: destination,
-            destinationStride: destinationStride,
-            width: width,
-            rows: rows
-        )
+        parallelRows(rows) { start, count in
+            LagoonPixelConversion.interleave420Chroma(
+                sourceU: firstU.advanced(by: start * sourceUStride),
+                sourceUStride: sourceUStride,
+                sourceV: firstV.advanced(by: start * sourceVStride),
+                sourceVStride: sourceVStride,
+                destination: destination.advanced(by: start * destinationStride),
+                destinationStride: destinationStride,
+                width: width,
+                rows: count
+            )
+        }
     }
 
     static func shift10BitPlaneToP010(
@@ -775,14 +831,20 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 .advanced(by: (rows - 1) * -sourceStride)
                 .assumingMemoryBound(to: UInt16.self)
         }
-        LagoonPixelConversion.shift10BitPlaneToP010(
-            source: firstSource,
-            sourceStride: sourceStride,
-            destination: destination,
-            destinationStride: destinationStride,
-            width: width,
-            rows: rows
-        )
+        parallelRows(rows) { start, count in
+            LagoonPixelConversion.shift10BitPlaneToP010(
+                source: UnsafeRawPointer(firstSource)
+                    .advanced(by: start * sourceStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                sourceStride: sourceStride,
+                destination: UnsafeMutableRawPointer(destination)
+                    .advanced(by: start * destinationStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                destinationStride: destinationStride,
+                width: width,
+                rows: count
+            )
+        }
     }
 
     static func interleave420Chroma10BitToP010(
@@ -809,16 +871,24 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 .advanced(by: (rows - 1) * -sourceVStride)
                 .assumingMemoryBound(to: UInt16.self)
         }
-        LagoonPixelConversion.interleave420Chroma10BitToP010(
-            sourceU: firstU,
-            sourceUStride: sourceUStride,
-            sourceV: firstV,
-            sourceVStride: sourceVStride,
-            destination: destination,
-            destinationStride: destinationStride,
-            width: width,
-            rows: rows
-        )
+        parallelRows(rows) { start, count in
+            LagoonPixelConversion.interleave420Chroma10BitToP010(
+                sourceU: UnsafeRawPointer(firstU)
+                    .advanced(by: start * sourceUStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                sourceUStride: sourceUStride,
+                sourceV: UnsafeRawPointer(firstV)
+                    .advanced(by: start * sourceVStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                sourceVStride: sourceVStride,
+                destination: UnsafeMutableRawPointer(destination)
+                    .advanced(by: start * destinationStride)
+                    .assumingMemoryBound(to: UInt16.self),
+                destinationStride: destinationStride,
+                width: width,
+                rows: count
+            )
+        }
     }
 
     private static func apply(

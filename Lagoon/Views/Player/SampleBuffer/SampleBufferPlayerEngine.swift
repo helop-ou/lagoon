@@ -131,12 +131,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // hold frame rate however the queues are behaving.
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         var line = String(
-            format: "%.1f ms/frame · budget %.0f%% · %.1f fps now (%.1f avg) · conv %.1f ms · read %.0f%% · pending %d",
-            profile.decodeMilliseconds,
+            format: "%.1f ms/frame · budget %.0f%% · decode %.1f · convert %.1f (surface %.1f) · %.1f fps now · read %.0f%% · pending %d",
+            profile.frameMilliseconds,
             profile.decodeBudgetUsed(frameRate: frameRate) * 100,
-            profile.recentFramesPerSecond,
-            profile.framesPerSecond,
+            profile.decodeMilliseconds,
             profile.conversionMilliseconds,
+            profile.surfaceMilliseconds,
+            profile.recentFramesPerSecond,
             readFraction * 100,
             stage.pendingCount
         )
@@ -157,12 +158,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         return String(
-            format: "decodeMs=%.2f budget=%.3f fpsNow=%.2f fpsAvg=%.2f convertMs=%.2f read=%.3f frames=%d threads=%d sdr=%@",
-            profile.decodeMilliseconds,
+            format: "frameMs=%.2f budget=%.3f decodeMs=%.2f convertMs=%.2f surfaceMs=%.2f fpsNow=%.2f fpsAvg=%.2f read=%.3f frames=%d threads=%d sdr=%@",
+            profile.frameMilliseconds,
             profile.decodeBudgetUsed(frameRate: frameRate),
+            profile.decodeMilliseconds,
+            profile.conversionMilliseconds,
+            profile.surfaceMilliseconds,
             profile.recentFramesPerSecond,
             profile.framesPerSecond,
-            profile.conversionMilliseconds,
             readFraction,
             profile.frames,
             stage.resolvedThreadCount,

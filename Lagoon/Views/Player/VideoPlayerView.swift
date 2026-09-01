@@ -91,6 +91,7 @@ final class PlaybackController {
         playbackCache.current != nil
     }
     private var progressTask: Task<Void, Never>?
+    private var decodeTraceTask: Task<Void, Never>?
     private var bufferFillTask: Task<Void, Never>?
     private var didReportStop = false
     private var playbackSessionActive = false
@@ -615,6 +616,7 @@ final class PlaybackController {
                 return
             }
             startProgressLoop()
+            startDecodeTrace()
             startHUD(source: source, method: method)
             resolveNextUp(after: media, client: client)
         } catch {
@@ -1112,6 +1114,37 @@ final class PlaybackController {
         nowPlaying.updateTimeline()
     }
 
+    /// A console time series of the software decode path, every two seconds
+    /// (HEL-137).
+    ///
+    /// The HUD shows the same numbers, but a HUD reading is one glance at one
+    /// moment, and the question this ticket is stuck on is a *curve*: cost per
+    /// frame climbs from 31 ms to past the 41.7 ms budget within half a
+    /// minute, and whether the queue depth and footprint move with it is what
+    /// separates memory pressure from heat from scene complexity. Reading that
+    /// off a television by eye loses exactly the correlation that matters.
+    ///
+    /// `devicectl ... --console` streams this from a real Apple TV, where the
+    /// unified log is out of reach. Off unless `-debug.decodeTrace YES`.
+    private func startDecodeTrace() {
+        guard UserDefaults.standard.bool(forKey: "debug.decodeTrace") else { return }
+        decodeTraceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, let engine = self.engine else { return }
+                let memory = MemorySnapshot.current()
+                let depths = engine.queueDepths
+                print("DecodeTrace"
+                    + String(format: " position=%.2f", engine.timePosition)
+                    + " video=\(depths.video) audio=\(depths.audio)"
+                    + String(format: " footprintMB=%.1f availableMB=%.1f",
+                        memory.footprintMB, memory.availableMB)
+                    + " stalls=\(engine.stallCount)"
+                    + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\"")
+            }
+        }
+    }
+
     private func startProgressLoop() {
         progressTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -1155,6 +1188,8 @@ final class PlaybackController {
         preservingPlayerSurface: Bool = false
     ) -> Task<Void, Never>? {
         progressTask?.cancel()
+        decodeTraceTask?.cancel()
+        decodeTraceTask = nil
         progressTask = nil
         hudTask?.cancel()
         hudTask = nil

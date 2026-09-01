@@ -50,8 +50,31 @@ nonisolated enum SoftwareDecodeThreadPolicy {
     /// no setting for it: dav1d's parallelism here is limited by the stream,
     /// not by the count.
     static func resolvedThreadCount(
+        explicit: Int = UserDefaults.standard.integer(forKey: threadCountDefaultsKey),
         activeProcessors: Int = ProcessInfo.processInfo.activeProcessorCount
     ) -> Int32 {
-        Int32(max(activeProcessors, 1))
+        if explicit > 0 {
+            return Int32(min(explicit, max(activeProcessors * 4, 2)))
+        }
+        return Int32(max(activeProcessors, 1))
+    }
+
+    /// Diagnostic knobs with no Settings UI, read from launch arguments:
+    /// `-debug.softwareDecodeThreadCount 8`, `-debug.softwareDecodeFrameDelay 6`.
+    ///
+    /// They live here rather than on the Advanced page because they are for
+    /// sweeping from a Mac against a paired Apple TV, not for anyone to set.
+    /// Both were "measured" once from the HUD and both answers were worthless:
+    /// decode cost on this content tracks scene complexity, so a cumulative
+    /// average read at a different playback position compares scenes rather
+    /// than settings (HEL-137).
+    static let threadCountDefaultsKey = "debug.softwareDecodeThreadCount"
+    static let frameDelayDefaultsKey = "debug.softwareDecodeFrameDelay"
+
+    /// Frames dav1d may have in flight, or zero to leave it to dav1d.
+    static func maxFrameDelay(
+        explicit: Int = UserDefaults.standard.integer(forKey: frameDelayDefaultsKey)
+    ) -> Int32 {
+        Int32(max(min(explicit, 16), 0))
     }
 }
