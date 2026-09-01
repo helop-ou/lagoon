@@ -142,6 +142,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             stage.pendingCount
         )
         line += " · \(stage.resolvedThreadCount) threads"
+        line += " · \(stage.outputModeName)"
         if stage.outputsToneMappedSDR {
             line += " · SDR tone-mapped"
         }
@@ -158,7 +159,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         return String(
-            format: "frameMs=%.2f budget=%.3f decodeMs=%.2f convertMs=%.2f surfaceMs=%.2f fpsNow=%.2f fpsAvg=%.2f read=%.3f frames=%d threads=%d sdr=%@",
+            format: "frameMs=%.2f budget=%.3f decodeMs=%.2f convertMs=%.2f surfaceMs=%.2f fpsNow=%.2f fpsAvg=%.2f read=%.3f frames=%d threads=%d sdr=%@ output=%@",
             profile.frameMilliseconds,
             profile.decodeBudgetUsed(frameRate: frameRate),
             profile.decodeMilliseconds,
@@ -169,8 +170,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             readFraction,
             profile.frames,
             stage.resolvedThreadCount,
-            stage.outputsToneMappedSDR ? "tonemapped" : "native"
-        )
+            stage.outputsToneMappedSDR ? "tonemapped" : "native",
+            stage.outputModeName
+        ) + " codec=\(stage.codecName) lowDelay=\(stage.lowDelayEnabled ? "on" : "off")"
+            + " maxFrameDelay=\(stage.maxFrameDelay.map(String.init) ?? "unknown")"
+            + " decoderDelay=\(stage.decoderDelay)"
     }
 
     /// Proof the DoVi enhancement-layer strip experiment engaged, for the
@@ -223,6 +227,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
     @ObservationIgnored nonisolated private let lifecycleID = UUID()
     @ObservationIgnored nonisolated private let audioContinuity = AudioContinuityMonitor()
+    @ObservationIgnored nonisolated private let av1PipelineTimings = RendererPipelineTimings(
+        enabled: UserDefaults.standard.bool(forKey: "debug.av1PipelineProfile")
+    )
+    @ObservationIgnored nonisolated(unsafe) private var av1PipelineTimer: DispatchSourceTimer?
     @ObservationIgnored nonisolated(unsafe) private var videoDecoder: VideoToolboxDecoder?
     /// libavcodec's decoder, driven from a queue of its own so reading and
     /// decoding overlap. Non-nil exactly when the software path is in use
@@ -276,6 +284,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     deinit {
+        av1PipelineTimer?.cancel()
         PlaybackLifecycleDiagnostics.engineDestroyed(lifecycleID)
     }
 
@@ -343,6 +352,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         audio.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
             self?.pumpAudio()
+        }
+        if av1PipelineTimings.enabled {
+            let timer = DispatchSource.makeTimerSource(queue: pumpQueue)
+            timer.schedule(
+                deadline: .now(),
+                repeating: .milliseconds(50),
+                leeway: .milliseconds(10)
+            )
+            timer.setEventHandler { [weak self] in
+                self?.sampleAV1Pipeline()
+            }
+            av1PipelineTimer = timer
+            timer.resume()
         }
 
         // 0.1 s so subtitle cues land on time; timePosition still only
@@ -593,6 +615,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         rendererNotificationTokens.removeAll()
         removeAudioRendererObservers()
         audioRendererReplacementID = nil
+        av1PipelineTimer?.cancel()
+        av1PipelineTimer = nil
         stallRecoveryTask?.cancel()
         clearPendingStallConfirmation()
         if stallSignpostActive {
@@ -1211,6 +1235,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         benchCompleted = false
         benchStatus = String(format: "arming @%.0fs", position)
+        av1PipelineTimings.reset()
+        softwareDecodeStage?.resetDetailedTimings()
     }
 
     private func feedBench(_ snapshot: VideoPerformanceSnapshot) {
@@ -1246,6 +1272,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             if let software = softwareDecodeBenchField {
                 gates += " swdecode=\"\(software)\""
             }
+            if let stage = softwareDecodeStage {
+                gates += " output=\"\(stage.outputModeName)\""
+            }
             gates += " hud=\"\(UserDefaults.standard.bool(forKey: "debug.playbackHUD") ? "on" : "off")\""
             #if os(tvOS)
             gates += " display=\"\(DisplayModeMatcher.statusDescription)\""
@@ -1268,6 +1297,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     : "")
                 + String(format: " start=%.2f window=%.2f ", result.startPosition, result.windowSeconds)
                 + gates)
+            for line in softwareDecodeStage?.detailedTimingLines ?? [] {
+                print("PipelineDecode \(line)")
+            }
+            for line in av1PipelineTimings.summaryLines() {
+                print("PipelineRenderer \(line)")
+            }
             benchCompleted = true
             os_signpost(
                 .event,
@@ -1974,6 +2009,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioQueue.interruptWaits()
         demuxer.interrupt()
         let detail = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        if UserDefaults.standard.bool(forKey: "debug.av1PipelineProfile") {
+            let output = softwareDecodeStage?.outputModeName ?? "unknown"
+            print("SoftwareVideoDecodeFailure output=\"\(output)\" detail=\"\(detail)\"")
+        }
         // Every caller is a decoder: VideoToolbox refusing a session or a
         // frame, or libavcodec refusing the stream. Redelivering the same
         // bitstream cannot change that.
@@ -2188,8 +2227,23 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     }
                 }
             }
+            let enqueueStarted = ProcessInfo.processInfo.systemUptime
             renderer.enqueue(buffer)
+            av1PipelineTimings.recordEnqueue(
+                from: enqueueStarted,
+                to: ProcessInfo.processInfo.systemUptime
+            )
         }
+    }
+
+    nonisolated private func sampleAV1Pipeline() {
+        guard let renderer = videoRenderer else { return }
+        av1PipelineTimings.sample(
+            at: ProcessInfo.processInfo.systemUptime,
+            rendererReady: renderer.isReadyForMoreMediaData,
+            renderQueue: videoQueue.count,
+            decodePending: softwareDecodeStage?.pendingCount ?? 0
+        )
     }
 
     nonisolated private func pumpAudio() {
