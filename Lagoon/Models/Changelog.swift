@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "83",
+            released: "September 2026",
+            headline: "4K AV1 shows in SDR on Apple TV, the way it has to be.",
+            changes: [
+                "On an Apple TV, video that Lagoon decodes itself now reaches the screen the same way hardware-decoded video does, instead of being blended with the interface frame by frame, which is the most expensive way a television can show a film.",
+                "For HDR films that Lagoon decodes itself, that requires showing them in SDR on Apple TV: the Apple TV cannot truly show this kind of playback in HDR, and pretending otherwise cost performance without delivering HDR. The conversion is done properly by the hardware, not by relabeling. Infuse made the same choice for the same reason. iPhone and iPad keep HDR.",
+                "This build carries the plumbing; 4K AV1 is better but not yet where it should be, and the remaining gap is understood well enough to keep chasing.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "82",
             released: "September 2026",
             headline: "A little more of the work of showing 4K AV1 spread across the chip.",
