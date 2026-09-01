@@ -458,19 +458,29 @@ costs, cumulative since the last seek, which is also where the frame-loss bench
 re-arms, so a bench window and the profile describe the same stretch:
 
 ```
-SWdec:   23.9 fps · decode 71% · convert 28% · read 0% · pending 2
+SWdec:   38.4 ms/frame · budget 92% · 21.7 fps now (23.9 avg) · conv 0.8 ms · read 0% · pending 3
 ```
 
-Each percentage is wall time on that stage's own queue, so it reads as the
-share of *one core* that stage holds. **They are independent and do not sum to
-100%** — that is the point, since the question the ticket asks is which stage
-is expensive, not how a single budget is divided. `decode` is libavcodec
+**Read `ms/frame` and `budget`, not the rate.** Once the queues fill,
+backpressure holds the decoder at playback rate, so a decoder with headroom to
+spare and one with none both settle at the frame rate of the content — the
+rate is a property of the content, not of the device. Cost per frame does not
+move when the decoder is throttled, and `budget` expresses it as a fraction of
+one frame period (41.7 ms at 23.976 fps), so anything at or above 100% cannot
+hold frame rate however healthy the queues look. Two builds of this ticket
+were read wrongly before the line said this.
+
+`fps now` is a two-second rolling window and `avg` is since the last seek. The
+average has memory: a fast start while priming drags it up for minutes, so a
+declining average is not by itself evidence of anything. `read` is still a
+share of one core, on the demux queue. `decode` is libavcodec
 (threaded, so on dav1d this is the wait, not the work). `convert` is everything
 between a decoded AVFrame and a ready `CMSampleBuffer`: the Core Video
 allocation, the 10-bit shift, the chroma interleave, the attachments. `read` is
 `av_read_frame`, which is the cache or the network.
 
-The conversion figure is what decides HEL-137's remaining levers. AV1 decodes
+The conversion figure decided HEL-137's levers 3 and 4: measured at 2% on an
+Apple TV, both are dead. For the record, what it would have meant otherwise: AV1 decodes
 to `YUV420P10LE` and the renderer wants P010, so every frame is shifted from low
 bits to high and its chroma interleaved: roughly 25 MB read and 25 MB written
 per 4K frame, about 600 MB/s at 24 fps. If that share is large on the device,
