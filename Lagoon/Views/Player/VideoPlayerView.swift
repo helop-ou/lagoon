@@ -1712,6 +1712,13 @@ final class PlaybackController {
         if let videoTiming = engine.videoTimingDiagnostic {
             lines.append("Vtime:   \(videoTiming)")
         }
+        // Where the software path's frame budget goes, split three ways so a
+        // slow one can be attributed rather than guessed at (HEL-137). Each
+        // percentage is a share of one core on its own queue; they overlap,
+        // so they are not meant to sum.
+        if let software = engine.softwareDecodeDiagnostic {
+            lines.append("SWdec:   \(software)")
+        }
         if let strip = engine.enhancementLayerStripInfo {
             lines.append("EL strip: \(strip)")
         }

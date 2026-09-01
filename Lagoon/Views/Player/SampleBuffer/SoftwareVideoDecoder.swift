@@ -16,7 +16,7 @@ import _LagoonFFmpeg
 /// The accepted output is deliberately narrow: 8-bit planar/NV12 becomes
 /// NV12, while little-endian 10-bit planar/P010 becomes Core Video P010.
 /// Anything else fails closed instead of silently presenting incorrect color.
-nonisolated final class SoftwareVideoDecoder {
+nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     enum DecoderError: LocalizedError {
         case codecSetup(String)
         case pixelBufferPool(OSStatus)
@@ -70,9 +70,61 @@ nonisolated final class SoftwareVideoDecoder {
     private let colorProperties: ColorProperties
     private let pixelAspectRatio: (horizontal: Int32, vertical: Int32)?
     private var timeline: VideoFrameTimeline?
+    private let profileLock = NSLock()
+    private var profileStorage = Profile()
+    private var profileStartedAt: Double?
 
     let formatDescription: CMVideoFormatDescription
     var gridDescription: String? { timeline?.gridDescription }
+
+    /// Where the software path's time actually goes (HEL-137), separated so
+    /// nobody has to guess which stage is the expensive one. Cumulative since
+    /// the last flush, which is every seek — the same boundary the frame-loss
+    /// bench re-arms on, so a bench window and this profile describe the same
+    /// stretch of playback.
+    ///
+    /// `decodeSeconds` is libavcodec (dav1d and its worker threads bill their
+    /// own time elsewhere, so on a threaded decoder this is the wait, not the
+    /// work). `conversionSeconds` is everything between a decoded AVFrame and
+    /// a ready `CMSampleBuffer`: the Core Video allocation, the 10-bit shift
+    /// and chroma interleave, the attachments. Both are wall time on the
+    /// decode queue, so as a fraction of `elapsedSeconds` they read as the
+    /// share of one core this stage holds.
+    struct Profile: Equatable, Sendable {
+        var frames = 0
+        var packets = 0
+        var decodeSeconds = 0.0
+        var conversionSeconds = 0.0
+        var elapsedSeconds = 0.0
+
+        var framesPerSecond: Double {
+            elapsedSeconds > 0 ? Double(frames) / elapsedSeconds : 0
+        }
+
+        /// Share of one core spent inside libavcodec.
+        var decodeFraction: Double {
+            elapsedSeconds > 0 ? decodeSeconds / elapsedSeconds : 0
+        }
+
+        /// Share of one core spent turning frames into renderer surfaces.
+        var conversionFraction: Double {
+            elapsedSeconds > 0 ? conversionSeconds / elapsedSeconds : 0
+        }
+    }
+
+    /// Bytes one decoded surface occupies, for the queue limit that has to
+    /// bound them (HEL-137 lever 5; a 4K P010 frame is 23.7 MiB).
+    var decodedFrameBytes: Int64 {
+        DecodedFrameMemory.bytesPer420Frame(
+            width: width,
+            height: height,
+            bitDepth: outputBitDepth
+        )
+    }
+
+    var profile: Profile {
+        profileLock.withLock { profileStorage }
+    }
 
     static func supports(codecID: AVCodecID) -> Bool {
         codecID == AV_CODEC_ID_VC1
@@ -246,7 +298,14 @@ nonisolated final class SoftwareVideoDecoder {
     }
 
     func decode(packet: UnsafeMutablePointer<AVPacket>) throws -> [CMSampleBuffer] {
+        let sent = Self.now()
+        beginProfileIfNeeded(at: sent)
         let status = avcodec_send_packet(codecContext, packet)
+        let elapsed = Self.now()
+        recordProfile(at: elapsed) {
+            $0.packets += 1
+            $0.decodeSeconds += elapsed - sent
+        }
         guard status >= 0 else { throw DecoderError.decode(status) }
         return try receiveFrames()
     }
@@ -260,15 +319,55 @@ nonisolated final class SoftwareVideoDecoder {
     func flush() {
         avcodec_flush_buffers(codecContext)
         timeline?.reset()
+        // A seek starts a new stretch of playback, which is also the boundary
+        // the frame-loss bench re-arms on. Averaging across one would mix two
+        // scenes into a single number, and the whole point of the profile is
+        // that it describes the scene the bench is measuring.
+        profileLock.withLock {
+            profileStorage = Profile()
+            profileStartedAt = nil
+        }
     }
 
     private func receiveFrames() throws -> [CMSampleBuffer] {
         var output: [CMSampleBuffer] = []
-        while avcodec_receive_frame(codecContext, frame) >= 0 {
+        while true {
+            let waited = Self.now()
+            let status = avcodec_receive_frame(codecContext, frame)
+            let received = Self.now()
+            recordProfile(at: received) { $0.decodeSeconds += received - waited }
+            guard status >= 0 else { break }
             defer { av_frame_unref(frame) }
-            output.append(try makeSampleBuffer())
+            let buffer = try makeSampleBuffer()
+            let converted = Self.now()
+            recordProfile(at: converted) {
+                $0.frames += 1
+                $0.conversionSeconds += converted - received
+            }
+            output.append(buffer)
         }
         return output
+    }
+
+    /// Monotonic and cheap; `ProcessInfo.systemUptime` reads the same mach
+    /// timebase the signposts do.
+    private static func now() -> Double {
+        ProcessInfo.processInfo.systemUptime
+    }
+
+    private func beginProfileIfNeeded(at instant: Double) {
+        profileLock.withLock {
+            if profileStartedAt == nil { profileStartedAt = instant }
+        }
+    }
+
+    private func recordProfile(at instant: Double, _ body: (inout Profile) -> Void) {
+        profileLock.withLock {
+            body(&profileStorage)
+            if let start = profileStartedAt {
+                profileStorage.elapsedSeconds = instant - start
+            }
+        }
     }
 
     private func makeSampleBuffer() throws -> CMSampleBuffer {

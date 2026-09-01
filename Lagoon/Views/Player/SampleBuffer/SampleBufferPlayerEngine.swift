@@ -108,6 +108,50 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioContinuity.gapCount
     }
 
+    /// Where the software decode path's time goes, separated into the three
+    /// costs it is made of (HEL-137): libavcodec, the conversion into Core
+    /// Video surfaces, and reading the container. Each is wall time on its own
+    /// queue, so the percentages read as the share of one core that stage
+    /// holds — they are independent and do not sum to 100%. Cumulative since
+    /// the last seek, which is also where the frame-loss bench re-arms, so a
+    /// bench result and this line describe the same stretch of playback.
+    ///
+    /// Nil unless libavcodec is decoding video, and until the first frame.
+    var softwareDecodeDiagnostic: String? {
+        guard let stage = softwareDecodeStage else { return nil }
+        let profile = stage.profile
+        guard profile.elapsedSeconds > 0, profile.frames > 0 else { return nil }
+        let io = demuxer.ioProfile
+        let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
+        return String(
+            format: "%.1f fps · decode %.0f%% · convert %.0f%% · read %.0f%% · pending %d",
+            profile.framesPerSecond,
+            profile.decodeFraction * 100,
+            profile.conversionFraction * 100,
+            readFraction * 100,
+            stage.pendingCount
+        )
+    }
+
+    /// The same three costs as one field for the bench's self-describing
+    /// result line, where a console log is all a hardware run leaves behind.
+    nonisolated var softwareDecodeBenchField: String? {
+        guard let stage = softwareDecodeStage else { return nil }
+        let profile = stage.profile
+        guard profile.elapsedSeconds > 0, profile.frames > 0 else { return nil }
+        let io = demuxer.ioProfile
+        let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
+        return String(
+            format: "fps=%.2f decode=%.3f convert=%.3f read=%.3f frames=%d threads=%d",
+            profile.framesPerSecond,
+            profile.decodeFraction,
+            profile.conversionFraction,
+            readFraction,
+            profile.frames,
+            SoftwareDecodeThreadPolicy.resolvedThreadCount()
+        )
+    }
+
     /// Proof the DoVi enhancement-layer strip experiment engaged, for the
     /// HUD — nil when the toggle is off or the stream has no EL.
     var enhancementLayerStripInfo: String? {
@@ -159,6 +203,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let lifecycleID = UUID()
     @ObservationIgnored nonisolated private let audioContinuity = AudioContinuityMonitor()
     @ObservationIgnored nonisolated(unsafe) private var videoDecoder: VideoToolboxDecoder?
+    /// libavcodec's decoder, driven from a queue of its own so reading and
+    /// decoding overlap. Non-nil exactly when the software path is in use
+    /// (HEL-137).
+    @ObservationIgnored nonisolated(unsafe) private var softwareDecodeStage: SoftwareVideoDecodeStage?
     @ObservationIgnored private var bench: FrameLossBench?
     @ObservationIgnored private var benchEnabled = false
     @ObservationIgnored private var benchTickCount = 0
@@ -1174,6 +1222,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             } else {
                 gates += " elStrip=\"off\""
             }
+            if let software = softwareDecodeBenchField {
+                gates += " swdecode=\"\(software)\""
+            }
             gates += " hud=\"\(UserDefaults.standard.bool(forKey: "debug.playbackHUD") ? "on" : "off")\""
             #if os(tvOS)
             gates += " display=\"\(DisplayModeMatcher.statusDescription)\""
@@ -1446,6 +1497,26 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             return
         }
         shared.withLock { $0.deliveryIsCached = deliveryIsCached }
+        // The demuxer builds the software decoder (it has the codec
+        // parameters) but never drives it: decoding on the demux queue meant
+        // reading and decoding took turns, which 4K AV1 cannot afford
+        // (HEL-137).
+        if demuxer.outputsDecodedVideo, let decoder = demuxer.takeSoftwareVideoDecoder() {
+            softwareDecodeStage = SoftwareVideoDecodeStage(
+                decoder: decoder,
+                outputHandler: { [weak self] buffer in
+                    self?.acceptSoftwareDecodedVideo(buffer)
+                },
+                errorHandler: { [weak self] error in
+                    self?.failVideoDecode(error)
+                },
+                packetCompletionHandler: { [weak self] in
+                    // Whoever is parked on the combined in-flight count has
+                    // to re-read it when a packet leaves the stage.
+                    self?.videoQueue.signalWaiters()
+                }
+            )
+        }
         if let codecName = demuxer.videoStream?.codecName,
            codecName == "hevc" || codecName == "av1",
            !demuxer.outputsDecodedVideo,
@@ -1614,6 +1685,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     failVideoDecode(error)
                     break
                 }
+                // Before the queues, and synchronously: a frame still inside
+                // libavcodec belongs to the old position and must not land in
+                // a queue that has just been emptied.
+                softwareDecodeStage?.reset()
                 videoQueue.reset()
                 audioQueue.reset()
                 applyAudioSelection(ordinal: shared.withLock { $0.selectedAudioOrdinal })
@@ -1634,8 +1709,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // two seconds. The policy keeps the useful batched hysteresis,
             // but yields a soft limit when the other stream needs data. Hard
             // limits still bound compressed packets and decoded 4K surfaces.
+            // Decoded frames plus the packets the stage still owes. Both
+            // are video already read and not yet shown, and counting only the
+            // first would let the loop read a decoder backlog ahead of itself
+            // the moment decode stopped happening on this queue (HEL-137).
             switch DemuxBackpressurePolicy.decision(
-                videoCount: videoQueue.count,
+                videoCount: videoQueue.count + (softwareDecodeStage?.pendingCount ?? 0),
                 audioCount: audioQueue.count,
                 audioBufferedSeconds: audioQueue.bufferedDuration,
                 videoFrameRate: demuxer.videoFrameRate,
@@ -1643,12 +1722,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 videoIsSoftwareDecoded: demuxer.outputsDecodedVideo,
                 hasAudio: !demuxer.audioStreams.isEmpty,
                 deliveryIsCached: deliveryIsCached,
-                playbackRate: shared.withLock { $0.playbackRate }
+                playbackRate: shared.withLock { $0.playbackRate },
+                decodedFrameBytes: softwareDecodeStage?.decodedFrameBytes ?? 0
             ) {
             case .read:
                 performDemuxStep()
             case .waitForVideo(let target):
-                videoQueue.waitUntilBelow(target)
+                videoQueue.waitUntilBelow(target) {
+                    self.softwareDecodeStage?.pendingCount ?? 0
+                }
             case .waitForAudio(let target):
                 audioQueue.waitUntilBelow(target)
             }
@@ -1661,6 +1743,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         )
         videoDecoder?.invalidate()
         videoDecoder = nil
+        softwareDecodeStage?.invalidate()
+        softwareDecodeStage = nil
         demuxer.close()
         os_signpost(
             .end,
@@ -1700,6 +1784,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 // Stall detection compares the clock against this.
                 shared.withLock { $0.videoBufferedTo = max($0.videoBufferedTo, seconds) }
             }
+        case .videoPacket(let packet):
+            // Stall detection and the finish boundary read the same media
+            // time they did when this queue held the decoded frame: the
+            // packet's, which is what the compressed path has always used.
+            if let seconds = packet.endSeconds {
+                shared.withLock {
+                    $0.mediaEndSeconds = max($0.mediaEndSeconds, seconds)
+                    $0.videoBufferedTo = max($0.videoBufferedTo, seconds)
+                }
+            }
+            softwareDecodeStage?.submit(packet)
         case .audio(let buffers, let streamIndex):
             let (selected, delay) = shared.withLock { ($0.selectedAudioStreamIndex, $0.audioDelaySeconds) }
             if streamIndex == selected {
@@ -1728,6 +1823,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         case .endOfFile:
             do {
                 try videoDecoder?.finish()
+                // Frame threading always leaves pictures inside libavcodec;
+                // they are the end of the film, so they have to be out before
+                // the queue may call itself finished.
+                try softwareDecodeStage?.finish()
             } catch {
                 failVideoDecode(error)
                 return
@@ -1755,6 +1854,25 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             Task { @MainActor in self.onError?(failure) }
             shared.withLock { $0.cancelled = true }
         }
+    }
+
+    /// Frames from the software decode stage.
+    ///
+    /// Deliberately not `acceptDecodedVideo`: a seek that has been *requested*
+    /// and not yet performed is not a reason to throw these away. The stage
+    /// discards its own pre-seek work when the demux loop resets it, and
+    /// `videoQueue.reset()` clears anything that landed in between, so both
+    /// ends of the seek are already covered.
+    ///
+    /// Dropping here instead starves the renderer exactly when stall recovery
+    /// is re-priming — and re-priming is a seek every couple of seconds, so
+    /// the drop keeps the queue empty, which keeps the stall going. Measured
+    /// as 4 displayed frames against 2133 on the same title and position with
+    /// the same stall loop running (HEL-137).
+    nonisolated private func acceptSoftwareDecodedVideo(_ buffer: CMSampleBuffer) {
+        guard !shared.withLock({ $0.cancelled }) else { return }
+        videoQueue.enqueue(buffer)
+        kickPumps()
     }
 
     nonisolated private func acceptDecodedVideo(_ buffer: CMSampleBuffer) {
@@ -1811,7 +1929,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let hasAudio = !demuxer.audioStreams.isEmpty
         let videoHardLimit = DemuxBackpressurePolicy.videoHardLimit(
             videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
-            videoIsSoftwareDecoded: demuxer.outputsDecodedVideo
+            videoIsSoftwareDecoded: demuxer.outputsDecodedVideo,
+            decodedFrameBytes: softwareDecodeStage?.decodedFrameBytes ?? 0
         )
         let playbackRate = shared.withLock { $0.playbackRate }
         let baseVideoReserve = demuxer.outputsDecodedVideo ? 18 : 12
@@ -1821,11 +1940,22 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         )
         let minimumAudioReserve = 1.25 * playbackRate
         while (videoQueue.count < minimumVideoReserve || (hasAudio && audioQueue.bufferedDuration < minimumAudioReserve)),
-              videoQueue.count < videoHardLimit,
               !videoQueue.isFinished,
               !shared.withLock({ $0.cancelled }) {
             if shared.withLock({ $0.pendingSeekSeconds != nil }) { return }
-            performDemuxStep()
+            let pendingDecode = softwareDecodeStage?.pendingCount ?? 0
+            guard videoQueue.count + pendingDecode >= videoHardLimit else {
+                performDemuxStep()
+                continue
+            }
+            // Everything the memory limit allows has been read. When frames
+            // are still inside the decoder the cushion is on its way, and
+            // waiting for it is the difference between starting playback on a
+            // full renderer and starting it on an empty one — with decode off
+            // this queue, "read enough" and "decoded enough" are no longer the
+            // same moment (HEL-137).
+            guard let stage = softwareDecodeStage, pendingDecode > 0 else { break }
+            stage.waitUntilPendingBelow(pendingDecode)
         }
         // Run after any already-scheduled pump blocks. If the renderer can
         // accept data, this records the real first enqueued video PTS for the
@@ -2305,12 +2435,32 @@ nonisolated enum DemuxBackpressurePolicy {
         deliveryIsCached ? audioHighWater : uncachedAudioHighWater
     }
 
+    /// The most decoded frames Lagoon's own queue may hold, bounded by count
+    /// and — once a frame is expensive enough for the count to stop meaning
+    /// anything — by bytes (HEL-137 lever 5).
+    ///
+    /// 42 frames was chosen when the software path carried SD and HD: at
+    /// 1080p 10-bit that is 250 MB. Software AV1 reaching 4K made the same
+    /// 42 frames 1.05 GB of P010 surfaces, in a process jetsam has already
+    /// killed once at 2.1 GB (HEL-109). The budget below is the ceiling the
+    /// hardware-decoded path was already allowed — 30 frames of 4K P010 —
+    /// so every configuration measured before this keeps the limit it was
+    /// measured with, and only 4K software decode comes back under it.
+    static let decodedQueueByteBudget: Int64 = 30 * 24_883_200
+
+    /// Never below this however large a frame gets: a queue has to hold the
+    /// codec's reorder depth plus a cushion or it stops being a queue.
+    private static let decodedQueueFrameFloor = 8
+
     static func videoHardLimit(
         videoIsDecoded: Bool,
-        videoIsSoftwareDecoded: Bool = false
+        videoIsSoftwareDecoded: Bool = false,
+        decodedFrameBytes: Int64 = 0
     ) -> Int {
-        if videoIsSoftwareDecoded { return 42 }
-        return videoIsDecoded ? 30 : 120
+        let byCount = videoIsSoftwareDecoded ? 42 : (videoIsDecoded ? 30 : 120)
+        guard decodedFrameBytes > 0 else { return byCount }
+        let byBytes = Int(decodedQueueByteBudget / decodedFrameBytes)
+        return max(min(byCount, byBytes), decodedQueueFrameFloor)
     }
 
     /// `deliveryIsCached` defaults true, which is the shape every caller had
@@ -2324,7 +2474,8 @@ nonisolated enum DemuxBackpressurePolicy {
         videoIsSoftwareDecoded: Bool = false,
         hasAudio: Bool,
         deliveryIsCached: Bool = true,
-        playbackRate: Double = 1
+        playbackRate: Double = 1,
+        decodedFrameBytes: Int64 = 0
     ) -> DemuxBackpressureDecision {
         let audioHighWater = deliveryIsCached ? Self.audioHighWater : uncachedAudioHighWater
         let audioLowWater = deliveryIsCached ? Self.audioLowWater : uncachedAudioLowWater
@@ -2334,7 +2485,8 @@ nonisolated enum DemuxBackpressurePolicy {
             : uncachedAudioSafetySeconds
         let videoHardWater = videoHardLimit(
             videoIsDecoded: videoIsDecoded,
-            videoIsSoftwareDecoded: videoIsSoftwareDecoded
+            videoIsSoftwareDecoded: videoIsSoftwareDecoded,
+            decodedFrameBytes: decodedFrameBytes
         )
         let safePlaybackRate = PlaybackRatePolicy.clamped(playbackRate)
         let baseVideoHighWater = videoIsSoftwareDecoded ? 30 : (videoIsDecoded ? 18 : 90)
@@ -2527,11 +2679,24 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
 
     /// Blocks the producer without polling until the consumer has drained
     /// a useful amount of work, EOF/reset occurs, or shutdown interrupts it.
-    func waitUntilBelow(_ targetCount: Int) {
+    ///
+    /// `alsoCounting` adds work already spoken for but not yet in this queue —
+    /// video sitting in the software decode stage (HEL-137). It is evaluated
+    /// under the lock on every wake, so the stage settles this wait by
+    /// signalling here rather than needing a condition of its own.
+    func waitUntilBelow(_ targetCount: Int, alsoCounting: () -> Int = { 0 }) {
         condition.lock()
-        while buffers.count - head >= targetCount, !finished, !waitsInterrupted {
+        while buffers.count - head + alsoCounting() >= targetCount, !finished, !waitsInterrupted {
             condition.wait()
         }
+        condition.unlock()
+    }
+
+    /// Re-evaluate the waits without the queue itself having changed — what
+    /// the decode stage calls when a packet leaves it.
+    func signalWaiters() {
+        condition.lock()
+        condition.broadcast()
         condition.unlock()
     }
 
