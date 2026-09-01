@@ -122,14 +122,89 @@ struct SoftwareDecodePipelineTests {
         ))
     }
 
-    @Test func threadCountIsAlwaysExplicitSoTheDeviceCanReportIt() {
-        // "Auto" left the resolved value inside libavcodec's dav1d wrapper,
-        // where nothing on an Apple TV could read it, so a whole build shipped
-        // with nobody able to say how many threads were decoding.
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 6) == 6)
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 1) == 1)
-        // Never zero, which is the value that meant "you work it out".
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 0) == 1)
+    @Test func threadCountIsExplicitUnlessTheHardwareProbeRequestsAuto() {
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: nil, activeProcessors: 6
+        ) == 6)
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: nil, activeProcessors: 0
+        ) == 1)
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: 0, activeProcessors: 6
+        ) == 0)
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: 8, activeProcessors: 6
+        ) == 8)
+
+        // Movies favor throughput over dav1d's lower square-root default.
+        #expect(SoftwareDecodeThreadPolicy.resolvedMaxFrameDelay(
+            explicit: nil, threadCount: 5
+        ) == 5)
+        #expect(SoftwareDecodeThreadPolicy.resolvedMaxFrameDelay(
+            explicit: nil, threadCount: 0
+        ) == 0)
+        #expect(SoftwareDecodeThreadPolicy.resolvedMaxFrameDelay(
+            explicit: 3, threadCount: 5
+        ) == 3)
+        #expect(SoftwareDecodeThreadPolicy.resolvedMaxFrameDelay(
+            explicit: -1, threadCount: 5
+        ) == 0)
+        #expect(SoftwareDecodeThreadPolicy.resolvedMaxFrameDelay(
+            explicit: 8, threadCount: 5
+        ) == 5)
+    }
+
+    @Test func decoderExperimentValuesComeOnlyFromProcessArguments() {
+        let key = SoftwareDecodeThreadPolicy.threadCountDefaultsKey
+        #expect(SoftwareDecodeThreadPolicy.commandLineInteger(
+            forKey: key,
+            arguments: ["Lagoon", "-\(key)", "0"]
+        ) == 0)
+        #expect(SoftwareDecodeThreadPolicy.commandLineInteger(
+            forKey: key,
+            arguments: ["Lagoon", "--\(key)", "8"]
+        ) == 8)
+        #expect(SoftwareDecodeThreadPolicy.commandLineInteger(
+            forKey: key,
+            arguments: ["Lagoon"]
+        ) == nil)
+        #expect(SoftwareDecodeThreadPolicy.commandLineInteger(
+            forKey: key,
+            arguments: ["Lagoon", "-\(key)"]
+        ) == nil)
+    }
+
+    @Test func outputModeMatrixSeparatesStorageFromColorConversion() {
+        let resolve: (String?) -> SoftwareVideoDecoder.OutputMode = { value in
+            SoftwareVideoDecoder.outputMode(
+                requestedValue: value,
+                legacyCompressedOutput: nil,
+                toneMapHDRByDefault: true
+            )
+        }
+        #expect(resolve("direct-pq") == .directSource)
+        #expect(resolve("lossless-pq") == .losslessSource)
+        #expect(resolve("linear-sdr") == .linearSDR)
+        #expect(resolve("compressed-sdr") == .losslessSDR)
+
+        #expect(!SoftwareVideoDecoder.OutputMode.directSource.usesPixelTransfer)
+        #expect(SoftwareVideoDecoder.OutputMode.losslessSource.usesPixelTransfer)
+        #expect(SoftwareVideoDecoder.OutputMode.losslessSource.usesLosslessStorage)
+        #expect(!SoftwareVideoDecoder.OutputMode.losslessSource.convertsToSDR)
+        #expect(!SoftwareVideoDecoder.OutputMode.linearSDR.usesLosslessStorage)
+        #expect(SoftwareVideoDecoder.OutputMode.linearSDR.convertsToSDR)
+
+        // Preserve the old A/B argument and the measured production default.
+        #expect(SoftwareVideoDecoder.outputMode(
+            requestedValue: nil,
+            legacyCompressedOutput: false,
+            toneMapHDRByDefault: true
+        ) == .directSource)
+        #expect(SoftwareVideoDecoder.outputMode(
+            requestedValue: nil,
+            legacyCompressedOutput: nil,
+            toneMapHDRByDefault: true
+        ) == .losslessSDR)
     }
 
     @Test func decodeProfileSeparatesTheThreeCostsAsSharesOfOneCore() {
@@ -153,5 +228,35 @@ struct SoftwareDecodePipelineTests {
         #expect(empty.framesPerSecond == 0)
         #expect(empty.decodeFraction == 0)
         #expect(empty.conversionFraction == 0)
+    }
+
+    @Test func rendererReadinessUsesElapsedTimeRatherThanCallbackCount() {
+        let timings = RendererPipelineTimings(enabled: true)
+        timings.reset(at: 100)
+        // Backpressured for one second, then producer-starved for nine. A
+        // callback-count summary would incorrectly call this 33% not-ready.
+        timings.sample(
+            at: 100,
+            rendererReady: false,
+            renderQueue: 4,
+            decodePending: 3
+        )
+        timings.sample(
+            at: 101,
+            rendererReady: true,
+            renderQueue: 0,
+            decodePending: 3
+        )
+        timings.sample(
+            at: 110,
+            rendererReady: true,
+            renderQueue: 0,
+            decodePending: 3
+        )
+
+        let summary = timings.summaryLines().joined(separator: "\n")
+        #expect(summary.contains("measured=10.00s rendererNotReady=10.00%"))
+        #expect(summary.contains("producerStarved=90.00%"))
+        #expect(summary.contains("downstreamBackpressure=10.00%"))
     }
 }
