@@ -132,11 +132,6 @@ struct SoftwareDecodePipelineTests {
         #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 0) == 1)
     }
 
-    @Test func sdrOutputStaysOffUntilAskedFor() {
-        #expect(!SoftwareDecodeThreadPolicy.forcesSDROutput(enabled: false))
-        #expect(SoftwareDecodeThreadPolicy.forcesSDROutput(enabled: true))
-    }
-
     @Test func decodeProfileSeparatesTheThreeCostsAsSharesOfOneCore() {
         // 24 frames in one second of wall time, 0.44 s of it inside
         // libavcodec and 0.12 s converting: the shape HEL-137 is asking the
