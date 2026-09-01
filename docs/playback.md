@@ -588,103 +588,56 @@ correctly and merely slowly, so nothing fails, nothing looks wrong, and
 nobody finds out until someone measures 4K on a device with two performance
 cores. That is exactly how this shipped in the first place.
 
-#### Film grain (retired)
+#### What was tried and retired
 
-**Measured on the Apple TV: this stream carries none.** The HUD reported
-`grain skipped (none in this stream)`, which retired the hypothesis in one
-playback without needing a timing comparison at all. The toggle stays, because
-it is the only way to ask the question of the next file: with synthesis on, a
-decoded frame carries no evidence that it ever had grain.
+Everything below was measured on the Apple TV and is gone from the code rather
+than left switched off, because a settings page full of levers that do nothing
+is worse than no levers. The measurements are kept here so nobody re-derives
+them.
 
-AV1 film grain synthesis is a per-pixel post-process across the whole frame,
-and dav1d does it on the CPU. At 4K 10-bit it is a large share of what a frame
-costs. It is also how a 13.2 Mbps 4K HDR10+ encode exists at all: grain is
-expensive to code, so the encoder strips it and the decoder puts it back.
+| lever | result |
+| --- | --- |
+| Thread count | 5 by default on that device, 6 identical, 8 about 10% better cold and hotter for it |
+| dav1d `max_frame_delay` | worse: 42.1 ms a frame against 33.8 ms cold |
+| Decode queue at `userInteractive` | never the constraint once heat was |
+| Film grain synthesis | **this stream carries none**, reported by the HUD in one playback |
+| Apple's AV1 decoder | **does not exist on an A15**: -12906 with the hardware requirement already dropped |
+| Playback HUD off | still lags |
+| Decoded-frame queue | empty (`V 0`) with 1.2 GB free, so never the memory |
 
-Settings → Advanced → **Skip Film Grain** hands the parameters back as side
-data instead of synthesizing (`AV_CODEC_EXPORT_DATA_FILM_GRAIN`), which is
-libavcodec's way of telling its dav1d wrapper not to apply them. Off by
-default, because the grain is in the master and removing it changes the
-picture rather than optimizing it.
+The AV1 one left something behind. `PlaybackCapabilities` used to route on
+`VTIsHardwareDecodeSupported`, which reports silicon and nothing else, and went
+straight to libdav1d on a false — never asking whether VideoToolbox had a
+software decoder, which Apple does ship on some platforms. AV1 is now always
+offered to VideoToolbox and `VideoToolboxDecoder.canDecode` settles it per
+stream by trying to create a session. Where the answer is no, the engine
+reopens on the software path rather than failing the title. That also covers
+the hardware case Apple warns about, where a decoder "may not be available at
+all times": until this, that would have stranded a title libdav1d could play.
 
-The toggle is also the only way to learn whether a stream has grain at all:
-when dav1d applies it, the decoded frame carries no evidence that it did. With
-the toggle on, the HUD reports how many frames asked for grain, so
-`grain skipped (none in this stream)` retires the hypothesis for that file in
-one playback.
+#### Where this leaves the ticket
 
-If this does turn out to be the cost, skipping it is not the answer — the
-answer is to synthesize it somewhere other than the decode thread. The measured
-`ms/frame` either side of the toggle is what says whether that is worth
-building.
+Cold, 4K AV1 costs about 31 ms a frame of a 41.7 ms budget: 76% before
+anything degrades, climbing past 100% within a minute as the box warms. dav1d
+is not underperforming — that is in line with published figures for a 2+4 core
+A15 — and nothing else on the CPU side is unaccounted for.
 
-#### Measuring on a box that heats up
+Infuse plays the same file on the same device, direct play, confirmed in the
+Jellyfin dashboard. So the headroom exists and Lagoon is spending it somewhere
+Infuse is not. The open lead is HDR output: Firecore's own answer is that
+"true HDR output is not available for AV1 videos on the Apple TV, so Infuse
+will (correctly) set the output to SDR when playing these. Other apps may be
+switching your TV to HDR (or Dolby Vision) mode, but this is not technically
+correct." Lagoon is one of those other apps.
 
-Every comparison has to start from the same thermal state. 4K AV1 measured
-31 ms a frame cold and 45 ms after 30 to 50 seconds, so a run started on a warm
-Apple TV reads worse than the same code on a cold one, by more than any of the
-levers here move it. Back-to-back A/Bs without a cooling gap are not
-comparisons, in the same way that different scenes are not comparisons
-(HEL-64). Leave the device idle for several minutes between runs, and note that
-`ms/frame` resets on seek, so a seek gives a fresh average but not a fresh
-device.
-
-The degradation is not itself the bug. A 45% thermal penalty is survivable from
-a low enough baseline: at 18 ms a frame it lands at 26 ms and never misses the
-41.7 ms budget. The problem is that 31 ms cold is already 76% of budget, so the
-first throttling puts it over. Infuse plays this file on this device, so the
-baseline is what has to come down, not the heat.
-
-#### Is dav1d even the right decoder here? (HEL-137, open)
-
-Measured on the Apple TV with dav1d's assembly in place: 28 ms a frame at 8
-threads, 31 ms at the default. Sweeping the thread count moves it about 10%
-(the device reports 5 processors, not 6; 6 changes nothing, 8 buys a little
-cold and heats faster). That is not a decoder underperforming — 4K 10-bit at
-roughly 35 fps is in line with published dav1d figures for a 2+4 core A15. The
-decoder is doing what it can do.
-
-Which raises the question the ticket was written around: Infuse plays this file
-on this device. If dav1d on the CPU is near its ceiling and still short, then
-Infuse is probably not decoding it on the CPU.
-
-`PlaybackCapabilities` asks `VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)`
-and sends AV1 to libdav1d when the answer is false. But that call reports
-*hardware* and nothing else, as the file's own comment has said all along, and
-Apple has shipped a **software** AV1 decoder inside VideoToolbox since iOS 17
-for devices without the silicon. A false has never meant "VideoToolbox cannot
-decode this". Lagoon has been declining a decoder it never asked for.
-
-Settings → Advanced → **Decode AV1 with the System Decoder** routes AV1 down
-the compressed path instead, and `VideoToolboxDecoder` drops
-`kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder` for that
-case, since requiring hardware is exactly what would refuse Apple's software
-decoder. The HUD's `Vtime:` line names which answered:
-`VideoToolbox system` against `libavcodec av1 SW`.
-
-**It fails the title if the platform has no AV1 decoder at all**, rather than
-falling back, which is why it is off by default. That failure is itself the
-answer, and if the toggle works then the fallback is worth building and this
-becomes the default.
-
-#### Thread count
-
-`AVCodecContext.thread_count` is set explicitly, and never to libavcodec's
-auto. Auto left the resolved value inside the dav1d wrapper, where nothing on
-an Apple TV can read it: a whole build shipped with nobody able to say how many
-threads were decoding, and `thread_count` is not written back after
-`avcodec_open2`, so reporting it would have echoed the zero it was asked for.
-The default is now every core the device reports, which is what auto was
-believed to be doing, stated so it can be seen on the HUD and swept from
-Settings → Advanced → Software Decode Threads.
-An A15 has six cores: two performance and four efficiency. Frame threading
-spread across efficiency cores can cost more in synchronisation than it
-returns, so the count is swept rather than assumed. It ships in Release because
-an Apple TV cannot be paired to Xcode and there is no other way to run the A/B.
-Which is faster is a question about a specific device. The one measurement taken so far
-says auto: on the C-path binary, bounding to the performance cluster took
-11.4 fps down to 9.1. That was answering the wrong question, though, and it
-should be re-run now that the decoder has its assembly.
+That matters twice. It is a correctness question on its own. And compositing
+4K PQ into an HDR output is GPU and memory-bandwidth work on the same chip
+running dav1d, which would not show in `ms/frame` but would show as heat — and
+heat is what has been eating the margin. Settings → Advanced → **Force SDR
+Output** drops the PQ transfer and the HDR10 metadata from software-decoded
+frames so the display stays in SDR, to find out. Nothing tone maps, so the
+picture is dark and flat: it is a measurement, not a mode. If HDR output is
+the cost, the work is to tone map properly, which is what Infuse does.
 
 ### Player panel performance
 
