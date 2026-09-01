@@ -667,36 +667,71 @@ Parallelising the conversion across rows was kept because it does less work in
 the same place: 4.8 ms to 4.3 ms. Only that much because the copy is bounded by
 memory bandwidth rather than cores.
 
-#### Where this leaves the ticket
+#### The display path, measured with a paired device
 
-Measured on the device, Release, in the demanding scene: decode 39.6 ms,
-conversion 4.3 ms, against a 41.7 ms budget. That is about 22 frames a second
-where 23.976 are needed — **roughly 8% short**, not the factor of two this
-ticket spent days chasing. dav1d is not underperforming; that is in line with
-published figures for a 2+4 core A15.
+An Apple TV can be paired to a Mac after all, which turned this from
+speculation into a matrix. `devicectl` installs and launches with console
+streaming, `-debug.decodeTrace YES` prints position, queue depths, footprint,
+the decode profile and the renderer's optimized-compositing counter every two
+seconds, and LagoonTests can host bare benchmark loops on the device itself.
 
-Infuse plays the same file on the same device, direct play, confirmed in the
-Jellyfin dashboard. So the headroom exists and Lagoon is spending it somewhere
-Infuse is not. The open lead is HDR output: Firecore's own answer is that
-"true HDR output is not available for AV1 videos on the Apple TV, so Infuse
-will (correctly) set the output to SDR when playing these. Other apps may be
-switching your TV to HDR (or Dolby Vision) mode, but this is not technically
-correct." Lagoon is one of those other apps.
+What the layers measure, same hard scene (35–75 s of the HEL-137 episode):
 
-Measured: forcing SDR changes nothing about the timing, so HDR output is not
-where the margin goes. Settings → Advanced → **Force SDR Output** remains,
-because the correctness question stands on its own — if Firecore is right, we
-are asking a television for a mode this pipeline cannot honestly deliver.
+| where | what | result |
+| --- | --- | --- |
+| Mac | our vendored dav1d, direct | 177 fps (Homebrew's: 182 — build exonerated) |
+| Mac | through our libavcodec, engine-style loop | 182 fps (wrapper exonerated) |
+| Apple TV | same loop, bare test process | **55.7 fps** (hardware exonerated) |
+| Apple TV | plus the P010 conversion | **39.7 fps** (enough, with margin) |
+| Apple TV | plus holding a 25-frame queue | 39.6 fps (footprint free) |
+| Apple TV | the app, playing | **~20–22 fps** |
 
-**The remaining lever is the conversion, on the GPU.** It is 4.3 ms of a
-41.7 ms budget, or about 10%, and the shortfall is 8%. That is lever 3 of this
-ticket, retired earlier on a reading of "2%" that turned out to be a Debug
-build's arithmetic. The GPU is otherwise idle during playback, dav1d's planar
-10-bit output would upload as textures, and a shader can write P010 into the
-IOSurface the renderer already wants. Unlike every other lever tried, it
-removes CPU work rather than moving it.
+And what decides whether a frame reaches the display engine directly or is
+GPU-composited with the UI (the renderer's `optimized` counter, HUD off):
 
-### Player panel performance
+| frames | signalling | direct display |
+| --- | --- | --- |
+| HEVC, VideoToolbox hardware | SDR | 87% |
+| HEVC, VideoToolbox hardware | Dolby Vision | **0%** |
+| ours, every variant tried | PQ | **0%** |
+| ours, lossless-compressed | tagged 709 | **88%** |
+
+**HDR never takes the direct path on this device, from any producer.** That is
+the mechanism behind Firecore's statement that "true HDR output is not
+available for AV1 videos on the Apple TV, so Infuse will (correctly) set the
+output to SDR". Lagoon now does the same: on tvOS, software-decoded HDR is
+tone-mapped to BT.709 by the same `VTPixelTransferSession` pass that already
+produces the lossless-compressed surfaces, tagged SDR end to end, and detaches
+at the same rate hardware HEVC does. iOS keeps HDR: its screens show EDR well
+and its chips afford the composition.
+
+The compressed-output stage itself is load-bearing twice over: linear surfaces
+never detach no matter how they are tagged (`IOSurfaceCoreAnimationCompatibility`
+included — tried, still 0%), and the compressed frames are about half the
+memory. Probed once at open; a configuration the hardware refuses falls back
+to linear exactly as before.
+
+#### What is still unexplained (HEL-137, open)
+
+Detachment did not return the throughput. With composition out of the path,
+the app still decodes at ~20–22 fps where the same loop in a bare process on
+the same device does 39.7 with conversion included. Roughly 20 ms per frame of
+decode-queue wall time exists only inside the playing app, and it is none of:
+GPU composition (detached, no change), dav1d worker QoS (raised at spawn, no
+change), the decoded queue or memory (empty, 1.2 GB free), conversion
+arrangement (pipelining measured worse, GPU conversion measured neutral),
+thread count or frame delay (swept at fixed position), film grain (absent), or
+heat (curves reproduce position-for-position on a hot device).
+
+Candidates that survive: the audio pipeline (the bare test is silent; the app
+decodes E-AC3 JOC alongside), system-wide power budgeting across CPU, the
+video scaler and the display block, and scheduler contention visible only to a
+profiler. `xctrace record --attach` reaches the paired device but hangs
+writing the trace over this connection; Instruments' GUI against the paired
+Apple TV is the next tool, and the first look should be a System Trace of the
+hard scene.
+
+### Player panel performance### Player panel performance
 
 The Debug-only Player Panel component preview carries a deterministic 30-track
 subtitle fixture. `PlayerRegressionUITests.testPlayerPanelPreviewPerformance`
