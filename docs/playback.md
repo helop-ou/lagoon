@@ -635,6 +635,38 @@ a low enough baseline: at 18 ms a frame it lands at 26 ms and never misses the
 first throttling puts it over. Infuse plays this file on this device, so the
 baseline is what has to come down, not the heat.
 
+#### Is dav1d even the right decoder here? (HEL-137, open)
+
+Measured on the Apple TV with dav1d's assembly in place: 28 ms a frame at 8
+threads, 31 ms at the default. Sweeping the thread count moves it about 10%
+(the device reports 5 processors, not 6; 6 changes nothing, 8 buys a little
+cold and heats faster). That is not a decoder underperforming — 4K 10-bit at
+roughly 35 fps is in line with published dav1d figures for a 2+4 core A15. The
+decoder is doing what it can do.
+
+Which raises the question the ticket was written around: Infuse plays this file
+on this device. If dav1d on the CPU is near its ceiling and still short, then
+Infuse is probably not decoding it on the CPU.
+
+`PlaybackCapabilities` asks `VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)`
+and sends AV1 to libdav1d when the answer is false. But that call reports
+*hardware* and nothing else, as the file's own comment has said all along, and
+Apple has shipped a **software** AV1 decoder inside VideoToolbox since iOS 17
+for devices without the silicon. A false has never meant "VideoToolbox cannot
+decode this". Lagoon has been declining a decoder it never asked for.
+
+Settings → Advanced → **Decode AV1 with the System Decoder** routes AV1 down
+the compressed path instead, and `VideoToolboxDecoder` drops
+`kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder` for that
+case, since requiring hardware is exactly what would refuse Apple's software
+decoder. The HUD's `Vtime:` line names which answered:
+`VideoToolbox system` against `libavcodec av1 SW`.
+
+**It fails the title if the platform has no AV1 decoder at all**, rather than
+falling back, which is why it is off by default. That failure is itself the
+answer, and if the toggle works then the fallback is worth building and this
+becomes the default.
+
 #### Thread count
 
 `AVCodecContext.thread_count` is set explicitly, and never to libavcodec's
