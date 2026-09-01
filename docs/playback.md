@@ -535,6 +535,24 @@ that cannot run on a device and never runs on Apple silicon at all. That is
 the same trade upstream made, and it is only defensible scoped to an
 architecture that never ships.
 
+**The framework Info.plists declare `MinimumOSVersion` 100.0**, which is not a
+mistake and must not be "corrected" to the real deployment target. Xcode builds
+a stub dylib per SwiftPM binary target using that value, and App Store
+validation requires the app's minimum not to exceed the framework's. Declaring
+the app's own minimum sits exactly on that boundary and is rejected:
+
+```
+ITMS-90208: Invalid Bundle - The bundle Lagoon.app/Frameworks/Libdav1d.framework
+does not support the minimum OS Version specified in the Info.plist.
+```
+
+That is what happened to build 74. The value has no runtime meaning, because
+the stub never loads: dav1d is a static archive linked into the app binary.
+All ten mpvkit artifacts beside it declare the same thing, which is why they
+have passed validation for seventy-odd builds, and it is the workaround
+several vendors' SDKs use. The deployment targets still apply to the code
+itself, through `-target`, which is the part that has to be right.
+
 Re-check the committed artifact at any time:
 
 ```sh
