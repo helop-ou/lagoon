@@ -9,6 +9,11 @@ struct SettingsView: View {
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
+    /// HEL-137 lever 2, on a device that cannot be paired to Xcode: the only
+    /// way to A/B libavcodec's thread count against the performance cluster
+    /// is to ship the switch. Read once when the decoder opens.
+    @AppStorage(SoftwareDecodeThreadPolicy.boundToPerformanceCoresDefaultsKey)
+    private var softwareDecodePerformanceCores = false
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
@@ -451,6 +456,11 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
+                settingsToggle(
+                    "Limit Software Decode Threads",
+                    isOn: $softwareDecodePerformanceCores
+                )
+                .accessibilityIdentifier("settings.diagnostics.softwareDecodeThreads")
                 settingsToggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
                     .accessibilityIdentifier("settings.diagnostics.transcodeCache")
             }
@@ -747,6 +757,7 @@ struct SettingsView: View {
                 Toggle("Show Playback Details", isOn: $showPlaybackHUD)
                 Toggle("Run Playback Performance Test", isOn: $frameLossBench)
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
+                Toggle("Limit Software Decode Threads", isOn: $softwareDecodePerformanceCores)
             }
         }
     }

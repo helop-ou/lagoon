@@ -164,7 +164,12 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // Safe with the rest of this class as written: `drain()` already
         // flushes the delay frame threading introduces, and `flush()` resets
         // the decoder on every seek.
-        context.pointee.thread_count = 0
+        //
+        // HEL-137 added the one alternative worth measuring behind a toggle:
+        // a count bounded to the performance cluster, for the case where
+        // frame threading across an A15's four efficiency cores costs more in
+        // synchronisation than it returns. Off, this stays zero.
+        context.pointee.thread_count = SoftwareDecodeThreadPolicy.resolvedThreadCount()
         guard avcodec_open2(context, codec, nil) >= 0, let decodedFrame = av_frame_alloc() else {
             var pointer: UnsafeMutablePointer<AVCodecContext>? = context
             avcodec_free_context(&pointer)
