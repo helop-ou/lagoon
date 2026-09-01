@@ -295,8 +295,16 @@ struct ApplePlaybackAlignmentTests {
         ) == 8)
     }
 
-    @Test func AV1CompressedRoutingRequiresHardwareSupport() {
-        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+    @Test func AV1CompressedRoutingIsOfferedAndSettledAtRuntime() {
+        // This pinned "AV1 goes compressed only with hardware" until HEL-137.
+        // The question it encoded was the wrong one: VTIsHardwareDecodeSupported
+        // reports silicon, and Apple ships a software AV1 decoder inside
+        // VideoToolbox on some platforms, so a false never meant VideoToolbox
+        // could not decode AV1. It is offered either way now, and
+        // VideoToolboxDecoder.canDecode settles it per stream by trying to
+        // create a session — on an A15 that answers no and the engine reopens
+        // on the software path.
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
             codecID: AV_CODEC_ID_AV1,
             capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
         ))

@@ -101,160 +101,40 @@ struct SoftwareDecodePipelineTests {
         #expect(queuedPlusPending == .waitForVideo(below: 23))
     }
 
-    @Test func av1TakesTheAppleDecoderWheneverOneMightExist() {
-        // The routing asked VTIsHardwareDecodeSupported, which reports silicon
-        // and nothing else. Apple ships a software AV1 decoder inside
-        // VideoToolbox for devices without it, so a false there never meant
-        // "VideoToolbox cannot decode this" (HEL-137).
+    @Test func av1IsAlwaysOfferedToVideoToolboxAndSettledAtRuntime() {
+        // The routing used to ask VTIsHardwareDecodeSupported, which reports
+        // silicon and nothing else, and went straight to libdav1d on a false.
+        // AV1 is now always offered and VideoToolboxDecoder.canDecode settles
+        // it per stream, so a platform with a software AV1 decoder is used
+        // without anyone having had to predict it (HEL-137).
         let noAV1Silicon = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
-        #expect(!noAV1Silicon.decodesAV1WithVideoToolbox)
-        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+        #expect(noAV1Silicon.decodesAV1WithVideoToolbox)
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
             codecID: AV_CODEC_ID_AV1, capabilities: noAV1Silicon
         ))
 
-        let systemDecoder = PlaybackCapabilities(
-            hardwareHEVC: true, hardwareAV1: false, systemAV1: true
-        )
-        #expect(systemDecoder.decodesAV1WithVideoToolbox)
-        #expect(FFmpegDemuxer.usesCompressedVideoPath(
-            codecID: AV_CODEC_ID_AV1, capabilities: systemDecoder
+        // Nothing about this moves any other codec.
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_VP9, capabilities: noAV1Silicon
         ))
-
-        // Hardware still routes there on its own, as it always did.
-        let silicon = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
-        #expect(silicon.decodesAV1WithVideoToolbox)
-
-        // And nothing about this moves any other codec.
-        #expect(FFmpegDemuxer.usesCompressedVideoPath(
-            codecID: AV_CODEC_ID_VP9, capabilities: systemDecoder
-        ) == false)
         #expect(FFmpegDemuxer.usesCompressedVideoPath(
             codecID: AV_CODEC_ID_H264, capabilities: noAV1Silicon
         ))
-    }
-
-    @Test func capabilitiesFollowTheToggleWithoutRelaunching() {
-        // A cached `current` meant turning the AV1 experiment off did nothing
-        // until the app was force-quit, so every AV1 title kept routing to a
-        // decoder that does not exist. A toggle that cannot be turned off is
-        // worse than no toggle.
-        let key = PlaybackCapabilities.systemAV1DefaultsKey
-        let original = UserDefaults.standard.bool(forKey: key)
-        defer { UserDefaults.standard.set(original, forKey: key) }
-
-        UserDefaults.standard.set(true, forKey: key)
-        #expect(PlaybackCapabilities.current.systemAV1)
-        UserDefaults.standard.set(false, forKey: key)
-        #expect(!PlaybackCapabilities.current.systemAV1)
     }
 
     @Test func threadCountIsAlwaysExplicitSoTheDeviceCanReportIt() {
         // "Auto" left the resolved value inside libavcodec's dav1d wrapper,
         // where nothing on an Apple TV could read it, so a whole build shipped
         // with nobody able to say how many threads were decoding.
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
-            explicit: 0, boundToPerformanceCores: false, activeProcessors: 6
-        ) == 6)
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
-            explicit: 4, boundToPerformanceCores: false, activeProcessors: 6
-        ) == 4)
-        // An explicit choice wins over the performance-core bound.
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
-            explicit: 8, boundToPerformanceCores: true, activeProcessors: 6
-        ) == 8)
-        // Oversubscription is allowed, since whether it helps is the question,
-        // but not without limit.
-        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
-            explicit: 999, boundToPerformanceCores: false, activeProcessors: 6
-        ) == 12)
-        // Every offered value is one the picker can show.
-        #expect(SoftwareDecodeThreadPolicy.selectableThreadCounts.first == 0)
-        #expect(SoftwareDecodeThreadPolicy.selectableThreadCounts.contains(6))
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 6) == 6)
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 1) == 1)
+        // Never zero, which is the value that meant "you work it out".
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(activeProcessors: 0) == 1)
     }
 
-    @Test func softwareDecodeThreadsStayAutomaticUnlessTheToggleIsOn() {
-        // The low-level helper still answers 0 for "not bounded"; the caller
-        // above is what turns that into an explicit count.
-        #expect(SoftwareDecodeThreadPolicy.threadCount(
-            performanceCores: 2,
-            activeProcessors: 6,
-            boundToPerformanceCores: false
-        ) == 0)
-
-        // An A15: two performance cores against four efficiency ones.
-        #expect(SoftwareDecodeThreadPolicy.threadCount(
-            performanceCores: 2,
-            activeProcessors: 6,
-            boundToPerformanceCores: true
-        ) == 2)
-    }
-
-    @Test func boundedThreadCountNeverCollapsesToSingleThreaded() {
-        // One thread is the configuration that took 13.26 s of CPU for 30 s
-        // of video. A device reporting one performance core is not a reason
-        // to go back to it.
-        #expect(SoftwareDecodeThreadPolicy.threadCount(
-            performanceCores: 1,
-            activeProcessors: 4,
-            boundToPerformanceCores: true
-        ) == 2)
-
-        // Never more threads than there are cores to run them on.
-        #expect(SoftwareDecodeThreadPolicy.threadCount(
-            performanceCores: 8,
-            activeProcessors: 4,
-            boundToPerformanceCores: true
-        ) == 4)
-
-        // A platform that cannot report its clusters gets libavcodec's own
-        // answer rather than a guess.
-        #expect(SoftwareDecodeThreadPolicy.threadCount(
-            performanceCores: 0,
-            activeProcessors: 6,
-            boundToPerformanceCores: true
-        ) == 0)
-    }
-
-    @Test func costPerFrameSurvivesThrottlingWhereARateDoesNot() {
-        // The lesson of two HEL-137 builds. Once the queues fill, backpressure
-        // holds the decoder at playback rate, so a decoder with headroom and
-        // one with none report the same frames per second. Cost per frame is
-        // what separates them, and the budget at 23.976 fps is 41.7 ms.
-        let comfortable = SoftwareVideoDecoder.Profile(
-            frames: 24, packets: 24, decodeSeconds: 24 * 0.020,
-            conversionSeconds: 24 * 0.001, elapsedSeconds: 1
-        )
-        let struggling = SoftwareVideoDecoder.Profile(
-            frames: 24, packets: 24, decodeSeconds: 24 * 0.055,
-            conversionSeconds: 24 * 0.001, elapsedSeconds: 1
-        )
-
-        // Identical rates, opposite verdicts.
-        #expect(comfortable.framesPerSecond == struggling.framesPerSecond)
-        #expect(abs(comfortable.decodeMilliseconds - 20) < 0.001)
-        #expect(abs(struggling.decodeMilliseconds - 55) < 0.001)
-        #expect(comfortable.decodeBudgetUsed(frameRate: 23.976) < 1)
-        #expect(struggling.decodeBudgetUsed(frameRate: 23.976) > 1)
-
-        // Nothing decoded yet must not read as a free decoder.
-        #expect(SoftwareVideoDecoder.Profile().decodeMilliseconds == 0)
-        #expect(SoftwareVideoDecoder.Profile().decodeBudgetUsed(frameRate: 24) == 0)
-    }
-
-    @Test func frameDelayAndPriorityStayOffUntilAskedFor() {
-        #expect(SoftwareDecodeThreadPolicy.maxFrameDelay(
-            enabled: false, activeProcessors: 6
-        ) == 0)
-        #expect(SoftwareDecodeThreadPolicy.maxFrameDelay(
-            enabled: true, activeProcessors: 6
-        ) == 6)
-        // Every frame in flight is another 4K surface held inside dav1d, on
-        // top of the queue the engine already bounds.
-        #expect(SoftwareDecodeThreadPolicy.maxFrameDelay(
-            enabled: true, activeProcessors: 32
-        ) == 8)
-        #expect(SoftwareDecodeThreadPolicy.decodeQueueQoS(highPriority: false) == .userInitiated)
-        #expect(SoftwareDecodeThreadPolicy.decodeQueueQoS(highPriority: true) == .userInteractive)
+    @Test func sdrOutputStaysOffUntilAskedFor() {
+        #expect(!SoftwareDecodeThreadPolicy.forcesSDROutput(enabled: false))
+        #expect(SoftwareDecodeThreadPolicy.forcesSDROutput(enabled: true))
     }
 
     @Test func decodeProfileSeparatesTheThreeCostsAsSharesOfOneCore() {
