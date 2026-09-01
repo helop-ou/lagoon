@@ -391,9 +391,109 @@ This is the app's only player. H.264 and supported audio codecs stay
 compressed; HEVC and hardware-supported AV1 are decoded ahead by a
 hardware-only VideoToolbox session; AV1 without that capability, VP9, VC-1,
 MPEG-4 Part 2, and MPEG-2 are software-decoded by libavcodec into
-renderer-recommended NV12/P010 Core Video buffers;
+renderer-recommended NV12/P010 Core Video buffers, on a decode queue of their
+own (see below);
 unsupported compressed audio is decoded to LPCM by libavcodec. AVFoundation
 still owns color management, presentation, synchronization, and audio output.
+
+### Software decode runs off the demux queue (HEL-137)
+
+Until 0.1 (73), `FFmpegDemuxer.readNext()` called
+`softwareVideoDecoder.decode(packet:)` inline, and `readNext` runs on the
+engine's demux queue. Every frame decoded was time the loop was not reading:
+reading and decoding took turns, both queues drained while a frame was inside
+libavcodec, and the loop only resumed reading once the frame was out.
+
+It never mattered before. Every path with real per-frame decode cost went to
+VideoToolbox, which is asynchronous. The software path's previous customers
+were SD and HD MPEG-2, VC-1 and MPEG-4, cheap enough that serialising them cost
+nothing visible. 4K AV1 is the first content expensive enough for the
+serialisation itself to be the problem, and it arrived in 0.1 (72).
+
+The decoder now lives in `SoftwareVideoDecodeStage`, on a queue of its own,
+shaped like `VideoToolboxDecoder`: the demux loop submits and moves on, frames
+arrive through an output handler, failures through an error handler. The
+demuxer still *builds* the decoder, because that is where the codec parameters
+are, and hands it over during open (`takeSoftwareVideoDecoder()`); it never
+decodes video again. Three things follow from that and each is load-bearing:
+
+- **Packets are detached, not copied.** `av_packet_clone` shares FFmpeg's
+  reference-counted buffer, so handing a 4K access unit to another thread is an
+  atomic increment. The demuxer's own packet is unref'd on the way out of
+  `readNext` as it always was.
+- **Backpressure counts both halves.** `DemuxBackpressurePolicy` is given
+  `videoQueue.count + stage.pendingCount`: decoded frames and packets the stage
+  still owes are both video already read and not yet shown. Counting only the
+  first lets the loop read an entire decoder backlog ahead of itself the moment
+  decode stops happening on its queue. `SampleBufferQueue.waitUntilBelow` takes
+  an `alsoCounting` closure for the same reason, and the stage calls
+  `signalWaiters()` when a packet leaves it.
+- **Priming waits for frames, not for packets.** "Read enough" and "decoded
+  enough" used to be the same moment and no longer are, so `primeAndStart`
+  waits on `stage.waitUntilPendingBelow` rather than starting playback on an
+  empty renderer.
+
+Seeks go through `stage.reset()`, which bumps a generation, empties the
+mailbox, and flushes libavcodec synchronously, so the demux loop can reset the
+render queues behind it without racing a frame still in flight. EOF goes
+through `stage.finish()`, because frame threading always leaves pictures inside
+libavcodec and they are the end of the film. `FFmpegDemuxer` no longer flushes
+or drains the software decoder at all; doing both would touch libavcodec from
+two queues at once.
+
+**Frames from the stage do not go through `acceptDecodedVideo`.** That gate
+drops anything arriving while a seek is merely *pending*, which is right for
+VideoToolbox and wrong here: the stage discards its own pre-seek work when the
+demux loop resets it, and `videoQueue.reset()` clears whatever landed in
+between, so both ends are already covered. Dropping there starves the renderer
+exactly while stall recovery is re-priming, and re-priming *is* a seek every
+couple of seconds, so the drop keeps the queue empty, which keeps the stall
+going. Caught as 4 displayed frames against 2133 on the same title, position
+and stall loop.
+
+#### Where the time goes
+
+The HUD's `SWdec:` line and the bench's `swdecode=` field separate the three
+costs, cumulative since the last seek, which is also where the frame-loss bench
+re-arms, so a bench window and the profile describe the same stretch:
+
+```
+SWdec:   23.9 fps · decode 71% · convert 28% · read 0% · pending 2
+```
+
+Each percentage is wall time on that stage's own queue, so it reads as the
+share of *one core* that stage holds. **They are independent and do not sum to
+100%** — that is the point, since the question the ticket asks is which stage
+is expensive, not how a single budget is divided. `decode` is libavcodec
+(threaded, so on dav1d this is the wait, not the work). `convert` is everything
+between a decoded AVFrame and a ready `CMSampleBuffer`: the Core Video
+allocation, the 10-bit shift, the chroma interleave, the attachments. `read` is
+`av_read_frame`, which is the cache or the network.
+
+The conversion figure is what decides HEL-137's remaining levers. AV1 decodes
+to `YUV420P10LE` and the renderer wants P010, so every frame is shifted from low
+bits to high and its chroma interleaved: roughly 25 MB read and 25 MB written
+per 4K frame, about 600 MB/s at 24 fps. If that share is large on the device,
+the shift is a candidate for the GPU, or for driving dav1d's own picture
+allocator directly (it is already linked in `Packages/LagoonFFmpeg`) to decode
+into IOSurface-backed buffers.
+
+**No number here has been measured on an Apple TV yet.** Per the bench rule
+below, nothing else counts: same scene, same media-time window, three or more
+runs, HUD off for the verdict.
+
+#### Thread count (unresolved)
+
+`AVCodecContext.thread_count` stays at 0, libavcodec's auto, which is what
+HEL-103 measured at 1.66 s for 30 s of 4K AV1 against 13.26 s single-threaded.
+Auto counts every core the SoC reports, which on an A15 is six: two performance
+and four efficiency. Frame threading spread across efficiency cores can cost
+more in synchronisation than it returns, so `SoftwareDecodeThreadPolicy` can
+bound the count to the performance cluster (`hw.perflevel0.logicalcpu`, never
+below two, never above the active processor count) behind Settings → Advanced →
+**Limit Software Decode Threads**. It ships in Release because an Apple TV
+cannot be paired to Xcode and there is no other way to run the A/B. Which is
+faster is a question about a specific device and is currently unanswered.
 
 ### Player panel performance
 
@@ -1234,6 +1334,18 @@ a 3840×2160 Main 10 HDR title, with the HUD off so the overlay does not alter
 the video path. The console line includes the presentation dimensions and
 whether the stream used VideoToolbox or libavcodec, making a captured result
 self-identifying.
+
+Above roughly 24 MB a frame, the frame *count* stops bounding anything useful
+and `DemuxBackpressurePolicy.videoHardLimit` falls back to bytes (HEL-137). The
+software path's limit of 42 frames was chosen when it carried SD and HD: at
+1080p 10-bit that is 250 MB, but software AV1 reaching 4K made the same 42
+frames 1.05 GB of P010 surfaces, in a process jetsam has already killed once at
+2100 MB. The budget is `decodedQueueByteBudget`, deliberately set to the
+ceiling the hardware-decoded path was already permitted (30 frames of 4K P010,
+746 MB), so every configuration measured before this keeps the limit it was
+measured with and only 4K software decode is brought back under it. There is a
+floor of 8 frames however large a frame gets, because a queue still has to hold
+the codec's reorder depth plus a cushion.
 
 The byte arithmetic is pinned separately so the measured process number has
 something honest to compare against. A 4:2:0 P010 surface is
