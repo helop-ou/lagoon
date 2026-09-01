@@ -63,13 +63,9 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
     typealias ErrorHandler = @Sendable (Error) -> Void
 
     private let decoder: SoftwareVideoDecoder
-    // dav1d's worker threads inherit this queue's scheduling class, which is
-    // what decides whether they are eligible for an A15's performance cores
-    // (HEL-137). The band is a toggle rather than a decision, for the same
-    // reason the thread count is.
     private let queue = DispatchQueue(
         label: "ee.helop.lagoon.videodecode",
-        qos: SoftwareDecodeThreadPolicy.decodeQueueQoS()
+        qos: .userInitiated
     )
     private let outputHandler: OutputHandler
     private let errorHandler: ErrorHandler
@@ -91,7 +87,7 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
 
     var decodedFrameBytes: Int64 { decoder.decodedFrameBytes }
     var resolvedThreadCount: Int32 { decoder.resolvedThreadCount }
-    var skipsFilmGrain: Bool { decoder.skipsFilmGrain }
+    var forcesSDROutput: Bool { decoder.forcesSDROutput }
     var gridDescription: String? { decoder.gridDescription }
     var profile: SoftwareVideoDecoder.Profile { decoder.profile }
 

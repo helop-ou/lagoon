@@ -12,18 +12,8 @@ struct SettingsView: View {
     /// HEL-137 lever 2, on a device that cannot be paired to Xcode: the only
     /// way to A/B libavcodec's thread count against the performance cluster
     /// is to ship the switch. Read once when the decoder opens.
-    @AppStorage(SoftwareDecodeThreadPolicy.boundToPerformanceCoresDefaultsKey)
-    private var softwareDecodePerformanceCores = false
-    @AppStorage(SoftwareDecodeThreadPolicy.threadCountDefaultsKey)
-    private var softwareDecodeThreadCount = 0
-    @AppStorage(SoftwareDecodeThreadPolicy.frameDelayDefaultsKey)
-    private var softwareDecodeFrameDelay = false
-    @AppStorage(SoftwareDecodeThreadPolicy.highPriorityDefaultsKey)
-    private var softwareDecodeHighPriority = false
-    @AppStorage(SoftwareDecodeThreadPolicy.skipFilmGrainDefaultsKey)
-    private var softwareDecodeSkipFilmGrain = false
-    @AppStorage(PlaybackCapabilities.systemAV1DefaultsKey)
-    private var systemAV1 = false
+    @AppStorage(SoftwareDecodeThreadPolicy.forceSDRDefaultsKey)
+    private var softwareDecodeForceSDR = false
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
@@ -466,31 +456,8 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 settingsToggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
-                TVSettingsMenuPicker(
-                    title: "Software Decode Threads",
-                    valueTitle: softwareDecodeThreadCount == 0
-                        ? "Every Core"
-                        : "\(softwareDecodeThreadCount)",
-                    accessibilityIdentifier: "settings.diagnostics.softwareDecodeThreads",
-                    selection: $softwareDecodeThreadCount,
-                    options: SoftwareDecodeThreadPolicy.selectableThreadCounts.map {
-                        TVSettingsOption(value: $0, title: $0 == 0 ? "Every Core" : "\($0)")
-                    }
-                )
-                settingsToggle(
-                    "Overlap More Decoded Frames",
-                    isOn: $softwareDecodeFrameDelay
-                )
-                .accessibilityIdentifier("settings.diagnostics.softwareDecodeFrameDelay")
-                settingsToggle(
-                    "Prioritize Software Decoding",
-                    isOn: $softwareDecodeHighPriority
-                )
-                .accessibilityIdentifier("settings.diagnostics.softwareDecodePriority")
-                settingsToggle("Skip Film Grain", isOn: $softwareDecodeSkipFilmGrain)
-                    .accessibilityIdentifier("settings.diagnostics.softwareDecodeFilmGrain")
-                settingsToggle("Decode AV1 with the System Decoder", isOn: $systemAV1)
-                    .accessibilityIdentifier("settings.diagnostics.systemAV1")
+                settingsToggle("Force SDR Output", isOn: $softwareDecodeForceSDR)
+                    .accessibilityIdentifier("settings.diagnostics.softwareDecodeSDR")
                 settingsToggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
                     .accessibilityIdentifier("settings.diagnostics.transcodeCache")
             }
@@ -787,15 +754,7 @@ struct SettingsView: View {
                 Toggle("Show Playback Details", isOn: $showPlaybackHUD)
                 Toggle("Run Playback Performance Test", isOn: $frameLossBench)
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
-                Picker("Software Decode Threads", selection: $softwareDecodeThreadCount) {
-                    ForEach(SoftwareDecodeThreadPolicy.selectableThreadCounts, id: \.self) {
-                        Text($0 == 0 ? "Every Core" : "\($0)").tag($0)
-                    }
-                }
-                Toggle("Overlap More Decoded Frames", isOn: $softwareDecodeFrameDelay)
-                Toggle("Prioritize Software Decoding", isOn: $softwareDecodeHighPriority)
-                Toggle("Skip Film Grain", isOn: $softwareDecodeSkipFilmGrain)
-                Toggle("Decode AV1 with the System Decoder", isOn: $systemAV1)
+                Toggle("Force SDR Output", isOn: $softwareDecodeForceSDR)
             }
         }
     }

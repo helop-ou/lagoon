@@ -26,34 +26,25 @@ import VideoToolbox
 nonisolated struct PlaybackCapabilities: Equatable, Sendable {
     let hardwareHEVC: Bool
     let hardwareAV1: Bool
-    /// Whether AV1 should be handed to VideoToolbox even where there is no
-    /// hardware decoder for it (HEL-137).
+    /// Whether AV1 may be offered to VideoToolbox at all (HEL-137).
     ///
-    /// The routing above asks `VTIsHardwareDecodeSupported`, which as this
-    /// file's own comment says reports hardware and nothing else. Apple has
-    /// shipped a *software* AV1 decoder inside VideoToolbox since iOS 17 for
-    /// devices without the silicon, so a false there has never meant
-    /// "VideoToolbox cannot decode this" — only "not in hardware". Lagoon went
-    /// straight to libdav1d on that answer, which on an Apple TV costs about
-    /// 30 ms of a 41.7 ms frame budget for 4K 10-bit and cannot hold frame
-    /// rate once the box warms up.
+    /// `VTIsHardwareDecodeSupported` reports hardware and nothing else, as
+    /// this file's own comment has always said, and Apple ships a *software*
+    /// AV1 decoder inside VideoToolbox on some platforms — so a false there
+    /// has never meant "VideoToolbox cannot decode this". Lagoon went straight
+    /// to libdav1d on that answer and never asked the real question.
     ///
-    /// Off by default until measured on hardware: if the platform has no AV1
-    /// decoder of any kind, asking for one fails the title rather than falling
-    /// back, and that failure is itself the answer.
-    let systemAV1: Bool
+    /// So AV1 is always offered, and `VideoToolboxDecoder.canDecode` settles
+    /// it per stream by trying to create a session. On an A15 that answers no
+    /// (-12906, measured) and the engine reopens on the software path; where a
+    /// decoder does exist, hardware or software, it is used without anyone
+    /// having to have predicted which.
+    var decodesAV1WithVideoToolbox: Bool { true }
 
-    static let systemAV1DefaultsKey = "debug.videoToolboxAV1"
-
-    init(hardwareHEVC: Bool, hardwareAV1: Bool = false, systemAV1: Bool = false) {
+    init(hardwareHEVC: Bool, hardwareAV1: Bool = false) {
         self.hardwareHEVC = hardwareHEVC
         self.hardwareAV1 = hardwareAV1
-        self.systemAV1 = systemAV1
     }
-
-    /// Whether AV1 leaves the demuxer compressed, for an Apple decoder,
-    /// rather than being decoded by libavcodec.
-    var decodesAV1WithVideoToolbox: Bool { hardwareAV1 || systemAV1 }
 
     /// What the hardware answers, resolved once per process: it does not grow
     /// a decoder mid-session.
@@ -62,18 +53,7 @@ nonisolated struct PlaybackCapabilities: Equatable, Sendable {
         av1: VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1)
     )
 
-    /// The hardware answer plus whatever the diagnostic toggles currently say.
-    ///
-    /// **Read fresh, not cached.** Caching the whole thing across the process
-    /// made turning the AV1 experiment *off* do nothing until the app was
-    /// force-quit, so every AV1 title kept routing to a decoder that does not
-    /// exist and falling down the delivery ladder to a transcode. A debug
-    /// toggle that cannot be turned off is worse than no toggle.
     static var current: PlaybackCapabilities {
-        PlaybackCapabilities(
-            hardwareHEVC: hardware.hevc,
-            hardwareAV1: hardware.av1,
-            systemAV1: UserDefaults.standard.bool(forKey: systemAV1DefaultsKey)
-        )
+        PlaybackCapabilities(hardwareHEVC: hardware.hevc, hardwareAV1: hardware.av1)
     }
 }

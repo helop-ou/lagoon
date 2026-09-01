@@ -1,135 +1,57 @@
 import Dispatch
 import Foundation
 
-/// How many threads libavcodec is given for software video decode (HEL-137
-/// lever 2).
+/// How libavcodec is configured for software video decode (HEL-137).
 ///
-/// `thread_count = 0` means auto, and auto counts every core the SoC reports.
-/// On an A15 that is six: two performance cores and four efficiency cores. A
-/// frame-threaded decoder spread across efficiency cores can spend more in
-/// synchronisation than the extra cores return, so the alternative worth
-/// measuring is a count bounded to the performance cluster.
-///
-/// **Auto remains the default and nothing here changes without the toggle.**
-/// Which of the two is faster is a question about a specific device, and the
-/// only honest answer is a measured one: same scene, same media-time window,
-/// three or more runs. Settings → Advanced → Limit Software Decode Threads
-/// exists so that A/B can be run on an Apple TV, which cannot be paired to
-/// Xcode and so cannot be profiled any other way.
+/// What is left here is what survived being measured on an Apple TV. The
+/// settings that did not are gone rather than left switched off: the thread
+/// count (5 by default on that device, 6 identical, 8 about 10% better cold
+/// and hotter for it), dav1d's `max_frame_delay` (worse), and the decode
+/// queue's scheduling band (never the constraint once heat was). Film grain
+/// went too, once the HUD reported that the stream carries none.
 nonisolated enum SoftwareDecodeThreadPolicy {
-    static let boundToPerformanceCoresDefaultsKey = "debug.softwareDecodePerformanceCores"
-    /// An explicit thread count, or 0 to derive one. Swept from Settings on
-    /// hardware, because an Apple TV cannot be profiled any other way.
-    static let threadCountDefaultsKey = "debug.softwareDecodeThreadCount"
-
-    /// The counts worth trying on the devices Lagoon runs on. An A15 has two
-    /// performance cores and four efficiency ones, so 2, 4 and 6 are the
-    /// interesting shapes and 8 is there to show whether oversubscribing
-    /// helps or hurts.
-    static let selectableThreadCounts = [0, 2, 3, 4, 6, 8]
-    /// HEL-137 lever 6. dav1d overlaps this many frames at once; more of them
-    /// is more frame-level parallelism, paid for in latency and in decoded
-    /// frames held inside the decoder. libavcodec leaves it on dav1d's own
-    /// automatic choice, which is derived from the thread count and is
-    /// conservative. Off, nothing is set and dav1d decides.
-    static let frameDelayDefaultsKey = "debug.softwareDecodeFrameDelay"
-    /// Whether the decode queue asks for the scheduling band the renderer
-    /// pump already uses. dav1d's worker threads inherit the queue's class,
-    /// and `userInitiated` leaves the scheduler free to place them on an
-    /// A15's four efficiency cores.
-    static let highPriorityDefaultsKey = "debug.softwareDecodeHighPriority"
-    /// Whether dav1d is told to hand film grain parameters over instead of
-    /// synthesizing the grain itself.
+    /// Whether software-decoded video is presented without its HDR
+    /// signalling, so tvOS keeps the display in SDR.
     ///
-    /// AV1 film grain is a per-pixel post-process across the whole frame, and
-    /// at 4K 10-bit it is a large share of what decoding a frame costs. It is
-    /// also how a 13 Mbps 4K HDR10+ encode is possible at all: the encoder
-    /// strips the grain, which is expensive to code, and the decoder puts it
-    /// back. Skipping it is therefore a picture change, not a free win, which
-    /// is why it is a toggle and why the default synthesizes it as the
-    /// bitstream asks.
-    static let skipFilmGrainDefaultsKey = "debug.softwareDecodeSkipFilmGrain"
+    /// Firecore's answer about Infuse: "True HDR output is not available for
+    /// AV1 videos on the Apple TV, so Infuse will (correctly) set the output
+    /// to SDR when playing these. Other apps may be switching your TV to HDR
+    /// (or Dolby Vision) mode, but this is not technically correct." Lagoon is
+    /// one of those other apps: it attaches PQ and HDR10 metadata to
+    /// libdav1d's frames and asks for a matching display mode.
+    ///
+    /// Two things follow, and this toggle is for the second. The first is
+    /// correctness, which is its own question. The second is that compositing
+    /// 4K PQ into an HDR output is GPU and memory-bandwidth work on the same
+    /// chip trying to run dav1d, and heat is exactly what has been eating this
+    /// ticket's margin.
+    ///
+    /// **A measurement, not a mode.** Nothing tone maps, so PQ content
+    /// signalled as BT.709 looks dark and flat. If HDR output turns out to be
+    /// what costs the headroom, the work is to tone map properly.
+    static let forceSDRDefaultsKey = "debug.softwareDecodeForceSDR"
 
-    static func skipsFilmGrain(
-        enabled: Bool = UserDefaults.standard.bool(forKey: skipFilmGrainDefaultsKey)
+    static func forcesSDROutput(
+        enabled: Bool = UserDefaults.standard.bool(forKey: forceSDRDefaultsKey)
     ) -> Bool {
         enabled
     }
 
-    /// Frames dav1d may have in flight, or zero to leave the decision to it.
-    /// Bounded well below dav1d's own ceiling: each frame in flight is another
-    /// 4K surface held inside the decoder, on top of the queue this engine
-    /// already accounts for.
-    static func maxFrameDelay(
-        enabled: Bool = UserDefaults.standard.bool(forKey: frameDelayDefaultsKey),
-        activeProcessors: Int = ProcessInfo.processInfo.activeProcessorCount
-    ) -> Int32 {
-        guard enabled, activeProcessors > 0 else { return 0 }
-        return Int32(min(max(activeProcessors, 2), 8))
-    }
-
-    static func decodeQueueQoS(
-        highPriority: Bool = UserDefaults.standard.bool(forKey: highPriorityDefaultsKey)
-    ) -> DispatchQoS {
-        highPriority ? .userInteractive : .userInitiated
-    }
-
-    /// What to write into `AVCodecContext.thread_count`. Zero is libavcodec's
-    /// "decide for yourself".
+    /// Threads for libavcodec, and never its "auto".
     ///
-    /// The bounded count never drops below two: one thread is the
-    /// configuration HEL-103 measured at 13.26 s of decode for 30 s of 4K
-    /// AV1, and a device that reports a single performance core is not a
-    /// reason to go back to it.
-    static func threadCount(
-        performanceCores: Int,
-        activeProcessors: Int,
-        boundToPerformanceCores: Bool
-    ) -> Int32 {
-        guard boundToPerformanceCores else { return 0 }
-        guard performanceCores > 0, activeProcessors > 0 else { return 0 }
-        return Int32(min(max(performanceCores, 2), activeProcessors))
-    }
-
-    /// The current device's answer to the above.
+    /// Auto left the resolved value inside the dav1d wrapper, where nothing on
+    /// a device that cannot be paired to Xcode could read it, and
+    /// `thread_count` is not written back by `avcodec_open2` — so a build
+    /// shipped with nobody able to say how many threads were decoding. Every
+    /// core the device reports is what auto was believed to be choosing,
+    /// stated explicitly so it is at least legible on the HUD.
     ///
-    /// Never returns libavcodec's "auto" any more. Auto meant the resolved
-    /// value lived inside the dav1d wrapper where nothing on the device could
-    /// read it, so a whole build went by without anyone able to say how many
-    /// threads were actually decoding (HEL-137). The default is now every core
-    /// the device reports, which is what auto was believed to be doing, stated
-    /// explicitly so it can be both seen and changed.
+    /// Sweeping it on hardware moved 4K AV1 by about 10% at best, so there is
+    /// no setting for it: dav1d's parallelism here is limited by the stream,
+    /// not by the count.
     static func resolvedThreadCount(
-        explicit: Int = UserDefaults.standard.integer(forKey: threadCountDefaultsKey),
-        boundToPerformanceCores: Bool = UserDefaults.standard.bool(
-            forKey: boundToPerformanceCoresDefaultsKey
-        ),
         activeProcessors: Int = ProcessInfo.processInfo.activeProcessorCount
     ) -> Int32 {
-        if explicit > 0 {
-            return Int32(min(explicit, max(activeProcessors * 2, 2)))
-        }
-        if boundToPerformanceCores {
-            return threadCount(
-                performanceCores: performanceCoreCount(),
-                activeProcessors: activeProcessors,
-                boundToPerformanceCores: true
-            )
-        }
-        return Int32(max(activeProcessors, 1))
-    }
-
-    /// Cores in the fastest cluster. Apple silicon numbers its clusters from
-    /// the fastest down (`hw.perflevel0` is the performance cluster on every
-    /// asymmetric SoC, and the only level on a symmetric one), so this is the
-    /// performance-core count without hard-coding a chip. Zero when the
-    /// sysctl is missing, which the caller reads as "cannot tell".
-    static func performanceCoreCount() -> Int {
-        var count = 0
-        var size = MemoryLayout<Int>.size
-        guard sysctlbyname("hw.perflevel0.logicalcpu", &count, &size, nil, 0) == 0 else {
-            return 0
-        }
-        return max(count, 0)
+        Int32(max(activeProcessors, 1))
     }
 }

@@ -86,7 +86,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// what it was asked for: zero means auto and the resolved value is only
     /// legible here (HEL-137).
     let resolvedThreadCount: Int32
-    let skipsFilmGrain: Bool
+    let forcesSDROutput: Bool
 
     /// Where the software path's time actually goes (HEL-137), separated so
     /// nobody has to guess which stage is the expensive one. Cumulative since
@@ -110,10 +110,6 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         /// Frames per second over the last completed rolling window, rather
         /// than since the seek. See `recentFramesPerSecond`.
         var recentFramesPerSecond = 0.0
-        /// Frames whose bitstream asked for film grain, counted only while
-        /// synthesis is being skipped — with it on, dav1d applies the grain
-        /// and the frame says nothing about it.
-        var framesCarryingFilmGrain = 0
 
         /// Frames per second since the last seek.
         ///
@@ -219,20 +215,6 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // frame threading across an A15's four efficiency cores costs more in
         // synchronisation than it returns. Off, this stays zero.
         context.pointee.thread_count = SoftwareDecodeThreadPolicy.resolvedThreadCount()
-        // HEL-137 lever 6, also off by default: how many frames dav1d keeps in
-        // flight. This is a private option on the libdav1d wrapper, so it is
-        // set on priv_data and ignored by every other decoder on this path.
-        let frameDelay = SoftwareDecodeThreadPolicy.maxFrameDelay()
-        if frameDelay > 0, let privateData = context.pointee.priv_data {
-            av_opt_set_int(privateData, "max_frame_delay", Int64(frameDelay), 0)
-        }
-        // Asking for the grain parameters as side data is how libavcodec's
-        // dav1d wrapper is told not to synthesize the grain itself. Off by
-        // default: the grain is in the master, and removing it is a change to
-        // the picture rather than an optimization.
-        if SoftwareDecodeThreadPolicy.skipsFilmGrain() {
-            context.pointee.export_side_data |= Self.exportFilmGrain
-        }
         guard avcodec_open2(context, codec, nil) >= 0, let decodedFrame = av_frame_alloc() else {
             var pointer: UnsafeMutablePointer<AVCodecContext>? = context
             avcodec_free_context(&pointer)
@@ -304,14 +286,28 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             throw DecoderError.pixelBufferPool(poolStatus)
         }
 
+        // The transfer function is what puts tvOS into HDR; the primaries and
+        // matrix are left alone so the colour is as close as it can be without
+        // tone mapping (HEL-137). Dropping the static metadata with it keeps
+        // the display from being told about a master it is no longer being
+        // shown in.
+        let forcesSDR = SoftwareDecodeThreadPolicy.forcesSDROutput()
         let properties = ColorProperties(
             primaries: SampleBufferFactory.colorPrimaries(codecpar.pointee.color_primaries),
-            transfer: SampleBufferFactory.transferFunction(codecpar.pointee.color_trc),
+            transfer: forcesSDR
+                ? kCVImageBufferTransferFunction_ITU_R_709_2
+                : SampleBufferFactory.transferFunction(codecpar.pointee.color_trc),
             matrix: SampleBufferFactory.yCbCrMatrix(codecpar.pointee.color_space),
             chromaLocation: SampleBufferFactory.chromaLocation(codecpar.pointee.chroma_location),
-            masteringDisplay: SampleBufferFactory.masteringDisplayColorVolume(codecpar),
-            contentLightLevel: SampleBufferFactory.contentLightLevel(codecpar),
-            ambientViewingEnvironment: SampleBufferFactory.ambientViewingEnvironment(codecpar)
+            masteringDisplay: forcesSDR
+                ? nil
+                : SampleBufferFactory.masteringDisplayColorVolume(codecpar),
+            contentLightLevel: forcesSDR
+                ? nil
+                : SampleBufferFactory.contentLightLevel(codecpar),
+            ambientViewingEnvironment: forcesSDR
+                ? nil
+                : SampleBufferFactory.ambientViewingEnvironment(codecpar)
         )
         var prototype: CVPixelBuffer?
         let prototypeStatus = CVPixelBufferPoolCreatePixelBuffer(
@@ -344,7 +340,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
 
         codecContext = context
         resolvedThreadCount = context.pointee.thread_count
-        skipsFilmGrain = context.pointee.export_side_data & Self.exportFilmGrain != 0
+        forcesSDROutput = forcesSDR
         frame = decodedFrame
         self.timeBase = timeBase
         width = resolvedWidth
@@ -410,19 +406,11 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             recordProfile(at: received) { $0.decodeSeconds += received - waited }
             guard status >= 0 else { break }
             defer { av_frame_unref(frame) }
-            // Only present when grain synthesis was handed back to us, which
-            // is the only way to learn whether this stream has grain at all:
-            // when dav1d applies it, it leaves no trace on the frame.
-            let carriesGrain = av_frame_get_side_data(
-                frame,
-                AV_FRAME_DATA_FILM_GRAIN_PARAMS
-            ) != nil
             let buffer = try makeSampleBuffer()
             let converted = Self.now()
             recordProfile(at: converted) {
                 $0.frames += 1
                 $0.conversionSeconds += converted - received
-                if carriesGrain { $0.framesCarryingFilmGrain += 1 }
             }
             output.append(buffer)
         }
@@ -629,10 +617,6 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
         return output
     }
-
-    /// libavcodec declares this as a macro, which does not reach Swift.
-    /// `AV_CODEC_EXPORT_DATA_FILM_GRAIN`.
-    private static let exportFilmGrain: Int32 = 1 << 3
 
     /// libavutil declares these as macros, which do not reach Swift.
     private static let interlacedFrameFlag: Int32 = 1 << 3

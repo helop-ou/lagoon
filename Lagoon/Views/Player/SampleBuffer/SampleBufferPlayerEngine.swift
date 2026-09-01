@@ -141,12 +141,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             stage.pendingCount
         )
         line += " · \(stage.resolvedThreadCount) threads"
-        // Only says anything while synthesis is skipped: with grain applied,
-        // a frame carries no evidence that it had any.
-        if stage.skipsFilmGrain {
-            line += profile.framesCarryingFilmGrain > 0
-                ? " · grain skipped (\(profile.framesCarryingFilmGrain)/\(profile.frames) frames had it)"
-                : " · grain skipped (none in this stream)"
+        if stage.forcesSDROutput {
+            line += " · SDR out"
         }
         return line
     }
@@ -161,7 +157,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let readFraction = io.elapsedSeconds > 0 ? io.readSeconds / io.elapsedSeconds : 0
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
         return String(
-            format: "decodeMs=%.2f budget=%.3f fpsNow=%.2f fpsAvg=%.2f convertMs=%.2f read=%.3f frames=%d threads=%d frameDelay=%d qos=%@ grainSkipped=%@ grainFrames=%d",
+            format: "decodeMs=%.2f budget=%.3f fpsNow=%.2f fpsAvg=%.2f convertMs=%.2f read=%.3f frames=%d threads=%d sdr=%@",
             profile.decodeMilliseconds,
             profile.decodeBudgetUsed(frameRate: frameRate),
             profile.recentFramesPerSecond,
@@ -170,10 +166,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             readFraction,
             profile.frames,
             stage.resolvedThreadCount,
-            SoftwareDecodeThreadPolicy.maxFrameDelay(),
-            SoftwareDecodeThreadPolicy.decodeQueueQoS() == .userInteractive ? "interactive" : "initiated",
-            stage.skipsFilmGrain ? "yes" : "no",
-            profile.framesCarryingFilmGrain
+            stage.forcesSDROutput ? "yes" : "no"
         )
     }
 
@@ -1579,12 +1572,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
            !demuxer.outputsDecodedVideo,
            let description = demuxer.videoStream?.formatDescription {
             do {
-                // AV1 reaches here either because the device has an AV1
-                // decoder in silicon, or because the system-decoder experiment
-                // is on and there is none. Only the first may demand hardware
-                // (HEL-137).
-                let capabilities = PlaybackCapabilities.current
-                let requiresHardware = codecName != "av1" || capabilities.hardwareAV1
+                // AV1 only reaches here when the probe above found a
+                // decoder for it, which may be Apple's software one on a
+                // platform that has it. Requiring hardware would refuse that,
+                // so only the silicon case demands it (HEL-137).
+                let requiresHardware = codecName != "av1"
+                    || PlaybackCapabilities.current.hardwareAV1
                 videoDecoder = try VideoToolboxDecoder(
                     formatDescription: description,
                     recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,

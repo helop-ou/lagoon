@@ -110,7 +110,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     private var formatContext: UnsafeMutablePointer<AVFormatContext>?
-    private var capabilities: PlaybackCapabilities
+    private let capabilities: PlaybackCapabilities
     private var cachedIO: FFmpegCachedIO?
     private var hlsCache: HLSPlaybackCacheScope?
     private let childIOLock = NSLock()
@@ -209,12 +209,10 @@ nonisolated final class FFmpegDemuxer {
     /// Stops routing AV1 to an Apple decoder, for a reopen after one could
     /// not be created. Call before `open` (HEL-137).
     func disableVideoToolboxAV1() {
-        capabilities = PlaybackCapabilities(
-            hardwareHEVC: capabilities.hardwareHEVC,
-            hardwareAV1: false,
-            systemAV1: false
-        )
+        routesAV1ToVideoToolbox = false
     }
+
+    private var routesAV1ToVideoToolbox = true
 
     /// Transfers the software decoder to its caller, which becomes
     /// responsible for decoding, flushing and draining it. Returns it once.
@@ -439,7 +437,7 @@ nonisolated final class FFmpegDemuxer {
         let usesCompressedVideo = Self.usesCompressedVideoPath(
             codecID: videoPar.pointee.codec_id,
             capabilities: capabilities
-        )
+        ) && (videoPar.pointee.codec_id != AV_CODEC_ID_AV1 || routesAV1ToVideoToolbox)
         // A container that describes no parameter sets has to be caught
         // before the description is built, not after: the description is
         // created successfully either way and only the decoder refuses
