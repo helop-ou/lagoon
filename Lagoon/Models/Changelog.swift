@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "79",
+            released: "September 2026",
+            headline: "A newer AV1 decoder, with better threading.",
+            changes: [
+                "Lagoon's AV1 decoder moves up to dav1d 1.5.4, which schedules the work of decoding a frame across processor cores better than the version before it. That matters most on an Apple TV playing 4K, where there is the least room to spare.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "78",
             released: "September 2026",
             headline: "Playback details say how many processor cores are decoding.",
