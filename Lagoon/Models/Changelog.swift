@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "81",
+            released: "September 2026",
+            headline: "AV1 falls back instead of failing, and the testing options are tidied away.",
+            changes: [
+                "An AV1 file could fail to play outright if the system turned down a request to decode it. Lagoon now checks first and decodes the file itself when the answer is no, which is what it should have done all along.",
+                "Most of the decoder testing options added over the last few builds are gone. They answered their questions, none of them made playback better, and a settings page full of switches that do nothing is worse than none.",
+                "One is left, Force SDR Output, and one is new: on an Apple TV, 4K AV1 cannot truly be shown in HDR, and Lagoon has been asking your TV for it anyway. This turns that off so the cost of it can be measured. It makes the picture look flat, so it is for testing rather than watching.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "80",
             released: "September 2026",
             headline: "An option to let the system decode AV1 instead of Lagoon.",
