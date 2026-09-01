@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "80",
+            released: "September 2026",
+            headline: "An option to let the system decode AV1 instead of Lagoon.",
+            changes: [
+                "Lagoon decodes AV1 itself on devices whose chip has no AV1 support, which on an Apple TV is most of a 4K frame's worth of work. It turns out the system may be able to decode it anyway, and Lagoon was never asking. Settings then Advanced now has Decode AV1 with the System Decoder, to find out.",
+                "It is off, and it is a test rather than a setting: on a device where the system genuinely cannot decode AV1, an AV1 file will fail to play with it on. Turn it back off if that happens.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "79",
             released: "September 2026",
             headline: "A newer AV1 decoder, with better threading.",
