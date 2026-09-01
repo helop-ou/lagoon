@@ -479,18 +479,13 @@ between a decoded AVFrame and a ready `CMSampleBuffer`: the Core Video
 allocation, the 10-bit shift, the chroma interleave, the attachments. `read` is
 `av_read_frame`, which is the cache or the network.
 
-The conversion figure decided HEL-137's levers 3 and 4: measured at 2% on an
-Apple TV, both are dead. For the record, what it would have meant otherwise: AV1 decodes
-to `YUV420P10LE` and the renderer wants P010, so every frame is shifted from low
-bits to high and its chroma interleaved: roughly 25 MB read and 25 MB written
-per 4K frame, about 600 MB/s at 24 fps. If that share is large on the device,
-the shift is a candidate for the GPU, or for driving dav1d's own picture
-allocator directly (it is already linked in `Packages/LagoonFFmpeg`) to decode
-into IOSurface-backed buffers.
-
-**No number here has been measured on an Apple TV yet.** Per the bench rule
-below, nothing else counts: same scene, same media-time window, three or more
-runs, HUD off for the verdict.
+AV1 decodes to `YUV420P10LE` and the renderer wants P010, so every frame is
+shifted from low bits to high and its chroma interleaved: roughly 25 MB read
+and 25 MB written per 4K frame, about 600 MB/s at 24 fps. The controlled
+hardware runs below put that operation at about 2.5–2.8 ms/frame. It matters,
+but it is not the dominant cost. The following `VTPixelTransferSession` pass
+is about 9.6 ms at p50 and can exceed 30 ms at p99; both are now reported
+separately instead of being hidden in one conversion average.
 
 #### Lagoon builds dav1d itself, because upstream's had no assembly
 
@@ -545,6 +540,15 @@ nothing for 10-bit HDR. libavcodec links against it unchanged: same
 `DAV1D_API_VERSION` 7.0.0, no public symbol removed, and the only header
 difference in the whole upgrade is an OS/2 export macro.
 
+The current tvOS archive contains 573 exported NEON routines, including 247
+high-bit-depth/16bpc routines. The newer DotProd and I8MM motion-compensation
+variants are 8-bit-only, but 10-bit decoding still uses dav1d's broad baseline
+HBD NEON implementation; there is no missing A15 compiler switch hiding a
+second assembly-path win. FFmpeg's wrapper also references compressed packet
+storage and dav1d picture allocations rather than copying either payload, so a
+direct-dav1d rewrite would mostly replace glue whose measured Mac throughput
+already matches the CLI.
+
 Bumping it is `scripts/build-dav1d.sh --version <tag>` and a rebuild. Check
 those three things afterwards, because libavcodec here is a binary compiled
 against a particular dav1d and cannot be rebuilt alongside it.
@@ -597,13 +601,17 @@ them.
 
 | lever | result |
 | --- | --- |
-| Thread count | 5 by default on that device, 6 identical, 8 about 10% better cold and hotter for it |
-| dav1d `max_frame_delay` | worse: 42.1 ms a frame against 33.8 ms cold |
+| Thread count | Keep 5: auto and 6 did not improve the fixed scene; 8 lowered p50 but worsened p95/p99 and dropped 17.5% |
 | Decode queue at `userInteractive` | never the constraint once heat was |
 | Film grain synthesis | **this stream carries none**, reported by the HUD in one playback |
 | Apple's AV1 decoder | **does not exist on an A15**: -12906 with the hardware requirement already dropped |
 | Playback HUD off | still lags |
 | Decoded-frame queue | empty (`V 0`) with 1.2 GB free, so never the memory |
+
+An early app A/B had also labelled a nonzero dav1d `max_frame_delay` worse
+(42.1 ms against 33.8 ms), but it compared different scene positions and was
+invalid by the fixed-position rule above. It is not evidence against the
+frame-context experiment documented below.
 
 The AV1 one left something behind. `PlaybackCapabilities` used to route on
 `VTIsHardwareDecodeSupported`, which reports silicon and nothing else, and went
@@ -634,9 +642,14 @@ seconds with position, queue depths, footprint and the full decode profile.
 
 Three rules came out of doing this badly first:
 
-**Measure Release.** A Debug build compiles `LagoonPixelOps` at `-O0`, which
+**Measure Release without coverage.** A Debug build compiles `LagoonPixelOps` at `-O0`, which
 reported conversion at 28 ms a frame against Release's 4.8 ms and made decode
-look cheap by comparison. Every conclusion drawn from that was wrong.
+look cheap by comparison. Every conclusion drawn from that was wrong. Xcode
+was also enabling LLVM coverage in Release unless explicitly overridden; the
+app target now disables `ENABLE_CODE_COVERAGE` and the coverage linker
+arguments for Release. Xcode 26 still injected coverage into the Swift-package
+`LagoonPixelOps` C target, so its Release settings explicitly cancel those
+flags as well; these are the only package loops that touch every pixel.
 
 **Compare at a fixed playback position.** Decode cost on this content tracks
 scene complexity: 14 ms a frame at the title, 40 ms in the scene at 40 s. A
@@ -648,20 +661,23 @@ decoder setting, so when six back-to-back runs pushed it from 4.8 ms to 9.1 ms
 that was the device degrading under continuous load, not the settings. Leave
 five minutes between runs and discard any run where it is not near 4.8.
 
-#### It is not thermal, and it is not arrangeable
+#### Thermal state and rearranging work
 
-Relaunching on a device hammered for ten minutes reproduced the cold curve
+Relaunching on a device hammered for ten minutes once reproduced the cold curve
 position for position (28.7 against 28.8 ms at 41.5 s, 34.2 against 34.7 at
-45.5 s). Sustained *testing* contaminates, but playback itself does not
-throttle its way out of budget.
+45.5 s). Later direct-P010 runs reached `.serious` at 60 seconds while others
+did not, without a result split large enough to make thermal state the root
+cause. Sustained testing can contaminate comparisons, so the diagnostic now
+samples thermal state and stage tails over fixed 0–10, 20–30, 40–50 and
+60–70 second bands instead of treating a single end-state as proof.
 
-And the work cannot be rearranged into fitting. Conversion used to run on the
+Conversion used to run on the
 decode queue, so a frame cost decode plus convert; moving it to its own queue
 so a frame costs the larger of the two is the same structural fix that opened
 this ticket, one stage later. Measured twice, it is *worse*: decode rose by
 about what conversion stopped adding, and frames per second went from 22.2 to
-21.2. The device is CPU-saturated, so a second thread takes from dav1d exactly
-what it saves. **Only doing less work can help, not doing it elsewhere.**
+21.2. That is evidence of shared-resource contention, not proof that the
+transfer runs on the CPU or that no pipelined design could work.
 
 Parallelising the conversion across rows was kept because it does less work in
 the same place: 4.8 ms to 4.3 ms. Only that much because the copy is bounded by
@@ -686,52 +702,228 @@ What the layers measure, same hard scene (35–75 s of the HEL-137 episode):
 | Apple TV | plus holding a 25-frame queue | 39.6 fps (footprint free) |
 | Apple TV | the app, playing | **~20–22 fps** |
 
-And what decides whether a frame reaches the display engine directly or is
-GPU-composited with the UI (the renderer's `optimized` counter, HUD off):
+Apple defines the renderer's `optimized` counter as a special power-efficient
+mode that avoids the usual UI composition; it is not a generic "fast frame"
+counter. The paired-device observations, with the HUD off, were:
 
-| frames | signalling | direct display |
+| frames | signalling | optimized composition |
 | --- | --- | --- |
 | HEVC, VideoToolbox hardware | SDR | 87% |
 | HEVC, VideoToolbox hardware | Dolby Vision | **0%** |
-| ours, every variant tried | PQ | **0%** |
-| ours, lossless-compressed | tagged 709 | **88%** |
+| software, every linear variant tried | PQ | **0%** |
+| software, lossless-compressed | tagged 709 | **88%** |
 
-**HDR never takes the direct path on this device, from any producer.** That is
-the mechanism behind Firecore's statement that "true HDR output is not
-available for AV1 videos on the Apple TV, so Infuse will (correctly) set the
-output to SDR". Lagoon now does the same: on tvOS, software-decoded HDR is
-tone-mapped to BT.709 by the same `VTPixelTransferSession` pass that already
-produces the lossless-compressed surfaces, tagged SDR end to end, and detaches
-at the same rate hardware HEVC does. iOS keeps HDR: its screens show EDR well
-and its chips afford the composition.
+That justified testing the lossless-compressed SDR route, but it did not prove
+that ordinary composition itself costs 20 ms. Apple documents the distinction
+in [`AVVideoPerformanceMetrics`](https://developer.apple.com/documentation/avfoundation/avvideoperformancemetrics).
 
-The compressed-output stage itself is load-bearing twice over: linear surfaces
-never detach no matter how they are tagged (`IOSurfaceCoreAnimationCompatibility`
-included — tried, still 0%), and the compressed frames are about half the
-memory. Probed once at open; a configuration the hardware refuses falls back
-to linear exactly as before.
+#### Direct renderer P010 versus the transfer path
+
+`AVSampleBufferVideoRenderer` can accept uncompressed image sample buffers,
+and exposes [`recommendedPixelBufferAttributes`](https://developer.apple.com/documentation/avfoundation/avsamplebuffervideorenderer/recommendedpixelbufferattributes-6zrqb).
+Lagoon already built its linear pool from those attributes and wrapped the
+populated image with `CMSampleBufferCreateReadyWithImageBuffer`, so the clean
+test was to bypass `VTPixelTransferSession` and enqueue that final P010 buffer.
+The launch-argument parser for this route was fixed first: `UserDefaults`
+stores `-key NO` as a string-like value, so casting it with `as? Bool` had
+silently left the transfer enabled.
+
+Six accepted runs used the same *Rise* segment, 10 seconds of warm-up followed
+by a 60-second window, in the order A1/B1/B2/A2/A3/B3. Release coverage, HUD
+and trace logging were off; dav1d used the production count of five threads.
+These are the three-run means unless noted:
+
+| metric | direct renderer P010 | lossless-compressed SDR |
+| --- | ---: | ---: |
+| dropped frames | **20.34%** | **13.77%** |
+| libavcodec wall time | 40.51 ms/frame | 32.69 ms/frame |
+| complete conversion | 2.82 ms/frame | 12.62 ms/frame |
+| producer total | 43.33 ms/frame | 45.31 ms/frame |
+| renderer not ready | 32.30% | 44.10% |
+| optimized composition | 0% | about 86% |
+| starting footprint | 1305 MB | 946 MB |
+
+The proposed direct-P010 fix is therefore falsified for this hardware and
+path. It really removes about 9.8 ms of synchronous transfer work, but the
+libavcodec wait rises by about 7.8 ms, memory rises by about 359 MB, and more
+frames miss presentation. During substantial direct-path bands the renderer
+was ready, Lagoon's render queue was empty, and the decoder still had about 30
+packets pending: that is producer starvation, not renderer backpressure or
+network starvation. The A/B changes linear versus compressed storage, PQ
+versus SDR, and ordinary versus optimized composition together, so it does
+not isolate which shared resource feeds back into dav1d.
+
+Production consequently stays on the lossless-compressed SDR route. The
+direct-P010 route remains a diagnostic control, not a shipping default. A
+default transfer configuration the device refuses falls back to linear
+output; an explicitly requested matrix mode fails at open instead of silently
+benchmarking a different path.
+
+The same run also proved the decoder configuration at runtime. This line was
+captured before the frame-context change below:
+
+```
+codec="libdav1d" longName="dav1d AV1 decoder by VideoLAN"
+lowDelay=off maxFrameDelay=0
+```
+
+AV1 now requests `libdav1d` by name instead of relying on registry order.
+Lagoon's packaged generic resolver had already selected it, but the explicit
+lookup makes that invariant fail closed if a future FFmpeg package omits it.
+`maxFrameDelay` is the requested dav1d option; the diagnostics also report
+`AVCodecContext.delay`, which is the effective depth. Production now requests
+five on the five-thread Apple TV configuration. Zero remains an explicit
+launch-argument control for dav1d's square-root default.
+
+The fixed-scene thread screening did not find a replacement for production's
+five threads:
+
+| configured threads | dropped | frame total | send p95 / p99 |
+| ---: | ---: | ---: | ---: |
+| 5 (three-run median) | **13.71%** | 45.32 ms | 49.86 / 60.00 ms |
+| 0 (dav1d auto) | 16.71% | 45.04 ms | 49.65 / 57.67 ms |
+| 6 | 14.41% | 45.05 ms | 54.47 / 74.04 ms |
+| 8 | 17.55% | 45.50 ms | 66.30 / 80.97 ms |
+
+Eight made the median send call faster but its tail much worse. Auto and six
+did not improve the playback outcome, so changing the worker count would have
+no evidence behind it. This sweep used `max_frame_delay=0`, so it does not
+answer whether five or six workers is best when the frame-context depth is
+allowed to match the count; that is a separate hardware sweep when the device
+is available again.
 
 #### What is still unexplained (HEL-137, open)
 
-Detachment did not return the throughput. With composition out of the path,
-the app still decodes at ~20–22 fps where the same loop in a bare process on
-the same device does 39.7 with conversion included. Roughly 20 ms per frame of
-decode-queue wall time exists only inside the playing app, and it is none of:
-GPU composition (detached, no change), dav1d worker QoS (raised at spawn, no
-change), the decoded queue or memory (empty, 1.2 GB free), conversion
-arrangement (pipelining measured worse, GPU conversion measured neutral),
-thread count or frame delay (swept at fixed position), film grain (absent), or
-heat (curves reproduce position-for-position on a hot device).
+The app still presents about 20–22 fps where the bare process reaches 39.7 fps
+with P010 conversion included. Allocation, buffer locking, sample creation and
+`renderer.enqueue()` are negligible; the transfer is costly and spiky, but
+removing it makes the surrounding system slower. There is no evidence here of
+a frame-retention leak or network starvation. E-AC3 JOC is compressed
+passthrough in this player, so the app-versus-bare audio confound is renderer
+and scheduling activity, not local E-AC3 decoding.
 
-Candidates that survive: the audio pipeline (the bare test is silent; the app
-decodes E-AC3 JOC alongside), system-wide power budgeting across CPU, the
-video scaler and the display block, and scheduler contention visible only to a
-profiler. `xctrace record --attach` reaches the paired device but hangs
-writing the trace over this connection; Instruments' GUI against the paired
-Apple TV is the next tool, and the first look should be a System Trace of the
-hard scene.
+The four-way output control now exists under
+`-debug.softwareDecodeOutputMode`: `direct-pq`, `lossless-pq`, `linear-sdr`
+and `lossless-sdr`. Every runtime and bench line prints the resolved mode. The
+transfer destinations use the matching range, SDR output removes HDR/ICC/gamma
+attachments, and a per-frame transfer failure fails the decode rather than
+returning a PQ source buffer under an SDR format description.
 
-### Player panel performance### Player panel performance
+Three single runs of the same *Rise* segment completed before the paired Apple
+TV was disconnected. They are controls, not enough repetitions to select a new
+shipping default:
+
+| mode | dropped | producer total | libavcodec | P010 | transfer p50 | footprint | optimized |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| direct PQ | 21.16% | 42.91 ms | 40.11 ms | 2.47 ms | — | 1176 MB | 0% |
+| lossless PQ | 18.92% | 43.22 ms | 36.00 ms | 2.48 ms | 4.28 ms | 924 MB | 0% |
+| lossless SDR (production) | **17.64%** | 43.53 ms | **30.88 ms** | **2.44 ms** | 9.59 ms | 999 MB | 81.6% |
+
+`linear-sdr` selected correctly, but its first run fell through the delivery
+ladder to a server transcode and the later run was interrupted when the device
+was removed. There is no accepted result for it. The valid runs establish two
+useful boundaries: lossless storage itself costs about 4.3 ms at the transfer
+median, while the SDR color conversion adds roughly another 5.3 ms. They also
+repeat the counterintuitive result that the expensive SDR transfer lowers time
+waiting in libavcodec enough to offset much of its own cost. That is why the
+10 ms transfer cannot be deleted on arithmetic alone.
+
+#### Simulator sink ladder
+
+`ApplePlaybackAlignmentTests.av1FixtureReportsDecodeOnlyAndOutputCeilings`
+is an opt-in same-process benchmark. Set `LAGOON_AV1_FIXTURE_URL` (and
+optionally `LAGOON_AV1_BENCHMARK_FRAMES`) in the test process and it opens two
+fresh software decoders: the first receives and unrefs dav1d frames without
+Core Video; the second runs the complete P010/transfer/sample-buffer output.
+It reports external throughput plus the decoder's own decode and conversion
+breakdown. This makes the theoretical ceiling reproducible without a Jellyfin
+session or renderer.
+
+#### dav1d frame-context depth
+
+dav1d has two independent parallelism limits. `n_threads` creates one shared
+worker pool. `max_frame_delay` limits the frame contexts that pool may advance
+concurrently; it does **not** assign one worker permanently to each picture.
+With an explicit value dav1d uses `min(max_frame_delay, n_threads)`, while zero
+uses `ceil(sqrt(n_threads))`. FFmpeg's libdav1d wrapper passes both settings to
+`dav1d_open`, and marks the wrapper as other-threaded/auto-thread-capable.
+The definitions are in [dav1d's public header](https://github.com/videolan/dav1d/blob/master/include/dav1d/dav1d.h), the resolution is in
+[dav1d's scheduler setup](https://code.videolan.org/videolan/dav1d/-/blob/1.5.4/src/lib.c), and the option bridge is in
+[FFmpeg's wrapper](https://ffmpeg.org/doxygen/8.0/libdav1d_8c_source.html).
+
+Lagoon previously configured five workers but left frame delay at zero, so the
+Apple TV could advance only three pictures at once. Production now requests a
+frame delay equal to the explicit worker count before `avcodec_open2`: five
+workers and five frame contexts on that device. `AV_CODEC_FLAG_LOW_DELAY`
+remains off. The diagnostic override is clamped to the useful worker depth,
+and experiment values are parsed only from process arguments; a thread value
+persisted by an older build can no longer silently reconfigure production.
+
+The first control bypassed Lagoon and ran the official dav1d 1.5.4 CLI three
+times per setting with five workers:
+
+| 4K 10-bit fixture | auto depth (3) | full depth (5) | throughput change |
+| --- | ---: | ---: | ---: |
+| 240 frames, no grain metadata | 1.26 s | 0.88 s | **+43%** |
+| 120 frames, film-grain metadata applied | 0.82 s | 0.61-0.63 s | **about +34%** |
+
+The exact Lagoon/libavcodec path then decoded longer repeated fixtures in a
+Release arm64 tvOS 26.5 simulator. Each decoder count was pinned to five, so
+this compares the same depth-three versus depth-five configuration that the
+Apple TV will use, rather than the Mac's sixteen-core default:
+
+| fixture | depth | decode-discard | complete P010 output |
+| --- | ---: | ---: | ---: |
+| 2,400-frame 4K 10-bit | 3 | 187.94 fps | 178.46 fps |
+| same | 5 | **277.51 fps (+47.7%)** | **276.51 fps (+54.9%)** |
+| 1,200-frame 4K 10-bit with grain metadata | 3 | 148.20 fps | 146.53 fps |
+| same | 5 | **204.79 fps (+38.2%)** | **205.13 fps (+40.0%)** |
+
+As an additional host-throughput check, leaving the simulator at its native
+sixteen workers compared dav1d's depth four with depth sixteen. Two interleaved
+runs were effectively identical: 204.8-205.2 fps became 427.6-427.9 fps for
+decode-discard, and 203.9-204.3 became 422.2-422.6 fps through output. This
+larger change is expected from the much larger context delta and must not be
+projected onto the A15.
+
+This is the first HEL-137 optimization with a repeatable gain much larger than
+five percent in both dav1d itself and Lagoon's FFmpeg/output path. It still is
+not physical-device proof: depth three to five retains at least two additional
+aligned 3840x2176 YUV420P10 pictures (about 47.8 MiB before scratch state) and
+may add roughly two frame periods, about 83 ms at 23.976 fps, to startup or
+seek latency. Only a 60-120 second A15 A/B can score thermals, memory pressure,
+tail latency, presentation drops and actual playback throughput.
+
+The output ownership path was tightened alongside it. Lagoon now unlocks the
+CPU-written P010 pixel buffer before `VTPixelTransferSessionTransferImage` and
+releases the source AVFrame immediately after the copy, rather than holding
+both through the synchronous transfer. That returns a roughly 24 MiB dav1d
+picture reference earlier and avoids carrying a Core Video CPU lock into the
+accelerator boundary. Detailed diagnostic arrays are capped, so an
+accidentally enabled profiler cannot grow for the lifetime of playback.
+
+The same benchmark compares the old two-barrier planar-to-P010 scheduling with
+the fused production call using identical 4K buffers and kernels. On that host,
+fusing the luma and chroma work into one `concurrentPerform` reduced p50 by
+about 5-6% in the final long runs. Sweeping one, two and three conversion chunks
+under the deeper decoder produced 395.4, 399.7 and 404.1 fps respectively on
+the short host fixture, so production keeps three. This is a copy-kernel
+micro-optimization beside the much larger frame-context change.
+
+The next hardware gate starts with production lossless-SDR at five workers:
+interleave depth 0 and 5 over the same 60-120 second scene with cooldowns, then
+sweep conversion chunks 1/2/3 only if deeper decoding regresses under load.
+Capture produced/presented fps, drops, send/P010/VT p95 and p99, footprint,
+thermal bands, and seek-to-first-frame. After that comes the renderer/audio
+half of the sink ladder: P010/discard, renderer with audio absent, then normal
+audio. A System Trace should inspect requested/effective QoS and runnable gaps
+on the named `dav1d-worker` pthreads; upstream creates those threads without a
+Darwin QoS attribute. Only a trace showing scheduling starvation would justify
+an Apple-specific `QOS_CLASS_USER_INITIATED` dav1d patch. The simulator can
+validate architecture and catch regressions; only an Apple TV can decide this
+performance and thermal result.
+
+### Player panel performance
 
 The Debug-only Player Panel component preview carries a deterministic 30-track
 subtitle fixture. `PlayerRegressionUITests.testPlayerPanelPreviewPerformance`
