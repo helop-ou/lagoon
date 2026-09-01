@@ -100,10 +100,33 @@ struct SoftwareDecodePipelineTests {
         #expect(queuedPlusPending == .waitForVideo(below: 23))
     }
 
+    @Test func threadCountIsAlwaysExplicitSoTheDeviceCanReportIt() {
+        // "Auto" left the resolved value inside libavcodec's dav1d wrapper,
+        // where nothing on an Apple TV could read it, so a whole build shipped
+        // with nobody able to say how many threads were decoding.
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: 0, boundToPerformanceCores: false, activeProcessors: 6
+        ) == 6)
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: 4, boundToPerformanceCores: false, activeProcessors: 6
+        ) == 4)
+        // An explicit choice wins over the performance-core bound.
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: 8, boundToPerformanceCores: true, activeProcessors: 6
+        ) == 8)
+        // Oversubscription is allowed, since whether it helps is the question,
+        // but not without limit.
+        #expect(SoftwareDecodeThreadPolicy.resolvedThreadCount(
+            explicit: 999, boundToPerformanceCores: false, activeProcessors: 6
+        ) == 12)
+        // Every offered value is one the picker can show.
+        #expect(SoftwareDecodeThreadPolicy.selectableThreadCounts.first == 0)
+        #expect(SoftwareDecodeThreadPolicy.selectableThreadCounts.contains(6))
+    }
+
     @Test func softwareDecodeThreadsStayAutomaticUnlessTheToggleIsOn() {
-        // Auto is what HEL-103 measured (1.66 s for 30 s of 4K AV1 against
-        // 13.26 s single-threaded), so it stays the default and the
-        // alternative only exists to be A/B'd on hardware.
+        // The low-level helper still answers 0 for "not bounded"; the caller
+        // above is what turns that into an explicit count.
         #expect(SoftwareDecodeThreadPolicy.threadCount(
             performanceCores: 2,
             activeProcessors: 6,
