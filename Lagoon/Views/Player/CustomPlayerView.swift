@@ -1260,7 +1260,7 @@ struct CustomPlayerView<Surface: View>: View {
         }
         let memory = MemorySnapshot.current()
         let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
-        return [
+        var elements: [String] = [
             "item=\(playbackIdentity)",
             "surface=\(playerSurfaceIdentity)",
             "method=\(playbackMethod.rawValue)",
@@ -1276,6 +1276,15 @@ struct CustomPlayerView<Surface: View>: View {
             "paused=\(engine.isPaused ? 1 : 0)",
             "buffering=\(engine.isBuffering ? 1 : 0)",
             "stalls=\(engine.stallCount)",
+            "aDry=\(engine.audioStarvationCount)",
+            "audioStalls=\(engine.audioStallCount)",
+            "audioBuffers=\(engine.buffersOnAudioStarvation ? 1 : 0)",
+            String(format: "audioLead=%.3f", engine.audioDeliveryLeadSeconds),
+            "audioReady=\(engine.audioRendererReadyForPlayback ? 1 : 0)",
+            "videoQueued=\(engine.videoQueueCountDiagnostic)",
+            "videoMax=\(engine.maximumVideoBacklogDiagnostic)",
+            "videoHard=\(engine.videoQueueHardLimitDiagnostic)",
+            "reprimes=\(engine.stallReprimeCount)",
             "idleRequests=\(engine.idleRequestCallbacks)",
             "audioRecoveries=\(engine.audioRendererRecoveryCount)",
             "mediaResetRecoveries=\(engine.mediaServicesResetRecoveryCount)",
@@ -1304,7 +1313,14 @@ struct CustomPlayerView<Surface: View>: View {
             "segments=\(info.segments.count)",
             String(format: "skippableStart=%.1f", skippableStart),
             String(format: "skippableEnd=%.1f", skippableEnd),
-        ].joined(separator: " ")
+        ]
+        #if DEBUG
+        elements.append(contentsOf: [
+            "audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)",
+            "deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)",
+        ])
+        #endif
+        return elements.joined(separator: " ")
     }
 
     private var progressFraction: CGFloat {
