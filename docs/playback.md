@@ -1519,8 +1519,18 @@ composition cost is more representative than Simulator timing.
   should: the ticket's own text warns that a count near zero cannot
   distinguish a starved feed from one being drained as fast as it fills,
   and the seconds are that same queue in different units. Both are the
-  wrong side of the pump. A real audio-starvation signal has to come from
-  the renderer, and finding one is still open.
+  wrong side of the pump.
+
+  The signal now measured sits on the renderer side of that boundary, and
+  it ships in Release.
+  Lagoon records the presentation end of the last audio sample actually
+  enqueued into `AVSampleBufferAudioRenderer` and subtracts the synchronizer
+  clock. That delivery lead is nil until the first sample reaches the
+  renderer, so startup and seeks cannot manufacture an event, and it resets
+  on seek, flush, and renderer replacement. Below 0.25 s times the current
+  playback rate it records one `aDry` episode. It never stops the clock.
+  The HUD shows `lead` alongside Apple's
+  `hasSufficientMediaDataForReliablePlaybackStart` reading, labeled `ready`.
 
   What stands is the reporting, which is the minimum HEL-123 asked for.
   `PlaybackStarvationPolicy` answers `.none`/`.video`/`.audio` from a
@@ -1541,12 +1551,94 @@ composition cost is more representative than Simulator timing.
   the `Buffer:`/`Cache:` reading nobody ever captured is moot for this title
   because there is no longer a cutout to capture it during.
 
-  The defect is still open, and is worth keeping apart from the symptom. A
-  genuinely starved audio path can still play on with the picture running and
-  no sound while every counter reads healthy. What changed is that the only
-  title anyone could reproduce it on no longer does, so verifying a fix will
-  need a deliberately starved feed: a throttled connection, or a transcode
-  paused server-side mid-playback.
+  The reproduction title no longer reproduces the failure (HEL-133), so the
+  defect is real only in principle: a delivery dip shorter than the cushion
+  that keeps video from stalling, but longer than what the audio renderer
+  holds. The delivery-stall regression below shows that shape on the
+  compressed path without trying to: during its outage the delivery lead
+  reached 0.15 s and `aDry` counted an episode while 45 frames of video were
+  still queued and the clock was running, roughly two seconds before the
+  picture would have stalled. **Simulate Audio Starvation** exercises the
+  audio half of that shape deterministically.
+  It is Debug-only, absent from Release, and lives in Settings → Advanced →
+  Playback Diagnostics in Debug builds; it stops feeding the audio renderer
+  once per playback engine, five seconds after playback starts, for three
+  seconds, both delays overridable with
+  `-debug.starvationInjectionDelaySeconds` and
+  `-debug.starvationInjectionDurationSeconds`. The tvOS simulator regression,
+  `testRendererSideAudioStarvationIsDetectedAndRecovers` in
+  `LagoonUITests/PlayerRegressionUITests.swift` (run with the
+  `LagoonHardwareRegression` scheme), proves the lead crosses the floor,
+  `aDry` increments once, the picture clock keeps running, and delivery lead
+  recovers after release. On release the hold discards audio that ended
+  before the clock, because a real recovery never hands the renderer such
+  samples and they would use up the acceptance budget the resume rule
+  depends on.
+
+  The hardware calibration pass runs a Debug build on the paired Apple TV
+  through devicectl, not TestFlight, and has to confirm two things a
+  simulator cannot: that a lead under 0.25 s coincides with audible silence,
+  and that audio returns in sync afterward rather than playing the withheld
+  seconds late.
+
+  The fix exists behind `debug.bufferOnAudioStarvation` (Debug Settings
+  toggle "Buffer on Audio Starvation", off by default). With it on, an
+  audio episode goes through the same one-second confirmation as video,
+  stops the clock, and counts as an audio stall (`stalls N (M audio)` in
+  the HUD); recovery resumes once the renderer reports sufficient data for
+  a reliable start and is at least half a second clear of the starvation
+  floor, or has a full second of lead, as well as its video frames.
+  Measured in the simulator, a renderer with the clock stopped accepts
+  about a second of audio and then stops asking, so a fixed one-second
+  lead threshold parked at 0.996 s and fell to the seek fallback every
+  time, which is why the renderer's own flag decides. Audio waiting in
+  Lagoon's queue is deliberately not counted, because audio behind a
+  renderer that is not taking it is not audio that will play; counting it
+  resumed a held renderer into silence three times in four seconds. That
+  audio condition also applies to video-caused stalls so a resume with a
+  dry renderer cannot stutter back into silence a second later. An `aDry`
+  episode spans its own stall: buffering answers no starvation because
+  nothing is being judged, and ending the episode there counted the dip
+  right after resume as a second one. Release is unchanged while the
+  switch is off. The hardware pass decides whether the default flips;
+  HEL-123 stays open until it does.
+
+  One caveat is real and deliberately not solved here: an audio-caused
+  stall reached with the video queue already at its hard limit cannot
+  refill audio through the demuxer, because the backpressure wait wakes
+  only on a video dequeue that a stopped clock never makes, so that shape
+  reaches the five-second seek fallback. It needs an interleave skewed by
+  more than the video cushion, and the bounded reprime is the repair it
+  gets.
+
+- **`A 0` is not a demux refill failure** (HEL-124, closed as invalid). The
+  ticket read the same app-side queue as HEL-123: after a delivery outage,
+  video sat at its hard limit while audio appeared to remain at zero, and the
+  premise was that the demux loop could not refill a starved audio queue.
+  Build 66 already answered that question: a healthy renderer drains
+  Lagoon's audio queue to zero on every title, so the count and the seconds
+  are both the wrong side of the pump. The premise does not hold, and the
+  ticket closes as invalid.
+
+  One residual is worth a sentence, left deliberately unfixed.
+  `audioCanCoverDrain` in `DemuxBackpressurePolicy` gates on app-side
+  buffered seconds, which are structurally near zero for the reason above,
+  so the batch-drain branch it guards is effectively unreachable; every
+  title with audio parks at its hard limit in one-slot pacing instead. No
+  symptom has been observed from it.
+
+  **Simulate Delivery Stall** stays as a Debug-only fault, in the same
+  Settings → Advanced → Playback Diagnostics section and using the same
+  timing overrides as Simulate Audio Starvation. Its regression was
+  reframed and renamed
+  `testBoundedDeliveryOutageRecoversThroughStallWithoutReprime`: an
+  eight-second demux outage enters buffering, then resumes with the video
+  backlog inside the hard limit. The seek fallback is asserted absent only
+  when the confirmed stall was clearly shorter than the five-second rule,
+  because the compressed path coasts on up to 120 queued frames while a
+  decoded path holds 30, and no single hold fits both. It pins the
+  existing M6 stall recovery path; it is not evidence about HEL-124. The Release HUD keeps `V current/max/hard` and
+  `reprime N` regardless.
 - **A stream with no cache gets a bigger demux cushion** (HEL-130). The
   sparse AVIO cache is enabled for direct play and direct stream and off for
   a transcode, because a Jellyfin HLS transcode has mutable manifests and a
