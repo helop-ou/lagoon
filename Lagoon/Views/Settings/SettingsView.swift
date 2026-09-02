@@ -13,6 +13,16 @@ struct SettingsView: View {
     /// way to A/B libavcodec's thread count against the performance cluster
     /// is to ship the switch. Read once when the decoder opens.
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
+    #if DEBUG
+    /// One-shot, timed fault injections scheduled after playback starts.
+    /// Debug-only: the exact same experiment runs in the simulator and,
+    /// from a Debug build, on the paired Apple TV (HEL-123/124).
+    @AppStorage("debug.simulateAudioStarvation") private var simulateAudioStarvation = false
+    @AppStorage("debug.simulateDeliveryStall") private var simulateDeliveryStall = false
+    /// Read once when an engine is created; off until the hardware pass
+    /// sets the floor (HEL-123).
+    @AppStorage("debug.bufferOnAudioStarvation") private var bufferOnAudioStarvation = false
+    #endif
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
@@ -456,6 +466,14 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.dovi")
                 settingsToggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
                     .accessibilityIdentifier("settings.diagnostics.transcodeCache")
+                #if DEBUG
+                settingsToggle("Simulate Audio Starvation", isOn: $simulateAudioStarvation)
+                    .accessibilityIdentifier("settings.diagnostics.audioStarvation")
+                settingsToggle("Simulate Delivery Stall", isOn: $simulateDeliveryStall)
+                    .accessibilityIdentifier("settings.diagnostics.deliveryStall")
+                settingsToggle("Buffer on Audio Starvation", isOn: $bufferOnAudioStarvation)
+                    .accessibilityIdentifier("settings.diagnostics.audioBuffering")
+                #endif
             }
 
             #if os(tvOS)
@@ -750,6 +768,11 @@ struct SettingsView: View {
                 Toggle("Show Playback Details", isOn: $showPlaybackHUD)
                 Toggle("Run Playback Performance Test", isOn: $frameLossBench)
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
+                #if DEBUG
+                Toggle("Simulate Audio Starvation", isOn: $simulateAudioStarvation)
+                Toggle("Simulate Delivery Stall", isOn: $simulateDeliveryStall)
+                Toggle("Buffer on Audio Starvation", isOn: $bufferOnAudioStarvation)
+                #endif
             }
         }
     }
