@@ -511,6 +511,7 @@ final class PlaybackController {
                     self.startBufferFill(session: cacheSession, engine: engine)
                 }
                 #if DEBUG
+                self.schedulePlaybackStarvationDiagnostics(for: engine)
                 self.scheduleRendererRecoveryRegressionHooks(for: engine)
                 self.scheduleDeliveryFallbackRegression(for: engine)
                 #endif
@@ -733,6 +734,35 @@ final class PlaybackController {
             self.nowPlaying.updateTimeline()
         }
     }
+
+    #if DEBUG
+    /// Debug-only: the paired Apple TV cannot be driven by the
+    /// simulator-only regression suite, but must run the identical bounded
+    /// HEL-123/124 outages from a Debug build before either renderer-side
+    /// conclusion is trusted on hardware.
+    private func schedulePlaybackStarvationDiagnostics(for engine: SampleBufferPlayerEngine) {
+        let defaults = UserDefaults.standard
+        let requestedDelay = defaults.double(forKey: "debug.starvationInjectionDelaySeconds")
+        let requestedDuration = defaults.double(forKey: "debug.starvationInjectionDurationSeconds")
+        let delay = requestedDelay > 0 ? requestedDelay : 5
+        let duration = requestedDuration > 0 ? requestedDuration : 3
+
+        if defaults.bool(forKey: "debug.simulateAudioStarvation") {
+            Task { [weak self, weak engine] in
+                try? await Task.sleep(for: .milliseconds(Int64(delay * 1_000)))
+                guard let self, let engine, self.engine === engine else { return }
+                engine.simulateAudioStarvationForDiagnostics(durationSeconds: duration)
+            }
+        }
+        if defaults.bool(forKey: "debug.simulateDeliveryStall") {
+            Task { [weak self, weak engine] in
+                try? await Task.sleep(for: .milliseconds(Int64(delay * 1_000)))
+                guard let self, let engine, self.engine === engine else { return }
+                engine.simulateDeliveryStallForDiagnostics(durationSeconds: duration)
+            }
+        }
+    }
+    #endif
 
     #if DEBUG
     /// Deterministic integration coverage for events that CoreSimulator
@@ -1702,21 +1732,35 @@ final class PlaybackController {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
         }
         let depths = engine.queueDepths
-        // Audio carries its buffered seconds as well as its count: the
-        // renderer drains this queue itself, so a count near zero does not by
-        // itself distinguish a starved feed from one being taken as fast as it
-        // arrives. The seconds are also the figure the backpressure policy
-        // actually gates on.
+        // App-side count/seconds explain demux backpressure. `lead` is the
+        // separate renderer-side starvation signal: media already handed to
+        // AVFoundation beyond the clock, which stays positive after Lagoon's
+        // own queue drains to zero (HEL-123).
         lines.append(String(
-            format: "Queues:  V %d · A %d/%d (%.1fs) · stalls %d · aDry %d · aGaps %d",
-            depths.video,
+            format: "Queues:  V %d/%d/%d · A %d/%d (%.1fs) · lead %.2fs ready%d · stalls %d (%d audio) · reprime %d · aDry %d · aGaps %d",
+            engine.videoQueueCountDiagnostic,
+            engine.maximumVideoBacklogDiagnostic,
+            engine.videoQueueHardLimitDiagnostic,
             depths.audio,
             engine.audioCushionTarget,
             engine.audioBufferedSeconds,
+            engine.audioDeliveryLeadSeconds,
+            engine.audioRendererReadyForPlayback ? 1 : 0,
             engine.stallCount,
+            engine.audioStallCount,
+            engine.stallReprimeCount,
             engine.audioStarvationCount,
             engine.audioTimingGapCount
         ))
+        #if DEBUG
+        if engine.audioDeliverySuspendedForDiagnostics
+            || engine.demuxDeliverySuspendedForDiagnostics {
+            lines.append(
+                "Fault: audio \(engine.audioDeliverySuspendedForDiagnostics ? "held" : "live")"
+                    + " · delivery \(engine.demuxDeliverySuspendedForDiagnostics ? "held" : "live")"
+            )
+        }
+        #endif
         // Audio thrown away in the demuxer, which no other counter can show:
         // dropped packets never reach the renderer, so aGaps above reads 0
         // through exactly the failure this line exists to catch.
