@@ -37,6 +37,27 @@ protocol PlayerEngine: AnyObject, Observable {
     /// give. The engine stops requesting when that happens, so this stays
     /// near zero; a runaway count is the half-core loop HEL-137 found.
     var idleRequestCallbacks: Int { get }
+    /// Renderer-side audio delivery diagnostics (HEL-123/HEL-124). The app
+    /// queue is normally empty because AVFoundation takes samples promptly,
+    /// so starvation is measured from the last sample actually enqueued to
+    /// the renderer instead.
+    var audioStarvationCount: Int { get }
+    /// Stalls confirmed as audio-caused, a subset of `stallCount`.
+    var audioStallCount: Int { get }
+    /// Off by default (Settings → Advanced → Playback Diagnostics →
+    /// Buffer on Audio Starvation). Read once when the engine is created.
+    var buffersOnAudioStarvation: Bool { get }
+    var audioDeliveryLeadSeconds: Double { get }
+    var audioRendererReadyForPlayback: Bool { get }
+    #if DEBUG
+    /// Off-by-default fault-injection state exposed to the regression probe.
+    var audioDeliverySuspendedForDiagnostics: Bool { get }
+    var demuxDeliverySuspendedForDiagnostics: Bool { get }
+    #endif
+    var videoQueueCountDiagnostic: Int { get }
+    var maximumVideoBacklogDiagnostic: Int { get }
+    var videoQueueHardLimitDiagnostic: Int { get }
+    var stallReprimeCount: Int { get }
     var subtitleTracks: [PlayerTrack] { get }
     /// The subtitle content on screen right now (M5): joined text lines
     /// and/or decoded bitmap rects, rendered by the player UI as an
@@ -80,6 +101,19 @@ extension PlayerEngine {
     var audioOutputPathDiagnostic: String { "unknown" }
     var videoOutputPathDiagnostic: String { "unknown" }
     var idleRequestCallbacks: Int { 0 }
+    var audioStarvationCount: Int { 0 }
+    var audioStallCount: Int { 0 }
+    var buffersOnAudioStarvation: Bool { false }
+    var audioDeliveryLeadSeconds: Double { -1 }
+    var audioRendererReadyForPlayback: Bool { false }
+    #if DEBUG
+    var audioDeliverySuspendedForDiagnostics: Bool { false }
+    var demuxDeliverySuspendedForDiagnostics: Bool { false }
+    #endif
+    var videoQueueCountDiagnostic: Int { 0 }
+    var maximumVideoBacklogDiagnostic: Int { 0 }
+    var videoQueueHardLimitDiagnostic: Int { 0 }
+    var stallReprimeCount: Int { 0 }
     var audioRendererRecoveryCount: Int { 0 }
     var mediaServicesResetRecoveryCount: Int { 0 }
     var currentSubtitleCues: [SubtitleTextCue] {
