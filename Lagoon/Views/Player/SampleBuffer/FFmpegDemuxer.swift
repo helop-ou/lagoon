@@ -120,6 +120,15 @@ nonisolated final class FFmpegDemuxer {
     private var videoTimeBase = AVRational(num: 1, den: 1)
     private var audioTimeBases: [Int32: AVRational] = [:]
     private var selectedAudioStreamIndex: Int32 = -1
+    /// `-debug.disableAudio YES` opens the title with no audio streams at
+    /// all, so a hardware CPU trace can tell the audio path's cost apart from
+    /// the video path's (HEL-137). Diagnostic only; never a user setting.
+    private static let audioDisabledForDiagnostics: Bool = {
+        guard let value = SoftwareDecodeThreadPolicy.commandLineString(forKey: "debug.disableAudio") else {
+            return false
+        }
+        return ["yes", "true", "1"].contains(value.lowercased())
+    }()
     private var didDrainAudioAtEOF = false
     // M4: codecs CoreAudio can't take compressed decode to LPCM here.
     private var audioDecoders: [Int32: AudioDecoder] = [:]
@@ -543,6 +552,10 @@ nonisolated final class FFmpegDemuxer {
                 // no decoder for drop out of the track list.
                 var description: CMFormatDescription?
                 var fallbackDuration: Double = 0
+                if Self.audioDisabledForDiagnostics {
+                    stream.pointee.discard = AVDISCARD_ALL
+                    continue
+                }
                 let requiresLocalPCM = AudioDecodePolicy.requiresLocalPCM(
                     codecID: par.pointee.codec_id,
                     softwareVideoDecoded: outputsDecodedVideo

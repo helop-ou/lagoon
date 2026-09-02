@@ -1129,6 +1129,7 @@ final class PlaybackController {
     private func startDecodeTrace() {
         guard UserDefaults.standard.bool(forKey: "debug.decodeTrace") else { return }
         decodeTraceTask = Task { [weak self] in
+            let cpuTrace = ProcessCPUTrace()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 guard let self, let engine = self.engine else { return }
@@ -1149,6 +1150,7 @@ final class PlaybackController {
                     + " opt=\(performance?.optimizedCompositingFrames ?? -1)"
                     + " dropped=\(performance?.droppedFrames ?? -1)"
                     + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\"")
+                print(cpuTrace.tick())
             }
         }
     }

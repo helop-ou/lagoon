@@ -89,4 +89,16 @@ nonisolated enum SoftwareDecodeThreadPolicy {
         }
         return Int(arguments[keyIndex + 1])
     }
+
+    static func commandLineString(
+        forKey key: String,
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> String? {
+        let acceptedKeys = ["-\(key)", "--\(key)"]
+        guard let keyIndex = arguments.lastIndex(where: acceptedKeys.contains),
+              arguments.indices.contains(keyIndex + 1) else {
+            return nil
+        }
+        return arguments[keyIndex + 1]
+    }
 }
