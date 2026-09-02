@@ -58,6 +58,16 @@ Quick rules that prevent regressions:
 - All playback goes through the Lagoon sample-buffer engine behind the
   `PlayerEngine` protocol — never add AVPlayer/AVKit playback paths; the
   player UI must only talk to the protocol.
+- A renderer's `requestMediaDataWhenReady` block is armed only while its
+  queue has something to give (`armVideoRequests`/`rearmRequestsIfNeeded` in
+  the engine). A block that returns empty-handed is called again at once, and
+  that loop cost half a core at the highest priority in the process while
+  4K AV1 starved (HEL-137). Keep the invariant when touching the pumps.
+- Software-decoded 10-bit video reaches the renderer through
+  `MetalFrameConverter` (`gpu-sdr` on tvOS HDR, `gpu-pq` otherwise); the
+  VideoToolbox transfer modes are fallbacks and diagnostics. The GPU stage is
+  asynchronous on purpose: measured synchronously it was as slow as what it
+  replaced. See docs/playback.md.
 - **Verify UI changes visually in the simulator** before considering them
   done: build → `simctl install/launch` → drive focus with
   `osascript -e 'tell application "System Events" to key code …'`

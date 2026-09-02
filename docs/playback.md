@@ -392,7 +392,8 @@ compressed; HEVC and hardware-supported AV1 are decoded ahead by a
 hardware-only VideoToolbox session; AV1 without that capability, VP9, VC-1,
 MPEG-4 Part 2, and MPEG-2 are software-decoded by libavcodec into
 renderer-recommended NV12/P010 Core Video buffers, on a decode queue of their
-own (see below);
+own (see below); 10-bit output goes through a Metal kernel that repacks and,
+on tvOS, tone-maps in one asynchronous pass (`MetalFrameConverter`);
 unsupported compressed audio is decoded to LPCM by libavcodec. AVFoundation
 still owns color management, presentation, synchronization, and audio output.
 
@@ -683,6 +684,10 @@ Parallelising the conversion across rows was kept because it does less work in
 the same place: 4.8 ms to 4.3 ms. Only that much because the copy is bounded by
 memory bandwidth rather than cores.
 
+The GPU stage later did overlap conversion with decode and was better, not
+worse, because it added no CPU work of its own: what made the CPU-queue
+version lose was contention for saturated cores, not the overlap.
+
 #### The display path, measured with a paired device
 
 An Apple TV can be paired to a Mac after all, which turned this from
@@ -792,41 +797,117 @@ answer whether five or six workers is best when the frame-context depth is
 allowed to match the count; that is a separate hardware sweep when the device
 is available again.
 
-#### What is still unexplained (HEL-137, open)
+#### Where the CPU went, and the two fixes (HEL-137, resolved)
 
-The app still presents about 20–22 fps where the bare process reaches 39.7 fps
-with P010 conversion included. Allocation, buffer locking, sample creation and
-`renderer.enqueue()` are negligible; the transfer is costly and spiky, but
-removing it makes the surrounding system slower. There is no evidence here of
-a frame-retention leak or network starvation. E-AC3 JOC is compressed
-passthrough in this player, so the app-versus-bare audio confound is renderer
-and scheduling activity, not local E-AC3 decoding.
+Everything above measured the decoder and the pipeline; what was never
+measured was *who else was on the CPU*. `-debug.decodeTrace YES` now prints a
+`CPUTrace` line beside every `DecodeTrace` tick: per-core busy percentages
+from `host_processor_info`, the process's CPU time, and CPU time grouped by
+thread name from `thread_info(THREAD_EXTENDED_INFO)`, with each group's
+scheduling priority (`DecodeThreadDiagnostics.swift`). The decode queue tags
+its own thread so it stands out among unnamed GCD workers. One tick of the
+hard *Rise* scene on the paired Apple TV, before any fix:
 
-The four-way output control now exists under
-`-debug.softwareDecodeOutputMode`: `direct-pq`, `lossless-pq`, `linear-sdr`
-and `lossless-sdr`. Every runtime and bench line prints the resolved mode. The
-transfer destinations use the matching range, SDR output removes HDR/ICC/gamma
-attachments, and a per-frame transfer failure fails the decode rather than
-returning a PQ source buffer under an SDR format description.
+```
+CPUTrace dt=2.02s coresBusy%=98/99/98/100/100 procMs=7331
+  dav1d-worker=6125ms(x5 pri31/31) unnamed=990ms(x8 pri37/37)
+  videodecode-q=133ms(x1 pri37/37) main=79ms(x1 pri47/47)
+```
 
-Three single runs of the same *Rise* segment completed before the paired Apple
-TV was disconnected. They are controls, not enough repetitions to select a new
-shipping default:
+Read it as cores. The Apple TV 4K (3rd generation) is the binned A15 with
+**five** cores, two performance and three efficiency, and all five were
+saturated. dav1d's five workers, at the default pthread priority of 31, were
+getting 3.0 cores between them. Something unnamed in the process was taking
+0.5 of a core at a *higher* priority, and 1.2 cores were going to other
+processes. That is the entire app-versus-bare-process gap: the bare loop had
+five cores and did 55 fps; the app's decoder had three, mostly efficiency
+ones, and did 22.
 
-| mode | dropped | producer total | libavcodec | P010 | transfer p50 | footprint | optimized |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| direct PQ | 21.16% | 42.91 ms | 40.11 ms | 2.47 ms | — | 1176 MB | 0% |
-| lossless PQ | 18.92% | 43.22 ms | 36.00 ms | 2.48 ms | 4.28 ms | 924 MB | 0% |
-| lossless SDR (production) | **17.64%** | 43.53 ms | **30.88 ms** | **2.44 ms** | 9.59 ms | 999 MB | 81.6% |
+**The unnamed half core was the pump queue**, found by reading each unnamed
+thread's dispatch queue label (a one-off diagnostic, since removed because it
+retained a dying queue). `AVSampleBufferVideoRenderer.requestMediaDataWhenReady`
+calls its block whenever the renderer wants more, and *keeps calling it* for
+as long as the block gives it nothing. The engine registered the block once
+at attach and never stopped it, so whenever the video queue was empty (which,
+with the decoder starving, was most of the hard scene) the block ran in a
+loop at priority 47, the highest in the process, enqueueing nothing. The
+audio block spun the same way on every title, because the audio renderer
+takes audio as fast as it is demuxed and the audio queue is empty almost
+always. The 1.2 cores in other processes were the remote renderer answering
+that loop: they fell to about 0.5 when it stopped. Disabling audio entirely
+(`-debug.disableAudio YES`, diagnostic) changed nothing, which is how audio
+decode was ruled out.
 
-`linear-sdr` selected correctly, but its first run fell through the delivery
-ladder to a server transcode and the later run was interrupted when the device
-was removed. There is no accepted result for it. The valid runs establish two
-useful boundaries: lossless storage itself costs about 4.3 ms at the transfer
-median, while the SDR color conversion adds roughly another 5.3 ms. They also
-repeat the counterintuitive result that the expensive SDR transfer lowers time
-waiting in libavcodec enough to offset much of its own cost. That is why the
-10 ms transfer cannot be deleted on arithmetic alone.
+The fix is the one Apple's own sample code shows: a request is armed only
+while there is something to give. A pump that finds its queue empty calls
+`stopRequestingMediaData()`; `kickPumps()`, which already runs whenever a
+queue receives a buffer, arms it again if the renderer could not take
+everything at once (`armVideoRequests` / `armAudioRequests` /
+`rearmRequestsIfNeeded`). This is not an AV1 fix. It applied to every title
+that ever played, and only mattered once something else needed the CPU.
+
+**The second fix takes the 12.5 ms of serial conversion off the decode
+queue.** The CPU P010 repack and the VideoToolbox transfer cost little CPU
+(the decode queue's own thread was 0.07 of a core), but they ran
+synchronously between one `avcodec_send_packet` and the next, so a frame cost
+`dav1d wait + 12.5 ms` and nothing could overlap them. `MetalFrameConverter`
+replaces both with one compute kernel (`SoftwareFrameConversion.metal`):
+dav1d's planar 10-bit frame is wrapped in a no-copy `MTLBuffer` (FFmpeg's
+pooled 4K allocations are page-aligned on Darwin; the simulator's driver
+traps on that and copies instead), the kernel repacks it to P010 and, for PQ
+BT.2020 sources, tone-maps it to BT.709 SDR with the BT.2390 EETF at 203 nits
+reference white, writing straight into an IOSurface the renderer takes on
+its direct display path (linear SDR P010 measured 66-73% optimized
+composition, the same as the transfer route). The dispatch is asynchronous:
+the decode queue submits and returns to libavcodec at once, the dav1d picture
+stays referenced until the kernel has read it, completions are delivered in
+submission order from a queue of their own, at most three frames are in
+flight, and `flush()` / `drain()` wait for the GPU so seeks and end of stream
+keep their old semantics. The output modes are `gpu-sdr` (tvOS HDR default)
+and `gpu-pq` (the default elsewhere for 10-bit sources); the transfer modes
+remain as fallbacks and diagnostics, and a stream the kernel cannot serve
+(8-bit, HLG, non-2020) degrades to its transfer equivalent at open.
+
+Same scene, same window, same device, three-run production configuration
+before and one run after each step:
+
+| configuration | dropped | stalls | min video queue | frame cost | cores busy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0.1 (84) as shipped | 24.8% | 2 | 0 | 43.6 ms | 97-100% |
+| + dav1d workers at `.userInitiated` | 21.5% | 2 | 0 | 42.1 ms | 99-100% |
+| + GPU stage, synchronous | 25.6% | 2 | 0 | 43.3 ms | 97-100% |
+| + pump fix and asynchronous GPU stage | **0.2%** | **0** | **29** | **1.4 ms** | **48-65%** |
+
+The last row is 3 dropped frames in 1463 with the decoder throttled by
+backpressure for the whole window (`producerStarved=0%`,
+`downstreamBackpressure=100%`); dav1d's workers use 2.05 cores and its wait
+per frame is under a millisecond because the queue is never allowed to
+empty. Thermal state was nominal in every run, including the failing ones,
+so throttling was never part of this.
+
+Things learned on the way that are worth keeping:
+
+- **The kernel takes 8.7 ms of GPU time on the A15** (0.1-0.35 ms on a Mac
+  GPU), with a p99 near 40 ms while the CPU is loaded. Synchronously that
+  was as bad as the transfer it replaced; asynchronously it is invisible.
+  The `pow`-heavy PQ and gamma math could move to lookup textures if the
+  GPU's power draw ever matters.
+- **Raising dav1d's workers to `.userInitiated`** (`-debug.dav1dWorkerQoS`,
+  applied through `pthread_override_qos_class_start_np` on the threads named
+  `dav1d-worker`) gave dav1d more performance-core time and took exactly that
+  time from whatever else ran: wait fell from 31 to 25 ms while conversion
+  rose from 12.6 to 16.7 ms. Reshuffling a saturated CPU is not a fix; it
+  stays a diagnostic.
+- **Apple's lossless-compressed P010 as a Metal destination** passes texture
+  creation and fails at the first dispatch on tvOS 26 / A15. `gpu-sdr`
+  therefore writes linear P010, and `-debug.softwareDecodeGPULossless YES`
+  proves a lossless request with one real conversion before accepting it.
+  Linear costs memory: the footprint sits near 1.67 GB with about 430 MB of
+  headroom on this title, which is what the 30-frame byte budget was sized
+  for.
+- `-debug.softwareDecodeTargetNits` (default 203) is the SDR white point of
+  the tone map; the source peak comes from mastering metadata, MaxCLL, or
+  1000 nits.
 
 #### Simulator sink ladder
 
