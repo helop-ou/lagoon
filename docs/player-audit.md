@@ -12,7 +12,7 @@ item below is a hypothesis with a named way to test it, never a result —
 CLAUDE.md's rule about casual frame-loss comparison applies to all of them,
 and HEL-64 already retracted two fixes that skipped it.
 
-**Since this audit** (noted September 1, 2026, at 0.1 (71)). The findings
+**Since this audit** (updated September 2, 2026). The findings
 below are left exactly as they were written; this says which of them moved.
 
 * **B4, interlaced content** — half closed. MPEG-2 deinterlaces locally as of
@@ -21,12 +21,24 @@ below are left exactly as they were written; this says which of them moved.
   this needed a filter-graph stage did not hold: libavfilter is not in the
   pinned build, and `Deinterlacer` does yadif's spatial pass directly on the
   decoded planes instead, at 1.61 ms per frame at 720x576.
-* **Order item 1, HEL-123** — the reported symptom is gone; the defect is not.
+* **Order item 1, HEL-123** — the reported symptom is gone; the renderer-side
+  signal is testable and ships in Release. Lagoon tracks the last audio
+  presentation end handed to AVFoundation against the synchronizer clock, and
+  a Debug-only deterministic hold in the simulator proves it detects and
+  recovers from withheld audio. The ticket stays open: the fix exists
+  behind `debug.bufferOnAudioStarvation`, off until a hardware pass
+  confirms the reading matches audible silence and sets the floor.
   The cutouts were the server rebuilding a 64.8 GB Blu-ray image in real time
   because Lagoon could not open the image itself. It reads the disc now
-  (HEL-133), and the drops went with the transcode. A starved audio path can
-  still play on silently, and now has no reproduction.
-* **Order item 2, HEL-124** — untouched.
+  (HEL-133), and the drops went with the transcode.
+* **Order item 2, HEL-124** — closed as invalid. Its `A 0` premise was the
+  same invalid app-side queue reading; build 66 already showed a healthy
+  renderer drains that queue to zero on every title. The Debug-only
+  deterministic demux outage that came out of it pins the existing stall
+  recovery path (buffering, resume without the seek fallback, hard limit
+  held) and is not evidence about this ticket. One residual, the
+  `audioCanCoverDrain` batch-drain branch being effectively unreachable, is
+  left unfixed with no observed symptom.
 * **Not in this audit at all: disc images.** Lagoon could not open one when
   this was written, and the resulting failure was being read as a transcode
   problem rather than as the client never having been in the path. See *Disc
