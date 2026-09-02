@@ -157,13 +157,9 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// on, so dav1d's wait and the GPU's latency overlap instead of adding;
     /// the cap keeps a slow GPU from running away with pictures.
     private let deliveryQueue = DispatchQueue(label: "ee.helop.lagoon.gpuoutput", qos: .userInitiated)
-    private let outputCondition = NSCondition()
-    private var gpuInFlight = 0
-    private var gpuSubmitSequence: UInt64 = 0
-    private var gpuDeliverSequence: UInt64 = 0
-    private var gpuHeld: [UInt64: () -> Void] = [:]
+    private let sequencer = GPUDeliverySequencer(capacity: 3)
+    private let failureLock = NSLock()
     private var gpuFailure: Error?
-    private static let maximumGPUInFlight = 3
     /// What the frames leaving this decoder are tagged as. Identical to
     /// `colorProperties` except on tvOS for HDR sources, where it is the
     /// BT.709 result of the transfer-session tone map (HEL-137).
@@ -781,22 +777,23 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// GPU frames submitted and not yet delivered; the decode stage counts
     /// them as video already read.
     var pendingOutputCount: Int {
-        outputCondition.withLock { gpuInFlight }
+        sequencer.pendingCount
     }
 
     /// Blocks until every submitted GPU frame has been delivered. Bounded,
     /// because a GPU that never answers must not wedge the demux loop.
     func waitForPendingOutput() {
-        outputCondition.lock()
-        let deadline = Date(timeIntervalSinceNow: 2)
-        while gpuInFlight > 0, outputCondition.wait(until: deadline) {}
-        outputCondition.unlock()
+        sequencer.waitUntilDrained(timeout: 2)
     }
 
     private func rethrowGPUFailure() throws {
-        if let failure = outputCondition.withLock({ gpuFailure }) {
+        if let failure = failureLock.withLock({ gpuFailure }) {
             throw failure
         }
+    }
+
+    private func recordGPUFailure(_ error: Error) {
+        failureLock.withLock { gpuFailure = gpuFailure ?? error }
     }
 
     /// Benchmark-only sink for establishing dav1d's ceiling without Core
@@ -1157,16 +1154,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
         guard let held = av_frame_alloc() else { throw DecoderError.pixelBuffer(-1) }
         av_frame_ref(held, frame)
-
-        outputCondition.lock()
-        while gpuInFlight >= Self.maximumGPUInFlight {
-            outputCondition.wait()
-        }
-        gpuInFlight += 1
-        let sequence = gpuSubmitSequence
-        gpuSubmitSequence += 1
-        outputCondition.unlock()
-
+        let sequence = sequencer.reserve()
         let submitted = Self.now()
         let heldFrame = held
         do {
@@ -1180,17 +1168,17 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 av_frame_free(&pointer)
                 detailedTimings.record(.gpuConversion, from: submitted, to: Self.now())
                 deliveryQueue.async { [self] in
-                    completeGPU(sequence: sequence) {
+                    sequencer.complete(sequence) {
                         switch result {
                         case .success:
                             Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: pixelBuffer)
                             do {
                                 deliver(try makeReadySample(from: pixelBuffer, timing: timing))
                             } catch {
-                                outputCondition.withLock { gpuFailure = gpuFailure ?? error }
+                                recordGPUFailure(error)
                             }
                         case .failure(let error):
-                            outputCondition.withLock { gpuFailure = gpuFailure ?? error }
+                            recordGPUFailure(error)
                         }
                     }
                 }
@@ -1198,35 +1186,12 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         } catch {
             var pointer: UnsafeMutablePointer<AVFrame>? = heldFrame
             av_frame_free(&pointer)
-            outputCondition.withLock {
-                gpuInFlight -= 1
-                gpuSubmitSequence -= 1
-                outputCondition.broadcast()
-            }
+            sequencer.complete(sequence) {}
             throw error
         }
         let submitEnded = Self.now()
         detailedTimings.record(.p010Conversion, from: surfaceAllocated, to: submitEnded)
         av_frame_unref(frame)
-    }
-
-    /// Runs completions in submission order, holding any that arrive early.
-    private func completeGPU(sequence: UInt64, _ body: @escaping () -> Void) {
-        outputCondition.lock()
-        gpuHeld[sequence] = body
-        var ready: [() -> Void] = []
-        while let next = gpuHeld.removeValue(forKey: gpuDeliverSequence) {
-            ready.append(next)
-            gpuDeliverSequence += 1
-        }
-        outputCondition.unlock()
-        for deliver in ready {
-            deliver()
-        }
-        outputCondition.withLock {
-            gpuInFlight -= ready.count
-            outputCondition.broadcast()
-        }
     }
 
     /// Builds the Metal output stage when the stream is one the kernel

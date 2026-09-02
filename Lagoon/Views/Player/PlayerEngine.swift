@@ -29,6 +29,14 @@ protocol PlayerEngine: AnyObject, Observable {
     /// Debug/regression label for the renderer input, not a user-facing
     /// codec name. Implementations without a distinct path may use unknown.
     var audioOutputPathDiagnostic: String { get }
+    /// Debug/regression label for how decoded video reaches the renderer:
+    /// "compressed", "videotoolbox", or a software output mode such as
+    /// "gpu-sdr-linear" (HEL-137).
+    var videoOutputPathDiagnostic: String { get }
+    /// Times a renderer's media-data request block ran and found nothing to
+    /// give. The engine stops requesting when that happens, so this stays
+    /// near zero; a runaway count is the half-core loop HEL-137 found.
+    var idleRequestCallbacks: Int { get }
     var subtitleTracks: [PlayerTrack] { get }
     /// The subtitle content on screen right now (M5): joined text lines
     /// and/or decoded bitmap rects, rendered by the player UI as an
@@ -70,6 +78,8 @@ protocol PlayerEngine: AnyObject, Observable {
 
 extension PlayerEngine {
     var audioOutputPathDiagnostic: String { "unknown" }
+    var videoOutputPathDiagnostic: String { "unknown" }
+    var idleRequestCallbacks: Int { 0 }
     var audioRendererRecoveryCount: Int { 0 }
     var mediaServicesResetRecoveryCount: Int { 0 }
     var currentSubtitleCues: [SubtitleTextCue] {

@@ -1,3 +1,4 @@
+import Synchronization
 import AVFoundation
 import CoreMedia
 import CoreVideo
@@ -228,6 +229,20 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// apart from attach and teardown, which run before and after any pump.
     @ObservationIgnored nonisolated(unsafe) private var videoRequestsArmed = false
     @ObservationIgnored nonisolated(unsafe) private var audioRequestsArmed = false
+    /// Request-block invocations that found nothing to give (HEL-137). The
+    /// pump stops requesting on each, so this stays near zero; the loop that
+    /// once cost half a core would count thousands a second. Read by the
+    /// regression probe, hence atomic.
+    @ObservationIgnored nonisolated private let idleRequestCounter = Atomic<Int>(0)
+
+    nonisolated var idleRequestCallbacks: Int {
+        idleRequestCounter.load(ordering: .relaxed)
+    }
+
+    nonisolated var videoOutputPathDiagnostic: String {
+        if let stage = softwareDecodeStage { return stage.outputModeName }
+        return videoDecoder != nil ? "videotoolbox" : "compressed"
+    }
     @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
     @ObservationIgnored nonisolated private let lifecycleID = UUID()
     @ObservationIgnored nonisolated private let audioContinuity = AudioContinuityMonitor()
@@ -2235,7 +2250,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard !videoRequestsArmed else { return }
         videoRequestsArmed = true
         renderer.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
-            self?.pumpVideo()
+            self?.pumpVideo(fromRequest: true)
         }
     }
 
@@ -2243,7 +2258,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard !audioRequestsArmed else { return }
         audioRequestsArmed = true
         renderer.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
-            self?.pumpAudio()
+            self?.pumpAudio(fromRequest: true)
         }
     }
 
@@ -2256,10 +2271,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
-    nonisolated private func pumpVideo() {
+    nonisolated private func pumpVideo(fromRequest: Bool = false) {
         guard let renderer = videoRenderer else { return }
         while renderer.isReadyForMoreMediaData {
             guard let buffer = videoQueue.dequeue() else {
+                if fromRequest {
+                    idleRequestCounter.wrappingAdd(1, ordering: .relaxed)
+                }
                 if videoRequestsArmed {
                     videoRequestsArmed = false
                     renderer.stopRequestingMediaData()
@@ -2293,10 +2311,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         )
     }
 
-    nonisolated private func pumpAudio() {
+    nonisolated private func pumpAudio(fromRequest: Bool = false) {
         guard let renderer = audioRenderer else { return }
         while renderer.isReadyForMoreMediaData {
             guard let buffer = audioQueue.dequeue() else {
+                if fromRequest {
+                    idleRequestCounter.wrappingAdd(1, ordering: .relaxed)
+                }
                 if audioRequestsArmed {
                     audioRequestsArmed = false
                     renderer.stopRequestingMediaData()
