@@ -909,6 +909,37 @@ Things learned on the way that are worth keeping:
   the tone map; the source peak comes from mastering metadata, MaxCLL, or
   1000 nits.
 
+What pins this against regression:
+
+- `GPUDeliverySequencerTests` cover the ordering guarantee, the in-flight
+  cap, the bounded drain and the failed-submission path of the GPU stage.
+- `MetalFrameConverterTests` run the kernel on the simulator's GPU: the
+  repack must be exact, and the tone map must match a Double reference of
+  its own arithmetic within two codes, keep black black, reach white at the
+  source peak, never invert a ramp and leave grey neutral.
+- The regression probe reports `videoPath` (which output stage is live) and
+  `idleRequests`, the number of times a renderer's request block ran with
+  nothing to give. `testControlledFrameLossPlaybackPerformance` bounds that
+  count per run in the simulator, and
+  `testSoftwareDecodedPlaybackSurvivesPauseSeeksAndSubtitles` drives the
+  software-decoded fixture on a paired Apple TV through pause, seeks both
+  ways and a subtitle switch, asserting the GPU stage is the live path,
+  playback continues afterwards, the request blocks stay quiet and teardown
+  is clean. It skips in the simulator, whose clock never starts on the
+  fixture's E-AC3 track, and it must run in Release: the Debug engine
+  stalled seven times through the same seeks where Release stalled none,
+  which is the "measure Release" rule again. The title comes from
+  `LAGOON_SOFTWARE_DECODE_TITLE` / `_SERIES`. Restart the Apple TV first if
+  a previous test run was killed mid-playback; a poisoned media daemon
+  showed up as a media-services reset that left the player paused.
+
+  ```sh
+  LAGOON_REGRESSION_SERVER=... LAGOON_REGRESSION_USER=... LAGOON_REGRESSION_PASS=... \
+  xcodebuild test -scheme LagoonHardwareRegression -configuration Release \
+    -destination 'platform=tvOS,id=<udid>' \
+    -only-testing:LagoonUITests/PlayerRegressionUITests/testSoftwareDecodedPlaybackSurvivesPauseSeeksAndSubtitles
+  ```
+
 #### Simulator sink ladder
 
 `ApplePlaybackAlignmentTests.av1FixtureReportsDecodeOnlyAndOutputCeilings`

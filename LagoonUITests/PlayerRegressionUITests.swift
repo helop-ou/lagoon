@@ -1020,6 +1020,7 @@ final class PlayerRegressionUITests: XCTestCase {
                 $0.int("ready") == 1 && $0.int("buffering") == 0
             }
             let startingStalls = ready.int("stalls")
+            let startingIdleRequests = ready.int("idleRequests")
 
             // Leave the simulator untouched for the complete 10 s warmup +
             // 60 s media-time window. Accessibility polling and screenshots
@@ -1027,6 +1028,10 @@ final class PlayerRegressionUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 74)
             let result = try waitForFrameLossResult(in: app, timeout: 25)
             results.append(result)
+            XCTAssertLessThan(
+                state(in: app).int("idleRequests") - startingIdleRequests, 2_000,
+                "Run \(run): renderer request blocks kept firing with nothing to give (HEL-137)"
+            )
 
             XCTAssertGreaterThan(result.frames, 1_000, "Run \(run) did not cover a full 60 s scene")
             XCTAssertEqual(result.corrupted, 0, "Run \(run) presented corrupted frames")
@@ -1177,6 +1182,123 @@ final class PlayerRegressionUITests: XCTestCase {
             initialMemory + 48,
             "VC-1 decoder or renderer memory remained live after dismissal"
         )
+    }
+
+    /// HEL-137: the software-decoded path, with its asynchronous GPU output
+    /// stage, has to survive what a viewer does to a film: pause, seek both
+    /// ways, subtitles, and then keep going. Device only, and Release only
+    /// (`xcodebuild test -configuration Release`): the simulator never starts
+    /// the clock on this fixture's E-AC3 track, and Debug's unoptimised
+    /// engine cannot hold 4K AV1 through a seek. The fixture is named through
+    /// the environment so the private library stays out of the project.
+    func testSoftwareDecodedPlaybackSurvivesPauseSeeksAndSubtitles() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("the software-decoded fixture's audio never starts the clock in the simulator")
+        #else
+        let environment = ProcessInfo.processInfo.environment
+        let title = environment["LAGOON_SOFTWARE_DECODE_TITLE"] ?? "Rise"
+        let series = environment["LAGOON_SOFTWARE_DECODE_SERIES"] ?? "The Dinosaurs"
+        let app = launchPlayer(title: title, series: series, simulatorTranscode: false)
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 90) {
+            $0.int("ready") == 1 && $0.int("buffering") == 0 && $0.double("time") > 0
+        }
+        XCTAssertTrue(
+            initial.string("videoPath").hasPrefix("gpu-"),
+            "expected the GPU output stage, got \(initial.string("videoPath"))"
+        )
+        // The fixture opens on a skippable intro that the player jumps past
+        // by itself a few seconds in; let that land before touching anything,
+        // or the pause check would measure the skip.
+        let introEnd = initial.double("skippableEnd")
+        if introEnd > 0 {
+            waitForState(in: app, timeout: 60) { $0.double("time") > introEnd + 1 }
+        }
+        let settled = state(in: app)
+        let initialStalls = settled.int("stalls")
+        let initialIdleRequests = settled.int("idleRequests")
+        let started = Date()
+
+        let startingTime = settled.double("time")
+        waitForState(in: app, timeout: 10) { $0.double("time") > startingTime + 3 }
+
+        remote.press(.playPause)
+        waitForState(in: app, timeout: 5) { $0.int("paused") == 1 }
+        let pausedTime = state(in: app).double("time")
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertLessThan(abs(state(in: app).double("time") - pausedTime), 0.8)
+        remote.press(.playPause)
+        waitForState(in: app, timeout: 5) { $0.int("paused") == 0 }
+
+        let beforeForward = state(in: app).double("time")
+        remote.press(.right)
+        waitForState(in: app, timeout: 3) { $0.int("scrubbing") == 1 }
+        for _ in 0..<3 {
+            Thread.sleep(forTimeInterval: 0.35)
+            remote.press(.right)
+        }
+        remote.press(.select)
+        waitForState(in: app, timeout: 60) {
+            $0.int("scrubbing") == 0 && $0.int("buffering") == 0 && $0.double("time") > beforeForward + 5
+        }
+        // The new position has to decode and present, not merely be reached.
+        let afterForward = state(in: app).double("time")
+        waitForState(in: app, timeout: 20) { $0.double("time") > afterForward + 4 }
+
+        let beforeBackward = state(in: app).double("time")
+        remote.press(.left)
+        waitForState(in: app, timeout: 3) { $0.int("scrubbing") == 1 }
+        remote.press(.select)
+        // A backward seek into a 4K AV1 scene decodes from the previous
+        // keyframe first, so judge it by where it landed relative to the
+        // committed target, not by how quickly it settled.
+        waitForState(in: app, timeout: 60) {
+            $0.int("scrubbing") == 0
+                && $0.int("buffering") == 0
+                && $0.double("lastScrub") > 0
+                && $0.double("lastScrub") < beforeBackward
+                && $0.double("time") >= $0.double("lastScrub")
+                && $0.double("time") < $0.double("lastScrub") + 30
+        }
+
+        if state(in: app).int("subtitleCount") > 0 {
+            selectFirstSubtitle(in: app)
+        }
+
+        let resumed = state(in: app).double("time")
+        waitForState(in: app, timeout: 25) { $0.double("time") > resumed + 8 }
+        let final = state(in: app)
+        let elapsed = Date().timeIntervalSince(started)
+        XCTAssertEqual(final.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(final.int("stalls") - initialStalls, 2)
+        XCTAssertEqual(final.int("engines"), 1)
+        XCTAssertEqual(final.int("unclean"), 0)
+        XCTAssertLessThan(
+            Double(final.int("idleRequests") - initialIdleRequests) / elapsed, 50,
+            "renderer request blocks kept firing with nothing to give (HEL-137)"
+        )
+
+        remote.press(.menu)
+        let playerProbe = app.descendants(matching: .any)["player.regression.state"]
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: playerProbe
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [dismissed], timeout: 20), .completed, "the player did not dismiss")
+        // The lifecycle probe is compiled into Debug builds only, and this
+        // test has to run in Release (`-configuration Release`): Debug's
+        // unoptimised engine stalls repeatedly on 4K AV1 and would fail the
+        // stall bound above for reasons that are not the player's.
+        if app.descendants(matching: .any)["app.lifecycle.state"].exists {
+            let cleanup = waitForLifecycle(in: app, timeout: 15) {
+                $0.int("engines") == 0
+                    && $0.int("controllers") == 0
+                    && $0.int("demux") == 0
+                    && $0.int("renderers") == 0
+            }
+            XCTAssertEqual(cleanup.int("unclean"), 0)
+        }
+        #endif
     }
 
     func testPlaybackDismissSettingsReplayLifecycleAndStallBenchmark() {
