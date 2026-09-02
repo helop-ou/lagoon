@@ -629,7 +629,9 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertFalse(olderNote.exists, "a collapsed build should not show its notes")
 
         let build53 = app.descendants(matching: .any)["settings.changelog.53"]
-        moveFocus(to: build53, maxPresses: 10) { remote.press(.down) }
+        // One row per shipped build sits above 53, so the budget grows with
+        // every release; 10 stopped reaching it around build 63.
+        moveFocus(to: build53, maxPresses: 80) { remote.press(.down) }
         remote.press(.select)
         XCTAssertTrue(
             olderNote.waitForExistence(timeout: 5),
