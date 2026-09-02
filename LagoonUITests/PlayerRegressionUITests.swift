@@ -277,6 +277,191 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(resumed.int("unclean"), 0)
     }
 
+    func testRendererSideAudioStarvationIsDetectedAndRecovers() throws {
+        let app = launchPlayer(
+            title: "audio-starvation-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.regressionRequireAudio", "YES",
+                "-debug.simulateAudioStarvation", "YES",
+                "-debug.starvationInjectionDelaySeconds", "8",
+                "-debug.starvationInjectionDurationSeconds", "5",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+        }
+        let initialDry = initial.int("aDry")
+        let initialIdleRequests = initial.int("idleRequests")
+
+        Thread.sleep(forTimeInterval: 1)
+        XCTAssertEqual(
+            state(in: app).int("aDry"),
+            initialDry,
+            "Healthy playback reported renderer starvation before the injection"
+        )
+
+        let held = waitForState(in: app, timeout: 15) { $0.int("audioHeld") == 1 }
+        let heldAt = held.double("time")
+        let dry = waitForState(in: app, timeout: 8) {
+            $0.int("aDry") == initialDry + 1
+                && $0.double("audioLead") < 0.25
+        }
+        XCTAssertGreaterThan(
+            dry.double("time"),
+            heldAt + 0.5,
+            "Withholding audio unexpectedly stopped the video clock"
+        )
+        XCTAssertEqual(dry.int("deliveryHeld"), 0)
+
+        let recovered = waitForState(in: app, timeout: 12) {
+            $0.int("audioHeld") == 0
+                && $0.double("audioLead") > 0.25
+                && $0.int("buffering") == 0
+        }
+        XCTAssertEqual(recovered.int("aDry"), initialDry + 1)
+        XCTAssertLessThanOrEqual(recovered.int("videoMax"), recovered.int("videoHard"))
+        XCTAssertLessThan(
+            recovered.int("idleRequests") - initialIdleRequests,
+            100,
+            "The held audio pump reintroduced an empty request-block spin"
+        )
+    }
+
+    /// Pins the audio-buffering mode (HEL-123): withheld audio stops the
+    /// clock after the confirmation delay, is counted as an audio stall,
+    /// and playback resumes once the renderer has its lead back.
+    func testAudioStarvationBuffersWhenTheModeIsOn() throws {
+        let app = launchPlayer(
+            title: "audio-starvation-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.regressionRequireAudio", "YES",
+                "-debug.simulateAudioStarvation", "YES",
+                "-debug.starvationInjectionDelaySeconds", "8",
+                // On this stream the renderer holds roughly two to three
+                // seconds of audio, so the floor is crossed around 2.5 s
+                // and the one-second confirmation lands near 3.5 s. A
+                // seven-second hold leaves a confirmed stall of about
+                // 3.5 s, inside the five-second reprime rule with margin,
+                // so the no-reprime assertion below is expected to run
+                // rather than be skipped.
+                "-debug.starvationInjectionDurationSeconds", "7",
+                "-debug.bufferOnAudioStarvation", "YES",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+                && $0.int("audioBuffers") == 1
+        }
+        let initialStalls = initial.int("stalls")
+        let initialAudioStalls = initial.int("audioStalls")
+        let initialDry = initial.int("aDry")
+        let initialReprimes = initial.int("reprimes")
+
+        _ = waitForState(in: app, timeout: 15) { $0.int("audioHeld") == 1 }
+        let buffering = waitForState(in: app, timeout: 9) { $0.int("buffering") == 1 }
+        let stallBegan = Date()
+        XCTAssertEqual(buffering.int("aDry"), initialDry + 1)
+
+        _ = waitForState(in: app, timeout: 12) { $0.int("audioHeld") == 0 }
+        let stallReleased = Date()
+        let recovered = waitForState(in: app, timeout: 20) {
+            $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+                && $0.double("time") > buffering.double("time") + 0.5
+        }
+        // Report every counter on a failure: which of them moved says which
+        // recovery path the engine took.
+        continueAfterFailure = true
+        XCTAssertEqual(recovered.int("stalls"), initialStalls + 1, recovered.raw)
+        XCTAssertEqual(recovered.int("audioStalls"), initialAudioStalls + 1, recovered.raw)
+        XCTAssertEqual(recovered.int("aDry"), initialDry + 1, recovered.raw)
+        XCTAssertLessThanOrEqual(recovered.int("videoMax"), recovered.int("videoHard"), recovered.raw)
+
+        let confirmedStallSeconds = stallReleased.timeIntervalSince(stallBegan)
+        print("AudioBufferingProbe confirmedStall=\(confirmedStallSeconds) \(recovered.raw)")
+        if confirmedStallSeconds < 4 {
+            XCTAssertEqual(
+                recovered.int("reprimes"),
+                initialReprimes,
+                "A stall of \(confirmedStallSeconds)s should have refilled in place rather than falling back to a seek: \(recovered.raw)"
+            )
+        }
+        // Otherwise, a confirmed stall at or beyond the five-second rule is
+        // allowed to take the seek fallback, and this test does not pin
+        // which side of the rule a given path lands on.
+    }
+
+    /// Pins the existing stall recovery path: a demux outage longer than the
+    /// video cushion enters buffering, then playback resumes afterwards
+    /// within the video hard limit. The seek fallback is asserted absent
+    /// only when the confirmed stall was clearly shorter than the
+    /// five-second rule. Not evidence about HEL-124.
+    func testBoundedDeliveryOutageRecoversThroughStallWithoutReprime() throws {
+        let app = launchPlayer(
+            title: "delivery-stall-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.regressionRequireAudio", "YES",
+                "-debug.simulateDeliveryStall", "YES",
+                "-debug.starvationInjectionDelaySeconds", "8",
+                // The compressed path coasts on up to 120 queued frames
+                // (about 5 s at 24 fps) plus a 1 s confirmation before
+                // buffering shows, so the hold has to outlast that. A
+                // decoded path (30 frames) stalls much sooner and may cross
+                // the 5 s reprime rule, which is why the reprime assertion
+                // below is conditional.
+                "-debug.starvationInjectionDurationSeconds", "8",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let initial = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+                && $0.int("videoHard") > 0
+        }
+        let initialReprimes = initial.int("reprimes")
+        let held = waitForState(in: app, timeout: 15) { $0.int("deliveryHeld") == 1 }
+        _ = waitForState(in: app, timeout: 9) { $0.int("buffering") == 1 }
+        let stallBegan = Date()
+
+        _ = waitForState(in: app, timeout: 12) { $0.int("deliveryHeld") == 0 }
+        let stallReleased = Date()
+        let recovered = waitForState(in: app, timeout: 20) {
+            $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+                && $0.double("time") > held.double("time") + 0.5
+        }
+        let confirmedStallSeconds = stallReleased.timeIntervalSince(stallBegan)
+        if confirmedStallSeconds < 4 {
+            XCTAssertEqual(
+                recovered.int("reprimes"),
+                initialReprimes,
+                "A stall of \(confirmedStallSeconds)s should have refilled in place rather than falling back to a seek"
+            )
+        }
+        // Otherwise, a confirmed stall at or beyond the five-second rule is
+        // allowed to take the seek fallback, and this test does not pin
+        // which side of the rule a given path lands on.
+        XCTAssertLessThanOrEqual(
+            recovered.int("videoMax"),
+            recovered.int("videoHard"),
+            "Recovery exceeded the active video-memory bound"
+        )
+        XCTAssertEqual(recovered.int("audioHeld"), 0)
+    }
+
     func testAutomaticIntroSkipUsesRealSegmentAndPlayerSeek() throws {
         let app = launchPlayer(
             title: "hardware-regression",
