@@ -224,6 +224,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let demuxQueue = DispatchQueue(label: "ee.helop.lagoon.demux", qos: .userInitiated)
     @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInteractive)
     @ObservationIgnored nonisolated private let pumpKickState = PumpKickState()
+    /// Whether each renderer's request block is registered. Pump queue only,
+    /// apart from attach and teardown, which run before and after any pump.
+    @ObservationIgnored nonisolated(unsafe) private var videoRequestsArmed = false
+    @ObservationIgnored nonisolated(unsafe) private var audioRequestsArmed = false
     @ObservationIgnored nonisolated private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
     @ObservationIgnored nonisolated private let lifecycleID = UUID()
     @ObservationIgnored nonisolated private let audioContinuity = AudioContinuityMonitor()
@@ -347,12 +351,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         observeVideoRenderer(video)
         observeAudioRenderer(audio)
 
-        video.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
-            self?.pumpVideo()
-        }
-        audio.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
-            self?.pumpAudio()
-        }
+        armVideoRequests(video)
+        armAudioRequests(audio)
         if av1PipelineTimings.enabled {
             let timer = DispatchSource.makeTimerSource(queue: pumpQueue)
             timer.schedule(
@@ -736,6 +736,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
         video?.stopRequestingMediaData()
         audio?.stopRequestingMediaData()
+        videoRequestsArmed = false
+        audioRequestsArmed = false
         video?.flush()
         audio?.flush()
         videoQueue.reset()
@@ -1081,6 +1083,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                   self.audioRenderer === outgoingAudio else { return }
             self.audioRenderer = nil
             outgoingAudio.stopRequestingMediaData()
+            self.audioRequestsArmed = false
             outgoingAudio.flush()
             self.audioQueue.reset()
             self.audioContinuity.reset()
@@ -1101,9 +1104,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     self.audioRenderer = incoming
                     self.synchronizer.addRenderer(incoming)
                     self.observeAudioRenderer(incoming)
-                    incoming.requestMediaDataWhenReady(on: self.pumpQueue) { [weak self] in
-                        self?.pumpAudio()
-                    }
+                    self.armAudioRequests(incoming)
                     switch replacement {
                     case .mediaServicesReset:
                         self.mediaServicesResetRecoveryCount += 1
@@ -2212,13 +2213,59 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             repeat {
                 self.pumpVideo()
                 self.pumpAudio()
+                self.rearmRequestsIfNeeded()
             } while self.pumpKickState.completeCycle()
+        }
+    }
+
+    /// AVFoundation calls a renderer's request block whenever the renderer
+    /// wants more, and keeps calling it for as long as the block gives it
+    /// nothing. With the software decoder starving the video queue, that
+    /// loop measured 0.4 of a core at the highest priority in the process,
+    /// enqueueing nothing, on a device whose decoder was short exactly that
+    /// much CPU (HEL-137). The audio queue is empty almost always, because
+    /// the renderer takes audio as fast as it is demuxed, so its block spun
+    /// the same way on every title.
+    ///
+    /// So a request is armed only while there is something to give: a pump
+    /// that finds its queue empty stops it, and `kickPumps()`, which runs
+    /// whenever a queue receives a buffer, arms it again if the renderer
+    /// could not take everything at once.
+    nonisolated private func armVideoRequests(_ renderer: AVSampleBufferVideoRenderer) {
+        guard !videoRequestsArmed else { return }
+        videoRequestsArmed = true
+        renderer.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
+            self?.pumpVideo()
+        }
+    }
+
+    nonisolated private func armAudioRequests(_ renderer: AVSampleBufferAudioRenderer) {
+        guard !audioRequestsArmed else { return }
+        audioRequestsArmed = true
+        renderer.requestMediaDataWhenReady(on: pumpQueue) { [weak self] in
+            self?.pumpAudio()
+        }
+    }
+
+    nonisolated private func rearmRequestsIfNeeded() {
+        if let renderer = videoRenderer, videoQueue.count > 0 {
+            armVideoRequests(renderer)
+        }
+        if let renderer = audioRenderer, audioQueue.count > 0 {
+            armAudioRequests(renderer)
         }
     }
 
     nonisolated private func pumpVideo() {
         guard let renderer = videoRenderer else { return }
-        while renderer.isReadyForMoreMediaData, let buffer = videoQueue.dequeue() {
+        while renderer.isReadyForMoreMediaData {
+            guard let buffer = videoQueue.dequeue() else {
+                if videoRequestsArmed {
+                    videoRequestsArmed = false
+                    renderer.stopRequestingMediaData()
+                }
+                return
+            }
             let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
             if pts.isValid {
                 shared.withLock { state in
@@ -2248,7 +2295,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     nonisolated private func pumpAudio() {
         guard let renderer = audioRenderer else { return }
-        while renderer.isReadyForMoreMediaData, let buffer = audioQueue.dequeue() {
+        while renderer.isReadyForMoreMediaData {
+            guard let buffer = audioQueue.dequeue() else {
+                if audioRequestsArmed {
+                    audioRequestsArmed = false
+                    renderer.stopRequestingMediaData()
+                }
+                return
+            }
             renderer.enqueue(buffer)
         }
     }
