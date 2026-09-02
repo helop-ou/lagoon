@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "86",
+            released: "September 2026",
+            headline: "Sound that cuts out while the picture keeps going now leaves a trace.",
+            changes: [
+                "If the sound ever drops out while the picture keeps playing, the playback details overlay now counts it (aDry) and shows how far ahead the audio is fed (lead), so the problem can be reported with numbers rather than a description. The overlay is under Settings → Advanced → Show Playback Details.",
+                "The same overlay shows the video queue's peak against its limit, and whether a buffering pause had to fall back to a seek to recover.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "85",
             released: "September 2026",
             headline: "4K AV1 plays smoothly on Apple TV.",
