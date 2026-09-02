@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "85",
+            released: "September 2026",
+            headline: "4K AV1 plays smoothly on Apple TV.",
+            changes: [
+                "4K HDR AV1 episodes no longer start stuttering and dropping frames half a minute in. The Apple TV's decoder had been competing for the CPU with a part of the player that kept asking for video it did not have; that loop is gone, and the same scene that dropped a quarter of its frames now drops none.",
+                "Software-decoded HDR video is converted for the screen by the GPU instead of the CPU, in the background, so the decoder never waits for it.",
+                "Every other kind of playback benefits from the first change too, since that loop ran on any title; hardware-decoded films simply had CPU to spare.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "84",
             released: "September 2026",
             headline: "More of the Apple TV can work on 4K AV1 at once.",
