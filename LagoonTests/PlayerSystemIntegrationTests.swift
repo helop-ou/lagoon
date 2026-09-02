@@ -1091,7 +1091,7 @@ struct PlaybackStarvationTests {
         snapshot.videoQueueCount = 30
         snapshot.videoBufferedTo = 130
         snapshot.hasAudio = true
-        snapshot.audioBufferedSeconds = 2
+        snapshot.audioDeliveryLeadSeconds = 2
         mutate(&snapshot)
         return snapshot
     }
@@ -1100,25 +1100,32 @@ struct PlaybackStarvationTests {
         #expect(PlaybackStarvationPolicy.starvation(healthy()) == .none)
     }
 
-    /// The reported shape: video full off its own buffer, audio empty.
-    /// Before HEL-123 this returned nothing at all.
-    @Test func anEmptyAudioQueueIsStarvationEvenWithVideoFull() {
+    /// The reported shape: video full off its own buffer, but AVFoundation
+    /// has consumed every audio sample it was handed. App queue depth is not
+    /// part of this decision.
+    @Test func exhaustedRendererAudioLeadIsStarvationEvenWithVideoFull() {
         let snapshot = healthy {
             $0.videoQueueCount = 30
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }
         #expect(PlaybackStarvationPolicy.starvation(snapshot) == .audio)
     }
 
-    /// Audio is judged on seconds, not count: a queue being drained as fast
-    /// as it fills is healthy, and a count would call it starved.
-    @Test func audioIsJudgedOnSecondsNotCount() {
+    /// Lead is measured after enqueueing to the renderer. Lagoon's own queue
+    /// may be at zero in both assertions and is deliberately absent here.
+    @Test func audioIsJudgedOnRendererDeliveryLead() {
         #expect(PlaybackStarvationPolicy.starvation(healthy {
-            $0.audioBufferedSeconds = PlaybackStarvationPolicy.audioFloorSeconds + 0.01
+            $0.audioDeliveryLeadSeconds = PlaybackStarvationPolicy.audioFloorSeconds + 0.01
         }) == .none)
         #expect(PlaybackStarvationPolicy.starvation(healthy {
-            $0.audioBufferedSeconds = PlaybackStarvationPolicy.audioFloorSeconds - 0.01
+            $0.audioDeliveryLeadSeconds = PlaybackStarvationPolicy.audioFloorSeconds - 0.01
         }) == .audio)
+    }
+
+    @Test func audioCannotBeCalledStarvedBeforeTheRendererReceivesItsFirstSample() {
+        #expect(PlaybackStarvationPolicy.starvation(healthy {
+            $0.audioDeliveryLeadSeconds = nil
+        }) == .none)
     }
 
     /// Both dry reports video: it is the half the viewer can see freeze,
@@ -1127,7 +1134,7 @@ struct PlaybackStarvationTests {
         let snapshot = healthy {
             $0.videoQueueCount = 0
             $0.videoBufferedTo = $0.position
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }
         #expect(PlaybackStarvationPolicy.starvation(snapshot) == .video)
     }
@@ -1137,11 +1144,11 @@ struct PlaybackStarvationTests {
     @Test func aTitleWithoutAudioNeverStarvesOnIt() {
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.hasAudio = false
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }) == .none)
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.audioQueueFinished = true
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }) == .none)
     }
 
@@ -1150,11 +1157,11 @@ struct PlaybackStarvationTests {
     @Test func theAudioFloorScalesWithPlaybackRate() {
         let justOverAt1x = PlaybackStarvationPolicy.audioFloorSeconds + 0.01
         #expect(PlaybackStarvationPolicy.starvation(healthy {
-            $0.audioBufferedSeconds = justOverAt1x
+            $0.audioDeliveryLeadSeconds = justOverAt1x
         }) == .none)
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.rate = 2
-            $0.audioBufferedSeconds = justOverAt1x
+            $0.audioDeliveryLeadSeconds = justOverAt1x
         }) == .audio)
     }
 
@@ -1163,28 +1170,28 @@ struct PlaybackStarvationTests {
     @Test func statesThatCannotStarve() {
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.isPaused = true
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }) == .none)
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.isBuffering = true
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }) == .none)
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.didFinish = true
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }) == .none)
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.position = $0.duration - 0.5
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }) == .none)
     }
 
     // MARK: - Why audio does not stop the clock
 
-    /// The revert, pinned so it is not re-introduced. `audioQueue` is
-    /// drained into the renderer as fast as it fills, so its depth is near
-    /// zero on a healthy title; gating recovery on it hung every video
-    /// stall until `reprimeAfter` and turned playback into buffer/play.
+    /// The revert, pinned so it is not re-introduced: with the defaults
+    /// these calls use, audio gates recovery only through renderer
+    /// delivery lead, and only when the engine asks for it via
+    /// `audioRequired`. Left unset, as here, video decides alone.
     @Test func recoveryDependsOnVideoAlone() {
         #expect(StallRecoveryPolicy.decision(
             elapsed: .seconds(1),
@@ -1203,9 +1210,160 @@ struct PlaybackStarvationTests {
     @Test func audioStarvationIsStillReportedEvenThoughItNeverStopsTheClock() {
         let snapshot = healthy {
             $0.videoQueueCount = 30
-            $0.audioBufferedSeconds = 0
+            $0.audioDeliveryLeadSeconds = 0
         }
         #expect(PlaybackStarvationPolicy.starvation(snapshot) == .audio)
+    }
+
+    // MARK: - Buffering on audio starvation (HEL-123, off by default)
+
+    @Test func confirmsGatesAudioOnTheModeAndAlwaysConfirmsVideo() {
+        #expect(StallRecoveryPolicy.confirms(.video, buffersOnAudioStarvation: false))
+        #expect(StallRecoveryPolicy.confirms(.video, buffersOnAudioStarvation: true))
+        #expect(!StallRecoveryPolicy.confirms(.audio, buffersOnAudioStarvation: false))
+        #expect(StallRecoveryPolicy.confirms(.audio, buffersOnAudioStarvation: true))
+        #expect(!StallRecoveryPolicy.confirms(.none, buffersOnAudioStarvation: false))
+        #expect(!StallRecoveryPolicy.confirms(.none, buffersOnAudioStarvation: true))
+    }
+
+    /// With `audioRequired` true, resume needs the renderer's own lead back
+    /// as well as the video cushion; either missing waits, and a wait long
+    /// enough still falls back to reprime.
+    @Test func audioRequiredResumeNeedsBothQueuesReady() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 1.0
+        ) == .resume)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 0.5
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: nil
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: StallRecoveryPolicy.reprimeAfter,
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 0.5
+        ) == .reprime)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount - 1,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 3.0
+        ) == .wait)
+    }
+
+    /// The renderer's own readiness flag lets a resume through once the
+    /// lead clears `resumeAudioLeadFloorSeconds`, without waiting for the
+    /// full-second fallback; without the flag, only the full second does.
+    @Test func rendererReadinessFlagResumesAboveTheFloor() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 0.6,
+            audioRendererHasSufficientData: true
+        ) == .resume)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 0.2,
+            audioRendererHasSufficientData: true
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 0.6,
+            audioRendererHasSufficientData: false
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 1.0,
+            audioRendererHasSufficientData: false
+        ) == .resume)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: nil,
+            audioRendererHasSufficientData: true
+        ) == .wait)
+        let requiredAtDoubleRate = Int(ceil(Double(StallRecoveryPolicy.resumeVideoCount) * 2))
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: requiredAtDoubleRate,
+            videoQueueFinished: false,
+            playbackRate: 2,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 0.9,
+            audioRendererHasSufficientData: true
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: requiredAtDoubleRate,
+            videoQueueFinished: false,
+            playbackRate: 2,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 1.0,
+            audioRendererHasSufficientData: true
+        ) == .resume)
+    }
+
+    /// The mode-off contract: with `audioRequired` false, a dry renderer
+    /// never blocks a video-ready resume.
+    @Test func audioNotRequiredResumesOnVideoAloneWithNoLead() {
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: StallRecoveryPolicy.resumeVideoCount,
+            videoQueueFinished: false,
+            audioRequired: false,
+            audioDeliveryLeadSeconds: 0
+        ) == .resume)
+    }
+
+    /// The audio lead floor scales with rate exactly as the video cushion
+    /// does.
+    @Test func audioLeadFloorScalesWithPlaybackRate() {
+        let requiredAtDoubleRate = StallRecoveryPolicy.resumeVideoCount * 2
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: requiredAtDoubleRate,
+            videoQueueFinished: false,
+            playbackRate: 2,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 1.5
+        ) == .wait)
+        #expect(StallRecoveryPolicy.decision(
+            elapsed: .seconds(1),
+            videoQueueCount: requiredAtDoubleRate,
+            videoQueueFinished: false,
+            playbackRate: 2,
+            audioRequired: true,
+            audioDeliveryLeadSeconds: 2.0
+        ) == .resume)
     }
 }
 
