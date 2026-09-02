@@ -28,13 +28,25 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         case losslessSource = "lossless-source"
         case linearSDR = "linear-sdr"
         case losslessSDR = "lossless-sdr"
+        /// The Metal kernel repacks (and, for `gpuSDR`, tone-maps) straight
+        /// into the renderer's buffer: no CPU conversion, no VideoToolbox
+        /// (HEL-137). Where Metal cannot serve the stream these fall back to
+        /// their pixel-transfer equivalents.
+        case gpuSource = "gpu-source"
+        case gpuSDR = "gpu-sdr"
 
-        var usesPixelTransfer: Bool { self != .directSource }
+        var usesPixelTransfer: Bool {
+            self == .losslessSource || self == .linearSDR || self == .losslessSDR
+        }
+        var usesGPU: Bool { self == .gpuSource || self == .gpuSDR }
         var usesLosslessStorage: Bool {
             self == .losslessSource || self == .losslessSDR
         }
         var convertsToSDR: Bool {
-            self == .linearSDR || self == .losslessSDR
+            self == .linearSDR || self == .losslessSDR || self == .gpuSDR
+        }
+        var pixelTransferFallback: OutputMode {
+            convertsToSDR ? .losslessSDR : .losslessSource
         }
 
         func diagnosticName(sourceIsHDR: Bool) -> String {
@@ -43,7 +55,9 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 sourceIsHDR ? "direct-pq" : rawValue
             case .losslessSource:
                 sourceIsHDR ? "lossless-pq" : rawValue
-            case .linearSDR, .losslessSDR:
+            case .gpuSource:
+                sourceIsHDR ? "gpu-pq" : rawValue
+            case .linearSDR, .losslessSDR, .gpuSDR:
                 rawValue
             }
         }
@@ -131,6 +145,25 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// the fallback.
     private let transferSession: VTPixelTransferSession?
     private let transferOutputPool: CVPixelBufferPool?
+    private let gpuConverter: MetalFrameConverter?
+    private let gpuOutputPool: CVPixelBufferPool?
+
+    /// A decoded frame, ready for the renderer. The CPU paths deliver
+    /// synchronously from inside `decode`; the GPU path delivers from its
+    /// own queue once the kernel has finished, in decode order.
+    typealias Delivery = @Sendable (CMSampleBuffer) -> Void
+
+    /// GPU frames in flight (HEL-137). The decode queue submits and moves
+    /// on, so dav1d's wait and the GPU's latency overlap instead of adding;
+    /// the cap keeps a slow GPU from running away with pictures.
+    private let deliveryQueue = DispatchQueue(label: "ee.helop.lagoon.gpuoutput", qos: .userInitiated)
+    private let outputCondition = NSCondition()
+    private var gpuInFlight = 0
+    private var gpuSubmitSequence: UInt64 = 0
+    private var gpuDeliverSequence: UInt64 = 0
+    private var gpuHeld: [UInt64: () -> Void] = [:]
+    private var gpuFailure: Error?
+    private static let maximumGPUInFlight = 3
     /// What the frames leaving this decoder are tagged as. Identical to
     /// `colorProperties` except on tvOS for HDR sources, where it is the
     /// BT.709 result of the transfer-session tone map (HEL-137).
@@ -306,12 +339,16 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 return .linearSDR
             case "lossless-sdr", "compressed-sdr":
                 return .losslessSDR
+            case "gpu-pq", "gpu-source":
+                return .gpuSource
+            case "gpu-sdr":
+                return .gpuSDR
             default:
                 break
             }
         }
         if legacyCompressedOutput == false { return .directSource }
-        return toneMapHDRByDefault ? .losslessSDR : .losslessSource
+        return toneMapHDRByDefault ? .gpuSDR : .gpuSource
     }
 
     init(
@@ -362,6 +399,9 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             var pointer: UnsafeMutablePointer<AVCodecContext>? = context
             avcodec_free_context(&pointer)
             throw DecoderError.codecSetup("libavcodec rejected the stream")
+        }
+        if codecID == AV_CODEC_ID_AV1 {
+            Dav1dWorkerQoS.applyIfRequested()
         }
 
         let resolvedWidth = Int(codecpar.pointee.width)
@@ -482,7 +522,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         let legacyCompressedOutput = defaults.object(forKey: compressedOutputKey) == nil
             ? nil
             : defaults.bool(forKey: compressedOutputKey)
-        let requestedOutputMode = Self.outputMode(
+        var requestedOutputMode = Self.outputMode(
             requestedValue: defaults.string(forKey: outputModeKey),
             legacyCompressedOutput: legacyCompressedOutput,
             toneMapHDRByDefault: toneMapHDRByDefault
@@ -493,6 +533,34 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // lossless destination storage. Direct-source still differs from all
         // three controls by having no VT transfer at all; see playback.md for
         // the comparisons the matrix can and cannot isolate.
+        // The GPU stage comes first: it replaces both CPU passes, and where
+        // Metal cannot serve the stream the mode degrades to its transfer
+        // equivalent so the matrix below still applies.
+        var gpuSetup: (MetalFrameConverter, CVPixelBufferPool, CVPixelBuffer, lossless: Bool)?
+        if requestedOutputMode.usesGPU {
+            gpuSetup = Self.makeGPUOutput(
+                mode: requestedOutputMode,
+                codecpar: codecpar,
+                sourcePixelFormat: sourcePixelFormat,
+                width: resolvedWidth,
+                height: resolvedHeight,
+                fullRange: fullRange,
+                properties: properties
+            )
+            if gpuSetup == nil {
+                if defaults.object(forKey: outputModeKey) != nil {
+                    var framePointer: UnsafeMutablePointer<AVFrame>? = decodedFrame
+                    av_frame_free(&framePointer)
+                    var contextPointer: UnsafeMutablePointer<AVCodecContext>? = context
+                    avcodec_free_context(&contextPointer)
+                    throw DecoderError.codecSetup(
+                        "requested output mode \(requestedOutputMode.rawValue) is unavailable"
+                    )
+                }
+                requestedOutputMode = requestedOutputMode.pixelTransferFallback
+            }
+        }
+
         var transferSetup: (VTPixelTransferSession, CVPixelBufferPool, CVPixelBuffer)?
         if requestedOutputMode.usesPixelTransfer {
             var transferAttributes = attributes
@@ -572,17 +640,21 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
                 "requested output mode \(requestedOutputMode.rawValue) is unavailable"
             )
         }
-        let resolvedOutputMode: OutputMode = transferSetup == nil
-            ? .directSource
-            : requestedOutputMode
+        let resolvedOutputMode: OutputMode = if gpuSetup != nil {
+            requestedOutputMode
+        } else if transferSetup == nil {
+            .directSource
+        } else {
+            requestedOutputMode
+        }
         let resolvedOutputProperties = resolvedOutputMode.convertsToSDR
             ? properties.sdrToneMapped
             : properties
-        if let probe = transferSetup?.2 {
+        if let probe = gpuSetup?.2 ?? transferSetup?.2 {
             Self.apply(resolvedOutputProperties, pixelAspectRatio: aspect, to: probe)
         }
 
-        let descriptionSource = transferSetup?.2 ?? prototype
+        let descriptionSource = gpuSetup?.2 ?? transferSetup?.2 ?? prototype
         var description: CMVideoFormatDescription?
         let descriptionStatus = CMVideoFormatDescriptionCreateForImageBuffer(
             allocator: kCFAllocatorDefault,
@@ -599,8 +671,11 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
 
         transferSession = transferSetup?.0
         transferOutputPool = transferSetup?.1
-        usesCompressedOutput = resolvedOutputMode.usesLosslessStorage
+        gpuConverter = gpuSetup?.0
+        gpuOutputPool = gpuSetup?.1
+        usesCompressedOutput = resolvedOutputMode.usesLosslessStorage || gpuSetup?.lossless == true
         outputModeName = resolvedOutputMode.diagnosticName(sourceIsHDR: properties.isHDR)
+            + (gpuSetup.map { $0.lossless ? "-lossless" : "-linear" } ?? "")
         outputProperties = resolvedOutputProperties
         outputsToneMappedSDR = properties.isHDR && resolvedOutputMode.convertsToSDR
         codecContext = context
@@ -638,7 +713,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             print("SoftwareVideoDecoder codec=\"\(codecName)\" longName=\"\(codecLongName)\""
                 + " threads=\(resolvedThreadCount) lowDelay=\(lowDelayEnabled ? "on" : "off")"
                 + " maxFrameDelay=\(maxFrameDelay.map(String.init) ?? "unknown")"
-                + " decoderDelay=\(decoderDelay) output=\"\(outputModeName)\"")
+                + " decoderDelay=\(decoderDelay) output=\"\(outputModeName)\""
+                + (gpuConverter.map {
+                    " gpuPeakNits=\($0.configuration.sourcePeakNits)->\($0.configuration.targetPeakNits)"
+                } ?? ""))
         }
     }
 
@@ -652,7 +730,17 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         avcodec_free_context(&contextPointer)
     }
 
+    /// Synchronous convenience for callers that want every frame back in
+    /// hand: benchmarks and fixtures. Playback uses the delivering variant.
     func decode(packet: UnsafeMutablePointer<AVPacket>) throws -> [CMSampleBuffer] {
+        let collected = CollectedFrames()
+        try decode(packet: packet) { collected.append($0) }
+        waitForPendingOutput()
+        return collected.frames
+    }
+
+    func decode(packet: UnsafeMutablePointer<AVPacket>, deliver: @escaping Delivery) throws {
+        try rethrowGPUFailure()
         let sent = Self.now()
         beginProfileIfNeeded(at: sent)
         let status = avcodec_send_packet(codecContext, packet)
@@ -663,13 +751,52 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             $0.decodeSeconds += elapsed - sent
         }
         guard status >= 0 else { throw DecoderError.decode(status) }
-        return try receiveFrames()
+        try receiveFrames(deliver: deliver)
     }
 
     func drain() throws -> [CMSampleBuffer] {
+        let collected = CollectedFrames()
+        try drain { collected.append($0) }
+        return collected.frames
+    }
+
+    /// End of stream: every picture libavcodec still holds comes out, and
+    /// this returns only once the GPU has delivered the last of them.
+    func drain(deliver: @escaping Delivery) throws {
+        try rethrowGPUFailure()
         let status = avcodec_send_packet(codecContext, nil)
         guard status >= 0 else { throw DecoderError.decode(status) }
-        return try receiveFrames()
+        try receiveFrames(deliver: deliver)
+        waitForPendingOutput()
+        try rethrowGPUFailure()
+    }
+
+    private final class CollectedFrames: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [CMSampleBuffer] = []
+        var frames: [CMSampleBuffer] { lock.withLock { storage } }
+        func append(_ frame: CMSampleBuffer) { lock.withLock { storage.append(frame) } }
+    }
+
+    /// GPU frames submitted and not yet delivered; the decode stage counts
+    /// them as video already read.
+    var pendingOutputCount: Int {
+        outputCondition.withLock { gpuInFlight }
+    }
+
+    /// Blocks until every submitted GPU frame has been delivered. Bounded,
+    /// because a GPU that never answers must not wedge the demux loop.
+    func waitForPendingOutput() {
+        outputCondition.lock()
+        let deadline = Date(timeIntervalSinceNow: 2)
+        while gpuInFlight > 0, outputCondition.wait(until: deadline) {}
+        outputCondition.unlock()
+    }
+
+    private func rethrowGPUFailure() throws {
+        if let failure = outputCondition.withLock({ gpuFailure }) {
+            throw failure
+        }
     }
 
     /// Benchmark-only sink for establishing dav1d's ceiling without Core
@@ -691,6 +818,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     }
 
     func flush() {
+        waitForPendingOutput()
         avcodec_flush_buffers(codecContext)
         timeline?.reset()
         // A seek starts a new stretch of playback, which is also the boundary
@@ -705,8 +833,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
     }
 
-    private func receiveFrames() throws -> [CMSampleBuffer] {
-        var output: [CMSampleBuffer] = []
+    private func receiveFrames(deliver: @escaping Delivery) throws {
         while true {
             let waited = Self.now()
             let status = avcodec_receive_frame(codecContext, frame)
@@ -715,16 +842,17 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             recordProfile(at: received) { $0.decodeSeconds += received - waited }
             guard status >= 0 else { break }
             defer { av_frame_unref(frame) }
-            let buffer = try makeSampleBuffer()
+            let buffer = try makeSampleBuffer(deliver: deliver)
             let converted = Self.now()
             detailedTimings.recordOutput(at: converted)
             recordProfile(at: converted) {
                 $0.frames += 1
                 $0.conversionSeconds += converted - received
             }
-            output.append(buffer)
+            if let buffer {
+                deliver(buffer)
+            }
         }
-        return output
     }
 
     private func receiveFramesDiscardingOutput() -> Int {
@@ -769,7 +897,9 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
     }
 
-    private func makeSampleBuffer() throws -> CMSampleBuffer {
+    /// Returns the ready sample for the CPU paths, or nil once the frame has
+    /// been handed to the GPU, which delivers it itself.
+    private func makeSampleBuffer(deliver: @escaping Delivery) throws -> CMSampleBuffer? {
         let decodedFormat = AVPixelFormat(rawValue: frame.pointee.format)
         let isSupported8Bit = outputBitDepth == 8 && (
             decodedFormat == AV_PIX_FMT_YUV420P
@@ -800,6 +930,11 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         // its pool; keeping a 4K 10-bit source referenced through a synchronous
         // VT transfer needlessly adds one more ~24 MiB live picture.
         let timing = resolvedTiming()
+
+        if let gpuConverter, let gpuOutputPool, decodedFormat == AV_PIX_FMT_YUV420P10LE {
+            try submitGPUSample(converter: gpuConverter, pool: gpuOutputPool, timing: timing, deliver: deliver)
+            return nil
+        }
 
         let surfaceStart = Self.now()
         var pixelBuffer: CVPixelBuffer?
@@ -996,6 +1131,221 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             presentationTimeStamp: presentationTime,
             decodeTimeStamp: .invalid
         )
+    }
+
+    /// The GPU output stage: one pool allocation, one kernel dispatch, no
+    /// intermediate buffer and no transfer session (HEL-137). The dav1d
+    /// picture is kept alive by a frame reference until the kernel has read
+    /// it; the sample is wrapped and delivered from the delivery queue.
+    private func submitGPUSample(
+        converter: MetalFrameConverter,
+        pool: CVPixelBufferPool,
+        timing: CMSampleTimingInfo,
+        deliver: @escaping Delivery
+    ) throws {
+        let surfaceStart = Self.now()
+        var pixelBuffer: CVPixelBuffer?
+        let pixelStatus = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBuffer)
+        let surfaceAllocated = Self.now()
+        detailedTimings.record(.pixelBufferAllocation, from: surfaceStart, to: surfaceAllocated)
+        guard pixelStatus == kCVReturnSuccess, let pixelBuffer else {
+            throw DecoderError.pixelBuffer(pixelStatus)
+        }
+        profileLock.withLock { profileStorage.surfaceSeconds += surfaceAllocated - surfaceStart }
+        guard let sourceY = planePointer(0), let sourceU = planePointer(1), let sourceV = planePointer(2) else {
+            throw DecoderError.unsupportedPixelFormat("missing 10-bit planar planes")
+        }
+        guard let held = av_frame_alloc() else { throw DecoderError.pixelBuffer(-1) }
+        av_frame_ref(held, frame)
+
+        outputCondition.lock()
+        while gpuInFlight >= Self.maximumGPUInFlight {
+            outputCondition.wait()
+        }
+        gpuInFlight += 1
+        let sequence = gpuSubmitSequence
+        gpuSubmitSequence += 1
+        outputCondition.unlock()
+
+        let submitted = Self.now()
+        let heldFrame = held
+        do {
+            try converter.convertAsync(
+                luma: .init(base: UnsafeRawPointer(sourceY), stride: planeStride(0), rows: height),
+                cb: .init(base: UnsafeRawPointer(sourceU), stride: planeStride(1), rows: height / 2),
+                cr: .init(base: UnsafeRawPointer(sourceV), stride: planeStride(2), rows: height / 2),
+                into: pixelBuffer
+            ) { [self] result in
+                var pointer: UnsafeMutablePointer<AVFrame>? = heldFrame
+                av_frame_free(&pointer)
+                detailedTimings.record(.gpuConversion, from: submitted, to: Self.now())
+                deliveryQueue.async { [self] in
+                    completeGPU(sequence: sequence) {
+                        switch result {
+                        case .success:
+                            Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: pixelBuffer)
+                            do {
+                                deliver(try makeReadySample(from: pixelBuffer, timing: timing))
+                            } catch {
+                                outputCondition.withLock { gpuFailure = gpuFailure ?? error }
+                            }
+                        case .failure(let error):
+                            outputCondition.withLock { gpuFailure = gpuFailure ?? error }
+                        }
+                    }
+                }
+            }
+        } catch {
+            var pointer: UnsafeMutablePointer<AVFrame>? = heldFrame
+            av_frame_free(&pointer)
+            outputCondition.withLock {
+                gpuInFlight -= 1
+                gpuSubmitSequence -= 1
+                outputCondition.broadcast()
+            }
+            throw error
+        }
+        let submitEnded = Self.now()
+        detailedTimings.record(.p010Conversion, from: surfaceAllocated, to: submitEnded)
+        av_frame_unref(frame)
+    }
+
+    /// Runs completions in submission order, holding any that arrive early.
+    private func completeGPU(sequence: UInt64, _ body: @escaping () -> Void) {
+        outputCondition.lock()
+        gpuHeld[sequence] = body
+        var ready: [() -> Void] = []
+        while let next = gpuHeld.removeValue(forKey: gpuDeliverSequence) {
+            ready.append(next)
+            gpuDeliverSequence += 1
+        }
+        outputCondition.unlock()
+        for deliver in ready {
+            deliver()
+        }
+        outputCondition.withLock {
+            gpuInFlight -= ready.count
+            outputCondition.broadcast()
+        }
+    }
+
+    /// Builds the Metal output stage when the stream is one the kernel
+    /// handles: little-endian 10-bit planar 4:2:0 and, for tone mapping, PQ
+    /// BT.2020. Nil means the caller falls back to VideoToolbox. Destinations
+    /// are linear P010 unless `-debug.softwareDecodeGPULossless YES` asks for
+    /// Apple's lossless-compressed layout, which Metal may or may not accept.
+    private static func makeGPUOutput(
+        mode: OutputMode,
+        codecpar: UnsafeMutablePointer<AVCodecParameters>,
+        sourcePixelFormat: AVPixelFormat,
+        width: Int,
+        height: Int,
+        fullRange: Bool,
+        properties: ColorProperties
+    ) -> (MetalFrameConverter, CVPixelBufferPool, CVPixelBuffer, lossless: Bool)? {
+        guard sourcePixelFormat == AV_PIX_FMT_YUV420P10LE else { return nil }
+        if mode.convertsToSDR {
+            guard properties.transfer == kCVImageBufferTransferFunction_SMPTE_ST_2084_PQ,
+                  properties.matrix == kCVImageBufferYCbCrMatrix_ITU_R_2020 else { return nil }
+        }
+        let targetNits = SoftwareDecodeThreadPolicy.commandLineInteger(
+            forKey: "debug.softwareDecodeTargetNits"
+        ) ?? 203
+        guard let converter = try? MetalFrameConverter(configuration: .init(
+            width: width,
+            height: height,
+            fullRange: fullRange,
+            toneMap: mode.convertsToSDR,
+            sourcePeakNits: sourcePeakNits(codecpar),
+            targetPeakNits: Float(min(max(targetNits, 100), 1000)),
+            outputBitDepth: 10,
+            verbose: UserDefaults.standard.bool(forKey: "debug.av1PipelineProfile")
+        )) else { return nil }
+        let destinationFullRange = fullRange && !mode.convertsToSDR
+        let preferLossless = SoftwareDecodeThreadPolicy.commandLineString(
+            forKey: "debug.softwareDecodeGPULossless"
+        ).map { ["yes", "true", "1"].contains($0.lowercased()) } ?? false
+        for lossless in preferLossless ? [true, false] : [false] {
+            let format: OSType = if lossless {
+                destinationFullRange
+                    ? kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarFullRange
+                    : kCVPixelFormatType_Lossless_420YpCbCr10PackedBiPlanarVideoRange
+            } else {
+                destinationFullRange
+                    ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+                    : kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            }
+            let attributes: [String: Any] = [
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferPixelFormatTypeKey as String: format,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+                kCVPixelBufferMetalCompatibilityKey as String: true,
+                kCVPixelBufferIOSurfaceCoreAnimationCompatibilityKey as String: true,
+            ]
+            var pool: CVPixelBufferPool?
+            guard CVPixelBufferPoolCreate(
+                kCFAllocatorDefault,
+                [kCVPixelBufferPoolMinimumBufferCountKey as String: 18] as CFDictionary,
+                attributes as CFDictionary,
+                &pool
+            ) == kCVReturnSuccess, let pool else { continue }
+            var probe: CVPixelBuffer?
+            guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &probe) == kCVReturnSuccess,
+                  let probe,
+                  converter.canWrite(probe) else { continue }
+            // Metal accepts a lossless-compressed destination at texture
+            // creation and can still refuse it at dispatch (tvOS 26 on an
+            // A15 did), so that layout is proven with one real conversion
+            // before it counts. Linear P010 has never needed the trial.
+            if lossless, !trialConvert(converter: converter, into: probe, width: width, height: height) {
+                continue
+            }
+            return (converter, pool, probe, lossless)
+        }
+        return nil
+    }
+
+    private static func trialConvert(
+        converter: MetalFrameConverter,
+        into probe: CVPixelBuffer,
+        width: Int,
+        height: Int
+    ) -> Bool {
+        let lumaBytes = width * height * MemoryLayout<UInt16>.stride
+        let chromaBytes = (width / 2) * (height / 2) * MemoryLayout<UInt16>.stride
+        let total = lumaBytes + 2 * chromaBytes
+        let memory = UnsafeMutableRawPointer.allocate(byteCount: total, alignment: Int(getpagesize()))
+        defer { memory.deallocate() }
+        memory.initializeMemory(as: UInt8.self, repeating: 0, count: total)
+        let luma = MetalFrameConverter.Plane(
+            base: UnsafeRawPointer(memory), stride: width * 2, rows: height
+        )
+        let cb = MetalFrameConverter.Plane(
+            base: UnsafeRawPointer(memory + lumaBytes), stride: width, rows: height / 2
+        )
+        let cr = MetalFrameConverter.Plane(
+            base: UnsafeRawPointer(memory + lumaBytes + chromaBytes), stride: width, rows: height / 2
+        )
+        return (try? converter.convert(luma: luma, cb: cb, cr: cr, into: probe)) != nil
+    }
+
+    /// The grade's peak: mastering-display maximum luminance, MaxCLL failing
+    /// that, and the HDR10 convention of 1000 nits when the stream says
+    /// nothing usable.
+    static func sourcePeakNits(_ codecpar: UnsafeMutablePointer<AVCodecParameters>) -> Float {
+        if let mastering: AVMasteringDisplayMetadata = SampleBufferFactory.sideData(
+            codecpar, type: AV_PKT_DATA_MASTERING_DISPLAY_METADATA
+        ), mastering.has_luminance != 0, mastering.max_luminance.den != 0 {
+            let nits = Float(mastering.max_luminance.num) / Float(mastering.max_luminance.den)
+            if nits >= 400 { return min(nits, 10000) }
+        }
+        if let light: AVContentLightMetadata = SampleBufferFactory.sideData(
+            codecpar, type: AV_PKT_DATA_CONTENT_LIGHT_LEVEL
+        ), light.MaxCLL >= 400 {
+            return min(Float(light.MaxCLL), 10000)
+        }
+        return 1000
     }
 
     private func makeReadySample(

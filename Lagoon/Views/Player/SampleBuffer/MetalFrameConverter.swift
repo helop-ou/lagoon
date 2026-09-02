@@ -1,0 +1,309 @@
+import CoreVideo
+import Foundation
+import Metal
+
+/// Turns a decoded 10-bit planar frame into a renderer-ready Core Video
+/// buffer on the GPU (HEL-137).
+///
+/// On an Apple TV every core is already spoken for by dav1d: the two CPU
+/// passes that used to follow it — the planar-to-P010 repack and
+/// VideoToolbox's PQ-to-SDR transfer — were measured at roughly 0.5 of a core
+/// inside the process and more outside it, and that is exactly the CPU the
+/// decoder was missing. One compute kernel does both passes in about a
+/// millisecond of GPU time and no CPU time at all.
+///
+/// The source is read in place: FFmpeg's frame pool hands dav1d page-aligned
+/// allocations, so the planes are wrapped in a no-copy `MTLBuffer` for the
+/// duration of one dispatch. When a frame is not page-aligned it is copied
+/// into a shared staging buffer instead, which is slower but still cheaper
+/// than either CPU pass.
+nonisolated final class MetalFrameConverter: @unchecked Sendable {
+    /// Mirrors `LagoonPlanarConvertParameters` in the shader, field for field.
+    private struct Parameters {
+        var width: UInt32
+        var height: UInt32
+        var lumaStride: UInt32
+        var chromaStride: UInt32
+        var lumaOffset: UInt32
+        var cbOffset: UInt32
+        var crOffset: UInt32
+        var fullRange: UInt32
+        var toneMap: UInt32
+        var outputDepth: UInt32
+        var sourcePeakNits: Float
+        var targetPeakNits: Float
+    }
+
+    struct Configuration: Sendable {
+        let width: Int
+        let height: Int
+        let fullRange: Bool
+        /// PQ BT.2020 in, BT.709 SDR out. Off, the kernel only repacks.
+        let toneMap: Bool
+        /// Peak of the source grade, from its mastering metadata.
+        let sourcePeakNits: Float
+        /// What maps to SDR white. 203 nits is BT.2408's reference white.
+        let targetPeakNits: Float
+        /// 10 writes P010 texels, 8 writes NV12 texels.
+        let outputBitDepth: Int
+        /// Prints GPU-versus-wall timing every 120 frames.
+        var verbose: Bool = false
+    }
+
+    enum ConverterError: LocalizedError {
+        case noDevice
+        case noKernel
+        case texture(Int)
+        case buffer
+        case dispatch(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .noDevice: "Metal is unavailable"
+            case .noKernel: "the conversion kernel is missing from the app's Metal library"
+            case .texture(let status): "Metal could not address the destination buffer (\(status))"
+            case .buffer: "Metal could not allocate a staging buffer"
+            case .dispatch(let detail): "the GPU conversion failed (\(detail))"
+            }
+        }
+    }
+
+    struct Plane {
+        let base: UnsafeRawPointer
+        /// Bytes per row.
+        let stride: Int
+        let rows: Int
+    }
+
+    let configuration: Configuration
+    private let device: MTLDevice
+    private let commandQueue: MTLCommandQueue
+    private let pipeline: MTLComputePipelineState
+    private let textureCache: CVMetalTextureCache
+    private let pageSize = Int(getpagesize())
+    /// Staging buffers for the copy path, one per frame in flight: a frame
+    /// is copied while the previous one's kernel may still be reading.
+    private let stagingLock = NSLock()
+    private var freeStaging: [MTLBuffer] = []
+    /// How many frames took the no-copy path, for the diagnostics line.
+    private(set) var zeroCopyFrames = 0
+    private(set) var copiedFrames = 0
+    private let statisticsLock = NSLock()
+    private var gpuSeconds = 0.0
+    private var wallSeconds = 0.0
+    private var mapSeconds = 0.0
+    private var timedFrames = 0
+
+    init(configuration: Configuration) throws {
+        guard let device = MTLCreateSystemDefaultDevice(),
+              let commandQueue = device.makeCommandQueue() else {
+            throw ConverterError.noDevice
+        }
+        guard let library = device.makeDefaultLibrary(),
+              let function = library.makeFunction(name: "lagoonConvertPlanar10") else {
+            throw ConverterError.noKernel
+        }
+        var cache: CVMetalTextureCache?
+        guard CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache) == kCVReturnSuccess,
+              let cache else {
+            throw ConverterError.noDevice
+        }
+        self.configuration = configuration
+        self.device = device
+        self.commandQueue = commandQueue
+        pipeline = try device.makeComputePipelineState(function: function)
+        textureCache = cache
+    }
+
+    /// Probes whether Metal can write to the pool's buffers, which is what
+    /// decides between lossless-compressed and linear destinations at setup.
+    func canWrite(_ pixelBuffer: CVPixelBuffer) -> Bool {
+        (try? destinationTextures(for: pixelBuffer)) != nil
+    }
+
+    /// Runs the kernel and blocks until the GPU has finished, so the caller
+    /// may release the source frame the moment this returns.
+    func convert(luma: Plane, cb: Plane, cr: Plane, into destination: CVPixelBuffer) throws {
+        let done = DispatchSemaphore(value: 0)
+        var outcome: Result<Void, Error> = .success(())
+        try convertAsync(luma: luma, cb: cb, cr: cr, into: destination) { result in
+            outcome = result
+            done.signal()
+        }
+        done.wait()
+        try outcome.get()
+    }
+
+    /// Submits the kernel and returns at once. `completion` runs on Metal's
+    /// completion thread once the destination is fully written; the source
+    /// planes must stay valid until then. Completions for one converter fire
+    /// in submission order, because they share one command queue.
+    func convertAsync(
+        luma: Plane,
+        cb: Plane,
+        cr: Plane,
+        into destination: CVPixelBuffer,
+        completion: @escaping @Sendable (Result<Void, Error>) -> Void
+    ) throws {
+        let started = ProcessInfo.processInfo.systemUptime
+        let source = try sourceBuffer(luma: luma, cb: cb, cr: cr)
+        let mapped = ProcessInfo.processInfo.systemUptime
+        let (lumaTexture, chromaTexture) = try destinationTextures(for: destination)
+        let elementSize = MemoryLayout<UInt16>.stride
+        var parameters = Parameters(
+            width: UInt32(configuration.width),
+            height: UInt32(configuration.height),
+            lumaStride: UInt32(luma.stride / elementSize),
+            chromaStride: UInt32(cb.stride / elementSize),
+            lumaOffset: UInt32(source.lumaOffset / elementSize),
+            cbOffset: UInt32(source.cbOffset / elementSize),
+            crOffset: UInt32(source.crOffset / elementSize),
+            fullRange: configuration.fullRange ? 1 : 0,
+            toneMap: configuration.toneMap ? 1 : 0,
+            outputDepth: UInt32(configuration.outputBitDepth),
+            sourcePeakNits: configuration.sourcePeakNits,
+            targetPeakNits: configuration.targetPeakNits
+        )
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw ConverterError.dispatch("no command buffer")
+        }
+        encoder.setComputePipelineState(pipeline)
+        encoder.setBuffer(source.buffer, offset: 0, index: 0)
+        encoder.setBytes(&parameters, length: MemoryLayout<Parameters>.stride, index: 1)
+        encoder.setTexture(CVMetalTextureGetTexture(lumaTexture), index: 0)
+        encoder.setTexture(CVMetalTextureGetTexture(chromaTexture), index: 1)
+        let grid = MTLSize(width: configuration.width / 2, height: configuration.height / 2, depth: 1)
+        let threadWidth = pipeline.threadExecutionWidth
+        let threadHeight = max(pipeline.maxTotalThreadsPerThreadgroup / threadWidth, 1)
+        encoder.dispatchThreads(
+            grid,
+            threadsPerThreadgroup: MTLSize(width: threadWidth, height: threadHeight, depth: 1)
+        )
+        encoder.endEncoding()
+        let sourceBufferHold = source.buffer
+        commandBuffer.addCompletedHandler { [self] finished in
+            // The texture wrappers hold the IOSurface and the no-copy buffer
+            // holds the frame's pages; both must outlive the GPU's reads
+            // and writes, and neither may outlive them by much.
+            withExtendedLifetime((lumaTexture, chromaTexture, sourceBufferHold)) {}
+            CVMetalTextureCacheFlush(textureCache, 0)
+            if source.staged {
+                stagingLock.withLock { freeStaging.append(sourceBufferHold) }
+            }
+            if configuration.verbose {
+                statisticsLock.withLock {
+                    gpuSeconds += finished.gpuEndTime - finished.gpuStartTime
+                    wallSeconds += ProcessInfo.processInfo.systemUptime - started
+                    mapSeconds += mapped - started
+                    timedFrames += 1
+                    if timedFrames % 120 == 0 {
+                        let frames = Double(timedFrames)
+                        print(String(
+                            format: "MetalFrameConverter frames=%d gpuAvgMs=%.2f wallAvgMs=%.2f mapAvgMs=%.2f zeroCopy=%d copied=%d",
+                            timedFrames, gpuSeconds / frames * 1000, wallSeconds / frames * 1000,
+                            mapSeconds / frames * 1000, zeroCopyFrames, copiedFrames
+                        ))
+                    }
+                }
+            }
+            if finished.status == .completed {
+                completion(.success(()))
+            } else {
+                completion(.failure(ConverterError.dispatch(
+                    finished.error?.localizedDescription ?? "GPU failed"
+                )))
+            }
+        }
+        commandBuffer.commit()
+    }
+
+    private func destinationTextures(for pixelBuffer: CVPixelBuffer) throws -> (CVMetalTexture, CVMetalTexture) {
+        let depth10 = configuration.outputBitDepth == 10
+        var luma: CVMetalTexture?
+        let lumaStatus = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault, textureCache, pixelBuffer, nil,
+            depth10 ? .r16Unorm : .r8Unorm,
+            CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
+            CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+            0, &luma
+        )
+        guard lumaStatus == kCVReturnSuccess, let luma else { throw ConverterError.texture(Int(lumaStatus)) }
+        var chroma: CVMetalTexture?
+        let chromaStatus = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault, textureCache, pixelBuffer, nil,
+            depth10 ? .rg16Unorm : .rg8Unorm,
+            CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
+            CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
+            1, &chroma
+        )
+        guard chromaStatus == kCVReturnSuccess, let chroma else { throw ConverterError.texture(Int(chromaStatus)) }
+        return (luma, chroma)
+    }
+
+    private struct SourceBuffer {
+        let buffer: MTLBuffer
+        /// Byte offsets of each plane from the buffer's element zero.
+        let lumaOffset: Int
+        let cbOffset: Int
+        let crOffset: Int
+        /// True when `buffer` is a staging copy to return to the pool.
+        let staged: Bool
+    }
+
+    /// Wraps the frame's planes without copying when their allocation is
+    /// page-aligned, which FFmpeg's pooled large allocations are on Darwin;
+    /// otherwise copies them into a staging buffer.
+    private func sourceBuffer(luma: Plane, cb: Plane, cr: Plane) throws -> SourceBuffer {
+        let planes = [luma, cb, cr]
+        let lowest = planes.map { Int(bitPattern: $0.base) }.min()!
+        let highest = planes.map { Int(bitPattern: $0.base) + $0.stride * $0.rows }.max()!
+        let base = lowest & ~(pageSize - 1)
+        let length = ((highest - base) + pageSize - 1) & ~(pageSize - 1)
+        // The simulator's Metal driver backs no-copy buffers with XPC shared
+        // memory and traps on ordinary malloc pages; only devices wrap.
+        #if targetEnvironment(simulator)
+        let mayWrap = false
+        #else
+        let mayWrap = true
+        #endif
+        if mayWrap, base == lowest,
+           let buffer = device.makeBuffer(
+               bytesNoCopy: UnsafeMutableRawPointer(bitPattern: base)!,
+               length: length,
+               options: .storageModeShared,
+               deallocator: nil
+           ) {
+            zeroCopyFrames += 1
+            return SourceBuffer(
+                buffer: buffer,
+                lumaOffset: Int(bitPattern: luma.base) - base,
+                cbOffset: Int(bitPattern: cb.base) - base,
+                crOffset: Int(bitPattern: cr.base) - base,
+                staged: false
+            )
+        }
+        // Fallback: pack the three planes, keeping their strides, into a
+        // staging buffer of this frame's own.
+        let required = planes.reduce(0) { $0 + $1.stride * $1.rows }
+        let reusable = stagingLock.withLock { () -> MTLBuffer? in
+            guard let index = freeStaging.firstIndex(where: { $0.length >= required }) else { return nil }
+            return freeStaging.remove(at: index)
+        }
+        guard let staging = reusable ?? device.makeBuffer(length: required, options: .storageModeShared) else {
+            throw ConverterError.buffer
+        }
+        var offsets: [Int] = []
+        var offset = 0
+        for plane in planes {
+            staging.contents().advanced(by: offset)
+                .copyMemory(from: plane.base, byteCount: plane.stride * plane.rows)
+            offsets.append(offset)
+            offset += plane.stride * plane.rows
+        }
+        copiedFrames += 1
+        return SourceBuffer(
+            buffer: staging, lumaOffset: offsets[0], cbOffset: offsets[1], crOffset: offsets[2], staged: true
+        )
+    }
+}

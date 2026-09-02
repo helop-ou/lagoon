@@ -106,7 +106,7 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
     /// decoder right now. The demux loop adds this to the decoded queue's
     /// depth: both are video it has read and the renderer has not shown.
     var pendingCount: Int {
-        condition.withLock { mailbox.count + (inFlight ? 1 : 0) }
+        condition.withLock { mailbox.count + (inFlight ? 1 : 0) } + decoder.pendingOutputCount
     }
 
     /// Blocks until fewer than `target` packets are outstanding, or until the
@@ -171,7 +171,7 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
         queue.sync {
             guard condition.withLock({ !failed && accepting }) else { return }
             do {
-                for buffer in try decoder.drain() {
+                try decoder.drain { [outputHandler] buffer in
                     outputHandler(buffer)
                 }
             } catch {
@@ -190,10 +190,11 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
             mailbox.removeAll(keepingCapacity: true)
             condition.broadcast()
         }
-        queue.sync {}
+        queue.sync { decoder.waitForPendingOutput() }
     }
 
     private func decodeNext(generation: UInt64) {
+        ProcessCPUTrace.noteDecodeThread()
         let packet: SoftwareVideoPacket? = condition.withLock {
             guard generation == self.generation, !failed, !mailbox.isEmpty else { return nil }
             inFlight = true
@@ -205,13 +206,13 @@ nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
         // an inner pool for the same reason the demux loop's step does.
         autoreleasepool {
             do {
-                let frames = try decoder.decode(packet: packet.packet)
-                // A seek that landed while this frame was in libavcodec
-                // makes it the old position's picture. Drop it.
-                if condition.withLock({ generation == self.generation }) {
-                    for frame in frames {
-                        outputHandler(frame)
-                    }
+                // A seek that lands while a frame is in libavcodec, or on
+                // the GPU, makes it the old position's picture. Drop it at
+                // delivery, whenever that is.
+                try decoder.decode(packet: packet.packet) { [weak self] frame in
+                    guard let self,
+                          self.condition.withLock({ generation == self.generation }) else { return }
+                    self.outputHandler(frame)
                 }
             } catch {
                 let alreadyFailed = condition.withLock { () -> Bool in

@@ -186,8 +186,16 @@ struct SoftwareDecodePipelineTests {
         #expect(resolve("lossless-pq") == .losslessSource)
         #expect(resolve("linear-sdr") == .linearSDR)
         #expect(resolve("compressed-sdr") == .losslessSDR)
+        #expect(resolve("gpu-pq") == .gpuSource)
+        #expect(resolve("gpu-sdr") == .gpuSDR)
 
         #expect(!SoftwareVideoDecoder.OutputMode.directSource.usesPixelTransfer)
+        #expect(!SoftwareVideoDecoder.OutputMode.gpuSDR.usesPixelTransfer)
+        #expect(SoftwareVideoDecoder.OutputMode.gpuSDR.usesGPU)
+        #expect(SoftwareVideoDecoder.OutputMode.gpuSDR.convertsToSDR)
+        #expect(!SoftwareVideoDecoder.OutputMode.gpuSource.convertsToSDR)
+        #expect(SoftwareVideoDecoder.OutputMode.gpuSDR.pixelTransferFallback == .losslessSDR)
+        #expect(SoftwareVideoDecoder.OutputMode.gpuSource.pixelTransferFallback == .losslessSource)
         #expect(SoftwareVideoDecoder.OutputMode.losslessSource.usesPixelTransfer)
         #expect(SoftwareVideoDecoder.OutputMode.losslessSource.usesLosslessStorage)
         #expect(!SoftwareVideoDecoder.OutputMode.losslessSource.convertsToSDR)
@@ -200,11 +208,18 @@ struct SoftwareDecodePipelineTests {
             legacyCompressedOutput: false,
             toneMapHDRByDefault: true
         ) == .directSource)
+        // The production default is the GPU stage; its fallback is the
+        // transfer route that was measured before it existed.
         #expect(SoftwareVideoDecoder.outputMode(
             requestedValue: nil,
             legacyCompressedOutput: nil,
             toneMapHDRByDefault: true
-        ) == .losslessSDR)
+        ) == .gpuSDR)
+        #expect(SoftwareVideoDecoder.outputMode(
+            requestedValue: nil,
+            legacyCompressedOutput: nil,
+            toneMapHDRByDefault: false
+        ) == .gpuSource)
     }
 
     @Test func decodeProfileSeparatesTheThreeCostsAsSharesOfOneCore() {

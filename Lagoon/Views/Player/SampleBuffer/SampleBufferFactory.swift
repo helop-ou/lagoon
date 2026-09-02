@@ -801,7 +801,7 @@ nonisolated enum SampleBufferFactory {
     /// Reads one typed side-data entry off the codec parameters (FFmpeg
     /// stores container-level HDR/DoVi metadata there after
     /// avformat_find_stream_info).
-    private static func sideData<T>(_ codecpar: UnsafeMutablePointer<AVCodecParameters>, type: AVPacketSideDataType) -> T? {
+    static func sideData<T>(_ codecpar: UnsafeMutablePointer<AVCodecParameters>, type: AVPacketSideDataType) -> T? {
         guard let entry = av_packet_side_data_get(
             codecpar.pointee.coded_side_data,
             codecpar.pointee.nb_coded_side_data,

@@ -18,6 +18,7 @@ nonisolated final class PipelineStageTimings: @unchecked Sendable {
         case pixelBufferLock = "pixelBufferLock"
         case p010Conversion = "p010"
         case pixelTransfer = "vtTransfer"
+        case gpuConversion = "gpu"
         case sampleBufferCreation = "sampleBufferCreate"
     }
 
@@ -95,6 +96,7 @@ nonisolated final class PipelineStageTimings: @unchecked Sendable {
                 .receiveFrame,
                 .p010Conversion,
                 .pixelTransfer,
+                .gpuConversion,
                 .outputInterval,
             ]
                 .compactMap { stage -> String? in
