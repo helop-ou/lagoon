@@ -401,7 +401,9 @@ struct MainTabView: View {
             for item in page.items {
                 guard let info = try? await session.client.playbackInfo(itemId: item.id),
                       let source = info.mediaSources.first,
-                      (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
+                      (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }),
+                      !UserDefaults.standard.bool(forKey: "debug.regressionRequireAudio")
+                        || (source.mediaStreams ?? []).contains(where: { $0.type == "Audio" }) else {
                     continue
                 }
                 print("RegressionResolve playable title=\"\(item.name ?? "?")\" id=\(item.id)")
