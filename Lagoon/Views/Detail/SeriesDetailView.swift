@@ -41,18 +41,28 @@ final class SeriesDetailViewModel {
     func reloadUserData(client: JellyfinClient, seriesId: String) async {
         async let detailTask = client.item(id: seriesId)
         async let upNextTask = client.nextUpEpisode(seriesId: seriesId)
-        detail = try? await detailTask
-        upNext = try? await upNextTask
+        let refreshedDetail = try? await detailTask
+        let refreshedUpNext: Result<MediaItem?, Error>
+        do {
+            refreshedUpNext = .success(try await upNextTask)
+        } catch {
+            refreshedUpNext = .failure(error)
+        }
+        if let refreshedDetail { detail = refreshedDetail }
+        if case .success(let item) = refreshedUpNext { upNext = item }
         await loadEpisodes(client: client, seriesId: seriesId)
     }
 
     private func loadEpisodes(client: JellyfinClient, seriesId: String) async {
         guard let selectedSeasonId else { return }
         isLoadingEpisodes = true
-        let loaded = (try? await client.episodes(seriesId: seriesId, seasonId: selectedSeasonId)) ?? []
+        let loaded = try? await client.episodes(seriesId: seriesId, seasonId: selectedSeasonId)
         // Stale-response guard: a slow season fetch must not clobber a newer pick.
         if self.selectedSeasonId == selectedSeasonId {
-            episodes = loaded
+            // A foreground sync is opportunistic. Preserve the visible rail
+            // when the server is asleep rather than turning a full season
+            // into an empty one (HEL-135).
+            if let loaded { episodes = loaded }
             isLoadingEpisodes = false
         }
     }
@@ -62,6 +72,7 @@ struct SeriesDetailView: View {
     let item: MediaItem
 
     @Environment(SessionStore.self) private var session
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
     /// The episode the rail last put focus on. Deliberately *not* cleared
@@ -85,6 +96,11 @@ struct SeriesDetailView: View {
         }
         .task(id: item.id) {
             await viewModel.load(client: session.client, seriesId: item.id)
+        }
+        .onChange(of: serverSync.generation) { _, _ in
+            Task {
+                await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+            }
         }
         // The highlight belongs to the season it came from.
         .onChange(of: viewModel.selectedSeasonId) { _, _ in highlighted = nil }
