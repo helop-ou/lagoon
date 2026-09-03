@@ -75,6 +75,10 @@ Quick rules that prevent regressions:
   only calls `pokeControls()`; SwiftUI's surface `onTapGesture` is Select and
   keeps its scrub/skip/Up Next/play-pause priority chain (HEL-134). Never
   merge the two paths.
+- Foreground content invalidation comes only from `RootView` advancing the
+  shared `ServerSyncState`; server-backed screens observe that generation and
+  refresh in place (HEL-135). Do not duplicate scene observers per screen or
+  replace existing content with a loading state during reconciliation.
 - Software-decoded 10-bit video reaches the renderer through
   `MetalFrameConverter` (`gpu-sdr` on tvOS HDR, `gpu-pq` otherwise); the
   VideoToolbox transfer modes are fallbacks and diagnostics. The GPU stage is
