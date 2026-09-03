@@ -76,7 +76,7 @@ nonisolated enum MediaItemType: String, Decodable, Hashable {
     }
 }
 
-nonisolated struct UserItemData: Decodable {
+nonisolated struct UserItemData: Decodable, Hashable {
     let playbackPositionTicks: Int64?
     let playedPercentage: Double?
     let played: Bool?
@@ -151,11 +151,14 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     }
 }
 
-// Identity-based Hashable so items can be NavigationStack destinations.
-nonisolated extension MediaItem: Hashable {
-    static func == (lhs: MediaItem, rhs: MediaItem) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
-}
+// Value equality, synthesized — and it has to stay that way. SwiftUI
+// compares Equatable values before it re-renders: a `@State` write whose new
+// value compares equal to the old one is dropped, and a child view handed an
+// "equal" item keeps what it has. The id-only `==` this replaced made a
+// re-fetched item with a new resume point equal to the stale one, so detail
+// pages kept offering Play after playback and rails kept stale progress
+// (HEL-132). Navigation identity lives on `ContentNavigationRoute`.
+nonisolated extension MediaItem: Hashable {}
 
 nonisolated struct ItemsPage: Decodable {
     let items: [MediaItem]
@@ -200,7 +203,7 @@ nonisolated struct PlaybackInfoResponse: Decodable {
     }
 }
 
-nonisolated struct MediaSource: Decodable, Identifiable {
+nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?
     let container: String?
@@ -230,7 +233,7 @@ nonisolated struct MediaSource: Decodable, Identifiable {
 
 /// A cast or crew credit as the item endpoint reports it (HEL-46). Headshots
 /// live at `Items/{person.id}/Images/Primary`, gated on `primaryImageTag`.
-nonisolated struct Person: Decodable, Identifiable {
+nonisolated struct Person: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?
     /// The character for actors; nil for crew.
@@ -249,7 +252,7 @@ nonisolated struct Person: Decodable, Identifiable {
     }
 }
 
-nonisolated struct MediaStream: Decodable {
+nonisolated struct MediaStream: Decodable, Hashable {
     let type: String?
     let codec: String?
     let displayTitle: String?
