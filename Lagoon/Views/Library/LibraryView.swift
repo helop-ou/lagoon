@@ -60,8 +60,8 @@ final class LibraryViewModel {
 
 struct LibraryView: View {
     let library: LibraryTab
+    let isActive: Bool
     @Environment(SessionStore.self) private var session
-    @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = LibraryViewModel()
 
     private var columns: [GridItem] { Metrics.posterGridColumns }
@@ -117,8 +117,8 @@ struct LibraryView: View {
                 await viewModel.loadMore(client: session.client, library: library)
             }
         }
-        .onChange(of: serverSync.generation) { _, _ in
-            Task { await viewModel.refresh(client: session.client, library: library) }
+        .serverRefreshable(.library(library.id), isActive: isActive) {
+            await viewModel.refresh(client: session.client, library: library)
         }
         .accessibilityIdentifier("library.view.\(library.id)")
         .accessibilityValue("\(viewModel.items.count) items")
