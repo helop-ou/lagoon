@@ -161,9 +161,14 @@ struct HomeView: View {
         // not: dismissing a `fullScreenCover` never re-appears the view
         // underneath it, so the one moment Continue Watching is most likely
         // to have changed — you just watched something — was the one moment
-        // neither the rail nor the Top Shelf refreshed (HEL-119).
+        // neither the rail nor the Top Shelf refreshed (HEL-119). The stop
+        // report is still in flight when this fires; `settle()` waits for
+        // it so the rails read the new position, not the old (HEL-132).
         .fullScreenCover(item: $playerItem, onDismiss: {
-            Task { await refreshUserData() }
+            Task {
+                await session.client.playbackReports.settle()
+                await refreshUserData()
+            }
         }) { item in
             VideoPlayerView(playerItem: item)
                 .preferredColorScheme(.dark)
