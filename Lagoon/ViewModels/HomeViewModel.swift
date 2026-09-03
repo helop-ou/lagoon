@@ -51,6 +51,7 @@ final class HomeViewModel {
     private var hasLoaded = false
     private var loadedAccountID: String?
     private var loadGeneration = 0
+    private var isRefreshing = false
 
     func load(
         client: JellyfinClient,
@@ -92,26 +93,7 @@ final class HomeViewModel {
                 fields: "Genres,CommunityRating,PrimaryImageAspectRatio"
             )
 
-            var rails: [LibraryRail] = []
-            await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
-                for (index, library) in libraries.enumerated() {
-                    group.addTask {
-                        guard let items = try? await client.latest(parentId: library.id) else { return nil }
-                        let title = "Recently Added" + (library.name.map { " in \($0)" } ?? "")
-                        return (index, LibraryRail(
-                            id: library.id,
-                            title: title,
-                            items: items,
-                            collectionType: library.collectionType
-                        ))
-                    }
-                }
-                var collected: [(Int, LibraryRail)] = []
-                for await entry in group {
-                    if let entry { collected.append(entry) }
-                }
-                rails = collected.sorted { $0.0 < $1.0 }.map(\.1)
-            }
+            let rails = await loadLatestRails(libraries: libraries, client: client)
 
             let resolvedResume = await resumeItems ?? []
             let resolvedNextUp = await nextUpItems ?? []
@@ -183,15 +165,52 @@ final class HomeViewModel {
     /// any one of those mutations can move an item between them.
     func refreshProgress(client: JellyfinClient) async {
         guard hasLoaded, !isLoading else { return }
+        let generation = loadGeneration
         async let resumeItems = client.resumeItems()
         async let nextUpItems = client.nextUp()
         async let favoriteItems = try? client.favorites()
-        if let refreshed = try? await (resume: resumeItems, nextUp: nextUpItems) {
+        let refreshed = try? await (resume: resumeItems, nextUp: nextUpItems)
+        let refreshedFavorites = await favoriteItems
+        guard generation == loadGeneration else { return }
+        if let refreshed {
             resume = refreshed.resume
             nextUp = refreshed.nextUp
         }
-        favorites = await favoriteItems ?? favorites
+        if let refreshedFavorites {
+            favorites = refreshedFavorites
+        }
         TopShelfStore.publish(resume, client: client)
+    }
+
+    /// Reconciles everything on Home that can visibly change while Lagoon is
+    /// in the background. Existing content stays mounted while these requests
+    /// run, and the primary progress/latest rails keep their last good value
+    /// when a request fails; foregrounding on a sleeping server must not turn
+    /// a full Home screen into an error page (HEL-135).
+    func refreshServerContent(
+        client: JellyfinClient,
+        homeSectionPreferences: HomeSectionPreferenceValues
+    ) async {
+        guard hasLoaded, !isLoading, !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        // Any optional discovery work launched by the initial load now owns
+        // an older generation and cannot land over this newer snapshot.
+        loadGeneration &+= 1
+        let generation = loadGeneration
+
+        async let progress: Void = refreshProgress(client: client)
+        async let latest: Void = refreshLatestRails(client: client)
+        async let plugin: Void = refreshPluginRails(
+            client: client,
+            preferences: homeSectionPreferences
+        )
+        async let curated: Void = loadCuratedRails(client: client, generation: generation)
+        async let refreshedCollections: Void = loadCollections(
+            client: client,
+            generation: generation
+        )
+        _ = await (progress, latest, plugin, curated, refreshedCollections)
     }
 
     func refreshPluginRails(
@@ -203,6 +222,60 @@ final class HomeViewModel {
         let rails = await loadPluginRails(client: client, preferences: preferences)
         guard generation == loadGeneration else { return }
         pluginRails = rails
+    }
+
+    private func refreshLatestRails(client: JellyfinClient) async {
+        guard hasLoaded, !isLoading else { return }
+        let generation = loadGeneration
+        guard let libraries = try? await client.userViews()
+            .filter({ ["movies", "tvshows"].contains($0.collectionType ?? "") }) else { return }
+        let refreshed = await loadLatestRails(libraries: libraries, client: client)
+        guard generation == loadGeneration else { return }
+
+        // A single failed library request keeps that rail's last good value;
+        // a successful empty response is still authoritative and clears it.
+        let freshByID = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, $0) })
+        let previousByID = Dictionary(uniqueKeysWithValues: latestRails.map { ($0.id, $0) })
+        latestRails = libraries.compactMap { freshByID[$0.id] ?? previousByID[$0.id] }
+
+        // Keep the hero's order stable across a foreground hop, but replace
+        // its values with fresh server records and fill vacancies from the
+        // new Recently Added results.
+        let candidates = latestRails.flatMap(\.items).filter {
+            $0.backdropImageTags?.isEmpty == false && $0.overview != nil
+        }
+        let candidatesByID = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var refreshedHero = heroItems.compactMap { candidatesByID[$0.id] }
+        var seen = Set(refreshedHero.map(\.id))
+        for candidate in candidates where refreshedHero.count < 6 && seen.insert(candidate.id).inserted {
+            refreshedHero.append(candidate)
+        }
+        heroItems = refreshedHero
+    }
+
+    private func loadLatestRails(
+        libraries: [MediaItem],
+        client: JellyfinClient
+    ) async -> [LibraryRail] {
+        await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
+            for (index, library) in libraries.enumerated() {
+                group.addTask {
+                    guard let items = try? await client.latest(parentId: library.id) else { return nil }
+                    let title = "Recently Added" + (library.name.map { " in \($0)" } ?? "")
+                    return (index, LibraryRail(
+                        id: library.id,
+                        title: title,
+                        items: items,
+                        collectionType: library.collectionType
+                    ))
+                }
+            }
+            var collected: [(Int, LibraryRail)] = []
+            for await entry in group {
+                if let entry { collected.append(entry) }
+            }
+            return collected.sorted { $0.0 < $1.0 }.map(\.1)
+        }
     }
 
     /// Fetches whatever the Home Screen Sections plugin adds beyond Lagoon's
