@@ -94,8 +94,9 @@ HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
 Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
 cap (HEL-108), the detail page turning Play into Resume after playback
 (HEL-132), and a light Siri Remote touch-surface tap revealing the player
-transport without changing playback (HEL-134), and server-backed screens
-reconciling automatically when Lagoon returns to the foreground (HEL-135).
+transport without changing playback (HEL-134), and server-backed browse
+screens refreshing on return, every five minutes while visible, or whenever
+the viewer requests it (HEL-135).
 
 ## Deliberate non-goals for now
 
