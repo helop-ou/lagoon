@@ -25,6 +25,9 @@ nonisolated struct FrameLossBench: Equatable {
         var stalls: Int
         /// Of those, the ones called on audio (HEL-123).
         var audioStalls: Int = 0
+        /// Audio-dry episodes (`aDry`), counted regardless of whether they
+        /// became a confirmed stall.
+        var audioDry: Int = 0
         var audioGaps: Int
         var videoQueueDepth: Int
         var optimizedFrames = 0
@@ -42,9 +45,12 @@ nonisolated struct FrameLossBench: Equatable {
         var dropped: Int
         var corrupted: Int
         var stalls: Int
-        /// Of those, the ones called on audio running dry rather than
-        /// video. Silence used to leave no trace in a bench window at all.
+        /// Of those, the ones called on audio (HEL-123).
         var audioStalls: Int = 0
+        /// Audio-dry episodes (`aDry`), counted regardless of whether they
+        /// became a confirmed stall. Silence used to leave no trace in a
+        /// bench window at all.
+        var audioDry: Int = 0
         var audioGaps: Int
         var minVideoQueue: Int
         /// Frames that took the direct-display path inside the window —
@@ -71,9 +77,9 @@ nonisolated struct FrameLossBench: Equatable {
         /// figures. `regressionSummaryIsParseable` pins it.
         var regressionSummary: String {
             String(
-                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aStalls %d · aGaps %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
+                format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aStalls %d · aDry %d · aGaps %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",
                 lossPercent, dropped, frames,
-                corrupted, stalls, audioStalls, audioGaps, minVideoQueue,
+                corrupted, stalls, audioStalls, audioDry, audioGaps, minVideoQueue,
                 peakFootprintMB, footprintGrowthMB,
                 startPosition, windowSeconds
             )
@@ -146,6 +152,7 @@ nonisolated struct FrameLossBench: Equatable {
                 corrupted: sample.corruptedFrames - start.corruptedFrames,
                 stalls: sample.stalls - start.stalls,
                 audioStalls: sample.audioStalls - start.audioStalls,
+                audioDry: sample.audioDry - start.audioDry,
                 audioGaps: sample.audioGaps - start.audioGaps,
                 minVideoQueue: minVideoQueue,
                 optimizedFrames: sample.optimizedFrames - start.optimizedFrames,
