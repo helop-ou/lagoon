@@ -5,6 +5,7 @@ struct ItemDetailView: View {
     let item: MediaItem
 
     @Environment(SessionStore.self) private var session
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var detail: MediaItem?
     @State private var similar: [MediaItem] = []
     @State private var playerItem: PlayerItem?
@@ -20,21 +21,10 @@ struct ItemDetailView: View {
             MediaRail(title: String(localized: "More Like This"), items: similar)
         }
         .task(id: item.id) {
-            detail = try? await session.client.item(id: item.id)
-            #if DEBUG
-            if UserDefaults.standard.bool(forKey: "debug.navigationRegression"),
-               let page = try? await session.client.items(
-                   includeTypes: [.movie],
-                   limit: 10
-               ) {
-                // The public demo's recommendation endpoint is intentionally
-                // sparse. Use different real catalog items so the regression
-                // can always exercise Detail -> Detail -> Back ordering.
-                similar = Array(page.items.filter { $0.id != item.id }.prefix(6))
-                return
-            }
-            #endif
-            similar = (try? await session.client.similarItems(itemId: item.id)) ?? []
+            await loadFromServer()
+        }
+        .onChange(of: serverSync.generation) { _, _ in
+            Task { await loadFromServer() }
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
@@ -49,6 +39,35 @@ struct ItemDetailView: View {
             VideoPlayerView(playerItem: player)
                 .preferredColorScheme(.dark)
         }
+    }
+
+    /// Refreshing in place preserves the detail and recommendation rail when
+    /// a foreground request fails. A successful response replaces the whole
+    /// value, including watch progress changed in another client (HEL-135).
+    private func loadFromServer() async {
+        let generation = serverSync.generation
+        async let refreshedDetail = try? session.client.item(id: item.id)
+        async let refreshedSimilar = loadSimilarFromServer()
+        let (newDetail, newSimilar) = await (refreshedDetail, refreshedSimilar)
+        guard generation == serverSync.generation else { return }
+        if let newDetail { detail = newDetail }
+        if let newSimilar { similar = newSimilar }
+    }
+
+    private func loadSimilarFromServer() async -> [MediaItem]? {
+        #if DEBUG
+        if UserDefaults.standard.bool(forKey: "debug.navigationRegression"),
+           let page = try? await session.client.items(
+               includeTypes: [.movie],
+               limit: 10
+           ) {
+            // The public demo's recommendation endpoint is intentionally
+            // sparse. Use different real catalog items so the regression can
+            // always exercise Detail -> Detail -> Back ordering.
+            return Array(page.items.filter { $0.id != item.id }.prefix(6))
+        }
+        #endif
+        return try? await session.client.similarItems(itemId: item.id)
     }
 
     private var resumeTicks: Int64? {
