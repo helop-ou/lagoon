@@ -10,14 +10,14 @@ import SwiftUI
 ///
 /// tvOS focus invariants: the surface is focusable at all times (Menu
 /// would quit the app from an unfocusable screen). Remote grammar:
-/// play/pause toggles anywhere; on the surface left/right seek ±10 s while
-/// playing and walk the scrub playhead while paused (HEL-39 slice 2), and
-/// down opens the panel; in the panel left/right walk the tabs (selection
-/// follows focus), down enters the track rows. Menu/Escape is intercepted
-/// at the UIKit press layer by `MenuPressGate` — scrubbing cancels back to
-/// the live position, else panel open closes the panel, otherwise the
-/// player exits (SwiftUI's `onExitCommand` never fires inside a
-/// fullScreenCover on tvOS 26).
+/// a light touch-surface tap reveals the transport (HEL-134); play/pause
+/// toggles anywhere; on the surface left/right seek ±10 s while playing and
+/// walk the scrub playhead while paused (HEL-39 slice 2), and down opens the
+/// panel; in the panel left/right walk the tabs (selection follows focus),
+/// down enters the track rows. Menu/Escape is intercepted at the UIKit press
+/// layer by `MenuPressGate` — scrubbing cancels back to the live position,
+/// else panel open closes the panel, otherwise the player exits (SwiftUI's
+/// `onExitCommand` never fires inside a fullScreenCover on tvOS 26).
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     /// Stable media identity, independent of the engine object's lifetime.
@@ -127,26 +127,11 @@ struct CustomPlayerView<Surface: View>: View {
         #if os(tvOS)
         // Menu never reaches SwiftUI inside a fullScreenCover on tvOS 26;
         // the gate intercepts the press itself (see MenuPressGate).
-        MenuPressGate {
-            if isScrubbing {
-                cancelScrub()
-            } else if let segment = activeSegment, skipMode == .autoDelay {
-                // Back during the countdown means "no" — the one mode with
-                // a pending action to call off. In `button` mode there is
-                // nothing to cancel, so Menu keeps meaning "leave".
-                handledSegmentIDs.insert(segment.id)
-            } else if showsNextUp, autoplayMode == .autoDelay {
-                // Same rule as the skip pill: Back only cancels where
-                // something is pending. In `card` mode the offer sits there
-                // unanswered and Menu still means "leave".
-                nextUpDismissed = true
-                onCancelNextUp?()
-            } else if panelOpen {
-                closePanel()
-            } else {
-                onDismiss()
-            }
-        } content: {
+        MenuPressGate(onMenu: {
+            handleMenu()
+        }, onRemoteTouchTap: {
+            handleRemoteTouchTap()
+        }) {
             playerContent
         }
         .ignoresSafeArea()
@@ -340,6 +325,36 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     // MARK: - Surface & remote commands
+
+    private func handleMenu() {
+        if isScrubbing {
+            cancelScrub()
+        } else if let segment = activeSegment, skipMode == .autoDelay {
+            // Back during the countdown means "no" — the one mode with a
+            // pending action to call off. In `button` mode there is nothing
+            // to cancel, so Menu keeps meaning "leave".
+            handledSegmentIDs.insert(segment.id)
+        } else if showsNextUp, autoplayMode == .autoDelay {
+            // Same rule as the skip pill: Back only cancels where something
+            // is pending. In `card` mode the offer sits there unanswered and
+            // Menu still means "leave".
+            nextUpDismissed = true
+            onCancelNextUp?()
+        } else if panelOpen {
+            closePanel()
+        } else {
+            onDismiss()
+        }
+    }
+
+    /// A light tap is intentionally non-destructive: reveal the existing
+    /// transport and restart its four-second dwell without changing play,
+    /// scrub, skip, or Up Next state. The panel already owns the whole remote
+    /// while it is open, so a touch there is ignored (HEL-134).
+    private func handleRemoteTouchTap() {
+        guard !panelOpen else { return }
+        pokeControls()
+    }
 
     private var videoSurface: some View {
         surface()
