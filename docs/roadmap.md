@@ -67,28 +67,26 @@ and the decoder switches that hardware questions get answered with.
 
 In the order they are worth doing. Keys are Jira tickets.
 
-1. **Siri Remote in the player** (HEL-134): a tap on the touch surface
-   should reveal the scrub bar and controls the way every tvOS player does.
-2. **Server sync** (HEL-135): the app is sometimes visibly behind the
+1. **Server sync** (HEL-135): the app is sometimes visibly behind the
    server; decide between a refresh affordance on Home and refreshing on
    foreground and after playback. Re-check first: HEL-132 removed two
    general causes of "sometimes" — API responses served from the URL
    cache, and item equality by id, which let SwiftUI skip re-rendering
    rails whose ids had not changed.
-3. **Jellyfin 10.12** (HEL-138): a scoping pass against a 10.12 server
+2. **Jellyfin 10.12** (HEL-138): a scoping pass against a 10.12 server
    before fixture upgrades.
-4. **Live Seerr status** (HEL-136): download status and time estimates
+3. **Live Seerr status** (HEL-136): download status and time estimates
    that update while a detail page is open, without hurting performance.
-5. **iOS polish pass** (HEL-41): compact-width detail composition, hero
+4. **iOS polish pass** (HEL-41): compact-width detail composition, hero
    sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
    between. Only the collection page has its own iOS layout so far.
-6. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+5. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-7. **Buffer on audio starvation by default** (HEL-123): the mode is built
+6. **Buffer on audio starvation by default** (HEL-123): the mode is built
    and switched off; the `aDry` counter in Release decides whether real
    delivery still reaches the floor now that HEL-124 is in.
-8. **Live TV**, if the server has it: guide and channels. A big lift with
+7. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
@@ -101,7 +99,8 @@ frame rate (HEL-137), the audio starvation signal and its fix (HEL-123,
 HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
 Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
 cap (HEL-108), the detail page turning Play into Resume after playback
-(HEL-132).
+(HEL-132), and a light Siri Remote touch-surface tap revealing the player
+transport without changing playback (HEL-134).
 
 ## Deliberate non-goals for now
 
