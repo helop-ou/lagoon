@@ -53,15 +53,23 @@ struct RootView: View {
         #if DEBUG
         .overlay(alignment: .topLeading) {
             if UserDefaults.standard.bool(forKey: "debug.serverSyncRegression") {
-                Text("Server sync generation")
-                    .font(.system(size: 1))
-                    .foregroundStyle(.clear)
-                    .frame(width: 1, height: 1)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Server sync generation")
-                    .accessibilityValue("\(serverSync.generation)")
-                    .accessibilityIdentifier("server.sync.generation")
-                    .allowsHitTesting(false)
+                VStack {
+                    regressionProbe(
+                        label: "Server sync generation",
+                        value: serverSync.generation,
+                        identifier: "server.sync.generation"
+                    )
+                    regressionProbe(
+                        label: "Periodic Home refreshes",
+                        value: serverSync.refreshCount(.home, trigger: .periodic),
+                        identifier: "server.sync.periodic.home"
+                    )
+                    regressionProbe(
+                        label: "Manual Home refreshes",
+                        value: serverSync.refreshCount(.home, trigger: .manual),
+                        identifier: "server.sync.manual.home"
+                    )
+                }
             }
         }
         .task {
@@ -69,4 +77,18 @@ struct RootView: View {
         }
         #endif
     }
+
+    #if DEBUG
+    private func regressionProbe(label: String, value: Int, identifier: String) -> some View {
+        Text(label)
+            .font(.system(size: 1))
+            .foregroundStyle(.clear)
+            .frame(width: 1, height: 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityValue("\(value)")
+            .accessibilityIdentifier(identifier)
+            .allowsHitTesting(false)
+    }
+    #endif
 }
