@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct HomeView: View {
+    let isActive: Bool
     @Environment(SessionStore.self) private var session
-    @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = HomeViewModel()
     @State private var playerItem: PlayerItem?
 
@@ -156,13 +156,11 @@ struct HomeView: View {
                 )
             }
         }
-        .onChange(of: serverSync.generation) { _, _ in
-            Task {
-                await viewModel.refreshServerContent(
-                    client: session.client,
-                    homeSectionPreferences: savedHomePreferences
-                )
-            }
+        .serverRefreshable(.home, isActive: isActive, isPaused: playerItem != nil) {
+            await viewModel.refreshServerContent(
+                client: session.client,
+                homeSectionPreferences: savedHomePreferences
+            )
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         // `refreshProgress` is documented as running on returning from
