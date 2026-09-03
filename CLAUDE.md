@@ -76,9 +76,11 @@ Quick rules that prevent regressions:
   keeps its scrub/skip/Up Next/play-pause priority chain (HEL-134). Never
   merge the two paths.
 - Foreground content invalidation comes only from `RootView` advancing the
-  shared `ServerSyncState`; server-backed screens observe that generation and
-  refresh in place (HEL-135). Do not duplicate scene observers per screen or
-  replace existing content with a loading state during reconciliation.
+  shared `ServerSyncState`. `ServerRefreshModifier` owns top-level browse
+  destinations' five-minute and manual refresh paths, and `MainTabView` gates
+  them to the visible root destination (HEL-135). Do not duplicate scene
+  observers, poll hidden tabs or pushed details, or replace existing content
+  with a loading state during reconciliation.
 - Software-decoded 10-bit video reaches the renderer through
   `MetalFrameConverter` (`gpu-sdr` on tvOS HDR, `gpu-pq` otherwise); the
   VideoToolbox transfer modes are fallbacks and diagnostics. The GPU stage is
