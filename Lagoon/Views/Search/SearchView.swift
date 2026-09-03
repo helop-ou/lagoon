@@ -165,6 +165,7 @@ extension String {
 struct SearchView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var librarySearch = SearchViewModel()
     private let recents = RecentSearchStore.shared
     @State private var searchText = ""
@@ -199,6 +200,12 @@ struct SearchView: View {
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
         .onChange(of: searchText) { _, newValue in
             librarySearch.search(newValue, client: session.client)
+        }
+        .onChange(of: serverSync.generation) { _, _ in
+            // An open result list carries user data too; repeat only the
+            // Jellyfin half, keeping Seerr's separate session lifecycle out
+            // of a Jellyfin foreground sync (HEL-135).
+            librarySearch.search(searchText, client: session.client)
         }
         .task(id: "\(seerr.user?.id ?? -1):\(normalizedSearch):\(searchRetryID)") {
             await performSearch()
