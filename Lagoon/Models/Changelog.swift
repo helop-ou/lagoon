@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "87",
+            released: "September 2026",
+            headline: "The Siri Remote feels at home, and watch progress stays current.",
+            changes: [
+                "A light tap on the Siri Remote touch surface now reveals the playback controls without pausing, seeking, or moving focus.",
+                "After you leave the player, Play changes to Resume and Home's progress bars and Continue Watching refresh after Jellyfin saves the new position, instead of showing the state from before you watched.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "86",
             released: "September 2026",
             headline: "Remuxed and transcoded titles no longer lose their sound every few seconds.",
