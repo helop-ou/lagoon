@@ -21,9 +21,14 @@ private final class DiscoverViewModel {
         // The layout is the server owner's own arrangement where they have
         // one. It is never worth failing the page over: a server that will
         // not answer still gets Jellyseerr's default order.
-        let sliders = (try? await client.discoverSliders()) ?? []
-        guard !Task.isCancelled else { return }
-        rows = SeerrDiscoverLayout.rows(for: sliders)
+        if let sliders = try? await client.discoverSliders() {
+            guard !Task.isCancelled else { return }
+            rows = SeerrDiscoverLayout.rows(for: sliders)
+        } else if rows.isEmpty {
+            // A transient refresh failure must not replace the server
+            // owner's chosen ordering with Lagoon's fallback ordering.
+            rows = SeerrDiscoverLayout.fallback
+        }
 
         do {
             let trending = try await client.trending()
@@ -44,10 +49,12 @@ private final class DiscoverViewModel {
 }
 
 struct DiscoverView: View {
+    let isActive: Bool
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = DiscoverViewModel()
     @State private var reloadID = 0
+    @State private var refreshGeneration = 0
 
     var body: some View {
         ScrollView {
@@ -80,9 +87,16 @@ struct DiscoverView: View {
                     ForEach(viewModel.rows) { row in
                         switch row {
                         case .media(let source):
-                            SeerrDiscoverRail(source: source)
+                            SeerrDiscoverRail(
+                                source: source,
+                                refreshGeneration: refreshGeneration
+                            )
                         case .genres(let mediaType):
-                            SeerrGenreRail(mediaType: mediaType, title: row.title)
+                            SeerrGenreRail(
+                                mediaType: mediaType,
+                                title: row.title,
+                                refreshGeneration: refreshGeneration
+                            )
                         }
                     }
                 }
@@ -91,8 +105,12 @@ struct DiscoverView: View {
         }
         .scrollClipDisabled()
         .background(Color.black.ignoresSafeArea())
-        .refreshable {
-            guard seerr.isConnected else { return }
+        .serverRefreshable(
+            .discover,
+            isActive: isActive,
+            isEnabled: seerr.isConnected
+        ) {
+            refreshGeneration &+= 1
             await viewModel.load(client: seerr.client)
         }
         // A viewer already signed in to Jellyfin should not meet a second
