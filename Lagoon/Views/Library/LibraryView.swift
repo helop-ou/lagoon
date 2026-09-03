@@ -32,11 +32,36 @@ final class LibraryViewModel {
             errorMessage = "Couldn't load this library."
         }
     }
+
+    /// Re-reads every page already visible rather than dropping the grid back
+    /// to its first sixty titles. Stable item ids preserve focus and scroll
+    /// position while new server values replace watched/favourite state
+    /// in-place (HEL-135).
+    func refresh(client: JellyfinClient, library: LibraryTab) async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let page = try await client.items(
+                parentId: library.id,
+                includeTypes: library.collectionType == "tvshows" ? [.series] : [.movie],
+                limit: max(pageSize, items.count)
+            )
+            items = page.items
+            totalCount = page.totalRecordCount
+            errorMessage = nil
+        } catch {
+            // Keep the last good grid and stay quiet. This refresh was caused
+            // by app lifecycle rather than a viewer action, so a sleeping
+            // server should not add an error to an otherwise usable library.
+        }
+    }
 }
 
 struct LibraryView: View {
     let library: LibraryTab
     @Environment(SessionStore.self) private var session
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = LibraryViewModel()
 
     private var columns: [GridItem] { Metrics.posterGridColumns }
@@ -91,6 +116,9 @@ struct LibraryView: View {
             if viewModel.items.isEmpty {
                 await viewModel.loadMore(client: session.client, library: library)
             }
+        }
+        .onChange(of: serverSync.generation) { _, _ in
+            Task { await viewModel.refresh(client: session.client, library: library) }
         }
         .accessibilityIdentifier("library.view.\(library.id)")
         .accessibilityValue("\(viewModel.items.count) items")
