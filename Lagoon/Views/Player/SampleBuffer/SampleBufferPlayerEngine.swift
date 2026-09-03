@@ -125,6 +125,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     var videoQueueHardLimitDiagnostic: Int {
         shared.withLock { $0.videoQueueHardLimit }
     }
+    var videoIntakeCountDiagnostic: Int { videoIntake.count }
+    var maximumVideoIntakeDiagnostic: Int { videoIntake.peakCount }
     /// Whether the title has sound at all. A silent one cannot starve for
     /// it, and must never be held in buffering waiting for a cushion that
     /// is never going to arrive (HEL-123).
@@ -265,6 +267,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let demuxQueue = DispatchQueue(label: "ee.helop.lagoon.demux", qos: .userInitiated)
     @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInteractive)
     @ObservationIgnored nonisolated private let pumpKickState = PumpKickState()
+    /// Compressed video read past the decoded-frame limit while the demuxer
+    /// reads on for audio (HEL-124). Demux queue, plus the resets.
+    @ObservationIgnored nonisolated private let videoIntake = VideoIntakeQueue()
+    /// Serialises admission to and drain from the intake, because both the
+    /// demux loop and the video pump feed the decoders from it and decode
+    /// order must survive the two racing (HEL-124).
+    @ObservationIgnored nonisolated private let videoFeedLock = NSLock()
+    /// How long a backpressure wait may sleep before the loop re-evaluates
+    /// the policy on its own. A full decoded queue under a stopped clock
+    /// never dequeues, and audio can run dry behind it (HEL-124).
+    nonisolated private static let demuxWaitTimeout: TimeInterval = 0.25
     #if DEBUG
     @ObservationIgnored nonisolated private let diagnosticFaultGate = PlaybackDiagnosticFaultGate()
     #endif
@@ -803,9 +816,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         audioRequestsArmed = false
         video?.flush()
         audio?.flush()
+        videoIntake.removeAll()
         videoQueue.reset()
         audioQueue.reset()
-        shared.withLock { $0.lastEnqueuedAudioEndSeconds = nil }
+        shared.withLock {
+            $0.lastEnqueuedAudioEndSeconds = nil
+            $0.endOfFilePendingIntake = false
+        }
 
         #if DEBUG
         // Hardware can spend several seconds retiring a 4K decoder and its
@@ -873,11 +890,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         pumpQueue.sync { [self] in
             videoRenderer?.flush()
             audioRenderer?.flush()
+            videoIntake.removeAll()
             videoQueue.reset()
             audioQueue.reset()
             shared.withLock {
                 $0.firstEnqueuedVideoPTS = nil
                 $0.lastEnqueuedAudioEndSeconds = nil
+                $0.endOfFilePendingIntake = false
             }
         }
         // The pts chain restarts at the target; the first buffer after a
@@ -1943,6 +1962,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 // libavcodec belongs to the old position and must not land in
                 // a queue that has just been emptied.
                 softwareDecodeStage?.reset()
+                videoIntake.removeAll()
+                shared.withLock { $0.endOfFilePendingIntake = false }
                 videoQueue.reset()
                 audioQueue.reset()
                 applyAudioSelection(ordinal: shared.withLock { $0.selectedAudioOrdinal })
@@ -1967,6 +1988,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // are video already read and not yet shown, and counting only the
             // first would let the loop read a decoder backlog ahead of itself
             // the moment decode stopped happening on this queue (HEL-137).
+            //
+            // Parked video goes first: it is older than anything the next
+            // read would return, and it only waits for decoded-queue room
+            // (HEL-124).
+            drainVideoIntake()
             let decodedFrameBytes = softwareDecodeStage?.decodedFrameBytes ?? 0
             let videoIsDecoded = videoDecoder != nil || demuxer.outputsDecodedVideo
             let videoIsSoftwareDecoded = demuxer.outputsDecodedVideo
@@ -1976,6 +2002,20 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 decodedFrameBytes: decodedFrameBytes
             )
             let videoBacklog = recordVideoBacklog(hardLimit: videoHardLimit)
+            let (playbackRate, endOfFilePending) = shared.withLock {
+                ($0.playbackRate, $0.endOfFilePendingIntake)
+            }
+            if endOfFilePending {
+                // Nothing left to read; finish once the intake has drained.
+                if videoIntake.isEmpty {
+                    finishVideoInput()
+                } else {
+                    videoQueue.waitUntilBelow(videoHardLimit, timeout: Self.demuxWaitTimeout) {
+                        self.softwareDecodeStage?.pendingCount ?? 0
+                    }
+                }
+                continue
+            }
             switch DemuxBackpressurePolicy.decision(
                 videoCount: videoBacklog,
                 audioCount: audioQueue.count,
@@ -1985,17 +2025,22 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 videoIsSoftwareDecoded: videoIsSoftwareDecoded,
                 hasAudio: !demuxer.audioStreams.isEmpty,
                 deliveryIsCached: deliveryIsCached,
-                playbackRate: shared.withLock { $0.playbackRate },
-                decodedFrameBytes: decodedFrameBytes
+                playbackRate: playbackRate,
+                decodedFrameBytes: decodedFrameBytes,
+                videoIntakeCount: videoIntake.count,
+                videoIntakeBytes: videoIntake.byteCount
             ) {
             case .read:
                 performDemuxStep()
             case .waitForVideo(let target):
-                videoQueue.waitUntilBelow(target) {
+                // Bounded: with the clock stopped nothing dequeues, and the
+                // other queue's state can change underneath a wait on this
+                // one. The loop re-evaluates the policy on its own (HEL-124).
+                videoQueue.waitUntilBelow(target, timeout: Self.demuxWaitTimeout) {
                     self.softwareDecodeStage?.pendingCount ?? 0
                 }
             case .waitForAudio(let target):
-                audioQueue.waitUntilBelow(target)
+                audioQueue.waitUntilBelow(target, timeout: Self.demuxWaitTimeout)
             }
         }
         os_signpost(
@@ -2046,10 +2091,49 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         return backlog
     }
 
-    nonisolated private func step() {
-        switch demuxer.readNext() {
-        case .video(let buffer):
-            recordMediaEnd(buffer)
+    /// Everything the container had is in the queues or the decoders:
+    /// flush the decoders, close the queues, and arm the finish boundary.
+    nonisolated private func finishVideoInput() {
+        shared.withLock { $0.endOfFilePendingIntake = false }
+        do {
+            try videoDecoder?.finish()
+            // Frame threading always leaves pictures inside libavcodec;
+            // they are the end of the film, so they have to be out before
+            // the queue may call itself finished.
+            try softwareDecodeStage?.finish()
+        } catch {
+            failVideoDecode(error)
+            return
+        }
+        videoQueue.markFinished()
+        audioQueue.markFinished()
+        let (sampledEnd, generation) = shared.withLock { ($0.mediaEndSeconds, $0.playbackGeneration) }
+        if let end = PlaybackEndBoundary.endTime(
+            sampledEnd: sampledEnd,
+            declaredDuration: demuxer.durationSeconds
+        ) {
+            Task { @MainActor in
+                self.armFinishBoundary(at: end, generation: generation)
+            }
+        }
+    }
+
+    /// Hands video to the next stage in order: straight through while the
+    /// decoded queue has room and nothing is parked ahead of it, otherwise
+    /// into the intake behind whatever is already waiting (HEL-124).
+    nonisolated private func admitVideo(_ item: VideoIntakeItem) {
+        videoFeedLock.lock()
+        defer { videoFeedLock.unlock() }
+        if videoIntake.isEmpty, decodedVideoBacklog() < currentVideoHardLimit() {
+            deliverVideo(item)
+        } else {
+            videoIntake.append(item)
+        }
+    }
+
+    nonisolated private func deliverVideo(_ item: VideoIntakeItem) {
+        switch item {
+        case .sample(let buffer):
             if let videoDecoder {
                 do {
                     try videoDecoder.decode(buffer)
@@ -2060,10 +2144,52 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 videoQueue.enqueue(buffer)
                 kickPumps()
             }
+        case .packet(let packet):
+            softwareDecodeStage?.submit(packet)
+        }
+    }
+
+    /// Moves parked video into the decoders while the decoded queue has
+    /// room. Called by the demux loop between reads and by the video pump
+    /// after every dequeue: the loop can sit in a network read for seconds
+    /// while it reads ahead, and the decoded queue must not run dry behind
+    /// a full intake in that time (measured on the Apple TV: `video=0/30/30
+    /// intake=151/151`, frames dropping, before the pump drained too).
+    nonisolated private func drainVideoIntake() {
+        guard !shared.withLock({ $0.cancelled }) else { return }
+        videoFeedLock.lock()
+        defer { videoFeedLock.unlock() }
+        let hardLimit = currentVideoHardLimit()
+        while decodedVideoBacklog() < hardLimit, let item = videoIntake.popFirst() {
+            deliverVideo(item)
+        }
+    }
+
+    /// Decoded frames ready to present plus packets the software stage
+    /// still owes; the figure every video limit is measured against.
+    nonisolated private func decodedVideoBacklog() -> Int {
+        videoQueue.count + (softwareDecodeStage?.pendingCount ?? 0)
+    }
+
+    nonisolated private func currentVideoHardLimit() -> Int {
+        DemuxBackpressurePolicy.videoHardLimit(
+            videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
+            videoIsSoftwareDecoded: demuxer.outputsDecodedVideo,
+            decodedFrameBytes: softwareDecodeStage?.decodedFrameBytes ?? 0
+        )
+    }
+
+    nonisolated private func step() {
+        switch demuxer.readNext() {
+        case .video(let buffer):
+            recordMediaEnd(buffer)
             if let seconds = Self.presentationEnd(of: buffer) {
-                // Stall detection compares the clock against this.
+                // Stall detection compares the clock against this. Parked
+                // video counts too: it is decoded the moment the decoded
+                // queue has room, like the software stage's pending packets.
                 shared.withLock { $0.videoBufferedTo = max($0.videoBufferedTo, seconds) }
             }
+            admitVideo(.sample(buffer))
         case .videoPacket(let packet):
             // Stall detection and the finish boundary read the same media
             // time they did when this queue held the decoded frame: the
@@ -2074,15 +2200,21 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     $0.videoBufferedTo = max($0.videoBufferedTo, seconds)
                 }
             }
-            softwareDecodeStage?.submit(packet)
+            admitVideo(.packet(packet))
         case .audio(let buffers, let streamIndex):
-            let (selected, delay) = shared.withLock { ($0.selectedAudioStreamIndex, $0.audioDelaySeconds) }
+            let (selected, delay, floor) = shared.withLock {
+                ($0.selectedAudioStreamIndex, $0.audioDelaySeconds, $0.audioAdmissionFloorSeconds)
+            }
             if streamIndex == selected {
                 for buffer in buffers {
                     // Watched pre-delay: the delay shifts every stamp
                     // uniformly, so continuity is the same either side.
                     audioContinuity.observe(buffer)
                     let output = delay == 0 ? buffer : Self.retimed(buffer, by: delay)
+                    // A seek into a coarse fragment reads that fragment's
+                    // audio from its keyframe; the part before the target
+                    // is never played and must not be counted (HEL-124).
+                    if let end = Self.presentationEnd(of: output), end <= floor { continue }
                     recordMediaEnd(output)
                     audioQueue.enqueue(output)
                 }
@@ -2101,27 +2233,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         case .skipped:
             break
         case .endOfFile:
-            do {
-                try videoDecoder?.finish()
-                // Frame threading always leaves pictures inside libavcodec;
-                // they are the end of the film, so they have to be out before
-                // the queue may call itself finished.
-                try softwareDecodeStage?.finish()
-            } catch {
-                failVideoDecode(error)
+            // Video still parked in the intake is the end of the film too.
+            // The demux loop drains it as the decoded queue makes room and
+            // finishes then (HEL-124).
+            guard videoIntake.isEmpty else {
+                shared.withLock { $0.endOfFilePendingIntake = true }
                 return
             }
-            videoQueue.markFinished()
-            audioQueue.markFinished()
-            let (sampledEnd, generation) = shared.withLock { ($0.mediaEndSeconds, $0.playbackGeneration) }
-            if let end = PlaybackEndBoundary.endTime(
-                sampledEnd: sampledEnd,
-                declaredDuration: demuxer.durationSeconds
-            ) {
-                Task { @MainActor in
-                    self.armFinishBoundary(at: end, generation: generation)
-                }
-            }
+            finishVideoInput()
         case .failed(let message):
             videoQueue.markFinished()
             audioQueue.markFinished()
@@ -2209,7 +2328,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Fill the queues enough that playback can start cleanly, then hand
     /// control back to the main actor to run the clock.
     nonisolated private func primeAndStart(at target: Double) {
-        let generation = shared.withLock { $0.playbackGeneration }
+        let generation = shared.withLock { state -> Int in
+            state.audioAdmissionFloorSeconds = target
+            return state.playbackGeneration
+        }
         let hasAudio = !demuxer.audioStreams.isEmpty
         let videoHardLimit = DemuxBackpressurePolicy.videoHardLimit(
             videoIsDecoded: videoDecoder != nil || demuxer.outputsDecodedVideo,
@@ -2224,13 +2346,35 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             max(videoHardLimit - 1, 1)
         )
         let minimumAudioReserve = 1.25 * playbackRate
-        while (videoQueue.count < minimumVideoReserve || (hasAudio && audioQueue.bufferedDuration < minimumAudioReserve)),
+        // Audio ahead of the start position wherever it sits: the pump may
+        // already have handed the renderer some of it, and that share is
+        // exactly what `audioQueue` no longer shows. Audio that ends before
+        // the target counts for nothing on either side; a seek into a
+        // coarse fragment primes on exactly that otherwise (HEL-123/124).
+        let audioAhead = { () -> Double in
+            let delivered = self.shared.withLock { state in
+                state.lastEnqueuedAudioEndSeconds.map { max($0 - target, 0) } ?? 0
+            }
+            return delivered + self.audioQueue.bufferedDuration(after: target)
+        }
+        while (videoQueue.count < minimumVideoReserve || (hasAudio && audioAhead() < minimumAudioReserve)),
               !videoQueue.isFinished,
               !shared.withLock({ $0.cancelled }) {
             if shared.withLock({ $0.pendingSeekSeconds != nil }) { return }
             let pendingDecode = softwareDecodeStage?.pendingCount ?? 0
             recordVideoBacklog(hardLimit: videoHardLimit)
             guard videoQueue.count + pendingDecode >= videoHardLimit else {
+                performDemuxStep()
+                continue
+            }
+            // The decoded queue is full and audio is still short. On an HLS
+            // fragment the audio block sits behind the rest of the video
+            // block, so keep reading and park the video compressed, up to the
+            // intake's own bounds (HEL-124).
+            if hasAudio, audioAhead() < minimumAudioReserve,
+               videoIntake.count < DemuxBackpressurePolicy.videoIntakeHardLimit,
+               videoIntake.byteCount < DemuxBackpressurePolicy.videoIntakeByteBudget,
+               !shared.withLock({ $0.endOfFilePendingIntake }) {
                 performDemuxStep()
                 continue
             }
@@ -2477,6 +2621,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 from: enqueueStarted,
                 to: ProcessInfo.processInfo.systemUptime
             )
+            // A frame left the decoded queue; the intake may have its
+            // replacement (HEL-124).
+            drainVideoIntake()
         }
     }
 
@@ -2833,6 +2980,14 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// Peak decoded-frame-plus-pending backlog observed under that
         /// bound, retained for the whole engine session and Release HUD.
         var maximumVideoBacklog = 0
+        /// End of file was read while the intake still held video. The
+        /// demux loop finishes the queues once that has drained.
+        var endOfFilePendingIntake = false
+        /// The position playback last started from. Audio that ends at or
+        /// before it is audio the renderer discards; queued, it would count
+        /// toward the audio high water and throttle the read-ahead exactly
+        /// when the renderer holds least (HEL-124).
+        var audioAdmissionFloorSeconds: Double = -.infinity
     }
 
     private let lock = NSLock()
@@ -2916,6 +3071,18 @@ nonisolated enum DemuxBackpressurePolicy {
     /// to survive is however long the network takes to deliver the next
     /// segment rather than a cache read.
     private static let uncachedAudioSafetySeconds = 3.0
+    /// Bounds on the compressed video the demux loop may park past the
+    /// decoded limit while it reads on for audio (HEL-124). Both have to
+    /// hold a whole fragment, because the audio block sits behind the
+    /// video block and the read-ahead only helps if it reaches it: 600
+    /// access units is 25 s at 24 fps or 10 s at 60 fps, and 128 MB is
+    /// 10 s at 100 Mbps. A lead-triggered read-ahead was tried first and
+    /// starved a 4K remux anyway, because reading a 60 MB video block over
+    /// the network takes longer than any cushion the renderer holds; the
+    /// read has to start the moment the decoded queue is full, and the
+    /// audio high water below is what bounds it.
+    static let videoIntakeHardLimit = 600
+    static let videoIntakeByteBudget = 128 * 1_048_576
 
     /// The audio depth being aimed for, so the HUD can show which profile
     /// is in force rather than leaving its absence to be inferred.
@@ -2963,7 +3130,9 @@ nonisolated enum DemuxBackpressurePolicy {
         hasAudio: Bool,
         deliveryIsCached: Bool = true,
         playbackRate: Double = 1,
-        decodedFrameBytes: Int64 = 0
+        decodedFrameBytes: Int64 = 0,
+        videoIntakeCount: Int = 0,
+        videoIntakeBytes: Int = 0
     ) -> DemuxBackpressureDecision {
         let audioHighWater = deliveryIsCached ? Self.audioHighWater : uncachedAudioHighWater
         let audioLowWater = deliveryIsCached ? Self.audioLowWater : uncachedAudioLowWater
@@ -3009,14 +3178,26 @@ nonisolated enum DemuxBackpressurePolicy {
             // renderer takes samples as fast as they are demuxed, so this
             // batch-drain branch is effectively unreachable there and the
             // loop instead parks at the hard limit below in one-slot pacing.
-            // No symptom has been observed from that; left as is on purpose.
+            // The read-ahead rule above is what keeps audio fed when the
+            // interleave is coarser than the cushion; this branch stays.
             if audioCanCoverDrain {
                 return .waitForVideo(below: videoLowWater)
             }
             if videoCount >= videoHardWater {
-                // Wait for one slot, not a full batch: demuxing at playback
-                // cadence keeps reaching interleaved audio without exceeding
-                // the absolute video-memory limit.
+                // The decoded queue is full. With audio in the stream the
+                // demuxer may not sit here: on an HLS fragment the audio
+                // block is behind the video block, so reaching it means
+                // reading video the decoded queue has no room for, which
+                // parks compressed in the intake (HEL-124). The audio high
+                // water is what stops the read-ahead on a finely interleaved
+                // stream, and the intake's own bounds stop it on a coarse
+                // one. Without audio, one slot at a time as before.
+                if hasAudio,
+                   audioCount < audioHighWater,
+                   videoIntakeCount < videoIntakeHardLimit,
+                   videoIntakeBytes < videoIntakeByteBudget {
+                    return .read
+                }
                 return .waitForVideo(below: videoHardWater)
             }
             return .read
@@ -3117,6 +3298,26 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
     /// Presentation time covered by buffers that have not yet reached the
     /// renderer. Audio uses monotonic PTS, so the first and last entries give
     /// a codec-independent safety reserve (AAC and AC-3 packet counts differ).
+    /// Seconds of queued audio that end after `seconds`. Priming after a
+    /// seek lands inside a fragment whose audio block starts at the
+    /// keyframe, and audio that ends before the target is audio the
+    /// renderer will discard, not a cushion (HEL-124).
+    func bufferedDuration(after seconds: Double) -> Double {
+        condition.lock()
+        defer { condition.unlock() }
+        guard head < buffers.count,
+              let first = buffers[head],
+              let last = buffers.last ?? nil else { return 0 }
+        let firstPTS = CMSampleBufferGetPresentationTimeStamp(first)
+        let lastPTS = CMSampleBufferGetPresentationTimeStamp(last)
+        guard firstPTS.isValid, lastPTS.isValid else { return 0 }
+        let duration = CMSampleBufferGetDuration(last)
+        let end = duration.isValid && duration.seconds.isFinite
+            ? CMTimeAdd(lastPTS, duration).seconds
+            : lastPTS.seconds
+        return max(end - max(firstPTS.seconds, seconds), 0)
+    }
+
     var bufferedDuration: Double {
         condition.lock()
         defer { condition.unlock() }
@@ -3194,10 +3395,22 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
     /// video sitting in the software decode stage (HEL-137). It is evaluated
     /// under the lock on every wake, so the stage settles this wait by
     /// signalling here rather than needing a condition of its own.
-    func waitUntilBelow(_ targetCount: Int, alsoCounting: () -> Int = { 0 }) {
+    /// With a `timeout`, returns after at most that long even if the queue
+    /// is still full, so the caller can re-evaluate something the queue
+    /// cannot see (HEL-124).
+    func waitUntilBelow(
+        _ targetCount: Int,
+        timeout: TimeInterval? = nil,
+        alsoCounting: () -> Int = { 0 }
+    ) {
         condition.lock()
+        let deadline = timeout.map { Date(timeIntervalSinceNow: $0) }
         while buffers.count - head + alsoCounting() >= targetCount, !finished, !waitsInterrupted {
-            condition.wait()
+            if let deadline {
+                guard condition.wait(until: deadline) else { break }
+            } else {
+                condition.wait()
+            }
         }
         condition.unlock()
     }
