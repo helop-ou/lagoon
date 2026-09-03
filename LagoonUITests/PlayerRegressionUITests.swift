@@ -462,6 +462,113 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertEqual(recovered.int("audioHeld"), 0)
     }
 
+    /// Pins the HEL-124 fix: each HLS fragment's `mdat` is one contiguous
+    /// video block followed by one contiguous audio block, so a demuxer
+    /// that stops reading once the decoded video queue hits its hard limit
+    /// only reaches a fragment's audio after that fragment's last video
+    /// frame — starving the renderer once per fragment on the HLS rungs
+    /// (13 `aDry` episodes in 70 s on the remux rung, per docs/playback.md).
+    /// The fix parks read-ahead compressed video in an intake queue so the
+    /// demux loop keeps reading into the audio block instead of parking on
+    /// the decoded limit. Forces the cheap remux rung via the injected
+    /// first-delivery failure — the same rung the original repro
+    /// sawtoothed on — then holds it to both bounds across 40 s of real
+    /// playback: the decoded backlog stays inside its hard limit and the
+    /// intake queue stays inside `DemuxBackpressurePolicy.videoIntakeHardLimit`,
+    /// with no additional dry episode, stall, or reprime.
+    func testForcedRemuxKeepsAudioFedWithinTheIntakeBound() throws {
+        // Mirrors `DemuxBackpressurePolicy.videoIntakeHardLimit`. The UI
+        // test target cannot import the app module, so the bound is
+        // pinned here as a literal instead — keep the two in sync.
+        let videoIntakeHardLimit = 600
+
+        let app = launchPlayer(
+            title: "hls-remux-intake-regression",
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.regressionRequireAudio", "YES",
+                "-debug.regressionFailFirstDelivery", "delivery",
+                "-playback.autoplayMode", "off",
+                // An intro auto-skip must not seek mid-run and confuse the
+                // rung/readiness sequence this test watches for below.
+                "-playback.skipMode", "button",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        _ = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+        }
+
+        // The injected failure fires 4 s after this engine starts and
+        // steps the delivery down to the remux rung. `method` alone can't
+        // tell that apart from an ordinary transcode — Jellyfin's
+        // `PlayMethod` reads `Transcode` for both, and on some simulators
+        // the first engine is already a transcode (a 4K HEVC title the
+        // simulator can only play that way), so `method` never even
+        // changes. `rung` is the app's own delivery-ladder state, so
+        // `remux` is unambiguous regardless of what the first engine
+        // used. The remux rung can then take 10-20 s to come back up,
+        // hence the generous timeout.
+        let fallenBack = waitForState(in: app, timeout: 60) {
+            $0.string("rung") == "remux"
+                && $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && $0.double("audioLead") > 0.25
+        }
+
+        // The switch itself may have counted a dry episode; that is not
+        // what this test is pinning, so the baseline is read after the
+        // switch rather than assumed to be zero.
+        let baselineDry = fallenBack.int("aDry")
+        let baselineStalls = fallenBack.int("stalls")
+        let baselineReprimes = fallenBack.int("reprimes")
+
+        var observedHealthyLead = false
+        for _ in 0..<40 {
+            Thread.sleep(forTimeInterval: 1)
+            let sample = state(in: app)
+            XCTAssertEqual(
+                sample.int("buffering"),
+                0,
+                "Remux playback buffered while the demux read past the decoded video limit: \(sample.raw)"
+            )
+            XCTAssertLessThanOrEqual(
+                sample.int("videoMax"),
+                sample.int("videoHard"),
+                "Decoded video backlog exceeded its hard limit during remux playback: \(sample.raw)"
+            )
+            XCTAssertLessThanOrEqual(
+                sample.int("videoIntakeMax"),
+                videoIntakeHardLimit,
+                "Intake queue exceeded DemuxBackpressurePolicy.videoIntakeHardLimit: \(sample.raw)"
+            )
+            if sample.double("audioLead") > 0.25 { observedHealthyLead = true }
+        }
+
+        let final = state(in: app)
+        XCTAssertTrue(
+            observedHealthyLead,
+            "Audio lead never rose back above the floor during 40 s of remux playback: \(final.raw)"
+        )
+        XCTAssertEqual(
+            final.int("aDry"),
+            baselineDry,
+            "Remux playback starved the audio renderer during 40 s of interleaved fMP4 fragments: \(final.raw)"
+        )
+        XCTAssertEqual(
+            final.int("stalls"),
+            baselineStalls,
+            "Remux playback stalled during the 40 s intake-bound window: \(final.raw)"
+        )
+        XCTAssertEqual(
+            final.int("reprimes"),
+            baselineReprimes,
+            "Remux playback reprimed during the 40 s intake-bound window: \(final.raw)"
+        )
+    }
+
     func testAutomaticIntroSkipUsesRealSegmentAndPlayerSeek() throws {
         let app = launchPlayer(
             title: "hardware-regression",
