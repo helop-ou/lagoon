@@ -70,6 +70,11 @@ Quick rules that prevent regressions:
   the engine). A block that returns empty-handed is called again at once, and
   that loop cost half a core at the highest priority in the process while
   4K AV1 starved (HEL-137). Keep the invariant when touching the pumps.
+- A light Siri Remote touch-surface tap and a Select press are different
+  inputs: the former is the indirect-touch recognizer in `MenuPressGate` and
+  only calls `pokeControls()`; SwiftUI's surface `onTapGesture` is Select and
+  keeps its scrub/skip/Up Next/play-pause priority chain (HEL-134). Never
+  merge the two paths.
 - Software-decoded 10-bit video reaches the renderer through
   `MetalFrameConverter` (`gpu-sdr` on tvOS HDR, `gpu-pq` otherwise); the
   VideoToolbox transfer modes are fallbacks and diagnostics. The GPU stage is
