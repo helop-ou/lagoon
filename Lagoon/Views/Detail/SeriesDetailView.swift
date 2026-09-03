@@ -91,8 +91,12 @@ struct SeriesDetailView: View {
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
             // Watching an episode moves the show on, so this reloads what's
-            // up next as well as the rail.
-            Task { await viewModel.reloadUserData(client: session.client, seriesId: item.id) }
+            // up next as well as the rail — once the stop report that moves
+            // it has landed (HEL-132).
+            Task {
+                await session.client.playbackReports.settle()
+                await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+            }
         }) { player in
             VideoPlayerView(playerItem: player)
                 .preferredColorScheme(.dark)
