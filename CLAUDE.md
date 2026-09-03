@@ -51,6 +51,13 @@ Quick rules that prevent regressions:
 - Jellyfin JSON is PascalCase; the client's global key strategies handle it —
   never add CodingKeys for casing. Don't decode `Date` (7-digit .NET
   fractions break ISO8601DateFormatter). Positions are ticks → `Ticks` helpers.
+- `MediaItem` compares by value (synthesized); navigation identity is
+  `ContentNavigationRoute`'s. Never give a DTO an id-only `==`: SwiftUI
+  drops a `@State` write whose new value compares equal to the old one and
+  skips child views handed an "equal" item, which is how a re-fetched
+  resume point never reached the screen (HEL-132). API calls bypass the
+  URL cache for the same reason; the ledger in `client.playbackReports`
+  makes a post-player re-fetch wait for the stop report.
 - Every screen needs a focusable element (Menu quits the app otherwise);
   keep `.scrollClipDisabled()` + rail focus-lift padding intact.
 - Images go through `CachedAsyncImage` with an explicit `maxPixelSize` —
