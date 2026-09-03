@@ -1382,7 +1382,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             droppedFrames: snapshot.droppedFrames,
             corruptedFrames: snapshot.corruptedFrames,
             stalls: stallCount,
-            audioStalls: audioStarvationCount,
+            audioStalls: audioStallCount,
+            audioDry: audioStarvationCount,
             audioGaps: audioContinuity.gapCount,
             videoQueueDepth: videoQueue.count,
             optimizedFrames: snapshot.optimizedCompositingFrames,
@@ -1419,7 +1420,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             print("BenchResult dropped=\(result.dropped) frames=\(result.frames) "
                 + String(format: "percent=%.3f", result.lossPercent)
                 + " corrupted=\(result.corrupted) stalls=\(result.stalls)"
-                + " audioStalls=\(result.audioStalls) audioGaps=\(result.audioGaps)"
+                + " audioStalls=\(result.audioStalls) audioDry=\(result.audioDry) audioGaps=\(result.audioGaps)"
                 + " minVideoQueue=\(result.minVideoQueue)"
                 + " optimized=\(result.optimizedFrames)"
                 + String(format: " delayMs=%.1f", result.accumulatedDelay * 1000)
@@ -1444,13 +1445,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 log: PlaybackPerformance.log,
                 name: "Bench Result",
                 signpostID: performanceSignpostID,
-                "dropped=%{public}d frames=%{public}d percent=%{public}.3f corrupted=%{public}d stalls=%{public}d audioStalls=%{public}d audioGaps=%{public}d minVideoQueue=%{public}d memoryStartMB=%{public}.1f memoryPeakMB=%{public}.1f memoryGrowthMB=%{public}.1f minimumAvailableMB=%{public}.1f start=%{public}.2f window=%{public}.2f",
+                "dropped=%{public}d frames=%{public}d percent=%{public}.3f corrupted=%{public}d stalls=%{public}d audioStalls=%{public}d audioDry=%{public}d audioGaps=%{public}d minVideoQueue=%{public}d memoryStartMB=%{public}.1f memoryPeakMB=%{public}.1f memoryGrowthMB=%{public}.1f minimumAvailableMB=%{public}.1f start=%{public}.2f window=%{public}.2f",
                 result.dropped,
                 result.frames,
                 result.lossPercent,
                 result.corrupted,
                 result.stalls,
                 result.audioStalls,
+                result.audioDry,
                 result.audioGaps,
                 result.minVideoQueue,
                 Double(result.startingFootprintBytes) / 1_048_576,
