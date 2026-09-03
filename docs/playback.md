@@ -2428,6 +2428,35 @@ or past `MaxResumePct` (90 %), so stopping a two-hour film after two
 minutes legitimately comes back as Play, and stopping in the credits
 comes back as played.
 
+## Siri Remote transport reveal
+
+A light tap on the Siri Remote touch surface reveals the transport and
+restarts its four-second dwell (HEL-134). It is deliberately informational:
+the tap never pauses, seeks, commits a scrub, accepts a Skip/Up Next offer,
+or moves focus. A tap while the control panel is open is ignored because the
+panel already owns the screen and the remote.
+
+This cannot share the surface's SwiftUI `onTapGesture`: on tvOS that gesture
+is the Select **press**, whose existing priority chain commits a scrub, skips
+an intro, accepts Up Next, or toggles pause. `MenuPressGate` therefore owns a
+second `UITapGestureRecognizer` configured with:
+
+- `allowedPressTypes = []` — Apple's documented switch from the default
+  Select press to a tap on a touchpad-like surface.
+- `allowedTouchTypes = [.indirect]` — the Siri Remote trackpad touch type.
+- `cancelsTouchesInView = false` — a recognized, non-destructive reveal does
+  not cancel delivery to the hosted surface; directional swipes still fail
+  the tap recognizer and follow the focus/scrub path they already had.
+
+The recognizer calls `pokeControls()`, the same path every other interaction
+uses, so showing the bar and resetting auto-hide cannot drift apart. Its unit
+test pins the touch-only configuration and the hosting controller's live
+callback forwarding. The production player UI journey separately proves that
+adding it does not consume Select, Play/Pause, directional scrubbing, or panel
+focus. Xcode's tvOS UI automation exposes remote button presses but no light
+touch-surface tap, so the final gesture-delivery check belongs on a physical
+Siri Remote.
+
 ## Putting controls in the transport (tvOS)
 
 The area around the scrubber is the obvious home for shortcut buttons —
