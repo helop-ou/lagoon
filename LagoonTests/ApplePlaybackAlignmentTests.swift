@@ -999,7 +999,21 @@ struct ApplePlaybackAlignmentTests {
             hasAudio: true
         )
 
-        #expect(decision == .waitForVideo(below: 120))
+        #expect(decision == .read)
+
+        // The compressed path's own hard limit hands over to the intake's
+        // once that fills too, which is what keeps this bounded.
+        let decisionAtIntakeLimit = DemuxBackpressurePolicy.decision(
+            videoCount: 120,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: false,
+            hasAudio: true,
+            videoIntakeCount: DemuxBackpressurePolicy.videoIntakeHardLimit
+        )
+
+        #expect(decisionAtIntakeLimit == .waitForVideo(below: 120))
     }
 
     @Test func demuxUsesBatchedVideoDrainWhenAudioHasEnoughReserve() {
