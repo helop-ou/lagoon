@@ -33,6 +33,11 @@ struct CustomPlayerView<Surface: View>: View {
     /// Negotiated Jellyfin mode and transport ownership are carried into the
     /// launch-gated probe so regressions prove the intended path actually ran.
     var playbackMethod: PlayMethod = .directPlay
+    /// The delivery-ladder rung backing `playbackMethod` (HEL-124): Jellyfin's
+    /// own `PlayMethod` reports `Transcode` for both the cheap remux rung and
+    /// the expensive re-encode rung, so the regression probe needs this to
+    /// tell them apart.
+    var deliveryRung: PlaybackDelivery = .negotiated
     var isPlaybackCacheActive = false
     /// The legacy byte-zero prefix remains in the regression probe. The
     /// visible scrubber renders every sparse direct-file cache island.
@@ -1264,6 +1269,7 @@ struct CustomPlayerView<Surface: View>: View {
             "item=\(playbackIdentity)",
             "surface=\(playerSurfaceIdentity)",
             "method=\(playbackMethod.rawValue)",
+            "rung=\(deliveryRung.rawValue)",
             "cache=\(isPlaybackCacheActive ? 1 : 0)",
             String(format: "buffered=%.3f", bufferedFraction ?? -1),
             "bufferRanges=\(bufferedRanges.count)",
@@ -1284,6 +1290,8 @@ struct CustomPlayerView<Surface: View>: View {
             "videoQueued=\(engine.videoQueueCountDiagnostic)",
             "videoMax=\(engine.maximumVideoBacklogDiagnostic)",
             "videoHard=\(engine.videoQueueHardLimitDiagnostic)",
+            "videoIntake=\(engine.videoIntakeCountDiagnostic)",
+            "videoIntakeMax=\(engine.maximumVideoIntakeDiagnostic)",
             "reprimes=\(engine.stallReprimeCount)",
             "idleRequests=\(engine.idleRequestCallbacks)",
             "audioRecoveries=\(engine.audioRendererRecoveryCount)",
