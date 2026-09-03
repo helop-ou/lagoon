@@ -63,6 +63,34 @@ therefore never sees the picker — `choosingAccount` appears only when no
 account can be resumed, or when Settings asks for it. A missing token drops
 to `needsSignIn`, no accounts at all to `needsServer`.
 
+### Foreground server sync (HEL-135)
+
+SwiftUI keeps the tab and navigation trees mounted when Lagoon goes into the
+background. Returning to the app therefore does not re-run the screens'
+ordinary `task` or `onAppear` work, which used to leave whatever Jellyfin had
+changed in the meantime invisible until a cold launch.
+
+`RootView` is the single scene-lifecycle observer. Each transition to
+`ScenePhase.active` advances the environment's `ServerSyncState.generation`.
+Server-backed screens observe that generation and reconcile only the state
+they own:
+
+- `MainTabView` refreshes the server's movie/show library tabs.
+- Home refreshes watch-state rails, Recently Added, curated/plugin rows,
+  collections, the hero values and Top Shelf without replacing the screen
+  with a loading state. Failed primary rail requests keep their last good
+  content.
+- An open library re-reads however many items it has already loaded, which
+  keeps focus and scroll identity instead of collapsing to page one.
+- Open item, series and collection details re-read their item or episode
+  state, and an open Jellyfin search repeats its current query.
+
+This is deliberately different from playback dismissal. The scene stays
+active while a full-screen player is open, and HEL-132's targeted dismissal
+refresh waits for the stop report before re-reading watch progress. A manual
+Home refresh control would duplicate both paths while still leaving an open
+detail or library stale, so there is none.
+
 ### Multiple accounts (HEL-38)
 
 `StoredAccount` is one server+user pair. Its `id` is
@@ -327,8 +355,8 @@ avoids title/year guesses and prevents a Seerr detail from entering a Jellyfin
 stack under the wrong identity.
 
 Playback is presented as `fullScreenCover(item:)` from whichever screen
-started it; dismissal triggers a re-fetch so resume state stays fresh
-(HomeView refreshes its progress rails in `onAppear`).
+started it; dismissal waits for the stop report and then triggers a targeted
+re-fetch so resume state stays fresh (HEL-132).
 
 There is one playback path: `SampleBufferPlayerEngine` demuxes with FFmpeg,
 uses VideoToolbox as an internal HEVC decode stage, and presents video/audio
