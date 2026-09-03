@@ -6,6 +6,33 @@ import SwiftUI
 nonisolated enum ContentNavigationRoute: Hashable {
     case item(MediaItem)
     case genre(name: String, includeTypes: [MediaItemType])
+
+    // A route carries whatever copy of the item a rail had, and the detail
+    // page re-fetches the rest. Two routes to the same item are the same
+    // destination however stale one copy's user data is, so identity here is
+    // the item's id; `MediaItem` itself compares by value (HEL-132).
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case let (.item(a), .item(b)):
+            a.id == b.id
+        case let (.genre(name, includeTypes), .genre(otherName, otherIncludeTypes)):
+            name == otherName && includeTypes == otherIncludeTypes
+        default:
+            false
+        }
+    }
+
+    func hash(into hasher: inout Hasher) {
+        switch self {
+        case .item(let item):
+            hasher.combine(0)
+            hasher.combine(item.id)
+        case .genre(let name, let includeTypes):
+            hasher.combine(1)
+            hasher.combine(name)
+            hasher.combine(includeTypes)
+        }
+    }
 }
 
 private struct ContentNavigationDestination: View {
