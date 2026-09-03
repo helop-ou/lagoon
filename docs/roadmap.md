@@ -67,27 +67,28 @@ and the decoder switches that hardware questions get answered with.
 
 In the order they are worth doing. Keys are Jira tickets.
 
-1. **Detail page after playback** (HEL-132): Play stays Play after leaving
-   the player instead of becoming Resume and Play from Start.
-2. **Siri Remote in the player** (HEL-134): a tap on the touch surface
+1. **Siri Remote in the player** (HEL-134): a tap on the touch surface
    should reveal the scrub bar and controls the way every tvOS player does.
-3. **Server sync** (HEL-135): the app is sometimes visibly behind the
+2. **Server sync** (HEL-135): the app is sometimes visibly behind the
    server; decide between a refresh affordance on Home and refreshing on
-   foreground and after playback.
-4. **Jellyfin 10.12** (HEL-138): a scoping pass against a 10.12 server
+   foreground and after playback. Re-check first: HEL-132 removed two
+   general causes of "sometimes" — API responses served from the URL
+   cache, and item equality by id, which let SwiftUI skip re-rendering
+   rails whose ids had not changed.
+3. **Jellyfin 10.12** (HEL-138): a scoping pass against a 10.12 server
    before fixture upgrades.
-5. **Live Seerr status** (HEL-136): download status and time estimates
+4. **Live Seerr status** (HEL-136): download status and time estimates
    that update while a detail page is open, without hurting performance.
-6. **iOS polish pass** (HEL-41): compact-width detail composition, hero
+5. **iOS polish pass** (HEL-41): compact-width detail composition, hero
    sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
    between. Only the collection page has its own iOS layout so far.
-7. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+6. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-8. **Buffer on audio starvation by default** (HEL-123): the mode is built
+7. **Buffer on audio starvation by default** (HEL-123): the mode is built
    and switched off; the `aDry` counter in Release decides whether real
    delivery still reaches the floor now that HEL-124 is in.
-9. **Live TV**, if the server has it: guide and channels. A big lift with
+8. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
@@ -99,7 +100,8 @@ Waiting on a TestFlight or hardware look rather than on code: 4K AV1
 frame rate (HEL-137), the audio starvation signal and its fix (HEL-123,
 HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
 Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
-cap (HEL-108).
+cap (HEL-108), the detail page turning Play into Resume after playback
+(HEL-132).
 
 ## Deliberate non-goals for now
 
