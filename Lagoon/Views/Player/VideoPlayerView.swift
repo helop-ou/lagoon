@@ -22,6 +22,8 @@ nonisolated struct PlayerItem: Identifiable {
     var startFromBeginning = false
 }
 
+private let reportLog = Logger(subsystem: "ee.helop.lagoon", category: "playback-reports")
+
 /// Negotiates the stream with Jellyfin, runs the Lagoon engine (the app's
 /// only player since HEL-48 went all-in), and owns progress reporting.
 @Observable
@@ -100,6 +102,10 @@ final class PlaybackController {
     private var bufferFillTask: Task<Void, Never>?
     private var didReportStop = false
     private var playbackSessionActive = false
+    /// Mirrors `playbackSessionActive` in `client.playbackReports`, so the
+    /// screen underneath can wait for the stop report before it re-fetches
+    /// (HEL-132).
+    private var reportLedgerSession: UUID?
     private var isClosed = false
     private var lastKnownPosition: Double = 0
     private var nextUpTask: Task<Void, Never>?
@@ -587,6 +593,7 @@ final class PlaybackController {
             }
             lastKnownPosition = resumeSeconds
             playbackSessionActive = true
+            reportLedgerSession = client.playbackReports.open()
 
             #if DEBUG
             // Deterministic UI-test hook for the otherwise tiny interval in
@@ -1303,6 +1310,8 @@ final class PlaybackController {
         guard let client, playbackSessionActive, !didReportStop else { return nil }
         didReportStop = true
         playbackSessionActive = false
+        let ledgerSession = reportLedgerSession
+        reportLedgerSession = nil
         let itemId = itemId
         let mediaSourceId = mediaSourceId
         let playSessionId = playSessionId
@@ -1314,18 +1323,30 @@ final class PlaybackController {
                 name: "Playback Stopped Report",
                 signpostID: signpostID
             )
-            try? await client.reportPlaybackStopped(.init(
-                itemId: itemId,
-                mediaSourceId: mediaSourceId,
-                playSessionId: playSessionId,
-                positionTicks: Ticks.ticks(seconds)
-            ))
+            do {
+                try await client.reportPlaybackStopped(.init(
+                    itemId: itemId,
+                    mediaSourceId: mediaSourceId,
+                    playSessionId: playSessionId,
+                    positionTicks: Ticks.ticks(seconds)
+                ))
+                reportLog.notice("stopped at \(seconds, format: .fixed(precision: 1)) s reported")
+            } catch {
+                // Advisory, like every other report — but the one that moves
+                // the resume point, so a failure is worth a line.
+                reportLog.error("stopped report failed: \(error.localizedDescription, privacy: .public)")
+            }
             os_signpost(
                 .end,
                 log: PlaybackPerformance.log,
                 name: "Playback Stopped Report",
                 signpostID: signpostID
             )
+            // Whether the report landed or failed, the server's answer is
+            // final now; let the screen underneath re-fetch.
+            if let ledgerSession {
+                client.playbackReports.close(ledgerSession)
+            }
         }
     }
 
