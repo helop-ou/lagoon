@@ -31,16 +31,18 @@ below are left exactly as they were written; this says which of them moved.
   that the WALL·E cutouts were the server rebuilding a Blu-ray image below
   real time, was wrong in its cause and right in its cure: HEL-133 moved
   the title off the HLS path, which is what stopped them.
-* **Order item 2, HEL-124** — closed as invalid on 2026-09-02, and the
-  hardware pass the next day says it should reopen. The `A 0` premise was
-  indeed the wrong queue, but the mechanism it described is real on HLS:
-  each fMP4 fragment carries its video block before its audio block,
-  libavformat emits them in that order from a non-seekable stream, and the
-  30-frame decoded video limit with one-slot pacing delivers a fragment's
-  audio roughly a fragment late. Transcode rung: lead sawtooths +1…−1.2 s,
-  22 dry episodes in 70 s; remux rung: −7 s, 13. The fix is a compressed
-  video stage ahead of VideoToolbox so the demuxer can read past the
-  decoded limit; see docs/playback.md.
+* **Order item 2, HEL-124** — closed as invalid on 2026-09-02, reopened
+  and fixed on 2026-09-03. The `A 0` premise was indeed the wrong queue,
+  but the mechanism it described is real on HLS: each fMP4 fragment
+  carries its video block before its audio block, libavformat emits them
+  in that order from a non-seekable stream, and the 30-frame decoded video
+  limit with one-slot pacing delivered a fragment's audio roughly a
+  fragment late (transcode rung: lead sawtoothing +1…−1.2 s, 22 dry
+  episodes in 70 s; remux rung: −7 s, 13). The fix is a compressed video
+  intake in front of every decoder, read into whenever the decoded queue is
+  full and bounded by the audio high water and its own limits, drained by
+  the video pump; see docs/playback.md for the two hardware lessons that
+  shaped it.
 * **Not in this audit at all: disc images.** Lagoon could not open one when
   this was written, and the resulting failure was being read as a transcode
   problem rather than as the client never having been in the path. See *Disc
