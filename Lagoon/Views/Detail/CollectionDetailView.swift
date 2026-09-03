@@ -21,7 +21,9 @@ final class CollectionDetailViewModel {
         } catch {
             errorMessage = "Couldn't load this collection."
         }
-        detail = await detailTask
+        if let refreshedDetail = await detailTask {
+            detail = refreshedDetail
+        }
         isLoading = false
     }
 
@@ -43,6 +45,7 @@ struct CollectionDetailView: View {
     let item: MediaItem
 
     @Environment(SessionStore.self) private var session
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = CollectionDetailViewModel()
 
     private var displayed: MediaItem { viewModel.detail ?? item }
@@ -70,6 +73,9 @@ struct CollectionDetailView: View {
             if viewModel.items.isEmpty {
                 await viewModel.load(client: session.client, collectionId: item.id)
             }
+        }
+        .onChange(of: serverSync.generation) { _, _ in
+            Task { await viewModel.load(client: session.client, collectionId: item.id) }
         }
         .accessibilityIdentifier("collection.detail.\(item.id)")
         .accessibilityValue("\(viewModel.items.count) titles")
