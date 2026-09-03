@@ -38,7 +38,13 @@ struct ItemDetailView: View {
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .fullScreenCover(item: $playerItem, onDismiss: {
-            Task { detail = try? await session.client.item(id: item.id) }
+            Task {
+                // The stop report that moves the resume point is still in
+                // flight here; read the item back only once it has landed
+                // (HEL-132).
+                await session.client.playbackReports.settle()
+                detail = try? await session.client.item(id: item.id)
+            }
         }) { player in
             VideoPlayerView(playerItem: player)
                 .preferredColorScheme(.dark)
