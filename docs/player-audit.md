@@ -21,24 +21,26 @@ below are left exactly as they were written; this says which of them moved.
   this needed a filter-graph stage did not hold: libavfilter is not in the
   pinned build, and `Deinterlacer` does yadif's spatial pass directly on the
   decoded planes instead, at 1.61 ms per frame at 720x576.
-* **Order item 1, HEL-123** — the reported symptom is gone; the renderer-side
-  signal is testable and ships in Release. Lagoon tracks the last audio
-  presentation end handed to AVFoundation against the synchronizer clock, and
-  a Debug-only deterministic hold in the simulator proves it detects and
-  recovers from withheld audio. The ticket stays open: the fix exists
-  behind `debug.bufferOnAudioStarvation`, off until a hardware pass
-  confirms the reading matches audible silence and sets the floor.
-  The cutouts were the server rebuilding a 64.8 GB Blu-ray image in real time
-  because Lagoon could not open the image itself. It reads the disc now
-  (HEL-133), and the drops went with the transcode.
-* **Order item 2, HEL-124** — closed as invalid. Its `A 0` premise was the
-  same invalid app-side queue reading; build 66 already showed a healthy
-  renderer drains that queue to zero on every title. The Debug-only
-  deterministic demux outage that came out of it pins the existing stall
-  recovery path (buffering, resume without the seek fallback, hard limit
-  held) and is not evidence about this ticket. One residual, the
-  `audioCanCoverDrain` batch-drain branch being effectively unreachable, is
-  left unfixed with no observed symptom.
+* **Order item 1, HEL-123** — the renderer-side signal ships in Release
+  and passed its hardware pass on 2026-09-03: direct-play lead sits at
+  1.9–2.2 s, the injected hold takes it below zero and counts one `aDry`,
+  the hold is audibly silent with the picture moving and sound returns in
+  sync, and the switched-off buffering mode stalls and resumes in place. The
+  default stays off, because the same pass found the symptom this ticket
+  was filed on is alive on every HLS rung (item 2). The earlier reading,
+  that the WALL·E cutouts were the server rebuilding a Blu-ray image below
+  real time, was wrong in its cause and right in its cure: HEL-133 moved
+  the title off the HLS path, which is what stopped them.
+* **Order item 2, HEL-124** — closed as invalid on 2026-09-02, and the
+  hardware pass the next day says it should reopen. The `A 0` premise was
+  indeed the wrong queue, but the mechanism it described is real on HLS:
+  each fMP4 fragment carries its video block before its audio block,
+  libavformat emits them in that order from a non-seekable stream, and the
+  30-frame decoded video limit with one-slot pacing delivers a fragment's
+  audio roughly a fragment late. Transcode rung: lead sawtooths +1…−1.2 s,
+  22 dry episodes in 70 s; remux rung: −7 s, 13. The fix is a compressed
+  video stage ahead of VideoToolbox so the demuxer can read past the
+  decoded limit; see docs/playback.md.
 * **Not in this audit at all: disc images.** Lagoon could not open one when
   this was written, and the resulting failure was being read as a transcode
   problem rather than as the client never having been in the path. See *Disc
