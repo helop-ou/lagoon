@@ -1,5 +1,14 @@
 import SwiftUI
 
+private enum MainTabSelection: Hashable {
+    case home
+    case discover
+    case library(String)
+    case libraries
+    case search
+    case settings
+}
+
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @Environment(DeepLinkRouter.self) private var deepLinks
@@ -21,9 +30,28 @@ struct MainTabView: View {
     // for the same reason (HEL-111).
     @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
+    @State private var selectedTab: MainTabSelection = .home
 
     var body: some View {
         primaryNavigation
+        #if os(tvOS)
+        .overlay(alignment: .topTrailing) {
+            if let target = serverSync.activeTarget {
+                ZStack(alignment: .topTrailing) {
+                    ServerRefreshButton(target: target)
+                        .padding(.trailing, Metrics.screenGutter)
+                        .offset(y: -Metrics.Space.l)
+
+                    ServerRefreshFocusGuide(destination: target)
+                        // The guide occupies only the strip immediately to
+                        // the hero's right. It therefore handles Right from
+                        // content without replacing Up's route to the tabs.
+                        .frame(width: Metrics.screenGutter, height: Metrics.heroHeight)
+                        .offset(y: Metrics.Space.section * 3)
+                }
+            }
+        }
+        #endif
         .task(id: "\(session.activeAccount?.id ?? ""):\(serverSync.generation)") {
             await loadLibraries()
         }
@@ -128,17 +156,19 @@ struct MainTabView: View {
     }
 
     private var primaryNavigation: some View {
-        TabView {
-            Tab("Home", systemImage: ContentIcon.home) {
+        TabView(selection: $selectedTab) {
+            Tab("Home", systemImage: ContentIcon.home, value: MainTabSelection.home) {
                 NavigationStack(path: $homeNavigationPath) {
-                    HomeView()
+                    HomeView(isActive: selectedTab == .home && homeNavigationPath.isEmpty)
                         .contentNavigationDestinations()
                 }
             }
 
-            Tab("Discover", systemImage: ContentIcon.discover) {
+            Tab("Discover", systemImage: ContentIcon.discover, value: MainTabSelection.discover) {
                 NavigationStack(path: $discoverNavigationPath) {
-                    DiscoverView()
+                    DiscoverView(
+                        isActive: selectedTab == .discover && discoverNavigationPath.isEmpty
+                    )
                         .seerrNavigationDestinations()
                         .contentNavigationDestinations()
                 }
@@ -146,19 +176,35 @@ struct MainTabView: View {
 
             if libraries.count <= 2 {
                 ForEach(libraries) { library in
-                    Tab(library.name ?? "Library", systemImage: icon(for: library)) {
+                    Tab(
+                        library.name ?? "Library",
+                        systemImage: icon(for: library),
+                        value: MainTabSelection.library(library.id)
+                    ) {
                         NavigationStack(path: libraryNavigationPath(for: library.id)) {
-                            LibraryView(library: library)
+                            LibraryView(
+                                library: library,
+                                isActive: selectedTab == .library(library.id)
+                                    && (libraryNavigationPaths[library.id]?.isEmpty ?? true)
+                            )
                                 .contentNavigationDestinations()
                         }
                     }
                 }
             } else {
-                Tab("Libraries", systemImage: ContentIcon.libraries) {
+                Tab(
+                    "Libraries",
+                    systemImage: ContentIcon.libraries,
+                    value: MainTabSelection.libraries
+                ) {
                     NavigationStack(path: $libraryPickerPath) {
                         LibraryPickerView(libraries: libraries)
                             .navigationDestination(for: LibraryTab.self) { library in
-                                LibraryView(library: library)
+                                LibraryView(
+                                    library: library,
+                                    isActive: selectedTab == .libraries
+                                        && libraryPickerPath.last?.id == library.id
+                                )
                                     .contentNavigationDestinations()
                             }
                     }
@@ -168,7 +214,12 @@ struct MainTabView: View {
             // Search is a destination of its own, not a fixture on a browse
             // screen: on tvOS `.searchable` draws a resident keyboard and
             // expects to own the screen (HEL-111).
-            Tab("Search", systemImage: ContentIcon.search, role: .search) {
+            Tab(
+                "Search",
+                systemImage: ContentIcon.search,
+                value: MainTabSelection.search,
+                role: .search
+            ) {
                 NavigationStack(path: $searchNavigationPath) {
                     SearchView()
                         .seerrNavigationDestinations()
@@ -176,7 +227,11 @@ struct MainTabView: View {
                 }
             }
 
-            Tab("Settings", systemImage: ContentIcon.settings) {
+            Tab(
+                "Settings",
+                systemImage: ContentIcon.settings,
+                value: MainTabSelection.settings
+            ) {
                 NavigationStack {
                     SettingsView()
                 }
