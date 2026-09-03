@@ -31,10 +31,11 @@ nonisolated enum Changelog {
             version: "0.1",
             build: "86",
             released: "September 2026",
-            headline: "Sound that cuts out while the picture keeps going now leaves a trace.",
+            headline: "Remuxed and transcoded titles no longer lose their sound every few seconds.",
             changes: [
-                "If the sound ever drops out while the picture keeps playing, the playback details overlay now counts it (aDry) and shows how far ahead the audio is fed (lead), so the problem can be reported with numbers rather than a description. The overlay is under Settings → Advanced → Show Playback Details.",
-                "The same overlay shows the video queue's peak against its limit, and whether a buffering pause had to fall back to a seek to recover.",
+                "Titles the server has to remux or transcode, such as a disc image or a fallback after a playback error, played with the sound cutting out for a second or more, over and over, while the picture kept going. The player was reading those streams in an order that starved its own audio buffer; it now reads far enough ahead to keep the sound fed, on every kind of title.",
+                "If the sound ever drops out while the picture keeps playing, the playback details overlay counts it (aDry) and shows how far ahead the audio is fed (lead), so the problem can be reported with numbers rather than a description. The overlay is under Settings → Advanced → Show Playback Details.",
+                "The same overlay shows the video queue's peak against its limit, how much video is waiting behind it, and whether a buffering pause had to fall back to a seek to recover.",
             ]
         ),
         ChangelogEntry(
