@@ -639,9 +639,11 @@ xcrun devicectl device process launch --device <udid> --console --terminate-exis
 
 The `--` matters: devicectl's parser reads `-debug.x` as bundled short flags
 without it. `-debug.decodeTrace YES` prints a `DecodeTrace` line every two
-seconds with position, queue depths (`video=current/peak/hard`), the
-renderer-side audio signal (`lead`, `ready`, `aDry`, `audioStalls`,
-`reprimes`, `buffering`; HEL-123), footprint and the full decode profile.
+seconds with position, queue depths (`video=current/peak/hard`,
+`intake=current/peak` for compressed video parked past the decoded limit,
+HEL-124), the renderer-side audio signal (`lead`, `ready`, `aDry`,
+`audioStalls`, `reprimes`, `buffering`; HEL-123), footprint and the full
+decode profile.
 
 Three rules came out of doing this badly first:
 
@@ -1679,9 +1681,100 @@ composition cost is more representative than Simulator timing.
   hardware-decoded path that means holding compressed video packets ahead
   of VideoToolbox rather than decoded frames, because at 4K the decoded
   overshoot is not affordable and the compressed path's 120-frame limit
-  already covers a 3 s fragment but not a 10 s GOP. HEL-124 should reopen
-  for it; the app-side `audioCanCoverDrain` gate cannot see any of this
-  and stays as it is.
+  already covers a 3 s fragment but not a 10 s GOP. HEL-124 reopened for
+  it the same day; the app-side `audioCanCoverDrain` gate cannot see any
+  of this and stays as it is.
+
+  **The fix: a compressed video intake in front of every decoder**
+  (HEL-124, 2026-09-03). `VideoIntakeQueue` holds video the demux loop has
+  read past the decoded-frame limit, still compressed: a `CMSampleBuffer`
+  for VideoToolbox or the compressed renderer path, a `SoftwareVideoPacket`
+  for the software stage. `step()` hands video to `admitVideo`, which
+  delivers straight to the next stage while the intake is empty and the
+  decoded backlog is under its hard limit, and parks it otherwise, so
+  decode order is the read order regardless of which path a packet took.
+  `DemuxBackpressurePolicy.decision` no longer waits one slot at a time at
+  the video hard limit when the stream has audio: it returns `.read` until
+  the app-side audio queue reaches its high water (180 packets cached, 360
+  uncached) or the intake reaches its own bounds, 600 access units or
+  128 MB, both chosen to hold a whole fragment because the audio block is
+  behind the video block and the read-ahead only helps if it reaches it.
+  Priming reads the same way: at the decoded limit with audio still short
+  of its 1.25 s reserve it parks video and reads on, measuring the reserve
+  as renderer-side delivery plus the app-side queue, since the pump may
+  already have handed the renderer part of it. End of file with video
+  still parked is a pending state; the loop drains the intake as the
+  decoded queue makes room and finishes then. Seek, flush, and teardown
+  empty the intake.
+
+  Two things about the shape were learned on hardware, not designed:
+
+  - **A lead-triggered read-ahead is not enough.** The first version read
+    on only when the renderer-side lead fell under a threshold (1.0 s,
+    then 1.5 s). On a 1080p transcode it worked, pinning the lead at the
+    threshold; on a 4K Dolby Vision remux it still counted seven dry
+    episodes in 70 s, because reading a 60 MB video block over the network
+    takes longer than any cushion the renderer holds. The read has to
+    start the moment the decoded queue is full, and the audio high water
+    is what bounds it. Direct play is unaffected in practice: a finely
+    interleaved stream reaches audio within a few packets, the app-side
+    audio queue fills to its high water, and the loop waits there.
+  - **The intake must drain from the consumer side.** With the loop
+    reading ahead it sits in network reads for seconds at a time, and
+    when only the loop drained the intake the decoded queue ran dry behind
+    a full one (`video=0/30/30 intake=151/151`, frames dropping by the
+    dozen). `pumpVideo` now drains after every dequeue, under a feed lock
+    shared with `admitVideo` so the two feeders cannot interleave packets.
+    The loop's own backpressure waits are bounded at 250 ms for the same
+    reason in reverse: with the clock stopped nothing dequeues, and the
+    loop has to re-evaluate the policy on its own.
+
+  A third lesson came from the first clean remux run: one `aDry` episode
+  in the first second after the rung switch, every time. The fallback
+  engine resumes a few seconds into a fragment whose audio block starts at
+  the keyframe, so priming read that fragment's audio from its start, and
+  the part before the resume position sat in the app-side queue counting
+  toward the audio high water, which paused the read-ahead exactly when
+  the renderer held least. `step()` now drops audio that ends at or before
+  the position playback last started from (`audioAdmissionFloorSeconds`,
+  set by every prime), and priming measures its 1.25 s reserve as
+  renderer-side delivery plus `bufferedDuration(after:)` the target.
+
+  Measured on the paired Apple TV with the final build, 60 s bench windows,
+  no fault injected, `-playback.skipMode button`:
+
+  | rung | title | intake peak | lead | window |
+  | --- | --- | --- | --- | --- |
+  | transcode (3 s fragments) | 1080p HEVC, E-AC-3 | 216 | 4.0–4.3 s | `stalls 0 · audioDry 0`, 0.69 % dropped |
+  | remux (one-GOP fragments, up to 10 s) | same | 409 | 3.9–4.2 s | `stalls 0 · audioDry 0`, 0.42 % dropped, `aDry 0` from the first tick |
+  | remux | 4K DoVi TrueHD (AC-3 on the rung), 73 Mbps | 277 | 4.0–4.2 s | `stalls 0 · audioDry 0`, 0.63 % dropped, footprint 790–877 MB |
+  | direct play | 1080p HEVC, E-AC-3 | 102 | 3.9–4.2 s | `stalls 0 · audioDry 0`, 0.21 % dropped, footprint unchanged at ~205 MB |
+
+  The decoded queue read `30/30/30` in every run. Direct play settles at
+  about 95 parked frames because the sparse cache only serves a window
+  ahead of the playhead; its lead doubled from 2 s to 4 s because the
+  app-side audio queue now holds what the renderer will not take yet.
+  One transcode run starved after 40 s with intake, decoded queue, and
+  audio all at zero together: the demuxer was getting nothing, which is
+  the server's HEVC re-encode running below real time (a rerun twenty
+  minutes later was clean for the full window). The read-ahead brings the
+  client closer to the encoder's edge, so it reaches that wall sooner than
+  the old pacing did, but it is upstream starvation and stall recovery is
+  the right answer to it; that is HEL-123's original report, and nothing
+  on the client can fix it.
+
+  The intake is visible in the HUD as `V cur/peak/hard +cur/peak`, in
+  `DecodeTrace` as `intake=cur/peak`, and in the regression probe as
+  `videoIntake`/`videoIntakeMax`, beside a new `rung=` field that names
+  the delivery rung because Jellyfin's `PlayMethod` reports both remux and
+  transcode as `Transcode`. `DemuxReadAheadPolicyTests`,
+  `VideoIntakeQueueTests` and `SampleBufferQueueTests` pin the policy, the
+  queue and the post-target measure;
+  `testForcedRemuxKeepsAudioFedWithinTheIntakeBound` pins the bounds and
+  `aDry` on a forced remux in the simulator. The HEL-123 buffering mode's
+  default is a separate decision and stays off: with the interleave fixed
+  the `aDry` counter in Release will show whether real delivery still
+  reaches the floor.
 
   **Simulate Delivery Stall** stays as a Debug-only fault, in the same
   Settings → Advanced → Playback Diagnostics section and using the same
