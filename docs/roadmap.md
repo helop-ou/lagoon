@@ -1,6 +1,14 @@
 # Roadmap
 
-## MVP (done)
+What Lagoon does today and what comes next, at the level of a viewer or a
+release note. Jira (Labs epic HEL-15 on helop-ou.atlassian.net) is
+canonical for ticket status, `Lagoon/Models/Changelog.swift` for what
+shipped in which build, and `docs/playback.md` for how the engine works.
+Last brought up to date 2026-09-03, at 0.1 (86).
+
+## Shipped
+
+### MVP (August 2026)
 
 - Connect to a Jellyfin server (schemeless input, https/http/:8096 probing)
 - Sign in with password or Quick Connect; keychain-persisted session
@@ -8,43 +16,97 @@
   Recently Added per library
 - Dynamic library tabs (Movies / Shows), paged 6-column poster grids
 - Movie/episode and series detail pages (seasons, episode rail)
-- Playback: direct play or server-decided HLS transcode, resume, and progress
-  reporting round-trip (originally AVPlayer; now superseded by the single
-  Lagoon sample-buffer engine documented below)
-- Debounced search (titles and collections), settings (sign out / change server)
-- Collections: a Home row of the franchises that actually hold something, and
-  a collection page listing its titles in release order (HEL-122)
-- Seerr/Jellyseerr discovery, per-user Quick Connect, title and season
-  requests, request history, and permission-gated moderation
+- Playback with resume and progress reporting
+- Debounced search, settings (sign out / change server)
 - iOS builds from the same target with scaled-down metrics
+
+### Since the MVP
+
+**Player.** One engine for everything (HEL-48): libavformat demux, codec
+stages, the AVSampleBuffer presentation APIs; the AVPlayer and mpv paths
+are gone. Hardware HEVC/H.264 and, where the silicon has it, AV1; software
+AV1 through a dav1d built by this repo (HEL-137), plus VP9, VC-1, MPEG-4
+Part 2 and MPEG-2 in software with local deinterlacing for MPEG-2
+(HEL-127, half). HDR10, HDR10+ and Dolby Vision with display-mode matching
+(HEL-64); software-decoded HDR shown as SDR on tvOS, converted on the
+GPU. Atmos/TrueHD/E-AC-3 passthrough, DTS/TrueHD/FLAC/Opus/PCM decoded
+locally, Spatial Audio for stereo. Blu-ray and DVD images play natively
+with their original audio (HEL-133). A delivery ladder that falls from
+direct play to remux to transcode on failure, by cause (HEL-100), with a
+1080p ceiling on the re-encode rung. A bounded playback cache behind
+direct play (HEL-86, HEL-130). Compressed video read-ahead so remuxed and
+transcoded titles keep their sound (HEL-124), and a renderer-side audio
+starvation signal in the overlay (HEL-123). Trickplay scrubbing, chapter
+markers, intro/recap skip, autoplay next episode, playback speed, picture
+in picture, Now Playing and remote integration (HEL-80). A metered-path
+bitrate cap on iOS (HEL-108).
+
+**Subtitles and audio.** Audio and subtitle track pickers over the
+server's streams; embedded text, PGS, VobSub and DVB; external subtitles
+with provider search and OpenSubtitles direct fetch, non-UTF-8 decoding,
+and on-screen positioning (M5).
+
+**Home and browsing.** Top Shelf with Continue Watching, published
+incrementally (HEL-31, builds 57–61). Curated Home rows: Because You
+Watched, 4K, genres and decades. Collections as a row and a page
+(HEL-122). Search on its own tab with recent searches (HEL-129). Favorites
+and played/unplayed from context menus and the detail action row.
+
+**Accounts.** User switching and multiple servers through an account
+picker (HEL-38), with per-account keychain sessions.
+
+**Seerr.** Discovery with a hero rail, title and season requests, request
+history and progress, permission-gated moderation, Jellyfin SSO and
+per-user Quick Connect.
+
+**Settings.** About with the changelog and the installed build badged
+(HEL-94). Playback Diagnostics: the details overlay, the frame-loss bench,
+and the decoder switches that hardware questions get answered with.
 
 ## Next
 
-- **Subtitle & audio track selection** — the device profile already requests
-  vtt; surface `MediaStreams` in a picker and pass `SubtitleStreamIndex` /
-  `AudioStreamIndex` through PlaybackInfo.
-- **Top Shelf extension** — Continue Watching in the tvOS top shelf
-  (TVServices; a reference implementation exists).
-- **User switching / multiple servers** — the keychain layout already keys by
-  account string; needs a profile picker at the root.
-- **Trickplay scrubbing thumbnails** (`Trickplay` images, 10.9+).
-- **Chapter markers** in the transport UI (`Chapters` field →
-  `AVNavigationMarkersGroup`).
-- **iOS polish pass** — the screens work but were designed 10-foot-first;
-  compact-width layouts deserve their own detail composition.
-- **Mark played/unplayed & favorites** — `UserPlayedItems` / `UserFavoriteItems`
-  endpoints, long-press context menus on cards.
-- **Live TV** if the server has it (guide, channels — big lift).
-- **Unified custom player — sample-buffer engine for everything** (HEL-48) —
-  decided 2026-08-16 and made total the same day: the Lagoon engine
-  (libavformat demux → codec-specific decode stages → the AVSampleBuffer*
-  presentation APIs) is the app's **only** player; the AVPlayer and mpv
-  (HEL-45) paths were removed rather than maintained in parallel. M2 Atmos,
-  M3 HDR/DoVi color tagging, M4 DTS/TrueHD decode, M5 subtitles, and M6
-  hardening + dependency slimming are delivered; MPVKit is kept only as the
-  source of the pinned FFmpeg xcframeworks.
+In the order they are worth doing. Keys are Jira tickets.
+
+1. **Detail page after playback** (HEL-132): Play stays Play after leaving
+   the player instead of becoming Resume and Play from Start.
+2. **Siri Remote in the player** (HEL-134): a tap on the touch surface
+   should reveal the scrub bar and controls the way every tvOS player does.
+3. **Server sync** (HEL-135): the app is sometimes visibly behind the
+   server; decide between a refresh affordance on Home and refreshing on
+   foreground and after playback.
+4. **Jellyfin 10.12** (HEL-138): a scoping pass against a 10.12 server
+   before fixture upgrades.
+5. **Live Seerr status** (HEL-136): download status and time estimates
+   that update while a detail page is open, without hurting performance.
+6. **iOS polish pass** (HEL-41): compact-width detail composition, hero
+   sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
+   between. Only the collection page has its own iOS layout so far.
+7. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+   decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
+   its own frame-loss measurement.
+8. **Buffer on audio starvation by default** (HEL-123): the mode is built
+   and switched off; the `aDry` counter in Release decides whether real
+   delivery still reaches the floor now that HEL-124 is in.
+9. **Live TV**, if the server has it: guide and channels. A big lift with
+   no ticket yet.
+
+**Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
+endpoint that does not exist; a personal one was rejected on value.
+
+## In verification
+
+Waiting on a TestFlight or hardware look rather than on code: 4K AV1
+frame rate (HEL-137), the audio starvation signal and its fix (HEL-123,
+HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
+Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
+cap (HEL-108).
 
 ## Deliberate non-goals for now
 
-- Offline downloads. HEL-86's bounded playback range cache is transient,
-  discardable on player exit, and deliberately cannot become saved media.
+- Offline downloads. HEL-86's playback cache is transient, discardable on
+  player exit, and deliberately cannot become saved media.
+- A personal most-watched row (HEL-121): your own history read back to
+  you.
+- A second player path. AVPlayer and mpv were removed rather than kept in
+  parallel (HEL-48), and MPVKit is only the source of the pinned FFmpeg
+  artifacts.
