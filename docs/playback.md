@@ -639,7 +639,9 @@ xcrun devicectl device process launch --device <udid> --console --terminate-exis
 
 The `--` matters: devicectl's parser reads `-debug.x` as bundled short flags
 without it. `-debug.decodeTrace YES` prints a `DecodeTrace` line every two
-seconds with position, queue depths, footprint and the full decode profile.
+seconds with position, queue depths (`video=current/peak/hard`), the
+renderer-side audio signal (`lead`, `ready`, `aDry`, `audioStalls`,
+`reprimes`, `buffering`; HEL-123), footprint and the full decode profile.
 
 Three rules came out of doing this badly first:
 
@@ -1536,7 +1538,9 @@ composition cost is more representative than Simulator timing.
   `PlaybackStarvationPolicy` answers `.none`/`.video`/`.audio` from a
   snapshot; `.video` confirms and stops the clock exactly as it always did,
   while `.audio` is counted per episode and shown in the HUD (`aDry`) and
-  the bench (`aStalls`). `StallRecoveryPolicy` is video-only, and gating it
+  the bench (`audioDry`); the bench's `audioStalls` is the audio-caused
+  subset of confirmed stalls, not the dry-episode count.
+  `StallRecoveryPolicy` is video-only, and gating it
   on audio as well was the second half of the same mistake: it would have
   hung every video stall until `reprimeAfter`, since the cushion it waited
   for is not normally there. Both are pinned by tests so neither comes
@@ -1575,11 +1579,21 @@ composition cost is more representative than Simulator timing.
   samples and they would use up the acceptance budget the resume rule
   depends on.
 
-  The hardware calibration pass runs a Debug build on the paired Apple TV
-  through devicectl, not TestFlight, and has to confirm two things a
-  simulator cannot: that a lead under 0.25 s coincides with audible silence,
-  and that audio returns in sync afterward rather than playing the withheld
-  seconds late.
+  The hardware pass ran on 2026-09-03 on the paired Apple TV 4K, a Debug
+  build through devicectl with `DecodeTrace` carrying the signal every two
+  seconds. On a direct play (1080p HEVC in VideoToolbox, E-AC-3 6ch
+  passthrough) the lead sits at 1.9–2.2 s throughout, and `ready`
+  (`hasSufficientMediaDataForReliablePlaybackStart`) reads 0 the whole
+  time, including inside a stall: it is not a signal on this hardware and
+  nothing may gate on it alone. The 5 s hold with the mode off took the
+  lead from 1.95 s to −2.05 s, `aDry` counted once, the clock never
+  stopped, and one tick after release the lead was back at 2.06 s with no
+  second episode. The 7 s hold with the mode on confirmed an audio stall
+  2.6 s in, stopped the clock, and resumed in place with 2.08 s of lead:
+  `stalls 1 (1 audio)`, `reprime 0`. The ear check the console cannot do
+  was done the same day from the sofa: the hold is audibly silent, the
+  picture keeps moving through it, and sound comes back in sync rather
+  than playing the withheld seconds late.
 
   The fix exists behind `debug.bufferOnAudioStarvation` (Debug Settings
   toggle "Buffer on Audio Starvation", off by default). With it on, an
@@ -1600,8 +1614,10 @@ composition cost is more representative than Simulator timing.
   episode spans its own stall: buffering answers no starvation because
   nothing is being judged, and ending the episode there counted the dip
   right after resume as a second one. Release is unchanged while the
-  switch is off. The hardware pass decides whether the default flips;
-  HEL-123 stays open until it does.
+  switch is off. **The default cannot flip yet.** On the HLS rungs the
+  lead sawtooths through the floor once per fragment (HEL-124 below), so
+  the mode would stop the clock a dozen times a minute on every transcode
+  and remux. It waits on the interleave fix.
 
   One caveat is real and deliberately not solved here: an audio-caused
   stall reached with the video queue already at its hard limit cannot
@@ -1620,12 +1636,52 @@ composition cost is more representative than Simulator timing.
   are both the wrong side of the pump. The premise does not hold, and the
   ticket closes as invalid.
 
-  One residual is worth a sentence, left deliberately unfixed.
   `audioCanCoverDrain` in `DemuxBackpressurePolicy` gates on app-side
   buffered seconds, which are structurally near zero for the reason above,
   so the batch-drain branch it guards is effectively unreachable; every
-  title with audio parks at its hard limit in one-slot pacing instead. No
-  symptom has been observed from it.
+  title with audio parks at its hard limit in one-slot pacing instead.
+
+  **The hardware pass the next day reopened the mechanism, if not the
+  premise** (2026-09-03). One-slot pacing at the video hard limit is
+  harmless while audio is interleaved finely with video, which every
+  direct-played MKV is. A Jellyfin HLS fMP4 segment is not: each
+  fragment's `mdat` is one contiguous video block followed by one
+  contiguous audio block (72 HEVC samples, then 92–94 E-AC-3 samples, per
+  `moof`, checked with a box parser on three segments), and libavformat's
+  HLS demuxer hands the inner MP4 demuxer a non-seekable stream, so
+  `av_read_frame` emits the whole video block before any of that
+  fragment's audio (`ffprobe` on the live playlist: V×72, A×93, V×72,
+  A×94, …; the same bytes concatenated into a seekable file come out
+  interleaved by DTS). Against a decoded video queue capped at 30 frames
+  (1.25 s) that means `primeAndStart` fills 30 frames, hits the hard
+  limit, and starts the clock with no audio delivered at all; the loop
+  then reads one packet per video dequeue, so a fragment's audio arrives
+  only after its last video frame has been read, roughly fragment length
+  minus the cushion late.
+
+  Measured with the renderer-side lead on the paired Apple TV, 1080p HEVC
+  with E-AC-3, video never stalling and pinned at `30/30/30`: the
+  transcode rung (3.003 s fragments) sawtooths the lead between about
+  +1 s and −1.2 s and counts 22 `aDry` episodes in 70 s; the remux rung,
+  whose fragments are one source GOP (keyframes up to 10 s apart on this
+  file), reaches −7 s and counts 13. That is the symptom HEL-123 was
+  filed on, on the rung WALL·E used, with the server demonstrably keeping
+  up. The cutouts did not stop with HEL-133 because the server stopped
+  being slow; they stopped because the title left the HLS path. The
+  `experimentalPlaybackCache` switch does not change it (same sawtooth,
+  −7.2 s), which is expected: the cache changes delivery, not the order
+  the HLS demuxer emits packets in. Nobody has heard a transcode on
+  hardware since 0.1 (70), which is how a silence this regular went
+  unreported.
+
+  The shape of the fix is to let the demuxer read past the decoded video
+  limit while the renderer-side audio lead is below its floor. On the
+  hardware-decoded path that means holding compressed video packets ahead
+  of VideoToolbox rather than decoded frames, because at 4K the decoded
+  overshoot is not affordable and the compressed path's 120-frame limit
+  already covers a 3 s fragment but not a 10 s GOP. HEL-124 should reopen
+  for it; the app-side `audioCanCoverDrain` gate cannot see any of this
+  and stays as it is.
 
   **Simulate Delivery Stall** stays as a Debug-only fault, in the same
   Settings → Advanced → Playback Diagnostics section and using the same
@@ -1675,7 +1731,10 @@ composition cost is more representative than Simulator timing.
   This does not answer whether the HLS cache scope is sound enough to enable
   outside DEBUG. That still needs the hardware A/B the shipped switch exists
   for, and the two are independent: a cushion helps a stream that has no
-  cache, and turning the cache on is what would stop it being one.
+  cache, and turning the cache on is what would stop it being one. The
+  2026-09-03 hardware pass answered the half that matters for silence:
+  the cache does not stop the periodic audio dropout on the HLS rungs,
+  because that dropout is packet order, not delivery (HEL-124 above).
 - **Audio delay** (M6): mpv convention, positive delays audio; applied
   by re-stamping buffers at enqueue (`CMSampleBufferCreateCopyWithNewTiming`)
   and re-demuxing from the current position on change. Lives in the
