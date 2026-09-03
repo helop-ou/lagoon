@@ -1449,6 +1449,18 @@ struct UncachedDeliveryCushionTests {
             videoIsDecoded: true,
             hasAudio: true,
             deliveryIsCached: false
+        ) == .read)
+        // The decoded queue's own bound hands over to the intake's, which is
+        // what still bounds it once that fills too.
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 40,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false,
+            videoIntakeCount: DemuxBackpressurePolicy.videoIntakeHardLimit
         ) == .waitForVideo(below: 30))
         // Audio parks at its own high water once video is off the floor,
         #expect(DemuxBackpressurePolicy.decision(
@@ -1471,5 +1483,171 @@ struct UncachedDeliveryCushionTests {
             hasAudio: true,
             deliveryIsCached: false
         ) == .waitForAudio(below: 540))
+    }
+}
+
+/// HEL-124 reopened once the app-side queue was cleared as a suspect: a
+/// Jellyfin HLS fragment's `mdat` is one contiguous video block followed by
+/// one contiguous audio block, so `primeAndStart` fills the decoded video
+/// queue to its hard limit and starts the clock before any of that
+/// fragment's audio has even been read, and the one-slot pacing at the hard
+/// limit then only reaches a fragment's audio after its last video frame.
+/// Hardware measurement moved the fix into the existing hard-limit branch
+/// itself rather than a separate renderer-side-lead gate: once the decoded
+/// video queue is full and `audioCanCoverDrain` is false, the loop now
+/// reads on for audio anyway — holding what it reads as compressed packets
+/// in an intake rather than decoded frames — as long as the app-side audio
+/// queue has not itself reached its own high water and the intake has not
+/// reached its own count and byte bounds. Any of those failing falls back
+/// to the one-slot-below-the-hard-limit pacing this branch always had.
+@Suite("Demux read-ahead for a starving audio track")
+struct DemuxReadAheadPolicyTests {
+    /// At the hard limit on every decode path, with audio still short of
+    /// its own high water, the loop reads on instead of parking. Once it
+    /// does, video parked in the intake does not count against the decoded
+    /// queue's own hard limit, so the same shape keeps reading even once
+    /// `videoCount` has run past it.
+    @Test func fullDecodedQueueReadsAheadForAudio() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .read)
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 120,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: false,
+            hasAudio: true
+        ) == .read)
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 42,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            videoIsSoftwareDecoded: true,
+            hasAudio: true
+        ) == .read)
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 45,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .read)
+    }
+
+    /// A silent title cannot starve on audio, so it never reaches this
+    /// branch at all: `audioCanCoverDrain` is vacuously true without audio,
+    /// which is the pre-existing one-slot-below-the-high-water pacing.
+    @Test func silentTitleKeepsOneSlotPacing() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: false
+        ) == .waitForVideo(below: 12))
+    }
+
+    /// The read-ahead only exists to keep audio from starving, so it stops
+    /// the moment audio itself has enough queued: 180 packets is the cached
+    /// profile's own high water, and going uncached moves that ceiling to
+    /// 360 rather than changing the rule.
+    @Test func audioHighWaterStopsTheReadAhead() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 180,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .waitForVideo(below: 30))
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 180,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .read)
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 360,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            deliveryIsCached: false
+        ) == .waitForVideo(below: 30))
+    }
+
+    /// The intake this rule reads into is bounded on its own, both by count
+    /// and by bytes, so a stuck audio track cannot turn it into an unbounded
+    /// compressed-packet queue: hitting either cap falls back to the
+    /// ordinary hard-limit pacing even while audio is short of its own high
+    /// water.
+    @Test func intakeBoundsStopTheReadAhead() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            videoIntakeCount: DemuxBackpressurePolicy.videoIntakeHardLimit
+        ) == .waitForVideo(below: 30))
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            videoIntakeCount: 10,
+            videoIntakeBytes: DemuxBackpressurePolicy.videoIntakeByteBudget
+        ) == .waitForVideo(below: 30))
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 30,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true,
+            videoIntakeCount: DemuxBackpressurePolicy.videoIntakeHardLimit - 1,
+            videoIntakeBytes: DemuxBackpressurePolicy.videoIntakeByteBudget - 1
+        ) == .read)
+    }
+
+    /// Below the hard limit this is all unchanged: over the high water but
+    /// short of the hard limit already read on for audio before any of this
+    /// existed, because the batch-drain branch above it returns `.read`
+    /// directly whenever audio cannot cover the drain and the hard limit has
+    /// not been reached.
+    @Test func belowTheHardLimitNothingChanged() {
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 20,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .read)
+        #expect(DemuxBackpressurePolicy.decision(
+            videoCount: 10,
+            audioCount: 0,
+            audioBufferedSeconds: 0,
+            videoFrameRate: 24,
+            videoIsDecoded: true,
+            hasAudio: true
+        ) == .read)
     }
 }
