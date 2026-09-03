@@ -15,6 +15,39 @@ struct ServerSyncTests {
         #expect(sync.generation == 2)
     }
 
+    @Test func idleRefreshPolicyUsesFiveMinutesAndAllowsADebugOverride() {
+        let suiteName = "ServerRefreshPolicyTests"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        #expect(ServerRefreshPolicy.intervalSeconds(defaults: defaults) == 300)
+        defaults.set(0.25, forKey: "debug.serverSyncIntervalSeconds")
+        #expect(ServerRefreshPolicy.intervalSeconds(defaults: defaults) == 0.25)
+    }
+
+    @Test func manualRefreshRoutesOnlyToTheVisibleDestination() {
+        let sync = ServerSyncState()
+
+        sync.activate(.home)
+        sync.requestManualRefresh(for: .discover)
+        #expect(sync.manualRefreshGeneration == 0)
+
+        sync.requestManualRefresh(for: .home)
+        #expect(sync.manualRefreshGeneration == 1)
+        #expect(sync.manualRefreshTarget == .home)
+
+        sync.beginRefresh(.home)
+        #expect(sync.isRefreshing(.home))
+        sync.endRefresh(.home)
+        #expect(!sync.isRefreshing(.home))
+
+        sync.deactivate(.discover)
+        #expect(sync.activeTarget == .home)
+        sync.deactivate(.home)
+        #expect(sync.activeTarget == nil)
+    }
+
     @Test func homeReconcilesServerBackedRailsWithoutASecondInitialLoad() async {
         let client = makeClient()
         let model = HomeViewModel()
