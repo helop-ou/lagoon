@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
     @Environment(DeepLinkRouter.self) private var deepLinks
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var libraries: [LibraryTab] = []
     @State private var playerItem: PlayerItem?
     @State private var deepLinkError: String?
@@ -23,7 +24,7 @@ struct MainTabView: View {
 
     var body: some View {
         primaryNavigation
-        .task {
+        .task(id: "\(session.activeAccount?.id ?? ""):\(serverSync.generation)") {
             await loadLibraries()
         }
         .onChange(of: session.activeAccount?.id) { oldAccountID, newAccountID in
