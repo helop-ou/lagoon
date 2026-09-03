@@ -63,7 +63,7 @@ therefore never sees the picker — `choosingAccount` appears only when no
 account can be resumed, or when Settings asks for it. A missing token drops
 to `needsSignIn`, no accounts at all to `needsServer`.
 
-### Foreground server sync (HEL-135)
+### Server reconciliation (HEL-135)
 
 SwiftUI keeps the tab and navigation trees mounted when Lagoon goes into the
 background. Returning to the app therefore does not re-run the screens'
@@ -73,7 +73,7 @@ changed in the meantime invisible until a cold launch.
 `RootView` is the single scene-lifecycle observer. Each transition to
 `ScenePhase.active` advances the environment's `ServerSyncState.generation`.
 Server-backed screens observe that generation and reconcile only the state
-they own:
+they own. This remains the foreground path for every mounted screen:
 
 - `MainTabView` refreshes the server's movie/show library tabs.
 - Home refreshes watch-state rails, Recently Added, curated/plugin rows,
@@ -85,11 +85,30 @@ they own:
 - Open item, series and collection details re-read their item or episode
   state, and an open Jellyfin search repeats its current query.
 
-This is deliberately different from playback dismissal. The scene stays
-active while a full-screen player is open, and HEL-132's targeted dismissal
-refresh waits for the stop report before re-reading watch progress. A manual
-Home refresh control would duplicate both paths while still leaving an open
-detail or library stale, so there is none.
+The top-level browse destinations also use `ServerRefreshModifier`. It adds a
+five-minute reconciliation cadence while Home, a movie/show library, or a
+connected Discover screen is both visible and active. `MainTabView` passes the
+selected tab and empty root navigation path explicitly, so SwiftUI's mounted
+hidden tabs do not poll, a pushed detail does not refresh content behind it,
+and timers stop in the background. Home also pauses its cadence while its
+full-screen player is presented. Refreshes preserve the current content and
+focus while requests are in flight, and transient failures retain the last
+good content.
+
+The same modifier owns the explicit platform affordance. On iOS it contributes
+native pull-to-refresh to each browse scroll view. On tvOS, `MainTabView`
+places one compact circular Refresh button at the top trailing edge, beside
+but outside the tab group. A narrow UIKit focus guide in the trailing safe-zone
+makes the action a right-edge destination without taking over the content's Up
+path to the tabs, adding an otherwise empty toolbar row, or putting Refresh in
+the tab navigation itself. The button is routed to
+`ServerSyncState.activeTarget`, so it can only refresh the visible Home,
+library, or Discover destination and becomes a progress indicator while that
+work runs.
+
+Playback dismissal remains deliberately separate. The scene stays active
+while a full-screen player is open, and HEL-132's targeted dismissal refresh
+waits for the stop report before re-reading watch progress.
 
 ### Multiple accounts (HEL-38)
 
