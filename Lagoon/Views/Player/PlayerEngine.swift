@@ -57,6 +57,10 @@ protocol PlayerEngine: AnyObject, Observable {
     var videoQueueCountDiagnostic: Int { get }
     var maximumVideoBacklogDiagnostic: Int { get }
     var videoQueueHardLimitDiagnostic: Int { get }
+    /// Compressed video parked past the decoded limit while the demuxer
+    /// reads on for audio (HEL-124): current count and the session peak.
+    var videoIntakeCountDiagnostic: Int { get }
+    var maximumVideoIntakeDiagnostic: Int { get }
     var stallReprimeCount: Int { get }
     var subtitleTracks: [PlayerTrack] { get }
     /// The subtitle content on screen right now (M5): joined text lines
@@ -113,6 +117,8 @@ extension PlayerEngine {
     var videoQueueCountDiagnostic: Int { 0 }
     var maximumVideoBacklogDiagnostic: Int { 0 }
     var videoQueueHardLimitDiagnostic: Int { 0 }
+    var videoIntakeCountDiagnostic: Int { 0 }
+    var maximumVideoIntakeDiagnostic: Int { 0 }
     var stallReprimeCount: Int { 0 }
     var audioRendererRecoveryCount: Int { 0 }
     var mediaServicesResetRecoveryCount: Int { 0 }
