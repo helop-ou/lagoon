@@ -34,6 +34,7 @@ private final class SeerrRailLoader {
 /// so adding rows does not slow the screen down.
 struct SeerrDiscoverRail: View {
     let source: SeerrCatalogSource
+    let refreshGeneration: Int
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var loader = SeerrRailLoader()
     @State private var retryID = 0
@@ -59,8 +60,12 @@ struct SeerrDiscoverRail: View {
             // A rail that loaded and came back empty draws nothing at all.
             // An empty watchlist is the ordinary case, not a fault.
         }
-        .task(id: "\(source.id):\(seerr.user?.id ?? -1):\(retryID)") {
-            await loader.load(source: source, client: seerr.client, reset: retryID > 0)
+        .task(id: "\(source.id):\(seerr.user?.id ?? -1):\(retryID):\(refreshGeneration)") {
+            await loader.load(
+                source: source,
+                client: seerr.client,
+                reset: retryID > 0 || refreshGeneration > 0
+            )
         }
         .accessibilityIdentifier("seerr.rail.\(source.id)")
     }
@@ -83,6 +88,7 @@ struct SeerrDiscoverRail: View {
 struct SeerrGenreRail: View {
     let mediaType: SeerrMediaType
     let title: String
+    let refreshGeneration: Int
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var genres: [SeerrGenre] = []
     @State private var didLoad = false
@@ -119,12 +125,21 @@ struct SeerrGenreRail: View {
                 }
             }
         }
-        .task(id: "genres:\(mediaType.rawValue):\(seerr.user?.id ?? -1)") {
-            guard !didLoad else { return }
+        .task(id: "genres:\(mediaType.rawValue):\(seerr.user?.id ?? -1):\(refreshGeneration)") {
+            guard refreshGeneration > 0 || !didLoad else { return }
             // A genre shelf that will not load is not worth a retry control
             // on a browse screen; the rail simply does not appear.
-            genres = (try? await seerr.client.genres(mediaType)) ?? []
-            didLoad = true
+            do {
+                let refreshed = try await seerr.client.genres(mediaType)
+                guard !Task.isCancelled else { return }
+                genres = refreshed
+                didLoad = true
+            } catch is CancellationError {
+            } catch {
+                // Preserve an existing shelf during an opportunistic refresh.
+                // The first load keeps the old no-row failure behavior.
+                if genres.isEmpty { didLoad = true }
+            }
         }
         .accessibilityIdentifier("seerr.genres.\(mediaType.rawValue)")
     }
