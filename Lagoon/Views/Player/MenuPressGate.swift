@@ -2,20 +2,39 @@
 import SwiftUI
 import UIKit
 
+/// Hosts the tvOS player behind the UIKit input hooks SwiftUI cannot express.
+///
 /// tvOS 26 never delivers the Menu press to SwiftUI's `onExitCommand`
 /// inside a fullScreenCover — UIKit's presentation controller consumes it
 /// and dismisses the cover directly (verified with instrumented handlers:
 /// arrows and play/pause reach SwiftUI, Menu does not, and
-/// `interactiveDismissDisabled` doesn't gate it). This gate hosts the
-/// player content in a UIHostingController that intercepts the Menu press
-/// at the responder-chain level, so panel-open vs exit is our decision.
+/// `interactiveDismissDisabled` doesn't gate it). The hosting controller
+/// intercepts that press so panel-open vs exit is our decision.
+///
+/// It also distinguishes a light tap on the Siri Remote's touch surface from
+/// a Select press (HEL-134). SwiftUI's `onTapGesture` receives Select on tvOS;
+/// UIKit exposes a touch-only tap by giving `UITapGestureRecognizer` an empty
+/// `allowedPressTypes` array. Keeping these paths separate lets a light tap
+/// reveal the transport without toggling playback.
 struct MenuPressGate<Content: View>: UIViewControllerRepresentable {
     let onMenu: () -> Void
+    let onRemoteTouchTap: () -> Void
     @ViewBuilder let content: () -> Content
+
+    init(
+        onMenu: @escaping () -> Void,
+        onRemoteTouchTap: @escaping () -> Void = {},
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.onMenu = onMenu
+        self.onRemoteTouchTap = onRemoteTouchTap
+        self.content = content
+    }
 
     func makeUIViewController(context: Context) -> MenuGateHostingController<Content> {
         let controller = MenuGateHostingController(rootView: content())
         controller.onMenu = onMenu
+        controller.onRemoteTouchTap = onRemoteTouchTap
         controller.view.backgroundColor = .clear
         return controller
     }
@@ -29,11 +48,14 @@ struct MenuPressGate<Content: View>: UIViewControllerRepresentable {
         // CustomPlayerView's panel does.
         controller.rootView = content()
         controller.onMenu = onMenu
+        controller.onRemoteTouchTap = onRemoteTouchTap
     }
 }
 
 final class MenuGateHostingController<Content: View>: UIHostingController<Content> {
     var onMenu: (() -> Void)?
+    var onRemoteTouchTap: (() -> Void)?
+    private(set) var remoteTouchTapRecognizer: UITapGestureRecognizer?
 
     // Hardware finding (Jaagop's Apple TV): a real Siri Remote .menu press
     // is consumed by UIKit's presentation-dismissal *gesture recognizer*
@@ -47,10 +69,30 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
         let recognizer = UITapGestureRecognizer(target: self, action: #selector(menuRecognized))
         recognizer.allowedPressTypes = [NSNumber(value: UIPress.PressType.menu.rawValue)]
         view.addGestureRecognizer(recognizer)
+
+        // A UITapGestureRecognizer defaults to Select on tvOS. Emptying the
+        // press list switches it to taps on a touchpad-like surface; limiting
+        // the touch list to `.indirect` makes that Siri Remote intent
+        // explicit. It does not cancel delivery to the hosted SwiftUI view,
+        // so directional swipes and its focus ownership keep their existing
+        // paths (HEL-134).
+        let touchTap = UITapGestureRecognizer(
+            target: self,
+            action: #selector(remoteTouchTapRecognized)
+        )
+        touchTap.allowedPressTypes = []
+        touchTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        touchTap.cancelsTouchesInView = false
+        view.addGestureRecognizer(touchTap)
+        remoteTouchTapRecognizer = touchTap
     }
 
     @objc private func menuRecognized() {
         onMenu?()
+    }
+
+    @objc func remoteTouchTapRecognized() {
+        onRemoteTouchTap?()
     }
 
     // The simulator's hardware keyboard sends a keyboard press (type =
