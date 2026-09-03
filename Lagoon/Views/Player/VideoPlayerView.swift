@@ -1170,16 +1170,30 @@ final class PlaybackController {
                 let performance = engine.videoPerformance
                 let memory = MemorySnapshot.current()
                 let depths = engine.queueDepths
-                print("DecodeTrace"
+                // The renderer-side audio signal (HEL-123) rides on the same
+                // line, so a device console can correlate it with position
+                // and the queues without the HUD or the accessibility probe.
+                var trace = "DecodeTrace"
                     + String(format: " position=%.2f", engine.timePosition)
-                    + " video=\(depths.video) audio=\(depths.audio)"
+                    + " video=\(engine.videoQueueCountDiagnostic)/\(engine.maximumVideoBacklogDiagnostic)/\(engine.videoQueueHardLimitDiagnostic)"
+                    + " audio=\(depths.audio)"
+                    + String(format: " lead=%.3f", engine.audioDeliveryLeadSeconds)
+                    + " ready=\(engine.audioRendererReadyForPlayback ? 1 : 0)"
+                    + " buffering=\(engine.isBuffering ? 1 : 0)"
+                    + " aDry=\(engine.audioStarvationCount)"
                     + String(format: " footprintMB=%.1f availableMB=%.1f",
                         memory.footprintMB, memory.availableMB)
-                    + " stalls=\(engine.stallCount)"
+                    + " stalls=\(engine.stallCount) audioStalls=\(engine.audioStallCount)"
+                    + " reprimes=\(engine.stallReprimeCount)"
                     + " shown=\(performance?.totalFrames ?? -1)"
                     + " opt=\(performance?.optimizedCompositingFrames ?? -1)"
                     + " dropped=\(performance?.droppedFrames ?? -1)"
-                    + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\"")
+                    + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\""
+                #if DEBUG
+                trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"
+                    + " deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)"
+                #endif
+                print(trace)
                 print(cpuTrace.tick())
             }
         }
