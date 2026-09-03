@@ -41,6 +41,9 @@ final class JellyfinClient {
     private(set) var accessToken: String?
     private(set) var userId: String?
     let deviceId: String
+    /// Playback sessions whose stop report is still in flight. Screens that
+    /// re-fetch after the player closes wait on it first (HEL-132).
+    let playbackReports = PlaybackReportLedger()
     /// Resolved once per session: sign-in carries the policy, a restored
     /// token does not, so this is filled from whichever arrives first.
     private var subtitleManagementAllowed: Bool?
@@ -72,6 +75,9 @@ final class JellyfinClient {
         self.deviceId = deviceId
         let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
+        // Nothing this session fetches is worth caching (images and the
+        // playback cache have their own sessions), and see `request(for:)`.
+        config.urlCache = nil
         session = URLSession(configuration: config)
     }
 
@@ -260,6 +266,11 @@ final class JellyfinClient {
     ) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        // Never answer an API call from the HTTP cache: these responses carry
+        // per-user state (resume points, played flags) that the app has just
+        // changed with a report, and a cached copy is exactly the position
+        // from before (HEL-132).
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         if let timeout { request.timeoutInterval = timeout }
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
