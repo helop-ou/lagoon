@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = HomeViewModel()
     @State private var playerItem: PlayerItem?
 
@@ -152,6 +153,14 @@ struct HomeView: View {
                 await viewModel.refreshPluginRails(
                     client: session.client,
                     preferences: savedHomePreferences
+                )
+            }
+        }
+        .onChange(of: serverSync.generation) { _, _ in
+            Task {
+                await viewModel.refreshServerContent(
+                    client: session.client,
+                    homeSectionPreferences: savedHomePreferences
                 )
             }
         }
