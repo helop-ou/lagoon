@@ -86,6 +86,11 @@ final class PlaybackController {
     private var playMethod: PlayMethod = .directPlay
 
     var activePlayMethod: PlayMethod { playMethod }
+    /// Jellyfin's `PlayMethod` collapses the remux and transcode rungs to
+    /// the same `Transcode` value, so the regression probe needs the
+    /// ladder rung itself to tell a forced HEL-124 remux apart from an
+    /// ordinary transcode.
+    var activeDeliveryRung: PlaybackDelivery { delivery }
 
     var isPlaybackCacheActive: Bool {
         playbackCache.current != nil
@@ -1176,6 +1181,7 @@ final class PlaybackController {
                 var trace = "DecodeTrace"
                     + String(format: " position=%.2f", engine.timePosition)
                     + " video=\(engine.videoQueueCountDiagnostic)/\(engine.maximumVideoBacklogDiagnostic)/\(engine.videoQueueHardLimitDiagnostic)"
+                    + " intake=\(engine.videoIntakeCountDiagnostic)/\(engine.maximumVideoIntakeDiagnostic)"
                     + " audio=\(depths.audio)"
                     + String(format: " lead=%.3f", engine.audioDeliveryLeadSeconds)
                     + " ready=\(engine.audioRendererReadyForPlayback ? 1 : 0)"
@@ -1749,12 +1755,16 @@ final class PlaybackController {
         // App-side count/seconds explain demux backpressure. `lead` is the
         // separate renderer-side starvation signal: media already handed to
         // AVFoundation beyond the clock, which stays positive after Lagoon's
-        // own queue drains to zero (HEL-123).
+        // own queue drains to zero (HEL-123). `+cur/peak` is compressed video
+        // parked in the intake, past the decoded limit, waiting for the
+        // demuxer to reach it again (HEL-124).
         lines.append(String(
-            format: "Queues:  V %d/%d/%d · A %d/%d (%.1fs) · lead %.2fs ready%d · stalls %d (%d audio) · reprime %d · aDry %d · aGaps %d",
+            format: "Queues:  V %d/%d/%d +%d/%d · A %d/%d (%.1fs) · lead %.2fs ready%d · stalls %d (%d audio) · reprime %d · aDry %d · aGaps %d",
             engine.videoQueueCountDiagnostic,
             engine.maximumVideoBacklogDiagnostic,
             engine.videoQueueHardLimitDiagnostic,
+            engine.videoIntakeCountDiagnostic,
+            engine.maximumVideoIntakeDiagnostic,
             depths.audio,
             engine.audioCushionTarget,
             engine.audioBufferedSeconds,
@@ -1905,6 +1915,7 @@ struct VideoPlayerView: View {
                     playerSurfaceIdentity: controller.playerSurfaceIdentity,
                     handoffMilliseconds: controller.lastHandoffMilliseconds,
                     playbackMethod: controller.activePlayMethod,
+                    deliveryRung: controller.activeDeliveryRung,
                     isPlaybackCacheActive: controller.isPlaybackCacheActive,
                     bufferedFraction: controller.bufferedFraction,
                     bufferedRanges: controller.bufferedRanges,
