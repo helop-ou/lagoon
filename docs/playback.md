@@ -2388,9 +2388,45 @@ and-forget (`try?` — reporting must never interrupt playback):
   `didReportStop`), called on dismiss. This is what moves the server-side
   resume point and reorders Continue Watching.
 
-Detail screens re-fetch the item in `fullScreenCover`'s `onDismiss`, and
-HomeView re-fetches its Resume/Next Up rails in `onAppear`, so the UI
-reflects the new position immediately.
+The screens underneath re-fetch in `fullScreenCover`'s `onDismiss`: the
+detail pages re-read the item (and, for a series, what is up next), Home
+re-reads its Resume/Next Up rails and republishes the Top Shelf (HEL-119).
+Until HEL-132 that re-fetch never reached the screen, for three separate
+reasons, each of which would have been enough on its own:
+
+- **It raced the stop report.** The report only starts from the player's
+  `onDisappear` — Menu calls `dismiss()` directly — which lands in the same
+  run-loop turn as `onDismiss`, and against fixture the report takes about
+  2.5 s to return (the server tears the session down before answering),
+  so the GET always read the position from before it.
+  `JellyfinClient.playbackReports` (a `PlaybackReportLedger`) closes that
+  gap: the controller opens a session in it the moment
+  `playbackSessionActive` is set and closes it when the stop report
+  returns, and every presenting screen awaits `settle()` before
+  re-fetching. The wait is bounded (8 s) so a server that has gone away
+  costs one pause rather than a hang, and it returns at once when nothing
+  is open. Dismissal itself never waits on the network; only the re-fetch.
+- **URLSession answered from its cache.** Jellyfin sends item JSON with no
+  cache headers at all, and CFNetwork still kept and reused it
+  (`cache_hit=true` in its own log). The client now sets
+  `reloadIgnoringLocalCacheData` on every API request and runs without a
+  `urlCache`; images and the playback cache have their own sessions.
+- **The write never re-rendered.** `MediaItem` compared equal by id alone,
+  and SwiftUI drops a `@State` write whose new value compares equal to the
+  old one — the fetched item with the new resume point was written and
+  readable, and the body never ran again. `MediaItem` now compares by
+  value; the id-only identity moved to `ContentNavigationRoute`, the one
+  place that wanted it. This one also explains rails whose cards kept a
+  stale progress bar after a refresh whose item ids had not changed.
+
+`playback-reports` in the unified log (subsystem `ee.helop.lagoon`) carries
+the stop report's position and outcome and how long `settle()` waited.
+
+When re-testing this, leave the title well into its runtime: the server
+keeps no resume point inside the first `MinResumePct` (5 % by default)
+or past `MaxResumePct` (90 %), so stopping a two-hour film after two
+minutes legitimately comes back as Play, and stopping in the credits
+comes back as played.
 
 ## Putting controls in the transport (tvOS)
 
