@@ -67,10 +67,47 @@ struct GPUDeliverySequencerTests {
         #expect(sequencer.pendingCount == 0)
     }
 
-    private final class Delivered: @unchecked Sendable {
+    // The ordering has to be the sequencer's own guarantee. Production
+    // completions happen to reach it through a serial queue, which would hide
+    // a sequencer that only orders what one thread hands it, so this drives it
+    // from many threads at once with nothing serial in front.
+    @Test func concurrentCompletionsAreStillDeliveredInOrderAndOneAtATime() {
+        let count = 200
+        let sequencer = GPUDeliverySequencer(capacity: count)
+        let sequences = (0..<count).map { _ in sequencer.reserve() }
+        let delivered = Delivered()
+
+        let arrivals = Array(0..<count).shuffled()
+        DispatchQueue.concurrentPerform(iterations: count) { index in
+            let sequence = sequences[arrivals[index]]
+            sequencer.complete(sequence) { delivered.run(sequence) }
+        }
+
+        #expect(sequencer.waitUntilDrained(timeout: 5))
+        #expect(delivered.values == sequences, "frames left in a different order than they were reserved")
+        #expect(delivered.peakOverlap == 1, "\(delivered.peakOverlap) deliveries ran at once")
+        #expect(sequencer.pendingCount == 0)
+    }
+
+    private nonisolated final class Delivered: @unchecked Sendable {
         private let lock = NSLock()
         private var storage: [UInt64] = []
+        private var inside = 0
+        private var peak = 0
         var values: [UInt64] { lock.withLock { storage } }
+        /// The most bodies ever inside at once. Anything above one is the race.
+        var peakOverlap: Int { lock.withLock { peak } }
         func append(_ value: UInt64) { lock.withLock { storage.append(value) } }
+        /// Appends and then lingers, so a body that runs alongside this one is
+        /// wide enough to be caught rather than a matter of timing luck.
+        func run(_ value: UInt64) {
+            lock.withLock {
+                storage.append(value)
+                inside += 1
+                peak = max(peak, inside)
+            }
+            Thread.sleep(forTimeInterval: 0.0002)
+            lock.withLock { inside -= 1 }
+        }
     }
 }
