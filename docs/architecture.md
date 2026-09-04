@@ -102,10 +102,17 @@ outside the tab group. Its proximity to Home gives it a natural Left/Right
 focus path from the tab bar. The button joins the focus graph only while the
 top chrome is focused, so content's Up path still returns to the selected tab.
 A quick move across the tabs can reach Refresh without selecting an
-intermediate destination. This avoids adding an otherwise empty toolbar row or
-putting Refresh in the tab navigation itself. While refreshing, the arrow
-itself rotates instead of being replaced by an unrelated progress glyph;
-Reduce Motion keeps it still. The button is routed to
+intermediate destination, and Down from Refresh is intercepted through
+SwiftUI focus state and routed directly to Home's hero instead of falling back
+into the tab bar. This avoids adding an otherwise empty toolbar row or putting
+Refresh in the tab navigation itself.
+
+Refresh shares the native tab bar's presentation offset: it scrolls offscreen
+with the top chrome while the viewer moves down through Home and returns with
+the tab bar, rather than becoming a sticky control over lower rails. It is not
+hittable while that chrome is offscreen. While refreshing, the arrow itself
+rotates instead of being replaced by an unrelated progress glyph; Reduce
+Motion keeps it still. The button is routed to
 `ServerSyncState.activeTarget`, so it can only refresh the visible Home,
 library, or Discover destination.
 
