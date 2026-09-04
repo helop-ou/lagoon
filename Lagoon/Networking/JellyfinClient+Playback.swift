@@ -118,9 +118,12 @@ extension JellyfinClient {
         }
         if let transcodingUrl = source.transcodingUrl, let serverURL {
             // TranscodingUrl arrives server-relative, query string included.
-            guard let url = URL(string: transcodingUrl, relativeTo: serverURL)?.absoluteURL else {
+            guard let resolvedURL = URL(string: transcodingUrl, relativeTo: serverURL)?.absoluteURL else {
                 throw JellyfinError.unplayable
             }
+            let url = accessToken.map {
+                authenticatedMediaURL(resolvedURL, accessToken: $0)
+            } ?? resolvedURL
             return (url, .transcode)
         }
         throw JellyfinError.unplayable
@@ -131,12 +134,7 @@ extension JellyfinClient {
     func externalSubtitleURL(deliveryUrl: String?) -> URL? {
         guard let deliveryUrl, let serverURL, let accessToken,
               let url = URL(string: deliveryUrl, relativeTo: serverURL)?.absoluteURL else { return nil }
-        if url.query()?.contains("api_key") == true {
-            return url
-        }
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
-        components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "api_key", value: accessToken)]
-        return components.url ?? url
+        return authenticatedMediaURL(url, accessToken: accessToken)
     }
 
     // MARK: - Remote subtitles (HEL-49)
@@ -166,11 +164,14 @@ extension JellyfinClient {
     /// sidecar during their queued library refresh.
     func remoteSubtitleFile(subtitleId: String) async throws -> (url: URL, data: Data) {
         guard let accessToken else { throw JellyfinError.notConfigured }
-        let query = [URLQueryItem(name: "api_key", value: accessToken)]
         let components = ["Providers", "Subtitles", "Subtitles", subtitleId]
+        let deliveryURL = authenticatedMediaURL(
+            try url(pathComponents: components),
+            accessToken: accessToken
+        )
         return (
-            try url(pathComponents: components, query: query),
-            try await getData(components, query: query, timeout: SubtitleRequestTimeout.provider)
+            deliveryURL,
+            try await getData(components, timeout: SubtitleRequestTimeout.provider)
         )
     }
 
@@ -208,12 +209,52 @@ extension JellyfinClient {
             URLQueryItem(name: "static", value: "true"),
             URLQueryItem(name: "mediaSourceId", value: source.id),
             URLQueryItem(name: "deviceId", value: deviceId),
-            URLQueryItem(name: "api_key", value: accessToken),
+            URLQueryItem(name: "ApiKey", value: accessToken),
         ]
         if let eTag = source.eTag {
             query.append(URLQueryItem(name: "Tag", value: eTag))
         }
         return query
+    }
+
+    /// FFmpeg, the playback cache and the lightweight image/subtitle loaders
+    /// consume URLs rather than URLRequests, so they cannot attach Lagoon's
+    /// preferred Authorization header. Jellyfin 12 disables the old
+    /// `api_key` spelling by default; `ApiKey` is its non-legacy URL fallback
+    /// and is also supported by Lagoon's minimum Jellyfin 10.8 release.
+    ///
+    /// Server-provided playback and subtitle URLs may already contain either
+    /// spelling. Replace it with the active session token instead of sending
+    /// two credentials, and never attach that token to a third-party origin.
+    private func authenticatedMediaURL(_ url: URL, accessToken: String) -> URL {
+        guard let serverURL,
+              Self.sameOrigin(url, serverURL),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        var query = components.queryItems ?? []
+        query.removeAll { item in
+            let name = item.name.lowercased()
+            return name == "apikey" || name == "api_key"
+        }
+        query.append(URLQueryItem(name: "ApiKey", value: accessToken))
+        components.queryItems = query
+        return components.url ?? url
+    }
+
+    private nonisolated static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && effectivePort(lhs) == effectivePort(rhs)
+    }
+
+    private nonisolated static func effectivePort(_ url: URL) -> Int? {
+        if let port = url.port { return port }
+        return switch url.scheme?.lowercased() {
+        case "http": 80
+        case "https": 443
+        default: nil
+        }
     }
 
     // MARK: - Transport extras (HEL-39 slice 3)
@@ -291,12 +332,13 @@ extension JellyfinClient {
 
     /// Unlike `Items/…/Images/…`, the trickplay route is authenticated — it
     /// 401s without credentials, and the image loader sends no headers, so
-    /// the token rides in the query the way stream URLs do.
+    /// the token rides in Jellyfin's non-legacy URL query the way stream URLs
+    /// do.
     private func trickplaySheetURL(itemId: String, width: Int, index: Int) -> URL? {
         guard let accessToken else { return nil }
         return try? url(
             path: "Videos/\(itemId)/Trickplay/\(width)/\(index).jpg",
-            query: [URLQueryItem(name: "api_key", value: accessToken)]
+            query: [URLQueryItem(name: "ApiKey", value: accessToken)]
         )
     }
 
