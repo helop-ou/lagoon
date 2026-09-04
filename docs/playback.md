@@ -30,7 +30,7 @@ shells instead of 27.
 2. Pick the first `MediaSource` and resolve a URL via
    `JellyfinClient.streamURL`:
    - `SupportsDirectPlay` → `Videos/{id}/stream?static=true&mediaSourceId=…`
-     (+ `api_key`, `deviceId`, `Tag`), PlayMethod `DirectPlay`.
+     (+ `ApiKey`, `deviceId`, `Tag`), PlayMethod `DirectPlay`.
    - else `SupportsDirectStream` → `Videos/{id}/stream.{container}` with the
      same static query, PlayMethod `DirectStream` (server-must-proxy case;
      container can arrive as an ffprobe list — take the first entry).
@@ -41,6 +41,14 @@ shells instead of 27.
 3. The engine plays it. Jellyfin's HLS playlists cover the full duration,
    so resume is handled the same way as direct play: an initial demuxer
    seek, keeping position reporting absolute in every play method.
+
+`ApiKey` is intentional capitalization, not cosmetic. Jellyfin 12 disables
+the deprecated lowercase `api_key` query parameter by default. Ordinary API
+requests continue to use Lagoon's `Authorization: MediaBrowser … Token=…`
+header; the query fallback exists only for URL-only consumers such as FFmpeg,
+the playback cache, external subtitle loading and trickplay. Server-issued
+media URLs have either credential spelling replaced with the active token,
+and Lagoon never adds it to a different origin.
 
 ### What this device is offered (HEL-102)
 
@@ -2669,7 +2677,7 @@ These are all verified on device, not inferred:
   — one sprite sheet per `TileWidth × TileHeight` grid of thumbnails, so
   the default 10×10 at 10 s covers ~16 minutes each. Two gotchas: unlike
   `Items/…/Images/…` this route **401s without credentials**, so the URL
-  carries `api_key` the way stream URLs do; and a sheet is ~23 MB decoded,
+  carries `ApiKey` the way stream URLs do; and a sheet is ~23 MB decoded,
   which is why `TrickplayLoader` holds its own two rather than going
   through `ImageCache` (one scrub would evict every poster). Tile crops are
   derived from the *decoded* sheet's size, never the declared numbers — the
