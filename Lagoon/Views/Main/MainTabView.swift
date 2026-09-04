@@ -37,17 +37,15 @@ struct MainTabView: View {
         primaryNavigation
         #if os(tvOS)
         .overlay(alignment: .topLeading) {
-            if let target = serverSync.activeTarget {
-                ServerRefreshButton(
-                    target: target,
-                    moveDownAction: refreshMoveDownAction(for: target)
-                )
-                    // Put the visible circle on the same leading grid line as
-                    // the hero and rails. UIKit's focus frame extends 4pt
-                    // beyond the rendered glass; the UI test accounts for it.
-                    .padding(.leading, Metrics.screenGutter)
-                    .offset(y: -Metrics.Space.m)
-            }
+            ServerRefreshButton(
+                target: serverSync.activeTarget,
+                moveDownAction: activeRefreshMoveDownAction
+            )
+                // Put the visible circle on the same leading grid line as
+                // the hero and rails. UIKit's focus frame extends 4pt
+                // beyond the rendered glass; the UI test accounts for it.
+                .padding(.leading, Metrics.screenGutter)
+                .offset(y: -Metrics.Space.m)
         }
         #endif
         .task(id: "\(session.activeAccount?.id ?? ""):\(serverSync.generation)") {
@@ -154,6 +152,11 @@ struct MainTabView: View {
     }
 
     #if os(tvOS)
+    private var activeRefreshMoveDownAction: (@MainActor @Sendable () -> Void)? {
+        guard let target = serverSync.activeTarget else { return nil }
+        return refreshMoveDownAction(for: target)
+    }
+
     private func refreshMoveDownAction(
         for target: ServerSyncTarget
     ) -> (@MainActor @Sendable () -> Void)? {
