@@ -29,23 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
-            build: "88",
-            released: "September 2026",
-            headline: "Pages keep themselves current, and newer Jellyfin servers work.",
-            changes: [
-                "Home, Movies, Shows, and Discover stay current while you leave Lagoon open, refresh after you return, and can be updated whenever you choose: pull down on iPhone or iPad, or choose the refresh button beside Home on Apple TV.",
-                "A request you are watching in Discover updates itself. While it waits for approval, and while your server is downloading and importing it, the page keeps up on its own instead of needing you to leave and come back.",
-                "Servers running the Jellyfin 12 preview no longer turn Lagoon's links away. That release switches off an older way of carrying your credentials in a link, which Lagoon still used for video, external subtitles and scrubbing thumbnails; it now uses the current one everywhere.",
-            ]
-        ),
-        ChangelogEntry(
-            version: "0.1",
             build: "87",
             released: "September 2026",
-            headline: "The Siri Remote feels at home, and watch progress stays current.",
+            headline: "Pages keep themselves current, and the Siri Remote feels at home.",
             changes: [
-                "A light tap on the Siri Remote touch surface now reveals the playback controls without pausing, seeking, or moving focus.",
+                "Home, Movies, Shows, and Discover stay current while you leave Lagoon open, refresh after you return, and can be updated whenever you choose: pull down on iPhone or iPad, or choose the refresh button beside Home on Apple TV.",
                 "After you leave the player, Play changes to Resume and Home's progress bars and Continue Watching refresh after Jellyfin saves the new position, instead of showing the state from before you watched.",
+                "A request you are watching in Discover updates itself. While it waits for approval, and while your server is downloading and importing it, the page keeps up on its own instead of needing you to leave and come back.",
+                "A light tap on the Siri Remote touch surface now reveals the playback controls without pausing, seeking, or moving focus.",
+                "Servers running the Jellyfin 12 preview no longer turn Lagoon's links away. That release switches off an older way of carrying your credentials in a link, which Lagoon still used for video, external subtitles and scrubbing thumbnails; it now uses the current one everywhere.",
             ]
         ),
         ChangelogEntry(
