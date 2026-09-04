@@ -49,6 +49,9 @@ Technical docs live in [`docs/`](docs/):
 
 ## Compatibility
 
-Uses Jellyfin's user-scoped HTTP API. Lagoon is verified with Jellyfin 10.8
-through 10.11.x and the Jellyfin 12.0 RC7 public server. The 12.0 compatibility
-work is tracked in [HEL-138](https://helop-ou.atlassian.net/browse/HEL-138).
+Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
+Lagoon works against 10.8 through current. What has actually been contacted is
+narrower than that range: the public **10.11.11** stable demo and the public
+**12.0.0** unstable demo. The 12.0 compatibility work is tracked in
+[HEL-138](https://helop-ou.atlassian.net/browse/HEL-138) and is not finished —
+see [Jellyfin API](docs/jellyfin-api.md) for what has and has not been checked.
