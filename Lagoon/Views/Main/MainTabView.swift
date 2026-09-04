@@ -35,20 +35,16 @@ struct MainTabView: View {
     var body: some View {
         primaryNavigation
         #if os(tvOS)
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: .topLeading) {
             if let target = serverSync.activeTarget {
-                ZStack(alignment: .topTrailing) {
-                    ServerRefreshButton(target: target)
-                        .padding(.trailing, Metrics.screenGutter)
-                        .offset(y: -Metrics.Space.l)
-
-                    ServerRefreshFocusGuide(destination: target)
-                        // The guide occupies only the strip immediately to
-                        // the hero's right. It therefore handles Right from
-                        // content without replacing Up's route to the tabs.
-                        .frame(width: Metrics.screenGutter, height: Metrics.heroHeight)
-                        .offset(y: Metrics.Space.section * 3)
-                }
+                ServerRefreshButton(target: target)
+                    // Keep the action just outside the tab capsule so the
+                    // focus engine can move naturally between it and Home.
+                    .padding(
+                        .leading,
+                        Metrics.screenGutter * 2 + Metrics.Space.section
+                    )
+                    .offset(y: -Metrics.Space.l)
             }
         }
         #endif
