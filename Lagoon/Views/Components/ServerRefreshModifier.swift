@@ -88,80 +88,6 @@ private struct ServerRefreshModifier: ViewModifier {
 }
 
 #if os(tvOS)
-/// A UIKit focus guide fills the otherwise empty safe-zone strip beside the
-/// hero and redirects a rightward Siri Remote move to the visible Refresh
-/// button. SwiftUI's `focusSection` also participates in default and vertical
-/// focus selection, which makes a full-width guide steal Up from the tab bar.
-struct ServerRefreshFocusGuide: UIViewRepresentable {
-    let destination: ServerSyncTarget
-
-    func makeUIView(context: Context) -> ServerRefreshFocusGuideView {
-        ServerRefreshFocusGuideView(identifier: destination.identifier)
-    }
-
-    func updateUIView(_ view: ServerRefreshFocusGuideView, context: Context) {
-        view.destinationIdentifier = destination.identifier
-        view.resolveDestination()
-    }
-}
-
-final class ServerRefreshFocusGuideView: UIView {
-    var destinationIdentifier: String {
-        didSet { resolveDestination() }
-    }
-
-    private let focusGuide = UIFocusGuide()
-
-    init(identifier: String) {
-        destinationIdentifier = identifier
-        super.init(frame: .zero)
-        backgroundColor = .clear
-        addLayoutGuide(focusGuide)
-        NSLayoutConstraint.activate([
-            focusGuide.leadingAnchor.constraint(equalTo: leadingAnchor),
-            focusGuide.trailingAnchor.constraint(equalTo: trailingAnchor),
-            focusGuide.topAnchor.constraint(equalTo: topAnchor),
-            focusGuide.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        resolveDestination()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if focusGuide.preferredFocusEnvironments.isEmpty {
-            resolveDestination()
-        }
-    }
-
-    func resolveDestination() {
-        guard let window else {
-            focusGuide.preferredFocusEnvironments = []
-            return
-        }
-        let identifier = "server.refresh.\(destinationIdentifier)"
-        focusGuide.preferredFocusEnvironments = window.firstSubview(with: identifier).map { [$0] } ?? []
-    }
-}
-
-private extension UIView {
-    func firstSubview(with identifier: String) -> UIView? {
-        if accessibilityIdentifier == identifier { return self }
-        for subview in subviews {
-            if let match = subview.firstSubview(with: identifier) { return match }
-        }
-        return nil
-    }
-}
-
 /// The manual action sits in MainTabView's full-screen coordinate space, not
 /// in a NavigationStack toolbar. A native toolbar adds a second horizontal
 /// bar below tvOS's tabs and puts Refresh directly in the hero's Down path.
@@ -169,6 +95,7 @@ private extension UIView {
 struct ServerRefreshButton: View {
     let target: ServerSyncTarget
     @Environment(ServerSyncState.self) private var serverSync
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var allowsFocus = false
 
     var body: some View {
@@ -176,6 +103,7 @@ struct ServerRefreshButton: View {
             target: target,
             isRefreshing: serverSync.isRefreshing(target),
             allowsFocus: allowsFocus,
+            reduceMotion: reduceMotion,
             action: { serverSync.requestManualRefresh(for: target) }
         )
         // UIKit's glass content inset gives the 28pt symbol the same 80pt
@@ -195,6 +123,7 @@ private struct TVServerRefreshControl: UIViewRepresentable {
     let target: ServerSyncTarget
     let isRefreshing: Bool
     let allowsFocus: Bool
+    let reduceMotion: Bool
     let action: @MainActor () -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -214,24 +143,28 @@ private struct TVServerRefreshControl: UIViewRepresentable {
             trailing: 20
         )
         return DelayedFocusButton(configuration: configuration, primaryAction: UIAction { _ in
+            guard !context.coordinator.isRefreshing else { return }
             context.coordinator.action()
         })
     }
 
     func updateUIView(_ button: DelayedFocusButton, context: Context) {
         context.coordinator.action = action
+        context.coordinator.isRefreshing = isRefreshing
         button.allowsFocus = allowsFocus
         var configuration = button.configuration ?? .glass()
-        configuration.image = isRefreshing ? nil : UIImage(systemName: "arrow.clockwise")
-        configuration.showsActivityIndicator = isRefreshing
+        configuration.image = UIImage(systemName: "arrow.clockwise")
+        configuration.showsActivityIndicator = false
         button.configuration = configuration
-        button.isEnabled = !isRefreshing
-        button.accessibilityLabel = isRefreshing ? "Refreshing" : "Refresh"
+        button.setIconSpinning(isRefreshing && !reduceMotion)
+        button.accessibilityLabel = "Refresh"
+        button.accessibilityValue = isRefreshing ? "In progress" : nil
         button.accessibilityIdentifier = "server.refresh.\(target.identifier)"
     }
 
     final class Coordinator {
         var action: @MainActor () -> Void
+        var isRefreshing = false
 
         init(action: @escaping @MainActor () -> Void) {
             self.action = action
@@ -240,15 +173,92 @@ private struct TVServerRefreshControl: UIViewRepresentable {
 }
 
 private final class DelayedFocusButton: UIButton {
+    private static let rotationAnimationKey = "server-refresh.rotation"
+    private var shouldSpinIcon = false
+    private var isTopChromeFocused = false
+    private var observesFocusUpdates = false
+
     var allowsFocus = false {
         didSet {
             guard allowsFocus != oldValue else { return }
+            updateTopChromeFocusState(
+                using: UIFocusSystem.focusSystem(for: self)?.focusedItem
+            )
             setNeedsFocusUpdate()
         }
     }
 
     override var canBecomeFocused: Bool {
-        allowsFocus && super.canBecomeFocused
+        allowsFocus && isTopChromeFocused && super.canBecomeFocused
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil, !observesFocusUpdates {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(focusDidUpdate(_:)),
+                name: UIFocusSystem.didUpdateNotification,
+                object: nil
+            )
+            observesFocusUpdates = true
+            updateTopChromeFocusState(
+                using: UIFocusSystem.focusSystem(for: self)?.focusedItem
+            )
+        } else if window == nil, observesFocusUpdates {
+            NotificationCenter.default.removeObserver(self)
+            observesFocusUpdates = false
+            isTopChromeFocused = false
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateIconAnimation()
+    }
+
+    func setIconSpinning(_ spinning: Bool) {
+        shouldSpinIcon = spinning
+        updateIconAnimation()
+    }
+
+    @objc private func focusDidUpdate(_ notification: Notification) {
+        guard let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey]
+            as? UIFocusUpdateContext else { return }
+        updateTopChromeFocusState(using: context.nextFocusedItem)
+    }
+
+    private func updateTopChromeFocusState(using focusedItem: (any UIFocusItem)?) {
+        guard let focusedView = focusedItem as? UIView else {
+            isTopChromeFocused = false
+            return
+        }
+
+        var ancestor: UIView? = focusedView
+        while let view = ancestor {
+            if view === self || view is UITabBar {
+                isTopChromeFocused = true
+                return
+            }
+            ancestor = view.superview
+        }
+        isTopChromeFocused = false
+    }
+
+    private func updateIconAnimation() {
+        guard let layer = imageView?.layer else { return }
+        if shouldSpinIcon {
+            guard layer.animation(forKey: Self.rotationAnimationKey) == nil else { return }
+            let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+            rotation.fromValue = 0
+            rotation.toValue = Double.pi * 2
+            rotation.duration = 0.8
+            rotation.repeatCount = .infinity
+            rotation.timingFunction = CAMediaTimingFunction(name: .linear)
+            layer.add(rotation, forKey: Self.rotationAnimationKey)
+        } else {
+            layer.removeAnimation(forKey: Self.rotationAnimationKey)
+        }
     }
 }
 #endif
