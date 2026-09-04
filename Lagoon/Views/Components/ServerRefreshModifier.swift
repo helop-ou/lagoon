@@ -1,5 +1,6 @@
 import SwiftUI
 #if os(tvOS)
+import Symbols
 import UIKit
 #endif
 
@@ -155,10 +156,6 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         context.coordinator.action = action
         context.coordinator.isRefreshing = isRefreshing
         button.allowsFocus = allowsFocus
-        var configuration = button.configuration ?? .glass()
-        configuration.image = UIImage(systemName: "arrow.clockwise")
-        configuration.showsActivityIndicator = false
-        button.configuration = configuration
         button.setIconSpinning(isRefreshing && !reduceMotion)
         button.accessibilityLabel = "Refresh"
         button.accessibilityValue = isRefreshing ? "In progress" : nil
@@ -176,8 +173,8 @@ private struct TVServerRefreshControl: UIViewRepresentable {
 }
 
 private final class DelayedFocusButton: UIButton {
-    private static let rotationAnimationKey = "server-refresh.rotation"
     private var shouldSpinIcon = false
+    private weak var animatedImageView: UIImageView?
     private var isTopChromeFocused = false
     private var observesFocusUpdates = false
 
@@ -249,18 +246,18 @@ private final class DelayedFocusButton: UIButton {
     }
 
     private func updateIconAnimation() {
-        guard let layer = imageView?.layer else { return }
+        guard let imageView else { return }
         if shouldSpinIcon {
-            guard layer.animation(forKey: Self.rotationAnimationKey) == nil else { return }
-            let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
-            rotation.fromValue = 0
-            rotation.toValue = Double.pi * 2
-            rotation.duration = 0.8
-            rotation.repeatCount = .infinity
-            rotation.timingFunction = CAMediaTimingFunction(name: .linear)
-            layer.add(rotation, forKey: Self.rotationAnimationKey)
-        } else {
-            layer.removeAnimation(forKey: Self.rotationAnimationKey)
+            guard animatedImageView !== imageView else { return }
+            animatedImageView?.removeSymbolEffect(ofType: .rotate)
+            imageView.addSymbolEffect(
+                .rotate,
+                options: .repeating.speed(0.6)
+            )
+            animatedImageView = imageView
+        } else if let animatedImageView {
+            animatedImageView.removeSymbolEffect(ofType: .rotate)
+            self.animatedImageView = nil
         }
     }
 }
