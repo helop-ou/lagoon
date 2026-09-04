@@ -48,11 +48,12 @@ struct MainTabView: View {
                     topChromeOffset: $refreshTopChromeOffset
                 )
                     // Put the visible circle on the same leading grid line as
-                    // the hero and rails. The TabView overlay begins 20pt inside
-                    // the scroll content's coordinate origin, while UIKit's
-                    // focus frame extends 4pt beyond the rendered glass.
+                    // the hero and rails. UIKit's focus frame extends a little
+                    // beyond the rendered glass, which the alignment UI test
+                    // accounts for; the overlay itself shares the content's
+                    // leading origin, so it needs no horizontal correction.
                     .padding(.leading, Metrics.screenGutter)
-                    .offset(x: -20, y: -Metrics.Space.m)
+                    .offset(y: -Metrics.Space.m)
                     .onAppear { hasMountedServerRefresh = true }
             }
         }
