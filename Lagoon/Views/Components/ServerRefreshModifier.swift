@@ -95,6 +95,7 @@ private struct ServerRefreshModifier: ViewModifier {
 /// This separate control shares the top chrome without changing layout.
 struct ServerRefreshButton: View {
     let target: ServerSyncTarget
+    let moveDownAction: (@MainActor @Sendable () -> Void)?
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var allowsFocus = false
@@ -105,6 +106,7 @@ struct ServerRefreshButton: View {
             isRefreshing: serverSync.isRefreshing(target),
             allowsFocus: allowsFocus,
             reduceMotion: reduceMotion,
+            moveDownAction: moveDownAction,
             action: { serverSync.requestManualRefresh(for: target) }
         )
         // The 64pt base grows to roughly the tab capsule's visual height when
@@ -128,10 +130,11 @@ private struct TVServerRefreshControl: UIViewRepresentable {
     let isRefreshing: Bool
     let allowsFocus: Bool
     let reduceMotion: Bool
+    let moveDownAction: (@MainActor @Sendable () -> Void)?
     let action: @MainActor () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(action: action)
+        Coordinator(action: action, moveDownAction: moveDownAction)
     }
 
     func makeUIView(context: Context) -> DelayedFocusButton {
@@ -146,14 +149,17 @@ private struct TVServerRefreshControl: UIViewRepresentable {
             bottom: 16,
             trailing: 16
         )
-        return DelayedFocusButton(configuration: configuration, primaryAction: UIAction { _ in
+        let button = DelayedFocusButton(configuration: configuration, primaryAction: UIAction { _ in
             guard !context.coordinator.isRefreshing else { return }
             context.coordinator.action()
         })
+        button.moveDownAction = { context.coordinator.moveDownAction?() }
+        return button
     }
 
     func updateUIView(_ button: DelayedFocusButton, context: Context) {
         context.coordinator.action = action
+        context.coordinator.moveDownAction = moveDownAction
         context.coordinator.isRefreshing = isRefreshing
         button.allowsFocus = allowsFocus
         button.setIconSpinning(isRefreshing && !reduceMotion)
@@ -164,10 +170,15 @@ private struct TVServerRefreshControl: UIViewRepresentable {
 
     final class Coordinator {
         var action: @MainActor () -> Void
+        var moveDownAction: (@MainActor @Sendable () -> Void)?
         var isRefreshing = false
 
-        init(action: @escaping @MainActor () -> Void) {
+        init(
+            action: @escaping @MainActor () -> Void,
+            moveDownAction: (@MainActor @Sendable () -> Void)?
+        ) {
             self.action = action
+            self.moveDownAction = moveDownAction
         }
     }
 }
@@ -177,6 +188,8 @@ private final class DelayedFocusButton: UIButton {
     private weak var animatedImageView: UIImageView?
     private var isTopChromeFocused = false
     private var observesFocusUpdates = false
+
+    var moveDownAction: (@MainActor @Sendable () -> Void)?
 
     var allowsFocus = false {
         didSet {
@@ -190,6 +203,23 @@ private final class DelayedFocusButton: UIButton {
 
     override var canBecomeFocused: Bool {
         allowsFocus && isTopChromeFocused && super.canBecomeFocused
+    }
+
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        guard context.focusHeading.contains(.down),
+              isFocused,
+              moveDownAction != nil else {
+            return super.shouldUpdateFocus(in: context)
+        }
+
+        // TabView normally resolves this move to its own tab bar. Cancel only
+        // that Down update and let SwiftUI's FocusState select the current
+        // hero. Up from the hero remains wholly owned by the tab hierarchy.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isFocused else { return }
+            self.moveDownAction?()
+        }
+        return false
     }
 
     override func didMoveToWindow() {
