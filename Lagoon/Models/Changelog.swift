@@ -31,8 +31,9 @@ nonisolated enum Changelog {
             version: "0.1",
             build: "88",
             released: "September 2026",
-            headline: "The player can tell you what time it will finish.",
+            headline: "Rows pick up the colour of what you are looking at.",
             changes: [
+                "On Apple TV, whatever you are pointed at in a row now casts a soft glow in the colours of its own artwork, underneath the usual lift. Posters are a little larger as well, with more room between rows.",
                 "While the playback controls are showing, another light tap on the Siri Remote touch surface swaps the time remaining for the time of day the film or episode will end. Tap again to swap back. Pause, and it keeps up: the finish time moves later for as long as you stay paused, and a faster playback speed brings it closer.",
             ]
         ),
