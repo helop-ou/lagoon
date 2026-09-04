@@ -31,21 +31,30 @@ struct MainTabView: View {
     @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
     @State private var selectedTab: MainTabSelection = .home
+    #if os(tvOS)
+    @State private var hasMountedServerRefresh = false
+    @State private var refreshTopChromeOffset: CGFloat = 0
+    #endif
     @FocusState private var homeHeroFocused: Bool
 
     var body: some View {
         primaryNavigation
         #if os(tvOS)
         .overlay(alignment: .topLeading) {
-            ServerRefreshButton(
-                target: serverSync.activeTarget,
-                moveDownAction: activeRefreshMoveDownAction
-            )
-                // Put the visible circle on the same leading grid line as
-                // the hero and rails. UIKit's focus frame extends 4pt
-                // beyond the rendered glass; the UI test accounts for it.
-                .padding(.leading, Metrics.screenGutter)
-                .offset(y: -Metrics.Space.m)
+            if hasMountedServerRefresh || serverSync.activeTarget != nil {
+                ServerRefreshButton(
+                    target: serverSync.activeTarget,
+                    moveDownAction: activeRefreshMoveDownAction,
+                    topChromeOffset: $refreshTopChromeOffset
+                )
+                    // Put the visible circle on the same leading grid line as
+                    // the hero and rails. The TabView overlay begins 20pt inside
+                    // the scroll content's coordinate origin, while UIKit's
+                    // focus frame extends 4pt beyond the rendered glass.
+                    .padding(.leading, Metrics.screenGutter)
+                    .offset(x: -20, y: -Metrics.Space.m)
+                    .onAppear { hasMountedServerRefresh = true }
+            }
         }
         #endif
         .task(id: "\(session.activeAccount?.id ?? ""):\(serverSync.generation)") {
