@@ -55,6 +55,12 @@ final class ServerSyncUITests: XCTestCase {
         let settingsTab = app.tabBars.buttons["Settings"]
         XCTAssertTrue(settingsTab.exists)
         XCTAssertLessThan(refresh.frame.maxX, homeTab.frame.minX)
+        XCTAssertEqual(
+            refresh.frame.minX + 4,
+            hero.frame.minX,
+            accuracy: 2,
+            "Refresh's visible glass does not share the hero's leading edge"
+        )
         XCTAssertLessThan(refresh.frame.maxY, hero.frame.minY)
         XCTAssertFalse(refresh.hasFocus, "Refresh must not take initial focus")
 
