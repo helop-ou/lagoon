@@ -75,6 +75,46 @@ struct MetalFrameConverterTests {
         #expect(chromaDrift <= 2, "grey picked up a tint of \(chromaDrift) codes")
     }
 
+    // The no-copy wrap itself cannot be tested: it is compiled out of the
+    // simulator, whose driver traps on malloc pages. The decision that guards
+    // it can be. libdav1d's pooled pictures are one block with an alignment
+    // gap between planes; VP9 Profile 2 decodes to the same format through
+    // FFmpeg's default allocator, which pools a buffer per plane, and wrapping
+    // that span would hand the GPU the unmapped heap between them.
+    @Test func onlyPlanesFromOneAllocationMayBeWrappedWithoutCopying() {
+        // A 4K 10-bit picture, the size that actually reaches this path, laid
+        // out the way FFmpeg lays a dav1d one out: 2160 visible rows inside
+        // regions allocated for 2176, so the planes are one block with about
+        // 150 KB of padding rows between them.
+        let pageSize = Int(getpagesize())
+        let (width, height, allocatedHeight) = (3840, 2160, 2176)
+        let (lumaStride, chromaStride) = (width * 2, width)
+        let start = 0x2_0000_0000
+        func plane(at address: Int, stride: Int, rows: Int) -> MetalFrameConverter.Plane {
+            .init(base: UnsafeRawPointer(bitPattern: address)!, stride: stride, rows: rows)
+        }
+        let luma = plane(at: start, stride: lumaStride, rows: height)
+        let cbStart = start + lumaStride * allocatedHeight
+        let crStart = cbStart + chromaStride * (allocatedHeight / 2)
+
+        let pooled = [
+            luma,
+            plane(at: cbStart, stride: chromaStride, rows: height / 2),
+            plane(at: crStart, stride: chromaStride, rows: height / 2),
+        ]
+        #expect(MetalFrameConverter.planesShareOneAllocation(pooled, pageSize: pageSize))
+
+        // A buffer per plane, which is what VP9 Profile 2 decodes into: the
+        // span reaches across heap this frame does not own, on either side of
+        // the luma plane at that.
+        let perPlane = [
+            luma,
+            plane(at: start + 0x1000_0000, stride: chromaStride, rows: height / 2),
+            plane(at: start - 0x1000_0000, stride: chromaStride, rows: height / 2),
+        ]
+        #expect(MetalFrameConverter.planesShareOneAllocation(perPlane, pageSize: pageSize) == false)
+    }
+
     // MARK: - Reference
 
     /// The shader's arithmetic for a grey sample, in Double: BT.2020 Y'CbCr
