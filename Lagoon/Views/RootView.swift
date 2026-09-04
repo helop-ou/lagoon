@@ -65,6 +65,11 @@ struct RootView: View {
                         identifier: "server.sync.periodic.home"
                     )
                     regressionProbe(
+                        label: "Foreground Home refreshes",
+                        value: serverSync.refreshCount(.home, trigger: .foreground),
+                        identifier: "server.sync.foreground.home"
+                    )
+                    regressionProbe(
                         label: "Manual Home refreshes",
                         value: serverSync.refreshCount(.home, trigger: .manual),
                         identifier: "server.sync.manual.home"
