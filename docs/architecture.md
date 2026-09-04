@@ -97,14 +97,17 @@ good content.
 
 The same modifier owns the explicit platform affordance. On iOS it contributes
 native pull-to-refresh to each browse scroll view. On tvOS, `MainTabView`
-places one compact circular Refresh button at the top trailing edge, beside
-but outside the tab group. A narrow UIKit focus guide in the trailing safe-zone
-makes the action a right-edge destination without taking over the content's Up
-path to the tabs, adding an otherwise empty toolbar row, or putting Refresh in
-the tab navigation itself. The button is routed to
+places one compact circular Refresh button at the top leading edge, beside but
+outside the tab group. Its proximity to Home gives it a natural Left/Right
+focus path from the tab bar. The button joins the focus graph only while the
+top chrome is focused, so content's Up path still returns to the selected tab.
+A quick move across the tabs can reach Refresh without selecting an
+intermediate destination. This avoids adding an otherwise empty toolbar row or
+putting Refresh in the tab navigation itself. While refreshing, the arrow
+itself rotates instead of being replaced by an unrelated progress glyph;
+Reduce Motion keeps it still. The button is routed to
 `ServerSyncState.activeTarget`, so it can only refresh the visible Home,
-library, or Discover destination and becomes a progress indicator while that
-work runs.
+library, or Discover destination.
 
 Playback dismissal remains deliberately separate. The scene stays active
 while a full-screen player is open, and HEL-132's targeted dismissal refresh
