@@ -198,7 +198,17 @@ private struct ArtworkFocusHue: ViewModifier {
                 guard isFocused, let url else { return }
                 try? await Task.sleep(for: .milliseconds(180))
                 guard !Task.isCancelled else { return }
-                palette = await ArtworkPaletteCache.shared.palette(for: url)
+                let sampled = await ArtworkPaletteCache.shared.palette(for: url)
+                guard !Task.isCancelled else { return }
+                // The halo does not exist until this lands, so its arrival is
+                // an insertion rather than a change of opacity. Without an
+                // animated transaction here there is nothing for the opacity
+                // animation below to interpolate and the hue snaps in at full
+                // strength; it only faded when re-focusing a card whose
+                // palette had already been sampled.
+                withAnimation(.easeOut(duration: Motion.standard)) {
+                    palette = sampled
+                }
             }
     }
 
@@ -218,7 +228,10 @@ private struct ArtworkFocusHue: ViewModifier {
                 // hierarchy carries a focus-driven transform.
                 .padding(-Metrics.Space.xl)
                 .opacity(isFocused ? Metrics.focusHaloOpacity : 0)
-                .animation(.easeOut(duration: Motion.fast), value: isFocused)
+                .animation(.easeOut(duration: Motion.standard), value: isFocused)
+                // Carries the insertion above; the opacity animation only
+                // covers focus moving on a card that already has its palette.
+                .transition(.opacity)
                 .allowsHitTesting(false)
         }
     }
