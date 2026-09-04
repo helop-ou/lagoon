@@ -64,6 +64,29 @@ nonisolated enum SeerrLiveRefreshCadence: Hashable {
     }
 }
 
+/// The loop is deliberately tiny and injectable: production sleeps on the
+/// continuous clock, while tests can advance it instantly and prove that one
+/// refresh always finishes before the next interval begins.
+@MainActor
+enum SeerrLiveRefreshLoop {
+    static func run(
+        interval: Duration,
+        sleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        shouldContinue: () -> Bool = { true },
+        refresh: () async -> Void
+    ) async {
+        while !Task.isCancelled, shouldContinue() {
+            do {
+                try await sleep(interval)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, shouldContinue() else { return }
+            await refresh()
+        }
+    }
+}
+
 /// Runs a single sequential refresh loop only while its detail page is both
 /// visible and foreground-active. SwiftUI cancels the structured task when
 /// any part of the task id changes, so pushed routes and background scenes do
@@ -112,13 +135,11 @@ private struct SeerrLiveRefreshModifier: ViewModifier {
                     guard !Task.isCancelled else { return }
                 }
 
-                while !Task.isCancelled, let cadence {
-                    do {
-                        try await Task.sleep(for: cadence.interval())
-                    } catch {
-                        return
-                    }
-                    guard canRefresh, !Task.isCancelled else { return }
+                guard let cadence else { return }
+                await SeerrLiveRefreshLoop.run(
+                    interval: cadence.interval(),
+                    shouldContinue: { canRefresh }
+                ) {
                     await refresh()
                 }
             }
