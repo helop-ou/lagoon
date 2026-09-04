@@ -320,8 +320,18 @@ turns a bare "Processing" into "62%" or "Importing" (HEL-116). **Deduplicate
 by `downloadId` before aggregating**: a season pack is one download that
 Sonarr reports once per episode, each row carrying the pack's full size, so
 summing the rows claims ten times the bytes and a meaningless percentage.
-Nothing polls it — the value is a snapshot from whatever response the screen
-already fetched.
+
+Seerr media and request details keep that snapshot live while the page is
+visible and the scene is active (HEL-136). Pending approval refreshes every
+30 seconds; downloading and importing refresh every 10 seconds. The ordinary
+page task performs the immediate first load, returning to the foreground
+reconciles immediately, and the structured refresh task is cancelled on
+backgrounding or navigation. Settled states stop scheduling altogether.
+Requests are sequential, so a slow response cannot overlap the next one.
+Each successful refresh commits status, progress, ETA, and any newly resolved
+Jellyfin item as one snapshot; a transient failure keeps the last good page.
+Static request metadata such as the quality-profile name is deliberately not
+part of the polling loop.
 
 **Never show a request's own status alone.** It answers "can I watch this?"
 only until the request is granted; after that the media's availability does.
