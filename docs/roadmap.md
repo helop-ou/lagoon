@@ -67,19 +67,33 @@ and the decoder switches that hardware questions get answered with.
 
 In the order they are worth doing. Keys are Jira tickets.
 
-1. **Siri Remote end time** (HEL-134, remainder): a second light touch tap
+1. **Refresh for server-backed browse screens** (HEL-135, in progress, not
+   shipped): the foreground, five-minute and manual refresh paths are written
+   and covered by tests, and the tvOS Refresh control sits in the top chrome.
+   A code review on 2026-09-04 found three defects still in the tree: Down
+   from the tvOS Refresh control is swallowed on Discover and Library instead
+   of reaching content, tabs that were not visible when Lagoon went to the
+   background do not refresh on return, and one UI test fails deterministically
+   on a 20pt misalignment. Until those are closed the feature is not finished
+   and nothing about it has been verified on a device.
+2. **Jellyfin 12 compatibility** (HEL-138, in progress): the `ApiKey` versus
+   `api_key` boundary is established against the 12.0.0 public preview and
+   pinned by unit tests over URL construction. The acceptance criterion that a
+   real app regression authenticates and sustains playback against that
+   preview has not been met. See `docs/jellyfin-api.md`.
+3. **Siri Remote end time** (HEL-134, remainder): a second light touch tap
    swaps remaining duration for the wall-clock time playback will finish and
    keeps that estimate current across pause and resume.
-2. **iOS polish pass** (HEL-41): compact-width detail composition, hero
+4. **iOS polish pass** (HEL-41): compact-width detail composition, hero
    sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
    between. Only the collection page has its own iOS layout so far.
-3. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+5. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-4. **Buffer on audio starvation by default** (HEL-123): the mode is built
+6. **Buffer on audio starvation by default** (HEL-123): the mode is built
    and switched off; the `aDry` counter in Release decides whether real
    delivery still reaches the floor now that HEL-124 is in.
-5. **Live TV**, if the server has it: guide and channels. A big lift with
+7. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
@@ -92,15 +106,16 @@ frame rate (HEL-137), the audio starvation signal and its fix (HEL-123,
 HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
 Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
 cap (HEL-108), the detail page turning Play into Resume after playback
-(HEL-132), the first HEL-134 slice—a light Siri Remote touch-surface tap
-revealing the player transport without changing playback—and server-backed
-browse screens refreshing on return, every five minutes while visible, or
-whenever the viewer requests it (HEL-135). Seerr media and request details now
-refresh pending approval every 30 seconds and active download/import progress
-every 10 seconds while visible and foregrounded (HEL-136); verification needs
-one real request to move through those states. Jellyfin 12 compatibility
-(HEL-138) passed the RC7 public-server auth, browse, negotiation and sustained
-HLS playback run; the remaining check is fixture after its server upgrade.
+(HEL-132), and the first HEL-134 slice—a light Siri Remote touch-surface tap
+revealing the player transport without changing playback. Seerr media and
+request details now refresh pending approval every 30 seconds and active
+download/import progress every 10 seconds while visible and foregrounded
+(HEL-136); verification needs one real request to move through those states.
+
+Two things that were listed here are back with the code rather than waiting on
+a look: the browse-refresh work (HEL-135) has three defects open against it,
+and Jellyfin 12 compatibility (HEL-138) still owes its app-level regression
+against the public preview. Both are under *Next* above.
 
 ## Deliberate non-goals for now
 
