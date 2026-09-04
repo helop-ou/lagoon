@@ -99,6 +99,7 @@ struct ServerRefreshButton: View {
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var allowsFocus = false
+    @State private var topChromeOffset: CGFloat = 0
 
     var body: some View {
         TVServerRefreshControl(
@@ -107,8 +108,13 @@ struct ServerRefreshButton: View {
             allowsFocus: allowsFocus,
             reduceMotion: reduceMotion,
             moveDownAction: moveDownAction,
+            topChromeOffsetChanged: { topChromeOffset = $0 },
             action: { serverSync.requestManualRefresh(for: target) }
         )
+        // TabView scrolls its native tab bar out with the content. The
+        // separate Refresh overlay mirrors that movement instead of staying
+        // pinned over whichever rail the user reaches.
+        .offset(y: topChromeOffset)
         // The 64pt base grows to roughly the tab capsule's visual height when
         // tvOS applies its native focus expansion.
         .frame(
@@ -131,10 +137,15 @@ private struct TVServerRefreshControl: UIViewRepresentable {
     let allowsFocus: Bool
     let reduceMotion: Bool
     let moveDownAction: (@MainActor @Sendable () -> Void)?
+    let topChromeOffsetChanged: @MainActor @Sendable (CGFloat) -> Void
     let action: @MainActor () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(action: action, moveDownAction: moveDownAction)
+        Coordinator(
+            action: action,
+            moveDownAction: moveDownAction,
+            topChromeOffsetChanged: topChromeOffsetChanged
+        )
     }
 
     func makeUIView(context: Context) -> DelayedFocusButton {
@@ -154,12 +165,14 @@ private struct TVServerRefreshControl: UIViewRepresentable {
             context.coordinator.action()
         })
         button.moveDownAction = { context.coordinator.moveDownAction?() }
+        button.topChromeOffsetChanged = { context.coordinator.topChromeOffsetChanged($0) }
         return button
     }
 
     func updateUIView(_ button: DelayedFocusButton, context: Context) {
         context.coordinator.action = action
         context.coordinator.moveDownAction = moveDownAction
+        context.coordinator.topChromeOffsetChanged = topChromeOffsetChanged
         context.coordinator.isRefreshing = isRefreshing
         button.allowsFocus = allowsFocus
         button.setIconSpinning(isRefreshing && !reduceMotion)
@@ -171,14 +184,17 @@ private struct TVServerRefreshControl: UIViewRepresentable {
     final class Coordinator {
         var action: @MainActor () -> Void
         var moveDownAction: (@MainActor @Sendable () -> Void)?
+        var topChromeOffsetChanged: @MainActor @Sendable (CGFloat) -> Void
         var isRefreshing = false
 
         init(
             action: @escaping @MainActor () -> Void,
-            moveDownAction: (@MainActor @Sendable () -> Void)?
+            moveDownAction: (@MainActor @Sendable () -> Void)?,
+            topChromeOffsetChanged: @escaping @MainActor @Sendable (CGFloat) -> Void
         ) {
             self.action = action
             self.moveDownAction = moveDownAction
+            self.topChromeOffsetChanged = topChromeOffsetChanged
         }
     }
 }
@@ -188,8 +204,14 @@ private final class DelayedFocusButton: UIButton {
     private weak var animatedImageView: UIImageView?
     private var isTopChromeFocused = false
     private var observesFocusUpdates = false
+    private weak var tabBar: UITabBar?
+    private var tabBarRestingMinY: CGFloat?
+    private var tabBarDisplayLink: CADisplayLink?
+    private var tabBarTrackingFramesRemaining = 0
+    private var lastReportedTopChromeOffset: CGFloat = 0
 
     var moveDownAction: (@MainActor @Sendable () -> Void)?
+    var topChromeOffsetChanged: (@MainActor @Sendable (CGFloat) -> Void)?
 
     var allowsFocus = false {
         didSet {
@@ -239,6 +261,9 @@ private final class DelayedFocusButton: UIButton {
             NotificationCenter.default.removeObserver(self)
             observesFocusUpdates = false
             isTopChromeFocused = false
+            stopTrackingTabBar()
+            tabBar = nil
+            tabBarRestingMinY = nil
         }
     }
 
@@ -256,6 +281,7 @@ private final class DelayedFocusButton: UIButton {
         guard let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey]
             as? UIFocusUpdateContext else { return }
         updateTopChromeFocusState(using: context.nextFocusedItem)
+        startTrackingTabBar()
     }
 
     private func updateTopChromeFocusState(using focusedItem: (any UIFocusItem)?) {
@@ -266,13 +292,69 @@ private final class DelayedFocusButton: UIButton {
 
         var ancestor: UIView? = focusedView
         while let view = ancestor {
-            if view === self || view is UITabBar {
+            if view === self {
                 isTopChromeFocused = true
+                return
+            }
+            if let tabBar = view as? UITabBar {
+                self.tabBar = tabBar
+                captureRestingPosition(of: tabBar)
+                isTopChromeFocused = true
+                startTrackingTabBar()
                 return
             }
             ancestor = view.superview
         }
         isTopChromeFocused = false
+    }
+
+    private func captureRestingPosition(of tabBar: UITabBar) {
+        guard tabBarRestingMinY == nil,
+              let window,
+              let superview = tabBar.superview else { return }
+        tabBarRestingMinY = superview.convert(tabBar.frame, to: window).minY
+    }
+
+    private func startTrackingTabBar() {
+        guard tabBar != nil, tabBarRestingMinY != nil else { return }
+        // Focus-driven scrolling can begin after the focus notification and
+        // runs as an animation. Sample its presentation frame briefly so the
+        // SwiftUI overlay follows the actual chrome rather than jumping to
+        // the tab bar's final model position.
+        tabBarTrackingFramesRemaining = 120
+        guard tabBarDisplayLink == nil else { return }
+        let displayLink = CADisplayLink(target: self, selector: #selector(sampleTabBarPosition))
+        displayLink.add(to: .main, forMode: .common)
+        tabBarDisplayLink = displayLink
+    }
+
+    private func stopTrackingTabBar() {
+        tabBarDisplayLink?.invalidate()
+        tabBarDisplayLink = nil
+        tabBarTrackingFramesRemaining = 0
+    }
+
+    @objc private func sampleTabBarPosition() {
+        guard let window,
+              let tabBar,
+              let superview = tabBar.superview,
+              let tabBarRestingMinY else {
+            stopTrackingTabBar()
+            return
+        }
+
+        let frame = tabBar.layer.presentation()?.frame ?? tabBar.frame
+        let minY = superview.convert(frame, to: window).minY
+        let offset = minY - tabBarRestingMinY
+        if abs(offset - lastReportedTopChromeOffset) >= 0.5 {
+            lastReportedTopChromeOffset = offset
+            topChromeOffsetChanged?(offset)
+        }
+
+        tabBarTrackingFramesRemaining -= 1
+        if tabBarTrackingFramesRemaining <= 0 {
+            stopTrackingTabBar()
+        }
     }
 
     private func updateIconAnimation() {
