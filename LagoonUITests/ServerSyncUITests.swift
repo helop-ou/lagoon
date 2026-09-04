@@ -129,6 +129,43 @@ final class ServerSyncUITests: XCTestCase {
         remote.press(.up)
         Thread.sleep(forTimeInterval: 0.3)
         XCTAssertTrue(homeTab.hasFocus, "Up from Home content no longer returned to the tab bar")
+
+        let topRefreshFrame = refresh.frame
+        let topTabBarFrame = app.tabBars.firstMatch.frame
+        remote.press(.down)
+        for _ in 0..<4 {
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+        let lowerRefreshFrame = refresh.frame
+        let lowerTabBarFrame = app.tabBars.firstMatch.frame
+        XCTAssertLessThan(lowerTabBarFrame.maxY, 0, "The test did not scroll past the top chrome")
+        XCTAssertEqual(
+            lowerRefreshFrame.midY - lowerTabBarFrame.midY,
+            topRefreshFrame.midY - topTabBarFrame.midY,
+            accuracy: 2,
+            "Refresh did not remain attached to the scrolling tab bar"
+        )
+        XCTAssertFalse(refresh.isHittable, "Refresh remained sticky over the lower Home rails")
+
+        for _ in 0..<20 where !homeTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTAssertTrue(homeTab.hasFocus, "Navigating up did not restore the Home tab")
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertEqual(
+            refresh.frame.midY,
+            topRefreshFrame.midY,
+            accuracy: 2,
+            "Refresh did not return with the top chrome"
+        )
+        for _ in 0..<8 where !refresh.hasFocus {
+            remote.press(.left)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable after returning to the top")
     }
 
     func testOnlyTheVisibleDestinationRefreshesOnTheIdleCadence() {
