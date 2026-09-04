@@ -110,9 +110,13 @@ Refresh in the tab navigation itself.
 Refresh shares the native tab bar's presentation offset: it scrolls offscreen
 with the top chrome while the viewer moves down through Home and returns with
 the tab bar, rather than becoming a sticky control over lower rails. It is not
-hittable while that chrome is offscreen. While refreshing, the arrow itself
-rotates instead of being replaced by an unrelated progress glyph; Reduce
-Motion keeps it still. The button is routed to
+hittable while that chrome is offscreen. Its UIKit measuring control remains
+mounted but invisible, non-focusable, and inert while a detail is pushed; the
+root `MainTabView` retains the last chrome offset and tracking pauses during
+the transition, so returning to a deeply scrolled root cannot briefly place
+Refresh over its content. While refreshing, the arrow itself rotates instead
+of being replaced by an unrelated progress glyph; Reduce Motion keeps it
+still. The button is routed to
 `ServerSyncState.activeTarget`, so it can only refresh the visible Home,
 library, or Discover destination.
 
