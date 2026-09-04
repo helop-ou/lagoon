@@ -80,7 +80,10 @@ Quick rules that prevent regressions:
   destinations' five-minute and manual refresh paths, and `MainTabView` gates
   them to the visible root destination (HEL-135). Do not duplicate scene
   observers, poll hidden tabs or pushed details, or replace existing content
-  with a loading state during reconciliation.
+  with a loading state during reconciliation. On tvOS, Refresh belongs to the
+  top chrome: it must scroll off and return with the native tab bar, remain
+  reachable from that bar, route Down directly to Home's hero, and never stay
+  hittable over lower content.
 - Software-decoded 10-bit video reaches the renderer through
   `MetalFrameConverter` (`gpu-sdr` on tvOS HDR, `gpu-pq` otherwise); the
   VideoToolbox transfer modes are fallbacks and diagnostics. The GPU stage is
