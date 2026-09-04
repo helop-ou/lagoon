@@ -84,6 +84,12 @@ Quick rules that prevent regressions:
   top chrome: it must scroll off and return with the native tab bar, remain
   reachable from that bar, route Down directly to Home's hero, and never stay
   hittable over lower content.
+- Seerr's detail-only live refresh is separate from browse invalidation
+  (HEL-136): wait 30 seconds for pending approval and 10 seconds for active
+  download/import work, only while that detail and the scene are active.
+  Keep requests sequential, stop at terminal state or on navigation, reconcile
+  immediately after foregrounding and moderation actions, retain the last good
+  snapshot on transient failure, and leave static metadata out of the loop.
 - Software-decoded 10-bit video reaches the renderer through
   `MetalFrameConverter` (`gpu-sdr` on tvOS HDR, `gpu-pq` otherwise); the
   VideoToolbox transfer modes are fallbacks and diagnostics. The GPU stage is
