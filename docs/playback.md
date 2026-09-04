@@ -697,8 +697,13 @@ the same place: 4.8 ms to 4.3 ms. Only that much because the copy is bounded by
 memory bandwidth rather than cores.
 
 The GPU stage later did overlap conversion with decode and was better, not
-worse, because it added no CPU work of its own: what made the CPU-queue
-version lose was contention for saturated cores, not the overlap.
+worse, because it costs *far less* CPU work than the loop it replaced: what
+made the CPU-queue version lose was contention for saturated cores, not the
+overlap. Not zero CPU work, though — an earlier version of this line said "no
+CPU work of its own", which is wrong. Each frame still builds a command buffer
+and an encoder, makes two texture-cache calls, flushes the cache and runs a
+completion handler, and on the simulator path a full staging copy on top. The
+claim is a large reduction, not an absence.
 
 #### The display path, measured with a paired device
 
@@ -872,8 +877,10 @@ reference white, writing straight into an IOSurface the renderer takes on
 its direct display path (linear SDR P010 measured 66-73% optimized
 composition, the same as the transfer route). The dispatch is asynchronous:
 the decode queue submits and returns to libavcodec at once, the dav1d picture
-stays referenced until the kernel has read it, completions are delivered in
-submission order from a queue of their own, at most three frames are in
+stays referenced until the kernel has read it, completions are resequenced
+into submission order by `GPUDeliverySequencer` — Metal serializes execution
+on one command queue but promises nothing about the order or mutual
+exclusion of the completion callbacks themselves — at most three frames are in
 flight, and `flush()` / `drain()` wait for the GPU so seeks and end of stream
 keep their old semantics. The output modes are `gpu-sdr` (tvOS HDR default)
 and `gpu-pq` (the default elsewhere for 10-bit sources); the transfer modes
@@ -881,14 +888,25 @@ remain as fallbacks and diagnostics, and a stream the kernel cannot serve
 (8-bit, HLG, non-2020) degrades to its transfer equivalent at open.
 
 Same scene, same window, same device, three-run production configuration
-before and one run after each step:
+before and **one run after each step**:
 
-| configuration | dropped | stalls | min video queue | frame cost | cores busy |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 0.1 (84) as shipped | 24.8% | 2 | 0 | 43.6 ms | 97-100% |
-| + dav1d workers at `.userInitiated` | 21.5% | 2 | 0 | 42.1 ms | 99-100% |
-| + GPU stage, synchronous | 25.6% | 2 | 0 | 43.3 ms | 97-100% |
-| + pump fix and asynchronous GPU stage | **0.2%** | **0** | **29** | **1.4 ms** | **48-65%** |
+| configuration | runs | dropped | stalls | min video queue | frame cost | cores busy |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.1 (84) as shipped | 3 | 24.8% | 2 | 0 | 43.6 ms | 97-100% |
+| + dav1d workers at `.userInitiated` | **1** | 21.5% | 2 | 0 | 42.1 ms | 99-100% |
+| + GPU stage, synchronous | **1** | 25.6% | 2 | 0 | 43.3 ms | 97-100% |
+| + pump fix and asynchronous GPU stage | **1** | **0.2%** | **0** | **29** | **1.4 ms** | **48-65%** |
+
+> **Not yet replicated.** Only the baseline row meets CLAUDE.md's rule of
+> three runs at a fixed position; every post-change row is a single run. The
+> last row's effect is far too large to be run-to-run noise — 24.8% to 0.2%
+> dropped, with the decoder switching from starved to backpressured — so the
+> direction is not in doubt and the fix stays in. The *numbers* are not
+> settled: treat 0.2%, 0 stalls, 1.4 ms and 48-65% as one sample each until
+> the same three-run protocol has been run over them on the paired Apple TV.
+> The two middle rows differ from the baseline by a few points on n=1 and
+> should not be read as ranking anything at all. HEL-64 retracted two fixes
+> for exactly this reason, and nothing here is exempt from that rule.
 
 The last row is 3 dropped frames in 1463 with the decoder throttled by
 backpressure for the whole window (`producerStarved=0%`,
@@ -900,10 +918,12 @@ so throttling was never part of this.
 Things learned on the way that are worth keeping:
 
 - **The kernel takes 8.7 ms of GPU time on the A15** (0.1-0.35 ms on a Mac
-  GPU), with a p99 near 40 ms while the CPU is loaded. Synchronously that
-  was as bad as the transfer it replaced; asynchronously it is invisible.
-  The `pow`-heavy PQ and gamma math could move to lookup textures if the
-  GPU's power draw ever matters.
+  GPU), with a p99 near 40 ms while the CPU is loaded. Synchronously it
+  measured no better than the transfer it replaced; asynchronously it did
+  not show up in the frame cost at all. Both readings come from the single
+  runs in the table above, so this is the shape of the result rather than a
+  replicated measurement of it. The `pow`-heavy PQ and gamma math could move
+  to lookup textures if the GPU's power draw ever matters.
 - **Raising dav1d's workers to `.userInitiated`** (`-debug.dav1dWorkerQoS`,
   applied through `pthread_override_qos_class_start_np` on the threads named
   `dav1d-worker`) gave dav1d more performance-core time and took exactly that
@@ -1003,6 +1023,12 @@ Apple TV will use, rather than the Mac's sixteen-core default:
 | 1,200-frame 4K 10-bit with grain metadata | 3 | 148.20 fps | 146.53 fps |
 | same | 5 | **204.79 fps (+38.2%)** | **205.13 fps (+40.0%)** |
 
+Unlike the dav1d CLI control above, this table records no repeat count: each
+cell is a single long run over a fixed fixture, not a median of three. The
+fixtures are long enough that within-run variance is small, and the effect is
+large enough that repetition would not change the direction, but the exact
+percentages are one sample each.
+
 As an additional host-throughput check, leaving the simulator at its native
 sixteen workers compared dav1d's depth four with depth sixteen. Two interleaved
 runs were effectively identical: 204.8-205.2 fps became 427.6-427.9 fps for
@@ -1031,8 +1057,11 @@ the fused production call using identical 4K buffers and kernels. On that host,
 fusing the luma and chroma work into one `concurrentPerform` reduced p50 by
 about 5-6% in the final long runs. Sweeping one, two and three conversion chunks
 under the deeper decoder produced 395.4, 399.7 and 404.1 fps respectively on
-the short host fixture, so production keeps three. This is a copy-kernel
-micro-optimization beside the much larger frame-context change.
+the short host fixture. That is a 2.2% spread across the whole sweep, one run
+per setting, on a simulator host — below the level this project treats as
+evidence, so it is not a reason to change anything. Production keeps three
+because three is what it already had. This is a copy-kernel micro-optimization
+beside the much larger frame-context change.
 
 The next hardware gate starts with production lossless-SDR at five workers:
 interleave depth 0 and 5 over the same 60-120 second scene with cooldowns, then
@@ -1600,10 +1629,16 @@ composition cost is more representative than Simulator timing.
   stopped, and one tick after release the lead was back at 2.06 s with no
   second episode. The 7 s hold with the mode on confirmed an audio stall
   2.6 s in, stopped the clock, and resumed in place with 2.08 s of lead:
-  `stalls 1 (1 audio)`, `reprime 0`. The ear check the console cannot do
-  was done the same day from the sofa: the hold is audibly silent, the
-  picture keeps moving through it, and sound comes back in sync rather
-  than playing the withheld seconds late.
+  `stalls 1 (1 audio)`, `reprime 0`.
+
+  **The listening check is still owed.** Everything above is read off the
+  console. What the console cannot say is what the hold sounds like: the
+  counters imply silence through the hold, the picture moving across it and
+  sound returning in sync rather than replaying the withheld seconds late,
+  and that is what the code is written to do, but no one has recorded
+  confirming it by ear. An earlier version of this passage asserted the sofa
+  check as a finding; it was not one. Treat it as expected and unconfirmed
+  until someone who was in the room says otherwise.
 
   The fix exists behind `debug.bufferOnAudioStarvation` (Debug Settings
   toggle "Buffer on Audio Starvation", off by default). With it on, an
@@ -1680,9 +1715,12 @@ composition cost is more representative than Simulator timing.
   being slow; they stopped because the title left the HLS path. The
   `experimentalPlaybackCache` switch does not change it (same sawtooth,
   −7.2 s), which is expected: the cache changes delivery, not the order
-  the HLS demuxer emits packets in. Nobody has heard a transcode on
-  hardware since 0.1 (70), which is how a silence this regular went
-  unreported.
+  the HLS demuxer emits packets in. Why a silence this regular went
+  unreported is a guess, not a finding: no listening report on a
+  hardware transcode is recorded anywhere after 0.1 (70), so most likely
+  nobody has watched one since. That is an absence of evidence, not
+  evidence of absence, and it is worth someone actually playing a
+  transcode on the Apple TV and saying what they hear.
 
   The shape of the fix is to let the demuxer read past the decoded video
   limit while the renderer-side audio lead is below its floor. On the
