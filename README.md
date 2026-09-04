@@ -50,5 +50,5 @@ Technical docs live in [`docs/`](docs/):
 ## Compatibility
 
 Uses Jellyfin's user-scoped HTTP API. Lagoon is verified with Jellyfin 10.8
-through 10.11.x; Jellyfin 12.0 compatibility validation is tracked in
-[HEL-138](https://helop-ou.atlassian.net/browse/HEL-138).
+through 10.11.x and the Jellyfin 12.0 RC7 public server. The 12.0 compatibility
+work is tracked in [HEL-138](https://helop-ou.atlassian.net/browse/HEL-138).
