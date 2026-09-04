@@ -38,12 +38,10 @@ struct MainTabView: View {
         .overlay(alignment: .topLeading) {
             if let target = serverSync.activeTarget {
                 ServerRefreshButton(target: target)
-                    // Reserve enough space for the native focus expansion so
-                    // the action remains visually separate from Home.
-                    .padding(
-                        .leading,
-                        Metrics.screenGutter * 2 + Metrics.Space.xl
-                    )
+                    // Put the visible circle on the same leading grid line as
+                    // the hero and rails. UIKit's focus frame extends 4pt
+                    // beyond the rendered glass; the UI test accounts for it.
+                    .padding(.leading, Metrics.screenGutter)
                     .offset(y: -Metrics.Space.m)
             }
         }
