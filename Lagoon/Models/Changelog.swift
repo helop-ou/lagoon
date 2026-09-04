@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "88",
+            released: "September 2026",
+            headline: "The player can tell you what time it will finish.",
+            changes: [
+                "While the playback controls are showing, another light tap on the Siri Remote touch surface swaps the time remaining for the time of day the film or episode will end. Tap again to swap back. Pause, and it keeps up: the finish time moves later for as long as you stay paused, and a faster playback speed brings it closer.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "87",
             released: "September 2026",
             headline: "Pages keep themselves current, and the Siri Remote feels at home.",
