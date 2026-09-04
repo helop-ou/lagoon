@@ -106,9 +106,12 @@ struct ServerRefreshButton: View {
             reduceMotion: reduceMotion,
             action: { serverSync.requestManualRefresh(for: target) }
         )
-        // UIKit's glass content inset gives the 28pt symbol the same 80pt
-        // visual and focus footprint as the tabs.
-        .frame(width: Metrics.Space.xxl * 2, height: Metrics.Space.xxl * 2)
+        // The 64pt base grows to roughly the tab capsule's visual height when
+        // tvOS applies its native focus expansion.
+        .frame(
+            width: Metrics.Space.xxl + Metrics.Space.xl,
+            height: Metrics.Space.xxl + Metrics.Space.xl
+        )
         .task {
             // Let the selected tab receive launch focus before this separate
             // overlay joins the focus graph.
@@ -134,13 +137,13 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         var configuration = UIButton.Configuration.glass()
         configuration.image = UIImage(systemName: "arrow.clockwise")
         configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(
-            pointSize: 28
+            pointSize: 24
         )
         configuration.contentInsets = NSDirectionalEdgeInsets(
-            top: 20,
-            leading: 20,
-            bottom: 20,
-            trailing: 20
+            top: 16,
+            leading: 16,
+            bottom: 16,
+            trailing: 16
         )
         return DelayedFocusButton(configuration: configuration, primaryAction: UIAction { _ in
             guard !context.coordinator.isRefreshing else { return }
