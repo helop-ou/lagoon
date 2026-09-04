@@ -1,8 +1,9 @@
 # Jellyfin API
 
-Verified against Jellyfin **10.11** (the public demo server) — the client uses
-the user-scoped legacy routes (`Users/{id}/…`), which every server from 10.8
-onward still answers, rather than the newer `/UserViews`-style routes.
+Verified against the public Jellyfin **10.11.11** stable and **12.0.0 RC7**
+unstable servers on 2026-09-04. Lagoon keeps using the user-scoped
+`Users/{id}/…` routes because both versions expose them and the 12.0 OpenAPI
+surface removes none of the routes Lagoon constructs.
 
 ## Wire format
 
@@ -27,6 +28,14 @@ Authorization: MediaBrowser Client="Lagoon", Device="Apple TV",
                DeviceId="<keychain uuid>", Version="<app version>"[, Token="…"]
 ```
 
+That header is the only credential on normal `URLRequest` API traffic. Media
+consumers such as FFmpeg and the trickplay loader accept a URL rather than a
+request, so same-origin stream, external-subtitle and trickplay URLs carry the
+modern `ApiKey=<token>` query fallback instead. Jellyfin 12 disables the old
+lowercase `api_key` spelling by default. Server-returned media URLs are
+normalized to one current `ApiKey`; a URL on any other origin is left alone so
+the Jellyfin token is never sent to a subtitle provider or CDN.
+
 - `POST Users/AuthenticateByName` `{Username, Pw}` → `AccessToken` + `User`.
 - **Quick Connect**: `GET QuickConnect/Enabled` → if true, `POST
   QuickConnect/Initiate` (needs the MediaBrowser header, no token) returns
@@ -37,6 +46,22 @@ Authorization: MediaBrowser Client="Lagoon", Device="Apple TV",
 - `POST Sessions/Logout` on sign-out invalidates the token server-side.
 - Pre-auth server validation hits `GET System/Info/Public` (no header
   needed); its `ServerName` seeds the sign-in screen.
+
+## Jellyfin 12 compatibility (HEL-138)
+
+The 10.11.11 and 12.0.0 RC7 OpenAPI documents were compared path-by-path and
+against every route Lagoon constructs. No used route was removed. Jellyfin 12
+drops older server-generated HLS routes, but Lagoon never constructs those:
+it resolves the `TranscodingUrl` supplied by `PlaybackInfo`. The relevant
+`BaseItemDto` and `MediaStream` changes are additive, so Lagoon's defensive
+decoders accept both versions without a model fork.
+
+A live 12.0 probe verified password authentication and an authenticated
+library request with Lagoon's `Authorization` header. It also established the
+media-URL boundary directly: `ApiKey` succeeds while lowercase `api_key`
+returns 401 on a normal authenticated endpoint. Focused integration coverage
+therefore fixes the spelling in every URL-only consumer and checks that a
+legacy server-returned credential is replaced rather than duplicated.
 
 ## Library endpoints
 
@@ -263,6 +288,8 @@ concurrently, empties answering in ~0.1 s each.
 
 ## Testing without a home server
 
-The public demo (`https://demo.jellyfin.org/stable`, user `demo`, empty
-password) exercises the full flow including Quick Connect discovery and
-playback, and is what the MVP was verified against end-to-end.
+The public demos use user `demo` with an empty password. `stable` at
+`https://demo.jellyfin.org/stable` exercises the supported 10.x baseline;
+`unstable` at `https://demo.jellyfin.org/unstable` is the Jellyfin 12 release
+candidate used by HEL-138. Both are suitable for authentication, navigation
+and playback regression runs, though their shared libraries can change.
