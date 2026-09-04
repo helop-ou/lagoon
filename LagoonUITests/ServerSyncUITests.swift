@@ -168,6 +168,69 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable after returning to the top")
     }
 
+    func testRefreshKeepsItsChromeOffsetAcrossADetailRoundTrip() {
+        let app = launch(interval: 60)
+        let tabBar = app.tabBars.firstMatch
+        let homeTab = app.tabBars.buttons["Home"]
+        let refresh = app.buttons["server.refresh.home"]
+        let hero = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "home.hero.")
+        ).firstMatch
+
+        XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
+        XCTAssertTrue(refresh.waitForExistence(timeout: 20))
+        XCTAssertTrue(hero.waitForExistence(timeout: 20))
+        let visibleChromeDelta = refresh.frame.midY - tabBar.frame.midY
+
+        for _ in 0..<8 where !hero.hasFocus {
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTAssertTrue(hero.hasFocus)
+        // The first two optional shelves can be direct-play rows. Moving
+        // further reaches the fixture's discovery shelves, whose cards open
+        // details, and leaves the native top chrome well offscreen.
+        for _ in 0..<12 {
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        let preDetailTabBarFrame = tabBar.frame
+        XCTAssertLessThan(
+            preDetailTabBarFrame.maxY,
+            0,
+            "The test did not move the native top chrome offscreen before opening a detail"
+        )
+        XCTAssertEqual(
+            refresh.frame.midY - preDetailTabBarFrame.midY,
+            visibleChromeDelta,
+            accuracy: 2,
+            "Refresh detached from the tab bar before the detail was opened"
+        )
+        remote.press(.select)
+        XCTAssertTrue(
+            waitForNonexistence(of: refresh, timeout: 8),
+            "Refresh remained exposed over the pushed detail"
+        )
+
+        remote.press(.menu)
+        XCTAssertTrue(refresh.waitForExistence(timeout: 8))
+        Thread.sleep(forTimeInterval: 0.5)
+
+        let returnedTabBarFrame = tabBar.frame
+        XCTAssertLessThan(
+            returnedTabBarFrame.maxY,
+            0,
+            "The detail round trip did not leave the native top chrome scrolled away"
+        )
+        XCTAssertEqual(
+            refresh.frame.midY - returnedTabBarFrame.midY,
+            visibleChromeDelta,
+            accuracy: 2,
+            "Refresh forgot the hidden tab bar's offset when the root page returned"
+        )
+        XCTAssertFalse(refresh.isHittable, "Refresh covered the hero after returning from a detail")
+    }
+
     func testOnlyTheVisibleDestinationRefreshesOnTheIdleCadence() {
         let app = launch(interval: 1)
         let periodicProbe = app.descendants(matching: .any)["server.sync.periodic.home"]
@@ -227,5 +290,13 @@ final class ServerSyncUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
         } while Date() < deadline
         return false
+    }
+
+    private func waitForNonexistence(of element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 }
