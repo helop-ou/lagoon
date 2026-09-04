@@ -758,7 +758,7 @@ struct PlayerSystemIntegrationTests {
             $0.method == "GET"
                 && $0.percentEncodedPath
                     == "/Providers/Subtitles/Subtitles/srt-eng-42%2Fprovider%3Fpart%23100%25"
-                && $0.query == "ApiKey=test-token"
+                && $0.query == nil
         })
         let upload = try #require(requests.first {
             $0.method == "POST" && $0.path == "/Videos/item-1/Subtitles"
