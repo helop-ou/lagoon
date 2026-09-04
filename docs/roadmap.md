@@ -67,22 +67,16 @@ and the decoder switches that hardware questions get answered with.
 
 In the order they are worth doing. Keys are Jira tickets.
 
-1. **Jellyfin 12 compatibility** (HEL-138, shipped in 0.1 (87), not
-   verified): the `ApiKey` versus `api_key` boundary is established against
-   the 12.0.0 public preview and pinned by unit tests over URL construction.
-   The acceptance criterion that a real app regression authenticates and
-   sustains playback against that preview has not been met, and the changelog
-   already tells viewers Jellyfin 12 works. See `docs/jellyfin-api.md`.
-2. **iOS polish pass** (HEL-41): compact-width detail composition, hero
+1. **iOS polish pass** (HEL-41): compact-width detail composition, hero
    sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
    between. Only the collection page has its own iOS layout so far.
-3. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+2. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-4. **Buffer on audio starvation by default** (HEL-123): the mode is built
+3. **Buffer on audio starvation by default** (HEL-123): the mode is built
    and switched off; the `aDry` counter in Release decides whether real
    delivery still reaches the floor now that HEL-124 is in.
-5. **Live TV**, if the server has it: guide and channels. A big lift with
+4. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
@@ -106,8 +100,11 @@ closed.
 The browse-refresh work (HEL-135) shipped in 0.1 (87) and is here rather than
 under *Next*: a code review on 2026-09-04 found three defects, all now fixed
 and covered by tests, so what it owes is a look on a device rather than more
-code. Jellyfin 12 compatibility (HEL-138) also shipped in 0.1 (87) but stays
-under *Next*, because what it owes is an app-level regression nobody has run.
+code. Jellyfin 12 compatibility (HEL-138) also shipped in 0.1 (87), and its
+app-level regression against the 12.0.0 preview was run on 2026-09-04: direct
+play authenticates, negotiates and sustains, and the transcode credential
+chain was verified hop by hop at the protocol level. What it still owes is the
+deployment check on fixture once that server upgrades, so it waits here.
 
 ## Deliberate non-goals for now
 

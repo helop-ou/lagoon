@@ -87,13 +87,32 @@ external subtitle sidecar whose delivery URL arrived with the legacy spelling
 and on a trickplay sheet, while a foreign-origin subtitle URL is left
 untouched.
 
-**Not done: an app-level run against Jellyfin 12.** Everything above is URL
-and credential analysis plus unit tests over URL construction. No build of
-Lagoon has been driven against the 12.0.0 public preview to authenticate,
-browse, negotiate through `PlaybackInfo` and sustain playback across segment
-boundaries. HEL-138 carries that regression as an acceptance criterion of its
-own and it is still outstanding; nothing here should be read as meeting it.
-Fixture after its server upgrade is a further, separate deployment check.
+**The app-level run against Jellyfin 12 (2026-09-04).** Lagoon was driven
+against the 12.0.0 public preview on a clean tvOS 26 simulator, pointed there
+with `LAGOON_REGRESSION_SERVER=https://demo.jellyfin.org/unstable`.
+`PlayerRegressionUITests.testBufferedDirectH264PlaybackStartsAndSustains`
+passed: it authenticates, browses for an episode with a direct-playable H.264
+successor, negotiates `DirectPlay` through `PlaybackInfo`, reaches ready with
+no buffering, then plays for 20 seconds advancing more than 14 seconds of
+media time with zero buffering events, at most one stall, exactly one engine,
+demuxer and renderer, no unclean teardown and under 96 MB of growth.
+
+**The transcode chain was verified at the protocol level, not in the app.**
+The harness picks whatever the server will play, and neither public demo
+returns a transcode for it, so `testNativeHLSPlaybackStartsAndCrossesSegment\
+Boundaries` resolves `DirectPlay` and fails its `Transcode` assertion on
+**both** 10.11.11 and 12.0.0 — a stale expectation in the test rather than a
+Jellyfin 12 regression; it passes against fixture, whose content does
+transcode. So the transcode path was checked directly instead: authenticating
+on 12.0.0 and calling `PlaybackInfo` with a profile that can direct-play
+nothing returns a `TranscodingUrl` carrying `ApiKey`, and that URL's master
+playlist, its variant playlist and its first media segment all return 200 with
+the credential propagated at every hop (620 KB of transport stream on the
+segment). That is the exact chain HEL-138 changed.
+
+Still outstanding: sustained *transcode* playback inside the app on 12, which
+needs a server whose content forces one, and the deployment check on fixture
+once it upgrades.
 
 ## Library endpoints
 
