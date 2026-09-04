@@ -49,5 +49,6 @@ Technical docs live in [`docs/`](docs/):
 
 ## Compatibility
 
-Speaks the user-scoped legacy API routes — works against Jellyfin 10.8
-through current (verified against 10.11).
+Uses Jellyfin's user-scoped HTTP API. Lagoon is verified with Jellyfin 10.8
+through 10.11.x; Jellyfin 12.0 compatibility validation is tracked in
+[HEL-138](https://helop-ou.atlassian.net/browse/HEL-138).
