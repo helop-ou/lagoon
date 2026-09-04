@@ -20,6 +20,10 @@ private struct ServerRefreshModifier: ViewModifier {
     @Environment(ServerSyncState.self) private var serverSync
     @State private var isVisible = false
     @State private var isRefreshing = false
+    // Baselined on first appearance so a bump that arrives while this
+    // destination is hidden is replayed when it comes back, rather than
+    // leaving the tab on pre-background content until its own cadence.
+    @State private var handledGeneration: Int?
 
     private var canRefresh: Bool {
         isActive && isEnabled && !isPaused && isVisible && scenePhase == .active
@@ -38,7 +42,10 @@ private struct ServerRefreshModifier: ViewModifier {
 
     private func managed(_ content: Content) -> some View {
         content
-            .onAppear { isVisible = true }
+            .onAppear {
+                isVisible = true
+                if handledGeneration == nil { handledGeneration = serverSync.generation }
+            }
             .onDisappear {
                 isVisible = false
                 serverSync.deactivate(target)
@@ -46,12 +53,17 @@ private struct ServerRefreshModifier: ViewModifier {
             .onChange(of: canRefresh, initial: true) { _, available in
                 if available {
                     serverSync.activate(target)
+                    if let handled = handledGeneration, serverSync.generation > handled {
+                        handledGeneration = serverSync.generation
+                        Task { await refresh(trigger: .foreground) }
+                    }
                 } else {
                     serverSync.deactivate(target)
                 }
             }
-            .onChange(of: serverSync.generation) { _, _ in
+            .onChange(of: serverSync.generation) { _, generation in
                 guard canRefresh else { return }
+                handledGeneration = generation
                 Task { await refresh(trigger: .foreground) }
             }
             .onChange(of: serverSync.manualRefreshGeneration) { _, _ in
@@ -174,7 +186,7 @@ private struct TVServerRefreshControl: UIViewRepresentable {
             guard !context.coordinator.isRefreshing else { return }
             context.coordinator.action()
         })
-        button.moveDownAction = { context.coordinator.moveDownAction?() }
+        button.installMoveDownAction(from: context.coordinator, isAvailable: moveDownAction != nil)
         button.topChromeOffsetChanged = { context.coordinator.topChromeOffsetChanged($0) }
         return button
     }
@@ -183,6 +195,7 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         context.coordinator.action = action
         context.coordinator.moveDownAction = moveDownAction
         context.coordinator.topChromeOffsetChanged = topChromeOffsetChanged
+        button.installMoveDownAction(from: context.coordinator, isAvailable: moveDownAction != nil)
         context.coordinator.isRefreshing = isRefreshing
         button.tracksTopChrome = target != nil
         button.allowsFocus = allowsFocus
@@ -224,6 +237,24 @@ private final class DelayedFocusButton: UIButton {
 
     var moveDownAction: (@MainActor @Sendable () -> Void)?
     var topChromeOffsetChanged: (@MainActor @Sendable (CGFloat) -> Void)?
+
+    /// Installs the Down override only where the destination actually has a
+    /// hero to move to. A wrapper closure that merely forwards to an absent
+    /// coordinator action still reads as non-nil to `shouldUpdateFocus`,
+    /// which then cancels the move and returns focus to nowhere — Discover
+    /// and the library tabs have no hero binding.
+    ///
+    /// Defensive rather than a fix for a reachable bug: Refresh sits left of
+    /// Home, tab selection follows focus, so focus cannot arrive here without
+    /// having selected Home on the way and made `.home` the active target.
+    /// A UI test for the trap was written and removed for that reason. This
+    /// keeps the override honest if the control ever moves.
+    func installMoveDownAction(
+        from coordinator: TVServerRefreshControl.Coordinator,
+        isAvailable: Bool
+    ) {
+        moveDownAction = isAvailable ? { coordinator.moveDownAction?() } : nil
+    }
 
     var tracksTopChrome = false {
         didSet {
