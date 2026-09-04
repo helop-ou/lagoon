@@ -96,10 +96,10 @@ private struct ServerRefreshModifier: ViewModifier {
 struct ServerRefreshButton: View {
     let target: ServerSyncTarget?
     let moveDownAction: (@MainActor @Sendable () -> Void)?
+    @Binding var topChromeOffset: CGFloat
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var allowsFocus = false
-    @State private var topChromeOffset: CGFloat = 0
 
     var body: some View {
         TVServerRefreshControl(
@@ -184,6 +184,7 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         context.coordinator.moveDownAction = moveDownAction
         context.coordinator.topChromeOffsetChanged = topChromeOffsetChanged
         context.coordinator.isRefreshing = isRefreshing
+        button.tracksTopChrome = target != nil
         button.allowsFocus = allowsFocus
         button.setIconSpinning(isRefreshing && !reduceMotion)
         button.accessibilityLabel = "Refresh"
@@ -224,12 +225,29 @@ private final class DelayedFocusButton: UIButton {
     var moveDownAction: (@MainActor @Sendable () -> Void)?
     var topChromeOffsetChanged: (@MainActor @Sendable (CGFloat) -> Void)?
 
+    var tracksTopChrome = false {
+        didSet {
+            guard tracksTopChrome != oldValue else { return }
+            if tracksTopChrome {
+                discoverTabBarIfNeeded()
+                startTrackingTabBar()
+            } else {
+                // NavigationStack briefly restores the tab bar's own frame
+                // while replacing the root with a detail. Freeze Refresh at
+                // the root's last scroll offset during that transition; the
+                // control is hidden and inert until the root is active again.
+                stopTrackingTabBar()
+            }
+        }
+    }
+
     var allowsFocus = false {
         didSet {
             guard allowsFocus != oldValue else { return }
             updateTopChromeFocusState(
                 using: UIFocusSystem.focusSystem(for: self)?.focusedItem
             )
+            discoverTabBarIfNeeded()
             setNeedsFocusUpdate()
         }
     }
@@ -280,6 +298,7 @@ private final class DelayedFocusButton: UIButton {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        discoverTabBarIfNeeded()
         updateIconAnimation()
     }
 
@@ -326,8 +345,25 @@ private final class DelayedFocusButton: UIButton {
         tabBarRestingMinY = superview.convert(tabBar.frame, to: window).minY
     }
 
+    private func discoverTabBarIfNeeded() {
+        guard tracksTopChrome, tabBar == nil, let window,
+              let discovered = firstTabBar(in: window) else { return }
+        tabBar = discovered
+        tabBarRestingMinY = nil
+        captureRestingPosition(of: discovered)
+        startTrackingTabBar()
+    }
+
+    private func firstTabBar(in view: UIView) -> UITabBar? {
+        if let tabBar = view as? UITabBar { return tabBar }
+        for subview in view.subviews {
+            if let tabBar = firstTabBar(in: subview) { return tabBar }
+        }
+        return nil
+    }
+
     private func startTrackingTabBar() {
-        guard tabBar != nil, tabBarRestingMinY != nil else { return }
+        guard tracksTopChrome, tabBar != nil, tabBarRestingMinY != nil else { return }
         // Focus-driven scrolling can begin after the focus notification and
         // runs as an animation. Sample its presentation frame briefly so the
         // SwiftUI overlay follows the actual chrome rather than jumping to
