@@ -100,6 +100,21 @@ final class ServerSyncUITests: XCTestCase {
             "Focused Refresh is visually taller than the tab bar"
         )
 
+        remote.press(.down)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(
+            hero.hasFocus,
+            "Down from Refresh did not move directly to the hero"
+        )
+        remote.press(.up)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(homeTab.hasFocus, "Up from the hero no longer returned to Home")
+        for _ in 0..<8 where !refresh.hasFocus {
+            remote.press(.left)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTAssertTrue(refresh.hasFocus)
+
         let manualProbe = app.descendants(matching: .any)["server.sync.manual.home"]
         let before = integerValue(of: manualProbe)
         remote.press(.select)
