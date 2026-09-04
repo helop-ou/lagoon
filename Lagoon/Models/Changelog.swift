@@ -35,7 +35,7 @@ nonisolated enum Changelog {
             changes: [
                 "A light tap on the Siri Remote touch surface now reveals the playback controls without pausing, seeking, or moving focus.",
                 "After you leave the player, Play changes to Resume and Home's progress bars and Continue Watching refresh after Jellyfin saves the new position, instead of showing the state from before you watched.",
-                "Home, Movies, Shows, and Discover stay current while you leave Lagoon open, refresh after you return, and can be updated whenever you choose: pull down on iPhone or iPad, or choose the refresh button at the top right on Apple TV.",
+                "Home, Movies, Shows, and Discover stay current while you leave Lagoon open, refresh after you return, and can be updated whenever you choose: pull down on iPhone or iPad, or choose the refresh button beside Home on Apple TV.",
             ]
         ),
         ChangelogEntry(
