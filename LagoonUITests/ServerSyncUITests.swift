@@ -54,25 +54,44 @@ final class ServerSyncUITests: XCTestCase {
 
         let settingsTab = app.tabBars.buttons["Settings"]
         XCTAssertTrue(settingsTab.exists)
-        XCTAssertGreaterThan(refresh.frame.minX, settingsTab.frame.maxX)
+        XCTAssertLessThan(refresh.frame.maxX, homeTab.frame.minX)
         XCTAssertLessThan(refresh.frame.maxY, hero.frame.minY)
         XCTAssertFalse(refresh.hasFocus, "Refresh must not take initial focus")
 
-        for _ in 0..<8 where !hero.hasFocus {
-            remote.press(.down)
+        for _ in 0..<8 where !homeTab.hasFocus {
+            remote.press(.up)
             Thread.sleep(forTimeInterval: 0.15)
         }
-        XCTAssertTrue(hero.hasFocus)
+        XCTAssertTrue(homeTab.hasFocus)
+
+        let discoverTab = app.tabBars.buttons["Discover"]
+        remote.press(.right)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(discoverTab.hasFocus)
+        remote.press(.left)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(homeTab.hasFocus)
+
         for _ in 0..<8 where !refresh.hasFocus {
-            remote.press(.right)
+            remote.press(.left)
             Thread.sleep(forTimeInterval: 0.15)
         }
-        XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable from Home content")
+        XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable from the tab bar")
 
         let manualProbe = app.descendants(matching: .any)["server.sync.manual.home"]
         let before = integerValue(of: manualProbe)
         remote.press(.select)
         XCTAssertTrue(waitForValue(of: manualProbe, greaterThan: before, timeout: 8))
+
+        remote.press(.right)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(homeTab.hasFocus)
+        remote.press(.down)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(hero.hasFocus)
+        remote.press(.up)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(homeTab.hasFocus, "Up from Home content no longer returned to the tab bar")
     }
 
     func testOnlyTheVisibleDestinationRefreshesOnTheIdleCadence() {
