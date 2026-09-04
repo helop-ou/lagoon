@@ -71,6 +71,10 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     @State private var controlsVisible = true
+    /// Swaps the remaining time for the clock time the item will finish at.
+    /// Toggled by a further touch-surface tap while the transport is already
+    /// up, and reset with the item (HEL-134).
+    @State private var showsEndTime = false
     @State private var interactionToken = 0
     @State private var panelOpen = false
     @State private var selectedTab: PlayerPanelTab = .info
@@ -353,6 +357,13 @@ struct CustomPlayerView<Surface: View>: View {
     /// while it is open, so a touch there is ignored (HEL-134).
     private func handleRemoteTouchTap() {
         guard !panelOpen else { return }
+        // The first tap only reveals the transport. A further tap while it is
+        // already up swaps the remaining time for the clock time the item
+        // finishes at, and a third swaps it back (HEL-134). Neither touches
+        // play, scrub, skip or Up Next state.
+        if transportVisible {
+            showsEndTime.toggle()
+        }
         pokeControls()
     }
 
@@ -470,6 +481,7 @@ struct CustomPlayerView<Surface: View>: View {
     /// display layer remain in place for a seamless engine swap.
     private func resetForPlaybackIdentity() {
         controlsVisible = true
+        showsEndTime = false
         interactionToken += 1
         panelOpen = false
         onPanelToggle?(false)
@@ -1142,7 +1154,7 @@ struct CustomPlayerView<Surface: View>: View {
                     .accessibilityIdentifier(isScrubbing ? "player.scrub.chip" : "player.elapsed")
 
                 if !isScrubbing {
-                    Text("-" + Self.timestamp(max(engine.duration - engine.timePosition, 0)))
+                    trailingTimeLabel
                         .font(.callout.monospacedDigit().weight(.medium))
                         .frame(width: labelWidth, alignment: .trailing)
                         .offset(x: max(width - labelWidth, 0))
@@ -1154,6 +1166,36 @@ struct CustomPlayerView<Surface: View>: View {
         .frame(height: ScrubMetrics.timeLabelHeight)
         .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
         .allowsHitTesting(false)
+    }
+
+    /// Either the time left, or the clock time the item finishes at. The
+    /// projection is redrawn once a second on its own schedule rather than
+    /// with the playhead, because the whole point is that it keeps moving
+    /// while playback is paused and the playhead is not.
+    @ViewBuilder
+    private var trailingTimeLabel: some View {
+        let remaining = max(engine.duration - engine.timePosition, 0)
+        if showsEndTime {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if let finish = PlaybackFinish.date(
+                    from: context.date,
+                    remaining: remaining,
+                    rate: engine.rate
+                ) {
+                    Text(PlaybackFinish.label(finish))
+                        .accessibilityIdentifier("player.endsAt")
+                        .accessibilityLabel("Ends at \(PlaybackFinish.label(finish))")
+                } else {
+                    // No usable duration, as on a live stream: there is no
+                    // finish to project, so the time left stands.
+                    Text("-" + Self.timestamp(remaining))
+                        .accessibilityIdentifier("player.remaining")
+                }
+            }
+        } else {
+            Text("-" + Self.timestamp(remaining))
+                .accessibilityIdentifier("player.remaining")
+        }
     }
 
     /// The preview image, or its empty frame while the sheet downloads —
@@ -1709,4 +1751,35 @@ private enum ScrubMetrics {
     static let timeLabelHeight: CGFloat = 30
     static let previewWidth: CGFloat = 160
     #endif
+}
+
+/// When an item will finish in real time, kept apart from the view so the
+/// projection can be tested without one.
+///
+/// The viewer's chosen speed is what the remaining media time is divided by,
+/// and `PlayerEngine.rate` deliberately survives a pause, so a paused item
+/// still projects against the speed it will resume at. Because the remaining
+/// time then stops falling while the clock keeps running, the answer slides
+/// later for as long as playback is held, which is the behaviour HEL-134 asks
+/// for.
+nonisolated enum PlaybackFinish {
+    /// Anything beyond a day is a live stream or a duration the demuxer has
+    /// not worked out yet, not something worth projecting a finish for.
+    static let longestProjection: TimeInterval = 24 * 60 * 60
+
+    static func date(from now: Date, remaining: TimeInterval, rate: Double) -> Date? {
+        guard remaining.isFinite, remaining >= 0 else { return nil }
+        let speed = rate.isFinite && rate > 0 ? rate : 1
+        let seconds = remaining / speed
+        guard seconds.isFinite, seconds <= longestProjection else { return nil }
+        return now.addingTimeInterval(seconds)
+    }
+
+    /// The clock time as the viewer's region writes it, so a 24-hour locale
+    /// gets 21:45 and a 12-hour one gets 9:45 PM.
+    static func label(_ date: Date, locale: Locale = .current) -> String {
+        date.formatted(
+            Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)
+        )
+    }
 }
