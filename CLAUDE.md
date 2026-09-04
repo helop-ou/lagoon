@@ -83,7 +83,9 @@ Quick rules that prevent regressions:
   with a loading state during reconciliation. On tvOS, Refresh belongs to the
   top chrome: it must scroll off and return with the native tab bar, remain
   reachable from that bar, route Down directly to Home's hero, and never stay
-  hittable over lower content.
+  hittable over lower content. Keep its measuring control mounted but inert
+  across pushed details and retain its chrome offset at `MainTabView` scope;
+  conditionally recreating it on return puts it back at the screen origin.
 - Seerr's detail-only live refresh is separate from browse invalidation
   (HEL-136): wait 30 seconds for pending approval and 10 seconds for active
   download/import work, only while that detail and the scene are active.
