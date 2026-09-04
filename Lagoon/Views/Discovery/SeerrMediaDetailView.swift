@@ -43,6 +43,12 @@ struct SeerrMediaDetailView: View {
             }
         }
         .task(id: reloadID) { await load() }
+        .seerrLiveRefreshable(
+            cadence: SeerrLiveRefreshCadence.mediaDetails(details),
+            isPaused: isLoading || isRequesting || seasonRequestDetails != nil
+        ) {
+            await load(isRefresh: true)
+        }
         .alert(popup?.title ?? "Seerr", isPresented: Binding(
             get: { popup != nil },
             set: { if !$0 { popup = nil } }
@@ -210,26 +216,41 @@ struct SeerrMediaDetailView: View {
         details?.mediaInfo?.availability ?? .unknown
     }
 
-    private func load() async {
-        isLoading = true
-        defer { isLoading = false }
-        errorMessage = nil
+    private func load(isRefresh: Bool = false) async {
+        if !isRefresh {
+            isLoading = true
+            errorMessage = nil
+        }
+        defer {
+            if !isRefresh { isLoading = false }
+        }
         do {
             let loaded = try await seerr.client.details(id: mediaID, mediaType: mediaType)
-            guard !Task.isCancelled else { return }
-            details = loaded
+            let loadedJellyfinItem: MediaItem?
             if loaded.mediaInfo?.availability == .available {
                 if let jellyfinID = loaded.mediaInfo?.jellyfinMediaId, !jellyfinID.isEmpty {
-                    jellyfinItem = try? await session.client.item(id: jellyfinID)
+                    loadedJellyfinItem = try? await session.client.item(id: jellyfinID)
                 } else {
-                    jellyfinItem = try? await session.client.item(tmdbID: mediaID, mediaType: mediaType)
+                    loadedJellyfinItem = try? await session.client.item(
+                        tmdbID: mediaID,
+                        mediaType: mediaType
+                    )
                 }
             } else {
-                jellyfinItem = nil
+                loadedJellyfinItem = nil
             }
+            // Commit one coherent snapshot. If changing cadence cancels the
+            // polling task, the page has already received every value from
+            // this response rather than half of a terminal transition.
+            guard !Task.isCancelled else { return }
+            details = loaded
+            jellyfinItem = loadedJellyfinItem
+            errorMessage = nil
         } catch is CancellationError {
         } catch {
-            errorMessage = error.localizedDescription
+            // A transient poll failure is not a page state. Keep the last
+            // useful percentage/ETA and try again on the next cadence.
+            if details == nil { errorMessage = error.localizedDescription }
         }
     }
 
