@@ -77,6 +77,16 @@ final class ServerSyncUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable from the tab bar")
+        XCTAssertGreaterThanOrEqual(
+            homeTab.frame.minX - refresh.frame.maxX,
+            16,
+            "Focused Refresh overlaps the Home tab"
+        )
+        XCTAssertLessThanOrEqual(
+            refresh.frame.height,
+            app.tabBars.firstMatch.frame.height + 8,
+            "Focused Refresh is visually taller than the tab bar"
+        )
 
         let manualProbe = app.descendants(matching: .any)["server.sync.manual.home"]
         let before = integerValue(of: manualProbe)
