@@ -94,7 +94,7 @@ private struct ServerRefreshModifier: ViewModifier {
 /// bar below tvOS's tabs and puts Refresh directly in the hero's Down path.
 /// This separate control shares the top chrome without changing layout.
 struct ServerRefreshButton: View {
-    let target: ServerSyncTarget
+    let target: ServerSyncTarget?
     let moveDownAction: (@MainActor @Sendable () -> Void)?
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -104,13 +104,23 @@ struct ServerRefreshButton: View {
     var body: some View {
         TVServerRefreshControl(
             target: target,
-            isRefreshing: serverSync.isRefreshing(target),
-            allowsFocus: allowsFocus,
+            isRefreshing: target.map(serverSync.isRefreshing) ?? false,
+            allowsFocus: allowsFocus && target != nil,
             reduceMotion: reduceMotion,
             moveDownAction: moveDownAction,
             topChromeOffsetChanged: { topChromeOffset = $0 },
-            action: { serverSync.requestManualRefresh(for: target) }
+            action: {
+                guard let target else { return }
+                serverSync.requestManualRefresh(for: target)
+            }
         )
+        // Keep the UIKit control mounted while a detail is pushed so it can
+        // retain and follow the native tab bar's presentation offset. Merely
+        // removing it here loses that measurement and recreates Refresh at
+        // offset zero over the root content when Back is pressed.
+        .opacity(target == nil ? 0 : 1)
+        .allowsHitTesting(target != nil)
+        .accessibilityHidden(target == nil)
         // TabView scrolls its native tab bar out with the content. The
         // separate Refresh overlay mirrors that movement instead of staying
         // pinned over whichever rail the user reaches.
@@ -132,7 +142,7 @@ struct ServerRefreshButton: View {
 }
 
 private struct TVServerRefreshControl: UIViewRepresentable {
-    let target: ServerSyncTarget
+    let target: ServerSyncTarget?
     let isRefreshing: Bool
     let allowsFocus: Bool
     let reduceMotion: Bool
@@ -178,7 +188,8 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         button.setIconSpinning(isRefreshing && !reduceMotion)
         button.accessibilityLabel = "Refresh"
         button.accessibilityValue = isRefreshing ? "In progress" : nil
-        button.accessibilityIdentifier = "server.refresh.\(target.identifier)"
+        button.accessibilityIdentifier = target.map { "server.refresh.\($0.identifier)" }
+            ?? "server.refresh.inactive"
     }
 
     final class Coordinator {
