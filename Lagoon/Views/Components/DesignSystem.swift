@@ -7,7 +7,7 @@ enum Metrics {
     #if os(tvOS)
     static let screenGutter: CGFloat = 80
     static let cardSpacing: CGFloat = 40
-    static let posterWidth: CGFloat = 260
+    static let posterWidth: CGFloat = 280
     static let landscapeWidth: CGFloat = 360
     static let heroHeight: CGFloat = 620
     static let gridColumns = 5
@@ -18,8 +18,8 @@ enum Metrics {
     /// poster's because the names that need it are collections, and
     /// "Spider-Man (MCU) Collection" does not fit on one line (HEL-122).
     static let landscapeCaptionHeight: CGFloat = 96
-    static let railTopPadding: CGFloat = 40    // headroom for the system focus lift
-    static let railBottomPadding: CGFloat = 80
+    static let railTopPadding: CGFloat = 48    // headroom for the system focus lift and the focus halo
+    static let railBottomPadding: CGFloat = 96
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
     /// Backdrop left uncovered above the info block — a scroll inset, not a
     /// spacer (see DetailPageScaffold). The reference starts its title about
@@ -149,6 +149,12 @@ enum Metrics {
 
     static let cardCornerRadius: CGFloat = 12
     static let cardArtRadius: CGFloat = 10
+    /// The focused card's artwork-derived halo. Blurred far enough that no
+    /// edge of the gradient reads as a shape, and kept well under full
+    /// strength so it kindles the space around the card rather than
+    /// competing with the artwork inside it.
+    static let focusHaloBlur: CGFloat = 36
+    static let focusHaloOpacity: Double = 0.55
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
     static let progressBarHeight: CGFloat = 6

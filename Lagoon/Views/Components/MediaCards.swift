@@ -1,7 +1,9 @@
 import SwiftUI
 
 // Focus strategy: no custom scaling anywhere — cards rely on the system
-// `.card` lift/parallax, and that is now the *only* thing focus does here.
+// `.card` lift/parallax for the movement, and add one thing of their own: an
+// ambient halo sampled from the card's artwork (HEL-139). Nothing here scales,
+// replaces or competes with the system treatment.
 
 /// 2:3 poster card that navigates to the item's detail page.
 ///
@@ -22,7 +24,7 @@ struct PosterCard: View {
             NavigationLink(value: ContentNavigationRoute.item(item)) {
                 ZStack(alignment: .bottom) {
                     CachedAsyncImage(
-                        url: session.client.imageURL(for: item, kind: .primary, maxWidth: Int(Metrics.posterWidth * 1.5)),
+                        url: posterURL,
                         maxPixelSize: Int(Metrics.posterHeight)
                     ) { image in
                         image.resizable().scaledToFill()
@@ -38,12 +40,21 @@ struct PosterCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
             .cardButtonStyle()
+            .artworkFocusHue(url: posterURL, cornerRadius: Metrics.cardArtRadius)
             .accessibilityLabel(item.name ?? "Item")
             .accessibilityIdentifier("media.poster.\(item.id)")
 
             caption
         }
         .frame(width: Metrics.posterWidth)
+    }
+
+    private var posterURL: URL? {
+        session.client.imageURL(
+            for: item,
+            kind: .primary,
+            maxWidth: Int(Metrics.posterWidth * 1.5)
+        )
     }
 
     /// Fixed height so a one-line title and a two-line one still leave every
@@ -106,13 +117,22 @@ struct LandscapeCard: View {
             }
         }
         .cardButtonStyle()
+        .artworkFocusHue(url: thumbURL, cornerRadius: Metrics.cardArtRadius)
         .accessibilityLabel(item.railTitle)
+    }
+
+    private var thumbURL: URL? {
+        session.client.imageURL(
+            for: item,
+            kind: .thumb,
+            maxWidth: Int(Metrics.landscapeWidth * 1.5)
+        )
     }
 
     private var artwork: some View {
         ZStack(alignment: .bottomLeading) {
             CachedAsyncImage(
-                url: session.client.imageURL(for: item, kind: .thumb, maxWidth: Int(Metrics.landscapeWidth * 1.5)),
+                url: thumbURL,
                 maxPixelSize: Int(Metrics.landscapeWidth * 1.5)
             ) { image in
                 image.resizable().scaledToFill()
@@ -152,6 +172,71 @@ struct LandscapeCard: View {
 }
 
 /// 6pt playback progress bar pinned to a card's bottom edge.
+#if os(tvOS)
+/// An ambient halo behind a focused card, drawn from that card's own artwork
+/// by the same sampler the hero glow uses.
+///
+/// Strictly additive: the system `.card` lift, parallax and specular remain
+/// the whole of the focus treatment, and nothing here scales or replaces them.
+/// The halo only tints the space the lift already opens up, which is why the
+/// rails carry a little more padding than the lift alone needs.
+private struct ArtworkFocusHue: ViewModifier {
+    let url: URL?
+    let cornerRadius: CGFloat
+
+    @FocusState private var isFocused: Bool
+    @State private var palette: ArtworkPalette?
+
+    func body(content: Content) -> some View {
+        content
+            .focused($isFocused)
+            .background { halo }
+            // Holding a direction walks a rail faster than artwork can be
+            // sampled, so nothing is fetched until focus settles. Changing
+            // focus cancels the wait rather than queueing another sample.
+            .task(id: "\(url?.absoluteString ?? "")|\(isFocused)") {
+                guard isFocused, let url else { return }
+                try? await Task.sleep(for: .milliseconds(180))
+                guard !Task.isCancelled else { return }
+                palette = await ArtworkPaletteCache.shared.palette(for: url)
+            }
+    }
+
+    @ViewBuilder
+    private var halo: some View {
+        if let palette {
+            RoundedRectangle(cornerRadius: cornerRadius + Metrics.Space.s)
+                .fill(
+                    LinearGradient(
+                        colors: palette.colors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .blur(radius: Metrics.focusHaloBlur)
+                // Grown by padding rather than a scale, so nothing in the card
+                // hierarchy carries a focus-driven transform.
+                .padding(-Metrics.Space.xl)
+                .opacity(isFocused ? Metrics.focusHaloOpacity : 0)
+                .animation(.easeOut(duration: Motion.fast), value: isFocused)
+                .allowsHitTesting(false)
+        }
+    }
+}
+#endif
+
+extension View {
+    /// Adds the artwork-derived focus halo on tvOS, and nothing anywhere else.
+    @ViewBuilder
+    func artworkFocusHue(url: URL?, cornerRadius: CGFloat) -> some View {
+        #if os(tvOS)
+        modifier(ArtworkFocusHue(url: url, cornerRadius: cornerRadius))
+        #else
+        self
+        #endif
+    }
+}
+
 struct ItemProgressBar: View {
     let progress: Double
 

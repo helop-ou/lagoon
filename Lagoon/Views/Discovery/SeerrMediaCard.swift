@@ -38,6 +38,10 @@ struct SeerrMediaCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
             .cardButtonStyle()
+            .artworkFocusHue(
+                url: SeerrClient.imageURL(path: item.posterPath, width: 500),
+                cornerRadius: Metrics.cardArtRadius
+            )
             .accessibilityLabel(item.displayTitle)
             .accessibilityValue(visibleStatus?.title ?? "Not Requested")
             .accessibilityIdentifier("seerr.media.\(mediaType.rawValue).\(item.id)")

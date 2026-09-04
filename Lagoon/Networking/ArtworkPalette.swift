@@ -61,7 +61,10 @@ final class ArtworkPaletteCache {
 
     private var palettes: [URL: ArtworkPalette] = [:]
     private var order: [URL] = []
-    private let limit = 40
+    /// Sized for browsing rather than the hero's handful: moving focus along
+    /// a rail asks for a palette per card, and at 40 a single sweep evicted
+    /// the entries the hero had just warmed.
+    private let limit = 160
 
     private init() {}
 

@@ -261,7 +261,18 @@ Symbol-effect availability on tvOS, if you reach for another one: `pulse`,
 
 **No custom focus scaling anywhere.** Cards rely on the system `.card` button
 style (lift/parallax/specular) via the `cardButtonStyle()` helper (`.plain`
-on iOS). Buttons use `.glass` — **everywhere, including primary actions**.
+on iOS).
+
+**Artwork focus halo** (`artworkFocusHue`, HEL-139, tvOS only): the focused
+card also casts a soft halo in its own artwork's colours, from the same
+`ArtworkPalette` sampler the hero glow uses. It is strictly additive — the
+system lift is still the whole of the movement, and the halo is grown with
+negative padding rather than a scale so nothing in a card carries a
+focus-driven transform. Sampling waits 180 ms for focus to settle, because
+holding a direction walks a rail faster than artwork can be read, and the
+palette cache holds 160 entries so a sweep does not evict what the hero
+warmed. `MediaRail`'s own `ScrollView` carries `.scrollClipDisabled()`: without
+it the halo is sliced square at the rail's bounds. Buttons use `.glass` — **everywhere, including primary actions**.
 `.glassProminent` fills with the app's accent, and the accent is white
 (Jaagop's call: "simple and white like Infuse"), so a prominent button is a
 white pill the system then labels in white: invisible. The reference's own

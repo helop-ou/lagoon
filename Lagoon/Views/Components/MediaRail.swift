@@ -50,6 +50,11 @@ struct MediaRail: View {
                     .padding(.top, Metrics.railTopPadding)
                     .padding(.bottom, Metrics.railBottomPadding)
                 }
+                // The rail's own ScrollView clips to its bounds, which cut the
+                // focus halo off square at the rail edge. The page-level
+                // ScrollView already does this for the lift; the shelf needs
+                // it too, or anything that bleeds past a card is sliced.
+                .scrollClipDisabled()
             }
         }
     }
