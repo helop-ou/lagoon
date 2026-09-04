@@ -38,11 +38,11 @@ struct MainTabView: View {
         .overlay(alignment: .topLeading) {
             if let target = serverSync.activeTarget {
                 ServerRefreshButton(target: target)
-                    // Keep the action just outside the tab capsule so the
-                    // focus engine can move naturally between it and Home.
+                    // Reserve enough space for the native focus expansion so
+                    // the action remains visually separate from Home.
                     .padding(
                         .leading,
-                        Metrics.screenGutter * 2 + Metrics.Space.section
+                        Metrics.screenGutter * 2 + Metrics.Space.xxl
                     )
                     .offset(y: -Metrics.Space.l)
             }
