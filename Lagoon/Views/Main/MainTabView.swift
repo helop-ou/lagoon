@@ -31,13 +31,17 @@ struct MainTabView: View {
     @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
     @State private var selectedTab: MainTabSelection = .home
+    @FocusState private var homeHeroFocused: Bool
 
     var body: some View {
         primaryNavigation
         #if os(tvOS)
         .overlay(alignment: .topLeading) {
             if let target = serverSync.activeTarget {
-                ServerRefreshButton(target: target)
+                ServerRefreshButton(
+                    target: target,
+                    moveDownAction: refreshMoveDownAction(for: target)
+                )
                     // Put the visible circle on the same leading grid line as
                     // the hero and rails. UIKit's focus frame extends 4pt
                     // beyond the rendered glass; the UI test accounts for it.
@@ -149,11 +153,31 @@ struct MainTabView: View {
         }
     }
 
+    #if os(tvOS)
+    private func refreshMoveDownAction(
+        for target: ServerSyncTarget
+    ) -> (@MainActor @Sendable () -> Void)? {
+        switch target {
+        case .home:
+            return focusHomeHero
+        case .discover, .library:
+            return nil
+        }
+    }
+
+    private func focusHomeHero() {
+        homeHeroFocused = true
+    }
+    #endif
+
     private var primaryNavigation: some View {
         TabView(selection: $selectedTab) {
             Tab("Home", systemImage: ContentIcon.home, value: MainTabSelection.home) {
                 NavigationStack(path: $homeNavigationPath) {
-                    HomeView(isActive: selectedTab == .home && homeNavigationPath.isEmpty)
+                    HomeView(
+                        isActive: selectedTab == .home && homeNavigationPath.isEmpty,
+                        heroFocus: $homeHeroFocused
+                    )
                         .contentNavigationDestinations()
                 }
             }
