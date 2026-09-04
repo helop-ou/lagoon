@@ -1153,7 +1153,16 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
             throw DecoderError.unsupportedPixelFormat("missing 10-bit planar planes")
         }
         guard let held = av_frame_alloc() else { throw DecoderError.pixelBuffer(-1) }
-        av_frame_ref(held, frame)
+        // The reference is what keeps the dav1d picture alive until the kernel
+        // has read it. If it fails — it allocates, so it can — `held` points at
+        // nothing, and freeing it later would release the frame's planes out
+        // from under a running dispatch. Give up before the slot is reserved.
+        let referenceStatus = av_frame_ref(held, frame)
+        guard referenceStatus >= 0 else {
+            var pointer: UnsafeMutablePointer<AVFrame>? = held
+            av_frame_free(&pointer)
+            throw DecoderError.decode(referenceStatus)
+        }
         let sequence = sequencer.reserve()
         let submitted = Self.now()
         let heldFrame = held
