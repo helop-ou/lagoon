@@ -22,10 +22,12 @@ below are left exactly as they were written; this says which of them moved.
   pinned build, and `Deinterlacer` does yadif's spatial pass directly on the
   decoded planes instead, at 1.61 ms per frame at 720x576.
 * **Order item 1, HEL-123** — the renderer-side signal ships in Release
-  and passed its hardware pass on 2026-09-03: direct-play lead sits at
-  1.9–2.2 s, the injected hold takes it below zero and counts one `aDry`,
-  the hold is audibly silent with the picture moving and sound returns in
-  sync, and the switched-off buffering mode stalls and resumes in place. The
+  and passed its hardware pass on 2026-09-03, on the console counters:
+  direct-play lead sits at 1.9–2.2 s, the injected hold takes it below zero
+  and counts one `aDry`, and the switched-off buffering mode stalls and
+  resumes in place. The counters imply the hold is silent with the picture
+  moving and sound returning in sync, which is what the code intends, but
+  that is expected rather than confirmed: no listening check is recorded. The
   default stays off, because the same pass found the symptom this ticket
   was filed on is alive on every HLS rung (item 2). The earlier reading,
   that the WALL·E cutouts were the server rebuilding a Blu-ray image below
