@@ -42,9 +42,9 @@ struct MainTabView: View {
                     // the action remains visually separate from Home.
                     .padding(
                         .leading,
-                        Metrics.screenGutter * 2 + Metrics.Space.xxl
+                        Metrics.screenGutter * 2 + Metrics.Space.xl
                     )
-                    .offset(y: -Metrics.Space.l)
+                    .offset(y: -Metrics.Space.m)
             }
         }
         #endif
