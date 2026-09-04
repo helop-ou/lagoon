@@ -63,6 +63,13 @@ returns 401 on a normal authenticated endpoint. Focused integration coverage
 therefore fixes the spelling in every URL-only consumer and checks that a
 legacy server-returned credential is replaced rather than duplicated.
 
+The app-level regression then authenticated against the 12.0 RC7 public
+server, selected media through `PlaybackInfo`, started its server-provided HLS
+transcode and played across segment boundaries for 20 seconds. It finished
+with no buffering, no extra stall, one engine/demuxer/renderer pipeline and a
+clean teardown. Fixture itself remains the final deployment check after its
+server upgrade.
+
 ## Library endpoints
 
 | Purpose | Endpoint | Quirk |
