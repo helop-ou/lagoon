@@ -263,6 +263,71 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertEqual(integerValue(of: periodicProbe), hiddenCount)
     }
 
+    /// A foreground bump that lands while a destination is hidden has to be
+    /// honoured when it becomes visible again. It used to be dropped, so a tab
+    /// the viewer was not on when the app resumed kept pre-background content
+    /// until its own five-minute cadence came round.
+    func testAForegroundBumpReachesATabThatWasHiddenWhenItArrived() {
+        let app = launch(interval: 600)
+        let homeTab = app.tabBars.buttons["Home"]
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
+
+        let foregroundProbe = app.descendants(matching: .any)["server.sync.foreground.home"]
+        XCTAssertTrue(foregroundProbe.waitForExistence(timeout: 20))
+
+        // Leave Home so the bump arrives while it is hidden.
+        focusTabBar(app, tab: settingsTab, stepping: .right)
+        remote.press(.select)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["settings.category.playback"]
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(app.buttons["server.refresh.home"].exists)
+        let baseline = integerValue(of: foregroundProbe)
+
+        XCUIRemote.shared.press(.menu)
+        if !app.wait(for: .runningBackground, timeout: 3) {
+            XCUIRemote.shared.press(.menu)
+        }
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 8))
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
+
+        // Still away from Home: it must not refresh while hidden.
+        Thread.sleep(forTimeInterval: 1.5)
+        XCTAssertEqual(
+            integerValue(of: foregroundProbe),
+            baseline,
+            "Hidden Home refreshed while it was not the visible destination"
+        )
+
+        focusTabBar(app, tab: homeTab, stepping: .left)
+        remote.press(.select)
+        XCTAssertTrue(
+            waitForValue(of: foregroundProbe, greaterThan: baseline, timeout: 10),
+            "Returning to Home did not honour the foreground bump it missed"
+        )
+    }
+
+    /// Walks focus up into the tab bar and then along it until `tab` is
+    /// focused. Focusing a tab does not select it; the caller presses Select.
+    private func focusTabBar(
+        _ app: XCUIApplication,
+        tab: XCUIElement,
+        stepping direction: XCUIRemote.Button
+    ) {
+        for _ in 0..<8 where !tab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        for _ in 0..<10 where !tab.hasFocus {
+            remote.press(direction)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        XCTAssertTrue(tab.hasFocus, "Could not focus the target tab")
+    }
+
     private func launch(interval: Double) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
