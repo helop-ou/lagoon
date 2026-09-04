@@ -13,10 +13,11 @@ import Metal
 /// millisecond of GPU time and no CPU time at all.
 ///
 /// The source is read in place: FFmpeg's frame pool hands dav1d page-aligned
-/// allocations, so the planes are wrapped in a no-copy `MTLBuffer` for the
-/// duration of one dispatch. When a frame is not page-aligned it is copied
-/// into a shared staging buffer instead, which is slower but still cheaper
-/// than either CPU pass.
+/// allocations whose three planes are one block, so they are wrapped in a
+/// no-copy `MTLBuffer` for the duration of one dispatch. A frame that is not
+/// page-aligned, or whose planes are separate allocations, is copied into a
+/// shared staging buffer instead, which is slower but still cheaper than
+/// either CPU pass.
 nonisolated final class MetalFrameConverter: @unchecked Sendable {
     /// Mirrors `LagoonPlanarConvertParameters` in the shader, field for field.
     private struct Parameters {
@@ -134,10 +135,13 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
         try outcome.get()
     }
 
-    /// Submits the kernel and returns at once. `completion` runs on Metal's
+    /// Submits the kernel and returns at once. `completion` runs on a Metal
     /// completion thread once the destination is fully written; the source
-    /// planes must stay valid until then. Completions for one converter fire
-    /// in submission order, because they share one command queue.
+    /// planes must stay valid until then. One command queue does execute its
+    /// command buffers in commit order, but Metal picks the thread each
+    /// completed handler runs on and promises neither the order those calls
+    /// are made in nor that one returns before the next begins — a caller that
+    /// needs decode order imposes it itself (`GPUDeliverySequencer`).
     func convertAsync(
         luma: Plane,
         cb: Plane,
@@ -251,8 +255,36 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
         let staged: Bool
     }
 
-    /// Wraps the frame's planes without copying when their allocation is
-    /// page-aligned, which FFmpeg's pooled large allocations are on Darwin;
+    /// FFmpeg lays a dav1d picture out for a height rounded up to this many
+    /// rows, so each plane's region is that much taller than the rows the
+    /// frame exposes (a 4K picture is allocated 3840x2176).
+    private static let allocationRowAlignment = 128
+
+    /// Whether the planes plausibly come from one allocation, which is what
+    /// the no-copy path assumes: it wraps every byte from the first plane's
+    /// page to the last plane's end, so an unmapped hole between them is a GPU
+    /// fault rather than a wrong picture.
+    ///
+    /// libdav1d's pooled pictures are one block, but not a tight one — the
+    /// padding rows above add about 150 KB to the span of a 4K frame, so a
+    /// bound of a page or two would reject every frame this stage exists
+    /// for. VP9 Profile 2 decodes to the same 10-bit planar format and reaches
+    /// the same kernel, but through `avcodec_default_get_buffer2`, which pools
+    /// one buffer per plane; that span crosses heap this frame does not own.
+    /// Allowing the padding rows plus a page of alignment per plane sits an
+    /// order of magnitude above the first case and far below the second.
+    static func planesShareOneAllocation(_ planes: [Plane], pageSize: Int) -> Bool {
+        guard let lowest = planes.map({ Int(bitPattern: $0.base) }).min(),
+              let highest = planes.map({ Int(bitPattern: $0.base) + $0.stride * $0.rows }).max() else {
+            return false
+        }
+        let occupied = planes.reduce(0) { $0 + $1.stride * $1.rows }
+        let padding = planes.reduce(0) { $0 + $1.stride * allocationRowAlignment + pageSize }
+        return highest - lowest <= occupied + padding
+    }
+
+    /// Wraps the frame's planes without copying when they are one page-aligned
+    /// allocation, which FFmpeg's pooled large allocations are on Darwin;
     /// otherwise copies them into a staging buffer.
     private func sourceBuffer(luma: Plane, cb: Plane, cr: Plane) throws -> SourceBuffer {
         let planes = [luma, cb, cr]
@@ -267,7 +299,7 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
         #else
         let mayWrap = true
         #endif
-        if mayWrap, base == lowest,
+        if mayWrap, base == lowest, Self.planesShareOneAllocation(planes, pageSize: pageSize),
            let buffer = device.makeBuffer(
                bytesNoCopy: UnsafeMutableRawPointer(bitPattern: base)!,
                length: length,
