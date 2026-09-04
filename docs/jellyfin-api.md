@@ -1,9 +1,15 @@
 # Jellyfin API
 
-Verified against the public Jellyfin **10.11.11** stable and **12.0.0 RC7**
-unstable servers on 2026-09-04. Lagoon keeps using the user-scoped
-`Users/{id}/…` routes because both versions expose them and the 12.0 OpenAPI
-surface removes none of the routes Lagoon constructs.
+Checked against the public Jellyfin **10.11.11** stable and **12.0.0**
+unstable servers on 2026-09-04. The unstable demo is a pre-release of 12.0,
+but nothing it exposes says which one: `System/Info/Public`, authenticated
+`System/Info` and its OpenAPI document all report the version as `12.0.0`, so
+that is the string used throughout these docs.
+
+Lagoon keeps using the user-scoped `Users/{id}/…` routes because both servers
+answer them. That is a runtime observation, not a schema guarantee — several
+of those routes are documented in neither version's OpenAPI surface; see
+*Jellyfin 12 compatibility* below.
 
 ## Wire format
 
@@ -49,26 +55,45 @@ the Jellyfin token is never sent to a subtitle provider or CDN.
 
 ## Jellyfin 12 compatibility (HEL-138)
 
-The 10.11.11 and 12.0.0 RC7 OpenAPI documents were compared path-by-path and
-against every route Lagoon constructs. No used route was removed. Jellyfin 12
-drops older server-generated HLS routes, but Lagoon never constructs those:
-it resolves the `TranscodingUrl` supplied by `PlaybackInfo`. The relevant
-`BaseItemDto` and `MediaStream` changes are additive, so Lagoon's defensive
-decoders accept both versions without a model fork.
+Jellyfin 12 drops older server-generated HLS routes — `master.m3u8`,
+`main.m3u8`, `hls/…`, `hls1/…` and `live.m3u8` are in the 10.11.11 document
+and gone from the 12.0.0 one — but Lagoon never constructs those: it resolves
+the `TranscodingUrl` supplied by `PlaybackInfo`. The relevant `BaseItemDto`
+and `MediaStream` changes are additive, so Lagoon's defensive decoders accept
+both versions without a model fork.
 
-A live 12.0 probe verified password authentication and an authenticated
+**What the schema comparison can and cannot settle.** Five of the routes
+Lagoon leans on hardest are documented in *neither* version's OpenAPI surface:
+`/Users/{userId}/Items`, `/Users/{userId}/Views`, `/Users/{userId}/Items/Latest`,
+`/Users/{userId}/Items/Resume` and `/Users/{userId}/Items/{itemId}`. They are
+undocumented legacy routes that both servers nonetheless serve. So a
+path-by-path diff of the two documents cannot clear them either way, and an
+earlier version of this page claimed a conclusion its stated method could not
+have produced. What actually clears them is a direct probe: each of the five
+returns 200 on the 12.0.0 server. That is a fact about one server on one day
+rather than a published compatibility guarantee, which is why these five get
+re-probed, not re-read, when 12.0 ships.
+
+A live 12.0.0 probe verified password authentication and an authenticated
 library request with Lagoon's `Authorization` header. It also established the
 media-URL boundary directly: `ApiKey` succeeds while lowercase `api_key`
 returns 401 on a normal authenticated endpoint. Focused integration coverage
 therefore fixes the spelling in every URL-only consumer and checks that a
 legacy server-returned credential is replaced rather than duplicated.
+`playbackURLResolutionPreservesTheNegotiatedTransportMatrix` in
+`LagoonTests/PlayerSystemIntegrationTests.swift` asserts `ApiKey` present and
+`api_key` absent on the direct-play, direct-stream and transcode URLs, on an
+external subtitle sidecar whose delivery URL arrived with the legacy spelling
+and on a trickplay sheet, while a foreign-origin subtitle URL is left
+untouched.
 
-The app-level regression then authenticated against the 12.0 RC7 public
-server, selected media through `PlaybackInfo`, started its server-provided HLS
-transcode and played across segment boundaries for 20 seconds. It finished
-with no buffering, within the one-stall regression ceiling, one
-engine/demuxer/renderer pipeline and a clean teardown. Fixture itself remains
-the final deployment check after its server upgrade.
+**Not done: an app-level run against Jellyfin 12.** Everything above is URL
+and credential analysis plus unit tests over URL construction. No build of
+Lagoon has been driven against the 12.0.0 public preview to authenticate,
+browse, negotiate through `PlaybackInfo` and sustain playback across segment
+boundaries. HEL-138 carries that regression as an acceptance criterion of its
+own and it is still outstanding; nothing here should be read as meeting it.
+Fixture after its server upgrade is a further, separate deployment check.
 
 ## Library endpoints
 
@@ -297,6 +322,8 @@ concurrently, empties answering in ~0.1 s each.
 
 The public demos use user `demo` with an empty password. `stable` at
 `https://demo.jellyfin.org/stable` exercises the supported 10.x baseline;
-`unstable` at `https://demo.jellyfin.org/unstable` is the Jellyfin 12 release
-candidate used by HEL-138. Both are suitable for authentication, navigation
-and playback regression runs, though their shared libraries can change.
+`unstable` at `https://demo.jellyfin.org/unstable` is the Jellyfin 12
+pre-release used by HEL-138, reporting itself as `12.0.0`. Both are suitable
+for authentication, navigation and playback regression runs, though their
+shared libraries can change. The `unstable` playback run HEL-138 needs has
+not been done yet.
