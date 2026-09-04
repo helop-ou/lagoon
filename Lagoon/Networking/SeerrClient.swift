@@ -36,11 +36,20 @@ final class SeerrClient {
     private let encoder: JSONEncoder
     private var configurationGeneration = 0
 
-    init(session: URLSession = .shared, requestTimeout: TimeInterval = 20) {
-        self.session = session
+    /// Its own session rather than `.shared`, so no Seerr response can be
+    /// stored in — or answered from — the process-wide URL cache. `JellyfinClient`
+    /// does the same for the same reason (HEL-132). Tests pass their own.
+    init(session: URLSession? = nil, requestTimeout: TimeInterval = 20) {
+        self.session = session ?? Self.uncachedSession()
         self.requestTimeout = requestTimeout
         decoder = JSONDecoder()
         encoder = JSONEncoder()
+    }
+
+    private nonisolated static func uncachedSession() -> URLSession {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        return URLSession(configuration: configuration)
     }
 
     func configure(serverURL: URL) {
@@ -342,6 +351,12 @@ final class SeerrClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = requestTimeout
+        // Never answer a Seerr call from an HTTP cache. The live-refresh loops
+        // poll constant, cache-keyable URLs (`request/{id}`, `movie/{tmdbId}`)
+        // for the express purpose of seeing state the server has just changed,
+        // so any freshness lifetime Jellyseerr or a reverse proxy in front of
+        // it emits would make them silently observe nothing (HEL-132, HEL-136).
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
