@@ -23,10 +23,20 @@ nonisolated struct HeroItem<Route: Hashable>: Identifiable {
 /// on an empty texture.
 struct HeroSection<Route: Hashable>: View {
     let items: [HeroItem<Route>]
+    let focus: FocusState<Bool>.Binding?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var index = 0
     @State private var palette: ArtworkPalette = .fallback
+    @FocusState private var fallbackFocus: Bool
+
+    init(
+        items: [HeroItem<Route>],
+        focus: FocusState<Bool>.Binding? = nil
+    ) {
+        self.items = items
+        self.focus = focus
+    }
 
     private var current: HeroItem<Route>? {
         items.indices.contains(index) ? items[index] : nil
@@ -60,6 +70,7 @@ struct HeroSection<Route: Hashable>: View {
                 panel(for: current, width: width)
             }
             .cardButtonStyle()
+            .focused(focus ?? $fallbackFocus)
             .accessibilityLabel(current.title)
             .accessibilityIdentifier("home.hero.\(current.id)")
         }
