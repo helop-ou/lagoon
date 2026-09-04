@@ -79,8 +79,14 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable from the tab bar")
         XCTAssertGreaterThanOrEqual(
             homeTab.frame.minX - refresh.frame.maxX,
-            16,
-            "Focused Refresh overlaps the Home tab"
+            32,
+            "Focused Refresh is too close to the Home tab"
+        )
+        XCTAssertEqual(
+            refresh.frame.midY,
+            app.tabBars.firstMatch.frame.midY,
+            accuracy: 2,
+            "Refresh is not vertically centered on the tab bar"
         )
         XCTAssertLessThanOrEqual(
             refresh.frame.height,
