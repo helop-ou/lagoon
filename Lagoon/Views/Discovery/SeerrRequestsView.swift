@@ -352,6 +352,7 @@ struct SeerrRequestDetailView: View {
     @State private var confirmation: Confirmation?
     @State private var isShowingProgressDetail = false
     @State private var qualityProfile: String?
+    @State private var didResolveQualityProfile = false
 
     init(request: SeerrMediaRequest) {
         self.request = request
@@ -396,6 +397,12 @@ struct SeerrRequestDetailView: View {
             }
         }
         .task { await load() }
+        .seerrLiveRefreshable(
+            cadence: SeerrLiveRefreshCadence.request(currentRequest),
+            isPaused: isLoading || isMutating
+        ) {
+            await load(isRefresh: true)
+        }
         .confirmationDialog(
             confirmation.map(confirmationTitle) ?? String(localized: "Update Request"),
             isPresented: Binding(
@@ -576,18 +583,48 @@ struct SeerrRequestDetailView: View {
         }
     }
 
-    private func load() async {
-        isLoading = true
-        defer { isLoading = false }
+    private func load(isRefresh: Bool = false) async {
+        if !isRefresh { isLoading = true }
+        defer {
+            if !isRefresh { isLoading = false }
+        }
         do {
-            currentRequest = (try? await seerr.client.request(id: request.id)) ?? currentRequest
-            if let tmdbID = currentRequest.tmdbID {
-                details = try await seerr.client.details(id: tmdbID, mediaType: currentRequest.resolvedMediaType)
+            let loadedRequest = try await seerr.client.request(id: request.id)
+            let loadedDetails: SeerrMediaDetails?
+            if let tmdbID = loadedRequest.tmdbID {
+                loadedDetails = try await seerr.client.details(
+                    id: tmdbID,
+                    mediaType: loadedRequest.resolvedMediaType
+                )
+            } else {
+                loadedDetails = nil
             }
-            await resolveJellyfinItem()
-            await resolveQualityProfile()
+            let loadedJellyfinItem = await jellyfinItem(
+                for: loadedRequest,
+                details: loadedDetails
+            )
+            let loadedQualityProfile: String?
+            if didResolveQualityProfile {
+                loadedQualityProfile = qualityProfile
+            } else {
+                loadedQualityProfile = await qualityProfile(for: loadedRequest)
+            }
+            // The cadence can change as this assignment lands. Publish one
+            // complete snapshot before SwiftUI replaces the polling task.
+            guard !Task.isCancelled else { return }
+            currentRequest = loadedRequest
+            details = loadedDetails
+            jellyfinItem = loadedJellyfinItem
+            qualityProfile = loadedQualityProfile
+            didResolveQualityProfile = true
+            errorMessage = nil
+        } catch is CancellationError {
         } catch {
-            errorMessage = error.localizedDescription
+            // Live refresh is reconciliation, not a new page load. A brief
+            // Seerr/Radarr outage must not erase a useful percentage or ETA.
+            if !isRefresh || details == nil {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -598,17 +635,16 @@ struct SeerrRequestDetailView: View {
     ///
     /// Best-effort throughout: a missing profile is one absent token, never
     /// an error on a page that is about the request.
-    private func resolveQualityProfile() async {
-        let mediaType = currentRequest.resolvedMediaType
+    private func qualityProfile(for request: SeerrMediaRequest) async -> String? {
+        let mediaType = request.resolvedMediaType
         guard mediaType != .person else {
-            qualityProfile = nil
-            return
+            return nil
         }
         let services = (try? await seerr.client.services(mediaType)) ?? []
-        let wants4k = currentRequest.is4k == true
+        let wants4k = request.is4k == true
         // The server the request names, else the default one for its
         // resolution, which is the server that would have taken it.
-        let service = services.first { $0.id == currentRequest.serverId }
+        let service = services.first { $0.id == request.serverId }
             ?? services.first { $0.isDefault && $0.is4k == wants4k }
             ?? services.first(where: \.isDefault)
 
@@ -616,36 +652,36 @@ struct SeerrRequestDetailView: View {
         // which needs REQUEST_ADVANCED and is rare. Everything else inherits
         // the server's active profile, and *that* is what an approver is
         // agreeing to fetch.
-        guard let profileID = currentRequest.profileId ?? service?.activeProfileId,
+        guard let profileID = request.profileId ?? service?.activeProfileId,
               let serverID = service?.id
         else {
-            qualityProfile = nil
-            return
+            return nil
         }
         let profiles = (try? await seerr.client.qualityProfiles(mediaType, serverID: serverID)) ?? []
-        qualityProfile = profiles.first { $0.id == profileID }?.name
+        return profiles.first { $0.id == profileID }?.name
     }
 
     /// A request whose title has arrived should be playable from here rather
     /// than only removable — the same match `SeerrMediaDetailView` makes, and
     /// on the same terms: the Jellyfin id Seerr recorded when it can, an
     /// exact TMDB lookup when it cannot (HEL-115).
-    private func resolveJellyfinItem() async {
-        guard currentRequest.progress == .available || currentRequest.progress == .partiallyAvailable else {
-            jellyfinItem = nil
-            return
+    private func jellyfinItem(
+        for request: SeerrMediaRequest,
+        details: SeerrMediaDetails?
+    ) async -> MediaItem? {
+        guard request.progress == .available || request.progress == .partiallyAvailable else {
+            return nil
         }
         let jellyfinID = details?.mediaInfo?.jellyfinMediaId
         if let jellyfinID, !jellyfinID.isEmpty {
-            jellyfinItem = try? await session.client.item(id: jellyfinID)
-        } else if let tmdbID = currentRequest.tmdbID {
-            jellyfinItem = try? await session.client.item(
+            return try? await session.client.item(id: jellyfinID)
+        } else if let tmdbID = request.tmdbID {
+            return try? await session.client.item(
                 tmdbID: tmdbID,
-                mediaType: currentRequest.resolvedMediaType
+                mediaType: request.resolvedMediaType
             )
-        } else {
-            jellyfinItem = nil
         }
+        return nil
     }
 
     private func apply(_ confirmation: Confirmation) {
@@ -653,12 +689,15 @@ struct SeerrRequestDetailView: View {
         isMutating = true
         errorMessage = nil
         Task {
+            defer { isMutating = false }
             do {
                 switch confirmation {
                 case .approve:
                     currentRequest = try await seerr.client.setRequestStatus(id: request.id, approved: true)
+                    await load(isRefresh: true)
                 case .decline:
                     currentRequest = try await seerr.client.setRequestStatus(id: request.id, approved: false)
+                    await load(isRefresh: true)
                 case .delete:
                     try await seerr.client.deleteRequest(id: request.id)
                     dismiss()
@@ -667,7 +706,6 @@ struct SeerrRequestDetailView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
-            isMutating = false
         }
     }
 
