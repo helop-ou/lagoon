@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     let isActive: Bool
+    let heroFocus: FocusState<Bool>.Binding
     @Environment(SessionStore.self) private var session
     @State private var viewModel = HomeViewModel()
     @State private var playerItem: PlayerItem?
@@ -25,7 +26,7 @@ struct HomeView: View {
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        HeroSection(items: heroItems)
+                        HeroSection(items: heroItems, focus: heroFocus)
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
