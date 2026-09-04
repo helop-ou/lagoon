@@ -63,6 +63,49 @@ struct SeerrLiveRefreshTests {
         #expect(SeerrLiveRefreshCadence.mediaDetails(loaded) == nil)
     }
 
+    @Test @MainActor func refreshesAreSequentialAndStopWhenThePageSettles() async {
+        var sleepCount = 0
+        var refreshCount = 0
+        var inFlight = 0
+        var maximumInFlight = 0
+        var isUnsettled = true
+
+        await SeerrLiveRefreshLoop.run(
+            interval: .seconds(10),
+            sleep: { _ in sleepCount += 1 },
+            shouldContinue: { isUnsettled }
+        ) {
+            inFlight += 1
+            maximumInFlight = max(maximumInFlight, inFlight)
+            await Task.yield()
+            refreshCount += 1
+            inFlight -= 1
+            if refreshCount == 3 { isUnsettled = false }
+        }
+
+        #expect(sleepCount == 3)
+        #expect(refreshCount == 3)
+        #expect(maximumInFlight == 1)
+    }
+
+    @Test @MainActor func cancellingTheStructuredTaskStopsBeforeARefresh() async {
+        var refreshCount = 0
+        let task = Task { @MainActor in
+            await SeerrLiveRefreshLoop.run(
+                interval: .seconds(60),
+                sleep: { duration in try await Task.sleep(for: duration) }
+            ) {
+                refreshCount += 1
+            }
+        }
+
+        await Task.yield()
+        task.cancel()
+        await task.value
+
+        #expect(refreshCount == 0)
+    }
+
     private func request(status: Int, mediaStatus: Int) throws -> SeerrMediaRequest {
         try JSONDecoder().decode(
             SeerrMediaRequest.self,
