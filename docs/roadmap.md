@@ -67,24 +67,21 @@ and the decoder switches that hardware questions get answered with.
 
 In the order they are worth doing. Keys are Jira tickets.
 
-1. **Jellyfin 12.0** (HEL-138): a compatibility pass against a 12.0
-   preview server, including its new authentication defaults, before fixture
-   upgrades.
-2. **Live Seerr status** (HEL-136): download status and time estimates
+1. **Live Seerr status** (HEL-136): download status and time estimates
    that update while a detail page is open, without hurting performance.
-3. **Siri Remote end time** (HEL-134, remainder): a second light touch tap
+2. **Siri Remote end time** (HEL-134, remainder): a second light touch tap
    swaps remaining duration for the wall-clock time playback will finish and
    keeps that estimate current across pause and resume.
-4. **iOS polish pass** (HEL-41): compact-width detail composition, hero
+3. **iOS polish pass** (HEL-41): compact-width detail composition, hero
    sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
    between. Only the collection page has its own iOS layout so far.
-5. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+4. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-6. **Buffer on audio starvation by default** (HEL-123): the mode is built
+5. **Buffer on audio starvation by default** (HEL-123): the mode is built
    and switched off; the `aDry` counter in Release decides whether real
    delivery still reaches the floor now that HEL-124 is in.
-7. **Live TV**, if the server has it: guide and channels. A big lift with
+6. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
@@ -100,7 +97,9 @@ cap (HEL-108), the detail page turning Play into Resume after playback
 (HEL-132), the first HEL-134 slice—a light Siri Remote touch-surface tap
 revealing the player transport without changing playback—and server-backed
 browse screens refreshing on return, every five minutes while visible, or
-whenever the viewer requests it (HEL-135).
+whenever the viewer requests it (HEL-135). Jellyfin 12 compatibility
+(HEL-138) passed the RC7 public-server auth, browse, negotiation and sustained
+HLS playback run; the remaining check is fixture after its server upgrade.
 
 ## Deliberate non-goals for now
 
