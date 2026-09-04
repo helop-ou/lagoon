@@ -569,6 +569,8 @@ struct PlayerSystemIntegrationTests {
         let directPlayResult = try client.streamURL(itemId: "item", source: directPlay)
         #expect(directPlayResult.method == .directPlay)
         #expect(directPlayResult.url.path == "/jellyfin/Videos/item/stream")
+        #expect(queryValue("ApiKey", in: directPlayResult.url) == "token")
+        #expect(queryValue("api_key", in: directPlayResult.url) == nil)
 
         let directStream = try mediaSource(#"""
         {
@@ -579,17 +581,46 @@ struct PlayerSystemIntegrationTests {
         let directStreamResult = try client.streamURL(itemId: "item", source: directStream)
         #expect(directStreamResult.method == .directStream)
         #expect(directStreamResult.url.path == "/jellyfin/Videos/item/stream.mov")
+        #expect(queryValue("ApiKey", in: directStreamResult.url) == "token")
+        #expect(queryValue("api_key", in: directStreamResult.url) == nil)
 
         let transcode = try mediaSource(#"""
         {
           "Id":"hls", "SupportsDirectPlay":false, "SupportsDirectStream":false,
           "SupportsTranscoding":true,
-          "TranscodingUrl":"/Videos/item/master.m3u8?PlaySessionId=session"
+          "TranscodingUrl":"/Videos/item/master.m3u8?PlaySessionId=session&api_key=legacy-token"
         }
         """#)
         let transcodeResult = try client.streamURL(itemId: "item", source: transcode)
         #expect(transcodeResult.method == .transcode)
         #expect(transcodeResult.url.path == "/Videos/item/master.m3u8")
+        #expect(queryValue("PlaySessionId", in: transcodeResult.url) == "session")
+        #expect(queryValue("ApiKey", in: transcodeResult.url) == "token")
+        #expect(queryValue("api_key", in: transcodeResult.url) == nil)
+
+        let sidecar = try #require(client.externalSubtitleURL(
+            deliveryUrl: "/Videos/item/source/Subtitles/2/0/Stream.srt?api_key=legacy-token"
+        ))
+        #expect(queryValue("ApiKey", in: sidecar) == "token")
+        #expect(queryValue("api_key", in: sidecar) == nil)
+
+        let externalSidecar = try #require(client.externalSubtitleURL(
+            deliveryUrl: "https://subtitles.example.test/item.srt"
+        ))
+        #expect(externalSidecar.absoluteString == "https://subtitles.example.test/item.srt")
+
+        let tile = try JellyfinClient.decoder.decode(
+            TrickplayTileInfo.self,
+            from: Data(#"{"Width":320,"Height":180,"TileWidth":10,"TileHeight":10,"ThumbnailCount":1,"Interval":10000}"#.utf8)
+        )
+        let trickplay = try #require(client.trickplaySource(
+            itemId: "item",
+            mediaSourceId: "direct",
+            extras: .init(chapters: [], trickplay: ["direct": ["320": tile]])
+        ))
+        let sheet = try #require(trickplay.sheetURLs.first)
+        #expect(queryValue("ApiKey", in: sheet) == "token")
+        #expect(queryValue("api_key", in: sheet) == nil)
     }
 
     @Test func episodePosterUsesSeriesArtworkInsteadOfTheEpisodeStill() throws {
@@ -727,7 +758,7 @@ struct PlayerSystemIntegrationTests {
             $0.method == "GET"
                 && $0.percentEncodedPath
                     == "/Providers/Subtitles/Subtitles/srt-eng-42%2Fprovider%3Fpart%23100%25"
-                && $0.query == "api_key=test-token"
+                && $0.query == "ApiKey=test-token"
         })
         let upload = try #require(requests.first {
             $0.method == "POST" && $0.path == "/Videos/item-1/Subtitles"
@@ -919,6 +950,13 @@ struct PlayerSystemIntegrationTests {
 
     private func mediaSource(_ json: String) throws -> MediaSource {
         try JellyfinClient.decoder.decode(MediaSource.self, from: Data(json.utf8))
+    }
+
+    private func queryValue(_ name: String, in url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first { $0.name == name }?
+            .value
     }
 }
 
