@@ -236,6 +236,11 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
             buttons
                 .padding(.top, Metrics.Space.xs)
         }
+        #if os(iOS)
+        // Let SwiftUI size the glass labels, circles and hit areas together.
+        // This also covers the synopsis button in the header.
+        .controlSize(.large)
+        #endif
         .padding(.horizontal, Metrics.screenGutter)
     }
 
