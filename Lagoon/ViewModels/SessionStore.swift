@@ -36,6 +36,7 @@ final class SessionStore {
     private let sessionConfiguration: URLSessionConfiguration
     private let localData: AccountLocalData
     private let credentials: any AccountCredentialStorage
+    private let publicInfo: @Sendable (URL) async throws -> PublicSystemInfo
     private var draftCancelled = false
     private var pendingAuthentication: AuthenticationResult?
     private var connectionGeneration = 0
@@ -63,10 +64,12 @@ final class SessionStore {
     init(accountDraft: Bool = false, defaults: UserDefaults = .standard,
          sessionConfiguration: URLSessionConfiguration = .default,
          credentials: any AccountCredentialStorage = SystemAccountCredentials(),
-         seerrClient: SeerrClient? = nil) {
+         seerrClient: SeerrClient? = nil,
+         publicInfo: @escaping @Sendable (URL) async throws -> PublicSystemInfo = JellyfinClient.fetchPublicInfo) {
         self.defaults = defaults
         self.sessionConfiguration = sessionConfiguration
         self.credentials = credentials
+        self.publicInfo = publicInfo
         let localData = AccountLocalData(defaults: defaults, credentials: credentials)
         self.localData = localData
         recentSearches = RecentSearchStore(defaults: defaults)
@@ -220,7 +223,7 @@ final class SessionStore {
     /// Reuse only the active server's address and name, never its user or
     /// credentials. With no active account, setup still asks for a server.
     func makeAccountDraft() -> SessionStore {
-        let draft = SessionStore(accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration, credentials: credentials)
+        let draft = SessionStore(accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration, credentials: credentials, publicInfo: publicInfo)
         if let account = activeAccount {
             draft.client.configure(serverURL: account.serverURL)
             draft.serverName = account.serverName
@@ -364,7 +367,7 @@ final class SessionStore {
         var lastError: Error = JellyfinError.invalidServerURL
         for url in Self.candidateURLs(for: input) {
             do {
-                let info = try await JellyfinClient.fetchPublicInfo(at: url)
+                let info = try await publicInfo(url)
                 try checkConnection(generation)
                 client.configure(serverURL: url)
                 serverName = info.serverName
@@ -376,6 +379,9 @@ final class SessionStore {
                 return
             } catch is CancellationError {
                 throw CancellationError()
+            } catch LocalNetworkAccess.Failure.denied {
+                try checkConnection(generation)
+                throw LocalNetworkAccess.Failure.denied
             } catch {
                 try checkConnection(generation)
                 lastError = error
