@@ -178,7 +178,7 @@ struct DiscoverView: View {
     /// Movies, Shows and Requests as destinations, kept above the rails
     /// where they are reachable without scrolling past eight of them.
     private var chips: some View {
-        HStack(spacing: Metrics.Space.m) {
+        AdaptiveActionStack {
             NavigationLink(value: SeerrNavigationRoute.catalog(.popular(.movie))) {
                 Label("Movies", systemImage: ContentIcon.movies)
             }
@@ -254,7 +254,8 @@ struct SeerrCatalogView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = SeerrCatalogViewModel()
 
-    private var columns: [GridItem] { Metrics.posterGridColumns }
+    let posterLayout = PosterLayout()
+    private var columns: [GridItem] { posterLayout.columns }
 
     var body: some View {
         ScrollView {
