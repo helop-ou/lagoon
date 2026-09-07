@@ -21,9 +21,14 @@ final class SessionStore {
     /// Every remembered server+user pair, in the order they were added.
     private(set) var accounts: [StoredAccount] = []
     private(set) var activeAccount: StoredAccount?
+    var isAddingAccount = false
     let client: JellyfinClient
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+    private let isAccountDraft: Bool
+    private var draftCancelled = false
+    private var pendingAuthentication: AuthenticationResult?
+    private var connectionGeneration = 0
 
     private enum DefaultsKey {
         /// The server being connected to *right now* — the sign-in screen's
@@ -44,7 +49,9 @@ final class SessionStore {
         static let deviceId = "deviceId"
     }
 
-    init() {
+    init(accountDraft: Bool = false, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        isAccountDraft = accountDraft
         let deviceId: String
         if let stored = KeychainStore.string(for: KeychainKey.deviceId) {
             deviceId = stored
@@ -53,7 +60,7 @@ final class SessionStore {
             try? KeychainStore.set(deviceId, for: KeychainKey.deviceId)
         }
         client = JellyfinClient(deviceId: deviceId)
-        restore()
+        if !accountDraft { restore() }
     }
 
     private func restore() {
@@ -129,13 +136,32 @@ final class SessionStore {
 
     /// Starts adding a server+user alongside the ones already remembered.
     func addAccount() {
+        isAddingAccount = true
+    }
+
+    /// Setup uses a separate client and never persists a server or token
+    /// until the parent accepts a completed sign-in. Cancel leaves the
+    /// active account, its requests, and its Seerr connection untouched.
+    func cancelAccountDraft() {
+        guard isAccountDraft else { return }
+        draftCancelled = true
+        connectionGeneration += 1
+        pendingAuthentication = nil
         client.clearSession()
-        activeAccount = nil
-        serverName = nil
-        userName = nil
-        defaults.removeObject(forKey: DefaultsKey.serverURL)
-        defaults.removeObject(forKey: DefaultsKey.serverName)
-        phase = .needsServer
+    }
+
+    func finishAddingAccount(from draft: SessionStore) throws {
+        guard draft.isAccountDraft, !draft.draftCancelled,
+              let account = draft.activeAccount,
+              let result = draft.pendingAuthentication else { throw CancellationError() }
+        try persistSignIn(result, account: account)
+        switchTo(account)
+        isAddingAccount = false
+    }
+
+    private func checkConnection(_ generation: Int) throws {
+        try Task.checkCancellation()
+        guard !draftCancelled, generation == connectionGeneration else { throw CancellationError() }
     }
 
     /// Forgets an account from the picker, token and all.
@@ -230,17 +256,26 @@ final class SessionStore {
     // MARK: - Connect
 
     func connect(to input: String) async throws {
+        connectionGeneration += 1
+        let generation = connectionGeneration
+        try checkConnection(generation)
         var lastError: Error = JellyfinError.invalidServerURL
         for url in Self.candidateURLs(for: input) {
             do {
                 let info = try await JellyfinClient.fetchPublicInfo(at: url)
+                try checkConnection(generation)
                 client.configure(serverURL: url)
                 serverName = info.serverName
-                defaults.set(url.absoluteString, forKey: DefaultsKey.serverURL)
-                defaults.set(info.serverName, forKey: DefaultsKey.serverName)
+                if !isAccountDraft {
+                    defaults.set(url.absoluteString, forKey: DefaultsKey.serverURL)
+                    defaults.set(info.serverName, forKey: DefaultsKey.serverName)
+                }
                 phase = .needsSignIn
                 return
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
+                try checkConnection(generation)
                 lastError = error
             }
         }
@@ -277,7 +312,10 @@ final class SessionStore {
     // MARK: - Sign-in
 
     func signIn(username: String, password: String) async throws {
+        let generation = connectionGeneration
+        try checkConnection(generation)
         let result = try await client.authenticateByName(username: username, password: password)
+        try checkConnection(generation)
         try completeSignIn(with: result)
     }
 
@@ -330,9 +368,13 @@ final class SessionStore {
     /// One poll step; returns true once the user has approved the code
     /// on another device and the session is active.
     func pollQuickConnect(secret: String) async throws -> Bool {
+        let generation = connectionGeneration
+        try checkConnection(generation)
         let state = try await client.quickConnectState(secret: secret)
+        try checkConnection(generation)
         guard state.authenticated else { return false }
         let result = try await client.authenticateWithQuickConnect(secret: secret)
+        try checkConnection(generation)
         try completeSignIn(with: result)
         return true
     }
@@ -345,13 +387,11 @@ final class SessionStore {
             userId: result.user.id,
             userName: result.user.name
         )
-        try KeychainStore.set(result.accessToken, for: account.keychainAccount)
-        guard KeychainStore.string(for: account.keychainAccount) == result.accessToken else {
-            throw KeychainStore.StoreError.verificationFailed
+        if isAccountDraft {
+            pendingAuthentication = result
+        } else {
+            try persistSignIn(result, account: account)
         }
-        // Re-signing in as someone already remembered refreshes that entry
-        // rather than duplicating them.
-        save(accounts: accounts.filter { $0.id != account.id } + [account])
 
         // Sign-in already carries the account's policy; taking it here saves
         // the extra Users/Me round trip a restored token has to make.
@@ -362,8 +402,18 @@ final class SessionStore {
         )
         activeAccount = account
         userName = result.user.name
-        defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
         phase = .signedIn
+    }
+
+    private func persistSignIn(_ result: AuthenticationResult, account: StoredAccount) throws {
+        try KeychainStore.set(result.accessToken, for: account.keychainAccount)
+        guard KeychainStore.string(for: account.keychainAccount) == result.accessToken else {
+            throw KeychainStore.StoreError.verificationFailed
+        }
+        save(accounts: loadAccounts().filter { $0.id != account.id } + [account])
+        defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
+        defaults.set(account.serverURL.absoluteString, forKey: DefaultsKey.serverURL)
+        defaults.set(account.serverName, forKey: DefaultsKey.serverName)
     }
 
     // MARK: - Sign-out
@@ -386,6 +436,16 @@ final class SessionStore {
     }
 
     func forgetServer() async {
+        connectionGeneration += 1
+        if isAccountDraft {
+            client.clearSession()
+            activeAccount = nil
+            pendingAuthentication = nil
+            serverName = nil
+            userName = nil
+            phase = .needsServer
+            return
+        }
         await signOut()
         defaults.removeObject(forKey: DefaultsKey.serverURL)
         defaults.removeObject(forKey: DefaultsKey.serverName)
