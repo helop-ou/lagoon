@@ -32,7 +32,12 @@ def main():
     parser.add_argument("--work", type=Path)
     parser.add_argument("--platforms", nargs="+", choices=("iOS", "tvOS"), default=["iOS", "tvOS"])
     parser.add_argument("--account-privacy", action="store_true", help="Run the remembered-account picker privacy journey")
+    parser.add_argument("--local-network", action="store_true", help="Run iOS denial guidance and retry with a simulated path diagnosis")
     args = parser.parse_args()
+    if args.local_network:
+        if args.account_privacy:
+            parser.error("Select one UI journey at a time")
+        args.platforms = ["iOS"]  # tvOS does not implement local-network privacy.
     work = (args.work or Path(tempfile.mkdtemp(prefix="lagoon-session-tests-"))).resolve()
     directory = work / datetime.now().strftime("%Y%m%d-%H%M%S")
     directory.mkdir(parents=True)
@@ -72,26 +77,28 @@ def main():
                 spec = plistlib.loads(spec_path.read_bytes())
                 environment(spec, url)
                 spec_path.write_bytes(plistlib.dumps(spec))
-                suite = "AccountPrivacyUITests" if args.account_privacy else "SessionExpiryUITests"
+                suite = "LocalNetworkUITests" if args.local_network else "AccountPrivacyUITests" if args.account_privacy else "SessionExpiryUITests"
                 command = ["xcodebuild", "test-without-building", "-xctestrun", str(spec_path),
                            "-destination", destination, "-parallel-testing-enabled", "NO",
                            f"-only-testing:LagoonUITests/{suite}", "-resultBundlePath", str(results / "Recovery.xcresult")]
                 with (results / "test.log").open("w") as log:
                     subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
-                expected = 1 if args.account_privacy else 2
+                expected = 1 if args.account_privacy or args.local_network else 2
                 if f"Executed {expected} test" not in (results / "test.log").read_text():
                     raise RuntimeError("The selected UI cases did not execute")
                 # Each case resets the fixture; the final case must complete
                 # reauthentication, not merely return a passing skip result.
                 state = json.loads((directory / "fixture/requests.json").read_text())
-                if not args.account_privacy and (state["generation"] != 2 or not state["revoked"]):
+                if not args.account_privacy and not args.local_network and (state["generation"] != 2 or not state["revoked"]):
                     raise RuntimeError("Recovery cases were skipped or did not revoke and replace a token")
                 if args.account_privacy and state["generation"] != 2 * (platform_index + 1):
                     raise RuntimeError("The privacy journey did not authenticate both synthetic accounts")
+                if args.local_network and (state["drop_connections"] or not any(r["path"] == "/QuickConnect/Enabled" for r in state["requests"])):
+                    raise RuntimeError("The local-network journey did not recover to sign-in")
                 (results / "requests.json").write_text(json.dumps(state, indent=2))
                 run(["xcrun", "xcresulttool", "export", "attachments", "--path", results / "Recovery.xcresult",
                      "--output-path", results / "screenshots"])
-                journey = "account picker and search isolation" if args.account_privacy else "direct/HLS playback, revocation, sign-in and resumed playback"
+                journey = "simulated denial guidance and retry to sign-in" if args.local_network else "account picker and search isolation" if args.account_privacy else "direct/HLS playback, revocation, sign-in and resumed playback"
                 print(f"Passed {platform}: {journey}", flush=True)
             finally:
                 if device:
