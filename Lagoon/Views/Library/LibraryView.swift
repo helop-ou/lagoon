@@ -10,8 +10,7 @@ struct LibraryView: View {
     @State private var viewModel = LibraryViewModel()
     @State private var decadeViewModel = LibraryDecadeViewModel()
     @State private var decadeRetry = 0
-    @State private var genres: [MediaGenre] = []
-    @State private var genreLoadFailed = false
+    @State private var genreViewModel = LibraryGenreViewModel()
     @State private var genreRetry = 0
 
     private struct DecadeRequest: Hashable {
@@ -49,15 +48,7 @@ struct LibraryView: View {
             await loadDecades()
         }
         .task(id: genreRetry) {
-            do {
-                let loaded = try await session.client.genres()
-                guard !Task.isCancelled else { return }
-                genres = loaded
-                genreLoadFailed = false
-            } catch {
-                guard !Task.isCancelled else { return }
-                genreLoadFailed = true
-            }
+            await loadGenres()
         }
         .onChange(of: selection) { _, value in
             value.save(accountID: accountID)
@@ -120,21 +111,27 @@ struct LibraryView: View {
                 Text(kind.title).tag(kind)
             }
         }
-        .pickerStyle(.segmented)
-        .accessibilityIdentifier("library.kind")
         #if os(tvOS)
-        .fixedSize(horizontal: true, vertical: false)
+        // Menu choices commit on Select, so moving past this control to
+        // Sort or Filters never changes the media type or clears 4K.
+        .pickerStyle(.menu)
+        .buttonStyle(.glass)
+        .accessibilityLabel("Media Type")
+        .accessibilityValue(selection.kind.title)
+        #else
+        .pickerStyle(.segmented)
         #endif
+        .accessibilityIdentifier("library.kind")
     }
 
     private var sortMenu: some View {
         Menu {
-            ForEach(LibrarySort.allCases) { sort in
-                Toggle(sort.title, isOn: Binding(
-                    get: { selection.sort == sort },
-                    set: { if $0 { selection.sort = sort } }
-                ))
+            Picker("Sort", selection: $selection.sort) {
+                ForEach(LibrarySort.allCases) { sort in
+                    Text(sort.title).tag(sort)
+                }
             }
+            .pickerStyle(.inline)
         } label: {
             Label(selection.sort.title, systemImage: "arrow.up.arrow.down")
         }
@@ -149,31 +146,44 @@ struct LibraryView: View {
         Menu {
             if !selection.kind.libraryChoices(in: libraries).isEmpty {
                 Menu("Library") {
-                    Toggle("All Libraries", isOn: sourceBinding(nil))
-                    ForEach(selection.kind.libraryChoices(in: libraries)) { library in
-                        Toggle(library.name ?? String(localized: "Library"), isOn: sourceBinding(library.id))
+                    Picker("Library", selection: $selection.libraryID) {
+                        Text("All Libraries").tag(String?.none)
+                        ForEach(selection.kind.libraryChoices(in: libraries)) { library in
+                            Text(library.name ?? String(localized: "Library")).tag(Optional(library.id))
+                        }
                     }
+                    .pickerStyle(.inline)
                 }
             }
             Menu("Genre") {
-                Toggle("All Genres", isOn: genreBinding(nil))
-                // A saved genre stays visible even if the catalogue fails.
-                ForEach(genreNames, id: \.self) { genre in
-                    Toggle(genre, isOn: genreBinding(genre))
+                Picker("Genre", selection: $selection.genre) {
+                    Text("All Genres").tag(String?.none)
+                    // A saved genre stays visible even if the catalogue fails.
+                    ForEach(genreNames, id: \.self) { genre in
+                        Text(genre).tag(Optional(genre))
+                    }
                 }
-                if genreLoadFailed {
+                .pickerStyle(.inline)
+                if genreViewModel.isLoading {
+                    Button("Loading Genres…") {}.disabled(true)
+                } else if genreViewModel.loadFailed || genreViewModel.genres == nil {
                     Button("Retry Loading Genres") { genreRetry += 1 }
+                } else if genreNames.isEmpty {
+                    Button("No Genres") {}.disabled(true)
                 }
             }
             Menu("Decade") {
-                Toggle("All Decades", isOn: decadeBinding(nil))
-                ForEach(decades) { decade in
-                    Toggle(decade.title, isOn: decadeBinding(decade))
+                Picker("Decade", selection: $selection.decade) {
+                    Text("All Decades").tag(LibraryDecade?.none)
+                    ForEach(decades) { decade in
+                        Text(decade.title).tag(Optional(decade))
+                    }
                 }
-                if decadeViewModel.loadFailed {
-                    Button("Retry Loading Decades") { decadeRetry += 1 }
-                } else if decadeViewModel.isLoading || decadeViewModel.scope != selection.yearScope {
+                .pickerStyle(.inline)
+                if decadeViewModel.isLoading || decadeViewModel.scope != selection.yearScope {
                     Button("Loading Decades…") {}.disabled(true)
+                } else if decadeViewModel.loadFailed || decadeViewModel.decades == nil {
+                    Button("Retry Loading Decades") { decadeRetry += 1 }
                 } else if decades.isEmpty {
                     Button("No Dated Titles") {}.disabled(true)
                 }
@@ -258,8 +268,7 @@ struct LibraryView: View {
     }
 
     private var genreNames: [String] {
-        Set(genres.map(\.name) + (selection.genre.map { [$0] } ?? []))
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        genreViewModel.choices(selected: selection.genre)
     }
 
     private var decades: [LibraryDecade] {
@@ -279,18 +288,6 @@ struct LibraryView: View {
         return parts.joined(separator: " · ")
     }
 
-    private func sourceBinding(_ id: String?) -> Binding<Bool> {
-        Binding(get: { selection.libraryID == id }, set: { if $0 { selection.libraryID = id } })
-    }
-
-    private func genreBinding(_ name: String?) -> Binding<Bool> {
-        Binding(get: { selection.genre == name }, set: { if $0 { selection.genre = name } })
-    }
-
-    private func decadeBinding(_ decade: LibraryDecade?) -> Binding<Bool> {
-        Binding(get: { selection.decade == decade }, set: { if $0 { selection.decade = decade } })
-    }
-
     private func reconcileSources() {
         guard librariesLoaded else { return }
         selection.reconcile(libraries: libraries)
@@ -307,11 +304,16 @@ struct LibraryView: View {
 
     private func refreshLibrary() async {
         async let years: Void = loadDecades()
+        async let genres: Void = loadGenres()
         if viewModel.hasLoaded {
             await viewModel.refresh(fetch: session.client.libraryItems)
         } else {
             await viewModel.load(selection: selection, fetch: session.client.libraryItems)
         }
-        await years
+        _ = await (years, genres)
+    }
+
+    private func loadGenres() async {
+        await genreViewModel.load { try await session.client.genres() }
     }
 }
