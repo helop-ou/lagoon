@@ -18,9 +18,15 @@ final class ImageCache {
         return cache
     }()
 
-    private var inFlight: [NSString: Task<UIImage?, Never>] = [:]
+    private struct Load {
+        let id: UUID
+        let task: Task<Void, Never>
+        var waiters: [UUID: CheckedContinuation<UIImage?, Never>]
+    }
+    private var inFlight: [NSString: Load] = [:]
+    private let downloader: BoundedDownload
 
-    private init() {}
+    init(downloader: BoundedDownload = .shared) { self.downloader = downloader }
 
     private func key(_ url: URL, maxPixelSize: Int) -> NSString {
         "\(url.absoluteString)::w\(maxPixelSize)" as NSString
@@ -32,28 +38,59 @@ final class ImageCache {
     }
 
     func load(_ url: URL, maxPixelSize: Int) async -> UIImage? {
+        guard !Task.isCancelled else { return nil }
         let key = key(url, maxPixelSize: maxPixelSize)
         if let cached = cache.object(forKey: key) {
             return cached
         }
-        if let task = inFlight[key] {
-            return await task.value
+        let waiter = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else { continuation.resume(returning: nil); return }
+                if inFlight[key] != nil {
+                    inFlight[key]?.waiters[waiter] = continuation
+                    return
+                }
+                let id = UUID()
+                let task = Task { [weak self, downloader] in
+                    let data = try? await downloader.data(from: url, limit: DownloadLimit.artwork, content: .image)
+                    let image: UIImage?
+                    if let data, !Task.isCancelled {
+                        image = await Task.detached(priority: .utility) {
+                            ArtworkDecoder.image(from: data, maxPixelSize: maxPixelSize)
+                        }.value
+                    } else { image = nil }
+                    self?.finish(key: key, id: id, image: Task.isCancelled ? nil : image)
+                }
+                inFlight[key] = Load(id: id, task: task, waiters: [waiter: continuation])
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancel(key: key, waiter: waiter) }
         }
-        let task = Task<UIImage?, Never> {
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
-            return await Self.decode(data, maxPixelSize: maxPixelSize)
+    }
+
+    private func cancel(key: NSString, waiter: UUID) {
+        guard let continuation = inFlight[key]?.waiters.removeValue(forKey: waiter) else { return }
+        continuation.resume(returning: nil)
+        if inFlight[key]?.waiters.isEmpty == true {
+            inFlight.removeValue(forKey: key)?.task.cancel()
         }
-        inFlight[key] = task
-        let image = await task.value
-        inFlight[key] = nil
+    }
+
+    private func finish(key: NSString, id: UUID, image: UIImage?) {
+        guard let load = inFlight[key], load.id == id else { return }
+        inFlight.removeValue(forKey: key)
         if let image {
             let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
             cache.setObject(image, forKey: key, cost: cost)
         }
-        return image
+        for waiter in load.waiters.values { waiter.resume(returning: image) }
     }
+}
 
-    private nonisolated static func decode(_ data: Data, maxPixelSize: Int) async -> UIImage? {
+nonisolated enum ArtworkDecoder {
+    static func image(from data: Data, maxPixelSize: Int) -> UIImage? {
+        guard !data.isEmpty, data.count <= DownloadLimit.artwork, maxPixelSize > 0 else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
@@ -61,6 +98,8 @@ final class ImageCache {
             kCGImageSourceShouldCacheImmediately: true,
         ]
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetStatus(source) == .statusComplete,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
               let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
             return nil
         }
