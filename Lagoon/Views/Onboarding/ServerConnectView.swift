@@ -115,6 +115,8 @@ struct ServerConnectView: View {
             do {
                 try await session.connect(to: address)
             } catch is CancellationError {
+            } catch ServerAddress.Failure.invalid {
+                errorMessage = ServerAddress.Failure.invalid.localizedDescription
             } catch LocalNetworkAccess.Failure.denied {
                 localNetworkAccessDenied = true
                 errorMessage = LocalNetworkAccess.Failure.denied.localizedDescription
