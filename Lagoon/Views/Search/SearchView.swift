@@ -11,6 +11,7 @@ final class SearchViewModel {
     @ObservationIgnored private var currentQuery = ""
 
     func search(_ query: String, client: JellyfinClient) {
+        let identity = client.sessionIdentity
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         errorMessage = nil
@@ -26,6 +27,7 @@ final class SearchViewModel {
             do {
                 try await Task.sleep(for: .milliseconds(400))
                 try Task.checkCancellation()
+                guard identity == client.sessionIdentity else { throw CancellationError() }
                 let page = try await client.items(
                     includeTypes: [.movie, .series, .boxSet],
                     searchTerm: trimmed,
@@ -80,23 +82,26 @@ final class SearchViewModel {
 /// want to do a lot of typing in tvOS."
 @Observable
 final class RecentSearchStore {
-    /// One store for the app: the Search screen reads it and account
-    /// switching clears it, and both must see the same array rather than
-    /// each holding a copy of what the defaults said at init.
-    static let shared = RecentSearchStore()
-
     private(set) var terms: [String] = []
+    private(set) var accountID: String?
 
     /// Long enough to cover a viewing session's worth of titles, short enough
     /// that the row stays scannable from the couch.
     static let limit = 10
 
     private let defaults: UserDefaults
-    private static let key = "search.recents"
+    private var key: String? { accountID.map { "search.recents.\($0)" } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        terms = Self.decode(defaults.data(forKey: Self.key))
+        // Legacy history has no attributable owner. Never assign it to the
+        // next viewer merely because that viewer happens to launch first.
+        defaults.removeObject(forKey: "search.recents")
+    }
+
+    func configure(accountID: String?) {
+        self.accountID = accountID
+        terms = Self.decode(key.flatMap { defaults.data(forKey: $0) })
     }
 
     /// Records a term that actually ran. Most recent first, folded against
@@ -109,6 +114,7 @@ final class RecentSearchStore {
     /// than leaning on the debounce is what makes it hold: the gap between
     /// two presses on a remote is far longer than any debounce worth having.
     func record(_ term: String) {
+        guard accountID != nil else { return }
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         var updated = terms.filter {
@@ -125,7 +131,8 @@ final class RecentSearchStore {
     }
 
     private func persist() {
-        defaults.set(try? JSONEncoder().encode(terms), forKey: Self.key)
+        guard let key else { return }
+        defaults.set(try? JSONEncoder().encode(terms), forKey: key)
     }
 
     private static func decode(_ data: Data?) -> [String] {
@@ -170,7 +177,7 @@ struct SearchView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(ServerSyncState.self) private var serverSync
     @State private var librarySearch = SearchViewModel()
-    private let recents = RecentSearchStore.shared
+    private var recents: RecentSearchStore { session.recentSearches }
     @State private var searchText = ""
     @State private var searchResults: [SeerrDiscoverResult] = []
     @State private var isSearching = false
@@ -367,6 +374,7 @@ struct SearchView: View {
     }
 
     private func performSearch() async {
+        let accountID = session.activeAccount?.id
         let term = normalizedSearch
         guard !term.isEmpty else {
             searchResults = []
@@ -382,7 +390,7 @@ struct SearchView: View {
             // but wait out the same debounce the Seerr path does rather than
             // writing an entry on every keystroke.
             try? await Task.sleep(for: .milliseconds(Self.debounceMilliseconds))
-            guard !Task.isCancelled, normalizedSearch == term else { return }
+            guard !Task.isCancelled, normalizedSearch == term, accountID == session.activeAccount?.id else { return }
             recents.record(term)
             return
         }
@@ -391,8 +399,9 @@ struct SearchView: View {
         searchResults = []
         do {
             try await Task.sleep(for: .milliseconds(Self.debounceMilliseconds))
+            guard accountID == session.activeAccount?.id else { throw CancellationError() }
             let page = try await seerr.client.search(query: term)
-            guard !Task.isCancelled, normalizedSearch == term else { return }
+            guard !Task.isCancelled, normalizedSearch == term, accountID == session.activeAccount?.id else { return }
             searchResults = page.results
             // The debounce only keeps this off every keystroke; folding in
             // RecentSearchStore is what makes "dune" one entry rather than
