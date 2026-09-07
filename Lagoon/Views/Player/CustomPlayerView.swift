@@ -176,6 +176,20 @@ struct CustomPlayerView<Surface: View>: View {
 
             subtitleOverlay
 
+            if case .failed = engine.subtitleLoadState, !panelOpen {
+                VStack {
+                    Label("Subtitles couldn't load. Open Subtitles to retry or choose another track.", systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .padding(Metrics.Space.l)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.Space.l))
+                        .padding(.horizontal, Metrics.screenGutter)
+                        .padding(.top, Metrics.Space.xl)
+                        .accessibilityIdentifier("player.subtitleLoad.notice")
+                    Spacer()
+                }
+                .allowsHitTesting(false)
+            }
+
             // Every animation in here is value-driven (.animation + value:).
             // withAnimation doesn't survive the MenuPressGate hosting
             // boundary, and neither do transitions — see the panel below and
@@ -960,20 +974,26 @@ struct CustomPlayerView<Surface: View>: View {
 
     // MARK: - Transport
 
+    private var showsPanelHint: Bool {
+        if case .failed = engine.subtitleLoadState { return false }
+        return !isScrubbing
+    }
+
     private var transportOverlay: some View {
         VStack {
             #if os(tvOS)
-            VStack(spacing: Metrics.Space.hair) {
-                Text("Swipe down for Info")
-                    .font(.caption.weight(.semibold))
-                Image(systemName: "chevron.compact.down")
-                    .font(.title3.weight(.bold))
+            // The subtitle error already supplies guidance in this space.
+            // Down is also unavailable while scrubbing.
+            if showsPanelHint {
+                VStack(spacing: Metrics.Space.hair) {
+                    Text("Swipe down for Info")
+                        .font(.caption.weight(.semibold))
+                    Image(systemName: "chevron.compact.down")
+                        .font(.title3.weight(.bold))
+                }
+                .foregroundStyle(.white.opacity(0.9))
+                .padding(.top, Metrics.railTopPadding)
             }
-            .foregroundStyle(.white.opacity(0.9))
-            .padding(.top, Metrics.railTopPadding)
-            // Down is dead while scrubbing — don't advertise it.
-            .opacity(isScrubbing ? 0 : 1)
-            .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
             #endif
 
             Spacer()
