@@ -16,6 +16,38 @@ struct ServerConnectView: View {
             // happen to use the same colours.
             JellyfishSwimLayer()
 
+            #if os(iOS)
+            ScrollView {
+                VStack(spacing: Metrics.Space.xl) {
+                    VStack(spacing: Metrics.Space.l) {
+                        LagoonLockup(layout: .horizontal, symbolHeight: Metrics.lockupHeaderSymbolHeight)
+                        Text("Connect to your Jellyfin server")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Metrics.Space.l)
+
+                    addressField
+                    connectButton
+                        .buttonStyle(.glass)
+                        .controlSize(.large)
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Metrics.screenGutter)
+                .padding(.vertical, Metrics.Space.xl)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            #else
             VStack(spacing: Metrics.Space.l) {
                 LagoonLockup()
                 Text("Connect to your Jellyfin server")
@@ -23,26 +55,9 @@ struct ServerConnectView: View {
                     .foregroundStyle(.secondary)
                     .padding(.bottom, Metrics.Space.l)
 
-                TextField("Server address", text: $address, prompt: Text("Server URL or IP"))
-                    .textContentType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .keyboardType(.URL)
-                    .textFieldStyle(.roundedBorder)
-                    #endif
-                    .onSubmit(connect)
-
-                Button(action: connect) {
-                    if isConnecting {
-                        ProgressView()
-                    } else {
-                        Text("Connect")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .buttonStyle(.glass)
-                .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || isConnecting)
+                addressField
+                connectButton
+                    .buttonStyle(.glass)
 
                 if let errorMessage {
                     Text(errorMessage)
@@ -53,7 +68,36 @@ struct ServerConnectView: View {
             }
             .frame(maxWidth: 700)
             .padding(.horizontal, Metrics.screenGutter)
+            #endif
         }
+    }
+
+    private var addressField: some View {
+        TextField("Server address", text: $address, prompt: Text("Server URL or IP"))
+            .textContentType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .accessibilityIdentifier("server.address")
+            #if os(iOS)
+            .textFieldStyle(.plain)
+            .frame(minHeight: Metrics.touchTarget)
+            .overlay(alignment: .bottom) { Divider() }
+            .keyboardType(.URL)
+            .submitLabel(.go)
+            #endif
+            .onSubmit(connect)
+    }
+
+    private var connectButton: some View {
+        Button(action: connect) {
+            if isConnecting {
+                ProgressView()
+            } else {
+                Text("Connect")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || isConnecting)
     }
 
     private func connect() {
