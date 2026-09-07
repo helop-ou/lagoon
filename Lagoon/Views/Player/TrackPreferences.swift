@@ -37,7 +37,7 @@ nonisolated enum SubtitleDefaultMode: String, Codable, CaseIterable, Identifiabl
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .system: String(localized: "Apple TV Setting")
+        case .system: String(localized: "System Setting")
         case .smart: String(localized: "Smart")
         case .always: String(localized: "Always")
         case .forcedOnly: String(localized: "Forced Only")
@@ -48,7 +48,7 @@ nonisolated enum SubtitleDefaultMode: String, Codable, CaseIterable, Identifiabl
     var settingsDescription: String {
         switch self {
         case .system:
-            String(localized: "Keeps the subtitle track Jellyfin marks as default. Caption languages and appearance still follow Apple TV Settings.")
+            String(localized: "Keeps the subtitle track Jellyfin marks as default. Caption languages and appearance still follow system settings.")
         case .smart:
             String(localized: "Shows full subtitles when the audio is not in one of your preferred languages. When the audio is preferred, only forced subtitles are selected.")
         case .always:
