@@ -11,6 +11,11 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
 
     @State private var image: UIImage?
 
+    private struct Request: Hashable {
+        let url: URL?
+        let maxPixelSize: Int
+    }
+
     init(
         url: URL?,
         maxPixelSize: Int,
@@ -34,7 +39,7 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 placeholder()
             }
         }
-        .task(id: url) {
+        .task(id: Request(url: url, maxPixelSize: maxPixelSize)) {
             guard let url else {
                 image = nil
                 return
@@ -44,7 +49,9 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
                 return
             }
             image = nil
-            image = await ImageCache.shared.load(url, maxPixelSize: maxPixelSize)
+            let loaded = await ImageCache.shared.load(url, maxPixelSize: maxPixelSize)
+            guard !Task.isCancelled else { return }
+            image = loaded
         }
     }
 }
