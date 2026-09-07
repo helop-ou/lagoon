@@ -443,35 +443,11 @@ final class SeerrClient {
     }
 
     nonisolated static func candidateURLs(for input: String) -> [URL] {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !trimmed.isEmpty else { return [] }
-        if trimmed.contains("://") {
-            return URL(string: trimmed).map { [normalizedServerURL($0)] } ?? []
-        }
-
-        let host = trimmed.split(separator: "/").first.map(String.init) ?? trimmed
-        let hasPort = host.split(separator: ":").count == 2
-        let looksLocal = host.hasSuffix(".local")
-            || host.split(separator: ":").first.map { $0.allSatisfy { $0.isNumber || $0 == "." } } == true
-        var candidates = looksLocal
-            ? ["http://\(trimmed)", "https://\(trimmed)"]
-            : ["https://\(trimmed)", "http://\(trimmed)"]
-        if !hasPort { candidates.append("http://\(trimmed):5055") }
-        return candidates.compactMap(URL.init(string:)).map(normalizedServerURL)
+        ServerAddress.candidateURLs(for: input, service: .seerr)
     }
 
     private nonisolated static func normalizedServerURL(_ url: URL) -> URL {
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        var path = components?.path ?? ""
-        if path.hasSuffix("/api/v1") {
-            path.removeLast("/api/v1".count)
-        }
-        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
-        components?.path = path == "/" ? "" : path
-        components?.query = nil
-        components?.fragment = nil
-        return components?.url ?? url
+        ServerAddress.normalizedRootURL(url)
     }
 }
 
