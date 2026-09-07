@@ -78,6 +78,9 @@ struct SignInView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if let url = session.client.serverURL {
+                ServerConnectionInfoView(url: url)
+            }
             if session.reauthenticationAccount != nil {
                 Text("Your session ended. Sign in again to continue.")
                     .font(.callout)
