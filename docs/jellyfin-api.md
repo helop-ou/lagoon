@@ -267,6 +267,17 @@ the direct fetch never falls through to the compatibility endpoint: that would
 make Jellyfin fetch from the provider a second time on the way to the same
 error, spending quota to learn nothing.
 
+Provider file responses use the shared `BoundedDownload` transport (audit A15):
+8 MiB maximum, enforced on each delivered chunk as well as declared length.
+HTML/JSON success responses, truncated transfers and unreadable cues are
+rejected before selecting or saving a file. HTTP errors retain at most 16 KiB
+of diagnostic body; 401/403/429 finish immediately without waiting for it.
+The normal captured-session check still precedes response handling, so an old
+account's late 401 cannot expire the account now in use. Oversized and invalid
+files have explicit errors and do not invoke the compatibility download.
+The same file-size limit applies to sidecars and direct OpenSubtitles files;
+see [download hardening validation](download-hardening-validation.md).
+
 Jellyfin 10.11's `DownloadRemoteSubtitles` controller catches its internal
 provider/save exception and still returns HTTP 204, so a successful status is
 not evidence that a subtitle exists. Lagoon instead fetches the provider file,
@@ -309,9 +320,54 @@ So the three shapes that matter all still work on cleartext:
 What the change *does* block is cleartext to a fully-qualified public domain,
 which is exactly the intent: a remote server must be https.
 
-`SessionStore.candidateURLs` needed no change. It already probes http first
-for IP/`.local` input and https first otherwise, and every http candidate it
-generates for a non-local name is one ATS should reject.
+The HEL-42 ATS change retained the existing discovery order: HTTP first for
+IP/`.local` input and HTTPS first otherwise. Public-host HTTP candidates remain
+subject to ATS. The later A13 fix below changes address construction and
+disclosure without broadening the transport exceptions.
+
+## Server address entry and discovery (audit A13)
+
+Jellyfin and Seerr use `Networking/ServerAddress.swift` to parse user-entered
+service roots. An address may include a hostname, port, and reverse-proxy base
+path. Explicit `http://` or `https://` selects exactly that transport and port;
+discovery never downgrades an explicit HTTPS address or adds a default port to
+it. Surrounding whitespace and trailing path slashes are normalized.
+
+Schemeless input retains the discovery order above. Jellyfin also tries port
+8096 and Seerr port 5055 when no port was supplied. Ports are assigned through
+`URLComponents.port`, before the path: `media.example/jellyfin` can produce
+`http://media.example:8096/jellyfin`. Bracketed IPv6 literals, including explicit
+ports, and internationalized hostnames are supported. A terminal `/api/v1` on
+Seerr input is removed so requests append the API prefix once. Configuration,
+restoration, and session snapshots then treat that URL as a service root;
+they do not strip another suffix if the proxy root itself ends in `/api/v1`.
+
+Normalization uses `percentEncodedPath`: an escaped slash inside a proxy path
+stays escaped. Credentials in the URL, query parameters, fragments, unsupported
+schemes, malformed escapes, missing hosts, invalid ports, and internal
+whitespace are rejected before discovery. Paste the service root rather than
+a browser page or an API URL containing a token.
+
+Sign-in and Seerr settings show the full selected scheme, host, port, and path.
+HTTP connections carry a visible explanation of password, token, and activity
+exposure before authentication controls. This also applies to restored sign-in
+screens. Legacy embedded credentials/query strings are redacted from that
+display; stored account identities are not migrated by this change.
+
+Regression coverage is in `ServerAddressTests`, `SeerrClientTests`, and
+`ServerAddressUITests`. Run the controlled UI journey on fresh simulators with:
+
+```sh
+python3 scripts/test-session-recovery.py --server-address
+```
+
+The fixture requires proxy paths for API requests and verifies both Jellyfin
+authentication and Seerr discovery. iOS exercises typed setup and invalid-input
+recovery; tvOS exercises restored sign-in and remote focus, then a synthetic
+account with a restored Seerr pairing. HTTPS disclosure is checked using a
+restored URL; that UI check is not a TLS-handshake test. See the
+[server address validation record](server-address-validation.md) for evidence
+and remaining physical-network acceptance.
 
 ## Home Screen Sections plugin (HEL-47)
 
