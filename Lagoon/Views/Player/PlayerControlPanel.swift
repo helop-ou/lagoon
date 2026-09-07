@@ -40,6 +40,8 @@ struct PlayerControlPanel: View {
     let audioDelay: Double
     let playbackRate: Double
     var subtitleSearch: SubtitleSearchCoordinator? = nil
+    var subtitleLoadState: SubtitleLoadState = .idle
+    var onRetrySubtitleLoad: (() -> Void)? = nil
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
@@ -471,6 +473,7 @@ struct PlayerControlPanel: View {
 
     private var subtitleCard: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            subtitleLoadStatus
             if let subtitleSearch {
                 cardHeader("Find Subtitles")
                 VStack(alignment: .leading, spacing: Metrics.Space.m) {
@@ -567,6 +570,43 @@ struct PlayerControlPanel: View {
                     onSelectSubtitleTrack(nil)
                 } else {
                     onSelectSubtitleTrack(subtitleTracks.first(where: { $0.id == rowID })?.engineID)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var subtitleLoadStatus: some View {
+        switch subtitleLoadState {
+        case .idle:
+            EmptyView()
+        case .loading(_, let title):
+            HStack(spacing: Metrics.Space.m) {
+                ProgressView()
+                Text("Loading \(title)…")
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityIdentifier("player.subtitleLoad.loading")
+        case .failed(_, let title, let message):
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                Label("Couldn't load \(title)", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("player.subtitleLoad.error")
+                if let onRetrySubtitleLoad {
+                    Button(action: onRetrySubtitleLoad) {
+                        Text("Retry Subtitle")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                        .focused(focus, equals: .track("subtitle-retry"))
+                        .accessibilityIdentifier("player.subtitleLoad.retry")
+                        #if os(iOS)
+                        // Multiple controls share this Form row. An automatic
+                        // button can also activate the adjacent Search action.
+                        .buttonStyle(.borderless)
+                        #endif
                 }
             }
         }
@@ -790,11 +830,16 @@ struct PlayerControlPanelHost: View, Equatable {
             audioDelay: engine.audioDelay,
             playbackRate: engine.rate,
             subtitleSearch: subtitleSearch,
+            subtitleLoadState: engine.subtitleLoadState,
+            onRetrySubtitleLoad: engine.retrySubtitleLoad,
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
             onTogglePictureInPicture: onTogglePictureInPicture,
             onSelectAudioTrack: engine.selectAudioTrack,
-            onSelectSubtitleTrack: engine.selectSubtitleTrack,
+            onSelectSubtitleTrack: { id in
+                subtitleSearch?.cancelDownload()
+                engine.selectSubtitleTrack(id: id)
+            },
             onSetAudioDelay: engine.setAudioDelay,
             onSetPlaybackRate: engine.setRate,
             onDismiss: onDismiss
