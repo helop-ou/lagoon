@@ -65,6 +65,7 @@ final class HomeViewModel {
         guard !hasLoaded else { return }
         hasLoaded = true
         let generation = loadGeneration
+        let identity = client.sessionIdentity
         isLoading = true
         errorMessage = nil
         do {
@@ -95,7 +96,7 @@ final class HomeViewModel {
 
             let rails = await loadLatestRails(libraries: libraries, client: client)
 
-            let resolvedResume = await resumeItems ?? []
+            let resolvedResume = await resumeItems
             let resolvedNextUp = await nextUpItems ?? []
             let resolvedFavorites = await favoriteItems ?? []
             let resolvedMovieGenres = await movieGenreCatalog ?? []
@@ -106,8 +107,8 @@ final class HomeViewModel {
                 client: client,
                 preferences: homeSectionPreferences
             )
-            guard generation == loadGeneration else { return }
-            resume = resolvedResume
+            guard generation == loadGeneration, identity == client.sessionIdentity else { return }
+            if let resolvedResume { resume = resolvedResume }
             nextUp = resolvedNextUp
             favorites = resolvedFavorites
             movieGenreShelf = GenreShelfResolver.resolve(
@@ -121,7 +122,7 @@ final class HomeViewModel {
                 includeTypes: [.series]
             )
             latestRails = rails
-            TopShelfStore.publish(resume, client: client)
+            if let resolvedResume { TopShelfStore.publish(resolvedResume, client: client, identity: identity) }
             pluginRails = resolvedPluginRails
             heroItems = Array(
                 rails.flatMap(\.items)
@@ -166,20 +167,21 @@ final class HomeViewModel {
     func refreshProgress(client: JellyfinClient) async {
         guard hasLoaded, !isLoading else { return }
         let generation = loadGeneration
-        async let resumeItems = client.resumeItems()
-        async let nextUpItems = client.nextUp()
+        let identity = client.sessionIdentity
+        async let resumeItems = try? client.resumeItems()
+        async let nextUpItems = try? client.nextUp()
         async let favoriteItems = try? client.favorites()
-        let refreshed = try? await (resume: resumeItems, nextUp: nextUpItems)
+        let refreshed = await (resume: resumeItems, nextUp: nextUpItems)
         let refreshedFavorites = await favoriteItems
-        guard generation == loadGeneration else { return }
-        if let refreshed {
-            resume = refreshed.resume
-            nextUp = refreshed.nextUp
+        guard generation == loadGeneration, identity == client.sessionIdentity else { return }
+        if let refreshedResume = refreshed.resume {
+            resume = refreshedResume
+            TopShelfStore.publish(refreshedResume, client: client, identity: identity)
         }
+        if let refreshedNextUp = refreshed.nextUp { nextUp = refreshedNextUp }
         if let refreshedFavorites {
             favorites = refreshedFavorites
         }
-        TopShelfStore.publish(resume, client: client)
     }
 
     /// Reconciles everything on Home that can visibly change while Lagoon is
