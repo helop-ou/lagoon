@@ -10,15 +10,23 @@ sample-buffer player with resume and progress sync.
 
 - Connect by address (schemeless input works — Lagoon probes https/http and
   Jellyfin's default `:8096`), sign in with password or **Quick Connect**
-- Home with a self-advancing hero carousel, Continue Watching, Next Up, and
-  Recently Added rails per library
+- Featured banners on Home and Discover: swipe between titles on iPhone/iPad,
+  or use Left/Right on Apple TV; tap or select to open the visible title
+- Home with Continue Watching, unstarted episodes in Next Up, and Recently
+  Added rails that group new episodes under their shows
 - Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state filters,
   a 4K movie filter, and selections remembered per account
 - Movie and series detail pages — seasons, episode rail, resume points
 - Native playback: direct play when the file allows it, server-side HLS
   transcode when it doesn't; watch progress syncs back to the server
-- Library-wide search
-- Session persists in the keychain; tvOS 26 Liquid Glass design, dark-locked
+- Search your Jellyfin library and Seerr, with recent searches, See All, and
+  paginated full results
+- Larger iOS posters, roomier rows, adaptive detail actions, and native
+  player toolbar controls and playback-options sheet
+- Settings organised into separate categories on iOS and tvOS
+- Multiple accounts and servers with keychain-persisted sessions; Add Account
+  starts on the current server, with Use Another Server available when needed
+- tvOS 26 Liquid Glass design, dark-locked on both platforms
 
 ## Building
 
