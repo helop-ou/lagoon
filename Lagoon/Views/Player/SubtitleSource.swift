@@ -191,13 +191,16 @@ nonisolated enum SubtitleFileStore {
 
     static func cached(itemID: String, candidateID: String) -> (url: URL, data: Data)? {
         guard let url = fileURL(itemID: itemID, candidateID: candidateID),
-              let data = try? Data(contentsOf: url),
-              !data.isEmpty else { return nil }
+              let file = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? file.close() }
+        guard let data = try? file.read(upToCount: DownloadLimit.subtitle + 1),
+              !data.isEmpty, data.count <= DownloadLimit.subtitle else { return nil }
         return (url, data)
     }
 
     @discardableResult
     static func store(_ data: Data, itemID: String, candidateID: String) -> URL? {
+        guard !data.isEmpty, data.count <= DownloadLimit.subtitle else { return nil }
         guard let url = fileURL(itemID: itemID, candidateID: candidateID) else { return nil }
         do {
             try data.write(to: url, options: .atomic)
