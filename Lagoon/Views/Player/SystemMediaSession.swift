@@ -376,9 +376,8 @@ final class NowPlayingCoordinator {
     private func loadArtwork(from url: URL?) {
         guard let url else { return }
         artworkTask = Task { [weak self] in
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
+            guard let image = await ImageCache.shared.load(url, maxPixelSize: 1024),
                   !Task.isCancelled,
-                  let image = UIImage(data: data),
                   let self else { return }
             self.nowPlayingInfo[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             self.updateTimeline()
