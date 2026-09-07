@@ -7,6 +7,7 @@ nonisolated enum JellyfinError: LocalizedError {
     case notConfigured
     case invalidServerURL
     case unauthorized
+    case sessionExpired
     /// `message` is whatever the server said in the body. Jellyfin wraps a
     /// provider's exception into a 500 and puts the real reason there — an
     /// exhausted OpenSubtitles quota, for instance — so discarding it left
@@ -19,6 +20,7 @@ nonisolated enum JellyfinError: LocalizedError {
         case .notConfigured: "Not connected to a server."
         case .invalidServerURL: "That doesn't look like a valid server address."
         case .unauthorized: "Wrong username or password."
+        case .sessionExpired: "Your session expired. Sign in again to continue."
         case .server(let status, let message):
             if let message, !message.isEmpty {
                 "\(message) (\(status))"
@@ -41,6 +43,18 @@ final class JellyfinClient {
     private(set) var accessToken: String?
     private(set) var userId: String?
     let deviceId: String
+    /// Identity only: no credential in callbacks, diagnostics or persistence.
+    nonisolated struct SessionIdentity: Equatable, Sendable {
+        let generation: UUID
+        let serverURL: URL
+        let userId: String
+    }
+    private var sessionGeneration = UUID()
+    var onSessionExpired: ((SessionIdentity) -> Void)?
+    var sessionIdentity: SessionIdentity? {
+        guard accessToken != nil, let serverURL, let userId else { return nil }
+        return SessionIdentity(generation: sessionGeneration, serverURL: serverURL, userId: userId)
+    }
     /// Playback sessions whose stop report is still in flight. Screens that
     /// re-fetch after the player closes wait on it first (HEL-132).
     let playbackReports = PlaybackReportLedger()
@@ -84,19 +98,31 @@ final class JellyfinClient {
     // MARK: - Session state
 
     func configure(serverURL: URL) {
+        if self.serverURL != serverURL { clearSession() }
         self.serverURL = serverURL
     }
 
     func activateSession(token: String, userId: String, policy: UserPolicy? = nil) {
+        sessionGeneration = UUID()
         accessToken = token
         self.userId = userId
         subtitleManagementAllowed = policy?.allowsSubtitleManagement
     }
 
     func clearSession() {
+        sessionGeneration = UUID()
         accessToken = nil
         userId = nil
         subtitleManagementAllowed = nil
+    }
+
+    /// An independent client for work that may outlive a view/account change.
+    /// It never consults or mutates the active client's later credentials.
+    func sessionSnapshot() -> JellyfinClient {
+        let copy = JellyfinClient(deviceId: deviceId, sessionConfiguration: session.configuration)
+        if let serverURL { copy.configure(serverURL: serverURL) }
+        if let accessToken, let userId { copy.activateSession(token: accessToken, userId: userId) }
+        return copy
     }
 
     /// Whether this account may use Jellyfin's remote-subtitle endpoints.
@@ -131,9 +157,13 @@ final class JellyfinClient {
     }
 
     var authorizationHeader: String {
+        authorizationHeader(token: accessToken)
+    }
+
+    private func authorizationHeader(token: String?) -> String {
         var header = #"MediaBrowser Client="\#(Self.clientName)", Device="\#(deviceName)", DeviceId="\#(deviceId)", Version="\#(appVersion)""#
-        if let accessToken {
-            header += #", Token="\#(accessToken)""#
+        if let token {
+            header += #", Token="\#(token)""#
         }
         return header
     }
@@ -258,12 +288,18 @@ final class JellyfinClient {
         _ = try await data(for: request(for: url(path: path, query: query), method: "DELETE"))
     }
 
+    private struct PreparedRequest {
+        let request: URLRequest
+        let session: SessionIdentity?
+    }
+
     private func request(
         for url: URL,
         method: String,
         body: Data? = nil,
-        timeout: TimeInterval? = nil
-    ) -> URLRequest {
+        timeout: TimeInterval? = nil,
+        authenticated: Bool = true
+    ) -> PreparedRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
         // Never answer an API call from the HTTP cache: these responses carry
@@ -272,27 +308,35 @@ final class JellyfinClient {
         // from before (HEL-132).
         request.cachePolicy = .reloadIgnoringLocalCacheData
         if let timeout { request.timeoutInterval = timeout }
-        request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
+        request.setValue(authorizationHeader(token: authenticated ? accessToken : nil), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
         }
-        return request
+        return PreparedRequest(request: request, session: authenticated ? sessionIdentity : nil)
     }
 
-    private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
+    private func send<T: Decodable>(_ request: PreparedRequest) async throws -> T {
         let data = try await data(for: request)
         return try Self.decoder.decode(T.self, from: data)
     }
 
-    private func data(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
+    private func data(for request: PreparedRequest) async throws -> Data {
+        let (data, response) = try await session.data(for: request.request)
+        // A response belongs to the session captured before suspension. Even
+        // a successful old response must not update the new account's screen.
+        if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw JellyfinError.server(status: 0) }
         switch http.statusCode {
         case 200...299:
             return data
         case 401:
+            if let identity = request.session {
+                clearSession()
+                onSessionExpired?(identity)
+                throw JellyfinError.sessionExpired
+            }
             throw JellyfinError.unauthorized
         default:
             throw JellyfinError.server(
@@ -357,19 +401,22 @@ extension JellyfinClient {
     }
 
     func authenticateByName(username: String, password: String) async throws -> AuthenticationResult {
-        try await post("Users/AuthenticateByName", body: AuthenticateByNameRequest(username: username, pw: password))
+        try await send(request(for: url(path: "Users/AuthenticateByName"), method: "POST",
+                               body: Self.encoder.encode(AuthenticateByNameRequest(username: username, pw: password)),
+                               authenticated: false))
     }
 
     func quickConnectEnabled() async throws -> Bool {
-        try await get("QuickConnect/Enabled")
+        try await send(request(for: url(path: "QuickConnect/Enabled"), method: "GET", authenticated: false))
     }
 
     func initiateQuickConnect() async throws -> QuickConnectResult {
-        try await post("QuickConnect/Initiate")
+        try await send(request(for: url(path: "QuickConnect/Initiate"), method: "POST", authenticated: false))
     }
 
     func quickConnectState(secret: String) async throws -> QuickConnectResult {
-        try await get("QuickConnect/Connect", query: [URLQueryItem(name: "secret", value: secret)])
+        try await send(request(for: url(path: "QuickConnect/Connect", query: [URLQueryItem(name: "secret", value: secret)]),
+                               method: "GET", authenticated: false))
     }
 
     /// Approves a Quick Connect code on behalf of the signed-in user — the
@@ -387,7 +434,8 @@ extension JellyfinClient {
     }
 
     func authenticateWithQuickConnect(secret: String) async throws -> AuthenticationResult {
-        try await post("Users/AuthenticateWithQuickConnect", body: QuickConnectAuthRequest(secret: secret))
+        try await send(request(for: url(path: "Users/AuthenticateWithQuickConnect"), method: "POST",
+                               body: Self.encoder.encode(QuickConnectAuthRequest(secret: secret)), authenticated: false))
     }
 
     func logout() async throws {
