@@ -25,6 +25,15 @@ struct HeroSection<Route: Hashable>: View {
     let items: [HeroItem<Route>]
     let focus: FocusState<Bool>.Binding?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .callout) private var textHeight = Metrics.heroHeight / 2
+
+    private var panelHeight: CGFloat {
+        #if os(tvOS)
+        Metrics.heroHeight
+        #else
+        max(Metrics.heroHeight, textHeight + Metrics.heroLogoHeight + Metrics.Space.section)
+        #endif
+    }
 
     @State private var index = 0
     @State private var palette: ArtworkPalette = .fallback
@@ -47,7 +56,7 @@ struct HeroSection<Route: Hashable>: View {
             GeometryReader { proxy in
                 heroBody(for: current, width: proxy.size.width)
             }
-            .frame(height: Metrics.heroHeight)
+            .frame(height: panelHeight)
             .padding(.horizontal, Metrics.screenGutter)
             .task(id: "\(items.first?.id ?? "empty"):\(reduceMotion)") {
                 await cycle()
@@ -86,6 +95,7 @@ struct HeroSection<Route: Hashable>: View {
             // and the picture just cuts, which is what `Motion.crossfade`
             // below was silently failing to do (Jaagop).
             backdrop(for: item)
+                .frame(width: width, height: panelHeight)
                 .id(item.id)
                 .transition(.opacity)
 
@@ -99,7 +109,11 @@ struct HeroSection<Route: Hashable>: View {
                     if let overview = item.overview {
                         Text(overview)
                             .font(.callout)
+                            #if os(tvOS)
                             .foregroundStyle(.secondary)
+                            #else
+                            .foregroundStyle(.primary)
+                            #endif
                             .lineLimit(4)
                     }
                 }
@@ -121,7 +135,10 @@ struct HeroSection<Route: Hashable>: View {
             .frame(maxWidth: max(0, min(Metrics.heroTextWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
         }
-        .frame(height: Metrics.heroHeight)
+        .frame(width: width, height: panelHeight)
+        #if os(iOS)
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+        #endif
         .overlay(alignment: .bottomLeading) {
             dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
         }
@@ -140,8 +157,8 @@ struct HeroSection<Route: Hashable>: View {
         #else
         [
             .init(color: .black.opacity(0.8), location: 0),
-            .init(color: .black.opacity(0.6), location: 0.5),
-            .init(color: .black.opacity(0.45), location: 1),
+            .init(color: .black.opacity(0.7), location: 0.5),
+            .init(color: .black.opacity(0.6), location: 1),
         ]
         #endif
     }
