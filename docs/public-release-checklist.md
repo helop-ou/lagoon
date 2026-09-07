@@ -16,7 +16,8 @@ performed by the privacy implementation pass.
   public 1.0, then update UI, tests, privacy and support copy to match.
 - [ ] Publish privacy/support pages with the selected domain, publisher identity
   and monitored contact. Add privacy/support/acknowledgements access before login
-  and in About; verify iPhone/iPad and tvOS presentation.
+  and in About; verify iPhone/iPad and tvOS presentation. Start with the
+  [website brief](website/README.md) for the proposed address, page scope and work order.
 - [ ] Complete HEL-144 physical acceptance, including the permission journey from
   HEL-143 and pending HEL-141/142 device checks.
 
