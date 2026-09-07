@@ -36,12 +36,19 @@ nonisolated enum BlurayPlaylistParser {
     /// Presentation timestamps in a playlist are 45 kHz ticks.
     private static let ticksPerSecond = 45_000.0
 
-    static func parse(_ data: Data, name: String) throws -> BlurayPlaylist {
+    static func parse(_ data: Data, name: String, budget: DiscReadBudget = DiscReadBudget()) throws -> BlurayPlaylist {
+        try budget.check()
+        guard data.count <= 1_024 * 1_024 else { throw DiscImageError.resourceLimit }
         let bytes = DiscBytes(data)
         guard try bytes.bytes(0, 4) == Data("MPLS".utf8) else {
             throw DiscImageError.malformed("\(name) is not a playlist")
         }
         let start = Int(try be32(bytes, 8))
+        guard start >= 20 else { throw DiscImageError.malformed("playlist offset overlaps its header") }
+        let sectionLength = Int(try be32(bytes, start))
+        guard sectionLength >= 6 else { throw DiscImageError.malformed("truncated playlist section") }
+        try bytes.require(start + 4, sectionLength)
+        let end = start + 4 + sectionLength
         let count = Int(try be16(bytes, start + 6))
         guard count > 0, count <= maxItems else {
             throw DiscImageError.malformed("\(name) declares \(count) play items")
@@ -51,14 +58,21 @@ nonisolated enum BlurayPlaylistParser {
         items.reserveCapacity(count)
         var offset = start + 10
         for _ in 0..<count {
+            try budget.check()
+            guard offset <= end - 2 else { throw DiscImageError.malformed("truncated play item") }
             let length = Int(try be16(bytes, offset))
-            guard length > 0 else {
+            guard length >= 20, length <= end - offset - 2 else {
                 throw DiscImageError.malformed("\(name) has an empty play item")
             }
             let body = offset + 2
             let clip = String(decoding: try bytes.bytes(body, 5), as: UTF8.self)
+            guard clip.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }),
+                  try bytes.bytes(body + 5, 4) == Data("M2TS".utf8) else {
+                throw DiscImageError.malformed("invalid playlist clip")
+            }
             let inTime = try be32(bytes, body + 12)
             let outTime = try be32(bytes, body + 16)
+            guard outTime >= inTime else { throw DiscImageError.malformed("reversed playlist timestamps") }
             let ticks = Double(outTime) - Double(inTime)
             items.append(BlurayPlaylist.Item(
                 clip: clip,
@@ -118,8 +132,8 @@ nonisolated enum BlurayDisc {
 
     /// True when the image carries a Blu-ray structure at all, which is what
     /// separates a disc this reader can play from one it must decline.
-    static func isBluray(_ volume: UDFVolume) -> Bool {
-        ((try? volume.entry(at: playlistDirectory)) ?? nil) != nil
+    static func isBluray(_ volume: UDFVolume) throws -> Bool {
+        try volume.entry(at: playlistDirectory) != nil
     }
 
     static func mainTitle(
@@ -133,19 +147,25 @@ nonisolated enum BlurayDisc {
 
         var clips: [String: UDFVolume.Entry] = [:]
         for entry in try volume.list(streamEntry.icb) where !entry.isDirectory {
+            try volume.checkBudget()
             clips[entry.name.uppercased()] = entry
         }
         guard !clips.isEmpty else { throw DiscImageError.noTitle }
 
         var playlists: [BlurayPlaylist] = []
+        var attempted = 0
         for entry in try volume.list(playlistEntry.icb)
-        where entry.name.uppercased().hasSuffix(".MPLS") && playlists.count < maxPlaylists {
+        where !entry.isDirectory && entry.name.uppercased().hasSuffix(".MPLS") {
+            try volume.checkBudget()
+            guard attempted < maxPlaylists else { throw DiscImageError.resourceLimit }
+            attempted += 1
             let data = try volume.data(of: entry.icb, limit: maxPlaylistBytes)
             // One unreadable playlist among sixty-five is not a broken disc.
-            guard let playlist = try? BlurayPlaylistParser.parse(data, name: entry.name) else {
-                continue
+            do {
+                playlists.append(try BlurayPlaylistParser.parse(data, name: entry.name, budget: volume.budget))
+            } catch DiscImageError.malformed {
+                continue // Skip malformed playlists, never cancellation/budget exhaustion.
             }
-            playlists.append(playlist)
         }
 
         guard let title = BlurayTitlePolicy.mainTitle(from: playlists, runtimeSeconds: runtimeSeconds) else {
@@ -156,12 +176,16 @@ nonisolated enum BlurayDisc {
 
         var extents: [DiscExtent] = []
         for item in title.items {
-            guard let entry = clips["\(item.clip).M2TS"] else { continue }
-            guard case .extents(let clipExtents) = try volume.contents(of: entry.icb) else { continue }
+            try volume.checkBudget()
+            guard let entry = clips["\(item.clip).M2TS"],
+                  case .extents(let clipExtents) = try volume.contents(of: entry.icb), !clipExtents.isEmpty else {
+                throw DiscImageError.malformed("playlist refers to an unavailable clip")
+            }
+            guard clipExtents.count <= DiscStreamMap.maxExtents - extents.count else { throw DiscImageError.resourceLimit }
             extents.append(contentsOf: clipExtents)
         }
         guard !extents.isEmpty else { throw DiscImageError.noTitle }
-        return (title, DiscStreamMap(extents: extents))
+        return (title, try DiscStreamMap(extents: extents))
     }
 
     private static func largestClipStream(
@@ -170,13 +194,14 @@ nonisolated enum BlurayDisc {
     ) throws -> DiscStreamMap {
         var best: (size: Int64, extents: [DiscExtent])?
         for entry in clips.values where entry.name.uppercased().hasSuffix(".M2TS") {
+            try volume.checkBudget()
             guard case .extents(let extents) = try volume.contents(of: entry.icb) else { continue }
-            let size = extents.reduce(0) { $0 + $1.length }
+            let size = try DiscStreamMap(extents: extents).length
             if size > (best?.size ?? 0) {
                 best = (size, extents)
             }
         }
         guard let best, !best.extents.isEmpty else { throw DiscImageError.noTitle }
-        return DiscStreamMap(extents: best.extents)
+        return try DiscStreamMap(extents: best.extents)
     }
 }
