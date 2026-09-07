@@ -4,7 +4,7 @@ import SwiftUI
 /// connection states are states, not screens you navigate to.
 struct RootView: View {
     @State private var session = SessionStore()
-    @State private var seerr = SeerrSessionStore()
+    private var seerr: SeerrSessionStore { session.seerr }
     @State private var serverSync = ServerSyncState()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -19,6 +19,7 @@ struct RootView: View {
                 AccountPickerView()
             case .signedIn:
                 MainTabView()
+                    .id(session.activeAccount?.id)
             }
         }
         .animation(.easeInOut(duration: Motion.standard), value: session.phase)
@@ -31,8 +32,14 @@ struct RootView: View {
         )) {
             AddAccountView(session: session)
         }
-        .task(id: session.activeAccount?.id) {
-            await seerr.activate(for: session.activeAccount)
+        .alert("Credential Cleanup Incomplete", isPresented: Binding(
+            get: { session.cleanupErrorMessage != nil },
+            set: { if !$0 { session.cleanupErrorMessage = nil } }
+        )) {
+            Button("Retry Cleanup") { session.retryCredentialCleanup() }
+            Button("Later", role: .cancel) { session.cleanupErrorMessage = nil }
+        } message: {
+            Text(session.cleanupErrorMessage ?? "Some saved credentials could not be deleted.")
         }
         // Returning from the device's home screen does not re-run `onAppear`
         // or `task` on the navigation tree SwiftUI kept mounted. Advance one
