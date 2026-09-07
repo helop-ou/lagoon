@@ -241,6 +241,16 @@ content, **not** the `NavigationStack`, or the field is drawn over pushed
 detail pages; and the stack is a heterogeneous `NavigationPath`, because
 results carry both route identities.
 
+Search rails are previews, not the entire result set. See All opens
+`ContentNavigationRoute.search(query)` or `SeerrNavigationRoute.search(query)`
+in that same stack. Both routes use `SearchResultsView`, with a source-specific
+fetch and native Load More Results action. Library cursors count raw server
+items; Seerr cursors follow server page numbers. Filtering unsupported results
+and deduplicating cards must not alter either cursor. Loading and retry retain
+the existing grid and its next-page position. Seerr result identity includes
+media type as well as TMDB ID. Changing the root search query clears its old
+rail matches before the replacement request completes.
+
 ### Top Shelf is a full-screen carousel
 
 `TVTopShelfCarouselItem` has **no `title` property**. It inherits only
@@ -442,6 +452,23 @@ anywhere** — not in discover results, not in details — so Discover's hero
 always falls back to the title in type, which is the same fallback
 `TitleArtImage` makes for a Jellyfin item without a logo.
 
+`HeroCarouselSelection` stores the selected item ID, not its array index.
+Refreshes may reorder the slides without changing the title being viewed;
+removing that ID falls back to the first available item, and an empty list
+clears the selection. iOS binds this state to a native paging ScrollView;
+tvOS handles Left/Right on one stable NavigationLink, wrapping at the ends.
+Up/Down still belongs to the focus engine, and activation always opens the
+visible item's route. VoiceOver gets the slide position and adjustable
+next/previous actions.
+
+Hero rotation is a cancellable seven-second view task, separate from server
+refresh. Its identity includes item IDs, the selected ID, and whether cycling
+is allowed, so manual selection restarts the interval. It runs only while the
+hero is visible, its root destination is active, and the scene is foregrounded;
+touch scrolling, tvOS hero focus, Reduce Motion, and VoiceOver pause it. Home
+also gates it while presenting playback. Artwork/palette work checks cancellation
+before publishing, preventing a superseded slide's palette from landing late.
+
 TMDB serves a fixed set of image widths and answers 400 for anything else, so
 `SeerrClient.imageURL` snaps a requested width up to a real rendition. Ask for
 the width the layout needs; do not hand it an arbitrary number and assume it
@@ -469,12 +496,14 @@ and AVKit are not alternate playback engines. See [playback.md](playback.md).
 - A screen with **no focusable element makes the Menu button quit the app** —
   `LoadingView` is `.focusable()`, error views carry a button.
 - The page-level vertical `ScrollView` uses `.scrollClipDisabled()` and rails
-  pad `top 40 / bottom 80` inside their horizontal ScrollViews — the system
+  use `Metrics.railTopPadding` / `Metrics.railBottomPadding` (48 / 96 pt on
+  tvOS) inside their horizontal ScrollViews — the system
   focus lift draws outside card bounds and gets clipped flat otherwise.
 - The episodes rail stays mounted across season switches (dimmed, not
   replaced by a spinner) so the layout doesn't collapse and yank focus.
-- The hero's CTA button lives **outside** the `.id()`-keyed transitioning
-  subtree so focus survives slide changes.
+- The hero's whole-banner NavigationLink lives **outside** the `.id()`-keyed
+  transitioning label content, so focus survives slide changes. Left/Right
+  changes the selected title, not the identity of the focused control.
 - `.searchable` belongs only on `SearchView`, and on its **content** rather
   than its `NavigationStack`. On a browse screen it costs the top third of
   the display to a keyboard nobody asked for; on the stack it draws the field
