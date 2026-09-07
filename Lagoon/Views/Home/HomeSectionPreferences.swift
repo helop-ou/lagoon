@@ -306,6 +306,24 @@ final class HomeSectionPreferencesStore {
         persist()
     }
 
+    func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        ensureConfigured()
+        // Missing plugin rows remain remembered, but have no index in the
+        // visible List. Reorder only the rows represented by its move action.
+        var visibleIDs = choices.map(\.id)
+        guard offsets.allSatisfy({ visibleIDs.indices.contains($0) }),
+              (0...visibleIDs.count).contains(destination) else { return }
+        visibleIDs.move(fromOffsets: offsets, toOffset: destination)
+        let byID = Dictionary(values.rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let visible = Set(visibleIDs)
+        var reordered = visibleIDs.makeIterator()
+        values.rows = values.rows.map { row in
+            guard visible.contains(row.id), let id = reordered.next() else { return row }
+            return byID[id] ?? row
+        }
+        persist()
+    }
+
     func reset() {
         values = HomeSectionPreferenceValues()
         guard let accountID else { return }
@@ -468,17 +486,10 @@ struct HomeRowsSettingsView: View {
         List {
             Section("Lagoon Native") {
                 ForEach(preferences.nativeChoices) { choice in
-                    Button {
-                        preferences.toggleNative(choice.id)
-                    } label: {
-                        Label(
-                            "\(choice.title) · \(choice.source.rawValue)",
-                            systemImage: choice.isEnabled ? "checkmark.circle.fill" : "circle"
-                        )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
+                    Toggle(choice.title, isOn: Binding(
+                        get: { choice.isEnabled },
+                        set: { _ in preferences.toggleNative(choice.id) }
+                    ))
                     .accessibilityIdentifier("settings.home.native.\(choice.id)")
                 }
             }
@@ -488,43 +499,18 @@ struct HomeRowsSettingsView: View {
                     Text("No plugin rows available on this server.")
                         .foregroundStyle(.secondary)
                 }
-                ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
-                    HStack(spacing: Metrics.Space.m) {
-                        Button {
-                            preferences.toggle(choice.id)
-                        } label: {
-                            Label(
-                                "\(choice.title) · \(choice.source.rawValue)",
-                                systemImage: choice.isEnabled ? "checkmark.circle.fill" : "circle"
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
-
-                        Button {
-                            preferences.move(choice.id, by: -1)
-                        } label: {
-                            Image(systemName: "arrow.up")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(index == 0)
-                        .accessibilityLabel("Move \(choice.title) up")
-
-                        Button {
-                            preferences.move(choice.id, by: 1)
-                        } label: {
-                            Image(systemName: "arrow.down")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(index == preferences.choices.count - 1)
-                        .accessibilityLabel("Move \(choice.title) down")
-                    }
+                ForEach(preferences.choices) { choice in
+                    Toggle(choice.title, isOn: Binding(
+                        get: { choice.isEnabled },
+                        set: { _ in preferences.toggle(choice.id) }
+                    ))
+                    .accessibilityIdentifier("settings.home.row.\(choice.id)")
                 }
+                .onMove(perform: preferences.move(fromOffsets:toOffset:))
             } header: {
                 Text("Home Screen Sections Plugin")
             } footer: {
-                Text("Plugin rows appear after Lagoon's native rows. Turn them on or off and arrange their order here.")
+                Text("Plugin rows appear after Lagoon's native rows. Tap Edit to change their order.")
             }
 
             if preferences.values.isCustomized {
@@ -536,6 +522,11 @@ struct HomeRowsSettingsView: View {
             }
         }
         .navigationTitle("Home Rows")
+        .toolbar {
+            if !preferences.choices.isEmpty {
+                EditButton()
+            }
+        }
         #endif
     }
 }
