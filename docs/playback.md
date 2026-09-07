@@ -10,7 +10,59 @@ plus the static libs FFmpeg's build references (gnutls/nettle/hogweed/gmp
 for TLS, dav1d, uavs3d, lcms2) — MPVKit itself, libmpv, MoltenVK, and
 libplacebo are no longer in the project. The archives are static: the app
 binary links only referenced objects, and the bundle embeds 11 framework
-shells instead of 27.
+shells instead of 27. Lagoon now builds two of those artifacts: dav1d for its
+arm64 assembly (HEL-137), and libavformat for Apple TLS trust (HEL-142).
+
+## Native HTTPS verification (HEL-142)
+
+Native FFmpeg I/O verifies certificates and destination hostnames, including
+direct-file fallback, HLS manifests/segments/keys, redirects and reconnects.
+`FFmpegNetworkPolicy` enforces verification at the app's native opens and
+preserves parent interrupts and protocol restrictions. Cached-HLS native
+fallbacks use this policy too. URLSession-backed cache reads retain system
+trust evaluation.
+
+The owned libavformat 8.1.2 build enables `tls_verify` by default. Its GnuTLS
+backend passes the actual peer chain to Apple's server trust policy; upstream
+GnuTLS does not load iOS/tvOS system roots. This also protects internal opens
+when HLS does not propagate the original options. Native persistent HTTP
+connections remain enabled. There is no trust-all fallback or bundled CA list.
+System and installed trust roots apply; servers must send intermediate
+certificates because trust evaluation disables additional network fetches.
+Plain HTTP server support is unchanged.
+FFmpeg's raw stderr logging is disabled because its HLS errors include complete
+token-bearing URLs. Lagoon retains its error-code and playback diagnostics.
+
+Rebuild with `scripts/build-ffmpeg-format.py`, and run the controlled simulator
+certificate matrix with `scripts/test-ffmpeg-tls.py --all-unit-tests`. Build
+provenance, exact trust behavior, prerequisites and remaining physical-device
+acceptance are documented in
+[`Libavformat.README.md`](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
+
+## Malformed discs and expired sessions (HEL-142)
+
+UDF mounting and Blu-ray/DVD title selection share a cancellable work budget:
+64 KiB per metadata read, 32 MiB requested in total, 2,048 reads, 100,000 checked
+operations and a 30-second deadline checked between synchronous reads and in
+parser loops. Partition/image bounds, exact reads, descriptor and playlist
+sections, continuation cycles and cumulative extent arithmetic are validated.
+Metadata cache reads bypass streaming read-ahead; ordinary playback retains it.
+Unsupported or malformed discs follow the existing server-delivery fallback.
+The demuxer owns its native context from allocation, so setup failures release
+it even before `avformat_open_input` runs.
+
+Authenticated API 401s expire only the request's captured account session.
+The app dismisses playback and opens sign-in for that server, retaining its
+username, remembered identity and preferences. Reauthentication replaces the
+rejected token. Progress reporting also uses this path, so remote revocation
+while buffered media plays is detected on the next authenticated report;
+there is no new expiry polling or startup network probe. Outages and 403s
+preserve credentials; late responses cannot expire a newer session.
+
+The [HEL-142 validation record](hel-142-native-tls-validation.md) documents
+bounds, regression coverage and physical-device acceptance still to perform.
+`python3 scripts/test-session-recovery.py` exercises direct and native HLS
+playback, remote revocation and sign-in against a loopback synthetic server.
 
 ## Stream resolution
 
