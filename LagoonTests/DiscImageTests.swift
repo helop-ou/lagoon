@@ -13,7 +13,7 @@ import Testing
 /// indirection above all — are exactly the ones worth spelling out.
 private struct DiscImageFixture {
     static let sectorSize = 2_048
-    static let sectors = 380
+    static let sectors = 420
     static let partitionStart = 300
     /// Physical blocks holding the metadata file's contents.
     static let metadataStart = 10
@@ -110,16 +110,23 @@ private struct DiscImageFixture {
 /// them.
 private final class InMemoryDiscSource: DiscImageSource {
     private let data: Data
+    private let reportsLength: Bool
     private(set) var reads = 0
+    private(set) var largestRead = 0
+    private(set) var requestedBytes = 0
 
-    init(_ bytes: [UInt8]) {
+    init(_ bytes: [UInt8], reportsLength: Bool = true) {
         data = Data(bytes)
+        self.reportsLength = reportsLength
     }
 
-    var imageLength: Int64? { Int64(data.count) }
+    var imageLength: Int64? { reportsLength ? Int64(data.count) : nil }
 
     func read(at offset: Int64, count: Int) throws -> Data {
         reads += 1
+        largestRead = max(largestRead, count)
+        requestedBytes += count
+        guard count >= 0, count <= 65_536 else { throw DiscImageError.resourceLimit }
         guard offset >= 0, offset < Int64(data.count) else { return Data() }
         let start = Int(offset)
         return data[start..<min(start + count, data.count)]
@@ -146,6 +153,7 @@ private func makePlaylist(items: [(clip: String, seconds: Double)]) -> [UInt8] {
         bytes += withUnsafeBytes(of: UInt16(body.count).bigEndian, Array.init)
         bytes += body
     }
+    bytes.replaceSubrange(start..<(start + 4), with: withUnsafeBytes(of: UInt32(bytes.count - start - 4).bigEndian, Array.init))
     return bytes
 }
 
@@ -164,10 +172,12 @@ private func makeFixture(playlist: [UInt8]) -> [UInt8] {
 
     image.u16(5, sector: 260, 0)                      // partition descriptor
     image.u32(UInt32(F.partitionStart), sector: 260, 188)
+    image.u32(UInt32(F.sectors - F.partitionStart), sector: 260, 192)
 
     image.u16(6, sector: 261, 0)                      // logical volume descriptor
     image.u32(UInt32(F.sectorSize), sector: 261, 212)
     image.longAD(sector: 261, 248, length: 2_048, block: 0, partition: 1)  // file set
+    image.u32(70, sector: 261, 264)
     image.u32(2, sector: 261, 268)                    // two partition maps
     image.u8(1, sector: 261, 440)                     // map 0: physical
     image.u8(6, sector: 261, 441)
@@ -257,10 +267,12 @@ private func makeDVDFixture() -> [UInt8] {
 
     image.u16(5, sector: 260, 0)
     image.u32(UInt32(F.partitionStart), sector: 260, 188)
+    image.u32(UInt32(F.sectors - F.partitionStart), sector: 260, 192)
 
     image.u16(6, sector: 261, 0)
     image.u32(UInt32(F.sectorSize), sector: 261, 212)
     image.longAD(sector: 261, 248, length: 2_048, block: 0, partition: 0)
+    image.u32(6, sector: 261, 264)
     image.u32(1, sector: 261, 268)                    // one partition map
     image.u8(1, sector: 261, 440)                     // physical
     image.u8(6, sector: 261, 441)
@@ -301,6 +313,169 @@ private func makeDVDFixture() -> [UInt8] {
 
 @Suite("Disc images")
 struct DiscImageTests {
+    @Test func hostileICBLengthsAreRejectedBeforeTheSourceIsCalled() throws {
+        let source = InMemoryDiscSource(makeDVDFixture())
+        let volume = try UDFVolume(source: source)
+        let reads = source.reads
+        for length: UInt32 in [65_537, 0x3fff_ffff, .max] {
+            #expect(throws: DiscImageError.resourceLimit) {
+                _ = try volume.entry(.init(block: 1, partition: 0, length: length))
+            }
+        }
+        #expect(source.reads == reads)
+    }
+
+    @Test func physicalAndMetadataMappingsRejectUncoveredRanges() throws {
+        let source = InMemoryDiscSource(makeFixture(playlist: makePlaylist(items: [("00001", 60)])))
+        let volume = try UDFVolume(source: source)
+        let reads = source.reads
+        for icb in [
+            UDFVolume.ICB(block: .max, partition: 0, length: 2048),
+            UDFVolume.ICB(block: 8, partition: 1, length: 2048),
+            UDFVolume.ICB(block: 1, partition: 99, length: 2048),
+        ] {
+            #expect(throws: DiscImageError.self) { _ = try volume.entry(icb) }
+        }
+        #expect(source.reads == reads)
+    }
+
+    @Test func truncatedReadsFailEvenWhenTheTransportDoesNotKnowTheLength() {
+        let source = InMemoryDiscSource(Array(makeDVDFixture().prefix(256 * 2048 + 100)), reportsLength: false)
+        #expect(throws: DiscImageError.self) { _ = try UDFVolume(source: source) }
+        #expect(source.reads == 1)
+    }
+
+    @Test func fileExtentsCannotPointOutsideThePartitionOrImage() throws {
+        var bytes = makeFixture(playlist: makePlaylist(items: [("00001", 60)]))
+        overwrite32(&bytes, DiscImageFixture.metadata(7) * 2048 + 180, .max)
+        let source = InMemoryDiscSource(bytes)
+        let volume = try UDFVolume(source: source)
+        #expect(throws: DiscImageError.self) {
+            _ = try volume.contents(of: .init(block: 7, partition: 1, length: 2048))
+        }
+        #expect(source.largestRead == 2048)
+    }
+
+    @Test func allocationListsCannotExtendBeyondTheirDescriptor() throws {
+        var bytes = makeDVDFixture()
+        overwrite32(&bytes, DiscImageFixture.physical(1) * 2048 + 172, .max)
+        let volume = try UDFVolume(source: InMemoryDiscSource(bytes))
+        #expect(throws: DiscImageError.self) { _ = try volume.list(volume.root) }
+    }
+
+    @Test func allocationContinuationCyclesFailWithoutRepeatedReads() throws {
+        var bytes = makeFixture(playlist: makePlaylist(items: [("00001", 60)]))
+        let root = DiscImageFixture.metadata(1) * 2048
+        bytes[root + 34] = 0
+        overwrite32(&bytes, root + 172, 8)
+        overwrite32(&bytes, root + 176, 0xc000_0800)
+        overwrite32(&bytes, root + 180, 7)
+        let continuation = DiscImageFixture.metadata(7) * 2048
+        bytes[continuation] = 2
+        bytes[continuation + 1] = 1 // allocation extent tag 258
+        overwrite32(&bytes, continuation + 20, 8)
+        overwrite32(&bytes, continuation + 24, 0xc000_0800)
+        overwrite32(&bytes, continuation + 28, 7)
+        let source = InMemoryDiscSource(bytes)
+        let volume = try UDFVolume(source: source)
+        let reads = source.reads
+        #expect(throws: DiscImageError.self) { _ = try volume.contents(of: volume.root) }
+        #expect(source.reads - reads == 2)
+    }
+
+    @Test func metadataLimitsRejectInsteadOfReturningPartialFiles() throws {
+        let volume = try UDFVolume(source: InMemoryDiscSource(makeFixture(playlist: makePlaylist(items: [("00001", 60)]))))
+        #expect(throws: DiscImageError.resourceLimit) { _ = try volume.data(of: volume.root, limit: 1) }
+        #expect(throws: DiscImageError.resourceLimit) {
+            _ = try volume.data(of: .init(block: 3, partition: 1, length: 2048), limit: 2047)
+        }
+    }
+
+    @Test func theReadBudgetCoversTheWholeMount() {
+        let source = InMemoryDiscSource(makeDVDFixture())
+        #expect(throws: DiscImageError.resourceLimit) {
+            _ = try UDFVolume(source: source, budget: DiscReadBudget(bytes: 8192, reads: 4))
+        }
+        #expect(source.reads <= 4)
+        #expect(source.requestedBytes <= 8192)
+    }
+
+    @Test func cancellationStopsMountingAndTitleDetection() throws {
+        let source = InMemoryDiscSource(makeDVDFixture())
+        #expect(throws: CancellationError.self) {
+            _ = try UDFVolume(source: source, budget: DiscReadBudget(isCancelled: { source.reads >= 2 }))
+        }
+        #expect(source.reads == 2)
+        var cancelled = false
+        let volume = try UDFVolume(source: InMemoryDiscSource(makeDVDFixture()),
+                                   budget: DiscReadBudget(isCancelled: { cancelled }))
+        cancelled = true
+        #expect(throws: CancellationError.self) { _ = try DiscTitle.mainTitle(in: volume, runtimeSeconds: nil) }
+    }
+
+    @Test func playlistsRespectTheirSectionAndItemLengthsAndCancellation() {
+        let valid = makePlaylist(items: [("00001", 60)])
+        var shortItem = valid
+        shortItem[68] = 0
+        shortItem[69] = 1
+        var shortSection = valid
+        shortSection[61] = 6
+        for bytes in [shortItem, shortSection, Array(valid.dropLast())] {
+            #expect(throws: DiscImageError.self) {
+                _ = try BlurayPlaylistParser.parse(Data(bytes), name: "fixture")
+            }
+        }
+        #expect(throws: CancellationError.self) {
+            _ = try BlurayPlaylistParser.parse(Data(valid), name: "fixture", budget: DiscReadBudget(isCancelled: { true }))
+        }
+    }
+
+    @Test func checkedByteAndStreamArithmeticCannotTrapOnExtremeValues() {
+        let bytes = DiscBytes(Data([1, 2, 3, 4]))
+        #expect(throws: DiscImageError.self) { _ = try bytes.u16(Int.max) }
+        #expect(throws: DiscImageError.self) { _ = try bytes.u32(Int.max) }
+        #expect(throws: DiscImageError.self) { _ = try bytes.u64(Int.max) }
+        #expect(throws: DiscImageError.self) { _ = try bytes.bytes(1, Int.max) }
+        for extents in [
+            [DiscExtent(offset: -1, length: 1)],
+            [DiscExtent(offset: 0, length: -1)],
+            [DiscExtent(offset: .max, length: 1)],
+            [DiscExtent(offset: 0, length: .max), DiscExtent(offset: 0, length: 1)],
+        ] {
+            #expect(throws: DiscImageError.self) { _ = try DiscStreamMap(extents: extents) }
+        }
+    }
+
+    @Test func mutatedDiscMetadataAlwaysStaysWithinItsReadBudget() {
+        let fixture = makeFixture(playlist: makePlaylist(items: [("00001", 60)]))
+        let positions = [256 * 2048 + 16, 256 * 2048 + 20, 260 * 2048 + 188,
+                         260 * 2048 + 192, 261 * 2048 + 212, 261 * 2048 + 264,
+                         261 * 2048 + 268, DiscImageFixture.metadata(1) * 2048 + 172,
+                         DiscImageFixture.metadata(7) * 2048 + 176]
+        var seed: UInt64 = 0x142
+        for iteration in 0..<128 {
+            seed = seed &* 6364136223846793005 &+ 1
+            var bytes = fixture
+            overwrite32(&bytes, positions[iteration % positions.count], UInt32(truncatingIfNeeded: seed >> 16))
+            let source = InMemoryDiscSource(bytes, reportsLength: iteration % 2 == 0)
+            do {
+                let volume = try UDFVolume(source: source, budget: DiscReadBudget(bytes: 512 * 1024, reads: 128, operations: 4096))
+                _ = try DiscTitle.mainTitle(in: volume, runtimeSeconds: nil)
+            } catch is DiscImageError {
+                // Declining mutated metadata is the intended fallback.
+            } catch {
+                Issue.record("Unexpected error: \(error)")
+            }
+            #expect(source.largestRead <= 65_536)
+            #expect(source.reads <= 128)
+            #expect(source.requestedBytes <= 512 * 1024)
+        }
+    }
+
+    private func overwrite32(_ bytes: inout [UInt8], _ offset: Int, _ value: UInt32) {
+        bytes.replaceSubrange(offset..<(offset + 4), with: withUnsafeBytes(of: value.littleEndian, Array.init))
+    }
+
     @Test func aUDFVolumeResolvesNamesThroughTheMetadataPartition() throws {
         // UDF 2.50 keeps file entries inside a metadata file and the data
         // they describe outside it. A reader that resolves every extent in
@@ -374,8 +549,8 @@ struct DiscImageTests {
         let volume = try UDFVolume(source: InMemoryDiscSource(makeDVDFixture()))
         #expect(try volume.entry(at: "VIDEO_TS") != nil)
         #expect(try volume.entry(at: "BDMV") == nil)
-        #expect(DVDDisc.isDVD(volume))
-        #expect(!BlurayDisc.isBluray(volume))
+        #expect(try DVDDisc.isDVD(volume))
+        #expect(try !BlurayDisc.isBluray(volume))
     }
 
     @Test func aDVDTitleIsItsLargestTitleSetInOrder() throws {
@@ -400,8 +575,8 @@ struct DiscImageTests {
         #expect(DVDDisc.titleSetPart(of: "VTS_01_0.IFO") == nil)
     }
 
-    @Test func aStreamMapTranslatesEveryOffsetOntoTheImage() {
-        let map = DiscStreamMap(extents: [
+    @Test func aStreamMapTranslatesEveryOffsetOntoTheImage() throws {
+        let map = try DiscStreamMap(extents: [
             DiscExtent(offset: 1_000, length: 100),
             DiscExtent(offset: 50_000, length: 50),
         ])
@@ -466,7 +641,7 @@ struct DiscImageTests {
         let underlying = RecordingByteSource()
         let stream = DiscImageStream(
             source: underlying,
-            map: DiscStreamMap(extents: [
+            map: try DiscStreamMap(extents: [
                 DiscExtent(offset: 1_000, length: 100),
                 DiscExtent(offset: 50_000, length: 50),
             ])
