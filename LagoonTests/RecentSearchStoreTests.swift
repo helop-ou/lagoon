@@ -10,7 +10,9 @@ struct RecentSearchStoreTests {
         let suite = "RecentSearchStoreTests.\(function)"
         UserDefaults.standard.removePersistentDomain(forName: suite)
         let defaults = UserDefaults(suiteName: suite)!
-        return (RecentSearchStore(defaults: defaults), defaults)
+        let store = RecentSearchStore(defaults: defaults)
+        store.configure(accountID: "viewer-a")
+        return (store, defaults)
     }
 
     @Test @MainActor func mostRecentComesFirst() {
@@ -80,8 +82,9 @@ struct RecentSearchStoreTests {
     @Test @MainActor func anAlreadyPollutedHistoryFoldsOnTheNextSearch() throws {
         let (_, defaults) = makeStore()
         let stored = ["dun", "du", "d", "severance"]
-        defaults.set(try JSONEncoder().encode(stored), forKey: "search.recents")
+        defaults.set(try JSONEncoder().encode(stored), forKey: "search.recents.viewer-a")
         let store = RecentSearchStore(defaults: defaults)
+        store.configure(accountID: "viewer-a")
         store.record("dune")
         #expect(store.terms == ["dune", "severance"])
     }
@@ -110,6 +113,7 @@ struct RecentSearchStoreTests {
         store.record("dune")
         store.record("severance")
         let reopened = RecentSearchStore(defaults: defaults)
+        reopened.configure(accountID: "viewer-a")
         #expect(reopened.terms == ["severance", "dune"])
     }
 
@@ -120,7 +124,9 @@ struct RecentSearchStoreTests {
         store.record("dune")
         store.clear()
         #expect(store.terms.isEmpty)
-        #expect(RecentSearchStore(defaults: defaults).terms.isEmpty)
+        let reopened = RecentSearchStore(defaults: defaults)
+        reopened.configure(accountID: "viewer-a")
+        #expect(reopened.terms.isEmpty)
     }
 
     /// A defaults value written by a future build with a bigger limit must
@@ -128,7 +134,9 @@ struct RecentSearchStoreTests {
     @Test @MainActor func anOverlongStoredListIsTrimmedOnLoad() throws {
         let (_, defaults) = makeStore()
         let stored = (0..<(RecentSearchStore.limit + 8)).map { "term \($0)" }
-        defaults.set(try JSONEncoder().encode(stored), forKey: "search.recents")
-        #expect(RecentSearchStore(defaults: defaults).terms.count == RecentSearchStore.limit)
+        defaults.set(try JSONEncoder().encode(stored), forKey: "search.recents.viewer-a")
+        let reopened = RecentSearchStore(defaults: defaults)
+        reopened.configure(accountID: "viewer-a")
+        #expect(reopened.terms.count == RecentSearchStore.limit)
     }
 }
