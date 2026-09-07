@@ -49,6 +49,8 @@ final class SeerrClient {
     private nonisolated static func uncachedSession() -> URLSession {
         let configuration = URLSessionConfiguration.default
         configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
         return URLSession(configuration: configuration)
     }
 
@@ -64,7 +66,15 @@ final class SeerrClient {
     }
 
     func setSessionCookie(_ cookie: String?) {
+        configurationGeneration += 1
         sessionCookie = cookie
+    }
+
+    func sessionSnapshot() -> SeerrClient {
+        let copy = SeerrClient(session: session, requestTimeout: requestTimeout)
+        if let serverURL { copy.configure(serverURL: serverURL) }
+        copy.setSessionCookie(sessionCookie)
+        return copy
     }
 
     // MARK: - Server and authentication
@@ -349,6 +359,7 @@ final class SeerrClient {
         guard let url = components?.url else { throw SeerrError.invalidServerURL }
 
         var request = URLRequest(url: url)
+        request.httpShouldHandleCookies = false
         request.httpMethod = method
         request.timeoutInterval = requestTimeout
         // Never answer a Seerr call from an HTTP cache. The live-refresh loops
