@@ -851,7 +851,18 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     }
 
     func read(offset: Int64, length: Int, priority: Float = URLSessionTask.highPriority) throws -> Data {
+        try read(offset: offset, length: length, priority: priority, readAhead: true)
+    }
+
+    /// Disc metadata has its own aggregate byte budget. Do not amplify a
+    /// small descriptor read into the streaming cache's megabyte read-ahead.
+    func readMetadata(offset: Int64, length: Int) throws -> Data {
+        try read(offset: offset, length: length, priority: URLSessionTask.highPriority, readAhead: false)
+    }
+
+    private func read(offset: Int64, length: Int, priority: Float, readAhead: Bool) throws -> Data {
         guard offset >= 0, length > 0 else { return Data() }
+        guard Int64(length) <= Int64.max - offset else { throw PlaybackCacheError.invalidResponse }
         try checkCancellation()
         lock.lock()
         if file == nil, !storageDisabled {
@@ -901,7 +912,7 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         }) {
             _ = lock.wait(until: Date().addingTimeInterval(15))
             lock.unlock()
-            return try read(offset: offset, length: length, priority: priority)
+            return try read(offset: offset, length: length, priority: priority, readAhead: readAhead)
         }
 
         // Make room before deciding how much to ask for. A read whose bytes
@@ -909,9 +920,9 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         // whole request to satisfy one AVIO buffer and discarding the rest
         // multiplies both bandwidth and round trips by the ratio between them,
         // which is what turned a full cache into permanent rebuffering.
-        makeRoomLocked(for: requestSize)
-        let readAheadEnd = storableCapacityLocked() > 0
-            ? max(requested.upperBound, requested.lowerBound + requestSize)
+        makeRoomLocked(for: readAhead ? requestSize : requested.count)
+        let readAheadEnd = readAhead && storableCapacityLocked() > 0
+            ? max(requested.upperBound, requested.lowerBound + min(requestSize, Int64.max - requested.lowerBound))
             : requested.upperBound
         let fetchEnd = min(readAheadEnd, knownLength ?? Int64.max)
         let fetchRange = PlaybackByteRange(requested.lowerBound, fetchEnd)
