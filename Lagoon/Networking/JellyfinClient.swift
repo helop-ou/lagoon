@@ -63,6 +63,7 @@ final class JellyfinClient {
     private var subtitleManagementAllowed: Bool?
 
     private let session: URLSession
+    private let downloads: BoundedDownload
 
     nonisolated static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -93,6 +94,7 @@ final class JellyfinClient {
         // playback cache have their own sessions), and see `request(for:)`.
         config.urlCache = nil
         session = URLSession(configuration: config)
+        downloads = BoundedDownload(configuration: config)
     }
 
     // MARK: - Session state
@@ -235,13 +237,14 @@ final class JellyfinClient {
     func getData(
         _ pathComponents: [String],
         query: [URLQueryItem] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        maximumBytes: Int? = nil
     ) async throws -> Data {
         try await data(for: request(
             for: url(pathComponents: pathComponents, query: query),
             method: "GET",
             timeout: timeout
-        ))
+        ), maximumBytes: maximumBytes)
     }
 
     func post<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
@@ -322,13 +325,30 @@ final class JellyfinClient {
         return try Self.decoder.decode(T.self, from: data)
     }
 
-    private func data(for request: PreparedRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request.request)
+    private func data(for request: PreparedRequest, maximumBytes: Int? = nil) async throws -> Data {
+        let data: Data
+        let status: Int
+        if let maximumBytes {
+            do {
+                data = try await downloads.data(for: request.request, limit: maximumBytes, content: .subtitle)
+                status = 200
+            } catch DownloadFailure.httpStatus(let code, let body) {
+                data = body
+                status = code
+            } catch {
+                if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
+                throw error
+            }
+        } else {
+            let response: URLResponse
+            (data, response) = try await session.data(for: request.request)
+            guard let http = response as? HTTPURLResponse else { throw JellyfinError.server(status: 0) }
+            status = http.statusCode
+        }
         // A response belongs to the session captured before suspension. Even
         // a successful old response must not update the new account's screen.
         if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
-        guard let http = response as? HTTPURLResponse else { throw JellyfinError.server(status: 0) }
-        switch http.statusCode {
+        switch status {
         case 200...299:
             return data
         case 401:
@@ -340,7 +360,7 @@ final class JellyfinClient {
             throw JellyfinError.unauthorized
         default:
             throw JellyfinError.server(
-                status: http.statusCode,
+                status: status,
                 message: Self.serverMessage(from: data)
             )
         }
@@ -349,7 +369,7 @@ final class JellyfinClient {
     /// Pulls a human sentence out of an error body. Jellyfin answers with
     /// problem-details JSON, plain text, or an HTML page depending on where
     /// the failure happened; only the first two say anything worth showing.
-    static func serverMessage(from data: Data) -> String? {
+    nonisolated static func serverMessage(from data: Data) -> String? {
         guard !data.isEmpty, data.count < 64 * 1_024 else { return nil }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             for key in ["detail", "title", "message", "Message", "error"] {
@@ -365,7 +385,7 @@ final class JellyfinClient {
         return condensed(text)
     }
 
-    private static func condensed(_ value: String) -> String? {
+    private nonisolated static func condensed(_ value: String) -> String? {
         let clean = value
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
