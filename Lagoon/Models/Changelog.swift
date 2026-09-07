@@ -29,6 +29,30 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "89",
+            released: "September 2026",
+            headline: "One Library, fuller search results, and a more comfortable iPhone experience.",
+            changes: [
+                "Movies and shows now share one Library tab. Browse everything together, or choose Movies or Shows.",
+                "Sort your Library by title, recently added, release date or rating, and combine filters for genre, unwatched titles, favourites and 4K movies. Your choices are remembered separately for each account.",
+                "Filter by decade using the years actually represented in your library, with choices that update as your collection changes. A library selector appears when your server has multiple movie or show libraries to choose between.",
+                "Search now offers See All for both your Jellyfin library and Seerr, with more results loading as you scroll. Changing the search clears the previous matches instead of leaving unrelated titles on screen.",
+                "Rows on iPhone and iPad have more breathing room, with clearer space between headings, artwork and the next row.",
+                "The Home banner on iPhone and iPad is shorter and wider, with compact text and centered page indicators, so more of your library is visible underneath.",
+                "Grids, title details, request cards and action buttons on iPhone and iPad adapt to the space available and larger text sizes, instead of squeezing labels and controls together.",
+                "Posters, backdrops and episode artwork are sharper on high-resolution screens and update when their display size changes.",
+                "On iPhone and iPad, tapping an episode opens its details before playback. Seasons are chosen from a standard menu.",
+                "Seerr titles that are only partly available can now open in Lagoon when the title is already in Jellyfin, so you can reach the episodes you have without waiting for the rest.",
+                "The iPhone and iPad player uses standard toolbar controls and a resizable playback-options sheet, with clearer track choices and controls for speed and audio delay. VoiceOver keeps the playback controls available and can move the playhead in ten-second steps.",
+                "Settings on iPhone and iPad is organised into Account, Playback, Audio, Subtitles, Home Rows, Seerr, Advanced and About pages. Each opens separately instead of putting every setting in one long view.",
+                "Settings → Home Rows on iPhone and iPad uses standard switches to show or hide rows and Edit to reorder them.",
+                "Settings → Subtitles → Subtitle Appearance explains when captions follow the system's accessibility settings. Lagoon's custom appearance controls are shown only when system styling is turned off.",
+                "Add Account opens sign-in for your current Jellyfin server, with Use Another Server available when needed. Cancelling setup leaves your existing Jellyfin account and Seerr connection untouched.",
+                "Server entry and sign-in on iPhone and iPad have lighter native input fields without filled boxes. Username offers Next to move to Password, while password and server address offer Go.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "88",
             released: "September 2026",
             headline: "Rows pick up the colour of what you are looking at.",
