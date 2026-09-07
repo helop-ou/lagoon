@@ -125,7 +125,7 @@ struct SeriesDetailView: View {
     @ViewBuilder
     private var actions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            HStack(spacing: Metrics.detailActionSpacing) {
+            AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
                 if let episode = subject {
                     Button {
                         playerItem = PlayerItem(media: episode)
@@ -154,6 +154,22 @@ struct SeriesDetailView: View {
     private var seasonChips: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.s) {
             if !viewModel.seasons.isEmpty {
+                #if os(iOS)
+                Picker("Season", selection: Binding(
+                    get: { viewModel.selectedSeasonId },
+                    set: { id in
+                        guard let id else { return }
+                        Task { await viewModel.selectSeason(id, client: session.client, seriesId: item.id) }
+                    }
+                )) {
+                    ForEach(viewModel.seasons) { season in
+                        Text(season.name ?? "Season").tag(Optional(season.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("series.season")
+                #else
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: Metrics.Space.m) {
                         ForEach(viewModel.seasons) { season in
@@ -178,6 +194,7 @@ struct SeriesDetailView: View {
                     .padding(.vertical, Metrics.Space.l)
                 }
                 .padding(.horizontal, -Metrics.screenGutter)
+                #endif
             }
         }
     }
@@ -221,17 +238,33 @@ struct EpisodeCard: View {
     let action: () -> Void
 
     @Environment(SessionStore.self) private var session
+    @Environment(\.displayScale) private var displayScale
     @FocusState private var isFocused: Bool
 
     private var cardWidth: CGFloat { Metrics.landscapeWidth * 0.89 }
     private var cardHeight: CGFloat { (cardWidth * 9 / 16).rounded() }
 
     var body: some View {
-        Button(action: action) {
+        Group {
+            #if os(iOS)
+            NavigationLink(value: ContentNavigationRoute.item(episode)) { artwork }
+            #else
+            Button(action: action) { artwork }
+            #endif
+        }
+        .focused($isFocused)
+        .cardButtonStyle()
+        .accessibilityLabel([episode.episodeLabel, episode.name].compactMap { $0 }.joined(separator: " · "))
+        .onChange(of: isFocused) { _, focused in
+            if focused { onFocus?() }
+        }
+    }
+
+    private var artwork: some View {
             ZStack(alignment: .bottomLeading) {
                 CachedAsyncImage(
-                    url: session.client.imageURL(for: episode, kind: .thumb, maxWidth: Int(cardWidth * 1.5)),
-                    maxPixelSize: Int(cardWidth * 1.5)
+                    url: session.client.imageURL(for: episode, kind: .thumb, maxWidth: ArtworkSizing.pixels(for: cardWidth, displayScale: displayScale)),
+                    maxPixelSize: ArtworkSizing.pixels(for: cardWidth, displayScale: displayScale)
                 ) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
@@ -263,12 +296,5 @@ struct EpisodeCard: View {
             }
             .frame(width: cardWidth, height: cardHeight)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-        }
-        .focused($isFocused)
-        .cardButtonStyle()
-        .accessibilityLabel(episode.name ?? "Episode")
-        .onChange(of: isFocused) { _, focused in
-            if focused { onFocus?() }
-        }
     }
 }
