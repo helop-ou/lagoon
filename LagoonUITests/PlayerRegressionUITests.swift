@@ -1794,20 +1794,26 @@ final class PlayerRegressionUITests: XCTestCase {
 
         // The unified Library can restore All or Shows from an earlier
         // visit. This journey exercises movie detail -> related movie.
-        let picker = app.segmentedControls["library.kind"]
-        let movies = picker.buttons["Movies"]
-        for _ in 0..<10 where !movies.hasFocus {
-            if picker.buttons["All"].hasFocus {
-                remote.press(.right)
-            } else if picker.buttons["Shows"].hasFocus {
-                remote.press(.left)
-            } else {
-                remote.press(.down)
-            }
+        let picker = app.descendants(matching: .any)["library.kind"]
+        func pickerOwnsFocus() -> Bool {
+            picker.hasFocus || picker.descendants(matching: .any)
+                .allElementsBoundByIndex.contains(where: \.hasFocus)
+        }
+        for _ in 0..<10 where !pickerOwnsFocus() {
+            remote.press(.down)
             Thread.sleep(forTimeInterval: 0.2)
         }
+        XCTAssertTrue(pickerOwnsFocus())
+        remote.press(.select)
+        let all = app.cells.containing(NSPredicate(format: "label == %@", "All")).firstMatch
+        XCTAssertTrue(all.waitForExistence(timeout: 5))
+        moveFocus(to: all, maxPresses: 4) { remote.press(.up) }
+        let movies = app.cells.containing(NSPredicate(format: "label == %@", "Movies")).firstMatch
+        moveFocus(to: movies, maxPresses: 4) { remote.press(.down) }
         XCTAssertTrue(movies.hasFocus)
-        XCTAssertTrue(movies.isSelected)
+        remote.press(.select)
+        XCTAssertTrue(movies.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(picker.value as? String, "Movies")
 
         let posters = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
