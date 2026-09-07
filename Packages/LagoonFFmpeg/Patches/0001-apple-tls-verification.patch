@@ -1,0 +1,116 @@
+--- a/libavformat/tls.h
++++ b/libavformat/tls.h
+@@ -68,11 +68,7 @@
+ 
+ #define TLS_OPTFL (AV_OPT_FLAG_DECODING_PARAM | AV_OPT_FLAG_ENCODING_PARAM)
+ 
+-#if FF_API_NO_DEFAULT_TLS_VERIFY
+-#define TLS_VERIFY_DEFAULT 0
+-#else
+-#define TLS_VERIFY_DEFAULT 1
+-#endif
++#define TLS_VERIFY_DEFAULT 1 /* Lagoon: verify every native TLS connection. */
+ 
+ #define FF_TLS_CLIENT_OPTIONS(pstruct, options_field) \
+     {"ca_file",    "Certificate Authority database file", offsetof(pstruct, options_field . ca_file),   AV_OPT_TYPE_STRING, .flags = TLS_OPTFL }, \
+--- a/libavformat/tls_gnutls.c
++++ b/libavformat/tls_gnutls.c
+@@ -21,6 +21,11 @@
+ 
+ #include <errno.h>
+ 
++#ifdef __APPLE__
++#include <CoreFoundation/CoreFoundation.h>
++#include <Security/Security.h>
++#endif
++
+ #include <gnutls/gnutls.h>
+ #include <gnutls/dtls.h>
+ #include <gnutls/x509.h>
+@@ -525,6 +530,63 @@
+     return ret;
+ }
+ 
++#ifdef __APPLE__
++/* GnuTLS does not load system roots on iOS/tvOS. Evaluate the actual TLS
++ * peer chain using Apple's server policy, including the destination hostname.
++ * Peer certificates are intermediates, never additional trust anchors. */
++static int tls_verify_apple(URLContext *h, gnutls_session_t session,
++                            const char *hostname)
++{
++    unsigned int count = 0;
++    const gnutls_datum_t *peers;
++    CFMutableArrayRef certificates = NULL;
++    CFStringRef host = NULL;
++    SecPolicyRef policy = NULL;
++    SecTrustRef trust = NULL;
++    int ret = AVERROR(EIO);
++
++    if (!hostname || !hostname[0] ||
++        gnutls_certificate_type_get(session) != GNUTLS_CRT_X509)
++        goto end;
++    peers = gnutls_certificate_get_peers(session, &count);
++    if (!peers || !count)
++        goto end;
++    certificates = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
++    if (!certificates)
++        goto end;
++    for (unsigned int i = 0; i < count; i++) {
++        CFDataRef der = CFDataCreate(NULL, peers[i].data, peers[i].size);
++        SecCertificateRef certificate = der ? SecCertificateCreateWithData(NULL, der) : NULL;
++        if (der)
++            CFRelease(der);
++        if (!certificate)
++            goto end;
++        CFArrayAppendValue(certificates, certificate);
++        CFRelease(certificate);
++    }
++    host = CFStringCreateWithCString(NULL, hostname, kCFStringEncodingUTF8);
++    if (!host)
++        goto end;
++    policy = SecPolicyCreateSSL(true, host);
++    if (!policy || SecTrustCreateWithCertificates(certificates, policy, &trust) != errSecSuccess)
++        goto end;
++    /* Offline evaluation keeps FFmpeg's network timeout/cancellation bounded.
++     * Servers must send their intermediates; installed/system roots are used. */
++    if (SecTrustSetNetworkFetchAllowed(trust, false) != errSecSuccess)
++        goto end;
++    if (SecTrustEvaluateWithError(trust, NULL))
++        ret = 0;
++end:
++    if (trust) CFRelease(trust);
++    if (policy) CFRelease(policy);
++    if (host) CFRelease(host);
++    if (certificates) CFRelease(certificates);
++    if (ret < 0)
++        av_log(h, AV_LOG_ERROR, "TLS peer certificate or hostname failed Apple trust verification\n");
++    return ret;
++}
++#endif
++
+ static int tls_open(URLContext *h, const char *uri, int flags, AVDictionary **options)
+ {
+     TLSContext *c = h->priv_data;
+@@ -572,7 +634,7 @@
+         if (ret < 0)
+             av_log(h, AV_LOG_ERROR, "%s\n", gnutls_strerror(ret));
+     }
+-#if GNUTLS_VERSION_NUMBER >= 0x030020
++#if GNUTLS_VERSION_NUMBER >= 0x030020 && !defined(__APPLE__)
+     else
+         gnutls_certificate_set_x509_system_trust(c->cred);
+ #endif
+@@ -648,6 +710,13 @@
+             goto fail;
+     }
+     c->need_shutdown = 1;
++#ifdef __APPLE__
++    if (s->verify && !s->ca_file) {
++        ret = tls_verify_apple(h, c->session, s->host);
++        if (ret < 0)
++            goto fail;
++    } else
++#endif
+     if (s->verify) {
+         unsigned int status, cert_list_size;
+         gnutls_x509_crt_t cert;
