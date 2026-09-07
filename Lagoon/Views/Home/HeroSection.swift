@@ -31,7 +31,7 @@ struct HeroSection<Route: Hashable>: View {
         #if os(tvOS)
         Metrics.heroHeight
         #else
-        max(Metrics.heroHeight, textHeight + Metrics.heroLogoHeight + Metrics.Space.section)
+        max(Metrics.heroHeight, textHeight + Metrics.heroLogoHeight + Metrics.Space.xxl)
         #endif
     }
 
@@ -106,15 +106,19 @@ struct HeroSection<Route: Hashable>: View {
                         title: item.title,
                         maxHeight: Metrics.heroLogoHeight
                     )
+                    #if os(iOS)
+                    .lineLimit(2)
+                    #endif
                     if let overview = item.overview {
                         Text(overview)
                             .font(.callout)
                             #if os(tvOS)
                             .foregroundStyle(.secondary)
+                            .lineLimit(4)
                             #else
                             .foregroundStyle(.primary)
+                            .lineLimit(2)
                             #endif
-                            .lineLimit(4)
                     }
                 }
                 .id(item.id)
@@ -134,14 +138,24 @@ struct HeroSection<Route: Hashable>: View {
             // smaller of the two.
             .frame(maxWidth: max(0, min(Metrics.heroTextWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
+            #if os(iOS)
+            // Anchor the copy low in the shorter banner, leaving artwork
+            // above and a dedicated strip below for the page indicator.
+            .frame(maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(.bottom, Metrics.Space.xxl)
+            #endif
         }
         .frame(width: width, height: panelHeight)
         #if os(iOS)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-        #endif
+        .overlay(alignment: .bottom) {
+            dots.padding(.bottom, Metrics.Space.l)
+        }
+        #else
         .overlay(alignment: .bottomLeading) {
             dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
         }
+        #endif
     }
 
     /// tvOS darkens only the left column the text occupies and leaves the
