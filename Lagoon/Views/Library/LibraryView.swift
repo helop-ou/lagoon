@@ -12,6 +12,8 @@ struct LibraryView: View {
     @State private var decadeRetry = 0
     @State private var genreViewModel = LibraryGenreViewModel()
     @State private var genreRetry = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let posterLayout = PosterLayout()
 
     private struct DecadeRequest: Hashable {
         let scope: LibraryYearScope
@@ -85,9 +87,8 @@ struct LibraryView: View {
             }
             #else
             kindPicker
-            HStack(spacing: Metrics.Space.m) {
+            AdaptiveActionStack {
                 sortMenu
-                Spacer(minLength: Metrics.Space.s)
                 filterMenu
             }
             resultCount
@@ -119,7 +120,7 @@ struct LibraryView: View {
         .accessibilityLabel("Media Type")
         .accessibilityValue(selection.kind.title)
         #else
-        .pickerStyle(.segmented)
+        .modifier(LibraryKindPickerStyle(usesMenu: dynamicTypeSize.isAccessibilitySize))
         #endif
         .accessibilityIdentifier("library.kind")
     }
@@ -244,7 +245,7 @@ struct LibraryView: View {
                 LoadingView()
             }
         } else {
-            LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.gridRowSpacing) {
+            LazyVGrid(columns: posterLayout.columns, spacing: Metrics.gridRowSpacing) {
                 ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
                     PosterCard(item: item)
                         .itemUserDataMenu(item: item)
@@ -317,3 +318,18 @@ struct LibraryView: View {
         await genreViewModel.load { try await session.client.genres() }
     }
 }
+
+#if os(iOS)
+private struct LibraryKindPickerStyle: ViewModifier {
+    let usesMenu: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if usesMenu {
+            content.pickerStyle(.menu).buttonStyle(.glass)
+        } else {
+            content.pickerStyle(.segmented)
+        }
+    }
+}
+#endif
