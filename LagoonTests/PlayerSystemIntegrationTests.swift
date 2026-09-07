@@ -693,8 +693,9 @@ struct PlayerSystemIntegrationTests {
         #expect(!retired)
     }
 
-    @Test @MainActor func downloadedSubtitleIsInsertedAndSelectedAtRuntime() {
+    @Test @MainActor func downloadedSubtitleIsInsertedAndSelectedAtRuntime() async throws {
         let engine = SampleBufferPlayerEngine()
+        defer { engine.shutdown() }
         engine.addExternalSubtitle(ExternalSubtitleTrack(
             url: URL(string: "https://example.invalid/subtitle.vtt")!,
             preloadedData: Data("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n".utf8),
@@ -705,6 +706,7 @@ struct PlayerSystemIntegrationTests {
             isDownloaded: true
         ))
         #expect(engine.subtitleTracks.count == 1)
+        try await waitUntil { engine.subtitleTracks[0].isSelected }
         #expect(engine.subtitleTracks[0].isSelected)
         #expect(engine.subtitleTracks[0].source == .downloaded)
         #expect(engine.subtitleTracks[0].isHearingImpaired)
@@ -1089,7 +1091,8 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
             url: url,
             statusCode: status,
             httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
+            headerFields: ["Content-Type": url.path.hasPrefix("/Providers/Subtitles/Subtitles/") && status == 200
+                          ? "application/x-subrip" : "application/json"]
         ) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
