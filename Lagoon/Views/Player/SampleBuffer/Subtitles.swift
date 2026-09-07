@@ -416,7 +416,8 @@ nonisolated enum ASSSubtitleTextParser {
 /// device profile; srt tolerated since the timestamp shapes overlap).
 nonisolated enum SubtitleParser {
     static func cues(from data: Data, languageHint: String? = nil) -> [SubtitleCue] {
-        guard let content = SubtitleTextDecoder.text(from: data, languageHint: languageHint) else {
+        guard data.count <= DownloadLimit.subtitle, !Task.isCancelled,
+              let content = SubtitleTextDecoder.text(from: data, languageHint: languageHint) else {
             return []
         }
         var result: [SubtitleCue] = []
@@ -425,13 +426,14 @@ nonisolated enum SubtitleParser {
             .replacingOccurrences(of: "\r\n", with: "\n")
             .components(separatedBy: "\n\n")
         for block in blocks {
+            guard !Task.isCancelled else { return [] }
             let lines = block.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
             guard let timingIndex = lines.firstIndex(where: { $0.contains("-->") }) else { continue }
             let timing = lines[timingIndex].components(separatedBy: "-->")
             guard timing.count == 2,
                   let start = seconds(fromTimestamp: timing[0]),
                   let end = seconds(fromTimestamp: timing[1]),
-                  end > start else { continue }
+                  start.isFinite, end.isFinite, start >= 0, end > start else { continue }
             let text = lines[(timingIndex + 1)...]
                 .map { $0.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression) }
                 .joined(separator: "\n")
