@@ -12,6 +12,35 @@ extension JellyfinClient {
         return page.items
     }
 
+    func libraryItems(_ selection: LibrarySelection, startIndex: Int, limit: Int) async throws -> ItemsPage {
+        try await items(
+            parentId: selection.libraryID,
+            includeTypes: selection.kind.includeTypes,
+            sortBy: selection.sort.sortBy,
+            sortOrder: selection.sort.sortOrder,
+            genres: selection.genre.map { [$0] } ?? [],
+            startIndex: startIndex,
+            limit: limit,
+            filters: selection.filters,
+            years: selection.decade?.years ?? [],
+            is4K: selection.kind == .movies && selection.only4K ? true : nil
+        )
+    }
+
+    func libraryYears(_ scope: LibraryYearScope) async throws -> [Int] {
+        var query = [
+            URLQueryItem(name: "UserId", value: try requireUserId()),
+            URLQueryItem(name: "IncludeItemTypes", value: scope.kind.includeTypes.map(\.rawValue).joined(separator: ",")),
+        ]
+        if let libraryID = scope.libraryID {
+            query.append(URLQueryItem(name: "ParentId", value: libraryID))
+        }
+        // Filters2 has no Years field. The legacy filters endpoint returns
+        // all production years, recursively scoped to the user and library.
+        let filters: LibraryYearFilters = try await get("Items/Filters", query: query)
+        return filters.years
+    }
+
     /// One browse query, shared by the library screens and by Home's curated
     /// rows (HEL-120). The filter arguments are all optional and all omitted
     /// from the URL when unset, so a caller pays only for what it asks for.
