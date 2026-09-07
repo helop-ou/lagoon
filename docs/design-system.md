@@ -562,7 +562,16 @@ opening or navigating between categories must not change a saved preference.
   follow layout dimensions and display scale via `ArtworkSizing`;
   hero/backdrops 1920, palette 120) and `ShouldCacheImmediately` so the render
   thread never decompresses JPEGs,
-- NSCache capped at 200 images / 50 MB, in-flight loads coalesced per key.
+- NSCache capped at 200 images / 50 MB, in-flight loads coalesced per key,
+- source responses capped at 16 MiB before image decoding, with HTTP/content
+  validation and incomplete images rejected by ImageIO,
+- each coalesced caller can cancel independently; the transfer stops when its
+  last waiter leaves. Failed images remain placeholders and are not cached.
+
+Now Playing shares this loader with a 1024-pixel budget. Top Shelf applies the
+same source cap and validated thumbnail decoder before composition. Trickplay
+uses its separate two-sheet decoded cache, a 32 MiB compressed-byte cache and
+the same 16 MiB per-response cap. See [download hardening validation](download-hardening-validation.md).
 
 Always pass a sensible `maxPixelSize` — requesting full-size art on a rail
 card is the difference between smooth and stuttering focus scrolling.
