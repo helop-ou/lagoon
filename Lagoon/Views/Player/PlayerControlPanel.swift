@@ -31,6 +31,7 @@ enum PlayerControlFocus: Hashable {
 /// Values and actions are injected so Debug settings can exercise the same
 /// focusable controls with representative data and harmless local state.
 struct PlayerControlPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var selectedTab: PlayerPanelTab
     let focus: FocusState<PlayerControlFocus?>.Binding
     let info: PlayerItemInfo
@@ -58,6 +59,22 @@ struct PlayerControlPanel: View {
     private var trackListMaxHeight: CGFloat { 360 }
 
     var body: some View {
+        #if os(iOS)
+        NavigationStack {
+            Form {
+                Section { tabBar }
+                Section { tabContent }
+            }
+            .navigationTitle("Playback")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "xmark", role: .close) { onDismiss?() }
+                        .accessibilityIdentifier("player.panel.close")
+                }
+            }
+        }
+        #else
         VStack(spacing: Metrics.Space.xl) {
             VStack(spacing: Metrics.Space.l) {
                 // Only the sibling glass tabs need shared sampling and
@@ -78,20 +95,21 @@ struct PlayerControlPanel: View {
         }
         .padding(.top, Metrics.railTopPadding)
         .defaultFocus(focus, .tab(selectedTab))
-        #if os(iOS)
-        .background(
-            // Dim + tap-out on iOS; tvOS closes via Menu.
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture { onDismiss?() }
-        )
         #endif
     }
 
     // Native buttons only: the system's focused lozenge IS the Infuse
     // white-pill look — never draw custom focus chrome around it. The
     // active tab keeps bold text once focus moves down into the card.
+    @ViewBuilder
     private var tabBar: some View {
+        #if os(iOS)
+        if dynamicTypeSize.isAccessibilitySize {
+            tabPicker.pickerStyle(.menu)
+        } else {
+            tabPicker.pickerStyle(.segmented)
+        }
+        #else
         HStack(spacing: Metrics.Space.m) {
             ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
                 Button {
@@ -108,17 +126,31 @@ struct PlayerControlPanel: View {
             }
         }
         .frame(maxWidth: .infinity)
+        #endif
+    }
+
+    private var tabPicker: some View {
+        Picker("Options", selection: $selectedTab) {
+            ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
+                Text(tab.title).tag(tab)
+                    .accessibilityIdentifier("player.tab.\(String(describing: tab))")
+            }
+        }
+        .accessibilityIdentifier("player.panel.tabs")
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        switch selectedTab {
+        case .info: infoCard
+        case .video: videoCard
+        case .audio: audioCard
+        case .subtitles: subtitleCard
+        }
     }
 
     private var tabCard: some View {
-        Group {
-            switch selectedTab {
-            case .info: infoCard
-            case .video: videoCard
-            case .audio: audioCard
-            case .subtitles: subtitleCard
-            }
-        }
+        tabContent
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(PlayerPanelMetrics.cardPadding)
         // Native focused controls choose their own label color. Forcing a
@@ -138,7 +170,46 @@ struct PlayerControlPanel: View {
         }
     }
 
+    @ViewBuilder
     private var infoCard: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            Text(combinedTitle)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            if let overview = info.overview {
+                Text(overview)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !info.facts.isEmpty {
+                Text(info.facts.joined(separator: " · "))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            AdaptiveActionStack {
+                if let onTogglePictureInPicture {
+                    Button(action: onTogglePictureInPicture) {
+                        Label(
+                            isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
+                            systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
+                        )
+                    }
+                    .buttonStyle(.glass)
+                    .labelStyle(.titleAndIcon)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
+                    .accessibilityIdentifier("player.pictureInPicture")
+                }
+                AirPlayRoutePicker()
+                    .frame(width: Metrics.touchTarget, height: Metrics.touchTarget)
+                    .accessibilityLabel("AirPlay")
+            }
+        }
+        #else
         HStack(alignment: .top, spacing: Metrics.Space.l) {
             CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
                 image
@@ -197,6 +268,7 @@ struct PlayerControlPanel: View {
                 .accessibilityLabel("AirPlay")
             #endif
         }
+        #endif
     }
 
     private var combinedTitle: String {
@@ -247,6 +319,22 @@ struct PlayerControlPanel: View {
     private var audioOptions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Options")
+            #if os(iOS)
+            Stepper {
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                    Text("Audio Delay")
+                    Text(String(format: "%+.1f s", audioDelay))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            } onIncrement: {
+                onSetAudioDelay(audioDelay + 0.1)
+            } onDecrement: {
+                onSetAudioDelay(audioDelay - 0.1)
+            }
+            .accessibilityValue(String(format: "%.1f seconds", audioDelay))
+            .accessibilityIdentifier("player.audioDelay")
+            #else
             HStack(spacing: Metrics.Space.m) {
                 Text("Audio Delay")
                     .font(.callout)
@@ -272,6 +360,7 @@ struct PlayerControlPanel: View {
                 }
                 .accessibilityIdentifier("player.audioDelay.increase")
             }
+            #endif
         }
     }
 
@@ -333,6 +422,22 @@ struct PlayerControlPanel: View {
     private var videoOptions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Options")
+            #if os(iOS)
+            Stepper {
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                    Text("Playback Speed")
+                    Text(PlaybackRatePolicy.title(playbackRate))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            } onIncrement: {
+                onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: 1))
+            } onDecrement: {
+                onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: -1))
+            }
+            .accessibilityValue(String(format: "%.2f times normal speed", playbackRate))
+            .accessibilityIdentifier("player.playbackRate")
+            #else
             HStack(spacing: Metrics.Space.m) {
                 Text("Playback Speed")
                     .font(.callout)
@@ -360,6 +465,7 @@ struct PlayerControlPanel: View {
                 }
                 .accessibilityIdentifier("player.playbackRate.increase")
             }
+            #endif
         }
     }
 
@@ -562,6 +668,28 @@ struct PlayerControlPanel: View {
         rows: [(id: String, name: String, selected: Bool)],
         onSelect: @escaping (String) -> Void
     ) -> some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: Metrics.Space.s) {
+            cardHeader("Tracks")
+            ForEach(rows, id: \.id) { row in
+                Button {
+                    onSelect(row.id)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.s) {
+                        Text(row.name)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: Metrics.Space.s)
+                        if row.selected { Image(systemName: "checkmark") }
+                    }
+                    .frame(minHeight: Metrics.touchTarget)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityAddTraits(row.selected ? [.isSelected] : [])
+                .accessibilityIdentifier("player.track.\(row.id)")
+            }
+        }
+        #else
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Tracks")
             ScrollView {
@@ -598,6 +726,7 @@ struct PlayerControlPanel: View {
                 )
             )
         }
+        #endif
     }
 
     private func cardHeader(_ text: LocalizedStringKey) -> some View {
