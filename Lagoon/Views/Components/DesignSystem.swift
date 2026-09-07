@@ -264,6 +264,17 @@ nonisolated enum ContentIcon {
     static let search = "magnifyingglass"
     static let settings = "gearshape.fill"
 
+    /// Settings destinations share the same filled navigation vocabulary.
+    nonisolated enum Settings {
+        static let account = "person.crop.circle.fill"
+        static let playback = "play.circle.fill"
+        static let audio = "speaker.wave.2.fill"
+        static let subtitles = "captions.bubble.fill"
+        static let advanced = "wrench.and.screwdriver.fill"
+        static let developer = "hammer.fill"
+        static let about = "info.circle.fill"
+    }
+
     /// Jellyfin's collection type for a library, as a glyph.
     static func library(collectionType: String?) -> String {
         collectionType == "tvshows" ? shows : movies
