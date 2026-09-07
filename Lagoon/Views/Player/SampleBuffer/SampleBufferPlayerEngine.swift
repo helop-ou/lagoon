@@ -36,6 +36,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var videoSize: CGSize?
     private(set) var audioTracks: [PlayerTrack] = []
     private(set) var subtitleTracks: [PlayerTrack] = []
+    private(set) var subtitleLoadState: SubtitleLoadState = .idle
+    var subtitleSelectionRevision: Int { externalLoadToken }
     private(set) var currentSubtitleText: String?
     private(set) var currentSubtitleCues: [SubtitleTextCue] = []
     private(set) var currentSubtitleImages: [SubtitleImage] = []
@@ -326,6 +328,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     // Bumped on every subtitle selection change so a stale external
     // download can't overwrite a newer choice's cues.
     @ObservationIgnored private var externalLoadToken = 0
+    @ObservationIgnored private var externalLoadTask: Task<Void, Never>?
+    @ObservationIgnored private let subtitleDownloader: BoundedDownload
 
     @ObservationIgnored nonisolated(unsafe) private var videoRenderer: AVSampleBufferVideoRenderer?
     @ObservationIgnored nonisolated(unsafe) private var audioRenderer: AVSampleBufferAudioRenderer?
@@ -354,12 +358,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated(unsafe) private var pendingDisc: DiscPlaybackRequest?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
 
-    init() {
+    init(subtitleDownloader: BoundedDownload = .shared) {
+        self.subtitleDownloader = subtitleDownloader
         PlaybackLifecycleDiagnostics.engineCreated(lifecycleID)
     }
 
     deinit {
         av1PipelineTimer?.cancel()
+        externalLoadTask?.cancel()
         PlaybackLifecycleDiagnostics.engineDestroyed(lifecycleID)
     }
 
@@ -584,8 +590,37 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func selectSubtitleTrack(id: Int?) {
         let ordinal = id ?? 0
+        guard !shutdownRequested, ordinal >= 0,
+              ordinal <= embeddedSubtitleCount + externalSubtitles.count else { return }
+        cancelExternalSubtitleLoad()
+        if ordinal > embeddedSubtitleCount {
+            loadExternalSubtitle(ordinal: ordinal)
+        } else {
+            commitSubtitleSelection(ordinal: ordinal)
+        }
+    }
+
+    func retrySubtitleLoad() {
+        if case .failed(let id, _, _) = subtitleLoadState { selectSubtitleTrack(id: id) }
+    }
+
+    private func cancelExternalSubtitleLoad() {
         externalLoadToken += 1
-        subtitleStore.removeAll()
+        externalLoadTask?.cancel()
+        externalLoadTask = nil
+        subtitleLoadState = .idle
+    }
+
+    private func commitSubtitleSelection(ordinal: Int, cues: [SubtitleCue] = []) {
+        shared.withLock { state in
+            state.selectedSubtitleOrdinal = ordinal
+            state.selectedSubtitleStreamIndex = ordinal > 0 && ordinal <= embeddedSubtitleCount
+                ? state.embeddedSubtitleStreamIndices[ordinal - 1] : -1
+            // The demux subtitle callback holds this same lock through its
+            // cue write, so an old embedded packet cannot append after the
+            // external replacement is committed.
+            subtitleStore.replaceAll(cues)
+        }
         currentSubtitleText = nil
         currentSubtitleCues = []
         currentSubtitleImages = []
@@ -603,22 +638,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         onTrackSelectionChanged?()
         if ordinal >= 1, ordinal <= embeddedSubtitleCount {
-            shared.withLock { state in
-                state.selectedSubtitleOrdinal = ordinal
-                state.selectedSubtitleStreamIndex = state.embeddedSubtitleStreamIndices[ordinal - 1]
-            }
             // Re-demux from the previous keyframe so a line that is
             // already on screen elsewhere appears immediately, not at the
             // next cue.
             seek(to: timePosition)
         } else {
-            shared.withLock { state in
-                state.selectedSubtitleOrdinal = ordinal
-                state.selectedSubtitleStreamIndex = -1
-            }
-            if ordinal > embeddedSubtitleCount {
-                loadExternalSubtitle(ordinal: ordinal)
-            }
+            refreshSubtitles(at: timePosition)
         }
     }
 
@@ -628,22 +653,21 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard externalSubtitles.indices.contains(index) else { return }
         let track = externalSubtitles[index]
         let token = externalLoadToken
-        Task { [weak self] in
-            let data: Data
-            if let preloadedData = track.preloadedData {
-                data = preloadedData
-            } else {
-                guard let response = try? await URLSession.shared.data(from: track.url) else { return }
-                data = response.0
+        let title = Self.externalTrackName(for: track)
+        subtitleLoadState = .loading(id: ordinal, title: title)
+        externalLoadTask = Task { [weak self, subtitleDownloader] in
+            do {
+                let cues = try await ExternalSubtitleLoader.load(track, using: subtitleDownloader)
+                try Task.checkCancellation()
+                guard let self, !self.shutdownRequested, self.externalLoadToken == token else { return }
+                self.commitSubtitleSelection(ordinal: ordinal, cues: cues)
+                self.subtitleLoadState = .idle
+                self.externalLoadTask = nil
+            } catch {
+                guard !Task.isCancelled, let self, !self.shutdownRequested, self.externalLoadToken == token else { return }
+                self.subtitleLoadState = .failed(id: ordinal, title: title, message: ExternalSubtitleLoader.message(for: error))
+                self.externalLoadTask = nil
             }
-            // The track's language is the only reliable signal for a
-            // non-UTF-8 sidecar, so it has to reach the decoder (HEL-92).
-            let languageHint = track.language
-            let cues = await Task.detached {
-                SubtitleParser.cues(from: data, languageHint: languageHint)
-            }.value
-            guard let self, self.externalLoadToken == token else { return }
-            self.subtitleStore.replaceAll(cues)
         }
     }
 
@@ -652,22 +676,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         externalSubtitles.append(track)
         shared.withLock { $0.externalSubtitles = externalSubtitles }
         let ordinal = embeddedSubtitleCount + externalSubtitles.count
-        subtitleTracks = subtitleTracks.map {
-            PlayerTrack(
-                engineID: $0.engineID,
-                kind: .subtitle,
-                displayName: $0.displayName,
-                isSelected: false,
-                languageTag: $0.languageTag,
-                isForced: $0.isForced,
-                isHearingImpaired: $0.isHearingImpaired,
-                source: $0.source
-            )
-        } + [PlayerTrack(
+        subtitleTracks += [PlayerTrack(
             engineID: ordinal,
             kind: .subtitle,
             displayName: Self.externalTrackName(for: track),
-            isSelected: true,
+            isSelected: false,
             languageTag: track.language,
             isForced: track.isForced,
             isHearingImpaired: track.isHearingImpaired,
@@ -679,6 +692,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func shutdown() {
         guard !shutdownRequested else { return }
         shutdownRequested = true
+        cancelExternalSubtitleLoad()
         PlaybackLifecycleDiagnostics.engineShutdownStarted(lifecycleID)
         for token in rendererNotificationTokens {
             NotificationCenter.default.removeObserver(token)
@@ -1673,7 +1687,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // An initially-selected external track (server default pointing at
         // a sidecar file) starts its download once the counts are known.
         if activeSubtitleOrdinal > embeddedSubtitleCount {
-            loadExternalSubtitle(ordinal: activeSubtitleOrdinal)
+            commitSubtitleSelection(ordinal: 0)
+            selectSubtitleTrack(id: activeSubtitleOrdinal)
         }
     }
 
@@ -2221,13 +2236,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 kickPumps()
             }
         case .subtitle(let events, let streamIndex):
-            guard streamIndex == shared.withLock({ $0.selectedSubtitleStreamIndex }) else { break }
-            for event in events {
-                switch event {
-                case .cue(let cue):
-                    subtitleStore.add(cue)
-                case .clear(let seconds):
-                    subtitleStore.closeOpenCues(at: seconds)
+            shared.withLock { state in
+                guard streamIndex == state.selectedSubtitleStreamIndex else { return }
+                for event in events {
+                    switch event {
+                    case .cue(let cue):
+                        subtitleStore.add(cue)
+                    case .clear(let seconds):
+                        subtitleStore.closeOpenCues(at: seconds)
+                    }
                 }
             }
         case .skipped:
