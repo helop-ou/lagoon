@@ -30,7 +30,10 @@ nonisolated final class PlaybackCacheDiscSource: DiscImageSource {
     var imageLength: Int64? { source.contentLength }
 
     func read(at offset: Int64, count: Int) throws -> Data {
-        try source.read(offset: offset, length: count, priority: URLSessionTask.highPriority)
+        if let cache = source as? PlaybackCacheScope {
+            return try cache.readMetadata(offset: offset, length: count)
+        }
+        return try source.read(offset: offset, length: count, priority: URLSessionTask.highPriority)
     }
 }
 
