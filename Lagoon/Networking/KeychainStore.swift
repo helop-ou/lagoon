@@ -66,4 +66,36 @@ nonisolated enum KeychainStore {
             throw StoreError.operationFailed("delete", status)
         }
     }
+
+    /// Enumerate only Lagoon's generic-password account names, never values.
+    /// Needed to remove cookies for every Seerr server previously paired with
+    /// a forgotten Jellyfin account, including addresses no longer configured.
+    static func accountNames() throws -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess else { throw StoreError.operationFailed("inspect", status) }
+        guard let entries = result as? [[String: Any]] else { throw StoreError.verificationFailed }
+        return entries.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
+}
+
+nonisolated protocol AccountCredentialStorage: Sendable {
+    func string(for account: String) -> String?
+    func set(_ value: String, for account: String) throws
+    func delete(_ account: String) throws
+    func accountNames() throws -> [String]
+}
+
+nonisolated struct SystemAccountCredentials: AccountCredentialStorage {
+    func string(for account: String) -> String? { KeychainStore.string(for: account) }
+    func set(_ value: String, for account: String) throws { try KeychainStore.set(value, for: account) }
+    func delete(_ account: String) throws { try KeychainStore.delete(account) }
+    func accountNames() throws -> [String] { try KeychainStore.accountNames() }
 }
