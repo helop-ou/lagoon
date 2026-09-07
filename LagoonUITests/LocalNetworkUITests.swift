@@ -84,6 +84,7 @@ final class LocalNetworkUITests: XCTestCase {
         #endif
     }
 
+    #if os(iOS)
     private func openSeerr(in app: XCUIApplication) {
         let settings = app.tabBars.buttons["Settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 20))
@@ -93,6 +94,7 @@ final class LocalNetworkUITests: XCTestCase {
         if !seerr.isHittable { app.swipeUp() }
         seerr.tap()
     }
+    #endif
 
     private func control(_ server: URL, path: String) async throws {
         var request = URLRequest(url: URL(string: "\(server.absoluteString)/__fixture/\(path)")!)
