@@ -51,6 +51,8 @@ final class SeerrClient {
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
+        configuration.waitsForConnectivity = true
+        configuration.timeoutIntervalForResource = 20
         return URLSession(configuration: configuration)
     }
 
@@ -378,7 +380,15 @@ final class SeerrClient {
             request.setValue("connect.sid=\(sessionCookie)", forHTTPHeaderField: "Cookie")
         }
 
-        let responsePayload = try await response(for: request)
+        let responsePayload: ResponsePayload
+        do {
+            responsePayload = try await response(for: request)
+        } catch {
+            guard configurationGeneration == requestGeneration else { throw CancellationError() }
+            let explained = await LocalNetworkAccess.explain(error, at: serverURL)
+            guard configurationGeneration == requestGeneration else { throw CancellationError() }
+            throw explained
+        }
         let data = responsePayload.data
         let response = responsePayload.response
         // An account switch clears/reconfigures this shared client. A late
