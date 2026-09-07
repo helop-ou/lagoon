@@ -157,7 +157,10 @@ against the actual release and retain the supporting assessment/documents.
 
 ## Website, integration and release decisions
 
-The owner intends to create a website; domain and support contact are undecided.
+The owner intends to create a website. The [website brief](website/README.md)
+records `lagoon.helop.ee` as the proposed starting address, the four-page scope
+and a work order for later implementation. Domain control, hosting and the
+support contact still need confirmation.
 [Privacy copy](website/privacy.md) and [support copy](website/support.md) are local
 drafts, with no invented contact or live URLs. Publication and pre-login in-app
 privacy/support/acknowledgements access remain open. The same approved content
