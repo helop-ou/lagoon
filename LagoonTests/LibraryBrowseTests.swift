@@ -107,7 +107,118 @@ struct LibraryBrowseTests {
         await request.value
         #expect(model.decades == nil)
         #expect(!model.isLoading)
+        #expect(!model.loadFailed)
         #expect(model.choices(for: scope, selected: LibraryDecade(rawValue: 2000)).map(\.rawValue) == [2000])
+    }
+
+    @Test(arguments: [false, true])
+    func aSameScopeYearRequestCanReplaceAnUnwindingRequest(cancelOriginal: Bool) async {
+        let model = LibraryDecadeViewModel()
+        let scope = LibraryYearScope(kind: .movies, libraryID: nil)
+        var originalResponse: CheckedContinuation<[Int], Never>?
+        let original = Task {
+            await model.load(scope: scope) { _ in
+                await withCheckedContinuation { originalResponse = $0 }
+            }
+        }
+        while originalResponse == nil { await Task.yield() }
+        if cancelOriginal { original.cancel() }
+
+        // Return to the same Library before the previous task has unwound.
+        var replacementResponse: CheckedContinuation<[Int], Never>?
+        var replacementFinished = false
+        let replacement = Task {
+            await model.load(scope: scope) { _ in
+                await withCheckedContinuation { replacementResponse = $0 }
+            }
+            replacementFinished = true
+        }
+        while replacementResponse == nil && !replacementFinished { await Task.yield() }
+        #expect(replacementResponse != nil)
+        originalResponse?.resume(returning: [1985])
+        await original.value
+        if replacementResponse != nil {
+            #expect(model.isLoading, "An obsolete request must not clear the replacement's loading state")
+        }
+        #expect(model.decades == nil)
+        replacementResponse?.resume(returning: [2005, 2015])
+        await replacement.value
+        #expect(model.decades?.map(\.rawValue) == [2010, 2000])
+        #expect(!model.isLoading)
+        #expect(!model.loadFailed)
+    }
+
+    @Test func aLateSameScopeYearResponseCannotOverwriteTheReplacement() async {
+        let model = LibraryDecadeViewModel()
+        let scope = LibraryYearScope(kind: .movies, libraryID: nil)
+        var pending: CheckedContinuation<[Int], Never>?
+        let original = Task {
+            await model.load(scope: scope) { _ in
+                await withCheckedContinuation { pending = $0 }
+            }
+        }
+        while pending == nil { await Task.yield() }
+        await model.load(scope: scope) { _ in [2021] }
+        pending?.resume(returning: [1985])
+        await original.value
+        #expect(model.decades?.map(\.rawValue) == [2020])
+        #expect(!model.isLoading)
+    }
+
+    @Test func genreRefreshAddsNewChoicesAndKeepsTheLastGoodCatalogueOnFailure() async {
+        let model = LibraryGenreViewModel()
+        #expect(model.genres == nil)
+        #expect(model.choices(selected: "Comedy") == ["Comedy"])
+        await model.load { [MediaGenre(id: "drama", name: "Drama")] }
+        #expect(model.choices(selected: "Drama") == ["Drama"])
+        await model.load {
+            [MediaGenre(id: "drama", name: "Drama"), MediaGenre(id: "horror", name: "Horror")]
+        }
+        #expect(model.choices(selected: "Comedy") == ["Comedy", "Drama", "Horror"])
+        await model.load { throw URLError(.notConnectedToInternet) }
+        #expect(model.loadFailed)
+        #expect(model.choices(selected: "Comedy") == ["Comedy", "Drama", "Horror"])
+        await model.load { [] }
+        #expect(model.genres == [])
+        #expect(!model.loadFailed)
+        #expect(model.choices(selected: "Comedy") == ["Comedy"])
+    }
+
+    @Test(arguments: [false, true])
+    func aGenreRefreshSupersedesAnOlderRequest(cancelOriginal: Bool) async {
+        let model = LibraryGenreViewModel()
+        var pending: CheckedContinuation<[MediaGenre], Never>?
+        let original = Task {
+            await model.load {
+                await withCheckedContinuation { pending = $0 }
+            }
+        }
+        while pending == nil { await Task.yield() }
+        if cancelOriginal { original.cancel() }
+        await model.load { [MediaGenre(id: "new", name: "New Genre")] }
+        pending?.resume(returning: [MediaGenre(id: "old", name: "Old Genre")])
+        await original.value
+        #expect(model.choices(selected: nil) == ["New Genre"])
+        #expect(!model.isLoading)
+        #expect(!model.loadFailed)
+    }
+
+    @Test func aCancelledGenreRequestDoesNotTurnAnUnloadedCatalogueIntoAnEmptyOne() async {
+        let model = LibraryGenreViewModel()
+        var pending: CheckedContinuation<[MediaGenre], Never>?
+        let request = Task {
+            await model.load {
+                await withCheckedContinuation { pending = $0 }
+            }
+        }
+        while pending == nil { await Task.yield() }
+        request.cancel()
+        pending?.resume(returning: [])
+        await request.value
+        #expect(model.genres == nil)
+        #expect(!model.isLoading)
+        #expect(!model.loadFailed)
+        #expect(model.choices(selected: "Drama") == ["Drama"])
     }
 
     @Test func catalogueYearsAreUserScopedAndUnboundedByPagingOrCurrentFilters() async throws {
