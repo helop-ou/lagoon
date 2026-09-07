@@ -16,15 +16,19 @@ final class SeerrSessionStore {
     let client: SeerrClient
 
     private let defaults: UserDefaults
+    private let localData: AccountLocalData
     private var activeAccount: StoredAccount?
     private var activationToken = UUID()
+    private var activationTask: Task<Void, Never>?
     /// One attempt per activation. A server with Quick Connect off would
     /// otherwise be re-asked every time Discover appears.
     private var hasAttemptedJellyfinSignIn = false
 
-    init(client: SeerrClient = SeerrClient(), defaults: UserDefaults = .standard) {
+    init(client: SeerrClient = SeerrClient(), defaults: UserDefaults = .standard,
+         localData: AccountLocalData? = nil) {
         self.client = client
         self.defaults = defaults
+        self.localData = localData ?? AccountLocalData(defaults: defaults, credentials: SystemAccountCredentials())
     }
 
     var isConfigured: Bool { configuredURL != nil }
@@ -46,6 +50,14 @@ final class SeerrSessionStore {
     }
 
     func activate(for account: StoredAccount?) async {
+        select(account)
+        await activationTask?.value
+    }
+
+    /// SessionStore calls this synchronously before the next account can be
+    /// observed. Pending authentication cannot reinstall an outgoing cookie.
+    func select(_ account: StoredAccount?) {
+        activationTask?.cancel()
         let token = UUID()
         activationToken = token
         activeAccount = account
@@ -59,13 +71,16 @@ final class SeerrSessionStore {
         client.clear()
 
         guard let account,
+              !localData.pendingAccountIDs.contains(account.id),
               let urlString = defaults.string(forKey: serverDefaultsKey(for: account)),
               let url = URL(string: urlString) else { return }
-        await restore(url: url, account: account, activationToken: token)
+        activationTask = Task { await restore(url: url, account: account, activationToken: token) }
     }
 
     func connect(to input: String) async throws {
         guard let account = activeAccount else { throw SeerrError.unauthenticated }
+        activationTask?.cancel()
+        activationToken = UUID()
         let token = activationToken
         isLoading = true
         errorMessage = nil
@@ -75,6 +90,7 @@ final class SeerrSessionStore {
 
         var lastError: Error = SeerrError.invalidServerURL
         for candidate in SeerrClient.candidateURLs(for: input) {
+            guard activationToken == token, activeAccount?.id == account.id else { throw CancellationError() }
             client.clear()
             client.configure(serverURL: candidate)
             do {
@@ -105,6 +121,7 @@ final class SeerrSessionStore {
                 if activationToken == token { client.clear() }
                 throw CancellationError()
             } catch {
+                guard activationToken == token, activeAccount?.id == account.id else { throw CancellationError() }
                 lastError = error
             }
         }
@@ -145,6 +162,10 @@ final class SeerrSessionStore {
     /// is the viewer's own account on both ends.
     func signInUsingJellyfin(_ jellyfin: JellyfinClient) async throws {
         guard isConfigured else { throw SeerrError.invalidServerURL }
+        guard jellyfin.serverURL == activeAccount?.serverURL, jellyfin.userId == activeAccount?.userId else {
+            throw SeerrError.unauthenticated
+        }
+        let jellyfin = jellyfin.sessionSnapshot()
         let token = activationToken
         let accountID = activeAccount?.id
         errorMessage = nil
@@ -159,6 +180,7 @@ final class SeerrSessionStore {
         }
 
         let handshake = try await client.initiateQuickConnect()
+        guard activationToken == token, activeAccount?.id == accountID else { throw CancellationError() }
         _ = try await jellyfin.authorizeQuickConnect(code: handshake.code)
 
         // Jellyseerr verifies the code against Jellyfin on its own schedule,
@@ -179,10 +201,12 @@ final class SeerrSessionStore {
     func signInUsingJellyfinIfNeeded(_ jellyfin: JellyfinClient) async {
         guard isConfigured, !isConnected, !isLoading, !hasAttemptedJellyfinSignIn else { return }
         hasAttemptedJellyfinSignIn = true
+        let token = activationToken
         do {
             try await signInUsingJellyfin(jellyfin)
         } catch is CancellationError {
         } catch {
+            guard activationToken == token else { return }
             // The manual paths remain, so this is a fallback rather than a
             // failure: say what happened without turning Discover into an
             // error screen.
@@ -236,17 +260,24 @@ final class SeerrSessionStore {
     }
 
     func disconnect() async {
-        if client.sessionCookie != nil {
-            try? await client.logout()
-        }
+        let remote = client.sessionSnapshot()
+        activationTask?.cancel()
+        activationToken = UUID()
+        isLoading = false
+        hasAttemptedJellyfinSignIn = true
         clearSavedCookie()
         client.setSessionCookie(nil)
         user = nil
-        errorMessage = nil
+        if remote.sessionCookie != nil { try? await remote.logout() }
     }
 
     func forgetServer() async {
-        await disconnect()
+        let remote = client.sessionSnapshot()
+        activationTask?.cancel()
+        activationToken = UUID()
+        isLoading = false
+        hasAttemptedJellyfinSignIn = true
+        clearSavedCookie()
         if let activeAccount {
             defaults.removeObject(forKey: serverDefaultsKey(for: activeAccount))
         }
@@ -254,10 +285,12 @@ final class SeerrSessionStore {
         configuredURL = nil
         status = nil
         publicSettings = nil
-        errorMessage = nil
+        user = nil
+        if remote.sessionCookie != nil { try? await remote.logout() }
     }
 
     private func restore(url: URL, account: StoredAccount, activationToken token: UUID) async {
+        guard !Task.isCancelled, activationToken == token, activeAccount?.id == account.id else { return }
         isLoading = true
         defer {
             if activationToken == token { isLoading = false }
@@ -280,10 +313,16 @@ final class SeerrSessionStore {
     }
 
     private func restoreSavedSession(for account: StoredAccount) async {
-        guard let configuredURL else { return }
+        guard let configuredURL, !localData.pendingAccountIDs.contains(account.id) else { return }
         let token = activationToken
         let key = cookieKey(account: account, serverURL: configuredURL)
-        guard let cookie = KeychainStore.string(for: key) else {
+        guard !localData.pendingCookieKeys.contains(key) else {
+            client.setSessionCookie(nil)
+            user = nil
+            errorMessage = "The saved Seerr credential could not be deleted. Sign in again to replace it."
+            return
+        }
+        guard let cookie = localData.credentials.string(for: key) else {
             client.setSessionCookie(nil)
             user = nil
             return
@@ -297,7 +336,8 @@ final class SeerrSessionStore {
         } catch is CancellationError {
         } catch SeerrError.unauthenticated {
             guard activationToken == token, activeAccount?.id == account.id else { return }
-            try? KeychainStore.delete(key)
+            do { try localData.removeSeerrCookie(key) }
+            catch { errorMessage = "The expired Seerr credential could not be deleted. Sign in again to replace it." }
             client.setSessionCookie(nil)
             user = nil
         } catch {
@@ -320,22 +360,26 @@ final class SeerrSessionStore {
             throw SeerrError.invalidResponse
         }
         let key = cookieKey(account: activeAccount, serverURL: configuredURL)
-        try KeychainStore.set(cookie, for: key)
-        guard KeychainStore.string(for: key) == cookie else {
-            throw KeychainStore.StoreError.verificationFailed
-        }
+        guard !localData.pendingAccountIDs.contains(activeAccount.id) else { throw CancellationError() }
+        try localData.saveSeerrCookie(cookie, for: key)
     }
 
     private func clearSavedCookie() {
         guard let activeAccount, let configuredURL else { return }
-        try? KeychainStore.delete(cookieKey(account: activeAccount, serverURL: configuredURL))
+        do {
+            try localData.removeSeerrCookie(cookieKey(account: activeAccount, serverURL: configuredURL))
+            errorMessage = nil
+        } catch {
+            errorMessage = "Local Seerr access has been removed, but the saved credential could not be deleted. Sign in again to replace it."
+        }
+        client.setSessionCookie(nil)
     }
 
     private func serverDefaultsKey(for account: StoredAccount) -> String {
-        "seerr.server.\(account.serverURL.absoluteString)"
+        AccountLocalData.seerrServerKey(account)
     }
 
     private func cookieKey(account: StoredAccount, serverURL: URL) -> String {
-        "seerr.cookie:\(account.id)|\(serverURL.absoluteString)"
+        AccountLocalData.seerrCookieKey(account, serverURL: serverURL)
     }
 }
