@@ -64,6 +64,7 @@ struct CustomPlayerView<Surface: View>: View {
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     @ViewBuilder let surface: () -> Surface
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     private struct SeekFeedback: Equatable {
         let forward: Bool
@@ -140,7 +141,32 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .ignoresSafeArea()
         #else
-        playerContent
+        NavigationStack {
+            playerContent
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close", systemImage: "xmark", role: .close, action: onDismiss)
+                            .accessibilityIdentifier("player.close")
+                    }
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Info", systemImage: "info.circle", action: openPanel)
+                            .accessibilityIdentifier("player.info")
+                        Button(engine.isPaused ? "Play" : "Pause",
+                               systemImage: engine.isPaused ? "play.fill" : "pause.fill") {
+                            engine.togglePause()
+                            pokeControls()
+                        }
+                        .accessibilityIdentifier("player.playPause")
+                    }
+                }
+                .toolbarBackground(.hidden, for: .navigationBar)
+                .toolbar(transportVisible ? .visible : .hidden, for: .navigationBar)
+        }
+            .sheet(isPresented: $panelOpen, onDismiss: closePanel) {
+                panel
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         #endif
     }
 
@@ -203,14 +229,14 @@ struct CustomPlayerView<Surface: View>: View {
             // between two frames 0.04 s apart. A plain value change does
             // survive, so the slide is an offset. Disabled while closed so
             // its buttons stay out of the focus engine's reach.
+            #if os(tvOS)
             panel
-                #if os(tvOS)
                 .focusScope(panelFocusScope)
-                #endif
                 .offset(y: panelOpen ? 0 : -panelSlideDistance)
                 .opacity(panelOpen ? 1 : 0)
                 .disabled(!panelOpen)
                 .animation(panelMotion, value: panelOpen)
+            #endif
 
         }
         .background(Color.black.ignoresSafeArea())
@@ -520,7 +546,7 @@ struct CustomPlayerView<Surface: View>: View {
     private var isScrubbing: Bool { scrubTarget != nil }
 
     private var transportVisible: Bool {
-        (controlsVisible || engine.isPaused || isScrubbing) && !panelOpen
+        (controlsVisible || voiceOverEnabled || engine.isPaused || isScrubbing) && !panelOpen
     }
 
     /// Walking a virtual playhead needs a known duration to walk along;
@@ -936,27 +962,6 @@ struct CustomPlayerView<Surface: View>: View {
             // Down is dead while scrubbing — don't advertise it.
             .opacity(isScrubbing ? 0 : 1)
             .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
-            #else
-            HStack(spacing: Metrics.Space.m) {
-                Button {
-                    onDismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                Spacer()
-                Button {
-                    openPanel()
-                } label: {
-                    Image(systemName: "info.circle")
-                }
-                Button {
-                    engine.togglePause()
-                } label: {
-                    Image(systemName: engine.isPaused ? "play.fill" : "pause.fill")
-                }
-            }
-            .buttonStyle(.glass)
-            .padding(Metrics.screenGutter)
             #endif
 
             Spacer()
@@ -1064,6 +1069,23 @@ struct CustomPlayerView<Surface: View>: View {
             #endif
         }
         .frame(height: Metrics.scrubberHeight)
+        #if os(iOS)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Playback position")
+        .accessibilityValue("\(Self.timestamp(scrubTarget ?? engine.timePosition)) of \(Self.timestamp(engine.duration))")
+        .accessibilityAdjustableAction { direction in
+            guard engine.duration.isFinite, engine.duration > 0 else { return }
+            let delta: Double
+            switch direction {
+            case .increment: delta = 10
+            case .decrement: delta = -10
+            @unknown default: return
+            }
+            commitScrub(to: min(max(engine.timePosition + delta, 0), engine.duration), resume: false)
+            pokeControls()
+        }
+        .accessibilityIdentifier("player.seek")
+        #endif
     }
 
     @ViewBuilder
