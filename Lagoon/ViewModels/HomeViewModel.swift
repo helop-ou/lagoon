@@ -260,7 +260,16 @@ final class HomeViewModel {
         await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
             for (index, library) in libraries.enumerated() {
                 group.addTask {
-                    guard let items = try? await client.latest(parentId: library.id) else { return nil }
+                    let items: [MediaItem]
+                    do {
+                        items = if library.collectionType == "tvshows" {
+                            try await client.latestSeries(parentId: library.id)
+                        } else {
+                            try await client.latest(parentId: library.id)
+                        }
+                    } catch {
+                        return nil
+                    }
                     let title = "Recently Added" + (library.name.map { " in \($0)" } ?? "")
                     return (index, LibraryRail(
                         id: library.id,
