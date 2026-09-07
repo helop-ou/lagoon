@@ -50,7 +50,8 @@ struct CollectionDetailView: View {
 
     private var displayed: MediaItem { viewModel.detail ?? item }
 
-    private var columns: [GridItem] { Metrics.posterGridColumns }
+    let posterLayout = PosterLayout()
+    private var columns: [GridItem] { posterLayout.columns }
 
     var body: some View {
         DetailPageScaffold(backdropURL: backdropURL) {
