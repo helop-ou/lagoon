@@ -6,6 +6,7 @@ compiler. Run with --work /tmp/lagoon-fixture. The printed URL can be passed to
 SessionExpiryUITests through LAGOON_SESSION_FIXTURE. No real accounts are used.
 """
 import argparse
+import gzip
 import json
 from pathlib import Path
 import re
@@ -15,13 +16,13 @@ from threading import Lock
 from urllib.parse import parse_qs, urlsplit
 
 
-def media(directory):
+def media(directory, duration):
     directory.mkdir(parents=True, exist_ok=True)
     subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
         "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24",
         "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-        "-t", "90", "-c:v", "libx264", "-preset", "ultrafast", "-g", "48",
+        "-t", str(duration), "-c:v", "libx264", "-preset", "ultrafast", "-g", "48",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-movflags", "+faststart",
         str(directory / "movie.mp4"),
     ], check=True)
@@ -35,14 +36,20 @@ def media(directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
+    parser.add_argument("--base-path", action="append", default=[],
+                        help="Require one of these proxy prefixes for API requests (repeatable; fixture controls remain at root)")
+    parser.add_argument("--subtitle-downloads", action="store_true", help="Expose working, failing, and oversized external subtitle tracks")
     args = parser.parse_args()
+    if any(not p.startswith("/") or p.endswith("/") or "?" in p or "#" in p for p in args.base_path):
+        parser.error("Base paths must start with / and have no trailing slash, query, or fragment")
     directory = args.work.resolve()
-    media(directory)
+    duration = 300 if args.subtitle_downloads else 90
+    media(directory, duration)
     lock = Lock()
-    state = {"mode": "direct", "generation": 0, "revoked": [], "requests": [], "drop_connections": False}
+    state = {"mode": "direct", "generation": 0, "revoked": [], "requests": [], "drop_connections": False, "subtitle_recovered": False}
     user = {"Id": "fixture-user", "Name": "Fixture viewer"}
     movie = {"Id": "fixture", "Name": "Session fixture movie", "Type": "Movie", "MediaType": "Video",
-             "RunTimeTicks": 900_000_000, "UserData": {"Played": False, "PlaybackPositionTicks": 0},
+             "RunTimeTicks": duration * 10_000_000, "UserData": {"Played": False, "PlaybackPositionTicks": 0},
              "Chapters": [], "Trickplay": {}, "Genres": []}
     empty = {"Items": [], "TotalRecordCount": 0}
 
@@ -76,7 +83,7 @@ def main():
             token = match.group(1) if match else query.get("ApiKey", [""])[0]
             with lock:
                 if path == "/__fixture/reset":
-                    state.update(mode=query.get("mode", ["direct"])[0], generation=0, revoked=[], requests=[], drop_connections=False)
+                    state.update(mode=query.get("mode", ["direct"])[0], generation=0, revoked=[], requests=[], drop_connections=False, subtitle_recovered=False)
                     return self.reply({"ok": True})
                 if path == "/__fixture/connectivity":
                     state["drop_connections"] = query.get("drop", ["0"])[0] == "1"
@@ -84,10 +91,19 @@ def main():
                 if path == "/__fixture/revoke":
                     state["revoked"].append(f"synthetic-session-{state['generation']}")
                     return self.reply({"ok": True})
+                if path == "/__fixture/subtitle-recover":
+                    state["subtitle_recovered"] = True
+                    return self.reply({"ok": True})
                 if path == "/__fixture/state":
                     return self.reply(state)
                 state["requests"].append({"path": path, "revoked": token in state["revoked"]})
                 (directory / "requests.json").write_text(json.dumps(state, indent=2))
+                if args.base_path:
+                    prefix = next((p for p in sorted(args.base_path, key=len, reverse=True)
+                                   if path.startswith(p + "/")), None)
+                    if prefix is None:
+                        return self.reply({"error": "Missing proxy base path"}, 404)
+                    path = path.removeprefix(prefix)
                 if path in ("/api/v1/status", "/api/v1/settings/public"):
                     if state["drop_connections"]:
                         self.close_connection = True
@@ -110,6 +126,16 @@ def main():
                 if not token or token in state["revoked"]:
                     return self.reply({"error": "Session expired"}, status=401)
                 mode = state["mode"]
+                recovered = state["subtitle_recovered"]
+            if args.subtitle_downloads and path.startswith("/Subtitles/"):
+                if path == "/Subtitles/retry.vtt" and not recovered:
+                    return self.reply({"error": "Synthetic subtitle failure"}, 500)
+                if path == "/Subtitles/oversized.vtt":
+                    # Small on the wire, too large after URLSession expands it.
+                    return self.reply(gzip.compress(b"x" * (8 * 1024 * 1024 + 1)), kind="text/vtt",
+                                      headers={"Content-Encoding": "gzip"})
+                text = "Recovered captions" if path.endswith("retry.vtt") else "Working captions"
+                return self.reply(f"WEBVTT\n\n00:00:00.000 --> 00:05:00.000\n{text}\n".encode(), kind="text/vtt")
             if path == "/Users/Me":
                 return self.reply(user)
             if path.endswith("/Views"):
@@ -124,6 +150,14 @@ def main():
                           "MediaStreams": [{"Type": "Video", "Codec": "h264", "Index": 0,
                                             "Width": 320, "Height": 180, "RealFrameRate": 24},
                                            {"Type": "Audio", "Codec": "aac", "Index": 1, "Channels": 2}]}
+                if args.subtitle_downloads:
+                    source["DefaultSubtitleStreamIndex"] = 2
+                    source["MediaStreams"] += [
+                        {"Type": "Subtitle", "Codec": "webvtt", "Index": index, "Language": "eng",
+                         "DisplayTitle": title, "IsExternal": True, "DeliveryMethod": "External",
+                         "DeliveryUrl": f"/Subtitles/{name}.vtt"}
+                        for index, name, title in [(2, "working", "Working track"), (3, "retry", "Retry track"),
+                                                   (4, "oversized", "Oversized track")]]
                 return self.reply({"MediaSources": [source], "PlaySessionId": "fixture-play"})
             if path.endswith("/Items/fixture"):
                 return self.reply(movie)
