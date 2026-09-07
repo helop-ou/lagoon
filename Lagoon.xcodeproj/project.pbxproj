@@ -10,6 +10,7 @@
 		4C41474F4F4E000000000012 /* LagoonFFmpeg in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* LagoonFFmpeg */; };
 		4C41474F4F4E000000000022 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000021 /* ContentProvider.swift */; };
 		4C41474F4F4E000000000023 /* LagoonTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000024 /* LagoonTopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4C41474F4F4E000000000072 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000071 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +59,7 @@
 		4C41474F4F4E000000000026 /* LagoonTopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LagoonTopShelf.entitlements; sourceTree = "<group>"; };
 		4C41474F4F4E000000000030 /* LagoonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LagoonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C41474F4F4E000000000041 /* LagoonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LagoonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4C41474F4F4E000000000071 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -129,6 +131,7 @@
 		4C41474F4F4E000000000027 /* LagoonTopShelf */ = {
 			isa = PBXGroup;
 			children = (
+				4C41474F4F4E000000000071 /* PrivacyInfo.xcprivacy */,
 				4C41474F4F4E000000000021 /* ContentProvider.swift */,
 				4C41474F4F4E000000000025 /* Info.plist */,
 				4C41474F4F4E000000000026 /* LagoonTopShelf.entitlements */,
@@ -169,6 +172,7 @@
 			buildConfigurationList = 4C41474F4F4E00000000002A /* Build configuration list for PBXNativeTarget "LagoonTopShelf" */;
 			buildPhases = (
 				4C41474F4F4E000000000029 /* Sources */,
+				4C41474F4F4E000000000073 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -270,6 +274,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4C41474F4F4E000000000073 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C41474F4F4E000000000072 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
