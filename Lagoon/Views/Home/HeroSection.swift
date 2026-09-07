@@ -17,14 +17,16 @@ nonisolated struct HeroItem<Route: Hashable>: Identifiable {
     let route: Route
 }
 
-/// Contained hero panel: material base, backdrop masked into it from the
-/// trailing edge, ambient glow bleeding out behind. Auto-advances every 7s,
-/// pre-warming the next backdrop and palette so the crossfade never lands
-/// on an empty texture.
+/// Contained hero panel with native touch paging and tvOS remote commands.
+/// Auto-advances every 7s while visible and idle; manual selection keeps the
+/// whole banner's detail link and native tvOS focus treatment intact.
 struct HeroSection<Route: Hashable>: View {
     let items: [HeroItem<Route>]
+    let isActive: Bool
     let focus: FocusState<Bool>.Binding?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .callout) private var textHeight = Metrics.heroHeight / 2
 
     private var panelHeight: CGFloat {
@@ -35,32 +37,68 @@ struct HeroSection<Route: Hashable>: View {
         #endif
     }
 
-    @State private var index = 0
+    @State private var selection = HeroCarouselSelection()
     @State private var palette: ArtworkPalette = .fallback
+    @State private var isVisible = false
+    @State private var isScrolling = false
     @FocusState private var fallbackFocus: Bool
 
     init(
         items: [HeroItem<Route>],
+        isActive: Bool,
         focus: FocusState<Bool>.Binding? = nil
     ) {
         self.items = items
+        self.isActive = isActive
         self.focus = focus
     }
 
     private var current: HeroItem<Route>? {
-        items.indices.contains(index) ? items[index] : nil
+        let id = selection.currentID(in: itemIDs)
+        return items.first { $0.id == id }
+    }
+
+    private var itemIDs: [String] { items.map(\.id) }
+
+    private var index: Int {
+        itemIDs.firstIndex(of: current?.id ?? "") ?? 0
+    }
+
+    private var canCycle: Bool {
+        isActive && isVisible && scenePhase == .active && items.count > 1
+            && !reduceMotion && !voiceOverEnabled && !isScrolling
+            && !(focus ?? $fallbackFocus).wrappedValue
+    }
+
+    private struct CycleID: Equatable {
+        let items: [String]
+        let selectedID: String?
+        let canCycle: Bool
     }
 
     var body: some View {
-        if let current {
-            GeometryReader { proxy in
-                heroBody(for: current, width: proxy.size.width)
+        Group {
+            if let current {
+                GeometryReader { proxy in
+                    heroBody(for: current, width: proxy.size.width)
+                }
+                .frame(height: panelHeight)
+                .padding(.horizontal, Metrics.screenGutter)
+                .onScrollVisibilityChange { isVisible = $0 }
+                .onDisappear { isVisible = false }
+                .task(id: CycleID(items: itemIDs, selectedID: current.id, canCycle: canCycle)) {
+                    await cycle()
+                }
+                .task(id: current.backdropURL) {
+                    await updatePalette()
+                    await warmAdjacentArtwork()
+                }
             }
-            .frame(height: panelHeight)
-            .padding(.horizontal, Metrics.screenGutter)
-            .task(id: "\(items.first?.id ?? "empty"):\(reduceMotion)") {
-                await cycle()
-            }
+        }
+        // Run even for an empty result, so a later load cannot resurrect a
+        // stale selection. Keeping the same ID preserves it across reorders.
+        .onChange(of: itemIDs, initial: true) { _, ids in
+            selection.reconcile(with: ids)
         }
     }
 
@@ -71,18 +109,62 @@ struct HeroSection<Route: Hashable>: View {
                 // hero panel rather than sit inside it.
                 .padding(-Metrics.screenGutter)
 
-            // The whole banner is the target (Jaagop): focus it, click it,
-            // and you get the detail page for whatever is on screen. A
-            // "See more" button inside it was a second thing to aim at for
-            // the one thing the banner already means.
-            NavigationLink(value: current.route) {
-                panel(for: current, width: width)
+            #if os(tvOS)
+            // Keep one native card mounted while its label changes, so
+            // directional paging never recreates the focused control.
+            heroLink(for: current, width: width)
+                .focused(focus ?? $fallbackFocus)
+                .onMoveCommand { direction in
+                    switch direction {
+                    case .left: move(by: -1)
+                    case .right: move(by: 1)
+                    default: break
+                    }
+                }
+            #else
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        heroLink(for: item, width: width)
+                            .accessibilityHidden(item.id != current.id)
+                    }
+                }
+                .scrollTargetLayout()
             }
-            .cardButtonStyle()
-            .focused(focus ?? $fallbackFocus)
-            .accessibilityLabel(current.title)
-            .accessibilityIdentifier("home.hero.\(current.id)")
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: Binding(
+                get: { selection.currentID(in: itemIDs) },
+                set: { selection.select($0, in: itemIDs) }
+            ))
+            .scrollDisabled(items.count < 2)
+            .onScrollPhaseChange { _, phase in
+                isScrolling = phase != .idle
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+            .overlay(alignment: .bottom) {
+                dots.padding(.bottom, Metrics.Space.l)
+                    .allowsHitTesting(false)
+            }
+            #endif
         }
+    }
+
+    private func heroLink(for item: HeroItem<Route>, width: CGFloat) -> some View {
+        NavigationLink(value: item.route) {
+            panel(for: item, width: width)
+        }
+        .cardButtonStyle()
+        .accessibilityLabel(item.title)
+        .accessibilityValue(Text("Slide \((itemIDs.firstIndex(of: item.id) ?? 0) + 1) of \(items.count)"))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: move(by: 1)
+            case .decrement: move(by: -1)
+            @unknown default: break
+            }
+        }
+        .accessibilityIdentifier("home.hero.\(item.id)")
     }
 
     private func panel(for item: HeroItem<Route>, width: CGFloat) -> some View {
@@ -96,8 +178,10 @@ struct HeroSection<Route: Hashable>: View {
             // below was silently failing to do (Jaagop).
             backdrop(for: item)
                 .frame(width: width, height: panelHeight)
+                #if os(tvOS)
                 .id(item.id)
-                .transition(.opacity)
+                .transition(reduceMotion ? .identity : .opacity)
+                #endif
 
             VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 VStack(alignment: .leading, spacing: Metrics.Space.m) {
@@ -121,13 +205,15 @@ struct HeroSection<Route: Hashable>: View {
                             #endif
                     }
                 }
+                #if os(tvOS)
                 .id(item.id)
                 // The button stays outside this transitioning subtree so focus
                 // survives slide changes; a plain crossfade double-exposes text.
-                .transition(.asymmetric(
+                .transition(reduceMotion ? .identity : .asymmetric(
                     insertion: .opacity.animation(.easeIn(duration: 0.3).delay(0.3)),
                     removal: .opacity.animation(.easeOut(duration: 0.2))
                 ))
+                #endif
             }
             // Bounded by the width actually available, not by a constant.
             // The card button style proposes an *unbounded* width to its
@@ -148,9 +234,6 @@ struct HeroSection<Route: Hashable>: View {
         .frame(width: width, height: panelHeight)
         #if os(iOS)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-        .overlay(alignment: .bottom) {
-            dots.padding(.bottom, Metrics.Space.l)
-        }
         #else
         .overlay(alignment: .bottomLeading) {
             dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
@@ -217,28 +300,33 @@ struct HeroSection<Route: Hashable>: View {
         }
     }
 
-    private func cycle() async {
-        index = 0
-        await updatePalette()
-        // A carousel that moves without input is exactly the kind of
-        // nonessential spatial motion Reduce Motion is intended to stop.
-        // Keep the first recommendation available and fully interactive.
-        guard !reduceMotion, items.count > 1 else { return }
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(7))
-            if Task.isCancelled { return }
-            let next = (index + 1) % items.count
-            if let url = items[next].backdropURL {
-                _ = await ImageCache.shared.load(url, maxPixelSize: 1920)
-                _ = await ArtworkPaletteCache.shared.palette(for: url)
-            }
-            try? await Task.sleep(for: .milliseconds(600))
-            if Task.isCancelled { return }
-            withAnimation(.easeInOut(duration: Motion.crossfade)) {
-                index = next
-            }
-            await updatePalette()
+    private func move(by offset: Int) {
+        guard items.count > 1 else { return }
+        let next = selection.adjacentID(offset: offset, in: itemIDs)
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.crossfade)) {
+            selection.select(next, in: itemIDs)
         }
+    }
+
+    private func cycle() async {
+        guard canCycle else { return }
+        // Selection and interaction are part of this task's identity. A swipe
+        // cancels the pending advance and gives the new slide a full interval.
+        do {
+            try await Task.sleep(for: .seconds(7))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled, canCycle,
+              let nextID = selection.adjacentID(offset: 1, in: itemIDs),
+              let next = items.first(where: { $0.id == nextID }) else { return }
+        if let url = next.backdropURL {
+            _ = await ImageCache.shared.load(url, maxPixelSize: 1920)
+            guard !Task.isCancelled else { return }
+            _ = await ArtworkPaletteCache.shared.palette(for: url)
+        }
+        guard !Task.isCancelled, canCycle else { return }
+        move(by: 1)
     }
 
     private func updatePalette() async {
@@ -246,6 +334,22 @@ struct HeroSection<Route: Hashable>: View {
             palette = .fallback
             return
         }
-        palette = await ArtworkPaletteCache.shared.palette(for: url)
+        let nextPalette = await ArtworkPaletteCache.shared.palette(for: url)
+        guard !Task.isCancelled, current?.backdropURL == url else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: Motion.crossfade)) {
+            palette = nextPalette
+        }
+    }
+
+    private func warmAdjacentArtwork() async {
+        guard items.count > 1 else { return }
+        for offset in [1, -1] {
+            guard !Task.isCancelled else { return }
+            let id = selection.adjacentID(offset: offset, in: itemIDs)
+            guard let url = items.first(where: { $0.id == id })?.backdropURL else { continue }
+            _ = await ImageCache.shared.load(url, maxPixelSize: 1920)
+            guard !Task.isCancelled else { return }
+            _ = await ArtworkPaletteCache.shared.palette(for: url)
+        }
     }
 }
