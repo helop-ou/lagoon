@@ -169,14 +169,24 @@ extension JellyfinClient {
         return page.items
     }
 
+    /// Home's unstarted episodes. A series with an episode in progress stays
+    /// in Continue Watching; excluding it must not skip ahead in that series.
     func nextUp(limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Shows/NextUp", query: [
             URLQueryItem(name: "UserId", value: userId),
             URLQueryItem(name: "Limit", value: String(limit)),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
+            URLQueryItem(name: "EnableResumable", value: "false"),
+            URLQueryItem(name: "EnableRewatching", value: "false"),
         ])
-        return page.items
+        // Filter on the server before Limit, with a defensive check for
+        // servers that still return resumable or already watched episodes.
+        return page.items.filter {
+            ($0.userData?.playbackPositionTicks ?? 0) <= 0
+                && ($0.userData?.playedPercentage ?? 0) <= 0
+                && $0.userData?.played != true
+        }
     }
 
     /// Note: unlike every other list endpoint, Latest returns a bare array.
@@ -187,6 +197,60 @@ extension JellyfinClient {
             URLQueryItem(name: "Limit", value: String(limit)),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
         ])
+    }
+
+    /// Latest groups containing just one episode can be returned as Episodes,
+    /// even with Jellyfin's default GroupItems=true. Resolve real Series DTOs
+    /// so cards use the show's artwork and open its seasons, not one episode.
+    func latestSeries(parentId: String, limit: Int = 16) async throws -> [MediaItem] {
+        let userId = try requireUserId()
+        let serverURL = self.serverURL
+        let accessToken = self.accessToken
+        func checkSession() throws {
+            try Task.checkCancellation()
+            guard self.userId == userId, self.serverURL == serverURL,
+                  self.accessToken == accessToken else { throw CancellationError() }
+        }
+
+        try checkSession()
+        let recent = try await latest(parentId: parentId, limit: limit)
+        try checkSession()
+        var seriesByID = Dictionary(
+            recent.filter { $0.type == .series }.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seen = Set<String>()
+        let orderedIDs = recent.compactMap { item -> String? in
+            let id: String?
+            switch item.type {
+            case .series: id = item.id
+            case .episode, .season: id = item.seriesId
+            default: id = nil
+            }
+            guard let id, !id.isEmpty, seen.insert(id).inserted else { return nil }
+            return id
+        }
+        let missingIDs = orderedIDs.filter { seriesByID[$0] == nil }
+        if !missingIDs.isEmpty {
+            // One bounded lookup, not one request per episode. Keep Latest's
+            // child-addition order rather than sorting by the series' age.
+            let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
+                URLQueryItem(name: "Ids", value: missingIDs.joined(separator: ",")),
+                URLQueryItem(name: "IncludeItemTypes", value: MediaItemType.series.rawValue),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "Limit", value: String(missingIDs.count)),
+                URLQueryItem(name: "Fields", value: Self.defaultFields),
+                URLQueryItem(name: "ImageTypeLimit", value: "1"),
+                URLQueryItem(name: "EnableTotalRecordCount", value: "false"),
+            ])
+            try checkSession()
+            for series in page.items where series.type == .series && seriesByID[series.id] == nil {
+                seriesByID[series.id] = series
+            }
+        }
+        // Removed/inaccessible parents are omitted. Request failures throw so
+        // Home's existing refresh fallback keeps the last good rail instead.
+        return orderedIDs.compactMap { seriesByID[$0] }
     }
 
     /// "More Like This" on the detail page (HEL-46). The server does the
@@ -312,6 +376,7 @@ extension JellyfinClient {
         let page: ItemsPage = try await get("Shows/NextUp", query: [
             URLQueryItem(name: "userId", value: userId),
             URLQueryItem(name: "seriesId", value: seriesId),
+            URLQueryItem(name: "EnableResumable", value: "true"),
             URLQueryItem(name: "Limit", value: "1"),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
         ])
