@@ -63,11 +63,13 @@ enum Metrics {
     static let landscapeWidth: CGFloat = 240
     static let heroHeight: CGFloat = 380
     static let gridColumns = 3
-    static let gridRowSpacing: CGFloat = 28
+    static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
     static let landscapeCaptionHeight: CGFloat = 60
-    static let railTopPadding: CGFloat = 6
-    static let railBottomPadding: CGFloat = 10
+    /// Keep a heading close to its own cards, with a larger break before
+    /// the next shelf. Browse pages stack rails without extra spacing.
+    static let railTopPadding: CGFloat = Space.m
+    static let railBottomPadding: CGFloat = Space.xxl
     static let accountTileSize: CGFloat = 110
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
     static let detailHeroSpace: CGFloat = 100
