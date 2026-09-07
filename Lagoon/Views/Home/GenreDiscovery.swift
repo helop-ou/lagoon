@@ -234,7 +234,8 @@ struct GenreLibraryView: View {
     @Environment(SessionStore.self) private var session
     @State private var viewModel = GenreLibraryViewModel()
 
-    private var columns: [GridItem] { Metrics.posterGridColumns }
+    let posterLayout = PosterLayout()
+    private var columns: [GridItem] { posterLayout.columns }
 
     var body: some View {
         ZStack {
