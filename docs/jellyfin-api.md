@@ -123,7 +123,7 @@ once it upgrades.
 | Decade choices | `Items/Filters` | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`; recursive full catalogue, not `Filters2` (which has no years) |
 | Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
-| Next up | `Shows/NextUp?UserId=` | rail only — **never** for autoplay, see below |
+| Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`; **never** for autoplay, see below |
 | Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one (HEL-66) |
@@ -134,6 +134,17 @@ List calls pass `Fields=Overview,Genres,…,OriginalLanguage`
 (`JellyfinClient.defaultFields`) because the server omits those from list
 payloads by default. `OriginalLanguage` is also read from the full item
 request that already supplies chapters and trickplay at playback start.
+
+**Recently Added Shows must normalize Latest's groups.** `GroupItems=true`
+is already the default, but a group containing one recent episode is returned
+as an `Episode`, while a multi-episode group is returned as its `Series`.
+`latestSeries` replaces episode/season results with genuine parent series,
+using one user-scoped `Items?Ids=…&IncludeItemTypes=Series` request for any
+parents not already present. It deduplicates in first-occurrence order, so
+an old show receiving a new episode still appears at its latest-addition
+position. Do not replace this with a series `DateCreated` sort. Missing
+parents are omitted; lookup failures propagate to Home's last-good-rail
+fallback. Movie libraries continue to use the original Latest response.
 
 ## Collections are folders, and folders are expensive (HEL-122)
 
@@ -180,11 +191,16 @@ matching, including the older bibliographic ISO aliases.
 **`Shows/NextUp` is a rail, not a cursor.** It returns the episode *in
 progress* when there is one: `enableResumable` defaults to `true` (checked
 against the server's own `/api-docs/openapi.json` on 10.11.11 — the build
-both fixture and the public demo run). That is right for the Home rail and
-wrong for anything asking "what plays after this", because a stop report
+both fixture and the public demo run). Home explicitly sets
+`EnableResumable=false` and `EnableRewatching=false`: started episodes belong
+in Continue Watching. Jellyfin omits that series rather than skipping ahead
+to a later episode. Lagoon also defensively removes records reporting any
+progress or `Played=true`. The series detail Play button uses a separate
+`nextUpEpisode` request with `EnableResumable=true`, so it still resumes.
+
+NextUp is wrong for anything asking "what plays after this", because a stop report
 that hasn't landed yet leaves the episode you just finished looking
-in-progress, so you get it back. Its other flags are `enableRewatching`
-(default `false`) and `disableFirstEpisode` (default `false`).
+in-progress, so the default request gives it back.
 
 `Shows/{seriesId}/Episodes` takes **`startItemId`**, which runs the list
 forward to a given episode — so `startItemId=<current>&Limit=2` returns
