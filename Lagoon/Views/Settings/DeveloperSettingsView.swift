@@ -325,6 +325,9 @@ private struct PlayerTransportComponentPreviewScreen: View {
     }
 
     private var previewSurface: some View {
+        // Decorative shapes must not propose their intrinsic 760pt width
+        // to the player or shift its controls and touch coordinates.
+        Color.black.overlay {
         ZStack {
             LinearGradient(
                 colors: [
@@ -354,6 +357,7 @@ private struct PlayerTransportComponentPreviewScreen: View {
                 .rotationEffect(.degrees(-9))
                 .offset(x: 150, y: -40)
         }
+        }
         .ignoresSafeArea()
     }
 }
@@ -380,15 +384,6 @@ private struct PlayerPanelComponentPreviewScreen: View {
         }
         #if os(tvOS)
         .onExitCommand { dismiss() }
-        #else
-        .overlay(alignment: .topTrailing) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-            }
-            .padding(Metrics.screenGutter)
-        }
         #endif
     }
 }
