@@ -25,6 +25,12 @@ struct RootView: View {
         .environment(session)
         .environment(seerr)
         .environment(serverSync)
+        .fullScreenCover(isPresented: Binding(
+            get: { session.isAddingAccount },
+            set: { session.isAddingAccount = $0 }
+        )) {
+            AddAccountView(session: session)
+        }
         .task(id: session.activeAccount?.id) {
             await seerr.activate(for: session.activeAccount)
         }
