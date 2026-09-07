@@ -29,6 +29,24 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "91",
+            released: "September 2026",
+            headline: "Clearer subtitle recovery, safer account switching, and easier server setup.",
+            changes: [
+                "Changing subtitle tracks keeps your current captions until the new track is ready. If it fails, playback continues and Subtitles offers an explanation and Retry.",
+                "Subtitle files over 8 MB now show a clear size-limit message. Oversized or incomplete artwork uses a placeholder instead of trying to display a broken image.",
+                "If your Jellyfin sign-in expires or is revoked, Lagoon takes you back to sign-in for that account while keeping your saved accounts and preferences.",
+                "Search results, recent searches and Seerr sign-ins no longer carry over when you switch Jellyfin accounts.",
+                "Removing a remembered account also clears its recent searches, preferences and linked Seerr sign-ins, while keeping your other accounts intact.",
+                "On Apple TV, Home screen previews are tied to the active Jellyfin account. Links left over from a previous account no longer open titles.",
+                "Jellyfin and Seerr setup now handles server addresses with proxy paths, custom ports and IPv6 correctly, and explains invalid addresses before trying to connect.",
+                "Sign-in shows the full server address and warns when the connection uses unencrypted HTTP, before you enter your credentials.",
+                "If local-network access is blocked on iPhone or iPad, Jellyfin and Seerr setup explains how to enable it in Settings and offers Retry without re-entering the server address.",
+                "HTTPS playback now checks the server's certificate and rejects invalid or untrusted connections. Servers using a private certificate authority need it to be trusted on your device.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "90",
             released: "September 2026",
             headline: "Featured titles you can swipe through, clearer Home rows, and easier browsing.",
