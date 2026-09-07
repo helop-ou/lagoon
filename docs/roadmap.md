@@ -67,16 +67,18 @@ and the decoder switches that hardware questions get answered with.
 
 In the order they are worth doing. Keys are Jira tickets.
 
+**In development:** unified Library (HEL-140), combining Movies and Shows
+with server-side sorting and library, genre, decade, unwatched, favorites, and 4K movie
+filters. Selections are remembered per account; the five main tabs stay stable
+regardless of how many Jellyfin libraries exist.
+
 1. **iOS polish pass** (HEL-41): compact-width detail composition, hero
    sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
    between. Only the collection page has its own iOS layout so far.
 2. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-3. **Buffer on audio starvation by default** (HEL-123): the mode is built
-   and switched off; the `aDry` counter in Release decides whether real
-   delivery still reaches the floor now that HEL-124 is in.
-4. **Live TV**, if the server has it: guide and channels. A big lift with
+3. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
@@ -84,9 +86,11 @@ endpoint that does not exist; a personal one was rejected on value.
 
 ## In verification
 
-Waiting on a TestFlight or hardware look rather than on code: 4K AV1
-frame rate (HEL-137), the audio starvation signal and its fix (HEL-123,
-HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
+HEL-137 (4K AV1 frame rate) and HEL-123 (audio starvation) were accepted by
+Jaagop and moved to Done on 2026-09-07.
+
+Waiting on a TestFlight or hardware look rather than on code: the audio
+refill fix (HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
 Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
 cap (HEL-108), the detail page turning Play into Resume after playback
 (HEL-132), and both halves of HEL-134: the light Siri Remote touch-surface tap
