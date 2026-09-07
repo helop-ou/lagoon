@@ -132,11 +132,16 @@ a user cannot orphan a token or duplicate an entry.
 
 Adding an account is presented by `RootView` in `AddAccountView`, using a
 separate `SessionStore(accountDraft: true)`. The active client and Seerr
-connection stay mounted. Draft connection details and authentication results
-remain in memory until `finishAddingAccount` persists the verified account
-and switches to it. Cancel invalidates pending operations without logging out
-or changing the current account; changing the draft server also invalidates
-responses from its previous connection.
+connection stay mounted. `makeAccountDraft()` seeds only the active account's
+server URL and name, so Add Account opens sign-in for that server without
+copying its user or credentials. “Use Another Server” returns the draft to
+server entry; without an active account, setup starts at server entry as before.
+Each presentation creates a fresh draft, so cancelling a different-server
+attempt does not change the next presentation's default. Draft connection
+details and authentication results remain in memory until `finishAddingAccount`
+persists the verified account and switches to it. Cancel invalidates pending
+operations without logging out or changing the current account; changing the
+draft server also invalidates responses from its previous connection.
 
 Two rules that are easy to get wrong:
 
