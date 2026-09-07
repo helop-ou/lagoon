@@ -66,7 +66,7 @@ struct SeerrSettingsView: View {
             footer: "Seerr and Jellyseerr instances using the standard /api/v1 API are supported."
         ) {
             if let url = seerr.configuredURL {
-                infoRow("Address", value: url.host() ?? url.absoluteString)
+                ServerConnectionInfoView(url: url)
                 if let version = seerr.status?.version {
                     infoRow("Version", value: version)
                 }
@@ -119,7 +119,7 @@ struct SeerrSettingsView: View {
         Form {
             Section("Server") {
                 if let url = seerr.configuredURL {
-                    LabeledContent("Address", value: url.host() ?? url.absoluteString)
+                    ServerConnectionInfoView(url: url)
                     if let version = seerr.status?.version {
                         LabeledContent("Version", value: version)
                             .accessibilityIdentifier("settings.seerr.version")
