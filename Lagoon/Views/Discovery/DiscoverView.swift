@@ -78,7 +78,7 @@ struct DiscoverView: View {
                 } else {
                     // Artwork first, like Home. The title used to be the
                     // whole top of the screen.
-                    HeroSection(items: heroItems)
+                    HeroSection(items: heroItems, isActive: isActive)
                         .padding(.top, Metrics.Space.s)
                         .padding(.bottom, Metrics.Space.xl)
 
