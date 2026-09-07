@@ -58,13 +58,15 @@ enum Metrics {
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
-    static let posterWidth: CGFloat = 105
+    /// Two comfortable columns on a typical portrait phone, shared with
+    /// poster rails so recommendations aren't reduced to thumbnails.
+    static let posterWidth: CGFloat = 160
     static let accessibilityPosterWidth: CGFloat = 240
     static let landscapeWidth: CGFloat = 240
     /// A landscape banner at standard text sizes; HeroSection grows for
     /// Dynamic Type when its title and synopsis need more room.
     static let heroHeight: CGFloat = 200
-    static let gridColumns = 3
+    static let gridColumns = 2
     static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
     static let landscapeCaptionHeight: CGFloat = 60
@@ -80,9 +82,8 @@ enum Metrics {
     /// The liquid tab bar floats over scroll content. The final rail needs
     /// enough runway to clear it rather than finishing underneath it.
     static let detailBottomPadding: CGFloat = 110
-    /// Glass circles carry their own generous touch frame on iOS; additional
-    /// HStack spacing makes the visible controls look disconnected.
-    static let detailActionSpacing: CGFloat = 0
+    /// Keep the native large glass actions distinct and easy to tap.
+    static let detailActionSpacing: CGFloat = Space.s
     static let castPortraitSize: CGFloat = 72
     static let castCaptionWidth: CGFloat = 104
     // No castCount on iOS: the strip scrolls there, so it shows everyone.
