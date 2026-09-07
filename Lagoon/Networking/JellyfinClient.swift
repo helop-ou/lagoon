@@ -377,10 +377,26 @@ final class JellyfinClient {
 
     // MARK: - Server probe (pre-auth, arbitrary URL)
 
+    private nonisolated static let serverProbeSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.waitsForConnectivity = true
+        configuration.timeoutIntervalForResource = 15
+        return URLSession(configuration: configuration)
+    }()
+
     nonisolated static func fetchPublicInfo(at serverURL: URL) async throws -> PublicSystemInfo {
         var request = URLRequest(url: serverURL.appending(path: "System/Info/Public"))
         request.timeoutInterval = 10
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await serverProbeSession.data(for: request)
+        } catch {
+            throw await LocalNetworkAccess.explain(error, at: serverURL)
+        }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw JellyfinError.invalidServerURL
         }
