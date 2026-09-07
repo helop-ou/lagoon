@@ -89,6 +89,17 @@ struct ServerSyncTests {
         #expect(model.errorMessage == nil)
     }
 
+    @Test func emptyResumeClearsEvenWhenNextUpFails() async {
+        let client = makeClient()
+        let model = HomeViewModel()
+        await model.load(client: client, accountID: "account")
+        #expect(!model.resume.isEmpty)
+        ServerSyncURLProtocol.setRevision(0)
+        await model.refreshProgress(client: client)
+        #expect(model.resume.isEmpty)
+        #expect(model.nextUp.first?.id == "next-1")
+    }
+
     private func makeClient() -> JellyfinClient {
         ServerSyncURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -150,7 +161,7 @@ private nonisolated final class ServerSyncURLProtocol: URLProtocol, @unchecked S
         let shouldFail = Self.isFailing
         Self.lock.unlock()
 
-        if shouldFail {
+        if shouldFail || (currentRevision == 0 && url.path == "/Shows/NextUp") {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return
         }
@@ -173,6 +184,7 @@ private nonisolated final class ServerSyncURLProtocol: URLProtocol, @unchecked S
                 extra: #", "CollectionType": "movies""#
             ))
         case "/Users/user/Items/Resume":
+            if revision == 0 { return page(nil) }
             return page(item(id: "resume-\(revision)", name: "Resume", type: "Movie"))
         case "/Shows/NextUp":
             return page(item(id: "next-\(revision)", name: "Next", type: "Episode"))
