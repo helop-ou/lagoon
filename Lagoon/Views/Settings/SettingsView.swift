@@ -52,7 +52,7 @@ struct SettingsView: View {
     var body: some View {
         Group {
             #if os(tvOS)
-            splitLayout
+            confirmingAccountActions { splitLayout }
             #else
             touchForm
                 .navigationTitle("Settings")
@@ -72,7 +72,14 @@ struct SettingsView: View {
             homePreferences.configure(accountID: session.activeAccount?.id)
             await homePreferences.loadCatalog(client: session.client)
         }
-        .confirmationDialog(
+    }
+
+    /// Attach to the visible action on iOS so its native confirmation
+    /// popover is anchored to Sign Out, not to the hidden settings root.
+    private func confirmingAccountActions<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content().confirmationDialog(
             "Sign Out?",
             isPresented: Binding(
                 get: { pendingAccountAction == .signOut },
@@ -587,13 +594,101 @@ struct SettingsView: View {
     }
     #endif
 
-    // MARK: - Touch
+    // MARK: - iOS: category list and native settings pages
 
     #if !os(tvOS)
-    /// `Form` is right on iOS: there is no focused lozenge to fight, and the
-    /// identity split would be wrong for the width.
+    /// Keep the same categories as tvOS, but let native navigation and
+    /// grouped Forms do the work on a touch-sized screen.
     private var touchForm: some View {
         Form {
+            Section {
+                NavigationLink {
+                    touchAccountSettings
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                            Text("Account")
+                            Text([session.userName, session.serverName].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    } icon: {
+                        Image(systemName: ContentIcon.Settings.account)
+                    }
+                }
+                .accessibilityIdentifier("settings.category.account")
+            }
+
+            Section("Preferences") {
+                touchSettingsDestination("Playback", systemImage: ContentIcon.Settings.playback, id: "playback") {
+                    touchPlaybackSettings
+                }
+                touchSettingsDestination("Audio", systemImage: ContentIcon.Settings.audio, id: "audio") {
+                    touchAudioSettings
+                }
+                touchSettingsDestination("Subtitles", systemImage: ContentIcon.Settings.subtitles, id: "subtitles") {
+                    touchSubtitleSettings
+                }
+                touchSettingsDestination("Home Rows", systemImage: ContentIcon.home, id: "home") {
+                    HomeRowsSettingsView(preferences: homePreferences)
+                }
+            }
+
+            Section("Services") {
+                touchSettingsDestination("Seerr", systemImage: ContentIcon.discover, id: "seerr") {
+                    SeerrSettingsView()
+                }
+            }
+
+            Section("Application") {
+                touchSettingsDestination("Advanced", systemImage: ContentIcon.Settings.advanced, id: "diagnostics") {
+                    touchDiagnosticsSettings
+                }
+                #if DEBUG
+                touchSettingsDestination("Developer", systemImage: ContentIcon.Settings.developer, id: "developer") {
+                    DeveloperSettingsView(subtitleStyle: subtitlePreferences.renderStyle)
+                }
+                #endif
+                touchSettingsDestination("About", systemImage: ContentIcon.Settings.about, id: "about") {
+                    AboutSettingsView()
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(Color.black.ignoresSafeArea())
+        .accessibilityIdentifier("settings.root")
+    }
+
+    private func touchSettingsDestination<Destination: View>(
+        _ title: LocalizedStringKey,
+        systemImage: String,
+        id: String,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+                .navigationBarTitleDisplayMode(.inline)
+        } label: {
+            Label(title, systemImage: systemImage)
+        }
+        .accessibilityIdentifier("settings.category.\(id)")
+    }
+
+    private func touchSettingsPage<Content: View>(
+        _ title: LocalizedStringKey,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Form(content: content)
+            .pickerStyle(.navigationLink)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .scrollContentBackground(.hidden)
+            .background(Color.black.ignoresSafeArea())
+    }
+
+    private var touchAccountSettings: some View {
+        touchSettingsPage("Account") {
             Section("Server") {
                 LabeledContent("Server", value: session.serverName ?? "Jellyfin")
                 LabeledContent("Address", value: session.client.serverURL?.absoluteString ?? "—")
@@ -603,14 +698,38 @@ struct SettingsView: View {
             Section {
                 if session.accounts.count > 1 {
                     Button("Switch User") { session.showAccountPicker() }
+                        .accessibilityIdentifier("settings.account.switch")
                 }
                 Button("Add Account") { session.addAccount() }
-                Button("Sign Out", role: .destructive) {
-                    pendingAccountAction = .signOut
+                    .accessibilityIdentifier("settings.account.add")
+                confirmingAccountActions {
+                    Button("Sign Out", role: .destructive) {
+                        pendingAccountAction = .signOut
+                    }
+                    .accessibilityIdentifier("settings.account.signOut")
                 }
             }
+        }
+    }
 
-            #if os(iOS)
+    private var touchPlaybackSettings: some View {
+        touchSettingsPage("Playback") {
+            Section("Playback Behavior") {
+                Picker("Skip Intros & Recaps", selection: $skipModeRaw) {
+                    ForEach(SkipMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .accessibilityIdentifier("settings.playback.skipMode")
+
+                Picker("Play Next Episode", selection: $autoplayModeRaw) {
+                    ForEach(AutoplayMode.allCases) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .accessibilityIdentifier("settings.playback.autoplayMode")
+            }
+
             Section {
                 Toggle("Full Quality on Cellular", isOn: $allowFullQualityOnMetered)
                     .accessibilityIdentifier("settings.playback.fullQualityOnMetered")
@@ -624,50 +743,25 @@ struct SettingsView: View {
                 is fast and unmetered.
                 """)
             }
-            #endif
+        }
+    }
 
-            Section("Skip Intros & Recaps") {
-                Picker("When one starts", selection: $skipModeRaw) {
-                    ForEach(SkipMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
-                    }
-                }
-            }
-
-            Section("Play Next Episode") {
-                Picker("When one ends", selection: $autoplayModeRaw) {
-                    ForEach(AutoplayMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
-                    }
-                }
-            }
-
-            Section("Home") {
-                NavigationLink("Home Rows") {
-                    HomeRowsSettingsView(preferences: homePreferences)
-                }
-            }
-
-            Section("Discovery & Requests") {
-                NavigationLink {
-                    SeerrSettingsView()
-                } label: {
-                    LabeledContent("Seerr", value: seerr.displayName)
-                }
-            }
-
-            Section("Audio Languages") {
+    private var touchAudioSettings: some View {
+        touchSettingsPage("Audio") {
+            Section {
                 Picker("Default", selection: trackBinding(\.audioMode)) {
                     ForEach(AudioDefaultMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
+                .accessibilityIdentifier("settings.audio.default")
                 Picker("Preferred", selection: primaryAudioLanguageBinding) {
                     ForEach(settingsLanguageChoices, id: \.self) { language in
                         Text(SubtitlePreferencesStore.displayName(for: language))
                             .tag(Optional(language))
                     }
                 }
+                .accessibilityIdentifier("settings.audio.preferred")
                 Picker("Fallback", selection: fallbackAudioLanguageBinding) {
                     Text("None").tag(String?.none)
                     ForEach(settingsLanguageChoices, id: \.self) { language in
@@ -675,20 +769,31 @@ struct SettingsView: View {
                             .tag(Optional(language))
                     }
                 }
+                .accessibilityIdentifier("settings.audio.fallback")
+            } header: {
+                Text("Language Selection")
+            } footer: {
+                Text(trackPreferences.values.audioMode.settingsDescription)
             }
+        }
+    }
 
+    private var touchSubtitleSettings: some View {
+        touchSettingsPage("Subtitles") {
             Section("Subtitle Languages") {
                 Picker("Default", selection: trackBinding(\.subtitleMode)) {
                     ForEach(SubtitleDefaultMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
+                .accessibilityIdentifier("settings.subtitles.default")
                 Picker("Preferred", selection: primaryLanguageBinding) {
                     ForEach(settingsLanguageChoices, id: \.self) { language in
                         Text(SubtitlePreferencesStore.displayName(for: language))
                             .tag(Optional(language))
                     }
                 }
+                .accessibilityIdentifier("settings.subtitles.preferred")
                 Picker("Fallback", selection: fallbackLanguageBinding) {
                     Text("None").tag(String?.none)
                     ForEach(settingsLanguageChoices, id: \.self) { language in
@@ -696,11 +801,13 @@ struct SettingsView: View {
                             .tag(Optional(language))
                     }
                 }
+                .accessibilityIdentifier("settings.subtitles.fallback")
                 Picker("When Missing", selection: subtitleBinding(\.missingMode)) {
                     ForEach(MissingSubtitleMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
+                .accessibilityIdentifier("settings.subtitles.missing")
             }
 
             Section {
@@ -709,76 +816,101 @@ struct SettingsView: View {
                         Text(source.displayName).tag(source)
                     }
                 }
+                .accessibilityIdentifier("settings.subtitles.source")
                 NavigationLink {
                     OpenSubtitlesSettingsView()
                 } label: {
                     LabeledContent("OpenSubtitles", value: openSubtitlesSummary)
                 }
+                .accessibilityIdentifier("settings.subtitles.openSubtitles")
             } header: {
                 Text("Where Subtitles Come From")
             } footer: {
                 Text("Automatic uses your Jellyfin server when your account may manage subtitles — which saves the file for every client — and OpenSubtitles directly when it may not.")
             }
 
-            Section("Subtitle Appearance") {
+            Section("Appearance") {
+                NavigationLink {
+                    touchSubtitleAppearanceSettings
+                } label: {
+                    LabeledContent("Subtitle Appearance", value: appearanceTitle)
+                }
+                .accessibilityIdentifier("settings.subtitles.appearance")
+            }
+        }
+    }
+
+    private var touchSubtitleAppearanceSettings: some View {
+        touchSettingsPage("Subtitle Appearance") {
+            Section("Preview") {
+                subtitlePreview
+            }
+
+            Section("Style") {
                 Toggle("Use System Caption Style", isOn: subtitleBinding(\.followsSystemAppearance))
+                    .accessibilityIdentifier("settings.subtitles.systemAppearance")
                 if !subtitlePreferences.values.followsSystemAppearance {
                     Picker("Size", selection: subtitleBinding(\.textSize, customAppearance: true)) {
                         ForEach(SubtitleTextSize.allCases) { size in
                             Text(size.title).tag(size)
                         }
                     }
+                    .accessibilityIdentifier("settings.subtitles.size")
                     Picker("Edge", selection: subtitleBinding(\.edgeStyle, customAppearance: true)) {
                         ForEach(SubtitleEdgeStyle.allCases) { edge in
                             Text(edge.title).tag(edge)
                         }
                     }
+                    .accessibilityIdentifier("settings.subtitles.edge")
                     Picker("Background", selection: subtitleBinding(\.background, customAppearance: true)) {
                         ForEach(SubtitleBackground.allCases) { background in
                             Text(background.title).tag(background)
                         }
                     }
+                    .accessibilityIdentifier("settings.subtitles.background")
                     Picker("Position", selection: subtitleBinding(\.verticalPosition, customAppearance: true)) {
                         ForEach(SubtitleVerticalPosition.allCases) { position in
                             Text(position.title).tag(position)
                         }
                     }
+                    .accessibilityIdentifier("settings.subtitles.position")
                 } else {
                     Text("Appearance follows Accessibility → Subtitles & Captioning in Settings. Turn off system style to customize captions in Lagoon.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                subtitlePreview
-                Button("Reset to System") {
-                    subtitlePreferences.resetAppearanceToSystem()
-                }
             }
 
             Section {
-                NavigationLink {
-                    AboutSettingsView()
-                } label: {
-                    LabeledContent("About", value: Bundle.main.displayVersion)
+                Button("Reset to System") {
+                    subtitlePreferences.resetAppearanceToSystem()
                 }
+                .accessibilityIdentifier("settings.subtitles.reset")
             }
+        }
+    }
 
-            #if DEBUG
-            Section("Developer") {
-                NavigationLink("Component Previews") {
-                    DeveloperSettingsView(subtitleStyle: subtitlePreferences.renderStyle)
-                }
-            }
-            #endif
-
-            Section("Advanced") {
+    private var touchDiagnosticsSettings: some View {
+        touchSettingsPage("Advanced") {
+            Section {
                 Toggle("Show Playback Details", isOn: $showPlaybackHUD)
+                    .accessibilityIdentifier("settings.diagnostics.hud")
                 Toggle("Run Playback Performance Test", isOn: $frameLossBench)
+                    .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
+                    .accessibilityIdentifier("settings.diagnostics.dovi")
                 #if DEBUG
                 Toggle("Simulate Audio Starvation", isOn: $simulateAudioStarvation)
+                    .accessibilityIdentifier("settings.diagnostics.audioStarvation")
                 Toggle("Simulate Delivery Stall", isOn: $simulateDeliveryStall)
+                    .accessibilityIdentifier("settings.diagnostics.deliveryStall")
                 Toggle("Buffer on Audio Starvation", isOn: $bufferOnAudioStarvation)
+                    .accessibilityIdentifier("settings.diagnostics.audioBuffering")
                 #endif
+            } header: {
+                Text("Playback Diagnostics")
+            } footer: {
+                Text("These options can affect playback behavior and are intended for troubleshooting. Leave them off during normal viewing.")
             }
         }
     }
