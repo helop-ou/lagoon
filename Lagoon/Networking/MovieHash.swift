@@ -51,11 +51,11 @@ nonisolated enum MovieHash {
 /// Jellyfin serves direct-play files over ranged HTTP, which is the same
 /// capability the playback cache already relies on.
 nonisolated struct MovieHashReader: Sendable {
-    private let session: URLSession
+    private let downloads: BoundedDownload
     private let timeout: TimeInterval
 
     init(session: URLSession = .shared, timeout: TimeInterval = 15) {
-        self.session = session
+        downloads = BoundedDownload(configuration: session.configuration)
         self.timeout = timeout
     }
 
@@ -77,11 +77,9 @@ nonisolated struct MovieHashReader: Sendable {
             "bytes=\(offset)-\(offset + Int64(MovieHash.chunkSize) - 1)",
             forHTTPHeaderField: "Range"
         )
-        guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse,
-              // 206 only: a 200 means the server ignored the range and is
-              // sending the whole movie, which must not be read as a chunk.
-              http.statusCode == 206,
+        // Reject a server ignoring Range before it can send an entire movie.
+        guard let data = try? await downloads.data(for: request, limit: MovieHash.chunkSize,
+                                                  content: .bytes, statusCodes: [206]),
               data.count == MovieHash.chunkSize else { return nil }
         return data
     }
