@@ -131,14 +131,20 @@ private struct GenreCard: View {
                 background
 
                 LinearGradient(
-                    colors: [.clear, .black.opacity(0.82)],
+                    colors: titleWash,
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
                 Text(genre.name)
                     .font(.title3.bold())
+                    #if os(tvOS)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    #else
                     .lineLimit(1)
+                    #endif
                     .padding(Metrics.Space.xl)
             }
             .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
@@ -147,6 +153,15 @@ private struct GenreCard: View {
         .cardButtonStyle()
         .accessibilityLabel("\(genre.name) genre")
         .accessibilityIdentifier("home.genre.\(identifier).\(genre.id)")
+    }
+
+    private var titleWash: [Color] {
+        #if os(tvOS)
+        // Protect the centered title as well as the bottom of the artwork.
+        [.black.opacity(0.2), .black.opacity(0.6), .black.opacity(0.82)]
+        #else
+        [.clear, .black.opacity(0.82)]
+        #endif
     }
 
     @ViewBuilder
