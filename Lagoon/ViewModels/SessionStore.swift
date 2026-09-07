@@ -139,6 +139,18 @@ final class SessionStore {
         isAddingAccount = true
     }
 
+    /// Reuse only the active server's address and name, never its user or
+    /// credentials. With no active account, setup still asks for a server.
+    func makeAccountDraft() -> SessionStore {
+        let draft = SessionStore(accountDraft: true, defaults: defaults)
+        if let account = activeAccount {
+            draft.client.configure(serverURL: account.serverURL)
+            draft.serverName = account.serverName
+            draft.phase = .needsSignIn
+        }
+        return draft
+    }
+
     /// Setup uses a separate client and never persists a server or token
     /// until the parent accepts a completed sign-in. Cancel leaves the
     /// active account, its requests, and its Seerr connection untouched.
