@@ -26,7 +26,11 @@ struct HomeView: View {
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        HeroSection(items: heroItems, focus: heroFocus)
+                        HeroSection(
+                            items: heroItems,
+                            isActive: isActive && playerItem == nil,
+                            focus: heroFocus
+                        )
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
