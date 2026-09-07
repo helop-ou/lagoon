@@ -180,8 +180,11 @@ The Library filter appears only when multiple libraries share a media type;
 a server with one movie and one show library needs only the media-type controls.
 Redundant saved library filters become their equivalent media type so hiding
 the menu does not leave an invisible constraint. Media type uses SwiftUI's
-native segmented Picker on both platforms. On tvOS it fits its labels and
-changes selection as focus moves; the system owns selection and focus styling.
+native segmented Picker on iOS and a menu Picker on tvOS. The tvOS menu
+commits on Select, not focus, so reaching Sort or Filters cannot change
+Movies to Shows or clear the movie-only 4K filter. Sort, Library, Genre, and
+Decade are native single-selection Pickers inside menus; only the independent
+watch-state, favorites, and 4K options use Toggles.
 The native Decade filter derives non-overlapping ranges from Jellyfin's
 `Items/Filters` year catalogue for the selected media type and source library,
 not from the loaded page or a fixed calendar range. Gaps and undated titles
@@ -190,10 +193,15 @@ It sends ten production years through Jellyfin's `Years`
 parameter for movies and series, so it applies across pagination and refresh,
 not just to loaded posters. All Decades omits the constraint; Clear Filters
 removes it along with the other filters. Older saved preferences remain valid.
-Year choices refresh with the Library's existing refresh lifecycle; failed
-refreshes retain that scope's last good list, and outdated responses can't
-overwrite a newer scope. A saved decade stays clearable while loading/offline
-and is removed only after a successful catalogue confirms it is absent.
+Year and genre choices refresh with the Library's existing foreground,
+periodic, manual, and return-navigation refresh lifecycle. Failed refreshes
+retain the last good catalogue; year lists remain scoped to their library
+and media type. Replacement requests supersede older responses even for the
+same scope, including when a cancelled view task has not finished unwinding.
+An unloaded or cancelled catalogue offers retry rather than claiming it is
+empty. A saved decade stays clearable while loading/offline and is removed
+only after a successful catalogue confirms it is absent. A saved genre stays
+visible even if the refreshed catalogue no longer includes it.
 
 `LibraryViewModel` discards responses from superseded queries, resets paging
 on filter changes, and counts raw server rows for offsets while deduplicating
