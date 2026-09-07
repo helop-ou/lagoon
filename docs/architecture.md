@@ -130,6 +130,14 @@ waits for the stop report before re-reading watch progress.
 `{serverURL}|{userId}` and never the display names, so renaming a server or
 a user cannot orphan a token or duplicate an entry.
 
+Adding an account is presented by `RootView` in `AddAccountView`, using a
+separate `SessionStore(accountDraft: true)`. The active client and Seerr
+connection stay mounted. Draft connection details and authentication results
+remain in memory until `finishAddingAccount` persists the verified account
+and switches to it. Cancel invalidates pending operations without logging out
+or changing the current account; changing the draft server also invalidates
+responses from its previous connection.
+
 Two rules that are easy to get wrong:
 
 - **`migrateLegacySessionIfNeeded()` is load-bearing.** The single-slot
