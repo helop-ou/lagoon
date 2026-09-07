@@ -19,13 +19,23 @@ struct MediaRail: View {
     var playAction: ((MediaItem) -> Void)?
     /// Lets a card's watched/favourite menu re-fetch the list it sits in.
     var onUserDataChange: (() async -> Void)?
+    var destination: ContentNavigationRoute?
 
     var body: some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.headline)
-                    .padding(.leading, Metrics.screenGutter)
+                HStack {
+                    Text(title).font(.headline)
+                    #if os(iOS)
+                    if let destination {
+                        Spacer()
+                        NavigationLink("See All", value: destination)
+                            .font(.callout)
+                            .accessibilityLabel("See all \(title)")
+                    }
+                    #endif
+                }
+                .padding(.horizontal, Metrics.screenGutter)
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: Metrics.cardSpacing) {
                         ForEach(items) { item in
@@ -45,6 +55,11 @@ struct MediaRail: View {
                             }
                             .itemUserDataMenu(item: item, onChange: onUserDataChange)
                         }
+                        #if os(tvOS)
+                        if let destination {
+                            RailSeeAllCard(destination: destination, title: title)
+                        }
+                        #endif
                     }
                     .padding(.horizontal, Metrics.screenGutter)
                     .padding(.top, Metrics.railTopPadding)
