@@ -80,6 +80,12 @@ they own. This remains the foreground path for every mounted screen:
   collections, the hero values and Top Shelf without replacing the screen
   with a loading state. Failed primary rail requests keep their last good
   content.
+- Home's Next Up contains only unstarted, unwatched episodes; in-progress
+  episodes stay in Continue Watching. The series detail Play action still
+  resumes, and autoplay keeps its separate episode cursor. Recently Added
+  TV rails resolve episodes to real, deduplicated series records in latest
+  child-addition order on both initial load and refresh. Failed parent lookups
+  preserve that rail's last good snapshot; movie rails are unchanged.
 - An open library re-reads however many items it has already loaded, which
   keeps focus and scroll identity instead of collapsing to page one.
 - Open item, series and collection details re-read their item or episode
