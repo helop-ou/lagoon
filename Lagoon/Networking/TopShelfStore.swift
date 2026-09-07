@@ -163,8 +163,8 @@ enum TopShelfStore {
 
     nonisolated private static func render(backdrop: Data, logo: Data?, title: String,
                                            as names: (twoX: String, oneX: String), into directory: URL) -> String? {
-        guard let backdropImage = UIImage(data: backdrop) else { return "backdrop would not decode" }
-        let logoImage = logo.flatMap { UIImage(data: $0) }
+        guard let backdropImage = ArtworkDecoder.image(from: backdrop, maxPixelSize: 3840) else { return "backdrop would not decode" }
+        let logoImage = logo.flatMap { ArtworkDecoder.image(from: $0, maxPixelSize: 1920) }
         for (name, size) in [(names.twoX, TopShelfArtwork.scale2x), (names.oneX, TopShelfArtwork.scale1x)] {
             let composed = TopShelfArtwork.compose(backdrop: backdropImage, logo: logoImage, title: title, size: size)
             guard let jpeg = composed.jpegData(compressionQuality: 0.9) else { return "composite would not encode" }
@@ -175,9 +175,7 @@ enum TopShelfStore {
     }
 
     private static func data(at url: URL) async -> Data? {
-        guard let (data, response) = try? await URLSession.shared.data(from: url),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return data
+        try? await BoundedDownload.shared.data(from: url, limit: DownloadLimit.artwork, content: .image)
     }
     #else
     static func publish(_ items: [MediaItem], client: JellyfinClient, identity: JellyfinClient.SessionIdentity?) {}
