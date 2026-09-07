@@ -1786,15 +1786,33 @@ final class PlayerRegressionUITests: XCTestCase {
         remote.press(.select)
 
         let library = app.descendants(matching: .any).matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "library.view.")
+            NSPredicate(format: "identifier == %@", "library.view")
         ).firstMatch
         XCTAssertTrue(library.waitForExistence(timeout: 8))
         expectation(for: NSPredicate(format: "value != '0 items'"), evaluatedWith: library)
         waitForExpectations(timeout: 20)
 
+        // The unified Library can restore All or Shows from an earlier
+        // visit. This journey exercises movie detail -> related movie.
+        let picker = app.segmentedControls["library.kind"]
+        let movies = picker.buttons["Movies"]
+        for _ in 0..<10 where !movies.hasFocus {
+            if picker.buttons["All"].hasFocus {
+                remote.press(.right)
+            } else if picker.buttons["Shows"].hasFocus {
+                remote.press(.left)
+            } else {
+                remote.press(.down)
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        XCTAssertTrue(movies.hasFocus)
+        XCTAssertTrue(movies.isSelected)
+
         let posters = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "media.poster.")
         )
+        XCTAssertTrue(posters.firstMatch.waitForExistence(timeout: 12))
         var focusedPoster: XCUIElement?
         for _ in 0..<8 {
             focusedPoster = posters.allElementsBoundByIndex.first(where: \.hasFocus)
