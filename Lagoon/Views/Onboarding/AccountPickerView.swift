@@ -97,6 +97,7 @@ struct AccountPickerView: View {
             }
         }
         .cardButtonStyle()
+        .accessibilityIdentifier("account.select.\(account.userId)")
         .contextMenu {
             Button(role: .destructive) {
                 accountToForget = account
@@ -125,6 +126,7 @@ struct AccountPickerView: View {
             }
         }
         .cardButtonStyle()
+        .accessibilityIdentifier("account.add")
     }
 
     /// Initials rather than a photo: Jellyfin user images are optional and
@@ -149,7 +151,9 @@ struct AccountPickerView: View {
         do {
             try session.remove(account)
         } catch {
-            errorMessage = error.localizedDescription
+            // SessionStore removes access immediately and RootView presents
+            // the persistent, retryable cleanup failure even if this unmounts.
+            if session.cleanupErrorMessage == nil { errorMessage = error.localizedDescription }
         }
     }
 }
