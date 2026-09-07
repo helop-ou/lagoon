@@ -6,6 +6,8 @@ import SwiftUI
 /// exactly where the words are.
 struct DetailBackdropView: View {
     let url: URL?
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         ZStack {
@@ -44,11 +46,11 @@ struct DetailBackdropView: View {
         // bright still. Keep the top recognisably photographic, then settle
         // into a near-black reading surface before the rails begin.
         ZStack {
-            Color.black.opacity(0.28)
+            Color.black.opacity(contrast == .increased || reduceTransparency ? 0.9 : 0.55)
             LinearGradient(
                 stops: [
                     .init(color: .black.opacity(0.08), location: 0),
-                    .init(color: .black.opacity(0.42), location: 0.28),
+                    .init(color: .black.opacity(0.65), location: 0.28),
                     .init(color: .black.opacity(0.82), location: 0.55),
                     .init(color: .black.opacity(0.96), location: 0.76),
                     .init(color: .black, location: 1),
@@ -217,18 +219,18 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle)
                     .font(.title3.weight(.semibold))
+                    #if os(tvOS)
                     .lineLimit(1)
+                    #else
+                    .fixedSize(horizontal: false, vertical: true)
+                    #endif
             }
 
             facts
             supportingFacts
 
             if let overview, !overview.isEmpty {
-                Text(overview)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .frame(maxWidth: 1000, alignment: .leading)
+                DetailOverview(text: overview)
             }
 
             buttons
@@ -253,12 +255,12 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         // of producing "1 h 56" / "min" and "TrueHD" / "7.1" fragments.
         VStack(alignment: .leading, spacing: Metrics.Space.s) {
             if !factTokens.isEmpty || officialRating != nil {
-                HStack(spacing: Metrics.Space.m) {
+                MetadataFlowLayout {
                     primaryFactViews
                 }
             }
             if !qualityTokens.isEmpty {
-                HStack(spacing: Metrics.Space.m) {
+                MetadataFlowLayout {
                     qualityFactViews
                 }
             }
@@ -271,13 +273,21 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     private var primaryFactViews: some View {
         ForEach(factTokens, id: \.self) { token in
             Text(token)
+                #if os(tvOS)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                #else
+                .fixedSize(horizontal: false, vertical: true)
+                #endif
         }
         if let official = officialRating {
             Text(official)
+                #if os(tvOS)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                #else
+                .fixedSize(horizontal: false, vertical: true)
+                #endif
                 .padding(.horizontal, Metrics.Space.s)
                 .padding(.vertical, Metrics.Space.hair)
                 .overlay(
@@ -291,8 +301,12 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     private var qualityFactViews: some View {
         ForEach(qualityTokens, id: \.self) { token in
             Text(token)
+                #if os(tvOS)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
+                #else
+                .fixedSize(horizontal: false, vertical: true)
+                #endif
         }
     }
 
@@ -307,13 +321,13 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         }
         #else
         if !genres.isEmpty || communityRating != nil {
-            HStack(spacing: Metrics.Space.l) {
+            MetadataFlowLayout(spacing: Metrics.Space.l) {
                 if !genres.isEmpty {
                     genreText(genres)
                 }
                 if let rating = communityRating {
                     communityRatingText(rating)
-                        .fixedSize(horizontal: true, vertical: false)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -323,14 +337,68 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     private func genreText(_ genres: [String]) -> some View {
         Text(genres.prefix(3).joined(separator: ", "))
             .font(.callout)
+            #if os(tvOS)
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            #else
+            .foregroundStyle(.primary)
+            .fixedSize(horizontal: false, vertical: true)
+            #endif
     }
 
     private func communityRatingText(_ rating: Double) -> some View {
         Text(String(format: "★ %.1f", rating))
             .font(.callout)
+            #if os(tvOS)
             .foregroundStyle(.secondary)
+            #else
+            .foregroundStyle(.primary)
+            #endif
+    }
+}
+
+/// Keep the compact TV overview; touch can expand the same text without
+/// leaving the detail page. Changing the episode resets the expansion.
+private struct DetailOverview: View {
+    let text: String
+    @State private var isExpanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var visibleHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.s) {
+            Text(text)
+                .font(.callout)
+                #if os(tvOS)
+                .foregroundStyle(.secondary)
+                #else
+                .foregroundStyle(.primary)
+                #endif
+                .lineLimit(isExpanded ? nil : 3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 1000, alignment: .leading)
+                #if os(iOS)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
+                .background {
+                    Text(text)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                }
+                #endif
+            #if os(iOS)
+            if isExpanded || fullHeight > visibleHeight + 1 {
+                Button(isExpanded ? "Show Less" : "Read Synopsis") {
+                    isExpanded.toggle()
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("detail.overview.expand")
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            }
+            #endif
+        }
+        .onChange(of: text) { _, _ in isExpanded = false }
     }
 }
 
@@ -365,6 +433,14 @@ struct TitleArtImage: View {
     var maxHeight: CGFloat = Metrics.logoMaxHeight
 
     var body: some View {
+        artwork
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
         if let url {
             CachedAsyncImage(url: url, maxPixelSize: Int(Metrics.logoMaxWidth * 2)) { image in
                 image
@@ -384,7 +460,9 @@ struct TitleArtImage: View {
     private var titleText: some View {
         Text(title)
             .font(.largeTitle.bold())
+            #if os(tvOS)
             .lineLimit(2)
+            #endif
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -463,6 +541,7 @@ struct CastStrip: View {
             }
             .frame(width: Metrics.castPortraitSize, height: Metrics.castPortraitSize)
             .clipShape(Circle())
+            .accessibilityHidden(true)
 
             VStack(spacing: Metrics.Space.hair) {
                 // Two lines for the name: at eight across there is width to
@@ -482,5 +561,6 @@ struct CastStrip: View {
             }
             .frame(width: Metrics.castCaptionWidth)
         }
+        .accessibilityElement(children: .combine)
     }
 }
