@@ -295,9 +295,19 @@ nonisolated final class FFmpegDemuxer {
         recommendedPixelBufferAttributes: CVPixelBufferAttributes
     ) throws {
         avformat_network_init()
-        guard let allocated = avformat_alloc_context() else {
+        close()
+        formatContext = avformat_alloc_context()
+        guard let allocated = formatContext else {
             throw DemuxError.openFailed("out of memory")
         }
+        var completedOpen = false
+        defer {
+            // Own the context from allocation, including disc/custom-I/O
+            // setup. avformat_open_input updates this same pointer (and frees
+            // it on failure), so every throw has exactly one cleanup path.
+            if !completedOpen { close() }
+        }
+        FFmpegNetworkPolicy.install(on: allocated)
         allocated.pointee.interrupt_callback = AVIOInterruptCB(
             callback: { opaque in
                 guard let opaque else { return 0 }
@@ -313,7 +323,10 @@ nonisolated final class FFmpegDemuxer {
             // server remux exactly as it did before any of this existed
             // (HEL-133).
             do {
-                let volume = try UDFVolume(source: PlaybackCacheDiscSource(source: cacheScope))
+                let volume = try UDFVolume(
+                    source: PlaybackCacheDiscSource(source: cacheScope),
+                    budget: DiscReadBudget(isCancelled: { [weak self] in self?.isInterrupted ?? true })
+                )
                 let title = try DiscTitle.mainTitle(
                     in: volume,
                     runtimeSeconds: disc.runtimeSeconds
@@ -343,7 +356,7 @@ nonisolated final class FFmpegDemuxer {
                 return Unmanaged<FFmpegDemuxer>
                     .fromOpaque(opaque)
                     .takeUnretainedValue()
-                    .openChildIO(output: output, url: url, flags: flags, options: options)
+                    .openChildIO(context: context, output: output, url: url, flags: flags, options: options)
             }
             allocated.pointee.io_close2 = { context, ioContext in
                 guard let context, let opaque = context.pointee.opaque else { return -5 }
@@ -357,6 +370,7 @@ nonisolated final class FFmpegDemuxer {
         // Bound every network operation and survive transient drops — an
         // unbounded connect was capable of wedging playback startup.
         var options: OpaquePointer?
+        av_dict_set(&options, "tls_verify", "1", 0)
         av_dict_set(&options, "rw_timeout", "15000000", 0) // 15 s per I/O op
         av_dict_set(&options, "reconnect", "1", 0)
         av_dict_set(&options, "reconnect_streamed", "1", 0)
@@ -372,22 +386,9 @@ nonisolated final class FFmpegDemuxer {
         }
         defer { av_dict_free(&options) }
 
-        var ctx: UnsafeMutablePointer<AVFormatContext>? = allocated
-        var status = avformat_open_input(&ctx, url, nil, &options)
-        guard status >= 0, let ctx else {
-            cachedIO?.close()
-            cachedIO = nil
-            closeAllChildIO()
-            hlsCache = nil
+        var status = avformat_open_input(&formatContext, url, nil, &options)
+        guard status >= 0, let ctx = formatContext else {
             throw DemuxError.openFailed(Self.errorText(status))
-        }
-        formatContext = ctx
-        var completedOpen = false
-        defer {
-            // Once avformat_open_input succeeds, every later throw owns the
-            // context. The demux loop's close path only runs after a complete
-            // open, so partial stream/codec setup is cleaned up here.
-            if !completedOpen { close() }
         }
         status = avformat_find_stream_info(ctx, nil)
         guard status >= 0 else {
@@ -1046,6 +1047,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     private func openChildIO(
+        context: UnsafeMutablePointer<AVFormatContext>,
         output: UnsafeMutablePointer<UnsafeMutablePointer<AVIOContext>?>?,
         url: UnsafePointer<CChar>?,
         flags: Int32,
@@ -1053,7 +1055,7 @@ nonisolated final class FFmpegDemuxer {
     ) -> Int32 {
         guard let output, let url else { return -22 }
         let nativeOpen = {
-            avio_open2(output, url, flags, nil, options)
+            FFmpegNetworkPolicy.open(context: context, output: output, url: url, flags: flags, options: options)
         }
         guard flags & 1 != 0, flags & 2 == 0,
               let hlsCache,
