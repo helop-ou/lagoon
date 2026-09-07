@@ -29,6 +29,21 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "90",
+            released: "September 2026",
+            headline: "Featured titles you can swipe through, clearer Home rows, and easier browsing.",
+            changes: [
+                "Browse featured titles on Home and Discover by swiping left or right on iPhone and iPad, or pressing Left and Right on your Apple TV remote. Tap or select the banner to open the title on screen.",
+                "Featured banners pause automatic rotation while you swipe or focus them on Apple TV, and keep your selected title when the library refreshes. VoiceOver announces the slide position and offers next and previous actions.",
+                "Next Up now only shows episodes you have not started. Partly watched episodes stay in Continue Watching, while playing from a show's details still resumes where you left off.",
+                "Recently Added show rows now display the show once when new episodes arrive, instead of listing individual episodes.",
+                "Posters on iPhone and iPad are larger across Library and recommendation rows, with layouts that adapt to the available space and text size.",
+                "Title details on iPhone and iPad use larger standard action buttons, with Resume and From Beginning kept together when space allows.",
+                "Long movie and show genre names on Apple TV are centered and can wrap onto two lines instead of being cut off.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "89",
             released: "September 2026",
             headline: "One Library, fuller search results, and a more comfortable iPhone experience.",
