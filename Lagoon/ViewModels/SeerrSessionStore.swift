@@ -91,8 +91,13 @@ final class SeerrSessionStore {
             if activationToken == token { isLoading = false }
         }
 
+        let candidates = SeerrClient.candidateURLs(for: input)
+        guard !candidates.isEmpty else {
+            errorMessage = ServerAddress.Failure.invalid.localizedDescription
+            throw ServerAddress.Failure.invalid
+        }
         var lastError: Error = SeerrError.invalidServerURL
-        for candidate in SeerrClient.candidateURLs(for: input) {
+        for candidate in candidates {
             guard activationToken == token, activeAccount?.id == account.id else { throw CancellationError() }
             client.clear()
             client.configure(serverURL: candidate)
