@@ -15,28 +15,29 @@ import SwiftUI
 struct PosterCard: View {
     let item: MediaItem
     @Environment(SessionStore.self) private var session
+    let layout = PosterLayout()
 
     var body: some View {
         // The gap has to clear the focus lift, not just look right at rest:
         // `.card` scales the poster about a tenth, so a 390pt one grows ~20pt
         // past its resting bottom edge and lands on the title (Jaagop).
-        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+        VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: ContentNavigationRoute.item(item)) {
                 ZStack(alignment: .bottom) {
                     CachedAsyncImage(
                         url: posterURL,
-                        maxPixelSize: Int(Metrics.posterHeight)
+                        maxPixelSize: layout.imageSize
                     ) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
                         placeholderLabel
                     }
-                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                    .frame(width: layout.width, height: layout.height)
                     .clipped()
 
                     progressBar
                 }
-                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
             .cardButtonStyle()
@@ -46,14 +47,14 @@ struct PosterCard: View {
 
             caption
         }
-        .frame(width: Metrics.posterWidth)
+        .frame(width: layout.width)
     }
 
     private var posterURL: URL? {
         session.client.imageURL(
             for: item,
             kind: .primary,
-            maxWidth: Int(Metrics.posterWidth * 1.5)
+            maxWidth: layout.imageWidth
         )
     }
 
@@ -63,7 +64,7 @@ struct PosterCard: View {
         VStack(alignment: .leading, spacing: Metrics.Space.hair) {
             Text(item.name ?? "")
                 .font(.caption.weight(.medium))
-                .lineLimit(1)
+                .lineLimit(layout.captionLines)
             if let year = item.productionYear {
                 Text(String(year))
                     .font(.caption2)
@@ -71,7 +72,8 @@ struct PosterCard: View {
             }
             Spacer(minLength: 0)
         }
-        .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight, alignment: .topLeading)
+        .frame(width: layout.width, alignment: .leading)
+        .frame(minHeight: layout.captionHeight, alignment: .topLeading)
     }
 
     private var placeholderLabel: some View {
@@ -101,6 +103,7 @@ struct LandscapeCard: View {
     var showsMetadata = false
     var action: (() -> Void)? = nil
     @Environment(SessionStore.self) private var session
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         Group {
@@ -125,7 +128,7 @@ struct LandscapeCard: View {
         session.client.imageURL(
             for: item,
             kind: .thumb,
-            maxWidth: Int(Metrics.landscapeWidth * 1.5)
+            maxWidth: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
         )
     }
 
@@ -133,7 +136,7 @@ struct LandscapeCard: View {
         ZStack(alignment: .bottomLeading) {
             CachedAsyncImage(
                 url: thumbURL,
-                maxPixelSize: Int(Metrics.landscapeWidth * 1.5)
+                maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
             ) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
