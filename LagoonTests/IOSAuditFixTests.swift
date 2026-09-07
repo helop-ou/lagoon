@@ -24,7 +24,7 @@ struct AccountDraftTests {
     @Test func addingAndCancellingLeaveTheActiveSessionIntact() throws {
         let suite = "AccountDraftTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
-        let account = StoredAccount(serverURL: URL(string: "https://example.invalid")!,
+        let account = StoredAccount(serverURL: URL(string: "https://example.invalid/jellyfin")!,
                                     serverName: "Original", userId: UUID().uuidString, userName: "Viewer")
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -36,14 +36,22 @@ struct AccountDraftTests {
         let session = SessionStore(defaults: defaults)
         let before = defaults.dictionaryRepresentation() as NSDictionary
         session.addAccount()
-        let draft = SessionStore(accountDraft: true, defaults: defaults)
+        let draft = session.makeAccountDraft()
 
         #expect(session.isAddingAccount)
         #expect(session.phase == .signedIn)
         #expect(session.activeAccount == account)
         #expect(session.client.serverURL == account.serverURL)
-        #expect(draft.phase == .needsServer)
+        #expect(draft.phase == .needsSignIn)
+        #expect(draft.client !== session.client)
+        #expect(draft.client.serverURL == account.serverURL)
+        #expect(draft.serverName == account.serverName)
+        #expect(draft.client.accessToken == nil)
+        #expect(draft.client.userId == nil)
+        #expect(draft.userName == nil)
         #expect(draft.activeAccount == nil)
+        #expect(draft.accounts.isEmpty)
+        #expect(throws: CancellationError.self) { try session.finishAddingAccount(from: draft) }
         draft.cancelAccountDraft()
         session.isAddingAccount = false
 
@@ -70,17 +78,88 @@ struct AccountDraftTests {
         #expect(draft.phase == .needsServer)
     }
 
-    @Test func changingDraftServerDoesNotForgetTheExistingAccount() async {
+    @Test func changingDraftServerDoesNotForgetTheExistingAccount() async throws {
+        let suite = "AccountDraftTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let account = StoredAccount(serverURL: URL(string: "https://original.invalid")!,
+                                    serverName: "Original", userId: UUID().uuidString, userName: "Viewer")
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? KeychainStore.delete(account.keychainAccount)
+        }
+        try KeychainStore.set("test-token", for: account.keychainAccount)
+        defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
+        defaults.set(account.id, forKey: "session.activeAccountId")
+        defaults.set(account.serverURL.absoluteString, forKey: "server.url")
+        let session = SessionStore(defaults: defaults)
+        let before = defaults.dictionaryRepresentation() as NSDictionary
+        let draft = session.makeAccountDraft()
+        #expect(draft.phase == .needsSignIn)
+
+        await draft.forgetServer()
+        #expect(draft.phase == .needsServer)
+        #expect(draft.serverName == nil)
+        #expect(draft.activeAccount == nil)
+        #expect(draft.client.accessToken == nil)
+        #expect(session.phase == .signedIn)
+        #expect(session.activeAccount == account)
+        #expect(session.client.serverURL == account.serverURL)
+        #expect(session.client.accessToken == "test-token")
+        #expect(KeychainStore.string(for: account.keychainAccount) == "test-token")
+        #expect(defaults.dictionaryRepresentation() as NSDictionary == before)
+
+        draft.cancelAccountDraft()
+        let reopened = session.makeAccountDraft()
+        #expect(reopened !== draft)
+        #expect(reopened.phase == .needsSignIn)
+        #expect(reopened.client.serverURL == account.serverURL)
+        #expect(reopened.client.accessToken == nil)
+    }
+
+    @Test(arguments: [false, true])
+    func noActiveAccountStartsAtServerEntry(hasRememberedAccount: Bool) throws {
         let suite = "AccountDraftTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set("original", forKey: "session.activeAccountId")
-        defaults.set("https://original.invalid", forKey: "server.url")
-        let draft = SessionStore(accountDraft: true, defaults: defaults)
-        await draft.forgetServer()
-        #expect(defaults.string(forKey: "session.activeAccountId") == "original")
-        #expect(defaults.string(forKey: "server.url") == "https://original.invalid")
+        if hasRememberedAccount {
+            let account = StoredAccount(serverURL: URL(string: "https://example.invalid")!,
+                                        serverName: "Remembered", userId: UUID().uuidString, userName: "Viewer")
+            defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
+        }
+        let session = SessionStore(defaults: defaults)
+        let before = defaults.dictionaryRepresentation() as NSDictionary
+        let draft = session.makeAccountDraft()
+
+        #expect(session.activeAccount == nil)
         #expect(draft.phase == .needsServer)
+        #expect(draft.serverName == nil)
+        #expect(draft.client.serverURL == nil)
+        #expect(draft.client.accessToken == nil)
+        #expect(defaults.dictionaryRepresentation() as NSDictionary == before)
+    }
+
+    @Test func draftUsesTheActiveServerNotTheFirstRememberedServer() throws {
+        let suite = "AccountDraftTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let first = StoredAccount(serverURL: URL(string: "https://first.invalid")!,
+                                  serverName: "First", userId: UUID().uuidString, userName: "Viewer")
+        let active = StoredAccount(serverURL: URL(string: "https://active.invalid/jellyfin")!,
+                                   serverName: "Active", userId: UUID().uuidString, userName: "Viewer")
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? KeychainStore.delete(active.keychainAccount)
+        }
+        try KeychainStore.set("test-token", for: active.keychainAccount)
+        defaults.set(try JSONEncoder().encode([first, active]), forKey: "accounts")
+        defaults.set(active.id, forKey: "session.activeAccountId")
+        let session = SessionStore(defaults: defaults)
+        let draft = session.makeAccountDraft()
+
+        #expect(draft.phase == .needsSignIn)
+        #expect(draft.client.serverURL == active.serverURL)
+        #expect(draft.serverName == active.serverName)
+        #expect(draft.client.accessToken == nil)
+        #expect(draft.client.userId == nil)
     }
 }
 
