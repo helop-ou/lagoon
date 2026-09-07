@@ -45,9 +45,16 @@ private struct TopShelfItem: Codable {
     let mediaOptions: UInt?
 }
 
+private struct TopShelfSnapshot: Decodable {
+    let owner: String
+    let generation: UUID
+    let publishedAt: Date
+    let items: [TopShelfItem]
+}
+
 class ContentProvider: TVTopShelfContentProvider {
     private let appGroupID = "group.ee.helop.lagoon"
-    private let itemsKey = "topShelf.continueWatching"
+    private let snapshotName = "snapshot-v2.json"
     /// Mirrors `TopShelfArtwork.containerSubpath`, which explains why it is
     /// under Caches: tvOS gives an app 500 KB of persistent local storage and
     /// requires everything else to be purgeable, so a real Apple TV refuses
@@ -59,7 +66,8 @@ class ContentProvider: TVTopShelfContentProvider {
         // "it ran and had nothing" — the whole of HEL-119 turned on that.
         log.info("loadTopShelfContent")
 
-        let items = loadItems()
+        guard let snapshot = loadSnapshot() else { return nil }
+        let items = snapshot.items
         // Returning nil leaves the static brand image in place, which is the
         // right look for a signed-out or freshly installed app and better
         // than an empty carousel.
@@ -68,7 +76,7 @@ class ContentProvider: TVTopShelfContentProvider {
             return nil
         }
 
-        let carouselItems = items.compactMap(carouselItem(for:))
+        let carouselItems = items.compactMap { carouselItem(for: $0, snapshot: snapshot) }
         guard !carouselItems.isEmpty else {
             log.error("\(items.count) items in the snapshot, none usable")
             return nil
@@ -78,10 +86,13 @@ class ContentProvider: TVTopShelfContentProvider {
         // `.details` over `.actions`: Lagoon has a summary, a genre and a
         // runtime to show, and withholding them to keep the frame clean
         // would be throwing away the reason someone pauses on a title.
+        // Recheck after assembling file URLs so a clear/commit in the other
+        // process cannot make a snapshot we already read current again.
+        guard loadSnapshot()?.generation == snapshot.generation else { return nil }
         return TVTopShelfCarouselContent(style: .details, items: carouselItems)
     }
 
-    private func carouselItem(for item: TopShelfItem) -> TVTopShelfCarouselItem? {
+    private func carouselItem(for item: TopShelfItem, snapshot: TopShelfSnapshot) -> TVTopShelfCarouselItem? {
         guard let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupID
         ) else {
@@ -90,7 +101,7 @@ class ContentProvider: TVTopShelfContentProvider {
         }
         let directory = container.appending(path: artworkDirectory)
 
-        let entry = TVTopShelfCarouselItem(identifier: item.id)
+        let entry = TVTopShelfCarouselItem(identifier: "\(snapshot.owner):\(snapshot.generation):\(item.id)")
         // The line above the title. The app composes it, because which
         // episode this is and how much of it is left are library facts and
         // this process deliberately has no library.
@@ -120,6 +131,8 @@ class ContentProvider: TVTopShelfContentProvider {
             (item.artwork1x, TVTopShelfItem.ImageTraits.screenScale1x),
         ] {
             guard let name else { continue }
+            let prefix = "\(snapshot.owner)-\(snapshot.generation.uuidString)/"
+            guard name.hasPrefix(prefix), !name.contains(".."), name.split(separator: "/").count == 2 else { continue }
             let url = directory.appending(path: name)
             guard FileManager.default.fileExists(atPath: url.path) else {
                 log.error("\(name, privacy: .public) is in the snapshot but not on disk")
@@ -134,28 +147,30 @@ class ContentProvider: TVTopShelfContentProvider {
 
         // Two buttons, two different things. Play resumes; More Info opens
         // the detail page, which is what the carousel's second button is for.
-        if let play = URL(string: "lagoon://play/\(item.id)") {
+        if let play = actionURL("play", item: item, snapshot: snapshot) {
             entry.playAction = TVTopShelfAction(url: play)
         }
-        if let detail = URL(string: "lagoon://item/\(item.id)") {
+        if let detail = actionURL("item", item: item, snapshot: snapshot) {
             entry.displayAction = TVTopShelfAction(url: detail)
         }
         return entry
     }
 
-    private func loadItems() -> [TopShelfItem] {
-        guard let defaults = UserDefaults(suiteName: appGroupID) else {
-            log.error("no App Group defaults — entitlement missing on the extension?")
-            return []
-        }
-        guard let data = defaults.data(forKey: itemsKey) else { return [] }
-        do {
-            return try JSONDecoder().decode([TopShelfItem].self, from: data)
-        } catch {
-            // The app redeclares this shape by hand in TopShelfStore.Item.
-            // If the two ever drift, this is where it shows.
-            log.error("snapshot did not decode: \(error, privacy: .public)")
-            return []
-        }
+    private func actionURL(_ action: String, item: TopShelfItem, snapshot: TopShelfSnapshot) -> URL? {
+        var components = URLComponents()
+        components.scheme = "lagoon"
+        components.host = action
+        components.path = "/\(item.id)"
+        components.queryItems = [URLQueryItem(name: "owner", value: snapshot.owner),
+                                 URLQueryItem(name: "generation", value: snapshot.generation.uuidString)]
+        return components.url
+    }
+
+    private func loadSnapshot() -> TopShelfSnapshot? {
+        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID),
+              let data = try? Data(contentsOf: container.appending(path: artworkDirectory).appending(path: snapshotName)),
+              let snapshot = try? JSONDecoder().decode(TopShelfSnapshot.self, from: data),
+              snapshot.owner.count == 64, snapshot.owner.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return snapshot
     }
 }
