@@ -15,7 +15,7 @@ convention; iOS scales down via `#if os(tvOS)`.
 | `cardSpacing` | 40 | 14 |
 | `posterWidth` (2:3) | 260 | 140 |
 | `landscapeWidth` (16:9) | 360 | 240 |
-| `heroHeight` | 620 | 380 |
+| `heroHeight` | 620 | 200 (grows with Dynamic Type) |
 | `gridColumns` | 5 | 3 |
 | rail padding (focus headroom on tvOS) | top 48 / bottom 96 | 12 / 40 |
 | poster grid row spacing | 72 | 40 |
@@ -396,10 +396,15 @@ resolves against whichever side of that it lands on.
   column is what actually buys the spacing, and the caption under each poster
   needs the vertical room too.
 - **Hero** (`HeroSection`): a *contained* rounded panel, not a full-bleed
-  banner, with the backdrop filling **all** of it. It sets **no `clipShape`
-  of its own** — the `.card` button style draws its plate at the system's
-  corner radius, and a competing r32 clip left the plate's corners peeking
-  out behind the panel's as a double edge when focused. The title is the
+  banner, with the backdrop filling **all** of it. On iOS the 200 pt landscape
+  banner anchors its title and two-line synopsis toward the bottom-left,
+  with page dots centered below them. Text-only titles use at most two lines.
+  It keeps its rounded clip and grows
+  at larger Dynamic Type sizes so the shorter banner does not crush text.
+  On tvOS it sets **no `clipShape` of its own** — the `.card` button style
+  draws its plate at the system's corner radius, and a competing r32 clip
+  left the plate's corners peeking out behind the panel's as a double edge
+  when focused. The title is the
   item's own logo art via `TitleArtView` at `heroLogoHeight`, matching the
   detail pages. The mask that used to fade the artwork's leading third into
   flat material is gone (Jaagop: it read as a grey wash over a third of the
