@@ -20,12 +20,22 @@ final class SessionStore {
     private(set) var userName: String?
     /// Every remembered server+user pair, in the order they were added.
     private(set) var accounts: [StoredAccount] = []
-    private(set) var activeAccount: StoredAccount?
+    private(set) var activeAccount: StoredAccount? {
+        didSet { synchronizeAccountContext() }
+    }
+    /// Retained identity for reauthentication; it has no active credential.
+    private(set) var reauthenticationAccount: StoredAccount?
     var isAddingAccount = false
     let client: JellyfinClient
+    let seerr: SeerrSessionStore
+    let recentSearches: RecentSearchStore
+    var cleanupErrorMessage: String?
 
     private let defaults: UserDefaults
     private let isAccountDraft: Bool
+    private let sessionConfiguration: URLSessionConfiguration
+    private let localData: AccountLocalData
+    private let credentials: any AccountCredentialStorage
     private var draftCancelled = false
     private var pendingAuthentication: AuthenticationResult?
     private var connectionGeneration = 0
@@ -38,6 +48,7 @@ final class SessionStore {
         static let serverName = "server.name"
         static let accounts = "accounts"
         static let activeAccountId = "session.activeAccountId"
+        static let expiredAccounts = "session.expiredAccountIds"
         /// Single-slot layout, pre-HEL-38. Read once by the migration.
         static let legacyUserId = "session.userId"
         static let legacyUserName = "session.userName"
@@ -49,18 +60,50 @@ final class SessionStore {
         static let deviceId = "deviceId"
     }
 
-    init(accountDraft: Bool = false, defaults: UserDefaults = .standard) {
+    init(accountDraft: Bool = false, defaults: UserDefaults = .standard,
+         sessionConfiguration: URLSessionConfiguration = .default,
+         credentials: any AccountCredentialStorage = SystemAccountCredentials(),
+         seerrClient: SeerrClient? = nil) {
         self.defaults = defaults
+        self.sessionConfiguration = sessionConfiguration
+        self.credentials = credentials
+        let localData = AccountLocalData(defaults: defaults, credentials: credentials)
+        self.localData = localData
+        recentSearches = RecentSearchStore(defaults: defaults)
+        seerr = SeerrSessionStore(client: seerrClient ?? SeerrClient(), defaults: defaults, localData: localData)
         isAccountDraft = accountDraft
         let deviceId: String
-        if let stored = KeychainStore.string(for: KeychainKey.deviceId) {
+        if let stored = credentials.string(for: KeychainKey.deviceId) {
             deviceId = stored
         } else {
             deviceId = UUID().uuidString
-            try? KeychainStore.set(deviceId, for: KeychainKey.deviceId)
+            try? credentials.set(deviceId, for: KeychainKey.deviceId)
         }
-        client = JellyfinClient(deviceId: deviceId)
-        if !accountDraft { restore() }
+        client = JellyfinClient(deviceId: deviceId, sessionConfiguration: sessionConfiguration)
+        client.onSessionExpired = { [weak self] identity in self?.sessionExpired(identity) }
+        if !accountDraft {
+            retryCredentialCleanup()
+            restore()
+            if activeAccount == nil { synchronizeAccountContext() }
+        }
+    }
+
+    private func synchronizeAccountContext() {
+        guard !isAccountDraft else { return }
+        recentSearches.configure(accountID: activeAccount?.id)
+        TopShelfStore.activate(accountID: activeAccount?.id)
+        seerr.select(activeAccount)
+    }
+
+    func retryCredentialCleanup() {
+        do {
+            try localData.retryPendingRemovals()
+            cleanupErrorMessage = nil
+        } catch { reportCleanupFailure() }
+    }
+
+    private func reportCleanupFailure() {
+        cleanupErrorMessage = "The account's local access has been removed, but some saved credentials could not be deleted. Retry cleanup before adding that account again."
     }
 
     private func restore() {
@@ -71,8 +114,8 @@ final class SessionStore {
         // profile shouldn't have to be picked before every session; the
         // picker is reachable from Settings whenever it is wanted.
         if let id = defaults.string(forKey: DefaultsKey.activeAccountId),
-           let account = accounts.first(where: { $0.id == id }),
-           activate(account) {
+           let account = accounts.first(where: { $0.id == id }) {
+            if !activate(account) { beginReauthentication(account) }
             return
         }
 
@@ -96,13 +139,17 @@ final class SessionStore {
     // MARK: - Accounts (HEL-38)
 
     /// Points the client at a remembered account. Fails only when its token
-    /// has gone — a cleared keychain, or a session revoked server-side.
+    /// has gone or has been rejected. Restore never probes the server, so
+    /// offline startup preserves usable remembered sessions.
     @discardableResult
     private func activate(_ account: StoredAccount) -> Bool {
-        guard let token = KeychainStore.string(for: account.keychainAccount) else { return false }
+        guard !expiredAccountIDs.contains(account.id),
+              !localData.pendingAccountIDs.contains(account.id),
+              let token = credentials.string(for: account.keychainAccount) else { return false }
         client.configure(serverURL: account.serverURL)
         client.activateSession(token: token, userId: account.userId)
         activeAccount = account
+        reauthenticationAccount = nil
         serverName = account.serverName
         userName = account.userName
         defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
@@ -114,6 +161,7 @@ final class SessionStore {
     /// credentials. Every Jellyfin call is user-scoped, so Continue
     /// Watching and the rest follow on their own.
     func switchTo(_ account: StoredAccount) {
+        connectionGeneration += 1
         // The shelf still shows the outgoing user's viewing until Home
         // refreshes; on a TV anyone in the room can read it (HEL-37).
         TopShelfStore.clear()
@@ -121,17 +169,47 @@ final class SessionStore {
         guard !activate(account) else { return }
         // The account outlived its token. Send them to sign-in for *that*
         // server rather than leaving a dead entry in the picker.
-        client.configure(serverURL: account.serverURL)
-        serverName = account.serverName
-        userName = nil
-        activeAccount = nil
-        defaults.set(account.serverURL.absoluteString, forKey: DefaultsKey.serverURL)
-        defaults.set(account.serverName, forKey: DefaultsKey.serverName)
-        phase = .needsSignIn
+        beginReauthentication(account)
     }
 
     func showAccountPicker() {
+        connectionGeneration += 1
+        client.clearSession()
+        activeAccount = nil
+        reauthenticationAccount = nil
+        userName = nil
         phase = .choosingAccount
+    }
+
+    private var expiredAccountIDs: Set<String> {
+        get { Set(defaults.stringArray(forKey: DefaultsKey.expiredAccounts) ?? []) }
+        set { defaults.set(newValue.sorted(), forKey: DefaultsKey.expiredAccounts) }
+    }
+
+    private func sessionExpired(_ identity: JellyfinClient.SessionIdentity) {
+        guard !isAccountDraft, let account = activeAccount,
+              account.serverURL == identity.serverURL, account.userId == identity.userId else { return }
+        // Persist rejection before attempting Keychain deletion. A temporary
+        // Keychain failure must not reactivate this token on the next launch.
+        expiredAccountIDs.insert(account.id)
+        try? credentials.delete(account.keychainAccount)
+        TopShelfStore.clear()
+        isAddingAccount = false
+        beginReauthentication(account)
+    }
+
+    private func beginReauthentication(_ account: StoredAccount) {
+        connectionGeneration += 1
+        client.clearSession()
+        client.configure(serverURL: account.serverURL)
+        activeAccount = nil
+        reauthenticationAccount = account
+        serverName = account.serverName
+        userName = account.userName
+        defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
+        defaults.set(account.serverURL.absoluteString, forKey: DefaultsKey.serverURL)
+        defaults.set(account.serverName, forKey: DefaultsKey.serverName)
+        phase = .needsSignIn
     }
 
     /// Starts adding a server+user alongside the ones already remembered.
@@ -142,7 +220,7 @@ final class SessionStore {
     /// Reuse only the active server's address and name, never its user or
     /// credentials. With no active account, setup still asks for a server.
     func makeAccountDraft() -> SessionStore {
-        let draft = SessionStore(accountDraft: true, defaults: defaults)
+        let draft = SessionStore(accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration, credentials: credentials)
         if let account = activeAccount {
             draft.client.configure(serverURL: account.serverURL)
             draft.serverName = account.serverName
@@ -178,14 +256,19 @@ final class SessionStore {
 
     /// Forgets an account from the picker, token and all.
     func remove(_ account: StoredAccount) throws {
-        try KeychainStore.delete(account.keychainAccount)
-        let removedActiveAccount = activeAccount?.id == account.id
-        defaults.removeObject(forKey: "libraries.\(account.id)")
+        localData.beginRemoval(accountID: account.id)
+        expiredAccountIDs.remove(account.id)
+        let removedActiveAccount = activeAccount?.id == account.id || reauthenticationAccount?.id == account.id
         save(accounts: accounts.filter { $0.id != account.id })
+        if !accounts.contains(where: { $0.serverURL == account.serverURL }) {
+            defaults.removeObject(forKey: AccountLocalData.seerrServerKey(account))
+        }
         if removedActiveAccount {
+            connectionGeneration += 1
             TopShelfStore.clear()
             client.clearSession()
             activeAccount = nil
+            reauthenticationAccount = nil
             serverName = nil
             userName = nil
             defaults.removeObject(forKey: DefaultsKey.activeAccountId)
@@ -198,6 +281,13 @@ final class SessionStore {
             phase = .needsServer
         } else if removedActiveAccount {
             phase = .choosingAccount
+        }
+        do {
+            try localData.finishRemoval(accountID: account.id)
+            if localData.pendingAccountIDs.isEmpty { cleanupErrorMessage = nil }
+        } catch {
+            reportCleanupFailure()
+            throw error
         }
     }
 
@@ -239,7 +329,7 @@ final class SessionStore {
               let urlString = defaults.string(forKey: DefaultsKey.serverURL),
               let url = URL(string: urlString),
               let userId = defaults.string(forKey: DefaultsKey.legacyUserId),
-              let token = KeychainStore.string(for: KeychainKey.legacyAccessToken) else { return }
+              let token = credentials.string(for: KeychainKey.legacyAccessToken) else { return }
 
         let account = StoredAccount(
             serverURL: url,
@@ -248,8 +338,8 @@ final class SessionStore {
             userName: defaults.string(forKey: DefaultsKey.legacyUserName)
         )
         do {
-            try KeychainStore.set(token, for: account.keychainAccount)
-            guard KeychainStore.string(for: account.keychainAccount) == token else {
+            try credentials.set(token, for: account.keychainAccount)
+            guard credentials.string(for: account.keychainAccount) == token else {
                 throw KeychainStore.StoreError.verificationFailed
             }
         } catch {
@@ -260,7 +350,7 @@ final class SessionStore {
         save(accounts: [account])
         defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
 
-        try? KeychainStore.delete(KeychainKey.legacyAccessToken)
+        try? credentials.delete(KeychainKey.legacyAccessToken)
         defaults.removeObject(forKey: DefaultsKey.legacyUserId)
         defaults.removeObject(forKey: DefaultsKey.legacyUserName)
     }
@@ -350,6 +440,13 @@ final class SessionStore {
             try await connect(to: address)
             let result = try await client.authenticateByName(username: username, password: password)
             guard let url = client.serverURL else { return }
+            if UserDefaults.standard.bool(forKey: "debug.accountPrivacyRegression"), url.host == "127.0.0.1" {
+                // Synthetic UI fixture only: exercise normal credential and
+                // account persistence, then let tests drive the real picker.
+                try completeSignIn(with: result)
+                if let term = environment["LAGOON_REGRESSION_SEARCH"] { recentSearches.record(term) }
+                return
+            }
             // UI tests run in an ephemeral simulator session. Activating the
             // documented demo token directly avoids making the regression
             // harness depend on keychain entitlements or persisted accounts.
@@ -413,15 +510,19 @@ final class SessionStore {
             policy: result.user.policy
         )
         activeAccount = account
+        reauthenticationAccount = nil
         userName = result.user.name
         phase = .signedIn
     }
 
     private func persistSignIn(_ result: AuthenticationResult, account: StoredAccount) throws {
-        try KeychainStore.set(result.accessToken, for: account.keychainAccount)
-        guard KeychainStore.string(for: account.keychainAccount) == result.accessToken else {
+        // Re-adding must not resurrect cookies left by a failed local forget.
+        try localData.finishRemoval(accountID: account.id)
+        try credentials.set(result.accessToken, for: account.keychainAccount)
+        guard credentials.string(for: account.keychainAccount) == result.accessToken else {
             throw KeychainStore.StoreError.verificationFailed
         }
+        expiredAccountIDs.remove(account.id)
         save(accounts: loadAccounts().filter { $0.id != account.id } + [account])
         defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
         defaults.set(account.serverURL.absoluteString, forKey: DefaultsKey.serverURL)
@@ -434,21 +535,27 @@ final class SessionStore {
     /// server-side, so keeping the entry would only offer a dead session.
     /// Any other remembered account survives, and the picker takes over.
     func signOut() async {
-        try? await client.logout()
-        TopShelfStore.clear()
+        connectionGeneration += 1
+        let account = activeAccount ?? reauthenticationAccount
+        let remote = client.sessionSnapshot()
+        let linkedRemote = seerr.client.sessionSnapshot()
+        // Privacy cleanup precedes network suspension. Even offline logout
+        // immediately drops local access; late responses affect only copies.
+        if let account { try? remove(account) }
         client.clearSession()
-        if let account = activeAccount {
-            try? KeychainStore.delete(account.keychainAccount)
-            save(accounts: accounts.filter { $0.id != account.id })
-        }
         activeAccount = nil
+        reauthenticationAccount = nil
         userName = nil
         defaults.removeObject(forKey: DefaultsKey.activeAccountId)
         phase = accounts.isEmpty ? .needsSignIn : .choosingAccount
+        async let jellyfinLogout: Void? = try? remote.logout()
+        async let seerrLogout: Void? = linkedRemote.sessionCookie == nil ? nil : try? linkedRemote.logout()
+        _ = await (jellyfinLogout, seerrLogout)
     }
 
     func forgetServer() async {
         connectionGeneration += 1
+        reauthenticationAccount = nil
         if isAccountDraft {
             client.clearSession()
             activeAccount = nil
@@ -458,10 +565,20 @@ final class SessionStore {
             phase = .needsServer
             return
         }
-        await signOut()
+        // Invalidate immediately, and do not touch a later account after
+        // waiting for revocation of this one.
+        let remote = client.sessionSnapshot()
+        let linkedRemote = seerr.client.sessionSnapshot()
+        if let account = activeAccount { try? remove(account) }
+        client.clearSession()
+        activeAccount = nil
+        defaults.removeObject(forKey: DefaultsKey.activeAccountId)
         defaults.removeObject(forKey: DefaultsKey.serverURL)
         defaults.removeObject(forKey: DefaultsKey.serverName)
         serverName = nil
         phase = .needsServer
+        async let jellyfinLogout: Void? = try? remote.logout()
+        async let seerrLogout: Void? = linkedRemote.sessionCookie == nil ? nil : try? linkedRemote.logout()
+        _ = await (jellyfinLogout, seerrLogout)
     }
 }
