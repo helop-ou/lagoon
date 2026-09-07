@@ -54,6 +54,42 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.last?.cookie == nil)
     }
 
+    @Test func serverSetupValidatesBeforeProbingAndPersistsTheSuccessfulProxyRoot() async throws {
+        let client = makeClient()
+        let suite = "SeerrAddressTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let localData = AccountLocalData(defaults: defaults, credentials: MemoryAccountCredentials())
+        let store = SeerrSessionStore(client: client, defaults: defaults, localData: localData)
+        let account = StoredAccount(serverURL: URL(string: "https://jellyfin.test")!, serverName: "Fixture", userId: "user", userName: "Viewer")
+        store.select(account)
+        defer { store.select(nil) }
+        do {
+            try await store.connect(to: "https://user:secret@seerr.test")
+            Issue.record("Invalid input must not start discovery")
+        } catch ServerAddress.Failure.invalid {}
+        #expect(SeerrMockURLProtocol.requests.isEmpty)
+        #expect(!store.isLoading)
+        #expect(store.configuredURL == nil)
+        // The proxy's own root ends in /api/v1; only the final API suffix
+        // supplied by the user should be removed, once.
+        try await store.connect(to: "seerr.test/proxy%2Fname/api/v1/api/v1/")
+        let root = "http://seerr.test:5055/proxy%2Fname/api/v1"
+        #expect(store.configuredURL?.absoluteString == root)
+        #expect(defaults.string(forKey: AccountLocalData.seerrServerKey(account)) == root)
+        #expect(store.isConfigured)
+        let copy = client.sessionSnapshot()
+        #expect(copy.serverURL?.absoluteString == root)
+        _ = try await copy.status()
+        await store.activate(for: account)
+        #expect(store.configuredURL?.absoluteString == root)
+        #expect(store.client.serverURL?.absoluteString == root)
+        let requests = SeerrMockURLProtocol.requests
+        #expect(requests.contains { $0.url.absoluteString == root + "/api/v1/settings/public" })
+        #expect(requests.contains { $0.url.absoluteString == root + "/api/v1/status" })
+        #expect(requests.allSatisfy { $0.cookie == nil })
+    }
+
     @Test func discoveryDecodesAvailabilityAndRequestState() async throws {
         let client = makeClient()
         client.configure(serverURL: URL(string: "https://seerr.test")!)
@@ -154,6 +190,7 @@ struct SeerrClientTests {
 }
 
 private nonisolated struct RecordedSeerrRequest: Sendable {
+    let url: URL
     let method: String
     let path: String
     let query: String?
@@ -192,6 +229,7 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
         let body = bodyString(from: request)
         Self.lock.lock()
         Self.recorded.append(RecordedSeerrRequest(
+            url: url,
             method: request.httpMethod ?? "GET",
             path: url.path,
             query: url.query,
@@ -200,6 +238,11 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             handlesCookies: request.httpShouldHandleCookies
         ))
         Self.lock.unlock()
+
+        if url.path(percentEncoded: true).hasPrefix("/proxy%2Fname/"), url.port != 5055 {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+            return
+        }
 
         // Deliberately never finishes. The client must enforce an absolute
         // deadline instead of relying only on URLSession's inactivity timer.
@@ -243,6 +286,10 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
     }
 
     private func response(for url: URL) -> (status: Int, headers: [String: String], body: String) {
+        if url.port == 5055, url.path(percentEncoded: true).hasPrefix("/proxy%2Fname/api/v1/") {
+            return (200, ["Content-Type": "application/json"], url.path.hasSuffix("/status")
+                    ? #"{"version":"test"}"# : #"{"initialized":true,"mediaServerType":2}"#)
+        }
         switch (request.httpMethod ?? "GET", url.path) {
         case ("POST", "/base/api/v1/auth/jellyfin/quickconnect/authenticate"):
             return (200, [
