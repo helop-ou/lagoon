@@ -396,6 +396,18 @@ struct CustomPlayerView<Surface: View>: View {
     private var videoSurface: some View {
         surface()
             .ignoresSafeArea()
+        #if DEBUG && os(iOS)
+            .overlay(alignment: .topLeading) {
+                if UserDefaults.standard.bool(forKey: "debug.playerRegression") {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Playback state")
+                        .accessibilityIdentifier("player.regression.state")
+                        .accessibilityValue(regressionAccessibilityValue)
+                }
+            }
+        #endif
         #if os(tvOS)
             // The surface owns focus during playback. It stays eligible
             // during the panel animation so there is never a focusless
