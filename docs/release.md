@@ -24,8 +24,9 @@ Once per platform (the multiplatform target archives separately for
 tvOS and iOS):
 
 0. **Bump and write the changelog first** (see *Build numbers* below):
-   `scripts/bump-build.sh`, then add the matching `ChangelogEntry`. The build
-   cannot be archived without one — `ChangelogTests` fails.
+   `scripts/bump-build.sh`, then add the matching `ChangelogEntry`. Run the
+   unit suites explicitly, including `ChangelogTests`, before archiving.
+   Product → Archive does not run the test action or enforce those tests.
 1. Select an **Any tvOS Device** destination → Product → **Archive**.
 2. Organizer → Distribute App → **Custom** → **TestFlight Internal Only**, and
    **uncheck "Manage version and build number"**. Only the Custom method shows
@@ -44,8 +45,10 @@ are deliberate and manual: `xcrun agvtool new-marketing-version 0.2` (or edit
 
 ## Facts already encoded in the project
 
-- `ITSAppUsesNonExemptEncryption = NO` — no export-compliance prompt
-  blocking each build in TestFlight.
+- `ITSAppUsesNonExemptEncryption = NO` is the existing declaration. It is
+  **not a recorded exemption assessment**. HEL-143 must reconcile the bundled
+  GnuTLS stack, distribution territories and required documentation before
+  public distribution; see [release preparation](hel-143-release-preparation.md).
 - All icon slots are filled (HEL-31), including the 1280×768 App Store
   stack that upload validation requires.
 - ATS enables `NSAllowsLocalNetworking` so home-LAN Jellyfin servers remain
@@ -194,8 +197,9 @@ orphaned changelog entries into the one you are keeping, and check App Store
 Connect first if there is any doubt about what was uploaded.
 
 `ChangelogTests.theBuildThisProjectDeclaresHasChangelogNotes` fails when the
-declared version and build have no entry, so a build cannot reach TestFlight
-without someone having written what changed in it. `LagoonTests` is app-hosted,
+declared version and build have no entry. This enforces the rule only when
+tests are run; Xcode's Archive and Organizer upload do not run it automatically.
+The CLI upload script separately checks for notes. `LagoonTests` is app-hosted,
 so the test reads the app bundle's real values.
 
 If a build somehow ships without notes, `Changelog.runningBuildIsListed()`
@@ -253,3 +257,12 @@ account, and it cannot be re-downloaded after issue.
 
 The GUI flow above remains perfectly fine; this exists so the setting is
 enforced by a file rather than by remembering a checkbox.
+
+## Preparing a public release (HEL-143)
+
+The internal upload script and `ExportOptions.plist` remain internal-only.
+Use the separate [public release checklist](public-release-checklist.md) for
+an external TestFlight/App Store candidate. Privacy packaging checks can run
+against an unsigned local archive, but that is not a substitute for signed
+archive validation, the Organizer privacy report, physical acceptance or the
+external release decisions in HEL-143.
