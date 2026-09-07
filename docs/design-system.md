@@ -13,10 +13,10 @@ convention; iOS scales down via `#if os(tvOS)`.
 |---|---|---|
 | `screenGutter` | 80 | 20 |
 | `cardSpacing` | 40 | 14 |
-| `posterWidth` (2:3) | 260 | 140 |
+| `posterWidth` (2:3) | 280 | 160 (grows with Dynamic Type) |
 | `landscapeWidth` (16:9) | 360 | 240 |
 | `heroHeight` | 620 | 200 (grows with Dynamic Type) |
-| `gridColumns` | 5 | 3 |
+| `gridColumns` | 5 | 2 baseline; adaptive to available width and Dynamic Type |
 | rail padding (focus headroom on tvOS) | top 48 / bottom 96 | 12 / 40 |
 | poster grid row spacing | 72 | 40 |
 
@@ -401,7 +401,11 @@ opening or navigating between categories must not change a saved preference.
 - **Library grid**: 5 columns on tvOS, not 6. The cards are fixed width, so a
   flexible column can't widen a gap without room to grow into — dropping a
   column is what actually buys the spacing, and the caption under each poster
-  needs the vertical room too.
+  needs the vertical room too. On iOS, the 160 × 240 pt poster baseline gives
+  typical portrait phones two columns; narrower layouts and larger text use
+  fewer, while wider layouts fit more. The same baseline applies to poster
+  rails, including More Like This, Search and Discover. It is a Lagoon design
+  choice, not an Apple-prescribed poster size.
 - **Hero** (`HeroSection`): a *contained* rounded panel, not a full-bleed
   banner, with the backdrop filling **all** of it. On iOS the 200 pt landscape
   banner anchors its title and two-line synopsis toward the bottom-left,
@@ -463,9 +467,18 @@ opening or navigating between categories must not change a saved preference.
   before the rails. A horizontal wash cannot protect full-width phone text,
   and leaving the still equally vivid behind cast and episodes made the whole
   page read as wallpaper. Header and section spacing are tighter, title art is
-  centered in the full-width phone column, Play leads a compact touch-action
+  centered in the full-width phone column, Play leads a native large touch-action
   group, cast captions are phone-sized, and the final rail gets enough bottom
   runway to clear the floating tab bar.
+  The shared metadata header uses `.controlSize(.large)` on iOS for Play,
+  Resume, watched/favorite and synopsis buttons. The season picker retains its
+  native menu presentation. Glass styling and system label sizing remain
+  native, with 8 pt between the circular actions;
+  `AdaptiveActionStack` still stacks actions when their labels don't fit.
+  Apple's [accessibility guidance](https://developer.apple.com/design/human-interface-guidelines/accessibility)
+  lists a 44 × 44 pt default iOS control size (28 × 28 pt minimum) and stresses
+  spacing as well as size. Use generous native controls for these frequent
+  actions, not the compact minimum, and verify with larger Dynamic Type too.
 - **Facts line**: on tvOS this is one spaced row — runtime, year, a *boxed*
   certification (r4 outline), then plain capability tokens from
   `MediaSource.qualityTokens` ("4K  DV  TrueHD 7.1  Atmos"). iOS splits identity
