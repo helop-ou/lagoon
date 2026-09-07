@@ -45,6 +45,13 @@ struct SeerrClientTests {
         #expect(requests[0].path == "/base/api/v1/auth/jellyfin/quickconnect/authenticate")
         #expect(requests[0].body?.contains(#""secret":"secret-1""#) == true)
         #expect(requests[1].cookie == "connect.sid=s%3Asession.signature")
+        #expect(requests.allSatisfy { !$0.handlesCookies })
+        // Configuration without an active cookie must not use the process's
+        // automatic cookie jar, even after another account authenticated.
+        client.clear()
+        client.configure(serverURL: URL(string: "https://seerr.test/base")!)
+        _ = try await client.status()
+        #expect(SeerrMockURLProtocol.requests.last?.cookie == nil)
     }
 
     @Test func discoveryDecodesAvailabilityAndRequestState() async throws {
@@ -152,6 +159,7 @@ private nonisolated struct RecordedSeerrRequest: Sendable {
     let query: String?
     let cookie: String?
     let body: String?
+    let handlesCookies: Bool
 }
 
 private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Sendable {
@@ -188,7 +196,8 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             path: url.path,
             query: url.query,
             cookie: request.value(forHTTPHeaderField: "Cookie"),
-            body: body
+            body: body,
+            handlesCookies: request.httpShouldHandleCookies
         ))
         Self.lock.unlock()
 
@@ -242,6 +251,8 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             ], userJSON)
         case ("GET", "/base/api/v1/auth/me"):
             return (200, ["Content-Type": "application/json"], userJSON)
+        case ("GET", "/base/api/v1/status"):
+            return (200, ["Content-Type": "application/json"], #"{"version":"test"}"#)
         case ("GET", "/api/v1/discover/trending"):
             return (200, ["Content-Type": "application/json"], #"{"page":1,"totalPages":1,"totalResults":1,"results":[{"id":329865,"mediaType":"movie","title":"Arrival","releaseDate":"2016-11-11","mediaInfo":{"id":8,"tmdbId":329865,"status":3,"jellyfinMediaId":"jellyfin-arrival","requests":[{"id":9,"status":2}]}}]}"#)
         case ("GET", "/api/v1/request"):
