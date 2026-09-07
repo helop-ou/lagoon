@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SignInView: View {
     @Environment(SessionStore.self) private var session
+    var changeServerTitle: LocalizedStringKey = "Change Server"
 
     @State private var username = ""
     @State private var password = ""
@@ -13,48 +14,26 @@ struct SignInView: View {
     @State private var isStartingQuickConnect = false
     @State private var pollTask: Task<Void, Never>?
 
+    #if os(iOS)
+    private enum Field { case username, password }
+    @FocusState private var focusedField: Field?
+    #endif
+
     var body: some View {
         ZStack {
             BrandBackground()
             JellyfishSwimLayer()
 
+            #if os(iOS)
+            touchForm
+            #else
             ScrollView {
                 VStack(spacing: Metrics.Space.l) {
-                    LagoonLockup(
-                        layout: .horizontal,
-                        symbolHeight: Metrics.lockupHeaderSymbolHeight
-                    )
-                    Text("Sign In")
-                        .font(.largeTitle.bold())
-                    Text(session.serverName ?? "Jellyfin")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.bottom, Metrics.Space.l)
-
-                    TextField("Username", text: $username)
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textFieldStyle(.roundedBorder)
-                        #endif
-                    SecureField("Password", text: $password)
-                        .textContentType(.password)
-                        #if os(iOS)
-                        .textFieldStyle(.roundedBorder)
-                        #endif
-                        .onSubmit(signIn)
-
-                    Button(action: signIn) {
-                        if isSigningIn {
-                            ProgressView()
-                        } else {
-                            Text("Sign In")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.glass)
-                    .disabled(username.isEmpty || isSigningIn)
+                    heading
+                    usernameField
+                    passwordField
+                    signInButton
+                        .buttonStyle(.glass)
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -68,18 +47,16 @@ struct SignInView: View {
                             .padding(.top, Metrics.Space.l)
                     }
 
-                    Button("Change Server") {
-                        pollTask?.cancel()
-                        Task { await session.forgetServer() }
-                    }
-                    .buttonStyle(.glass)
-                    .padding(.top, Metrics.Space.xl)
+                    changeServerButton
+                        .buttonStyle(.glass)
+                        .padding(.top, Metrics.Space.xl)
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Metrics.screenGutter)
                 .padding(.vertical, Metrics.Space.section)
             }
+            #endif
         }
         .task {
             quickConnectAvailable = await session.quickConnectAvailable()
@@ -89,6 +66,111 @@ struct SignInView: View {
         }
     }
 
+    private var heading: some View {
+        VStack(spacing: Metrics.Space.l) {
+            LagoonLockup(layout: .horizontal, symbolHeight: Metrics.lockupHeaderSymbolHeight)
+            Text("Sign In")
+                .font(.largeTitle.bold())
+            Text(session.serverName ?? session.client.serverURL?.host() ?? "Jellyfin")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.bottom, Metrics.Space.l)
+    }
+
+    private var usernameField: some View {
+        TextField("Username", text: $username)
+            .textContentType(.username)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .accessibilityIdentifier("signin.username")
+            #if os(iOS)
+            .textFieldStyle(.plain)
+            .frame(minHeight: Metrics.touchTarget)
+            .overlay(alignment: .bottom) { Divider() }
+            .focused($focusedField, equals: .username)
+            .submitLabel(.next)
+            .onSubmit { focusedField = .password }
+            #endif
+    }
+
+    private var passwordField: some View {
+        SecureField("Password", text: $password)
+            .textContentType(.password)
+            .accessibilityIdentifier("signin.password")
+            #if os(iOS)
+            .textFieldStyle(.plain)
+            .frame(minHeight: Metrics.touchTarget)
+            .overlay(alignment: .bottom) { Divider() }
+            .focused($focusedField, equals: .password)
+            .submitLabel(.go)
+            #endif
+            .onSubmit(signIn)
+    }
+
+    private var signInButton: some View {
+        Button(action: signIn) {
+            if isSigningIn {
+                ProgressView()
+            } else {
+                Text("Sign In")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .disabled(username.isEmpty || isSigningIn)
+    }
+
+    private var changeServerButton: some View {
+        Button(changeServerTitle) {
+            pollTask?.cancel()
+            #if os(iOS)
+            focusedField = nil
+            #endif
+            Task { await session.forgetServer() }
+        }
+        .accessibilityIdentifier("signin.changeServer")
+    }
+
+    #if os(iOS)
+    private var touchForm: some View {
+        ScrollView {
+            VStack(spacing: Metrics.Space.xl) {
+                heading
+
+                VStack(spacing: Metrics.Space.l) {
+                    usernameField
+                    passwordField
+                }
+
+                signInButton
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
+
+                if quickConnectAvailable {
+                    quickConnectSection
+                }
+
+                changeServerButton
+                    .buttonStyle(.plain)
+                    .frame(minHeight: Metrics.touchTarget)
+            }
+            .frame(maxWidth: 700)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Metrics.screenGutter)
+            .padding(.vertical, Metrics.Space.xl)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+    #endif
+
     private var quickConnectSection: some View {
         VStack(spacing: Metrics.Space.m) {
             Text("or")
@@ -96,32 +178,43 @@ struct SignInView: View {
                 .foregroundStyle(.tertiary)
 
             if let quickConnectCode {
-                Text(quickConnectCode)
-                    .font(Typography.quickConnectCode)
-                    .tracking(6)
-                Text("Enter this code under Quick Connect in any signed-in Jellyfin app.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                ProgressView()
+                quickConnectDetails(code: quickConnectCode)
             } else {
-                Button {
-                    startQuickConnect()
-                } label: {
-                    if isStartingQuickConnect {
-                        ProgressView()
-                    } else {
-                        Text("Sign in with Quick Connect")
-                    }
-                }
-                .buttonStyle(.glass)
-                .disabled(isStartingQuickConnect)
+                quickConnectButton
+                    .buttonStyle(.glass)
             }
         }
     }
 
+    private func quickConnectDetails(code: String) -> some View {
+        VStack(spacing: Metrics.Space.m) {
+            Text(code)
+                .font(Typography.quickConnectCode)
+                .tracking(6)
+            Text("Enter this code under Quick Connect in any signed-in Jellyfin app.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            ProgressView()
+        }
+    }
+
+    private var quickConnectButton: some View {
+        Button(action: startQuickConnect) {
+            if isStartingQuickConnect {
+                ProgressView()
+            } else {
+                Text("Sign in with Quick Connect")
+            }
+        }
+        .disabled(isStartingQuickConnect)
+    }
+
     private func signIn() {
         guard !isSigningIn, !username.isEmpty else { return }
+        #if os(iOS)
+        focusedField = nil
+        #endif
         pollTask?.cancel()
         pollTask = nil
         quickConnectCode = nil
