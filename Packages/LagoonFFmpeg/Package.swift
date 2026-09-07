@@ -33,6 +33,7 @@ let package = Package(
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("CoreFoundation"),
+                .linkedFramework("Security"),
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("Metal"),
                 .linkedFramework("VideoToolbox"),
@@ -67,8 +68,10 @@ let package = Package(
         ),
         .binaryTarget(
             name: "Libavformat",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libavformat.xcframework.zip",
-            checksum: "2afb601375929640e743e7bdaa6c4a88e2b582a07e1c5f2dc95cc7f5b26a0810"
+            // HEL-142: same FFmpeg release, verification enabled by default
+            // with Apple system trust for GnuTLS's actual peer chain.
+            // Rebuild/provenance: scripts/build-ffmpeg-format.py.
+            path: "Artifacts/Libavformat.xcframework"
         ),
         .binaryTarget(
             name: "Libavutil",
@@ -100,7 +103,7 @@ let package = Package(
             url: "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gnutls.xcframework.zip",
             checksum: "3dbec5809339189bf9679e218c6cff387ebf8fb72745927835afc2678f5c9f4d"
         ),
-        // The one artifact Lagoon builds itself (HEL-137). mpvkit's dav1d is
+        // Lagoon also builds dav1d itself (HEL-137). mpvkit's dav1d is
         // compiled with -Denable_asm=false, to silence an Xcode 15 linker
         // warning about assembled objects carrying no platform load command,
         // so every AV1 frame ran dav1d's portable C path: 11.4 fps against
