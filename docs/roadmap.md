@@ -4,9 +4,11 @@ What Lagoon does today and what comes next, at the level of a viewer or a
 release note. Jira (Labs epic HEL-15 on helop-ou.atlassian.net) is
 canonical for ticket status, `Lagoon/Models/Changelog.swift` for what
 shipped in which build, and `docs/playback.md` for how the engine works.
-Last brought up to date 2026-09-04, at 0.1 (87).
+Last brought up to date 2026-09-07, at repository version 0.1 (90).
+Builds 89 and 90 have release notes and verified simulator builds; this does
+not confirm a TestFlight upload or physical-device acceptance.
 
-## Shipped
+## Implemented
 
 ### MVP (August 2026)
 
@@ -14,7 +16,7 @@ Last brought up to date 2026-09-04, at 0.1 (87).
 - Sign in with password or Quick Connect; keychain-persisted session
 - Home: hero carousel with ambient glow, Continue Watching, Next Up,
   Recently Added per library
-- Dynamic library tabs (Movies / Shows), paged 6-column poster grids
+- Movie/show libraries with paged poster grids, initially in separate tabs
 - Movie/episode and series detail pages (seasons, episode rail)
 - Playback with resume and progress reporting
 - Debounced search, settings (sign out / change server)
@@ -63,18 +65,45 @@ per-user Quick Connect.
 (HEL-94). Playback Diagnostics: the details overlay, the frame-loss bench,
 and the decoder switches that hardware questions get answered with.
 
+### September 7 browsing and iOS pass (builds 89–90)
+
+**Unified Library (HEL-140).** Home, Discover, Library, Search, and Settings
+are five stable tabs. Library combines movies and shows with server-side
+sorting and library, genre, decade, unwatched, favorites, and 4K movie filters.
+Decades follow the library's year catalogue rather than a hardcoded list;
+redundant source selectors stay hidden. Choices are remembered per account.
+tvOS uses five poster columns; iOS adapts its grid to width and text size.
+
+**Home and Discover.** Featured banners support native swipe paging on iOS
+and Left/Right navigation on tvOS, keeping tap/select for details. Rotation
+pauses during interaction and selection survives refreshes. Next Up excludes
+started episodes; Recently Added shows resolves new episodes to their parent
+series. Long tvOS genre names are centered and wrap onto two lines.
+
+**Search and Seerr.** Both library and Seerr search offer See All and paginated
+full results. Changing the query clears stale matches. Partially available
+Seerr titles can open their matching item in Lagoon.
+
+**iOS layout and controls (HEL-41).** Shorter landscape hero banners, roomier
+rows, larger posters, adaptive grids and detail actions, and display-scale
+artwork. Episode taps open details; seasons use a native picker. The player
+uses native toolbar actions and a resizable options sheet, with adjustable
+VoiceOver seeking. Home Rows uses native toggles and Edit/reorder.
+
+**Settings and accounts.** iOS settings now opens separate category pages,
+matching the organisation on tvOS. Native onboarding fields use lighter
+styling and keyboard submit actions. Add Account starts on the current
+server, offers Use Another Server, and leaves the active Jellyfin and Seerr
+sessions intact until a new account is verified. System-managed subtitle
+appearance hides Lagoon controls that would have no effect.
+
 ## Next
 
 In the order they are worth doing. Keys are Jira tickets.
 
-**In development:** unified Library (HEL-140), combining Movies and Shows
-with server-side sorting and library, genre, decade, unwatched, favorites, and 4K movie
-filters. Selections are remembered per account; the five main tabs stay stable
-regardless of how many Jellyfin libraries exist.
-
-1. **iOS polish pass** (HEL-41): compact-width detail composition, hero
-   sizing, touch-first rails, keyboard behaviour on onboarding; iPad in
-   between. Only the collection page has its own iOS layout so far.
+1. **iPhone/iPad validation** (HEL-41): the implementation pass above is in
+   place. Next is dedicated iPad layout coverage and physical-device checks
+   for touch, keyboards, large text, VoiceOver, and playback controls.
 2. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
@@ -85,6 +114,12 @@ regardless of how many Jellyfin libraries exist.
 endpoint that does not exist; a personal one was rejected on value.
 
 ## In verification
+
+The Library and iOS work above was checked in simulators on 2026-09-07,
+including portrait/landscape layouts, large text on iPhone, and Home/Discover
+hero paging, details, and back navigation on iOS and tvOS. Unit tests and
+both platform builds pass. These checks do not replace iPad and physical-device
+validation or change Jira status automatically.
 
 HEL-137 (4K AV1 frame rate) and HEL-123 (audio starvation) were accepted by
 Jaagop and moved to Done on 2026-09-07.
