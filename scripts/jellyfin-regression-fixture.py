@@ -39,7 +39,7 @@ def main():
     directory = args.work.resolve()
     media(directory)
     lock = Lock()
-    state = {"mode": "direct", "generation": 0, "revoked": [], "requests": []}
+    state = {"mode": "direct", "generation": 0, "revoked": [], "requests": [], "drop_connections": False}
     user = {"Id": "fixture-user", "Name": "Fixture viewer"}
     movie = {"Id": "fixture", "Name": "Session fixture movie", "Type": "Movie", "MediaType": "Video",
              "RunTimeTicks": 900_000_000, "UserData": {"Played": False, "PlaybackPositionTicks": 0},
@@ -76,7 +76,10 @@ def main():
             token = match.group(1) if match else query.get("ApiKey", [""])[0]
             with lock:
                 if path == "/__fixture/reset":
-                    state.update(mode=query.get("mode", ["direct"])[0], generation=0, revoked=[], requests=[])
+                    state.update(mode=query.get("mode", ["direct"])[0], generation=0, revoked=[], requests=[], drop_connections=False)
+                    return self.reply({"ok": True})
+                if path == "/__fixture/connectivity":
+                    state["drop_connections"] = query.get("drop", ["0"])[0] == "1"
                     return self.reply({"ok": True})
                 if path == "/__fixture/revoke":
                     state["revoked"].append(f"synthetic-session-{state['generation']}")
@@ -85,7 +88,16 @@ def main():
                     return self.reply(state)
                 state["requests"].append({"path": path, "revoked": token in state["revoked"]})
                 (directory / "requests.json").write_text(json.dumps(state, indent=2))
+                if path in ("/api/v1/status", "/api/v1/settings/public"):
+                    if state["drop_connections"]:
+                        self.close_connection = True
+                        return
+                    return self.reply({"version": "3.0.0"} if path.endswith("/status") else
+                                      {"initialized": True, "mediaServerType": 2, "mediaServerLogin": False})
                 if path == "/System/Info/Public":
+                    if state["drop_connections"]:
+                        self.close_connection = True
+                        return
                     return self.reply({"ServerName": "Lagoon session fixture", "Id": "fixture", "Version": "10.11.0"})
                 if path == "/QuickConnect/Enabled":
                     return self.reply(False)
