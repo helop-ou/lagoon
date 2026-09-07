@@ -101,11 +101,13 @@ struct ItemDetailView: View {
         }
         #else
         // Lead with the primary action on touch too. Most items fit all
-        // controls on one line; a resumed item with the longer From Beginning
-        // label falls back cleanly without putting watched/favourite first.
+        // controls on one line. Keep Resume and From Beginning together when
+        // they fit, moving the toggles below before stacking every button.
         AdaptiveActionStack {
-            playButton
-            fromBeginningButton
+            AdaptiveActionStack {
+                playButton
+                fromBeginningButton
+            }
             actionRow
         }
         #endif
