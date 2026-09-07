@@ -171,7 +171,7 @@ extension JellyfinClient {
         )
         return (
             deliveryURL,
-            try await getData(components, timeout: SubtitleRequestTimeout.provider)
+            try await getData(components, timeout: SubtitleRequestTimeout.provider, maximumBytes: DownloadLimit.subtitle)
         )
     }
 
