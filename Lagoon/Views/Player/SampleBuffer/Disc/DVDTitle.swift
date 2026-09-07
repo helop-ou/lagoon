@@ -17,18 +17,21 @@ nonisolated enum DVDDisc {
     /// menu, not its film, and `VIDEO_TS.VOB` is the disc's own menu.
     static func titleSetPart(of name: String) -> (titleSet: Int, part: Int)? {
         let upper = name.uppercased()
-        guard upper.hasPrefix("VTS_"), upper.hasSuffix(".VOB") else { return nil }
+        guard upper.utf8.count == 12, upper.hasPrefix("VTS_"), upper.hasSuffix(".VOB") else { return nil }
         let stem = upper.dropFirst(4).dropLast(4)     // "01_2"
         let pieces = stem.split(separator: "_")
         guard pieces.count == 2,
               let titleSet = Int(pieces[0]),
               let part = Int(pieces[1]),
-              part >= 1 else { return nil }
+              pieces[0].count == 2, pieces[1].count == 1,
+              pieces[0].utf8.allSatisfy({ (48...57).contains($0) }),
+              pieces[1].utf8.allSatisfy({ (48...57).contains($0) }),
+              (1...99).contains(titleSet), (1...9).contains(part) else { return nil }
         return (titleSet, part)
     }
 
-    static func isDVD(_ volume: UDFVolume) -> Bool {
-        ((try? volume.entry(at: directory)) ?? nil) != nil
+    static func isDVD(_ volume: UDFVolume) throws -> Bool {
+        try volume.entry(at: directory) != nil
     }
 
     /// The largest title set, its parts laid end to end.
@@ -43,23 +46,39 @@ nonisolated enum DVDDisc {
             throw DiscImageError.noTitle
         }
         var parts: [Int: [(part: Int, extents: [DiscExtent])]] = [:]
+        var totalExtents = 0
+        var sizes: [Int: Int64] = [:]
         for entry in try volume.list(videoTS.icb) where !entry.isDirectory {
+            try volume.checkBudget()
             guard let position = titleSetPart(of: entry.name) else { continue }
             guard case .extents(let extents) = try volume.contents(of: entry.icb) else { continue }
+            guard extents.count <= DiscStreamMap.maxExtents - totalExtents else { throw DiscImageError.resourceLimit }
+            totalExtents += extents.count
+            guard parts[position.titleSet]?.contains(where: { $0.part == position.part }) != true else {
+                throw DiscImageError.malformed("duplicate DVD title part")
+            }
+            let size = try DiscStreamMap(extents: extents).length
+            let previous = sizes[position.titleSet, default: 0]
+            guard size <= Int64.max - previous else { throw DiscImageError.malformed("DVD title size overflow") }
+            sizes[position.titleSet] = previous + size
             parts[position.titleSet, default: []].append((position.part, extents))
         }
         guard let chosen = parts.max(by: { left, right in
-            let leftBytes = left.value.flatMap(\.extents).reduce(0) { $0 + $1.length }
-            let rightBytes = right.value.flatMap(\.extents).reduce(0) { $0 + $1.length }
+            let leftBytes = sizes[left.key, default: 0]
+            let rightBytes = sizes[right.key, default: 0]
             // Ties by title set number, so the choice cannot depend on
             // dictionary order.
             return leftBytes == rightBytes ? left.key > right.key : leftBytes < rightBytes
         }) else {
             throw DiscImageError.noTitle
         }
-        let extents = chosen.value.sorted { $0.part < $1.part }.flatMap(\.extents)
+        let ordered = chosen.value.sorted { $0.part < $1.part }
+        guard ordered.enumerated().allSatisfy({ $0.element.part == $0.offset + 1 }) else {
+            throw DiscImageError.malformed("missing DVD title part")
+        }
+        let extents = ordered.flatMap(\.extents)
         guard !extents.isEmpty else { throw DiscImageError.noTitle }
-        return DiscStreamMap(extents: extents)
+        return try DiscStreamMap(extents: extents)
     }
 }
 
@@ -76,11 +95,11 @@ nonisolated enum DiscTitle {
     }
 
     static func mainTitle(in volume: UDFVolume, runtimeSeconds: Double?) throws -> Selection {
-        if BlurayDisc.isBluray(volume) {
+        if try BlurayDisc.isBluray(volume) {
             let title = try BlurayDisc.mainTitle(in: volume, runtimeSeconds: runtimeSeconds)
             return Selection(playlist: title.playlist, stream: title.stream)
         }
-        if DVDDisc.isDVD(volume) {
+        if try DVDDisc.isDVD(volume) {
             return Selection(playlist: nil, stream: try DVDDisc.mainTitle(in: volume))
         }
         throw DiscImageError.noTitle
