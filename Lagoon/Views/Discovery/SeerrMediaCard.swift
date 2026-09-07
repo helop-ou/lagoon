@@ -2,14 +2,15 @@ import SwiftUI
 
 struct SeerrMediaCard: View {
     let item: SeerrDiscoverResult
+    let layout = PosterLayout()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+        VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: route) {
                 ZStack(alignment: .topTrailing) {
                     CachedAsyncImage(
-                        url: SeerrClient.imageURL(path: item.posterPath, width: 500),
-                        maxPixelSize: Int(Metrics.posterHeight)
+                        url: SeerrClient.imageURL(path: item.posterPath, width: layout.imageWidth),
+                        maxPixelSize: layout.imageSize
                     ) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
@@ -22,7 +23,7 @@ struct SeerrMediaCard: View {
                                 .padding(Metrics.Space.m)
                         }
                     }
-                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                    .frame(width: layout.width, height: layout.height)
                     .clipped()
 
                     if let status = visibleStatus {
@@ -34,12 +35,12 @@ struct SeerrMediaCard: View {
                             .padding(Metrics.Space.s)
                     }
                 }
-                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
             .cardButtonStyle()
             .artworkFocusHue(
-                url: SeerrClient.imageURL(path: item.posterPath, width: 500),
+                url: SeerrClient.imageURL(path: item.posterPath, width: layout.imageWidth),
                 cornerRadius: Metrics.cardArtRadius
             )
             .accessibilityLabel(item.displayTitle)
@@ -49,7 +50,7 @@ struct SeerrMediaCard: View {
             VStack(alignment: .leading, spacing: Metrics.Space.hair) {
                 Text(item.displayTitle)
                     .font(.caption.weight(.medium))
-                    .lineLimit(1)
+                    .lineLimit(layout.captionLines)
                 if let year = item.year {
                     Text(year)
                         .font(.caption2)
@@ -57,9 +58,10 @@ struct SeerrMediaCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight, alignment: .topLeading)
+            .frame(width: layout.width, alignment: .leading)
+            .frame(minHeight: layout.captionHeight, alignment: .topLeading)
         }
-        .frame(width: Metrics.posterWidth)
+        .frame(width: layout.width)
     }
 
     private var mediaType: SeerrMediaType {
@@ -90,18 +92,29 @@ struct SeerrMediaRail: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.headline)
-                .padding(.horizontal, Metrics.screenGutter)
+            HStack {
+                Text(title).font(.headline)
+                #if os(iOS)
+                if let destination {
+                    Spacer()
+                    NavigationLink("See All", value: destination)
+                        .font(.callout)
+                        .accessibilityLabel("See all \(title)")
+                }
+                #endif
+            }
+            .padding(.horizontal, Metrics.screenGutter)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: Metrics.cardSpacing) {
                     ForEach(requestableItems) { item in
                         SeerrMediaCard(item: item)
                     }
+                    #if os(tvOS)
                     if let destination, !requestableItems.isEmpty {
-                        SeerrSeeAllCard(destination: destination, title: title)
+                        RailSeeAllCard(destination: destination, title: title, identifier: "seerr.seeAll")
                     }
+                    #endif
                 }
                 .padding(.horizontal, Metrics.screenGutter)
                 .padding(.top, Metrics.railTopPadding)
@@ -120,12 +133,14 @@ struct SeerrMediaRail: View {
 /// between every pair of rails, so moving down the page meant passing through
 /// one for each — clunky on a remote (Jaagop). Here it is just the last thing
 /// in the row you were already scrolling.
-private struct SeerrSeeAllCard: View {
-    let destination: SeerrNavigationRoute
+struct RailSeeAllCard<Route: Hashable>: View {
+    let destination: Route
     let title: String
+    var identifier = "rail.seeAll"
+    let layout = PosterLayout()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+        VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: destination) {
                 ZStack {
                     Color.white.opacity(0.07)
@@ -136,20 +151,20 @@ private struct SeerrSeeAllCard: View {
                             .font(.callout.weight(.medium))
                     }
                 }
-                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
             // The system card treatment, like every other card in the rail:
             // the focus visual is never ours to draw.
             .cardButtonStyle()
             .accessibilityLabel("See all \(title)")
-            .accessibilityIdentifier("seerr.seeAll")
+            .accessibilityIdentifier(identifier)
 
             // Keeps the row's baseline: the poster cards below reserve this
             // much for their title and year.
             Color.clear
-                .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight)
+                .frame(width: layout.width, height: layout.captionHeight)
         }
-        .frame(width: Metrics.posterWidth)
+        .frame(width: layout.width)
     }
 }
