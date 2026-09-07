@@ -63,6 +63,9 @@ protocol PlayerEngine: AnyObject, Observable {
     var maximumVideoIntakeDiagnostic: Int { get }
     var stallReprimeCount: Int { get }
     var subtitleTracks: [PlayerTrack] { get }
+    var subtitleLoadState: SubtitleLoadState { get }
+    /// Changes on every selection intent, even while a sidecar is loading.
+    var subtitleSelectionRevision: Int { get }
     /// The subtitle content on screen right now (M5): joined text lines
     /// and/or decoded bitmap rects, rendered by the player UI as an
     /// overlay. Empty/nil when no cue is active.
@@ -95,6 +98,7 @@ protocol PlayerEngine: AnyObject, Observable {
     /// nil turns the stream off (subtitles); audio pickers shouldn't pass nil.
     func selectAudioTrack(id: Int?)
     func selectSubtitleTrack(id: Int?)
+    func retrySubtitleLoad()
     /// Adds a server-downloaded sidecar to the live item and selects it
     /// without rebuilding the renderers or restarting playback (HEL-49).
     func addExternalSubtitle(_ track: ExternalSubtitleTrack)
@@ -102,6 +106,9 @@ protocol PlayerEngine: AnyObject, Observable {
 }
 
 extension PlayerEngine {
+    var subtitleLoadState: SubtitleLoadState { .idle }
+    var subtitleSelectionRevision: Int { 0 }
+    func retrySubtitleLoad() {}
     var audioOutputPathDiagnostic: String { "unknown" }
     var videoOutputPathDiagnostic: String { "unknown" }
     var idleRequestCallbacks: Int { 0 }
