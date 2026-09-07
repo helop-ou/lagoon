@@ -8,11 +8,14 @@ final class SearchViewModel {
     var errorMessage: String?
 
     @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private var currentQuery = ""
 
     func search(_ query: String, client: JellyfinClient) {
         searchTask?.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         errorMessage = nil
+        if trimmed != currentQuery { results = [] }
+        currentQuery = trimmed
         guard !trimmed.isEmpty else {
             results = []
             isSearching = false
@@ -48,7 +51,7 @@ final class SearchViewModel {
     /// it, so the stubs a metadata scrape leaves behind would otherwise put a
     /// dead end at the top of the results — a library holds far more empty
     /// collections than real ones. The same floor Home's row uses.
-    static func presentable(_ items: [MediaItem]) -> [MediaItem] {
+    nonisolated static func presentable(_ items: [MediaItem]) -> [MediaItem] {
         items.filter { $0.type != .boxSet || ($0.childCount ?? 0) >= CollectionShelf.minimumTitles }
     }
 
@@ -270,7 +273,8 @@ struct SearchView: View {
     @ViewBuilder
     private var librarySearchSection: some View {
         if !librarySearch.results.isEmpty {
-            MediaRail(title: "In Your Library", items: librarySearch.results)
+            MediaRail(title: "In Your Library", items: librarySearch.results,
+                      destination: normalizedSearch.isEmpty ? nil : .search(normalizedSearch))
         } else {
             searchStatusSection(
                 title: "In Your Library",
@@ -279,6 +283,11 @@ struct SearchView: View {
                 canRetry: librarySearch.errorMessage != nil
             ) {
                 librarySearch.search(searchText, client: session.client)
+            }
+            if !librarySearch.isSearching, librarySearch.errorMessage == nil, !normalizedSearch.isEmpty {
+                NavigationLink("See All Library Results", value: ContentNavigationRoute.search(normalizedSearch))
+                    .buttonStyle(.glass)
+                    .padding(.horizontal, Metrics.screenGutter)
             }
         }
     }
@@ -303,7 +312,8 @@ struct SearchView: View {
             }
             .padding(.horizontal, Metrics.screenGutter)
         } else if !requestableSearchResults.isEmpty {
-            SeerrMediaRail(title: "From Seerr", items: requestableSearchResults)
+            SeerrMediaRail(title: "From Seerr", items: requestableSearchResults,
+                           destination: .search(normalizedSearch))
         } else {
             searchStatusSection(
                 title: "From Seerr",
@@ -312,6 +322,11 @@ struct SearchView: View {
                 canRetry: searchError != nil
             ) {
                 searchRetryID += 1
+            }
+            if !isSearching, searchError == nil, !normalizedSearch.isEmpty {
+                NavigationLink("See All Seerr Results", value: SeerrNavigationRoute.search(normalizedSearch))
+                    .buttonStyle(.glass)
+                    .padding(.horizontal, Metrics.screenGutter)
             }
         }
     }
@@ -373,6 +388,7 @@ struct SearchView: View {
         }
         isSearching = true
         searchError = nil
+        searchResults = []
         do {
             try await Task.sleep(for: .milliseconds(Self.debounceMilliseconds))
             let page = try await seerr.client.search(query: term)
