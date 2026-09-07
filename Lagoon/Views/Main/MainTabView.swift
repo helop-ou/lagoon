@@ -3,8 +3,7 @@ import SwiftUI
 private enum MainTabSelection: Hashable {
     case home
     case discover
-    case library(String)
-    case libraries
+    case library
     case search
     case settings
 }
@@ -14,14 +13,14 @@ struct MainTabView: View {
     @Environment(DeepLinkRouter.self) private var deepLinks
     @Environment(ServerSyncState.self) private var serverSync
     @State private var libraries: [LibraryTab] = []
+    @State private var librariesLoaded = false
     @State private var playerItem: PlayerItem?
     @State private var deepLinkError: String?
     @State private var deepLinkRetry = 0
     @State private var lifecycleBenchmarkMedia: MediaItem?
     @State private var lifecycleReplaysScheduled = 0
     @State private var homeNavigationPath: [ContentNavigationRoute] = []
-    @State private var libraryNavigationPaths: [String: [ContentNavigationRoute]] = [:]
-    @State private var libraryPickerPath: [LibraryTab] = []
+    @State private var libraryNavigationPath: [ContentNavigationRoute] = []
     // Discover owns both Jellyfin and Seerr results, so its stack needs to
     // carry both route types. NavigationPath keeps those identities separate
     // while still allowing a local result and a Seerr result to share a page.
@@ -67,8 +66,9 @@ struct MainTabView: View {
             // also dismisses an old user's detail if accounts are switched
             // without rebuilding MainTabView.
             homeNavigationPath.removeAll()
-            libraryNavigationPaths.removeAll()
-            libraryPickerPath.removeAll()
+            libraryNavigationPath.removeAll()
+            libraries = session.cachedLibraries()
+            librariesLoaded = false
             discoverNavigationPath = NavigationPath()
             searchNavigationPath = NavigationPath()
             // A shared TV should not hand the next viewer the last one's
@@ -205,40 +205,16 @@ struct MainTabView: View {
                 }
             }
 
-            if libraries.count <= 2 {
-                ForEach(libraries) { library in
-                    Tab(
-                        library.name ?? "Library",
-                        systemImage: icon(for: library),
-                        value: MainTabSelection.library(library.id)
-                    ) {
-                        NavigationStack(path: libraryNavigationPath(for: library.id)) {
-                            LibraryView(
-                                library: library,
-                                isActive: selectedTab == .library(library.id)
-                                    && (libraryNavigationPaths[library.id]?.isEmpty ?? true)
-                            )
-                                .contentNavigationDestinations()
-                        }
-                    }
-                }
-            } else {
-                Tab(
-                    "Libraries",
-                    systemImage: ContentIcon.libraries,
-                    value: MainTabSelection.libraries
-                ) {
-                    NavigationStack(path: $libraryPickerPath) {
-                        LibraryPickerView(libraries: libraries)
-                            .navigationDestination(for: LibraryTab.self) { library in
-                                LibraryView(
-                                    library: library,
-                                    isActive: selectedTab == .libraries
-                                        && libraryPickerPath.last?.id == library.id
-                                )
-                                    .contentNavigationDestinations()
-                            }
-                    }
+            Tab("Library", systemImage: ContentIcon.libraries, value: MainTabSelection.library) {
+                NavigationStack(path: $libraryNavigationPath) {
+                    LibraryView(
+                        accountID: session.activeAccount?.id ?? "",
+                        libraries: libraries,
+                        librariesLoaded: librariesLoaded,
+                        isActive: selectedTab == .library && libraryNavigationPath.isEmpty
+                    )
+                        .id(session.activeAccount?.id)
+                        .contentNavigationDestinations()
                 }
             }
 
@@ -270,25 +246,19 @@ struct MainTabView: View {
         }
     }
 
-    /// Tabs are the app's *navigation*, not a content rail, so a transient
-    /// failure must never collapse them (HEL-61). This used to be a one-shot
-    /// `try?` assigning `[]`, which meant a single unlucky request at launch
-    /// removed Movies and Shows for the rest of the session — and it failed
-    /// in exactly the situation where recovery is likely: a server slow to
-    /// wake, or a TV rejoining wi-fi as the app foregrounds.
-    ///
-    /// So: never assign on failure, and keep retrying with backoff until the
-    /// server answers.
+    /// Keep source choices available through transient failures (HEL-61).
+    /// Library itself is now a stable tab, independent of this request.
     private func loadLibraries() async {
-        // Draw last session's tabs straight away; the fetch reconciles a
-        // moment later. Without this the bar visibly pops from three tabs
-        // to five on every cold start (HEL-61).
+        let accountID = session.activeAccount?.id
+        // Populate the source filter from this account's cache while the
+        // server wakes; reconcile saved selections only after a success.
         if libraries.isEmpty {
             libraries = session.cachedLibraries()
         }
         var delay = Duration.seconds(2)
         while !Task.isCancelled {
             if let views = try? await session.client.userViews() {
+                guard !Task.isCancelled, accountID == session.activeAccount?.id else { return }
                 // Assigning only on success is what distinguishes an empty
                 // library from a failed fetch: an empty result here really
                 // is empty, and clears the cache with it.
@@ -296,6 +266,7 @@ struct MainTabView: View {
                     .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
                     .map(LibraryTab.init)
                 libraries = tabs
+                librariesLoaded = true
                 session.cacheLibraries(tabs)
                 return
             }
@@ -620,56 +591,6 @@ struct MainTabView: View {
         }
     }
 
-    private func icon(for library: LibraryTab) -> String {
-        ContentIcon.library(collectionType: library.collectionType)
-    }
-
-    private func libraryNavigationPath(
-        for libraryID: String
-    ) -> Binding<[ContentNavigationRoute]> {
-        Binding(
-            get: { libraryNavigationPaths[libraryID] ?? [] },
-            set: { libraryNavigationPaths[libraryID] = $0 }
-        )
-    }
-}
-
-private struct LibraryPickerView: View {
-    let libraries: [LibraryTab]
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
-                Text("Libraries")
-                    .font(.largeTitle.bold())
-                    .padding(.top, Metrics.Space.xxl)
-                    .padding(.bottom, Metrics.Space.s)
-
-                ForEach(libraries) { library in
-                    NavigationLink(value: library) {
-                        HStack(spacing: Metrics.Space.l) {
-                            Image(systemName: ContentIcon.library(collectionType: library.collectionType))
-                                .font(.title3)
-                                .frame(width: 36)
-                            Text(library.name ?? "Library")
-                                .font(.headline)
-                            Spacer()
-                            Image(systemName: "chevron.forward")
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, Metrics.Space.l)
-                        .frame(minHeight: 66)
-                    }
-                    .buttonStyle(.glass)
-                }
-            }
-            .padding(.horizontal, Metrics.screenGutter)
-            .padding(.bottom, Metrics.Space.section)
-        }
-        .scrollClipDisabled()
-        .background(Color.black.ignoresSafeArea())
-        .accessibilityIdentifier("libraries.picker")
-    }
 }
 
 #if DEBUG
