@@ -7,6 +7,7 @@ nonisolated enum SeerrNavigationRoute: Hashable {
     case requests
     case request(SeerrMediaRequest)
     case jellyfinItem(MediaItem)
+    case search(String)
 }
 
 private struct SeerrNavigationDestination: View {
@@ -26,6 +27,8 @@ private struct SeerrNavigationDestination: View {
             SeerrRequestDetailView(request: request)
         case .jellyfinItem(let item):
             ItemDetailRouter(item: item)
+        case .search(let query):
+            SearchResultsView(query: query, source: .seerr)
         }
     }
 }
