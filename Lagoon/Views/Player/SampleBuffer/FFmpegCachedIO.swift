@@ -94,6 +94,7 @@ nonisolated final class FFmpegCachedIO {
     }
 
     private func read(into buffer: UnsafeMutablePointer<UInt8>, size: Int32) -> Int32 {
+        guard Int64(size) <= Int64.max - position else { return avIOErrorIO }
         do {
             let data = try source.read(
                 offset: position,
@@ -101,6 +102,7 @@ nonisolated final class FFmpegCachedIO {
                 priority: URLSessionTask.highPriority
             )
             guard !data.isEmpty else { return avIOErrorEOF }
+            guard data.count <= Int(size), Int64(data.count) <= Int64.max - position else { return avIOErrorIO }
             data.copyBytes(to: buffer, count: data.count)
             position += Int64(data.count)
             return Int32(data.count)
@@ -124,10 +126,14 @@ nonisolated final class FFmpegCachedIO {
         case Int32(SEEK_SET):
             target = offset
         case Int32(SEEK_CUR):
-            target = position + offset
+            let (value, overflow) = position.addingReportingOverflow(offset)
+            guard !overflow else { return -1 }
+            target = value
         case Int32(SEEK_END):
             guard let length = source.contentLength else { return -1 }
-            target = length + offset
+            let (value, overflow) = length.addingReportingOverflow(offset)
+            guard !overflow else { return -1 }
+            target = value
         default:
             return -1
         }
