@@ -438,7 +438,9 @@ resolves against whichever side of that it lands on.
   The title art stays the show's. The highlight is **not** cleared when focus
   leaves the rail — having browsed to E5, moving up to Play should start E5
   rather than snapping back — but it is cleared on a season change, since
-  those episodes are gone. iOS has no focus, so it simply shows what's next.
+  those episodes are gone. On iOS the header describes what's next, a native
+  menu selects the season, and tapping an episode opens its own details before
+  playback. tvOS still starts the focused episode directly.
 - **Phone detail composition** (HEL-41): iOS keeps the same full-bleed artwork,
   but a top-to-bottom wash moves from photographic at the title to near-black
   before the rails. A horizontal wash cannot protect full-width phone text,
@@ -450,8 +452,9 @@ resolves against whichever side of that it lands on.
 - **Facts line**: on tvOS this is one spaced row — runtime, year, a *boxed*
   certification (r4 outline), then plain capability tokens from
   `MediaSource.qualityTokens` ("4K  DV  TrueHD 7.1  Atmos"). iOS splits identity
-  facts and playback capabilities into two compact rows so a value never
-  breaks internally ("1 h 56" / "min" or "TrueHD" / "7.1"). Plain text, not
+  facts and playback capabilities into separate wrapping flows. Tokens move
+  together where possible, but may wrap internally at accessibility sizes
+  when a single value is wider than the viewport. Plain text, not
   capsules — outlined chips read far louder than the facts deserve. The
   vocabulary lives in `MediaQuality` so the player's facts line and the detail
   row can't disagree about what counts as 4K.
@@ -465,6 +468,31 @@ resolves against whichever side of that it lands on.
   non-focusable row on tvOS — there is no person screen to navigate to, and
   a rail you can focus but not act on is worse than a short honest one — and
   a scrolling one on iOS, where touch needs no focus.
+
+### iPhone accessibility and browsing
+
+- `PosterLayout` scales cards, caption space, and grid columns together with
+  Dynamic Type. Decode and server image sizes use display-scale pixels, not
+  point dimensions; a changed decode size also reloads `CachedAsyncImage`.
+- `AdaptiveActionStack` stacks actions when their intrinsic widths do not fit.
+  Its horizontal candidate measures both ideal width and height, including
+  inside Forms. Native segmented pickers become menu pickers at accessibility
+  sizes rather than truncating their choices.
+- Phone synopses expand in place. Title artwork has a spoken title/header,
+  and cast portraits are decorative within combined name/role elements.
+  Text over phone backdrops uses a stronger wash and primary contrast.
+- iPhone Close, Info, and Play/Pause use the native navigation toolbar, outside
+  the video's tap gesture surface. The playback panel is a native sheet with a NavigationStack, Form,
+  native picker and steppers, selected track semantics, and Done. The custom
+  timeline exposes an adjustable playback position to VoiceOver, and transport
+  controls remain visible while VoiceOver is enabled. tvOS keeps its mounted,
+  focus-driven panel and existing remote commands.
+- Home Rows uses native toggles and Edit/reorder on iPhone. System caption
+  appearance hides the inactive Lagoon appearance controls.
+- Search rails open full results through See All (in iPhone headings; rail-end
+  cards on tvOS). `SearchResultsView` pages with Load More, preserves loaded
+  results on errors, and advances using raw server cursors before filtering
+  or deduplicating. Seerr identities include media type as well as TMDB id.
 
 - **Overlays over credits** (HEL-66): anything the player floats during an
   episode's end titles — the Up Next card today — uses a system translucent
