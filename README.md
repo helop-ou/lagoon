@@ -12,7 +12,8 @@ sample-buffer player with resume and progress sync.
   Jellyfin's default `:8096`), sign in with password or **Quick Connect**
 - Home with a self-advancing hero carousel, Continue Watching, Next Up, and
   Recently Added rails per library
-- Dynamic tabs per movie/show library with paged poster grids
+- Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state filters,
+  a 4K movie filter, and selections remembered per account
 - Movie and series detail pages — seasons, episode rail, resume points
 - Native playback: direct play when the file allows it, server-side HLS
   transcode when it doesn't; watch progress syncs back to the server
