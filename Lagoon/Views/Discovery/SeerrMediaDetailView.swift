@@ -34,8 +34,11 @@ struct SeerrMediaDetailView: View {
                     ) {
                         Text(details.displayTitle)
                             .font(.largeTitle.bold())
+                            #if os(tvOS)
                             .lineLimit(2)
+                            #endif
                             .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
                     } buttons: {
                         action(details)
                     }
@@ -120,6 +123,13 @@ struct SeerrMediaDetailView: View {
                 )
             }
         case .partiallyAvailable:
+            if let jellyfinItem {
+                NavigationLink(value: SeerrNavigationRoute.jellyfinItem(jellyfinItem)) {
+                    Label("Open in Lagoon", systemImage: "play.fill")
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("seerr.detail.open")
+            }
             if mediaType == .tv, seerr.user?.canRequest(.tv) == true {
                 Button {
                     seasonRequestDetails = details
@@ -227,7 +237,7 @@ struct SeerrMediaDetailView: View {
         do {
             let loaded = try await seerr.client.details(id: mediaID, mediaType: mediaType)
             let loadedJellyfinItem: MediaItem?
-            if loaded.mediaInfo?.availability == .available {
+            if loaded.mediaInfo?.availability == .available || loaded.mediaInfo?.availability == .partiallyAvailable {
                 if let jellyfinID = loaded.mediaInfo?.jellyfinMediaId, !jellyfinID.isEmpty {
                     loadedJellyfinItem = try? await session.client.item(id: jellyfinID)
                 } else {
@@ -360,7 +370,7 @@ struct SeerrSeasonRequestView: View {
                                 Text(season.displayName)
                                     .font(.headline)
                                 if let count = season.episodeCount {
-                                    Text("\(count) episodes")
+                                    Text(count == 1 ? "1 episode" : "\(count) episodes")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
