@@ -62,6 +62,7 @@ struct SeerrRequestsView: View {
     @State private var filter = SeerrRequestFilter.all
     @State private var onlyMine = false
     @State private var refreshID = 0
+    let posterLayout = PosterLayout()
 
     var body: some View {
         Group {
@@ -112,7 +113,7 @@ struct SeerrRequestsView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 400)
                 } else {
-                    LazyVGrid(columns: Metrics.posterGridColumns, spacing: Metrics.gridRowSpacing) {
+                    LazyVGrid(columns: posterLayout.columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(Array(viewModel.requests.enumerated()), id: \.element.id) { index, request in
                             SeerrRequestCard(request: request)
                                 .onAppear {
@@ -247,6 +248,7 @@ private struct SeerrRequestCard: View {
     let request: SeerrMediaRequest
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var details: SeerrMediaDetails?
+    let layout = PosterLayout()
 
     /// "Processing" says nothing about whether anything is happening. When
     /// the server knows how far the download has got, say that instead
@@ -275,12 +277,12 @@ private struct SeerrRequestCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+        VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: SeerrNavigationRoute.request(request)) {
                 ZStack(alignment: .topTrailing) {
                     CachedAsyncImage(
-                        url: SeerrClient.imageURL(path: details?.posterPath, width: 500),
-                        maxPixelSize: Int(Metrics.posterHeight)
+                        url: SeerrClient.imageURL(path: details?.posterPath, width: layout.imageWidth),
+                        maxPixelSize: layout.imageSize
                     ) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
@@ -293,7 +295,7 @@ private struct SeerrRequestCard: View {
                                 .padding(Metrics.Space.m)
                         }
                     }
-                    .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                    .frame(width: layout.width, height: layout.height)
                     .clipped()
 
                     // One word, like the availability badges on the Discover
@@ -308,7 +310,7 @@ private struct SeerrRequestCard: View {
                         .background(.regularMaterial, in: Capsule())
                         .padding(Metrics.Space.s)
                 }
-                .frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
             .cardButtonStyle()
@@ -319,7 +321,7 @@ private struct SeerrRequestCard: View {
             VStack(alignment: .leading, spacing: Metrics.Space.hair) {
                 Text(details?.displayTitle ?? "Loading \(request.resolvedMediaType.title)…")
                     .font(.caption.weight(.medium))
-                    .lineLimit(1)
+                    .lineLimit(layout.captionLines)
                 if let name = request.requestedBy?.name {
                     Text(name)
                         .font(.caption2)
@@ -328,9 +330,10 @@ private struct SeerrRequestCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .frame(width: Metrics.posterWidth, height: Metrics.posterCaptionHeight, alignment: .topLeading)
+            .frame(width: layout.width, alignment: .leading)
+            .frame(minHeight: layout.captionHeight, alignment: .topLeading)
         }
-        .frame(width: Metrics.posterWidth)
+        .frame(width: layout.width)
         .task(id: request.id) {
             guard let tmdbID = request.tmdbID else { return }
             details = try? await seerr.client.details(id: tmdbID, mediaType: request.resolvedMediaType)
@@ -657,7 +660,7 @@ struct SeerrRequestDetailView: View {
         if isMutating {
             ProgressView()
         } else {
-            HStack(spacing: Metrics.Space.m) {
+            AdaptiveActionStack {
                 // A title still on its way has nothing to act on, so this is
                 // the one thing worth focusing — and the glyph animates while
                 // it is (HEL-117).
