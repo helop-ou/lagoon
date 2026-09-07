@@ -123,6 +123,14 @@ that happen to share a palette. Past onboarding, black is the ground Lagoon
 plays content against and `MainTabView` onwards is unchanged. Deep Navy is
 RGB(11, 29, 40), so this is not far from black to begin with.
 
+On iOS, server entry and sign-in keep their native text fields directly on that
+background, with plain styling, a subtle bottom divider, and a 44 pt minimum
+touch height. Neither boxed `.roundedBorder` fields nor grey grouped Form rows
+belong on these onboarding screens. The username keyboard advances to Password
+with Next; password and server address offer Go. The content scrolls with the
+keyboard and larger Dynamic Type. tvOS keeps its centered onboarding column
+and glass action buttons.
+
 `LagoonLockup` composes the mark rather than shipping one asset, because the
 package has no dark-background lockup: its color lockup sets the wordmark in
 Ink `#07161D`, invisible on black, and its white lockup flattens the two shores
