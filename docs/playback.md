@@ -1471,6 +1471,18 @@ composition cost is more representative than Simulator timing.
   side-load/select the authenticated external file without restarting the
   video. Not covered: an embedded subtitle rendition inside an HLS master
   (remote downloads arrive as external files and do work).
+- **Subtitle download safety** (audit A15): external sidecars, Jellyfin provider
+  files and direct OpenSubtitles files share an 8 MiB response cap. The
+  `BoundedDownload` URLSession delegate validates HTTP status and checks each
+  delivered chunk, including decompressed bytes, before appending it. Declared
+  HTML/JSON responses, incomplete transfers and files without readable, finite
+  cues cannot replace a working track. Selecting an external track keeps the
+  current selection and captions until parsing succeeds; failed replacements
+  expose a track-specific error and Retry in Subtitles, plus a notice over the
+  video when the panel is closed. Off or another selection cancels superseded
+  work, and request generations prevent late results from taking over. Embedded
+  subtitle writes and replacement commits share the engine lock. None of these
+  failures pause or restart playback. See the [validation record](download-hardening-validation.md).
 - **ASS/SSA authored placement** (HEL-107): `ASSSubtitleTextParser` keeps each
   decoded text composition separate rather than joining simultaneous speakers
   into one bottom-centre block. It reads `PlayResX/Y` from FFmpeg's subtitle
@@ -1499,11 +1511,16 @@ composition cost is more representative than Simulator timing.
   exact release rather than the title; `imdb_id`/`tmdb_id` from Jellyfin's
   `ProviderIds` and a title/season/episode query are the fallbacks. Downloads
   are quota'd — five a day anonymously, twenty with a free account — so every
-  fetched sidecar is kept under `Library/Caches/Lagoon/Subtitles` and a repeat
+  validated sidecar is kept under `Library/Caches/Lagoon/Subtitles` and a repeat
   watch is served from disk. The account prompt is deferred until the
   allowance actually runs out; searching needs no account at all. The download
   request asks for `sub_format=srt`, so the provider converts ASS/SSA on its
   side and Lagoon's `-->`-only parser never sees an authored format.
+  Cache reads are capped at 8 MiB and invalid cached files are discarded on
+  validation failure so Retry can obtain fresh bytes. Oversized or HTML files
+  do not trigger Jellyfin's compatibility fallback or an automatic provider
+  retry. Moviehash requests require exactly 64 KiB and HTTP 206 per range; a
+  server ignoring Range cannot make hashing download the whole movie.
 - **Text encoding**: `SubtitleTextDecoder` replaces a fallback chain that
   ended in `isoLatin1`, which cannot fail — it maps every byte — so a
   Windows-1251 file used to decode to mojibake and render as garbage with no
@@ -2796,6 +2813,9 @@ These are all verified on device, not inferred:
   derived from the *decoded* sheet's size, never the declared numbers — the
   decode caps sheets at 3200 px, and the last sheet of a film is only
   partially filled, so its height isn't `rows` tiles.
+  Source responses are capped at 16 MiB and must be complete images before
+  decoding. The compressed-sheet cache is capped at 32 MiB; requesting another
+  uncached sheet cancels obsolete transfers while retaining the previous frame.
 - Chapters and trickplay are fetched by the player itself
   (`playbackExtras`, concurrent with the PlaybackInfo negotiation), not
   taken from the `MediaItem` it was handed: playback starts from rails too,
