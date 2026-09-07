@@ -17,6 +17,7 @@ final class LibraryBrowseUITests: XCTestCase {
         ]
         app.launch()
         openLibrary(app)
+        chooseKind(app, title: "Shows")
         focusFilters(app)
         let summary = app.staticTexts["library.filters.summary"]
         let filters = app.descendants(matching: .any)["library.filters"]
@@ -73,24 +74,30 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertTrue(posters.firstMatch.waitForExistence(timeout: 20))
         capture(app, name: "Unified Library")
 
-        let picker = app.segmentedControls["library.kind"]
+        let picker = app.descendants(matching: .any)["library.kind"]
         XCTAssertTrue(picker.exists, app.debugDescription)
-        let all = picker.buttons["All"]
-        let movies = picker.buttons["Movies"]
-        let shows = picker.buttons["Shows"]
-        for _ in 0..<5 where ![all, movies, shows].contains(where: \.hasFocus) {
-            remote.press(.down)
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-        move(to: all, direction: .left)
-        XCTAssertTrue(all.isSelected)
-        move(to: movies, direction: .right)
-        XCTAssertTrue(movies.isSelected, "The native picker selects Movies on focus without a click")
-        capture(app, name: "Native Picker Focused")
+        XCTAssertFalse(app.segmentedControls["library.kind"].exists)
+        chooseKind(app, title: "Movies")
+        focusFilters(app)
+        let summary = app.staticTexts["library.filters.summary"]
+        if summary.exists { chooseFilter(app, title: "Clear Filters") }
+        move(to: picker, direction: .left)
+        capture(app, name: "Native Media Type Picker Focused")
+
+        // Merely exploring another menu option, then pressing Back, must
+        // leave Movies selected. A native menu picker commits on Select.
+        remote.press(.select)
+        let shows = menuCell(app, title: "Shows")
+        XCTAssertTrue(shows.waitForExistence(timeout: 5))
+        move(to: shows, direction: .down)
+        capture(app, name: "Media Type Menu Before Selection")
+        remote.press(.menu)
+        XCTAssertTrue(shows.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(picker.value as? String, "Movies")
 
         let sort = app.descendants(matching: .any)["library.sort"]
         move(to: sort, direction: .right)
-        XCTAssertTrue(shows.isSelected, "Crossing Shows to reach Sort uses native focus-driven selection")
+        XCTAssertEqual(picker.value as? String, "Movies", "Moving to Sort must not change the media type")
         remote.press(.select)
         let recentlyAdded = menuCell(app, title: "Recently Added")
         XCTAssertTrue(recentlyAdded.waitForExistence(timeout: 5))
@@ -103,23 +110,31 @@ final class LibraryBrowseUITests: XCTestCase {
         let filters = app.descendants(matching: .any)["library.filters"]
         XCTAssertTrue(filters.exists)
         move(to: filters, direction: .right)
+        XCTAssertEqual(picker.value as? String, "Movies", "Moving to Filters must not change the media type")
         remote.press(.select)
         let unwatched = menuCell(app, title: "Unwatched Only")
         XCTAssertTrue(unwatched.waitForExistence(timeout: 5))
-        // The demo has one Shows library: the media-type control already
+        // The demo has one Movies library: the media-type control already
         // makes that choice, so neither the old Source nor Library is useful.
         XCTAssertFalse(menuCell(app, title: "Source").exists)
         XCTAssertFalse(menuCell(app, title: "Library").exists)
-        XCTAssertFalse(menuCell(app, title: "4K Only").exists)
-        capture(app, name: "Show Filters")
+        XCTAssertTrue(menuCell(app, title: "4K Only").exists)
+        capture(app, name: "Movie Filters")
         move(to: unwatched, direction: .down)
         remote.press(.select)
         XCTAssertTrue(unwatched.waitForNonExistence(timeout: 5))
         Thread.sleep(forTimeInterval: 0.5)
-        let summary = app.staticTexts["library.filters.summary"]
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         XCTAssertTrue(summary.label.contains("Unwatched"))
-        capture(app, name: "Filtered Shows")
+        capture(app, name: "Filtered Movies")
+
+        chooseFilter(app, title: "4K Only")
+        XCTAssertTrue(summary.label.contains("4K"))
+        move(to: picker, direction: .left)
+        move(to: filters, direction: .right)
+        XCTAssertEqual(picker.value as? String, "Movies")
+        XCTAssertTrue(summary.label.contains("4K"), "Crossing the controls must preserve the movie-only filter")
+        XCTAssertEqual(filters.value as? String, "2 active")
 
         // Clearing returns the complete collection without resetting sort.
         remote.press(.select)
@@ -132,8 +147,8 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertFalse(summary.exists)
         XCTAssertEqual(sort.value as? String, "Recently Added")
 
-        move(to: movies, direction: .left)
-        XCTAssertTrue(movies.isSelected)
+        move(to: picker, direction: .left)
+        XCTAssertEqual(picker.value as? String, "Movies")
         for _ in 0..<8 where !posters.allElementsBoundByIndex.contains(where: \.hasFocus) {
             remote.press(.down)
             Thread.sleep(forTimeInterval: 0.2)
@@ -142,7 +157,7 @@ final class LibraryBrowseUITests: XCTestCase {
             XCTFail("Library posters could not receive focus")
             return
         }
-        XCTAssertTrue(movies.isSelected, "Selection remains visible after focus leaves the picker")
+        XCTAssertEqual(picker.value as? String, "Movies", "Selection remains visible after focus leaves the picker")
         capture(app, name: "Native Picker Unfocused")
         let itemID = poster.identifier.replacingOccurrences(of: "media.poster.", with: "")
         remote.press(.select)
@@ -157,14 +172,13 @@ final class LibraryBrowseUITests: XCTestCase {
         let tab = app.tabBars.buttons["Library"]
         move(to: tab, direction: .up, limit: 30)
         XCTAssertTrue(tab.hasFocus)
-        let selectedKind = picker.buttons.allElementsBoundByIndex.first(where: \.isSelected)?.label
-        XCTAssertNotNil(selectedKind)
+        XCTAssertEqual(picker.value as? String, "Movies", "Returning to the tab bar must not change the media type")
 
         app.terminate()
         app.launch()
         openLibrary(app)
         XCTAssertEqual(app.descendants(matching: .any)["library.sort"].value as? String, "Recently Added")
-        XCTAssertEqual(picker.buttons.allElementsBoundByIndex.first(where: \.isSelected)?.label, selectedKind)
+        XCTAssertEqual(picker.value as? String, "Movies")
         capture(app, name: "Library Restored")
     }
 
@@ -179,14 +193,34 @@ final class LibraryBrowseUITests: XCTestCase {
     }
 
     private func focusFilters(_ app: XCUIApplication) {
-        let picker = app.segmentedControls["library.kind"]
+        focusControls(app)
+        move(to: app.descendants(matching: .any)["library.filters"], direction: .right)
+    }
+
+    private func focusControls(_ app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["library.kind"]
         let sort = app.descendants(matching: .any)["library.sort"]
         let filters = app.descendants(matching: .any)["library.filters"]
         for _ in 0..<5 where ![picker, sort, filters].contains(where: ownsFocus) {
             remote.press(.down)
             Thread.sleep(forTimeInterval: 0.2)
         }
-        move(to: filters, direction: .right)
+    }
+
+    private func chooseKind(_ app: XCUIApplication, title: String) {
+        focusControls(app)
+        let picker = app.descendants(matching: .any)["library.kind"]
+        move(to: picker, direction: .left)
+        remote.press(.select)
+        let all = menuCell(app, title: "All")
+        XCTAssertTrue(all.waitForExistence(timeout: 5))
+        move(to: all, direction: .up)
+        let option = menuCell(app, title: title)
+        move(to: option, direction: .down)
+        remote.press(.select)
+        XCTAssertTrue(option.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(picker.value as? String, title)
+        Thread.sleep(forTimeInterval: 0.5)
     }
 
     private func chooseFilter(_ app: XCUIApplication, title: String, submenu: String? = nil) {
