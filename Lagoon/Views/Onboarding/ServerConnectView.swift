@@ -6,6 +6,8 @@ struct ServerConnectView: View {
     @State private var address = ""
     @State private var isConnecting = false
     @State private var errorMessage: String?
+    @State private var localNetworkAccessDenied = false
+    @State private var connectionTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -40,6 +42,7 @@ struct ServerConnectView: View {
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                     }
+                    if localNetworkAccessDenied { LocalNetworkRecoveryView() }
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
@@ -70,6 +73,7 @@ struct ServerConnectView: View {
             .padding(.horizontal, Metrics.screenGutter)
             #endif
         }
+        .onDisappear { connectionTask?.cancel() }
     }
 
     private var addressField: some View {
@@ -98,19 +102,25 @@ struct ServerConnectView: View {
             }
         }
         .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || isConnecting)
+        .accessibilityIdentifier("server.connect")
     }
 
     private func connect() {
         guard !isConnecting else { return }
         isConnecting = true
         errorMessage = nil
-        Task {
+        localNetworkAccessDenied = false
+        connectionTask = Task {
+            defer { isConnecting = false }
             do {
                 try await session.connect(to: address)
+            } catch is CancellationError {
+            } catch LocalNetworkAccess.Failure.denied {
+                localNetworkAccessDenied = true
+                errorMessage = LocalNetworkAccess.Failure.denied.localizedDescription
             } catch {
-                errorMessage = "Couldn't reach a Jellyfin server at that address."
+                if !Task.isCancelled { errorMessage = "Couldn't reach a Jellyfin server at that address. Check the address and network connection, then try again." }
             }
-            isConnecting = false
         }
     }
 }
