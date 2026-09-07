@@ -122,14 +122,29 @@ struct SeerrSettingsView: View {
                     LabeledContent("Address", value: url.host() ?? url.absoluteString)
                     if let version = seerr.status?.version {
                         LabeledContent("Version", value: version)
+                            .accessibilityIdentifier("settings.seerr.version")
                     }
                 } else {
                     TextField("Seerr server address", text: $serverAddress)
                         .textContentType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .accessibilityIdentifier("settings.seerr.server")
                     Button("Connect", action: connect)
                         .disabled(serverAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking)
+                        .accessibilityIdentifier("settings.seerr.connect")
+                }
+            }
+
+            if let errorMessage = errorMessage ?? seerr.errorMessage {
+                Section {
+                    Text(errorMessage).foregroundStyle(.red)
+                    if seerr.localNetworkAccessDenied {
+                        LocalNetworkRecoveryView()
+                        Button("Try Again", action: connect)
+                            .disabled(isWorking)
+                            .accessibilityIdentifier("settings.seerr.retry")
+                    }
                 }
             }
 
@@ -153,11 +168,7 @@ struct SeerrSettingsView: View {
                 }
             }
 
-            if let errorMessage = errorMessage ?? seerr.errorMessage {
-                Section {
-                    Text(errorMessage).foregroundStyle(.red)
-                }
-            }
+
         }
     }
     #endif
@@ -253,11 +264,15 @@ struct SeerrSettingsView: View {
 
     private func connect() {
         guard !isWorking else { return }
+        // A saved connection can finish restoring after this view's initial
+        // address prefill. Retry that saved endpoint when the field is empty.
+        let input = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = input.isEmpty ? seerr.configuredURL?.absoluteString ?? "" : input
         isWorking = true
         errorMessage = nil
         Task {
             do {
-                try await seerr.connect(to: serverAddress)
+                try await seerr.connect(to: address)
                 serverAddress = seerr.configuredURL?.absoluteString ?? serverAddress
             } catch {
                 errorMessage = error.localizedDescription
