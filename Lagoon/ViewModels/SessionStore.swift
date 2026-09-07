@@ -364,8 +364,10 @@ final class SessionStore {
         connectionGeneration += 1
         let generation = connectionGeneration
         try checkConnection(generation)
+        let candidates = Self.candidateURLs(for: input)
+        guard !candidates.isEmpty else { throw ServerAddress.Failure.invalid }
         var lastError: Error = JellyfinError.invalidServerURL
-        for url in Self.candidateURLs(for: input) {
+        for url in candidates {
             do {
                 let info = try await publicInfo(url)
                 try checkConnection(generation)
@@ -394,27 +396,7 @@ final class SessionStore {
     /// tries https and http, plus Jellyfin's default port 8096 when none was
     /// given; LAN-looking hosts probe http first so https can't stall them.
     nonisolated static func candidateURLs(for input: String) -> [URL] {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !trimmed.isEmpty else { return [] }
-
-        if trimmed.contains("://") {
-            return URL(string: trimmed).map { [$0] } ?? []
-        }
-
-        let host = trimmed.split(separator: "/").first.map(String.init) ?? trimmed
-        let hasPort = host.split(separator: ":").count == 2
-        let looksLocal = host.hasSuffix(".local")
-            || host.split(separator: ":").first.map { $0.allSatisfy { $0.isNumber || $0 == "." } } == true
-
-        var strings = looksLocal ? ["http://\(trimmed)"] : ["https://\(trimmed)", "http://\(trimmed)"]
-        if !hasPort {
-            strings.append("http://\(trimmed):8096")
-        }
-        if looksLocal {
-            strings.append("https://\(trimmed)")
-        }
-        return strings.compactMap { URL(string: $0) }
+        ServerAddress.candidateURLs(for: input, service: .jellyfin)
     }
 
     // MARK: - Sign-in
