@@ -164,11 +164,42 @@ attempt can't stall them.
 
 ## Navigation
 
-`MainTabView` builds tabs dynamically: Home, Discover, one tab per
-`movies`/`tvshows` library from `userViews()`, Search, and Settings. Each tab
-owns its own `NavigationStack`; `MediaItem` is the content navigation value
-(Hashable by id), routed by `ItemDetailRouter` — `.series` →
+`MainTabView` has five stable tabs: Home, Discover, Library, Search, and
+Settings (HEL-140). Each owns a `NavigationStack`; `ContentNavigationRoute`
+provides stable item identity, routed by `ItemDetailRouter` — `.series` →
 `SeriesDetailView`, everything else → `ItemDetailView`.
+
+Library combines movies and series in one paged grid. All / Movies / Shows,
+sort order, source library, genre, decade, unwatched, favorites, and 4K movie filters
+are sent to Jellyfin on every page and refresh. `LibrarySelection` persists
+per server/account; switching accounts recreates the browse state. Source
+choices come from cached `LibraryTab` values until `userViews()` succeeds.
+Only then can a deleted or incompatible saved source be cleared. Resolution
+filtering is offered for Movies because series folders have no file resolution.
+The Library filter appears only when multiple libraries share a media type;
+a server with one movie and one show library needs only the media-type controls.
+Redundant saved library filters become their equivalent media type so hiding
+the menu does not leave an invisible constraint. Media type uses SwiftUI's
+native segmented Picker on both platforms. On tvOS it fits its labels and
+changes selection as focus moves; the system owns selection and focus styling.
+The native Decade filter derives non-overlapping ranges from Jellyfin's
+`Items/Filters` year catalogue for the selected media type and source library,
+not from the loaded page or a fixed calendar range. Gaps and undated titles
+don't create choices; Genre and watch-state filters don't narrow the catalogue.
+It sends ten production years through Jellyfin's `Years`
+parameter for movies and series, so it applies across pagination and refresh,
+not just to loaded posters. All Decades omits the constraint; Clear Filters
+removes it along with the other filters. Older saved preferences remain valid.
+Year choices refresh with the Library's existing refresh lifecycle; failed
+refreshes retain that scope's last good list, and outdated responses can't
+overwrite a newer scope. A saved decade stays clearable while loading/offline
+and is removed only after a successful catalogue confirms it is absent.
+
+`LibraryViewModel` discards responses from superseded queries, resets paging
+on filter changes, and counts raw server rows for offsets while deduplicating
+visible item IDs. Refresh re-fetches the loaded depth and retains the grid on
+failure. The shared refresh target is `library.all`; sort/filter changes do
+not create new refresh timers or replace the containing navigation stack.
 
 `SearchView` is the app's single search location, presenting Jellyfin
 library matches and Seerr catalogue matches as separate rails, with recent
