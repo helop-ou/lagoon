@@ -4,6 +4,28 @@ import Testing
 
 @Suite("Playback cache", .serialized)
 struct PlaybackCacheTests {
+    @Test func discMetadataDoesNotAmplifyItsReadBudgetIntoStreamingReadAhead() throws {
+        let loader = PlaybackCacheLoaderStub(payload: Data(repeating: 0, count: 2 * 1_024 * 1_024))
+        let scope = try PlaybackCacheScope(
+            itemID: "disc", sourceURL: URL(string: "https://media.test/disc.iso")!,
+            expectedLength: nil, directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
+            byteLimit: 2 * 1_024 * 1_024, requestSize: 1_024 * 1_024, loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+        let metadata = PlaybackCacheDiscSource(source: scope)
+        #expect(try metadata.read(at: 0, count: 2_048).count == 2_048)
+        #expect(loader.requestedRanges == [PlaybackByteRange(0, 2_048)])
+        #expect(try metadata.read(at: 0, count: 2_048).count == 2_048)
+        #expect(loader.requestCount == 1)
+        #expect(throws: PlaybackCacheError.invalidResponse) {
+            try scope.read(offset: Int64.max, length: 2)
+        }
+        #expect(loader.requestCount == 1)
+        // Ordinary playback retains streaming read-ahead after mount.
+        #expect(try scope.read(offset: 4_096, length: 2_048).count == 2_048)
+        #expect(loader.requestedRanges.last == PlaybackByteRange(4_096, 4_096 + 1_024 * 1_024))
+    }
+
     @Test func directFilesUseCachedTransportWhileReleaseHLSStaysNative() {
         let suiteName = "PlaybackCacheTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
