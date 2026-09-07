@@ -6,6 +6,7 @@ import SwiftUI
 nonisolated enum ContentNavigationRoute: Hashable {
     case item(MediaItem)
     case genre(name: String, includeTypes: [MediaItemType])
+    case search(String)
 
     // A route carries whatever copy of the item a rail had, and the detail
     // page re-fetches the rest. Two routes to the same item are the same
@@ -17,6 +18,8 @@ nonisolated enum ContentNavigationRoute: Hashable {
             a.id == b.id
         case let (.genre(name, includeTypes), .genre(otherName, otherIncludeTypes)):
             name == otherName && includeTypes == otherIncludeTypes
+        case let (.search(query), .search(other)):
+            query == other
         default:
             false
         }
@@ -31,6 +34,9 @@ nonisolated enum ContentNavigationRoute: Hashable {
             hasher.combine(1)
             hasher.combine(name)
             hasher.combine(includeTypes)
+        case .search(let query):
+            hasher.combine(2)
+            hasher.combine(query)
         }
     }
 }
@@ -44,6 +50,8 @@ private struct ContentNavigationDestination: View {
             ItemDetailRouter(item: item)
         case .genre(let name, let includeTypes):
             GenreLibraryView(genre: name, includeTypes: includeTypes)
+        case .search(let query):
+            SearchResultsView(query: query, source: .library)
         }
     }
 }
