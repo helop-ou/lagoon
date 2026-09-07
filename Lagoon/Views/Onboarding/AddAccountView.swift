@@ -3,15 +3,20 @@ import SwiftUI
 /// A cancellable setup transaction, independent of the signed-in UI below.
 struct AddAccountView: View {
     let session: SessionStore
-    @State private var draft = SessionStore(accountDraft: true)
+    @State private var draft: SessionStore
     @State private var errorMessage: String?
+
+    init(session: SessionStore) {
+        self.session = session
+        _draft = State(initialValue: session.makeAccountDraft())
+    }
 
     var body: some View {
         NavigationStack {
             Group {
                 switch draft.phase {
                 case .needsServer: ServerConnectView()
-                case .needsSignIn: SignInView()
+                case .needsSignIn: SignInView(changeServerTitle: "Use Another Server")
                 case .signedIn, .choosingAccount: ProgressView("Signing In")
                 }
             }
