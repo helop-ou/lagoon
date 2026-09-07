@@ -59,6 +59,9 @@ struct SignInView: View {
             #endif
         }
         .task {
+            if let account = session.reauthenticationAccount {
+                username = account.userName ?? ""
+            }
             quickConnectAvailable = await session.quickConnectAvailable()
         }
         .onDisappear {
@@ -75,6 +78,17 @@ struct SignInView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if session.reauthenticationAccount != nil {
+                Text("Your session ended. Sign in again to continue.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("signin.sessionExpired")
+                if session.accounts.count > 1 {
+                    Button("Choose Another Account") { session.showAccountPicker() }
+                        .accessibilityIdentifier("signin.chooseAccount")
+                }
+            }
         }
         .padding(.bottom, Metrics.Space.l)
     }
@@ -119,6 +133,7 @@ struct SignInView: View {
             }
         }
         .disabled(username.isEmpty || isSigningIn)
+        .accessibilityIdentifier("signin.submit")
     }
 
     private var changeServerButton: some View {
