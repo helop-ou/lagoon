@@ -12,6 +12,7 @@ final class SeerrSessionStore {
     private(set) var user: SeerrUser?
     private(set) var isLoading = false
     private(set) var errorMessage: String?
+    private(set) var localNetworkAccessDenied = false
 
     let client: SeerrClient
 
@@ -68,6 +69,7 @@ final class SeerrSessionStore {
         isLoading = false
         errorMessage = nil
         hasAttemptedJellyfinSignIn = false
+        localNetworkAccessDenied = false
         client.clear()
 
         guard let account,
@@ -84,6 +86,7 @@ final class SeerrSessionStore {
         let token = activationToken
         isLoading = true
         errorMessage = nil
+        localNetworkAccessDenied = false
         defer {
             if activationToken == token { isLoading = false }
         }
@@ -120,6 +123,12 @@ final class SeerrSessionStore {
             } catch is CancellationError {
                 if activationToken == token { client.clear() }
                 throw CancellationError()
+            } catch LocalNetworkAccess.Failure.denied {
+                guard activationToken == token, activeAccount?.id == account.id else { throw CancellationError() }
+                client.clear()
+                localNetworkAccessDenied = true
+                errorMessage = LocalNetworkAccess.Failure.denied.localizedDescription
+                throw LocalNetworkAccess.Failure.denied
             } catch {
                 guard activationToken == token, activeAccount?.id == account.id else { throw CancellationError() }
                 lastError = error
@@ -308,6 +317,7 @@ final class SeerrSessionStore {
         } catch {
             guard activationToken == token else { return }
             configuredURL = client.serverURL ?? url
+            localNetworkAccessDenied = error is LocalNetworkAccess.Failure
             errorMessage = error.localizedDescription
         }
     }
