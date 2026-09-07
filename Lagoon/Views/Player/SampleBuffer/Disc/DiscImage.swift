@@ -20,6 +20,7 @@ nonisolated enum DiscImageError: LocalizedError, Equatable {
     case unsupported(String)
     case malformed(String)
     case noTitle
+    case resourceLimit
 
     var errorDescription: String? {
         switch self {
@@ -31,7 +32,49 @@ nonisolated enum DiscImageError: LocalizedError, Equatable {
             "The disc image is malformed (\(detail))."
         case .noTitle:
             "The disc image has no playable title."
+        case .resourceLimit:
+            "The disc image's metadata exceeds the safe reading limits."
         }
+    }
+}
+
+/// One budget for mounting AND selecting a title. Per-file limits alone let
+/// hundreds of individually small files consume unbounded startup work.
+/// Owned by the demux worker; cancellation is supplied by its locked flag.
+nonisolated final class DiscReadBudget {
+    static let maxReadBytes = 64 * 1_024
+    private var bytesRemaining: Int
+    private var readsRemaining: Int
+    private var operationsRemaining: Int
+    private let deadline: TimeInterval
+    private let isCancelled: () -> Bool
+
+    init(bytes: Int = 32 * 1_024 * 1_024, reads: Int = 2_048,
+         operations: Int = 100_000, seconds: TimeInterval = 30,
+         isCancelled: @escaping () -> Bool = { false }) {
+        bytesRemaining = bytes
+        readsRemaining = reads
+        operationsRemaining = operations
+        deadline = ProcessInfo.processInfo.systemUptime + seconds
+        self.isCancelled = isCancelled
+    }
+
+    func check() throws {
+        if isCancelled() { throw CancellationError() }
+        guard operationsRemaining > 0, ProcessInfo.processInfo.systemUptime <= deadline else {
+            throw DiscImageError.resourceLimit
+        }
+        operationsRemaining -= 1
+    }
+
+    func read(_ count: Int) throws {
+        try check()
+        guard count >= 0, count <= Self.maxReadBytes,
+              count <= bytesRemaining, readsRemaining > 0 else {
+            throw DiscImageError.resourceLimit
+        }
+        bytesRemaining -= count
+        readsRemaining -= 1
     }
 }
 
@@ -59,16 +102,23 @@ nonisolated struct DiscExtent: Equatable {
 /// into dozens of clips — WALL·E's is 42 — and the filesystem fragments some
 /// of those again, so the mapping has to be per extent rather than per file.
 nonisolated struct DiscStreamMap: Equatable {
+    static let maxExtents = 65_536
     let extents: [DiscExtent]
     /// Virtual start of each extent, parallel to `extents`.
     private let starts: [Int64]
     let length: Int64
 
-    init(extents: [DiscExtent]) {
+    init(extents: [DiscExtent]) throws {
+        guard extents.count <= Self.maxExtents else { throw DiscImageError.resourceLimit }
         var starts: [Int64] = []
         var total: Int64 = 0
         starts.reserveCapacity(extents.count)
         for extent in extents {
+            guard extent.offset >= 0, extent.length > 0,
+                  extent.length <= Int64.max - extent.offset,
+                  extent.length <= Int64.max - total else {
+                throw DiscImageError.malformed("invalid stream extent")
+            }
             starts.append(total)
             total += extent.length
         }
@@ -121,10 +171,12 @@ nonisolated struct DiscBytes {
     }
 
     func u16(_ offset: Int) throws -> UInt16 {
-        UInt16(try u8(offset)) | (UInt16(try u8(offset + 1)) << 8)
+        try require(offset, 2)
+        return UInt16(try u8(offset)) | (UInt16(try u8(offset + 1)) << 8)
     }
 
     func u32(_ offset: Int) throws -> UInt32 {
+        try require(offset, 4)
         var value: UInt32 = 0
         for byte in 0..<4 {
             value |= UInt32(try u8(offset + byte)) << (8 * UInt32(byte))
@@ -133,6 +185,7 @@ nonisolated struct DiscBytes {
     }
 
     func u64(_ offset: Int) throws -> UInt64 {
+        try require(offset, 8)
         var value: UInt64 = 0
         for byte in 0..<8 {
             value |= UInt64(try u8(offset + byte)) << (8 * UInt64(byte))
@@ -141,16 +194,21 @@ nonisolated struct DiscBytes {
     }
 
     func bytes(_ offset: Int, _ count: Int) throws -> Data {
-        guard offset >= 0, count >= 0, offset + count <= data.count else {
-            throw DiscImageError.malformed("read past the end of a descriptor")
-        }
+        try require(offset, count)
         let start = data.startIndex + offset
         return data[start..<(start + count)]
+    }
+
+    func require(_ offset: Int, _ count: Int) throws {
+        guard offset >= 0, offset <= data.count, count >= 0, count <= data.count - offset else {
+            throw DiscImageError.malformed("read past the end of a descriptor")
+        }
     }
 
     /// A UDF regid's identifier, which names things like the metadata
     /// partition.
     func identifier(_ offset: Int) throws -> String {
+        try require(offset, 24)
         let raw = try bytes(offset + 1, 23)
         let trimmed = raw.prefix { $0 != 0 }
         return String(decoding: trimmed, as: UTF8.self)
