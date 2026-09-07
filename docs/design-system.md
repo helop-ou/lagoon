@@ -387,17 +387,21 @@ opening or navigating between categories must not change a saved preference.
   escape it with a matching negative padding on the ScrollView so the clip
   boundary lands at the screen edge. Zoom in on a *focused* leading item to
   check: the tell is a straight vertical edge where a capsule end should be.
-- **Cards**: `PosterCard` (260×390, navigates), `LandscapeCard` (360×202,
-  plays directly — used for Continue Watching / Next Up), `EpisodeCard`
-  (320×180). All carry the teal `ItemProgressBar`, hidden at ≥95 % watched.
+- **Cards**: `PosterCard` navigates to details; artwork starts at 280×420 pt
+  on tvOS and 160×240 pt on iOS, where `PosterLayout` scales it with Dynamic
+  Type. `LandscapeCard` uses 360×203 pt on tvOS and 240×135 pt on iOS; Continue
+  Watching and Next Up supply its direct-play action. `EpisodeCard` is 89% of
+  `Metrics.landscapeWidth` at 16:9, approximately 320×180 pt on tvOS and
+  214×120 pt on iOS. It opens details on iOS and plays on tvOS. Progress uses
+  the teal `ItemProgressBar`, hidden at ≥95 % watched.
 - **A poster's title goes *under* the artwork, never over it** (Jaagop,
   2026-08-17): a scrim and a headline across the bottom third cover the part
   of a poster its designer cared most about, and a poster is already a title
   card. `PosterCard` shows the name over the year beneath the art, in a
-  fixed-height caption so grid rows stay aligned whatever the title length.
+  minimum-height caption so grid rows stay aligned at the chosen text size.
   The gap above that caption has to clear the **focus lift**, not merely look
-  right at rest: `.card` scales the poster about a tenth, so a 390 pt one
-  grows ~20 pt past its resting bottom edge and lands on the title. Same
+  right at rest: the native `.card` treatment expands the artwork past its
+  resting bottom edge. Keep that headroom as poster dimensions change. Same
   family as the ScrollView rule above — a focused card is bigger than the one
   you laid out.
   The landscape and episode cards still overlay, because a still is not a
@@ -544,19 +548,20 @@ opening or navigating between categories must not change a saved preference.
   episode's end titles — the Up Next card today — uses a system translucent
   material, never a black wash. Credits are white text on black, and a flat
   scrim lets them through at any opacity as *readable letters*; only blurring
-  actually stops it. The track panel is a centered regular-material content
-  sheet with Liquid Glass tabs and actions above/inside it; this preserves
-  Apple's functional-layer hierarchy and avoids nesting glass inside glass.
-  Its height is driven by the selected tab's content.
+  actually stops it. On tvOS the track panel is centered regular-material
+  content with Liquid Glass tabs and actions above/inside it, avoiding nested
+  glass; its height is driven by the selected tab's content. iOS uses the
+  native resizable playback-options sheet described above.
 
 ## Image loading
 
 `CachedAsyncImage` + `ImageCache` replace `AsyncImage` entirely:
 
 - synchronous cache probe in `init` → no placeholder flash on cached art,
-- CGImageSource thumbnail decode off-main with `maxPixelSize` (cards ~400,
-  hero/backdrops 1920, palette 120) and `ShouldCacheImmediately` so the
-  render thread never decompresses JPEGs,
+- CGImageSource thumbnail decode off-main with `maxPixelSize` (card budgets
+  follow layout dimensions and display scale via `ArtworkSizing`;
+  hero/backdrops 1920, palette 120) and `ShouldCacheImmediately` so the render
+  thread never decompresses JPEGs,
 - NSCache capped at 200 images / 50 MB, in-flight loads coalesced per key.
 
 Always pass a sensible `maxPixelSize` — requesting full-size art on a rail
