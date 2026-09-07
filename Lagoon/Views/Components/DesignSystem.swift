@@ -59,6 +59,7 @@ enum Metrics {
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
     static let posterWidth: CGFloat = 105
+    static let accessibilityPosterWidth: CGFloat = 240
     static let landscapeWidth: CGFloat = 240
     static let heroHeight: CGFloat = 380
     static let gridColumns = 3
@@ -158,6 +159,7 @@ enum Metrics {
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
     static let progressBarHeight: CGFloat = 6
+    static let touchTarget: CGFloat = 44
 }
 
 /// The only sanctioned escapes from the Dynamic Type scale (HEL-51).
