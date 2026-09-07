@@ -722,25 +722,31 @@ struct SettingsView: View {
 
             Section("Subtitle Appearance") {
                 Toggle("Use System Caption Style", isOn: subtitleBinding(\.followsSystemAppearance))
-                Picker("Size", selection: subtitleBinding(\.textSize, customAppearance: true)) {
-                    ForEach(SubtitleTextSize.allCases) { size in
-                        Text(size.title).tag(size)
+                if !subtitlePreferences.values.followsSystemAppearance {
+                    Picker("Size", selection: subtitleBinding(\.textSize, customAppearance: true)) {
+                        ForEach(SubtitleTextSize.allCases) { size in
+                            Text(size.title).tag(size)
+                        }
                     }
-                }
-                Picker("Edge", selection: subtitleBinding(\.edgeStyle, customAppearance: true)) {
-                    ForEach(SubtitleEdgeStyle.allCases) { edge in
-                        Text(edge.title).tag(edge)
+                    Picker("Edge", selection: subtitleBinding(\.edgeStyle, customAppearance: true)) {
+                        ForEach(SubtitleEdgeStyle.allCases) { edge in
+                            Text(edge.title).tag(edge)
+                        }
                     }
-                }
-                Picker("Background", selection: subtitleBinding(\.background, customAppearance: true)) {
-                    ForEach(SubtitleBackground.allCases) { background in
-                        Text(background.title).tag(background)
+                    Picker("Background", selection: subtitleBinding(\.background, customAppearance: true)) {
+                        ForEach(SubtitleBackground.allCases) { background in
+                            Text(background.title).tag(background)
+                        }
                     }
-                }
-                Picker("Position", selection: subtitleBinding(\.verticalPosition, customAppearance: true)) {
-                    ForEach(SubtitleVerticalPosition.allCases) { position in
-                        Text(position.title).tag(position)
+                    Picker("Position", selection: subtitleBinding(\.verticalPosition, customAppearance: true)) {
+                        ForEach(SubtitleVerticalPosition.allCases) { position in
+                            Text(position.title).tag(position)
+                        }
                     }
+                } else {
+                    Text("Appearance follows Accessibility → Subtitles & Captioning in Settings. Turn off system style to customize captions in Lagoon.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 subtitlePreview
                 Button("Reset to System") {
