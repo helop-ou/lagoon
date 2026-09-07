@@ -40,6 +40,8 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     case notAvailable
     case providerUnavailable
     case unsupportedFile
+    case invalidFile
+    case tooLarge
     case notPermitted
     case sessionExpired
     case rateLimited
@@ -59,6 +61,10 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
             "The subtitle provider could not supply this file. It may have been removed or the provider's download limit may have been reached. Try another result."
         case .unsupportedFile:
             "The subtitle provider returned a file Lagoon couldn't read. Try another result."
+        case .invalidFile:
+            "The server returned an incomplete or invalid subtitle file. Try another result."
+        case .tooLarge:
+            "This subtitle exceeds Lagoon's 8 MB download limit. Choose another result or track."
         case .notPermitted:
             "This Jellyfin account isn't allowed to manage subtitles. Ask the server administrator to enable Subtitle Management for it."
         case .sessionExpired:
@@ -94,6 +100,14 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     /// to be a provider problem.
     static func classify(_ error: Error) -> SubtitleDownloadError {
         if let known = error as? SubtitleDownloadError { return known }
+        if let download = error as? DownloadFailure {
+            switch download {
+            case .tooLarge: return .tooLarge
+            case .httpStatus(let status, let body):
+                return classify(JellyfinError.server(status: status, message: JellyfinClient.serverMessage(from: body)))
+            case .invalidResponse, .unexpectedContentType, .truncated, .unsafeRedirect: return .invalidFile
+            }
+        }
         if let jellyfin = error as? JellyfinError {
             switch jellyfin {
             case .unauthorized, .sessionExpired:
@@ -144,7 +158,7 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         case .reported(let status, _):
             (500...599).contains(status)
         case .timedOut, .rateLimited, .notPermitted, .sessionExpired,
-             .unsupportedFile, .notAvailable, .server:
+             .unsupportedFile, .invalidFile, .tooLarge, .notAvailable, .server:
             false
         }
     }
@@ -572,7 +586,8 @@ final class SubtitleSearchCoordinator {
     }
 
     func startDownload(_ candidate: SubtitleCandidate) {
-        guard engine != nil, !phase.isBusy else { return }
+        guard let engine, !phase.isBusy else { return }
+        let selectionRevision = engine.subtitleSelectionRevision
         downloadTask?.cancel()
         downloadGeneration &+= 1
         let generation = downloadGeneration
@@ -581,9 +596,9 @@ final class SubtitleSearchCoordinator {
             guard let self else { return }
             switch candidate.source {
             case .jellyfin:
-                await self.downloadFromJellyfin(candidate, generation: generation)
+                await self.downloadFromJellyfin(candidate, generation: generation, selectionRevision: selectionRevision)
             case .openSubtitles:
-                await self.downloadFromProvider(candidate, generation: generation)
+                await self.downloadFromProvider(candidate, generation: generation, selectionRevision: selectionRevision)
             }
         }
     }
@@ -592,7 +607,7 @@ final class SubtitleSearchCoordinator {
     /// nothing about the account is disclosed to Jellyfin. A repeat watch is
     /// served from disk because the provider allowance is measured in a
     /// handful of downloads per day.
-    private func downloadFromProvider(_ candidate: SubtitleCandidate, generation: Int) async {
+    private func downloadFromProvider(_ candidate: SubtitleCandidate, generation: Int, selectionRevision: Int) async {
         guard let provider, let engine, let fileID = candidate.providerFileID else { return }
         do {
             let data: Data
@@ -601,9 +616,9 @@ final class SubtitleSearchCoordinator {
                 (url, data) = (cached.url, cached.data)
             } else {
                 let fetched = try await provider.download(fileID: fileID)
-                guard let stored = SubtitleFileStore.store(
-                    fetched, itemID: itemID, candidateID: candidate.id
-                ) else { throw OpenSubtitlesError.invalidResponse }
+                guard let stored = SubtitleFileStore.fileURL(itemID: itemID, candidateID: candidate.id) else {
+                    throw OpenSubtitlesError.invalidResponse
+                }
                 data = fetched
                 url = stored
             }
@@ -611,14 +626,22 @@ final class SubtitleSearchCoordinator {
             guard generation == downloadGeneration else { return }
             providerRemainingDownloads = provider.remainingDownloads
 
-            let language = candidate.language
-            let hasCues = await Task.detached {
-                !SubtitleParser.cues(from: data, languageHint: language).isEmpty
-            }.value
-            guard hasCues else { throw SubtitleDownloadError.unsupportedFile }
+            do {
+                _ = try await ExternalSubtitleLoader.parse(data, language: candidate.language)
+            } catch {
+                // Invalid legacy cache entries must not make every retry
+                // serve the same broken bytes. Fresh data is saved only
+                // after validation and the current-request checks below.
+                if !Task.isCancelled { try? FileManager.default.removeItem(at: url) }
+                throw error
+            }
             try Task.checkCancellation()
             guard generation == downloadGeneration else { return }
+            guard SubtitleFileStore.store(data, itemID: itemID, candidateID: candidate.id) != nil else {
+                throw OpenSubtitlesError.invalidResponse
+            }
 
+            guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
             engine.addExternalSubtitle(ExternalSubtitleTrack(
                 url: url,
                 preloadedData: data,
@@ -653,7 +676,7 @@ final class SubtitleSearchCoordinator {
         }
     }
 
-    private func downloadFromJellyfin(_ candidate: SubtitleCandidate, generation: Int) async {
+    private func downloadFromJellyfin(_ candidate: SubtitleCandidate, generation: Int, selectionRevision: Int) async {
         guard let client, let engine, let subtitleID = candidate.jellyfinID else { return }
         var directFailure: SubtitleDownloadError?
         do {
@@ -674,13 +697,10 @@ final class SubtitleSearchCoordinator {
                 let file = try await Self.retrying {
                     try await client.remoteSubtitleFile(subtitleId: subtitleID)
                 }
-                let language = candidate.language
-                let hasCues = await Task.detached {
-                    !SubtitleParser.cues(from: file.data, languageHint: language).isEmpty
-                }.value
-                guard hasCues else { throw SubtitleDownloadError.unsupportedFile }
+                _ = try await ExternalSubtitleLoader.parse(file.data, language: candidate.language)
                 try Task.checkCancellation()
                 guard generation == downloadGeneration else { return }
+                guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
                 engine.addExternalSubtitle(ExternalSubtitleTrack(
                     url: file.url,
                     preloadedData: file.data,
@@ -738,6 +758,7 @@ final class SubtitleSearchCoordinator {
             }
             try Task.checkCancellation()
             guard generation == downloadGeneration else { return }
+            guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
             existingSignatures.insert(SubtitleStreamSignature(stream))
             engine.addExternalSubtitle(ExternalSubtitleTrack(
                 url: url,
@@ -768,15 +789,20 @@ final class SubtitleSearchCoordinator {
         }
     }
 
+    func cancelDownload() {
+        downloadTask?.cancel()
+        downloadTask = nil
+        downloadGeneration &+= 1
+        if phase.isDownloading { phase = .idle }
+    }
+
     func cancel() {
         searchTask?.cancel()
         searchTask = nil
-        downloadTask?.cancel()
-        downloadTask = nil
+        cancelDownload()
         persistenceTask?.cancel()
         persistenceTask = nil
         searchGeneration &+= 1
-        downloadGeneration &+= 1
     }
 
     /// Playback dismissal severs the coordinator's session-sized references
