@@ -133,9 +133,9 @@ Four things are deliberate:
   the server answers a 4K source with a 4K re-encode at 3 Mbps — a picture
   nobody wants, minutes of server CPU to make it, on a phone that cannot show
   it. 720p is the conventional cellular rendition and makes the encode cheap.
-- **The viewer can override it** (Settings → Cellular → Full Quality on
-  Cellular). Apple reports that a path is *expensive*, never that it is
-  *slow*, and a fast tethered 5G connection is indistinguishable from a
+- **The viewer can override it** (Settings → Playback → Cellular → Full
+  Quality on Cellular). Apple reports that a path is *expensive*, never that
+  it is *slow*, and a fast tethered 5G connection is indistinguishable from a
   throttled hotspot from inside the app.
 
 Two known limits, both deliberate. The profile is built once per
@@ -2474,6 +2474,31 @@ or past `MaxResumePct` (90 %), so stopping a two-hour film after two
 minutes legitimately comes back as Play, and stopping in the credits
 comes back as played.
 
+## iOS player controls
+
+`CustomPlayerView` keeps the same `PlayerEngine` protocol and playback
+controller as tvOS, but uses a native NavigationStack toolbar for Close,
+Info, and Play/Pause. These actions sit outside the video's tap-gesture
+surface, so tapping an action cannot also trigger the surface interaction.
+The toolbar follows transport visibility; VoiceOver keeps it and the timeline
+available while the options sheet is closed.
+
+Info presents `PlayerControlPanel` as a native sheet with medium/large
+detents and a drag indicator. The panel owns a NavigationStack, Form, and
+Done action. Info, Video, Audio, and Subtitles use a segmented picker at
+standard text sizes and a menu picker at accessibility sizes. Track rows
+carry checkmarks and selected accessibility traits; playback speed and audio
+delay use native steppers. Dismissing the sheet returns to the player without
+changing playback state.
+
+Touch scrubbing still previews during the drag and seeks only on release,
+preserving the current play/pause state. VoiceOver exposes the timeline as
+an adjustable Playback position with elapsed/total time and ten-second
+increments, clamped to the title's duration. tvOS retains its mounted,
+focus-driven panel and remote grammar below; the iOS sheet does not replace
+that path. See [Design system](design-system.md#iphone-accessibility-and-browsing)
+for the shared layout and accessibility conventions.
+
 ## Siri Remote transport reveal
 
 A light tap on the Siri Remote touch surface reveals the transport and
@@ -2551,15 +2576,13 @@ These are all verified on device, not inferred:
   Neither a smaller font nor an explicit `.frame(height:)` moves it.
   `.controlSize(.small)` is the only lever short of drawing the focus lozenge
   by hand, which this codebase does not do.
-- **Do not ask for `.buttonStyle(.glass)`.** On tvOS, per Apple, "certain
-  interface elements, like image views and buttons, adopt Liquid Glass **when
-  they gain focus**" — a plain button already becomes glass at the moment it
-  should. Asking for it makes every option permanently glass, against "use
-  Liquid Glass effects sparingly … limit these effects to the most important
-  functional elements". It also tints the label with the accent, which is
-  white, so on a bright backdrop the labels disappear into their own pills.
-  That is exactly how the first speed control shipped, and it is why the panel
-  rows are plain buttons.
+- **Follow the current panel styles, not the early speed-control experiment.**
+  tvOS panel tabs and action buttons use `.glass`; track rows use native
+  buttons inside the regular-material content card. Keep `.glassProminent`
+  out of this white-accent app, and do not override foreground colours on
+  focusable lozenges or their ancestors. The system must choose a readable
+  label when focus changes. The earlier blanket ban on `.glass` was superseded
+  by the shared [focus strategy](design-system.md#focus-strategy).
 
 ## Player view gotchas (learned the hard way on tvOS)
 
