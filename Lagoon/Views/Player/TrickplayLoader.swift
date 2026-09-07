@@ -30,17 +30,19 @@ final class TrickplayLoader {
     private let source: TrickplaySource
     /// Decoded sheets, most-recently-used first.
     private var sheets: [(index: Int, image: CGImage)] = []
-    /// Every sheet's compressed bytes, kept once fetched. A whole film's
-    /// sheets are only a few MB as JPEG, and holding them means a drag that
-    /// sweeps the timeline twice re-decodes rather than re-downloads.
+    /// Compressed sheets, capped at 32 MiB. Revisiting a retained sheet
+    /// re-decodes it without another download.
     private var sheetData: [Int: Data] = [:]
+    private var sheetDataOrder: [Int] = []
     private var loading: Set<Int> = []
+    @ObservationIgnored private var loadTasks: [Int: Task<Void, Never>] = [:]
     /// The tile the scrubber is asking for right now — re-checked when a
     /// sheet lands, since the playhead has usually moved on by then.
     private var wanted: TrickplayTile?
 
     /// Two sheets ≈ 46 MB. A third buys almost nothing at 16 minutes each.
     private static let sheetLimit = 2
+    private static let rawSheetByteLimit = 32 * 1_024 * 1_024
     /// Caps the decode so a server generating fat trickplay resolutions
     /// can't blow up memory. Tile geometry is derived from the decoded
     /// sheet, so a downscaled one crops just as correctly.
@@ -49,6 +51,8 @@ final class TrickplayLoader {
     init(source: TrickplaySource) {
         self.source = source
     }
+
+    deinit { for task in loadTasks.values { task.cancel() } }
 
     /// Points the loader at a playback position. Cheap to call per drag
     /// update: within one thumbnail's interval it does nothing at all.
@@ -71,10 +75,17 @@ final class TrickplayLoader {
 
     private func load(sheet index: Int) {
         guard !loading.contains(index), source.sheetURLs.indices.contains(index) else { return }
+        // A rapid scrub can cross many sheets. Keep only the requested
+        // sheet's transfer; the previous decoded frame remains visible.
+        for (other, task) in loadTasks where other != index {
+            task.cancel()
+            loadTasks.removeValue(forKey: other)
+            loading.remove(other)
+        }
         loading.insert(index)
         let url = source.sheetURLs[index]
         let cached = sheetData[index]
-        Task { [weak self] in
+        loadTasks[index] = Task { [weak self] in
             let data: Data?
             if let cached {
                 data = cached
@@ -82,8 +93,9 @@ final class TrickplayLoader {
                 data = await Self.fetch(url)
             }
             let image = await Self.decode(data, maxPixelSize: Self.maxSheetPixels)
-            guard let self else { return }
+            guard !Task.isCancelled, let self else { return }
             self.loading.remove(index)
+            self.loadTasks.removeValue(forKey: index)
             guard let image else {
                 // Nothing has ever loaded, so the tiles aren't really there.
                 // A later failure just means one bad sheet — keep going.
@@ -91,6 +103,13 @@ final class TrickplayLoader {
                 return
             }
             self.sheetData[index] = data
+            self.sheetDataOrder.removeAll { $0 == index }
+            self.sheetDataOrder.append(index)
+            while self.sheetData.values.reduce(0, { $0 + $1.count }) > Self.rawSheetByteLimit,
+                  let oldest = self.sheetDataOrder.first {
+                self.sheetData.removeValue(forKey: oldest)
+                self.sheetDataOrder.removeFirst()
+            }
             self.sheets.insert((index, image), at: 0)
             if self.sheets.count > Self.sheetLimit {
                 self.sheets.removeLast()
@@ -121,9 +140,7 @@ final class TrickplayLoader {
     }
 
     private nonisolated static func fetch(_ url: URL) async -> Data? {
-        guard let (data, response) = try? await URLSession.shared.data(from: url),
-              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return data
+        try? await BoundedDownload.shared.data(from: url, limit: DownloadLimit.artwork, content: .image)
     }
 
     private nonisolated static func decode(_ data: Data?, maxPixelSize: Int) async -> CGImage? {
@@ -133,7 +150,9 @@ final class TrickplayLoader {
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
             kCGImageSourceShouldCacheImmediately: true,
         ]
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetStatus(source) == .statusComplete,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { return nil }
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }
