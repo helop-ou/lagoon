@@ -96,7 +96,7 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         if let known = error as? SubtitleDownloadError { return known }
         if let jellyfin = error as? JellyfinError {
             switch jellyfin {
-            case .unauthorized:
+            case .unauthorized, .sessionExpired:
                 return .sessionExpired
             case .server(let status, let message):
                 // Our own wording is better for the cases we understand;
