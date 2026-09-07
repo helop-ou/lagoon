@@ -157,6 +157,13 @@ struct SubtitleProviderTests {
         }
     }
 
+    @Test func oversizedProviderFileFailsWithTheDownloadLimit() async throws {
+        let client = Self.makeClient()
+        OpenSubtitlesURLProtocol.reset()
+        do { _ = try await client.download(fileID: 413); Issue.record("Expected the subtitle byte limit") }
+        catch SubtitleDownloadError.tooLarge {}
+    }
+
     @Test func aRejectedTokenIsDroppedRatherThanRetriedForever() async {
         let client = Self.makeClient()
         OpenSubtitlesURLProtocol.reset()
@@ -376,11 +383,17 @@ private nonisolated final class OpenSubtitlesURLProtocol: URLProtocol, @unchecke
         case ("POST", "/api/v1/download") where body?.contains("\"file_id\":401") == true:
             payload = Data(#"{"message":"invalid token"}"#.utf8)
             status = 401
+        case ("POST", "/api/v1/download") where body?.contains("\"file_id\":413") == true:
+            payload = Data(#"{"link":"https://files.opensubtitles.test/files/oversized.srt"}"#.utf8)
+            status = 200
         case ("POST", "/api/v1/download"):
             payload = Data(#"{"link":"https://files.opensubtitles.test/files/200.srt","file_name":"m.srt","requests":3,"remaining":17,"reset_time":"20 hours"}"#.utf8)
             status = 200
         case ("GET", "/files/200.srt"):
             payload = Data("1\n00:00:01,000 --> 00:00:03,000\nProvider cue\n".utf8)
+            status = 200
+        case ("GET", "/files/oversized.srt"):
+            payload = Data(repeating: 65, count: DownloadLimit.subtitle + 1)
             status = 200
         default:
             payload = Data()
@@ -391,7 +404,7 @@ private nonisolated final class OpenSubtitlesURLProtocol: URLProtocol, @unchecke
             url: url,
             statusCode: status,
             httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
+            headerFields: ["Content-Type": url.path.hasSuffix(".srt") ? "application/x-subrip" : "application/json"]
         ) else {
             client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
             return
