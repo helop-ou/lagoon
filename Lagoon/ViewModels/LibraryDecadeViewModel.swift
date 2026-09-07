@@ -13,7 +13,10 @@ final class LibraryDecadeViewModel {
     private var revision = 0
 
     func load(scope: LibraryYearScope, fetch: FetchYears) async {
-        guard self.scope != scope || !isLoading else { return }
+        // A cancelled view task may still be unwinding when its replacement
+        // starts. Supersede even a same-scope request instead of dropping the
+        // replacement behind isLoading and then discarding the old response.
+        guard !Task.isCancelled else { return }
         revision &+= 1
         let revision = revision
         if self.scope != scope { decades = nil }
