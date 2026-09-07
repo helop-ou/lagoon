@@ -374,6 +374,11 @@ opening or navigating between categories must not change a saved preference.
   the cards/captions from the next shelf heading. Home, Discover, Search,
   and episode/genre/collection rails share this rhythm; poster grids also
   leave 40 pt between rows. Horizontal card spacing stays unchanged.
+- **Genre cards**: on tvOS, movie and show genre names are centered on both
+  axes and can wrap onto two centered lines. Keep the title inside the card's
+  24 pt padding and darken the artwork behind its center for contrast. The
+  native `.card` focus treatment and rail focus headroom remain unchanged.
+  iOS retains its bottom-leading single-line treatment.
 - **Any horizontal ScrollView of focusable things** puts the gutter *inside*
   the scroll content, never on the ScrollView itself — a ScrollView clips at
   its own edges, and the focused lozenge is bigger than the resting frame, so
