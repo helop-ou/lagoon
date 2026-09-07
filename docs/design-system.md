@@ -426,12 +426,23 @@ opening or navigating between categories must not change a saved preference.
   flat material is gone (Jaagop: it read as a grey wash over a third of the
   image); legibility now comes from the same **leading wash** the detail pages
   use — darken only the column the text occupies and let the rest of the still
-  be itself. Auto-advances every 7 s after pre-warming the next image and
-  palette; text transitions asymmetrically (in: 0.3 s delayed, out: 0.2 s).
+  be itself. On iOS a native horizontal paging ScrollView follows left/right
+  swipes and settles on a full slide, with normal bounce at either end;
+  vertical swipes still scroll the page. On tvOS Left/Right wraps through
+  slides without replacing the focused `.card`; Up/Down still leaves the
+  banner normally. Both Home and Discover use this shared behaviour.
+  Auto-advances every 7 s while visible and idle, pre-warming adjacent artwork
+  and palettes. Manual paging restarts the interval; tvOS focus, touch scrolling,
+  hidden destinations, backgrounding, Reduce Motion and VoiceOver pause it.
+  Reduce Motion still allows manual paging without added transition animations.
+  tvOS text transitions asymmetrically (in: 0.3 s delayed, out: 0.2 s).
   **The whole banner is the link** — focus it, click it, get the detail page
   for whatever is on screen. It carried a "See more" button until 2026-08-17,
   which was a second thing to aim at for the one thing the banner already
-  meant. Dots: 8 pt capsules, 24 pt when active.
+  meant. Dots: 8 pt capsules, 24 pt when active. VoiceOver exposes the slide
+  position and adjustable next/previous actions without removing activation.
+  Selection follows the item's ID across refresh/reordering, falling back to
+  the first slide only if that title disappears.
 - **Ambient glow** (`AmbientGlowView` + `ArtworkPalette`): three radial
   gradients at fixed unit points from the artwork's dominant colors, blurred
   120, bleeding 80 pt past the hero panel. Palette extraction is a pure-Swift
