@@ -17,7 +17,8 @@ convention; iOS scales down via `#if os(tvOS)`.
 | `landscapeWidth` (16:9) | 360 | 240 |
 | `heroHeight` | 620 | 380 |
 | `gridColumns` | 5 | 3 |
-| rail focus headroom | top 40 / bottom 80 | 6 / 10 |
+| rail padding (focus headroom on tvOS) | top 48 / bottom 96 | 12 / 40 |
+| poster grid row spacing | 72 | 40 |
 
 Shared radii: card 12, card artwork 10, badge 6, hero panel 32. Player
 progress is a flat 6 pt rail with an attached time label and a transient
@@ -362,6 +363,10 @@ resolves against whichever side of that it lands on.
 - **Rails** (`MediaRail`): `.headline` title + `LazyHStack` at `cardSpacing`,
   gutter padding, asymmetric top/bottom padding for focus lift; the page
   ScrollView carries `.scrollClipDisabled()`.
+  On iOS, 12 pt separates the heading from its cards and 40 pt separates
+  the cards/captions from the next shelf heading. Home, Discover, Search,
+  and episode/genre/collection rails share this rhythm; poster grids also
+  leave 40 pt between rows. Horizontal card spacing stays unchanged.
 - **Any horizontal ScrollView of focusable things** puts the gutter *inside*
   the scroll content, never on the ScrollView itself — a ScrollView clips at
   its own edges, and the focused lozenge is bigger than the resting frame, so
