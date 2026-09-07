@@ -71,9 +71,8 @@ struct MainTabView: View {
             librariesLoaded = false
             discoverNavigationPath = NavigationPath()
             searchNavigationPath = NavigationPath()
-            // A shared TV should not hand the next viewer the last one's
-            // searches.
-            RecentSearchStore.shared.clear()
+            playerItem = nil
+            deepLinks.clear()
         }
         // Headless hardware harness: resolve a named library item through
         // the app's existing signed-in client, then present the same player
@@ -114,9 +113,14 @@ struct MainTabView: View {
         // instead of being dropped.
         .task(id: "\(deepLinks.pendingItemID ?? ""):\(deepLinkRetry)") {
             guard let id = deepLinks.pendingItemID else { return }
+            guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
+                deepLinks.clear()
+                return
+            }
             do {
                 let item = try await session.client.item(id: id)
-                guard !Task.isCancelled, deepLinks.pendingItemID == id else { return }
+                guard !Task.isCancelled, deepLinks.pendingItemID == id,
+                      deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else { return }
                 playerItem = PlayerItem(media: item)
                 deepLinks.pendingItemID = nil
                 deepLinkError = nil
@@ -131,9 +135,14 @@ struct MainTabView: View {
         // that is where Continue Watching lives.
         .task(id: "\(deepLinks.pendingDetailItemID ?? ""):\(deepLinkRetry)") {
             guard let id = deepLinks.pendingDetailItemID else { return }
+            guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
+                deepLinks.clear()
+                return
+            }
             do {
                 let item = try await session.client.item(id: id)
-                guard !Task.isCancelled, deepLinks.pendingDetailItemID == id else { return }
+                guard !Task.isCancelled, deepLinks.pendingDetailItemID == id,
+                      deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else { return }
                 homeNavigationPath.append(ContentNavigationRoute.item(item))
                 deepLinks.pendingDetailItemID = nil
                 deepLinkError = nil
