@@ -117,10 +117,12 @@ final class OpenSubtitlesClient {
     private(set) var host: String = OpenSubtitlesClient.defaultHost
 
     private let session: URLSession
+    private let downloads: BoundedDownload
     private let requestTimeout: TimeInterval
     private let decoder: JSONDecoder
 
     init(session: URLSession = .shared, requestTimeout: TimeInterval = 30) {
+        downloads = BoundedDownload(configuration: session.configuration)
         self.session = session
         self.requestTimeout = requestTimeout
         decoder = JSONDecoder()
@@ -337,13 +339,14 @@ final class OpenSubtitlesClient {
         var request = URLRequest(url: url)
         request.timeoutInterval = requestTimeout
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
-        let (payload, fileResponse) = try await session.data(for: request)
-        guard let http = fileResponse as? HTTPURLResponse else {
-            throw OpenSubtitlesError.invalidResponse
-        }
-        if http.statusCode == 410 { throw OpenSubtitlesError.linkExpired }
-        guard (200...299).contains(http.statusCode) else {
-            throw OpenSubtitlesError.server(http.statusCode)
+        let payload: Data
+        do {
+            payload = try await downloads.data(for: request, limit: DownloadLimit.subtitle, content: .subtitle)
+        } catch DownloadFailure.httpStatus(let status, _) {
+            if status == 410 { throw OpenSubtitlesError.linkExpired }
+            throw OpenSubtitlesError.server(status)
+        } catch let failure as DownloadFailure {
+            throw SubtitleDownloadError.classify(failure)
         }
         guard !payload.isEmpty else { throw OpenSubtitlesError.invalidResponse }
         return payload
