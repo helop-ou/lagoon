@@ -29,9 +29,9 @@ Lagoon/
 ## State management
 
 - `@Observable` everywhere (never `ObservableObject`/`@Published`). Screen
-  view models are owned as `@State private var viewModel = …`; the one shared
-  objects are `SessionStore` and the account-scoped `SeerrSessionStore`,
-  injected from `RootView`.
+  view models are owned as `@State private var viewModel = …`. `SessionStore`
+  owns the shared account context, including `SeerrSessionStore` and recent
+  searches; `RootView` injects the session and its Seerr store.
 - The Swift default actor isolation is `MainActor` (build setting). Model
   types are declared `nonisolated` so Codable conformances stay usable off
   the main actor.
@@ -162,9 +162,26 @@ Two rules that are easy to get wrong:
   can only fail. Other accounts are untouched, and the picker takes over
   when any remain.
 
-Switching costs no re-authentication and nothing else has to know: every
-Jellyfin call is user-scoped, so Continue Watching and the rest follow from
-the client being re-pointed.
+Switching a valid remembered account costs no re-authentication. The
+authoritative session transition synchronously clears outgoing Seerr state,
+changes recent-search ownership, and invalidates Top Shelf work. Entering the
+picker itself drops active access. `MainTabView` is identified by account so
+navigation, details and search results are rebuilt for the next viewer.
+
+`AccountLocalData` centralizes forgetting (HEL-141). It removes the Jellyfin
+token, all Seerr cookies linked to that account (including previously configured
+Seerr servers), cached libraries, recent searches, and subtitle, track and Home
+preferences. Another account's data and the device-wide OpenSubtitles login
+remain. The shared Seerr server address is removed only when its last Jellyfin
+account is forgotten. Legacy global recent searches are discarded because their
+owner cannot be determined.
+
+Local forgetting happens before awaiting remote logout. Immutable client copies
+perform Jellyfin/Seerr revocation so a late completion cannot affect the next
+account. Keychain deletion/enumeration failures retain a persistent removal
+marker, block credential restoration, and surface a root-level cleanup alert
+with Retry. Relaunch retries cleanup; re-adding the same account must finish it
+before saving a replacement token. See [HEL-141 validation](hel-141-account-privacy-validation.md).
 
 ### Seerr sessions
 
@@ -174,7 +191,11 @@ the same Jellyfin server, but stores a separate opaque `connect.sid` cookie in
 the Keychain for each Lagoon account. Jellyfin passwords are accepted only as
 a one-time fallback and are never persisted; Jellyfin Quick Connect is the
 primary sign-in path. Changing Lagoon accounts clears in-flight Seerr UI state
-and restores only the matching cookie.
+and restores only the matching cookie. Activation invalidates pending restores
+and sign-ins before they can write into the next session. Automatic URLSession
+cookie handling is disabled; only the explicitly selected account cookie is
+sent. Failed cookie deletions are persistently quarantined and cannot restore;
+a verified new sign-in replaces them.
 
 Server address input is expanded by `SessionStore.candidateURLs(for:)`:
 schemeless input probes https then http, plus `:8096` when no port was given;
@@ -273,14 +294,26 @@ no networking. It also fixes the old sizing, which asked Jellyfin for 800px
 and set that one URL for both `.screenScale1x` and `.screenScale2x` — under
 half the width a 16:9 item needs at @2x.
 
-Composed artwork is cleaned on every publish and wiped on sign-out along with
-the snapshot: a 4K still of what someone was watching is the same privacy
-leak as the title list.
+`TopShelfPublisher` owns one cancelable task and serializes the commit on the
+main actor (HEL-141). Each operation captures its server/user and source URLs
+and writes only into a unique `<account-hash>-<generation>` staging directory.
+It commits `snapshot-v2.json` atomically after complete artwork is available,
+then prunes old generations and notifies TVServices. A stale worker can delete
+only its own directory. Switching, entering the picker, forgetting and logout
+invalidate pending work and clear the shared snapshot/artwork.
+
+A successful empty resume result clears the shelf. Network failures preserve
+the last valid snapshot; an unrelated Next Up failure cannot prevent a successful
+empty resume result from clearing. The extension reads only the new owned
+manifest, validates artwork paths and rechecks its generation before returning
+content. Old unowned shared-defaults payloads are retired on upgrade.
 
 The carousel's two buttons must do two different things, so the `lagoon://`
 contract has two hosts: `play/{id}` resumes and `item/{id}` opens the detail
-page. `DeepLinkRouterTests` is the only thing holding that contract together
-across the two targets, which cannot import each other.
+page. Both require `owner=<account-hash>&generation=<UUID>`. The app checks the
+active account and committed manifest before and after fetching the item.
+Legacy unowned links and links from cleared/replaced snapshots are ignored.
+`DeepLinkRouterTests` and `TopShelfPublisherTests` cover parsing and ownership.
 
 #### Eight items, and why artwork is only composed once
 
@@ -291,18 +324,18 @@ from the reason Apple gives for the banner ceiling, which does transfer: the
 carousel is swipe-navigated and wraps, so a long one buries the title you
 wanted.
 
-That cap is only affordable because **artwork is composed once per title and
-reused**. `publish` runs on every `onAppear` of `HomeView` — returning from
-playback, backing out of a detail page, switching tabs — not merely when
-Continue Watching changes. Composing is two 4K-class renders and two image
-downloads per item, so recomposing every time cost ~16 renders and ~19 MB of
-churn per visit. `build` now skips any title whose two files are already in
-the container.
+Artwork is reused when account/server, title, source URLs and layout version
+match the previous complete snapshot. Both images are copied into the new
+generation before committing, so deletion of the outgoing generation cannot
+break the replacement. Item IDs alone never identify cached artwork across
+servers. Changed source image tags/URLs trigger composition again; a server
+that changes pixels without changing its URL can still require cache recovery.
 
-The **payload is still rewritten on every publish**, which is what keeps
-"32 min left" honest while the images stay put. The trade is that artwork
-never refreshes if a backdrop changes server-side; `removeArtwork(notIn:)`
-still prunes anything that falls off the shelf.
+Metadata is rewritten on each successful publication to keep remaining time
+and episode context current. No partial payload becomes visible while images
+are being prepared; if every nonempty item's artwork fails, the prior snapshot
+is retained. Settings exposes current snapshot and artwork counts and the last
+publication result.
 
 #### What the app derives, because the extension cannot
 
