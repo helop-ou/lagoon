@@ -120,6 +120,7 @@ once it upgrades.
 |---|---|---|
 | Libraries | `Users/{uid}/Views` | filter `CollectionType` to `movies`/`tvshows` |
 | Browse/search | `Users/{uid}/Items` | `ParentId`, `IncludeItemTypes`, `SearchTerm`, paged via `StartIndex`/`Limit` |
+| Decade choices | `Items/Filters` | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`; recursive full catalogue, not `Filters2` (which has no years) |
 | Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
 | Next up | `Shows/NextUp?UserId=` | rail only — **never** for autoplay, see below |
