@@ -61,7 +61,9 @@ enum Metrics {
     static let posterWidth: CGFloat = 105
     static let accessibilityPosterWidth: CGFloat = 240
     static let landscapeWidth: CGFloat = 240
-    static let heroHeight: CGFloat = 380
+    /// A landscape banner at standard text sizes; HeroSection grows for
+    /// Dynamic Type when its title and synopsis need more room.
+    static let heroHeight: CGFloat = 200
     static let gridColumns = 3
     static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
