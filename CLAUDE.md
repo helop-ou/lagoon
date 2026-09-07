@@ -9,8 +9,11 @@ artifacts from MPVKit's 1.0.0 release (FFmpeg 8.1.2) plus their
 transitive static libs (gnutls stack, uavs3d, lcms2), with **dav1d built
 by this repo** (`scripts/build-dav1d.sh`, vendored under
 `Packages/LagoonFFmpeg/Artifacts/`) because upstream's is compiled without
-its arm64 assembly — see docs/playback.md (HEL-137) — with
-MPVKit/libmpv/MoltenVK/libplacebo out of the project entirely since
+its arm64 assembly — see docs/playback.md (HEL-137). **libavformat is also
+repo-built** (`scripts/build-ffmpeg-format.py`, HEL-142) to verify native TLS
+certificates and hostnames against Apple trust; keep its patch and vendored
+artifact in sync. All compiler roles use Apple Clang.
+MPVKit/libmpv/MoltenVK/libplacebo have been out of the project entirely since
 2026-08-17. Don't add other dependencies without serious deliberation.
 
 **Full technical docs are in `docs/` — read the relevant file before working on an area:**
