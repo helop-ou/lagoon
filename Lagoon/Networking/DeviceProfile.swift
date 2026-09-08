@@ -105,12 +105,14 @@ nonisolated enum DeviceProfile {
             // Video range types the pipeline can present. Dolby Vision
             // profile 5 is DOVI, profile 8 the DOVIWith* fallbacks.
             // Dual-layer profile 7 (DOVIWithEL / DOVIWithELHDR10Plus)
-            // direct-plays too: the base layer is plain HEVC Main 10
-            // HDR10(+), the enhancement-layer NALs are unspecified types
-            // the decoder ignores, and tvOS can't reconstruct dual-layer
-            // DoVi anyway — so BL-as-HDR10 is the ceiling whether we or
-            // the server strip the EL, and direct play skips the lossy
-            // server re-encode.
+            // direct-plays too: the demuxer rewrites every RPU (unspec 62)
+            // to profile 8.1 with libdovi and drops the enhancement-layer
+            // NALs (unspec 63) in flight, tagging the track hvc1 plus a
+            // supplementary dvvC so tvOS engages real Dolby Vision off the
+            // rewritten single layer (HEL-145). The base layer's own
+            // HDR10(+) tags are the debug-toggle fallback when that
+            // conversion is turned off. Either way direct play skips the
+            // lossy server re-encode.
             CodecProfile(
                 type: "Video",
                 codec: "hevc",
