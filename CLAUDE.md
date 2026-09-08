@@ -18,7 +18,10 @@ and per-slice hashes in `Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md`),
 for the profile 7 → 8.1 Dolby Vision RPU conversion (HEL-145) — see
 docs/playback.md. All compiler roles use Apple Clang.
 MPVKit/libmpv/MoltenVK/libplacebo have been out of the project entirely since
-2026-08-17. Don't add other dependencies without serious deliberation.
+2026-08-17. Don't add other dependencies without serious deliberation, and
+when you do, add an entry to `Lagoon/Models/Acknowledgements.swift` and its
+licence text under `Lagoon/Resources/Licenses` — `AcknowledgementsTests`
+fails the unit suite otherwise.
 
 **Full technical docs are in `docs/` — read the relevant file before working on an area:**
 
