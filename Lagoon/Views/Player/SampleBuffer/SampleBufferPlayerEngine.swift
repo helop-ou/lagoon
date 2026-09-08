@@ -685,9 +685,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let token = externalLoadToken
         let title = Self.externalTrackName(for: track)
         subtitleLoadState = .loading(id: ordinal, title: title)
-        externalLoadTask = Task { [weak self, subtitleDownloader] in
+        // `pendingAuthorization` is set once by `prepare(...)` and held for
+        // the engine's whole lifetime, so it is still there for a track
+        // added later through `addExternalSubtitle` mid-playback.
+        externalLoadTask = Task { [weak self, subtitleDownloader, pendingAuthorization] in
             do {
-                let cues = try await ExternalSubtitleLoader.load(track, using: subtitleDownloader)
+                let cues = try await ExternalSubtitleLoader.load(track, using: subtitleDownloader, authorization: pendingAuthorization)
                 try Task.checkCancellation()
                 guard let self, !self.shutdownRequested, self.externalLoadToken == token else { return }
                 self.commitSubtitleSelection(ordinal: ordinal, cues: cues)
