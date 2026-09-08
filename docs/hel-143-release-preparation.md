@@ -26,12 +26,13 @@ These reason codes were checked against Apple's [required-reason API list](https
 Reassess the reasons whenever file access, diagnostics, app-group usage or native
 build options change. No active-keyboard API use was found.
 
-`scripts/inventory-native-dependencies.py` inspects all 7 binary targets and
-50 declared slices, including Catalyst, visionOS and macOS slices that this app
+`scripts/inventory-native-dependencies.py` inspects all 8 binary targets and
+55 declared slices, including Catalyst, visionOS and macOS slices that this app
 does not ship. [The generated inventory](native-dependency-inventory.json) records
 package URL/checksum pins, per-slice binary hashes/types and required-reason C
 imports. On iOS arm64, libavformat imports `fstat`, `lstat`, `stat` and
-libavutil imports `fstat`; the other five have no matches in the scanned
+libavutil imports `fstat`; the other six (including the new libdovi target,
+HEL-145) have no matches in the scanned
 C-symbol set. This is an aid to review, not exhaustive dynamic
 coverage or an Objective-C selector analysis.
 
@@ -111,7 +112,7 @@ Do not fill the manifest or App Store Connect with guessed retention claims.
 
 ## Native licensing and encryption assessment
 
-All 7 input frameworks contain static archives. Fresh iOS/tvOS app executables
+All 8 input frameworks contain static archives. Fresh iOS/tvOS app executables
 have no load commands for these native frameworks. Small dynamic framework
 executables in Xcode's product packaging do not establish dynamic linkage of the
 actual libraries. The obligations must follow the static inputs and app linkage.
@@ -124,6 +125,7 @@ libavformat was rebuilt on the transport spike branch (September 8); the other n
 | dav1d | Owned 1.5.4 with arm64 assembly | Build script retained; add immutable source digest, matching source archive and BSD notices. |
 | lcms2 | Header `LCMS_VERSION=2170`, upstream release 2.17.0 | Retain matching source/build provenance and MIT notices. |
 | uavs3d | Pinned binary release `1.2.1-fix` | Release label is not a complete source commit; resolve upstream changes and retain BSD notices. |
+| libdovi | dovi_tool's `dolby_vision` crate 3.4.0, dual-licensed MIT/Apache-2.0 (MIT option elected); vendored prebuilt from superuser404notfound/LibDovi tag 2.1.0, per-slice hashes in `Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md` (HEL-145) | A notice for quietvoid (dovi_tool/LibDovi's author) is required in acknowledgements. Materials: retain the upstream source tag and LibDovi's build recipe (`build.sh`) — this repo has no Rust toolchain, so it cannot rebuild libdovi itself. |
 
 `--enable-version3` is gone from the FFmpeg build: since the transport spike
 (September 8), libavformat is built without networking and without GnuTLS, so
