@@ -1,5 +1,15 @@
 # HEL-142: transport, malformed-media and session-recovery validation
 
+**Superseded, September 8, 2026:** the GnuTLS-based `tls_verify`
+verification this record documents was replaced on the `spike/urlsession-transport`
+branch by `FFmpegNetworkTransport`, which moves every HTTP open onto
+URLSession and removes libavformat's network stack (and GnuTLS with it) —
+see "Network transport" in [`playback.md`](playback.md). The 32-case
+certificate fixture matrix below is unchanged and remains the acceptance
+test, now run through the new transport instead of libavformat's own TLS.
+This document otherwise stands as the historical record of the GnuTLS-based
+implementation.
+
 Implemented and validated September 7, 2026, against FFmpeg n8.1.2 and Xcode
 26.6 (17F113), with iOS/tvOS 26.5 simulator runtimes. App version remains
 0.1 (90); this work does not cut or upload a release.
