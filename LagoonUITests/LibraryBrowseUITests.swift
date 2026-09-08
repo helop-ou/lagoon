@@ -13,6 +13,7 @@ final class LibraryBrowseUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.navigationRegression", "YES",
         ]
         app.launch()
@@ -63,6 +64,7 @@ final class LibraryBrowseUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.navigationRegression", "YES",
         ]
         app.launch()
