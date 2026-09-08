@@ -1,6 +1,6 @@
 {
   "scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
-  "package_sha256": "fb6796938f3a814a53410dae4cfd335719fa923a69d217e5ac55051ac059d8de",
+  "package_sha256": "55c5aac9bcee071617553477d1fbfd415c6b377b70d2fb771191b3fc50bc3b1d",
   "dependencies": [
     {
       "name": "Libavcodec",
@@ -96,20 +96,19 @@
         "COPYING.LGPLv3",
         "LICENSE.md"
       ],
-      "build_record_sha256": "5dd7e00af66bd83aa25f524296de5b9f0f8056e54dd15ea0cae40baedcdb9890",
+      "build_record_sha256": "5e5cb07466d039b9dc1f781a9e4251f25af12dcb10d7ac9254112efffb87ba6c",
       "slices": [
         {
           "id": "ios-arm64",
           "architectures": [
             "arm64"
           ],
-          "sha256": "c25ebc3a165a6beee23ad523a8a86742d935e4e54082372aa9625cd3f6194f5d",
+          "sha256": "06d14c8b6717ac5ec1a7627abbf7354d09ea5cda6b39b0d1920b5e3cda606041",
           "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
           "required_reason_imports": {
             "FileTimestamp": [
               "_fstat",
-              "_lstat",
-              "_stat"
+              "_lstat"
             ]
           }
         },
@@ -119,13 +118,12 @@
             "arm64",
             "x86_64"
           ],
-          "sha256": "98e6c9d2ec8c0f21a8d8d80dada26288d29810a1d4fe2c91fef7746f8158bfa4",
+          "sha256": "5b63fdb4ba84d79e6b8abc0b5b697a0a40d056c6cace73fb4c0c4729590a8fc1",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
           "required_reason_imports": {
             "FileTimestamp": [
               "_fstat",
-              "_lstat",
-              "_stat"
+              "_lstat"
             ]
           }
         },
@@ -135,13 +133,12 @@
             "arm64",
             "x86_64"
           ],
-          "sha256": "54e0cd1f5f5670cee20b34663d0484018c6124b6216282e9c8171dac52c9b715",
+          "sha256": "49f89cabdfee9cd5ba654392147c8d30fce566b159b981a505188b92dcee3f27",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
           "required_reason_imports": {
             "FileTimestamp": [
               "_fstat",
-              "_lstat",
-              "_stat"
+              "_lstat"
             ]
           }
         },
@@ -150,13 +147,12 @@
           "architectures": [
             "arm64"
           ],
-          "sha256": "65f11666b88b2bad47aa1c561b0c4eda62c7e644c0601fc1713a89aa4bf1188b",
+          "sha256": "91e1e26fbcc3d9d925ae8ab855b8a39793e67431804b0f0710172d7a80b70f98",
           "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
           "required_reason_imports": {
             "FileTimestamp": [
               "_fstat",
-              "_lstat",
-              "_stat"
+              "_lstat"
             ]
           }
         },
@@ -166,13 +162,12 @@
             "arm64",
             "x86_64"
           ],
-          "sha256": "be44e0cbc8807098b55d60f9be03d45fbca09720fa5d5da61928550483a41fc8",
+          "sha256": "2b0a5818dd4643d7a08f5c2f7c15f2bfa52b54e246736c9a8de76fd7d8db6cb1",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
           "required_reason_imports": {
             "FileTimestamp": [
               "_fstat",
-              "_lstat",
-              "_stat"
+              "_lstat"
             ]
           }
         }
@@ -377,386 +372,6 @@
           "sha256": "1baa463993af528a9c4912f106e0f075db850280acfac7205d1692c3cf900f72",
           "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
           "required_reason_imports": {}
-        }
-      ]
-    },
-    {
-      "name": "gmp",
-      "url": "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gmp.xcframework.zip",
-      "checksum": "ad33c7a08f4cdcb9924c8f0e6d9a054dad33d7794b97667bf8b6fb2b236ae585",
-      "bundled_license_files": [],
-      "slices": [
-        {
-          "id": "ios-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "e8ee54bf06305367986c22b8c610c71448c60d703813787654b3a63eaeee27af",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "ios-arm64_x86_64-maccatalyst",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "257f02c795f7aa45753186eb5a3c99b2bcf7b071143a2d0a8c9708a0c763a59d",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "ios-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "10d2280470a7e3a523fd605a7e3e3eae8669ebc528403db4262db5d3cca8da6d",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "macos-arm64_x86_64",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "124fa271d5d2b0dd00785a56bc4cbd0ce4d840ce3758168ce091450593b6ba80",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "tvos-arm64_arm64e",
-          "architectures": [
-            "arm64",
-            "arm64e"
-          ],
-          "sha256": "0f2b68dd7f1424ba2d47336563dadfb38f353f427009c5c9e93b90a426f20446",
-          "file_type": "Mach-O universal binary with 2 architectures: [arm64:current ar archive random library] [arm64e]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "tvos-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "09ac7420581d8259065e4867bbd288bcb1de30b2a524670abaec0ff4eb3b4e08",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "xros-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "f4a1b02f99c04067b21fd1bd24dc268718dc5087ac1f1951bff636c4c6ace77d",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "xros-arm64-simulator",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "31934c3cf9632fe6c4f06d67ae4e95172049957b145e8c1b92cef4c836f0982a",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        }
-      ]
-    },
-    {
-      "name": "nettle",
-      "url": "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/nettle.xcframework.zip",
-      "checksum": "0fdf3ebf8bd7b8bc8eee837cf27261cb4c52ae520b6576a2f468656aa1691e02",
-      "bundled_license_files": [],
-      "slices": [
-        {
-          "id": "ios-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "9a02fac53987ade2384bccc6edeb12109211af9305a33f819daa2a0ab7bde9b3",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "ios-arm64_x86_64-maccatalyst",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "490fae154c0107457b07a3b2f571a99eba5f0202be99aa0d129db42f5a559c9e",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "ios-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "8fa6b89a312d6ace480353f74f008464bf44ce38964f43ea591b70783a42fe9e",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "macos-arm64_x86_64",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "270ad00bbee5f3a602ef8ec4b0aaf025dc6f72ba1d96f1dd5ae57128ad44c3ab",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "tvos-arm64_arm64e",
-          "architectures": [
-            "arm64",
-            "arm64e"
-          ],
-          "sha256": "2259d280ad3a0b0bc1ce496160d67ee9203d5ebe4313a7b090b4ab440c5401d4",
-          "file_type": "Mach-O universal binary with 2 architectures: [arm64:current ar archive random library] [arm64e]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "tvos-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "6abf4de2b3919bbfd657efc13daaec507c278eeebd880b8b954141138314cdf4",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "xros-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "3630237224bc9d5edf28d5c7129ab64b50354877b4fc8aa5867ec0e85c61ad4e",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "xros-arm64-simulator",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "ff270e140f8580895ab8e7778be6ffc37457559609384d2bd50d343e67988bdf",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        }
-      ]
-    },
-    {
-      "name": "hogweed",
-      "url": "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/hogweed.xcframework.zip",
-      "checksum": "25727c9fa67287fa0a4f4722f88bb8be669b23cd7e837e2d00870eb8a25d3f27",
-      "bundled_license_files": [],
-      "slices": [
-        {
-          "id": "ios-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "c03d981e81dbb1b9bb785b8b260cabd3cd54feec584ebfdfb6f10c5f692b5104",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "ios-arm64_x86_64-maccatalyst",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "24f0b050462ae10c40bfe583beebf2da2d360117366b4cebe364df601d045d01",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "ios-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "fda8b566f0ca1d64c96a0e2d0c76540fca2b21fddd23e10382700033cf92ad56",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "macos-arm64_x86_64",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "a7500339bc267e6f5df9351e9efa0630143d284ca98976b4e5aa6c62874e17bf",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "tvos-arm64_arm64e",
-          "architectures": [
-            "arm64",
-            "arm64e"
-          ],
-          "sha256": "436f060ffe516dbe9091c78eaf202495c52a899cf3955aa16c927b12b502462c",
-          "file_type": "Mach-O universal binary with 2 architectures: [arm64:current ar archive random library] [arm64e:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "tvos-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "0de25cbd80b6aaa4b89485a36d9590ee8bfa76aaaf7cd4c03f0133c3c537dbd7",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "xros-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "67910e6954d783477a5b5a9605e1c42b35d512accbcb49f0c5d0e7bb0a962e17",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        },
-        {
-          "id": "xros-arm64-simulator",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "3237ba5b1b042d7df777e59a00e461201c5b60ec72cfb8b5d0e55996a66dd55c",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {}
-        }
-      ]
-    },
-    {
-      "name": "gnutls",
-      "url": "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gnutls.xcframework.zip",
-      "checksum": "3dbec5809339189bf9679e218c6cff387ebf8fb72745927835afc2678f5c9f4d",
-      "bundled_license_files": [],
-      "slices": [
-        {
-          "id": "ios-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "d7a53875c2ec35890630435944bdb82e19a4bb2024cb932065f05ed6c825b286",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "ios-arm64_x86_64-maccatalyst",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "beff4ebc9408b61321e6e1c939001eb94e355f76d8dfcc3c9e152129d5c3c68e",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "ios-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "dfff515ff7ae7c6ad99825c1dc91c2c7648e32f4d3a3b005521d5dbe1bdea7ea",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "macos-arm64_x86_64",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "c45a42f66f0e1a12734cf6ef03dfd9f3c403636d0230b10d3dbcc895bb76e778",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "tvos-arm64_arm64e",
-          "architectures": [
-            "arm64",
-            "arm64e"
-          ],
-          "sha256": "cd25d21907cc50c424b1301e35be0903a76c317454654c03b315c48912347089",
-          "file_type": "Mach-O universal binary with 2 architectures: [arm64:current ar archive random library] [arm64e]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "tvos-arm64_x86_64-simulator",
-          "architectures": [
-            "arm64",
-            "x86_64"
-          ],
-          "sha256": "a42f7f1df53a3f706a05dce75eeeb38a3399b2fe4064abc2958207f5f2ada6c3",
-          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "xros-arm64",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "52e8155296c4d332d3d7d54a690be065a6a1db55ee95a1372ddd998c0a86f00d",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
-        },
-        {
-          "id": "xros-arm64-simulator",
-          "architectures": [
-            "arm64"
-          ],
-          "sha256": "ec788863a4752afe31cb6f2409a797e6b4bc30ff48c5990c1e1c72e3a5dd8e37",
-          "file_type": "Mach-O universal binary with 1 architecture: [arm64:current ar archive random library]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat",
-              "_stat"
-            ]
-          }
         }
       ]
     },
