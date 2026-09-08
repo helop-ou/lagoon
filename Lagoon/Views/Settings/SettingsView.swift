@@ -26,28 +26,51 @@ struct SettingsView: View {
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
-    @AppStorage("subtitles.source") private var subtitleSourceRaw = SubtitleSourcePreference.automatic.rawValue
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var homePreferences = HomeSectionPreferencesStore()
-
-    private var subtitleSourcePreference: SubtitleSourcePreference {
-        SubtitleSourcePreference(rawValue: subtitleSourceRaw) ?? .automatic
-    }
-
-    private var subtitleSourceBinding: Binding<SubtitleSourcePreference> {
-        Binding(
-            get: { subtitleSourcePreference },
-            set: { subtitleSourceRaw = $0.rawValue }
-        )
-    }
-
-    private var openSubtitlesSummary: String {
-        let account = OpenSubtitlesAccountStore.shared
-        if !account.isConfigured { return String(localized: "No key") }
-        return account.accountName ?? String(localized: "Anonymous")
-    }
+    @State private var subtitleSearchAvailability: SubtitleSearchAvailability = .checking
     @State private var pendingAccountAction: AccountAction?
+
+    private enum SubtitleSearchAvailability {
+        case checking, available, notEnabled, unknown
+    }
+
+    private func refreshSubtitleSearchAvailability() async {
+        subtitleSearchAvailability = .checking
+        switch await session.client.refreshSubtitlePermission() {
+        case true: subtitleSearchAvailability = .available
+        case false: subtitleSearchAvailability = .notEnabled
+        case nil: subtitleSearchAvailability = .unknown
+        }
+    }
+
+    private var subtitleSearchValue: String {
+        switch subtitleSearchAvailability {
+        case .checking:
+            return String(localized: "Checking…")
+        case .available:
+            let server = session.serverName ?? String(localized: "your Jellyfin server")
+            return String(localized: "Available through \(server)")
+        case .notEnabled:
+            return String(localized: "Not enabled for this account")
+        case .unknown:
+            return String(localized: "Couldn't check")
+        }
+    }
+
+    private var subtitleSearchFooter: LocalizedStringKey {
+        switch subtitleSearchAvailability {
+        case .available:
+            "Your Jellyfin account may search for and download subtitles. Results come from the subtitle providers your server administrator has installed."
+        case .notEnabled:
+            "Ask your server administrator to turn on “Allow subtitle management” for your account. Subtitles are then found and saved by the server."
+        case .unknown:
+            "Lagoon couldn't reach the server to check. Subtitle search is decided by your Jellyfin account's permissions."
+        case .checking:
+            "Subtitle search is decided by your Jellyfin account's permissions."
+        }
+    }
 
     var body: some View {
         Group {
@@ -355,28 +378,11 @@ struct SettingsView: View {
             }
 
             TVSettingsSection(
-                "Where Subtitles Come From",
-                footer: "Automatic uses your Jellyfin server when your account may manage subtitles — which saves the file for every client — and OpenSubtitles directly when it may not."
+                "Subtitle Search",
+                footer: subtitleSearchFooter
             ) {
-                TVSettingsMenuPicker(
-                    title: "Search With",
-                    valueTitle: subtitleSourcePreference.displayName,
-                    accessibilityIdentifier: "settings.subtitles.source",
-                    selection: subtitleSourceBinding,
-                    options: SubtitleSourcePreference.allCases.map {
-                        TVSettingsOption(value: $0, title: $0.displayName)
-                    }
-                )
-
-                NavigationLink {
-                    OpenSubtitlesSettingsView()
-                } label: {
-                    TVSettingsNavigationLabel(
-                        "OpenSubtitles",
-                        detail: openSubtitlesSummary
-                    )
-                }
-                .accessibilityIdentifier("settings.subtitles.openSubtitles")
+                TVSettingsActionLabel("Availability", value: subtitleSearchValue)
+                    .accessibilityIdentifier("settings.subtitles.search")
             }
 
             TVSettingsSection("Appearance") {
@@ -388,6 +394,9 @@ struct SettingsView: View {
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("settings.subtitles.appearance")
             }
+        }
+        .task(id: session.activeAccount?.id) {
+            await refreshSubtitleSearchAvailability()
         }
     }
 
@@ -811,22 +820,12 @@ struct SettingsView: View {
             }
 
             Section {
-                Picker("Search With", selection: subtitleSourceBinding) {
-                    ForEach(SubtitleSourcePreference.allCases, id: \.self) { source in
-                        Text(source.displayName).tag(source)
-                    }
-                }
-                .accessibilityIdentifier("settings.subtitles.source")
-                NavigationLink {
-                    OpenSubtitlesSettingsView()
-                } label: {
-                    LabeledContent("OpenSubtitles", value: openSubtitlesSummary)
-                }
-                .accessibilityIdentifier("settings.subtitles.openSubtitles")
+                LabeledContent("Availability", value: subtitleSearchValue)
+                    .accessibilityIdentifier("settings.subtitles.search")
             } header: {
-                Text("Where Subtitles Come From")
+                Text("Subtitle Search")
             } footer: {
-                Text("Automatic uses your Jellyfin server when your account may manage subtitles — which saves the file for every client — and OpenSubtitles directly when it may not.")
+                Text(subtitleSearchFooter)
             }
 
             Section("Appearance") {
@@ -837,6 +836,9 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings.subtitles.appearance")
             }
+        }
+        .task(id: session.activeAccount?.id) {
+            await refreshSubtitleSearchAvailability()
         }
     }
 
