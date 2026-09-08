@@ -41,6 +41,10 @@ final class SessionStore {
     private var pendingAuthentication: AuthenticationResult?
     private var connectionGeneration = 0
 
+    #if DEBUG
+    private static var didResetStateForRegression = false
+    #endif
+
     private enum DefaultsKey {
         /// The server being connected to *right now* — the sign-in screen's
         /// subject. Distinct from the accounts list, which only gains an
@@ -85,6 +89,18 @@ final class SessionStore {
         client = JellyfinClient(deviceId: deviceId, sessionConfiguration: sessionConfiguration)
         client.onSessionExpired = { [weak self] identity in self?.sessionExpired(identity) }
         if !accountDraft {
+            #if DEBUG
+            // The regression lane's clean slate (HEL-144): drop what an
+            // earlier run left on this simulator before restore() can
+            // re-activate any of it. Once per process — the account-draft
+            // store constructed while adding an account skips this block.
+            if RegressionStateReset.isRequested(), !Self.didResetStateForRegression {
+                Self.didResetStateForRegression = true
+                let removed = RegressionStateReset.run(defaults: defaults, credentials: credentials)
+                TopShelfStore.clear()
+                print("RegressionStateReset: removed \(removed.defaultsKeys.count) defaults keys and \(removed.credentialNames.count) credentials")
+            }
+            #endif
             retryCredentialCleanup()
             restore()
             // HEL-146: sweep any stored state left by the retired direct
