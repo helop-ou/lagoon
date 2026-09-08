@@ -4,13 +4,6 @@
 <dict>
 	<key>AVInitialRouteSharingPolicy</key>
 	<string>LongFormVideo</string>
-	<!-- OpenSubtitles consumer key (HEL-92). Register one free at
-	     opensubtitles.com under API Consumers and paste it here to have every
-	     build carry it; leaving it empty is supported, and Settings ->
-	     Subtitles -> OpenSubtitles accepts a key per device instead. It is a
-	     rate-limiting identifier rather than a user secret. -->
-	<key>LagoonOpenSubtitlesAPIKey</key>
-	<string></string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
