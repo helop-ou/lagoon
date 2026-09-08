@@ -12,8 +12,11 @@ by this repo** (`scripts/build-dav1d.sh`, vendored under
 its arm64 assembly — see docs/playback.md (HEL-137). **libavformat is also
 repo-built**, without its network stack (`scripts/build-ffmpeg-format.py`,
 HEL-142); every HTTP open goes through `FFmpegNetworkTransport` over
-URLSession; keep the build script and vendored artifact in sync. All
-compiler roles use Apple Clang.
+URLSession; keep the build script and vendored artifact in sync. **libdovi
+is vendored, not repo-built** (from superuser404notfound/LibDovi, provenance
+and per-slice hashes in `Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md`),
+for the profile 7 → 8.1 Dolby Vision RPU conversion (HEL-145) — see
+docs/playback.md. All compiler roles use Apple Clang.
 MPVKit/libmpv/MoltenVK/libplacebo have been out of the project entirely since
 2026-08-17. Don't add other dependencies without serious deliberation.
 
