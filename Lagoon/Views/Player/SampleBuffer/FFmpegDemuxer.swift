@@ -150,15 +150,19 @@ nonisolated final class FFmpegDemuxer {
     private var softwareVideoDecoder: SoftwareVideoDecoder?
     private var softwareGridDescription: String?
 
-    /// HEL-64 hardware experiment (Settings → Debug): set before `open`.
-    /// Only arms when the stream really is single-track DoVi with an
-    /// enhancement layer present.
-    var stripEnhancementLayer = false
+    /// HEL-145: how a single-track Dolby Vision profile 7 stream is
+    /// handled — rewritten to profile 8.1 (`.convert`, default) or stripped
+    /// to the HEL-64 HDR10 fallback (`.stripToHDR10`, Settings → Debug).
+    /// Set before `open`.
+    var dolbyVisionProfile7Mode: DolbyVisionProfile7Mode = .convert
+    /// Armed by the open-time gate in `.convert` mode; demux-queue use only.
+    private var profile7Converter: DolbyVisionProfileConverter?
     /// HEL-64 A/B: opt back into marking disposable frames droppable
     /// (4e2ad5f's behavior) — see the factory's attachment comment for
     /// why the default volunteers nothing. Set before `open`.
     var markDroppableFrames = false
-    /// Non-nil = stripping armed; demux-queue use only.
+    /// Non-nil = a profile 7 rewrite (convert or strip) is armed; demux-queue
+    /// use only.
     private var videoNALLengthSize: Int?
     /// Set when the video track arrives start-code delimited, which is every
     /// MPEG-TS and so every Blu-ray clip the disc reader opens (HEL-133).
@@ -167,12 +171,18 @@ nonisolated final class FFmpegDemuxer {
     /// Empty for every container that already starts at zero.
     private var streamStartOffsets: [Int32: Int64] = [:]
     // Written per-packet on the demux queue, read by the HUD from the main
-    // actor — proof the experiment engaged (the retraction lesson: verify
-    // the gate before trusting the A/B).
+    // actor — proof the rewrite engaged (the retraction lesson: verify
+    // the gate before trusting the A/B). Strip mode's own snapshot; convert
+    // mode forwards the converter's separately locked one instead.
     private let stripStatsLock = NSLock()
-    nonisolated(unsafe) private var stripStats: (units: Int, bytes: Int64)?
+    nonisolated(unsafe) private var stripStats: DolbyVisionRewriteStats?
 
-    var enhancementLayerStripStats: (units: Int, bytes: Int64)? {
+    /// Snapshot of this playback's profile 7 rewrite — nil until the
+    /// open-time gate arms strip or convert mode on a real profile 7 stream.
+    var dolbyVisionRewriteStats: DolbyVisionRewriteStats? {
+        if let profile7Converter {
+            return profile7Converter.stats
+        }
         stripStatsLock.lock()
         defer { stripStatsLock.unlock() }
         return stripStats
@@ -446,6 +456,44 @@ nonisolated final class FFmpegDemuxer {
         let harvestedParameterSets = usesCompressedVideo && annexBParameterSets == nil
             ? harvestedHEVCParameterSets(ctx: ctx, streamIndex: bestVideo, codecpar: videoPar)
             : nil
+        // Once a start-code stream is converted every NAL carries a
+        // four-byte length, whatever the container's own record claimed.
+        let filterNALLengthSize: Int? = videoUsesStartCodes
+            ? Int(AnnexBStream.nalUnitHeaderLength)
+            : videoPar.pointee.extradata.flatMap { extradata in
+                videoPar.pointee.extradata_size > 0
+                    ? HEVCNALUnitRewriter.nalLengthSize(
+                        hvcc: Data(bytes: extradata, count: Int(videoPar.pointee.extradata_size))
+                    )
+                    : nil
+            }
+        // HEL-145: a profile 7 remux (UHD Blu-ray) interleaves base-layer,
+        // RPU (unspec 62) and enhancement-layer (unspec 63) NALs in one
+        // HEVC track. tvOS cannot reconstruct dual-layer DoVi, so by
+        // default every RPU is rewritten to profile 8.1 with libdovi and
+        // every enhancement-layer unit is dropped, tagging the track hvc1
+        // + dvvC so the system engages real Dolby Vision off the rewritten
+        // single layer. The debug toggle falls back to the old HEL-64
+        // behaviour: drop both unit types and let the base layer present
+        // as HDR10. Neither mode arms without a known NAL length size or a
+        // profile other than 7 — MPEG-TS discs carry no DoVi configuration
+        // record at all, so they're untouched either way.
+        var dolbyVisionOverride: AVDOVIDecoderConfigurationRecord?
+        if videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
+           let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),
+           dovi.dv_profile == 7,
+           let lengthSize = filterNALLengthSize {
+            videoNALLengthSize = lengthSize
+            switch dolbyVisionProfile7Mode {
+            case .convert:
+                profile7Converter = DolbyVisionProfileConverter(record: dovi)
+                dolbyVisionOverride = profile7Converter?.synthesizedRecord
+            case .stripToHDR10:
+                stripStatsLock.lock()
+                stripStats = DolbyVisionRewriteStats(mode: .stripToHDR10)
+                stripStatsLock.unlock()
+            }
+        }
         var videoDescription: CMFormatDescription? = if usesCompressedVideo {
             SampleBufferFactory.videoFormatDescription(
                 codecpar: videoPar,
@@ -454,7 +502,7 @@ nonisolated final class FFmpegDemuxer {
                         sets: $0,
                         nalUnitHeaderLength: Int32(
                             videoPar.pointee.extradata.flatMap { extradata in
-                                HEVCEnhancementLayerFilter.nalLengthSize(
+                                HEVCNALUnitRewriter.nalLengthSize(
                                     hvcc: Data(
                                         bytes: extradata,
                                         count: Int(videoPar.pointee.extradata_size)
@@ -463,7 +511,8 @@ nonisolated final class FFmpegDemuxer {
                             } ?? 4
                         )
                     )
-                }
+                },
+                dolbyVisionOverride: dolbyVisionOverride
             )
         } else {
             nil
@@ -488,27 +537,6 @@ nonisolated final class FFmpegDemuxer {
                 frameRateNum: guessedRate.num,
                 frameRateDen: guessedRate.den
             )
-        }
-        // Once a start-code stream is converted every NAL carries a
-        // four-byte length, whatever the container's own record claimed.
-        let filterNALLengthSize: Int? = videoUsesStartCodes
-            ? Int(AnnexBStream.nalUnitHeaderLength)
-            : videoPar.pointee.extradata.flatMap { extradata in
-                videoPar.pointee.extradata_size > 0
-                    ? HEVCEnhancementLayerFilter.nalLengthSize(
-                        hvcc: Data(bytes: extradata, count: Int(videoPar.pointee.extradata_size))
-                    )
-                    : nil
-            }
-        if stripEnhancementLayer,
-           videoPar.pointee.codec_id == AV_CODEC_ID_HEVC,
-           let dovi = SampleBufferFactory.doviConfiguration(codecpar: videoPar),
-           dovi.el_present_flag != 0,
-           let lengthSize = filterNALLengthSize {
-            videoNALLengthSize = lengthSize
-            stripStatsLock.lock()
-            stripStats = (0, 0)
-            stripStatsLock.unlock()
         }
         videoStream = DemuxedStream(
             streamIndex: bestVideo,
@@ -682,7 +710,7 @@ nonisolated final class FFmpegDemuxer {
         guard !SampleBufferFactory.hevcExtradataCarriesParameterSets(hvcc),
               // The header stays valid even with no arrays behind it, so the
               // NAL length prefix is still described correctly.
-              let lengthSize = HEVCEnhancementLayerFilter.nalLengthSize(hvcc: hvcc),
+              let lengthSize = HEVCNALUnitRewriter.nalLengthSize(hvcc: hvcc),
               let probe = av_packet_alloc() else { return nil }
         var owned: UnsafeMutablePointer<AVPacket>? = probe
         defer { av_packet_free(&owned) }
@@ -821,6 +849,45 @@ nonisolated final class FFmpegDemuxer {
         }
     }
 
+    /// Rewrites one video payload for the profile 7 mode armed by `open`'s
+    /// gate (`videoNALLengthSize` non-nil implies one of the two is).
+    /// Convert mode defers entirely to the converter's own locked stats;
+    /// strip mode uses `HEVCNALUnitRewriter.rewrite` directly, rather than
+    /// the canned `strippingEnhancementLayer`, so it can keep the RPU/EL
+    /// breakdown `dolbyVisionRewriteStats` reports instead of just a byte
+    /// count (HEL-145).
+    private func rewrittenDolbyVisionPayload(
+        payload: UnsafeRawBufferPointer,
+        lengthSize: Int
+    ) -> Data? {
+        if let profile7Converter {
+            return profile7Converter.convert(payload: payload, lengthSize: lengthSize)
+        }
+        var rpuDropped = 0
+        var enhancementDropped = 0
+        guard let filtered = HEVCNALUnitRewriter.rewrite(payload: payload, lengthSize: lengthSize, transform: { nalType, _ in
+            switch nalType {
+            case 62:
+                rpuDropped += 1
+                return .drop
+            case 63:
+                enhancementDropped += 1
+                return .drop
+            default:
+                return .keep
+            }
+        }) else { return nil }
+        stripStatsLock.lock()
+        var stats = stripStats ?? DolbyVisionRewriteStats(mode: .stripToHDR10)
+        stats.packets += 1
+        stats.rpusDropped += rpuDropped
+        stats.enhancementUnitsDropped += enhancementDropped
+        stats.bytesRemoved += Int64(payload.count - filtered.count)
+        stripStats = stats
+        stripStatsLock.unlock()
+        return filtered
+    }
+
     func readNext() -> ReadResult {
         guard let ctx = formatContext, let packet else { return .failed("demuxer not open") }
         var status = readFrameTimed(ctx, packet)
@@ -904,29 +971,19 @@ nonisolated final class FFmpegDemuxer {
                 )
             }
             if let lengthSize = videoNALLengthSize {
-                let sizeBefore = strippedPayload?.count ?? Int(packet.pointee.size)
                 let filtered: Data? = if let converted = strippedPayload {
                     converted.withUnsafeBytes {
-                        HEVCEnhancementLayerFilter.strippingEnhancementLayer(
-                            from: $0,
-                            lengthSize: lengthSize
-                        )
+                        rewrittenDolbyVisionPayload(payload: $0, lengthSize: lengthSize)
                     }
                 } else if let data = packet.pointee.data {
-                    HEVCEnhancementLayerFilter.strippingEnhancementLayer(
-                        from: UnsafeRawBufferPointer(start: data, count: Int(packet.pointee.size)),
+                    rewrittenDolbyVisionPayload(
+                        payload: UnsafeRawBufferPointer(start: data, count: Int(packet.pointee.size)),
                         lengthSize: lengthSize
                     )
                 } else {
                     nil
                 }
                 if let filtered {
-                    stripStatsLock.lock()
-                    var stats = stripStats ?? (0, 0)
-                    stats.units += 1
-                    stats.bytes += Int64(sizeBefore - filtered.count)
-                    stripStats = stats
-                    stripStatsLock.unlock()
                     strippedPayload = filtered
                 }
             }
