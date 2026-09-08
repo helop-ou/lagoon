@@ -29,12 +29,24 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "92",
+            released: "September 2026",
+            headline: "Dolby Vision for disc remuxes, transcoding behind proxy paths, and a Home that always has featured titles.",
+            changes: [
+                "Dolby Vision profile 7 titles, such as UHD Blu-ray remuxes, now play as Dolby Vision instead of HDR10 on Apple TV. If a title looks wrong, Settings → Advanced → Playback Diagnostics → Dolby Vision Compatibility Mode brings back the HDR10 behavior.",
+                "Jellyfin servers reached through a reverse-proxy path, such as example.com/jellyfin, can now transcode and load external subtitles. Previously those requests went to the wrong address and playback fell back or failed.",
+                "Home always opens on featured titles. When nothing has been added recently, it features what you are watching, your favourites, or a pick from your library instead of showing no banner at all.",
+                "Subtitle search now uses your Jellyfin server only. Settings → Subtitles shows whether your account is allowed to search for subtitles, and what to ask your server administrator for if it is not.",
+                "The OpenSubtitles account, API key and Search With settings have been removed, and any saved OpenSubtitles sign-in is cleared.",
+                "Settings → About now lists the open-source components Lagoon is built on, with their licences, and the same information is reachable from the sign-in screen before you connect to a server.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "91",
             released: "September 2026",
             headline: "Clearer subtitle recovery, safer account switching, and easier server setup.",
             changes: [
-                "Subtitle search now uses your Jellyfin server only. Settings → Subtitles shows whether your account is allowed to search for subtitles, and what to ask your server administrator for if it is not.",
-                "The OpenSubtitles account, API key and Search With settings have been removed, and any saved OpenSubtitles sign-in is cleared.",
                 "Changing subtitle tracks keeps your current captions until the new track is ready. If it fails, playback continues and Subtitles offers an explanation and Retry.",
                 "Subtitle files over 8 MB now show a clear size-limit message. Oversized or incomplete artwork uses a placeholder instead of trying to display a broken image.",
                 "If your Jellyfin sign-in expires or is revoked, Lagoon takes you back to sign-in for that account while keeping your saved accounts and preferences.",
@@ -45,10 +57,6 @@ nonisolated enum Changelog {
                 "Sign-in shows the full server address and warns when the connection uses unencrypted HTTP, before you enter your credentials.",
                 "If local-network access is blocked on iPhone or iPad, Jellyfin and Seerr setup explains how to enable it in Settings and offers Retry without re-entering the server address.",
                 "HTTPS playback now checks the server's certificate and rejects invalid or untrusted connections. Servers using a private certificate authority need it to be trusted on your device.",
-                "Dolby Vision profile 7 titles, such as UHD Blu-ray remuxes, now play as Dolby Vision instead of HDR10 on Apple TV. If a title looks wrong, Settings → Advanced → Playback Diagnostics → Dolby Vision Compatibility Mode brings back the HDR10 behavior.",
-                "Jellyfin servers reached through a reverse-proxy path, such as example.com/jellyfin, can now transcode and load external subtitles. Previously those requests went to the wrong address and playback fell back or failed.",
-                "Settings → About now lists the open-source components Lagoon is built on, with their licences, and the same information is reachable from the sign-in screen before you connect to a server.",
-                "Home always opens on featured titles. When nothing has been added recently, it features what you are watching, your favourites, or a pick from your library instead of showing no banner at all.",
             ]
         ),
         ChangelogEntry(
