@@ -80,6 +80,15 @@ they own. This remains the foreground path for every mounted screen:
   collections, the hero values and Top Shelf without replacing the screen
   with a loading state. Failed primary rail requests keep their last good
   content.
+- Home's hero always has a source (HEL-147). `HeroSelection` takes the
+  view model's tiers in priority order — Recently Added, then Continue
+  Watching and Next Up, then Favorites, then the plugin and curated rails,
+  and last a random library sample fetched once and only when everything
+  above is empty — and the first tier with an item that has a backdrop and
+  an overview supplies the whole hero; tiers are never mixed to reach six.
+  On refresh, items on screen stay wherever the server still returns them
+  and vacancies fill from the leading tier. Collections stay out: their
+  cards route to a collection page, the hero routes to an item.
 - Home's Next Up contains only unstarted, unwatched episodes; in-progress
   episodes stay in Continue Watching. The series detail Play action still
   resumes, and autoplay keeps its separate episode cursor. Recently Added
