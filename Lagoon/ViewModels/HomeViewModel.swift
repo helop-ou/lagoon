@@ -38,6 +38,10 @@ final class HomeViewModel {
     var movieGenreShelf: [GenreShelfItem] = []
     var showGenreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
+    /// The library's own random sample, fetched once per load and only when
+    /// every other hero source came back empty (HEL-147); kept so a refresh
+    /// can keep those hero items on screen rather than roll the dice again.
+    private var librarySample: [MediaItem] = []
     /// The curated rows (HEL-120), each carrying its own title because two of
     /// them name what they are about: the title they are similar to, and the
     /// genre or decade the rotation landed on today.
@@ -124,12 +128,21 @@ final class HomeViewModel {
             latestRails = rails
             if let resolvedResume { TopShelfStore.publish(resolvedResume, client: client, identity: identity) }
             pluginRails = resolvedPluginRails
-            heroItems = Array(
-                rails.flatMap(\.items)
-                    .filter { $0.backdropImageTags?.isEmpty == false && $0.overview != nil }
-                    .shuffled()
-                    .prefix(6)
-            )
+            heroItems = HeroSelection.select(tiers: heroTiers)
+            if heroItems.isEmpty {
+                // Nothing recently added, in progress, favourited or
+                // contributed by a plugin: sample the library itself so a
+                // full but dormant server still opens on a hero (HEL-147).
+                // One query, and only on this path.
+                let sample = (try? await client.items(
+                    includeTypes: [.movie, .series],
+                    sortBy: "Random",
+                    limit: 24
+                ))?.items ?? []
+                guard generation == loadGeneration, identity == client.sessionIdentity else { return }
+                librarySample = sample
+                heroItems = HeroSelection.select(tiers: heroTiers)
+            }
             // Deliberately not awaited. These are discovery rather than the
             // reason anyone opened Lagoon, and awaiting them here would hold
             // `isLoading` — and so the entire screen, hero included — behind
@@ -182,6 +195,9 @@ final class HomeViewModel {
         if let refreshedFavorites {
             favorites = refreshedFavorites
         }
+        // These three rails are hero tiers too (HEL-147): keep what is on
+        // screen with its fresh record, fill anything that fell out.
+        heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
     }
 
     /// Reconciles everything on Home that can visibly change while Lagoon is
@@ -224,6 +240,9 @@ final class HomeViewModel {
         let rails = await loadPluginRails(client: client, preferences: preferences)
         guard generation == loadGeneration else { return }
         pluginRails = rails
+        if heroItems.isEmpty {
+            heroItems = HeroSelection.select(tiers: heroTiers)
+        }
     }
 
     private func refreshLatestRails(client: JellyfinClient) async {
@@ -242,17 +261,24 @@ final class HomeViewModel {
 
         // Keep the hero's order stable across a foreground hop, but replace
         // its values with fresh server records and fill vacancies from the
-        // new Recently Added results.
-        let candidates = latestRails.flatMap(\.items).filter {
-            $0.backdropImageTags?.isEmpty == false && $0.overview != nil
-        }
-        let candidatesByID = Dictionary(candidates.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        var refreshedHero = heroItems.compactMap { candidatesByID[$0.id] }
-        var seen = Set(refreshedHero.map(\.id))
-        for candidate in candidates where refreshedHero.count < 6 && seen.insert(candidate.id).inserted {
-            refreshedHero.append(candidate)
-        }
-        heroItems = refreshedHero
+        // leading tier — Recently Added when it has anything, otherwise
+        // whichever tier the hero came from (HEL-147).
+        heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
+    }
+
+    /// Hero sources in priority order (HEL-147). The first tier with an
+    /// eligible item supplies the hero; see `HeroSelection`. Collections are
+    /// deliberately absent: their cards route to a collection page, and the
+    /// hero routes to an item.
+    private var heroTiers: [[MediaItem]] {
+        [
+            latestRails.flatMap(\.items),
+            resume + nextUp,
+            favorites,
+            pluginRails.flatMap(\.items)
+                + curatedRails.keys.sorted().flatMap { curatedRails[$0]?.items ?? [] },
+            librarySample,
+        ]
     }
 
     private func loadLatestRails(
@@ -391,6 +417,11 @@ final class HomeViewModel {
             resolved.map { ($0.id, $0) },
             uniquingKeysWith: { current, _ in current }
         )
+        // A hero that found nothing above this tier at load time can still
+        // be filled by the curated rows arriving now (HEL-147).
+        if heroItems.isEmpty {
+            heroItems = HeroSelection.select(tiers: heroTiers)
+        }
     }
 
     /// The Collections row (HEL-122).
@@ -564,6 +595,7 @@ final class HomeViewModel {
         pluginRails = []
         latestRails = []
         heroItems = []
+        librarySample = []
         // Otherwise the previous account's "Because You Watched" survives the
         // switch, which names a title on someone else's screen.
         curatedRails = [:]
