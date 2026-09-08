@@ -513,8 +513,8 @@ struct PlayerControlPanel: View {
 
                 subtitleSearchStatus(subtitleSearch)
 
-                if let source = subtitleSearch.activeSource, !subtitleSearch.results.isEmpty {
-                    Text(subtitleSourceCaption(source, search: subtitleSearch))
+                if !subtitleSearch.results.isEmpty {
+                    Text(String(localized: "From your Jellyfin server · saved to the library"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -632,13 +632,6 @@ struct PlayerControlPanel: View {
                 systemImage: "lock"
             )
             .foregroundStyle(.secondary)
-        case .providerNotConfigured:
-            Label(
-                OpenSubtitlesError.notConfigured.localizedDescription
-                    + String(localized: " Add one in Settings → Subtitles."),
-                systemImage: "key"
-            )
-            .foregroundStyle(.secondary)
         case .noResults:
             Text("No matching subtitles were found.")
                 .foregroundStyle(.secondary)
@@ -666,23 +659,6 @@ struct PlayerControlPanel: View {
         if track.isForced { labels.append(String(localized: "Forced")) }
         if track.isHearingImpaired { labels.append(String(localized: "SDH")) }
         return labels.joined(separator: " · ")
-    }
-
-    /// Where these results came from, and — for the direct provider — what
-    /// is left of today's allowance, since it is small enough to matter.
-    private func subtitleSourceCaption(
-        _ source: SubtitleSourceKind,
-        search: SubtitleSearchCoordinator
-    ) -> String {
-        switch source {
-        case .jellyfin:
-            return String(localized: "From your Jellyfin server · saved to the library")
-        case .openSubtitles:
-            if let remaining = search.providerRemainingDownloads {
-                return String(localized: "From OpenSubtitles · this player only · \(remaining) downloads left today")
-            }
-            return String(localized: "From OpenSubtitles · this player only")
-        }
     }
 
     private func subtitleResultDetails(_ result: SubtitleCandidate) -> String {
