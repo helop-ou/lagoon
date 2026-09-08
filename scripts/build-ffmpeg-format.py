@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Build Lagoon's libavformat with Apple certificate/hostname verification.
+"""Build Lagoon's libavformat without its network stack.
 
 Requires Xcode, Python 3 and pkg-config. Only libavformat is rebuilt; the other
-FFmpeg libraries remain at their Package.swift pins. Downloads are SHA-256
-checked. Work/downloads stay outside the repository. See the artifact README.
+FFmpeg libraries remain at their Package.swift pins. Networking (HTTP/HTTPS/TLS/
+TCP/UDP protocols and everything GnuTLS/GMP/nettle/hogweed) is compiled out;
+the app reaches the server over Foundation's URLSession instead, so this build
+carries only the local-file protocols libavformat itself still needs (opening
+temporary files, `data:` URIs). Downloads are SHA-256 checked. Work/downloads
+stay outside the repository. See the artifact README.
 """
 import argparse
 import hashlib
@@ -23,7 +27,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "Packages/LagoonFFmpeg"
-PATCH = PACKAGE / "Patches/0001-apple-tls-verification.patch"
+PATCHES = sorted((PACKAGE / "Patches").glob("*.patch"))
 VERSION = "8.1.2"
 SOURCE_URL = "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/refs/tags/n8.1.2"
 SOURCE_SHA = "9fd092511605bbebafe095ea6d38d9e40f34d12f7386e1258372df8be0576eb7"
@@ -36,6 +40,15 @@ GROUPS = {
     "tvos-simulator": ("appletvsimulator", "AppleTVSimulator", "tvos-arm64_x86_64-simulator", "tvos26.0-simulator", ["arm64", "x86_64"]),
     "macos": ("macosx", "MacOSX", "macos-arm64_x86_64", "macos14.0", ["arm64", "x86_64"]),
 }
+GROUP_BY_SLICE = {info[2]: name for name, info in GROUPS.items()}
+
+# Networking symbols that must not survive --disable-network/--disable-protocols.
+FORBIDDEN_DEFINED_SYMBOLS = (
+    "_ff_http_protocol", "_ff_https_protocol", "_ff_tls_protocol",
+    "_ff_tcp_protocol", "_ff_udp_protocol",
+)
+# The TLS/bignum stack that leaves the package with the network stack.
+FORBIDDEN_UNDEFINED_PREFIXES = ("_gnutls_", "_nettle_", "___gmpz_", "___gmpn_")
 
 
 def run(args, **kwargs):
@@ -55,22 +68,82 @@ def download(url, checksum, path):
         raise RuntimeError(f"Checksum mismatch: {path}")
 
 
-def verify(artifact):
+def nm_symbols(binary, arch):
+    """Return (defined, undefined) external symbol names for one slice."""
+    defined, undefined = set(), set()
+    for line in run(["nm", "-arch", arch, "-g", binary]).splitlines():
+        fields = line.split()
+        if len(fields) < 2:
+            continue
+        symtype, name = fields[-2], fields[-1]
+        (undefined if symtype == "U" else defined).add(name)
+    return defined, undefined
+
+
+def read_config_header(artifact, library, work):
+    """The built config.h + config_components.h for one xcframework slice,
+    concatenated. FFmpeg 8.x splits per-component enables (CONFIG_*_DEMUXER,
+    CONFIG_*_PROTOCOL, ...) into config_components.h; general build config
+    (CONFIG_NETWORK, CONFIG_GPL, FFMPEG_CONFIGURATION, ...) stays in config.h.
+
+    Both are copied into the framework's Headers during the build (see
+    main()), so the artifact itself is the primary source; `work`, when
+    given, is a fallback to that group's build directory for use mid-build.
+    """
+    headers = artifact / library["LibraryIdentifier"] / library["LibraryPath"] / "Headers"
+    if not (headers / "config.h").exists() and work is not None:
+        group = GROUP_BY_SLICE.get(library["LibraryIdentifier"])
+        arch = library["SupportedArchitectures"][0]
+        headers = work / f"build-{group}-{arch}"
+    if not (headers / "config.h").exists():
+        raise RuntimeError(f"config.h not found for {library['LibraryIdentifier']}")
+    text = (headers / "config.h").read_text()
+    components = headers / "config_components.h"
+    if components.exists():
+        text += "\n" + components.read_text()
+    return text
+
+
+def check_config_header(text, binary):
+    if "#define CONFIG_NETWORK 0" not in text:
+        raise RuntimeError(f"Networking still compiled into {binary}: CONFIG_NETWORK is not 0")
+    if "#define CONFIG_HLS_DEMUXER 1" not in text:
+        raise RuntimeError(f"HLS demuxer missing from {binary}: CONFIG_HLS_DEMUXER is not 1")
+    configuration = re.search(r'^#define FFMPEG_CONFIGURATION "(.*)"$', text, re.M)[1]
+    if "--disable-network" not in configuration:
+        raise RuntimeError(f"{binary}: FFMPEG_CONFIGURATION is missing --disable-network")
+    if "--enable-version3" in configuration:
+        raise RuntimeError(f"{binary}: FFMPEG_CONFIGURATION still requests --enable-version3")
+
+
+def check_license(text, where):
+    for define in ("#define CONFIG_GPL 0", "#define CONFIG_NONFREE 0", "#define CONFIG_VERSION3 0"):
+        if define not in text:
+            raise RuntimeError(f"{where}: build is not LGPL-2.1-or-later, missing '{define}' in config.h")
+
+
+def verify(artifact, work=None):
     metadata = json.loads((artifact / "BUILD.json").read_text())
-    if metadata["patch_sha256"] != sha(PATCH):
-        raise RuntimeError("Native TLS patch changed: rebuild libavformat")
+    if metadata.get("patches", {}) != {patch.name: sha(patch) for patch in PATCHES}:
+        raise RuntimeError("Patches changed: rebuild libavformat")
     for relative, checksum in metadata["files"].items():
         if sha(artifact / relative) != checksum:
             raise RuntimeError(f"Artifact changed: {relative}")
     info = plistlib.loads((artifact / "Info.plist").read_bytes())
     for library in info["AvailableLibraries"]:
         binary = artifact / library["LibraryIdentifier"] / library["LibraryPath"] / "Libavformat"
+        check_config_header(read_config_header(artifact, library, work), binary)
         for arch in library["SupportedArchitectures"]:
-            symbols = run(["nm", "-arch", arch, "-u", binary])
-            for symbol in ("_SecPolicyCreateSSL", "_SecTrustEvaluateWithError", "_SecTrustCreateWithCertificates"):
-                if symbol not in symbols:
-                    raise RuntimeError(f"Missing Apple trust call in {binary} ({arch}): {symbol}")
-    print(f"Verified {artifact}: checksums, patch and Apple trust calls in every architecture")
+            defined, undefined = nm_symbols(binary, arch)
+            for symbol in FORBIDDEN_DEFINED_SYMBOLS:
+                if symbol in defined:
+                    raise RuntimeError(f"Network protocol linked into {binary} ({arch}): {symbol}")
+            for symbol in undefined:
+                if symbol.startswith(FORBIDDEN_UNDEFINED_PREFIXES):
+                    raise RuntimeError(f"GnuTLS/GMP/nettle reference remains in {binary} ({arch}): {symbol}")
+    print(f"Verified {artifact}: checksums; no http/https/tls/tcp/udp protocol symbols; "
+          f"no gnutls_/nettle_/__gmpz_/__gmpn_ references; CONFIG_NETWORK 0; CONFIG_HLS_DEMUXER 1 in every architecture; "
+          f"{len(PATCHES)} patch(es) recorded")
 
 
 def main():
@@ -93,17 +166,24 @@ def main():
         shutil.rmtree(source)
     with tarfile.open(archive) as tar:
         tar.extractall(work, filter="data")
-    with PATCH.open() as patch:
-        subprocess.run(["patch", "-p1", "--batch"], cwd=source, stdin=patch, check=True)
+    for patch in PATCHES:
+        # hls.c refuses any URL whose scheme has no registered protocol, which
+        # with the network stack gone is every http(s) URL; the patch lets it
+        # classify the scheme from the URL and hand the open to io_open.
+        print(f"Applying {patch.name}", flush=True)
+        with patch.open() as stream:
+            subprocess.run(["patch", "-p1", "--batch"], cwd=source, stdin=stream, check=True)
 
     # The original format configuration is itself checksum-pinned. Retain its
     # muxer/demuxer set and in-tree codec options for internal ABI compatibility.
+    # (hls is a demuxer, carried over below; its keepalive code is compiled
+    # out on its own, guarded by `#if CONFIG_HTTP_PROTOCOL` in hls.c.)
     manifest = (PACKAGE / "Package.swift").read_text()
     pins = {name: (url, checksum) for name, url, checksum in re.findall(
         r'name: "([^"]+)",\s*url: "([^"]+)",\s*checksum: "([^"]+)"', manifest)}
     pins["Libavformat"] = (UPSTREAM_FORMAT_URL, UPSTREAM_FORMAT_SHA)
     dependencies = {}
-    for name in ("Libavformat", "gnutls", "gmp", "nettle", "hogweed"):
+    for name in ("Libavformat",):
         url, checksum = pins[name]
         archive = work / f"{name}.xcframework.zip"
         download(url, checksum, archive)
@@ -142,17 +222,8 @@ def main():
             lib = build / "deps/lib"
             include.mkdir(parents=True)
             lib.mkdir(parents=True)
-            for name in ("gnutls", "gmp", "nettle", "hogweed"):
-                fw = dependencies[name] / dep_slice / f"{name}.framework"
-                if name != "hogweed":
-                    (include / name).symlink_to(fw / "Headers", target_is_directory=True)
-                (lib / f"lib{name}.a").symlink_to(fw / name)
-            (include / "gmp.h").symlink_to(include / "gmp/gmp.h")
             pc = lib / "pkgconfig"
             pc.mkdir()
-            (pc / "gnutls.pc").write_text(
-                f"Name: GnuTLS\nDescription: Pinned MPVKit GnuTLS\nVersion: 3.8.11\n"
-                f"Libs: -L{lib} -lgnutls -lhogweed -lnettle -lgmp\nCflags: -I{include}\n")
             (pc / "libxml-2.0.pc").write_text(
                 f"Name: libxml2\nDescription: Apple SDK libxml2\nVersion: 2.9.13\n"
                 f"Libs: -lxml2\nCflags: -I{sysroot}/usr/include/libxml2\n")
@@ -162,11 +233,12 @@ def main():
                 "--target-os=darwin", f"--arch={'aarch64' if arch == 'arm64' else arch}",
                 "--enable-cross-compile", "--cc=clang", "--cxx=clang++", "--host-cc=clang",
                 "--host-ld=clang", "--enable-static", "--disable-shared",
-                "--enable-pic", "--enable-version3", "--disable-autodetect", "--disable-programs",
+                "--enable-pic", "--disable-autodetect", "--disable-programs",
                 "--disable-doc", "--disable-debug", "--disable-avdevice", "--disable-avfilter",
                 "--disable-filters", "--disable-devices", "--disable-bzlib", "--disable-iconv",
-                "--disable-xlib", "--disable-x86asm", "--enable-network", "--enable-protocols",
-                "--enable-gnutls", "--enable-gmp", "--enable-libxml2", "--enable-zlib",
+                "--disable-xlib", "--disable-x86asm", "--disable-network", "--disable-protocols",
+                "--enable-protocol=file", "--enable-protocol=data",
+                "--enable-libxml2", "--enable-zlib",
                 "--enable-videotoolbox", "--enable-audiotoolbox", "--pkg-config-flags=--static",
                 f"--extra-cflags={flags} -I{include}",
                 f"--extra-ldflags={flags} -L{lib} -framework Security -framework CoreFoundation",
@@ -189,6 +261,10 @@ def main():
         # its framework module layout (including libavutil/libavcodec includes).
         shutil.copytree(dependencies["Libavformat"] / dep_slice / "Libavformat.framework/Headers", framework / "Headers")
         shutil.copyfile(build / "config.h", framework / "Headers/config.h")
+        # FFmpeg 8.x moves per-component enables (CONFIG_*_DEMUXER, CONFIG_*_PROTOCOL, ...)
+        # out of config.h into this sibling; verify() needs both to confirm the build.
+        shutil.copyfile(build / "config_components.h", framework / "Headers/config_components.h")
+        check_license((framework / "Headers/config.h").read_text(), f"{group} config.h")
         (framework / "Modules").mkdir()
         (framework / "Modules/module.modulemap").write_text('framework module Libavformat [system] {\n    umbrella "."\n    export *\n}\n')
         info = dict(CFBundleExecutable="Libavformat", CFBundleIdentifier="ee.helop.Libavformat",
@@ -203,11 +279,12 @@ def main():
     run(["xcodebuild", "-create-xcframework", *frameworks, "-output", output])
     for license_name in ("COPYING.LGPLv2.1", "COPYING.LGPLv3", "COPYING.GPLv3", "LICENSE.md"):
         shutil.copyfile(source / license_name, output / license_name)
-    metadata = dict(source_url=SOURCE_URL, source_sha256=SOURCE_SHA, patch_sha256=sha(PATCH),
+    metadata = dict(source_url=SOURCE_URL, source_sha256=SOURCE_SHA, network=False, license="LGPL-2.1-or-later",
+                    patches={patch.name: sha(patch) for patch in PATCHES},
                     xcode=run(["xcodebuild", "-version"]), configurations=configurations,
                     files={str(path.relative_to(output)): sha(path) for path in sorted(output.rglob("*")) if path.is_file()})
     (output / "BUILD.json").write_text(json.dumps(metadata, indent=2) + "\n")
-    verify(output)
+    verify(output, work)
 
 
 if __name__ == "__main__":
