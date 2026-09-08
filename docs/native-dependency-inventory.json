@@ -1,6 +1,6 @@
 {
   "scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
-  "package_sha256": "55c5aac9bcee071617553477d1fbfd415c6b377b70d2fb771191b3fc50bc3b1d",
+  "package_sha256": "0082f2b72896deaf48abb2dca584b131cb96738269c862799e2cb4e42a1b41b0",
   "dependencies": [
     {
       "name": "Libavcodec",
@@ -426,6 +426,60 @@
           ],
           "sha256": "d4881eaaca20f4687f9122e24ae9feb67eac05519f04df7a3c8fd554cb1d9060",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64:current ar archive random library]",
+          "required_reason_imports": {}
+        }
+      ]
+    },
+    {
+      "name": "Libdovi",
+      "path": "Artifacts/Libdovi.xcframework",
+      "bundled_license_files": [],
+      "slices": [
+        {
+          "id": "ios-arm64",
+          "architectures": [
+            "arm64"
+          ],
+          "sha256": "49e5d29609d3c9120b5e2fa325f5cea4b5ecabc31a7f504485eaba7cd07cf2b9",
+          "file_type": "current ar archive random library",
+          "required_reason_imports": {}
+        },
+        {
+          "id": "ios-arm64_x86_64-simulator",
+          "architectures": [
+            "arm64",
+            "x86_64"
+          ],
+          "sha256": "3947c54589447ec7bc648b0e812ed845aaf339ec37972bf40ef674c2507c7067",
+          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
+          "required_reason_imports": {}
+        },
+        {
+          "id": "macos-arm64_x86_64",
+          "architectures": [
+            "arm64",
+            "x86_64"
+          ],
+          "sha256": "73bedef3079b6aa70571818709e4ccff7e687db64802350ffa0476e61dc55bd1",
+          "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive random library] [arm64]",
+          "required_reason_imports": {}
+        },
+        {
+          "id": "tvos-arm64",
+          "architectures": [
+            "arm64"
+          ],
+          "sha256": "a40623a36f075ef7bbe42b34b7dddeaf804f64ab936ef7406338eb0692673441",
+          "file_type": "current ar archive random library",
+          "required_reason_imports": {}
+        },
+        {
+          "id": "tvos-arm64-simulator",
+          "architectures": [
+            "arm64"
+          ],
+          "sha256": "3971b6142dd470cd7b0fb75bc9f3f903762e45193a531c42ac7ff966c8d259ca",
+          "file_type": "current ar archive random library",
           "required_reason_imports": {}
         }
       ]
