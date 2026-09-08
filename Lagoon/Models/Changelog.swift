@@ -46,6 +46,7 @@ nonisolated enum Changelog {
                 "If local-network access is blocked on iPhone or iPad, Jellyfin and Seerr setup explains how to enable it in Settings and offers Retry without re-entering the server address.",
                 "HTTPS playback now checks the server's certificate and rejects invalid or untrusted connections. Servers using a private certificate authority need it to be trusted on your device.",
                 "Dolby Vision profile 7 titles, such as UHD Blu-ray remuxes, now play as Dolby Vision instead of HDR10 on Apple TV. If a title looks wrong, Settings → Advanced → Playback Diagnostics → Dolby Vision Compatibility Mode brings back the HDR10 behavior.",
+                "Jellyfin servers reached through a reverse-proxy path, such as example.com/jellyfin, can now transcode and load external subtitles. Previously those requests went to the wrong address and playback fell back or failed.",
             ]
         ),
         ChangelogEntry(
