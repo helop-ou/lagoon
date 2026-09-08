@@ -12,8 +12,7 @@ performed by the privacy implementation pass.
   build declarations and retain any required documentation.
 - [ ] Approve data collection/retention answers, complete the app's collection
   manifest and App Privacy labels, and generate/review Xcode's privacy report.
-- [ ] Resolve the direct OpenSubtitles consumer arrangement or exclude it from
-  public 1.0, then update UI, tests, privacy and support copy to match.
+- [x] Direct OpenSubtitles removed (HEL-146); subtitle search relies on Jellyfin.
 - [ ] Publish privacy/support pages with the selected domain, publisher identity
   and monitored contact. Add privacy/support/acknowledgements access before login
   and in About; verify iPhone/iPad and tvOS presentation. Start with the
