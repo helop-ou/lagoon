@@ -16,7 +16,9 @@ nonisolated protocol FFmpegByteSource: AnyObject {
     func setTimelineAnchor(byteOffset: Int64, timeFraction: Double)
 }
 
-extension PlaybackCacheScope: FFmpegByteSource {}
+// The demuxer and the transport use the scope as a byte source off the main
+// actor; the conformance has to say so or Swift 6 treats it as main-actor-bound.
+nonisolated extension PlaybackCacheScope: FFmpegByteSource {}
 
 /// The volume reader's view of a cached image: small scattered reads, served
 /// from the same cache that will later stream the title.
