@@ -423,9 +423,14 @@ final class SessionStore {
     /// environment without putting its credentials in the project or
     /// command-line arguments; this hook cannot ship in Release builds.
     func bootstrapPublicDemoForRegressionIfRequested() async {
+        // Deliberately not gated on `phase`: `restore()` has already
+        // re-activated whatever account the simulator last used, and the
+        // regression lane must run against the server it was told about,
+        // never a developer's own library that happened to be signed in
+        // (HEL-144 / audit A18). Nothing below persists, so the next ordinary
+        // launch restores that account untouched.
         guard UserDefaults.standard.bool(forKey: "debug.playerRegression"),
-              UserDefaults.standard.bool(forKey: "debug.regressionBootstrapPublicDemo"),
-              phase != .signedIn else { return }
+              UserDefaults.standard.bool(forKey: "debug.regressionBootstrapPublicDemo") else { return }
         let environment = ProcessInfo.processInfo.environment
         let address = environment["LAGOON_REGRESSION_SERVER"]
             ?? "https://demo.jellyfin.org/stable"
