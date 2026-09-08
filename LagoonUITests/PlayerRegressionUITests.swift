@@ -879,6 +879,7 @@ final class PlayerRegressionUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.settingsRegression", "YES",
         ]
         app.launch()
@@ -946,6 +947,7 @@ final class PlayerRegressionUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.settingsRegression", "YES",
         ]
         app.launch()
@@ -1229,6 +1231,7 @@ final class PlayerRegressionUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.settingsRegression", "YES",
         ]
         app.launch()
@@ -1773,15 +1776,12 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["player.regression.state"].exists)
     }
 
-    func testHomeHeroLibraryAndNestedDetailBackStacks() {
+    func testHomeHeroLibraryAndNestedDetailBackStacks() throws {
         let app = launchNavigationRegressionApp()
         let homeTab = app.tabBars.buttons["Home"]
         XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
 
-        let hero = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "home.hero.")
-        ).firstMatch
-        XCTAssertTrue(hero.waitForExistence(timeout: 20))
+        let hero = try requireHomeHero(in: app)
         moveFocus(to: hero, maxPresses: 8) { remote.press(.down) }
         let heroItemID = hero.identifier.replacingOccurrences(of: "home.hero.", with: "")
         remote.press(.select)
@@ -2003,6 +2003,7 @@ final class PlayerRegressionUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
         ]
         app.launch()
 
@@ -2126,6 +2127,7 @@ final class PlayerRegressionUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.navigationRegression", "YES",
         ]
         app.launch()
@@ -2244,6 +2246,7 @@ final class PlayerRegressionUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.benchSearchTerm", title,
             "-debug.playbackHUD", "YES",
         ]
