@@ -13,8 +13,9 @@ nonisolated struct MediaRequestAuthorization: Sendable, Equatable {
     /// Query item names (compared lowercased) that carry the same credential in the URL.
     let queryNames: Set<String>
 
-    /// Same scheme, host (case-insensitive) and effective port as `origin` —
-    /// the same comparison `JellyfinClient.sameOrigin` applies to media URLs.
+    /// Same scheme, host (case-insensitive) and effective port as `origin`.
+    /// This is the sole authority every media consumer defers to for
+    /// same-origin checks (HEL-142/HEL-143) — nothing else reimplements it.
     func applies(to url: URL) -> Bool {
         url.scheme?.lowercased() == origin.scheme?.lowercased()
             && url.host?.lowercased() == origin.host?.lowercased()
@@ -27,6 +28,25 @@ nonisolated struct MediaRequestAuthorization: Sendable, Equatable {
         guard let url = request.url, applies(to: url) else { return }
         request.url = strippingCredentials(from: url)
         request.setValue(headerValue, forHTTPHeaderField: headerName)
+    }
+
+    /// The URL with the credential removed when it targets `origin`; other
+    /// origins are left untouched. For consumers that still need a bare URL
+    /// (a server-generated HLS manifest reference, a display-only value)
+    /// rather than a request they can attach the header to.
+    func sanitizedURL(_ url: URL) -> URL {
+        applies(to: url) ? strippingCredentials(from: url) : url
+    }
+
+    /// A request for `url` with the credential moved into the header when it
+    /// targets `origin`; other origins get an ordinary, untouched request.
+    func request(for url: URL, timeoutInterval: TimeInterval? = nil) -> URLRequest {
+        var request = URLRequest(url: url)
+        if let timeoutInterval {
+            request.timeoutInterval = timeoutInterval
+        }
+        apply(to: &request)
+        return request
     }
 
     /// The URL with `queryNames` removed (used by tests and by `apply`).
