@@ -271,6 +271,20 @@ the existing grid and its next-page position. Seerr result identity includes
 media type as well as TMDB ID. Changing the root search query clears its old
 rail matches before the replacement request completes.
 
+Settings → About has a Legal section (HEL-143, audit A06): Acknowledgements
+opens a sheet listing `Acknowledgements.components`, each expandable to its
+copyright, provenance and source tag with the full bundled licence text, and
+a trademark notice at the end; on tvOS it follows the changelog sheet's
+pattern — no `NavigationStack`, the panel draws its own header/footer at a
+fixed `Metrics.modalPanelSize` rather than the title/background a pushed
+page would give it, and licence text is broken into focusable paragraphs
+rather than one long unfocusable block. Privacy Policy and Support rows
+appear only once `LegalDestinations` carries a URL for them; iOS opens the
+link, tvOS shows the address to type on another device. The same Legal
+section is reachable pre-login: the sign-in screen has an "About Lagoon"
+action presenting version, build and Legal without requiring a Jellyfin
+sign-in first.
+
 ### Top Shelf is a full-screen carousel
 
 `TVTopShelfCarouselItem` has **no `title` property**. It inherits only
