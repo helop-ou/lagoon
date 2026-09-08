@@ -7,12 +7,25 @@ nonisolated enum SubtitleLoadState: Equatable {
 }
 
 nonisolated enum ExternalSubtitleLoader {
-    static func load(_ track: ExternalSubtitleTrack, using downloader: BoundedDownload) async throws -> [SubtitleCue] {
+    /// `authorization` attaches the session credential as a header rather
+    /// than letting it ride in `track.url`'s query — Jellyfin delivery URLs
+    /// can arrive with a legacy `api_key`, and any URL is otherwise a
+    /// potential unified-log leak if the request fails (HEL-142/HEL-143).
+    static func load(
+        _ track: ExternalSubtitleTrack,
+        using downloader: BoundedDownload,
+        authorization: MediaRequestAuthorization? = nil
+    ) async throws -> [SubtitleCue] {
         let data: Data
         if let preloaded = track.preloadedData {
             data = preloaded
         } else {
-            data = try await downloader.data(from: track.url, limit: DownloadLimit.subtitle, content: .subtitle)
+            let request = authorization?.request(for: track.url, timeoutInterval: 30) ?? {
+                var request = URLRequest(url: track.url)
+                request.timeoutInterval = 30
+                return request
+            }()
+            data = try await downloader.data(for: request, limit: DownloadLimit.subtitle, content: .subtitle)
         }
         return try await parse(data, language: track.language)
     }
