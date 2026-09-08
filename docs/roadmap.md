@@ -30,8 +30,10 @@ are gone. Hardware HEVC/H.264 and, where the silicon has it, AV1; software
 AV1 through a dav1d built by this repo (HEL-137), plus VP9, VC-1, MPEG-4
 Part 2 and MPEG-2 in software with local deinterlacing for MPEG-2
 (HEL-127, half). HDR10, HDR10+ and Dolby Vision with display-mode matching
-(HEL-64); software-decoded HDR shown as SDR on tvOS, converted on the
-GPU. Atmos/TrueHD/E-AC-3 passthrough, DTS/TrueHD/FLAC/Opus/PCM decoded
+(HEL-64); profile 7 remuxes are converted to profile 8.1 live rather than
+falling back to HDR10 (HEL-145); software-decoded HDR shown as SDR on
+tvOS, converted on the GPU. Atmos/TrueHD/E-AC-3 passthrough,
+DTS/TrueHD/FLAC/Opus/PCM decoded
 locally, Spatial Audio for stereo. Blu-ray and DVD images play natively
 with their original audio (HEL-133). A delivery ladder that falls from
 direct play to remux to transcode on failure, by cause (HEL-100), with a
@@ -132,7 +134,10 @@ Waiting on a TestFlight or hardware look rather than on code: the audio
 refill fix (HEL-124), the transcode cache switch (HEL-130), interlaced MPEG-2 on an
 Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
 cap (HEL-108), the detail page turning Play into Resume after playback
-(HEL-132), and both halves of HEL-134: the light Siri Remote touch-surface tap
+(HEL-132), the Dolby Vision profile 7 → 8.1 conversion (HEL-145, waiting on
+an Apple TV reporting Dolby Vision and a rerun of the frame-loss bench
+against the converted path), and both halves of HEL-134: the light Siri
+Remote touch-surface tap
 that reveals the player transport, shipped in 0.1 (87), and the further tap
 that swaps remaining time for the clock time playback will finish, in 0.1 (88).
 Seerr media and request details refresh pending approval every 30 seconds and
