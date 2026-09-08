@@ -317,7 +317,8 @@ final class PlaybackController {
                 itemID: media.id,
                 url: streamURL,
                 method: method,
-                expectedLength: source.size
+                expectedLength: source.size,
+                authorization: client.mediaRequestAuthorization()
             )
             let playbackURL = cacheSession?.completeFileURL ?? streamURL
             let transportCache = !playbackURL.isFileURL
@@ -852,7 +853,8 @@ final class PlaybackController {
                     itemID: next.id,
                     url: url,
                     method: method,
-                    expectedLength: source.size
+                    expectedLength: source.size,
+                    authorization: client.mediaRequestAuthorization()
                 )
                 await self.warmPreparedNext(scope, byteCount: 8 * 1_024 * 1_024)
                 guard !Task.isCancelled, self.nextUp?.id == next.id else {
