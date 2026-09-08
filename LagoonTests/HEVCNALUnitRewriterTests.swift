@@ -2,11 +2,16 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The DoVi P7 enhancement-layer strip (HEL-64) mangles the video
-/// bitstream on purpose — these tests are what keeps "on purpose" honest:
-/// only unspec-62/63 NALs leave, every kept byte survives verbatim, and
-/// anything that doesn't parse passes through untouched.
-struct HEVCEnhancementLayerFilterTests {
+/// `HEVCNALUnitRewriter` replaced the strip-only `HEVCEnhancementLayerFilter`
+/// (HEL-145): it still knows how to drop the Dolby Vision profile 7
+/// enhancement layer (unspec-63) and RPU (unspec-62) wholesale, but it can
+/// also walk a length-prefixed access unit applying an arbitrary per-NAL
+/// transform — the primitive the P7→8.1 RPU rewrite is built on. These tests
+/// are what keeps that honest: only the NALs a transform touches change,
+/// every kept byte survives verbatim, and anything that doesn't parse (or
+/// can't be re-expressed within the prefix width it was given) passes
+/// through untouched or is dropped rather than mangled.
+struct HEVCNALUnitRewriterTests {
     /// One length-prefixed NAL unit: 4-byte (or shorter) big-endian length,
     /// then the two HEVC header bytes, then filler.
     private func nal(type: UInt8, payloadBytes: Int, lengthSize: Int = 4, filler: UInt8 = 0xAB) -> Data {
@@ -21,9 +26,21 @@ struct HEVCEnhancementLayerFilterTests {
         return data
     }
 
+    /// A length-prefixed NAL unit built from already-encoded unit bytes
+    /// (header + payload, no prefix of its own) — used to predict what
+    /// `rewrite` writes for a `.replace(_:)` result.
+    private func prefixed(_ unit: Data, lengthSize: Int = 4) -> Data {
+        var data = Data()
+        for shift in stride(from: (lengthSize - 1) * 8, through: 0, by: -8) {
+            data.append(UInt8((unit.count >> shift) & 0xFF))
+        }
+        data.append(unit)
+        return data
+    }
+
     private func strip(_ payload: Data, lengthSize: Int = 4) -> Data? {
         payload.withUnsafeBytes { bytes in
-            HEVCEnhancementLayerFilter.strippingEnhancementLayer(from: bytes, lengthSize: lengthSize)
+            HEVCNALUnitRewriter.strippingEnhancementLayer(from: bytes, lengthSize: lengthSize)
         }
     }
 
@@ -82,10 +99,63 @@ struct HEVCEnhancementLayerFilterTests {
     @Test func nalLengthSizeReadFromHvcC() {
         var hvcc = Data(count: 23)
         hvcc[21] = 0xFF // …| lengthSizeMinusOne = 3
-        #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: hvcc) == 4)
+        #expect(HEVCNALUnitRewriter.nalLengthSize(hvcc: hvcc) == 4)
         hvcc[21] = 0xFC | 0x01
-        #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: hvcc) == 2)
-        #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: Data(count: 10)) == nil)
+        #expect(HEVCNALUnitRewriter.nalLengthSize(hvcc: hvcc) == 2)
+        #expect(HEVCNALUnitRewriter.nalLengthSize(hvcc: Data(count: 10)) == nil)
+    }
+
+    // MARK: - rewrite(payload:lengthSize:transform:) (HEL-145)
+
+    /// The primitive the RPU rewrite is built on: a transform can replace
+    /// one unit while everything around it survives untouched, and the
+    /// replaced unit gets a length prefix computed from its *new* size.
+    @Test func rewriteReplacesOneUnitAndKeepsTheRestWithFreshLengthPrefixes() {
+        let before = nal(type: 32, payloadBytes: 4)
+        let target = nal(type: 62, payloadBytes: 20)
+        let after = nal(type: 1, payloadBytes: 500, filler: 0xCD)
+        let payload = before + target + after
+
+        // Deliberately a different length than the unit it replaces, so a
+        // stale length prefix (copied rather than recomputed) would be
+        // caught by this assertion.
+        let replacement = Data([0x7C, 0x01, 0x11, 0x22, 0x33])
+
+        let result = payload.withUnsafeBytes { bytes in
+            HEVCNALUnitRewriter.rewrite(payload: bytes, lengthSize: 4) { nalType, _ in
+                nalType == 62 ? .replace(replacement) : .keep
+            }
+        }
+
+        #expect(result == before + prefixed(replacement) + after)
+    }
+
+    @Test func rewriteReturnsNilWhenTheTransformKeepsEverything() {
+        let payload = nal(type: 32, payloadBytes: 4) + nal(type: 1, payloadBytes: 100)
+            + nal(type: 62, payloadBytes: 20)
+        let result = payload.withUnsafeBytes { bytes in
+            HEVCNALUnitRewriter.rewrite(payload: bytes, lengthSize: 4) { _, _ in .keep }
+        }
+        #expect(result == nil)
+    }
+
+    /// A 1-byte length prefix can express at most 255. A transform handing
+    /// back more than that for one unit can't be written without lying
+    /// about the unit's length, so the rewrite drops the unit instead of
+    /// truncating or overflowing the prefix.
+    @Test func rewriteTreatsAReplacementTooLargeForThePrefixAsADrop() {
+        let kept = nal(type: 32, payloadBytes: 4, lengthSize: 1)
+        let target = nal(type: 62, payloadBytes: 10, lengthSize: 1)
+        let payload = kept + target
+        let oversized = Data(repeating: 0x11, count: 300)
+
+        let result = payload.withUnsafeBytes { bytes in
+            HEVCNALUnitRewriter.rewrite(payload: bytes, lengthSize: 1) { nalType, _ in
+                nalType == 62 ? .replace(oversized) : .keep
+            }
+        }
+
+        #expect(result == kept)
     }
 
     // MARK: - Parameter sets the container may or may not carry (HEL-131)
@@ -120,7 +190,7 @@ struct HEVCEnhancementLayerFilterTests {
         #expect(SampleBufferFactory.hevcExtradataCarriesParameterSets(empty) == false)
         // The length prefix is still described correctly, which is what the
         // harvest relies on to walk the packets.
-        #expect(HEVCEnhancementLayerFilter.nalLengthSize(hvcc: empty) == 4)
+        #expect(HEVCNALUnitRewriter.nalLengthSize(hvcc: empty) == 4)
     }
 
     @Test func aRecordCarryingSPSAndPPSIsAccepted() {
