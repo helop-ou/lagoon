@@ -1471,10 +1471,10 @@ composition cost is more representative than Simulator timing.
   side-load/select the authenticated external file without restarting the
   video. Not covered: an embedded subtitle rendition inside an HLS master
   (remote downloads arrive as external files and do work).
-- **Subtitle download safety** (audit A15): external sidecars, Jellyfin provider
-  files and direct OpenSubtitles files share an 8 MiB response cap. The
-  `BoundedDownload` URLSession delegate validates HTTP status and checks each
-  delivered chunk, including decompressed bytes, before appending it. Declared
+- **Subtitle download safety** (audit A15): external sidecars and Jellyfin
+  provider files share an 8 MiB response cap. The `BoundedDownload` URLSession
+  delegate validates HTTP status and checks each delivered chunk, including
+  decompressed bytes, before appending it. Declared
   HTML/JSON responses, incomplete transfers and files without readable, finite
   cues cannot replace a working track. Selecting an external track keeps the
   current selection and captions until parsing succeeds; failed replacements
@@ -1493,40 +1493,31 @@ composition cost is more representative than Simulator timing.
   those supported overrides takes the exact old `PlayerSubtitleText` path, so
   ordinary SRT/WebVTT and plain ASS dialogue keep the viewer's caption font,
   edge, background and vertical position unchanged.
-- **Two subtitle sources** (HEL-92): Jellyfin's routes require the account's
-  `EnableSubtitleManagement` permission, which is off by default for every
-  non-administrator — the common case on a shared server. Those accounts fall
-  back to OpenSubtitles fetched **straight into the player**: no library
-  write, no server permission, and nothing about the provider account is
-  disclosed to Jellyfin. `SubtitleSourcePolicy` prefers Jellyfin whenever it
-  is available, because it persists the sidecar for every client and every
-  other viewer, converts the file server-side, uses whatever providers the
-  administrator configured, and costs the viewer none of their personal
-  provider quota. An explicit choice in Settings is never silently
-  overridden. Both sources produce `SubtitleCandidate`, so the UI privileges
-  neither.
-- **Matching and quota**: the direct provider is searched by OpenSubtitles'
-  moviehash (file size plus the little-endian 64-bit word sums of the first
-  and last 64 KiB) when the stream is range-readable, which identifies the
-  exact release rather than the title; `imdb_id`/`tmdb_id` from Jellyfin's
-  `ProviderIds` and a title/season/episode query are the fallbacks. Downloads
-  are quota'd — five a day anonymously, twenty with a free account — so every
-  validated sidecar is kept under `Library/Caches/Lagoon/Subtitles` and a repeat
-  watch is served from disk. The account prompt is deferred until the
-  allowance actually runs out; searching needs no account at all. The download
-  request asks for `sub_format=srt`, so the provider converts ASS/SSA on its
-  side and Lagoon's `-->`-only parser never sees an authored format.
-  Cache reads are capped at 8 MiB and invalid cached files are discarded on
-  validation failure so Retry can obtain fresh bytes. Oversized or HTML files
-  do not trigger Jellyfin's compatibility fallback or an automatic provider
-  retry. Moviehash requests require exactly 64 KiB and HTTP 206 per range; a
-  server ignoring Range cannot make hashing download the whole movie.
+- **One subtitle source** (HEL-92, HEL-146): Jellyfin's remote-subtitle routes
+  require the account's `EnableSubtitleManagement` permission, which is off by
+  default for every non-administrator — the common case on a shared server.
+  Administrators pass regardless of the stored flag (HEL-96), and an absent
+  value is let through rather than treated as a denial; either way the
+  server's own `403` is what actually decides. When the permission holds,
+  Lagoon searches preferred languages concurrently, fetches the matched
+  provider file directly for immediate playback, and uploads those same bytes
+  to Jellyfin so the sidecar persists for every client and viewer. Provider
+  formats Lagoon cannot parse directly fall back to Jellyfin's native save
+  plus a PlaybackInfo poll for the new stream. Oversized or HTML responses do
+  not trigger that compatibility fallback or an automatic retry. The direct
+  OpenSubtitles provider that used to serve accounts without the permission
+  was removed in HEL-146: OpenSubtitles' REST terms require one API key per
+  application and ban apps that ask users to supply their own, which is what
+  the per-device-key design did. Settings shows the account's permission
+  state so the viewer knows whether to ask their server administrator.
 - **Text encoding**: `SubtitleTextDecoder` replaces a fallback chain that
   ended in `isoLatin1`, which cannot fail — it maps every byte — so a
   Windows-1251 file used to decode to mojibake and render as garbage with no
   error anywhere. Jellyfin converts to UTF-8 on its way out, which hid this;
-  a provider fetched directly does not. Order is BOM, then strict UTF-8, then
-  the codepage implied by the track's language (Cyrillic → 1251, Baltic →
+  a file fetched through Jellyfin's `Providers/Subtitles/Subtitles/{id}`
+  endpoint arrives as the provider stored it, so the decoder still matters.
+  Order is BOM, then strict UTF-8, then the codepage implied by the track's
+  language (Cyrillic → 1251, Baltic →
   1257, and so on), then Windows-1252. **Known limitation**: with no language
   hint a legacy file still decodes to mojibake. Cyrillic bytes read as Latin-1
   become ordinary accented Latin letters, and separating that from real
