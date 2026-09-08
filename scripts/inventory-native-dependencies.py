@@ -70,7 +70,10 @@ def main():
                 "required_reason_imports": {category: sorted(symbols & values) for category, values in API_SYMBOLS.items() if symbols & values},
             })
         targets.append(target)
-    if len(targets) != 11:
+    # Seven since the transport spike: libavcodec, libavformat, libavutil,
+    # libswresample, dav1d, lcms2, uavs3d. The GnuTLS stack left with
+    # libavformat's network stack.
+    if len(targets) != 7:
         raise ValueError(f"Native target set changed ({len(targets)}); review the inventory before regenerating")
     report = {"scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
               "package_sha256": sha256(PACKAGE / "Package.swift"), "dependencies": targets}
