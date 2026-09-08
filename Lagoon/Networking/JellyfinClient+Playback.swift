@@ -99,9 +99,9 @@ extension JellyfinClient {
     /// Resolves a media source to a playable URL, preferring direct play,
     /// then direct stream, then the server-negotiated transcode.
     func streamURL(itemId: String, source: MediaSource) throws -> (url: URL, method: PlayMethod) {
-        if source.supportsDirectPlay == true, let accessToken {
+        if source.supportsDirectPlay == true, accessToken != nil {
             return (
-                try url(path: "Videos/\(itemId)/stream", query: staticStreamQuery(source: source, accessToken: accessToken)),
+                try url(path: "Videos/\(itemId)/stream", query: staticStreamQuery(source: source)),
                 .directPlay
             )
         }
@@ -165,12 +165,12 @@ extension JellyfinClient {
     /// for servers that accept the save request but fail to expose the new
     /// sidecar during their queued library refresh.
     func remoteSubtitleFile(subtitleId: String) async throws -> (url: URL, data: Data) {
-        guard let accessToken else { throw JellyfinError.notConfigured }
+        guard accessToken != nil else { throw JellyfinError.notConfigured }
         let components = ["Providers", "Subtitles", "Subtitles", subtitleId]
-        let deliveryURL = authenticatedMediaURL(
-            try url(pathComponents: components),
-            accessToken: accessToken
-        )
+        // The caller always has the bytes already (`getData` below); this URL
+        // is kept only as the track's display/identity value, so it carries
+        // no credential at all rather than one more copy of the token.
+        let deliveryURL = try url(pathComponents: components)
         return (
             deliveryURL,
             try await getData(components, timeout: SubtitleRequestTimeout.provider, maximumBytes: DownloadLimit.subtitle)
@@ -206,12 +206,11 @@ extension JellyfinClient {
         )
     }
 
-    private func staticStreamQuery(source: MediaSource, accessToken: String) -> [URLQueryItem] {
+    private func staticStreamQuery(source: MediaSource) -> [URLQueryItem] {
         var query = [
             URLQueryItem(name: "static", value: "true"),
             URLQueryItem(name: "mediaSourceId", value: source.id),
             URLQueryItem(name: "deviceId", value: deviceId),
-            URLQueryItem(name: "ApiKey", value: accessToken),
         ]
         if let eTag = source.eTag {
             query.append(URLQueryItem(name: "Tag", value: eTag))
@@ -219,45 +218,15 @@ extension JellyfinClient {
         return query
     }
 
-    /// FFmpeg, the playback cache and the lightweight image/subtitle loaders
-    /// consume URLs rather than URLRequests, so they cannot attach Lagoon's
-    /// preferred Authorization header. Jellyfin 12 disables the old
-    /// `api_key` spelling by default; `ApiKey` is its non-legacy URL fallback
-    /// and is also supported by Lagoon's minimum Jellyfin 10.8 release.
-    ///
-    /// Server-provided playback and subtitle URLs may already contain either
-    /// spelling. Replace it with the active session token instead of sending
-    /// two credentials, and never attach that token to a third-party origin.
-    private func authenticatedMediaURL(_ url: URL, accessToken: String) -> URL {
-        guard let serverURL,
-              Self.sameOrigin(url, serverURL),
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return url
-        }
-        var query = components.queryItems ?? []
-        query.removeAll { item in
-            let name = item.name.lowercased()
-            return name == "apikey" || name == "api_key"
-        }
-        query.append(URLQueryItem(name: "ApiKey", value: accessToken))
-        components.queryItems = query
-        return components.url ?? url
-    }
-
-    private nonisolated static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
-        lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
-            && lhs.host?.lowercased() == rhs.host?.lowercased()
-            && effectivePort(lhs) == effectivePort(rhs)
-    }
-
-    private nonisolated static func effectivePort(_ url: URL) -> Int? {
-        if let port = url.port { return port }
-        return switch url.scheme?.lowercased() {
-        case "http": 80
-        case "https": 443
-        default: nil
-        }
-    }
+    /// Every media consumer — the FFmpeg transport, the playback cache, the
+    /// subtitle loader, the trickplay loader — attaches the credential
+    /// itself via `MediaRequestAuthorization`, so no URL Lagoon builds
+    /// carries the token (HEL-142/HEL-143: CFNetwork logs a failed task's
+    /// full URL into the unified log, and a query token would leak into
+    /// diagnostics where the header never does). Server-provided playback
+    /// and subtitle URLs may still contain either legacy spelling
+    /// (`api_key`/`ApiKey`); `sanitizedURL(_:)` strips it on the Jellyfin
+    /// origin and leaves any other origin's URL untouched.
 
     // MARK: - Transport extras (HEL-39 slice 3)
 
@@ -328,20 +297,18 @@ extension JellyfinClient {
             columns: info.tileWidth,
             rows: info.tileHeight,
             interval: Double(info.interval) / 1000,
-            thumbnailCount: info.thumbnailCount
+            thumbnailCount: info.thumbnailCount,
+            authorization: mediaRequestAuthorization()
         )
     }
 
     /// Unlike `Items/…/Images/…`, the trickplay route is authenticated — it
-    /// 401s without credentials, and the image loader sends no headers, so
-    /// the token rides in Jellyfin's non-legacy URL query the way stream URLs
-    /// do.
+    /// 401s without credentials. Like every other media URL Lagoon builds,
+    /// this one carries no query token; the credential travels as a header
+    /// instead (HEL-142/HEL-143).
     private func trickplaySheetURL(itemId: String, width: Int, index: Int) -> URL? {
-        guard let accessToken else { return nil }
-        return try? url(
-            path: "Videos/\(itemId)/Trickplay/\(width)/\(index).jpg",
-            query: [URLQueryItem(name: "ApiKey", value: accessToken)]
-        )
+        guard accessToken != nil else { return nil }
+        return try? url(path: "Videos/\(itemId)/Trickplay/\(width)/\(index).jpg")
     }
 
     func reportPlaybackStart(_ info: PlaybackStartInfo) async throws {
