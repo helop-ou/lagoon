@@ -28,6 +28,10 @@ final class TrickplayLoader {
     private(set) var isUnavailable = false
 
     private let source: TrickplaySource
+    /// The trickplay route 401s without credentials, and the sheet URL
+    /// carries no query token (HEL-142/HEL-143), so every sheet fetch sends
+    /// the header credential the source arrived with.
+    private var authorization: MediaRequestAuthorization? { source.authorization }
     /// Decoded sheets, most-recently-used first.
     private var sheets: [(index: Int, image: CGImage)] = []
     /// Compressed sheets, capped at 32 MiB. Revisiting a retained sheet
@@ -85,12 +89,13 @@ final class TrickplayLoader {
         loading.insert(index)
         let url = source.sheetURLs[index]
         let cached = sheetData[index]
+        let authorization = authorization
         loadTasks[index] = Task { [weak self] in
             let data: Data?
             if let cached {
                 data = cached
             } else {
-                data = await Self.fetch(url)
+                data = await Self.fetch(url, authorization: authorization)
             }
             let image = await Self.decode(data, maxPixelSize: Self.maxSheetPixels)
             guard !Task.isCancelled, let self else { return }
@@ -139,8 +144,13 @@ final class TrickplayLoader {
         return sheet.cropping(to: rect)
     }
 
-    private nonisolated static func fetch(_ url: URL) async -> Data? {
-        try? await BoundedDownload.shared.data(from: url, limit: DownloadLimit.artwork, content: .image)
+    private nonisolated static func fetch(_ url: URL, authorization: MediaRequestAuthorization?) async -> Data? {
+        let request = authorization?.request(for: url, timeoutInterval: 30) ?? {
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 30
+            return request
+        }()
+        return try? await BoundedDownload.shared.data(for: request, limit: DownloadLimit.artwork, content: .image)
     }
 
     private nonisolated static func decode(_ data: Data?, maxPixelSize: Int) async -> CGImage? {
