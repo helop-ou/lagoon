@@ -75,7 +75,8 @@ nonisolated enum SampleBufferFactory {
 
     static func videoFormatDescription(
         codecpar: UnsafeMutablePointer<AVCodecParameters>,
-        parameterSets: BitstreamParameterSets? = nil
+        parameterSets: BitstreamParameterSets? = nil,
+        dolbyVisionOverride: AVDOVIDecoderConfigurationRecord? = nil
     ) -> CMFormatDescription? {
         var codecType: CMVideoCodecType
         let atomKey: String
@@ -155,10 +156,17 @@ nonisolated enum SampleBufferFactory {
         // meaningless without the DoVi decode path, so the sample entry
         // itself becomes dvh1; profile 8 keeps hvc1 with a supplementary
         // dvvC so non-DoVi displays fall back to the base layer's
-        // HDR10/HLG/SDR tags. Dual-layer profiles (4/7) get no atom — the
-        // enhancement layer isn't fed, so the base layer plays as HDR10
-        // via the tags above.
-        if codecpar.pointee.codec_id == AV_CODEC_ID_HEVC,
+        // HDR10/HLG/SDR tags. Dual-layer profile 4 gets no atom — nothing
+        // rewrites it, so it plays as HDR10 via the tags above. Profile 7
+        // (UHD Blu-ray remuxes) is tagged the same way as profile 8
+        // whenever the demuxer hands in `dolbyVisionOverride` — its RPUs
+        // have been rewritten to profile 8.1 in flight, HEL-145 — and
+        // otherwise gets no atom, same as profile 4, which is the debug
+        // HDR10 fallback (Settings → Advanced → Playback Diagnostics →
+        // "Dolby Vision Compatibility Mode").
+        if let dolbyVisionOverride {
+            atoms["dvvC"] = doviConfigurationBox(dolbyVisionOverride)
+        } else if codecpar.pointee.codec_id == AV_CODEC_ID_HEVC,
            let dovi = doviConfiguration(codecpar: codecpar) {
             switch dovi.dv_profile {
             case 5:
@@ -174,11 +182,14 @@ nonisolated enum SampleBufferFactory {
         // Built from the bitstream's own parameter sets, which carry the
         // geometry and profile the empty container record could not. The
         // colorimetry above still applies and is passed through; the Dolby
-        // Vision atoms are not, because this path only runs for a container
-        // that failed to describe its own bitstream and its DoVi signalling
-        // is not worth more trust than its parameter sets were. The base
-        // layer still presents as HDR10 off the tags, which is already the
-        // documented ceiling for the dual-layer profiles.
+        // Vision atoms — `dolbyVisionOverride` included — are not, because
+        // this path only runs for a container that failed to describe its
+        // own bitstream and its DoVi signalling is not worth more trust
+        // than its parameter sets were. In practice this never carries a
+        // profile 7 override anyway: it's MPEG-TS discs that need the
+        // bitstream harvest, and those never have a DoVi configuration
+        // record to convert in the first place (HEL-145). The base layer
+        // still presents as HDR10 off the tags either way.
         if let parameterSets, !parameterSets.sets.isEmpty {
             switch codecpar.pointee.codec_id {
             case AV_CODEC_ID_HEVC:
@@ -792,8 +803,9 @@ nonisolated enum SampleBufferFactory {
     }
 
     /// The stream's Dolby Vision configuration, when the container carries
-    /// one — the demuxer uses it to decide whether the enhancement-layer
-    /// strip experiment applies (HEL-64).
+    /// one — the demuxer uses it to decide whether a profile 7 stream gets
+    /// converted to profile 8.1 or stripped to the HDR10 fallback (HEL-145;
+    /// formerly the HEL-64 strip-only experiment).
     static func doviConfiguration(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> AVDOVIDecoderConfigurationRecord? {
         sideData(codecpar, type: AV_PKT_DATA_DOVI_CONF)
     }
