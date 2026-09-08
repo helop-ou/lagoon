@@ -51,7 +51,7 @@ because their owner is unknown.
 | Libraries, recent searches, subtitle/track/Home preferences | Remove that account's UserDefaults keys |
 | Seerr server address | Remove only after its last remembered Jellyfin account is removed |
 | Other accounts | Preserve their tokens, cookies, preferences and history |
-| Device-wide OpenSubtitles login and device ID | Preserve |
+| Device-wide OpenSubtitles login and device ID (removed under HEL-146; no longer exists) | Preserve |
 
 Switching preserves each remembered account's data. Add Account uses an isolated
 draft; cancellation leaves the active account intact. Logout removes local access
