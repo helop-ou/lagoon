@@ -510,7 +510,8 @@ final class PlaybackController {
                 initialSubtitleOrdinal: initialSubtitleOrdinal,
                 audioTrackMetadata: embeddedAudio.map(Self.trackMetadata),
                 embeddedSubtitleMetadata: embeddedSubtitles.map(Self.trackMetadata),
-                externalSubtitles: externalTracks
+                externalSubtitles: externalTracks,
+                authorization: client.mediaRequestAuthorization()
             )
             engine.onFinished = { [weak self] in self?.didFinish = true }
             engine.onPlaybackStarted = { [weak self, weak engine] in
