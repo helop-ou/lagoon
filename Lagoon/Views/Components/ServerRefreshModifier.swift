@@ -107,7 +107,11 @@ private struct ServerRefreshModifier: ViewModifier {
 /// This separate control shares the top chrome without changing layout.
 struct ServerRefreshButton: View {
     let target: ServerSyncTarget?
-    let moveDownAction: (@MainActor @Sendable () -> Void)?
+    /// Handed straight to the UIKit control below. The action itself is main
+    /// actor work — its type says so, and the coordinator only ever calls it
+    /// from a focus callback — but the value passing through this view is
+    /// immutable and belongs to no actor, so the storage is nonisolated.
+    nonisolated let moveDownAction: (@MainActor @Sendable () -> Void)?
     @Binding var topChromeOffset: CGFloat
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
