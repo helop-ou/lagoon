@@ -56,6 +56,11 @@ are deliberate and manual: `xcrun agvtool new-marketing-version 0.2` (or edit
 - ATS enables `NSAllowsLocalNetworking` so home-LAN Jellyfin servers remain
   reachable. The app does not enable the broad `NSAllowsArbitraryLoads`
   exception.
+- A new native dependency needs an entry in `Lagoon/Models/Acknowledgements.swift`
+  and its licence text bundled under `Lagoon/Resources/Licenses`.
+  `AcknowledgementsTests` enforces this: it fails if a binary target in
+  `Packages/LagoonFFmpeg/Package.swift` has no matching acknowledgement, or if
+  an entry's licence text is missing from the bundle.
 - **"Upload Symbols Failed" warnings for the Lib*.framework artifacts are
   expected and harmless.** The FFmpeg binary artifacts originally sourced
   from MPVKit's release ship with no dSYMs
