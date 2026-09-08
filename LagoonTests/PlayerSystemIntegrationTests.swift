@@ -563,7 +563,13 @@ struct PlayerSystemIntegrationTests {
         ) == .reprime)
     }
 
-    @Test func playbackURLResolutionPreservesTheNegotiatedTransportMatrix() throws {
+    /// HEL-142/HEL-143: the credential travels as a header
+    /// (`MediaRequestAuthorization`) rather than in the URL for every media
+    /// consumer, so none of the URLs Lagoon resolves here — direct play,
+    /// direct stream, transcode, subtitle sidecar, trickplay sheet — may
+    /// carry `ApiKey` or `api_key`, even when the server itself stamped a
+    /// legacy token into the value it handed back.
+    @Test func playbackURLResolutionNeverCarriesTheCredentialInTheQuery() throws {
         let client = JellyfinClient(deviceId: "stream-resolution-test")
         client.configure(serverURL: URL(string: "https://media.test/jellyfin")!)
         client.activateSession(token: "token", userId: "user")
