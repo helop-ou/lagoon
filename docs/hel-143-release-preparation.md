@@ -116,7 +116,7 @@ All 8 input frameworks contain static archives. Fresh iOS/tvOS app executables
 have no load commands for these native frameworks. Small dynamic framework
 executables in Xcode's product packaging do not establish dynamic linkage of the
 actual libraries. The obligations must follow the static inputs and app linkage.
-libavformat was rebuilt on the transport spike branch (September 8); the other native binaries are unchanged. No GCC was invoked.
+libavformat was rebuilt on the transport spike branch (September 8); the other native binaries are unchanged. No GCC was invoked. The notice half of what follows — each component's version, licence name, copyright and exact source tag — now ships in-app as `Lagoon/Models/Acknowledgements.swift` with the licence texts bundled under `Resources/Licenses`; the Materials status column below is a separate, still-open concern and is unaffected by that.
 
 | Component | Version evidence | Materials status |
 | --- | --- | --- |
@@ -171,9 +171,14 @@ records `lagoon.helop.ee` as the proposed starting address, the four-page scope
 and a work order for later implementation. Domain control, hosting and the
 support contact still need confirmation.
 [Privacy copy](website/privacy.md) and [support copy](website/support.md) are local
-drafts, with no invented contact or live URLs. Publication and pre-login in-app
-privacy/support/acknowledgements access remain open. The same approved content
-must populate App Store Connect, including its tvOS privacy-policy text.
+drafts, with no invented contact or live URLs. In-app acknowledgements and
+pre-login access to legal information are done, closing the in-app half of
+the readiness audit's A06: Settings → About → Legal and the signed-out
+"About Lagoon" action both work today. Publishing the privacy/support pages
+and filling in `LegalDestinations` with their live URLs remain open; until
+then, Settings shows only the rows whose URL is set. The same approved
+content must populate App Store Connect, including its tvOS privacy-policy
+text.
 
 A16 is resolved by exclusion (HEL-146, September 8): the direct OpenSubtitles
 integration and its per-device API key were removed rather than given a
