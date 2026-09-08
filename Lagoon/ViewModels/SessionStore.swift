@@ -87,6 +87,13 @@ final class SessionStore {
         if !accountDraft {
             retryCredentialCleanup()
             restore()
+            // HEL-146: sweep any stored state left by the retired direct
+            // OpenSubtitles integration (builds 87–91).
+            RetiredSubtitleProviderCleanup.run(
+                defaults: defaults,
+                credentials: credentials,
+                cachesDirectory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            )
             if activeAccount == nil { synchronizeAccountContext() }
         }
     }
