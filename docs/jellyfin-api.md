@@ -232,9 +232,9 @@ code knows whether a result came from OpenSubtitles or another plugin.
 
 **Every one of those routes requires the per-user `EnableSubtitleManagement`
 permission, and it is off by default for every non-administrator** (Jellyfin
-10.9+). Accounts without it use the direct OpenSubtitles source instead — see
-`docs/playback.md`, "Two subtitle sources"; nothing below applies to that
-path, which never touches Jellyfin. Without it all four answer `403` with an HTML body — verified on both
+10.9+). Accounts without it are shown administrator guidance instead of a
+search (HEL-146) — see `docs/playback.md`, "One subtitle source". Without it
+all four answer `403` with an HTML body — verified on both
 fixture 10.11.11 and the public demo server, whose accounts are both
 non-admin with the flag unset. On a shared server that is the common case, so
 Lagoon reads `User.Policy.EnableSubtitleManagement` (free in the
@@ -275,8 +275,8 @@ of diagnostic body; 401/403/429 finish immediately without waiting for it.
 The normal captured-session check still precedes response handling, so an old
 account's late 401 cannot expire the account now in use. Oversized and invalid
 files have explicit errors and do not invoke the compatibility download.
-The same file-size limit applies to sidecars and direct OpenSubtitles files;
-see [download hardening validation](download-hardening-validation.md).
+The same file-size limit applies to sidecars and to provider files fetched
+through Jellyfin; see [download hardening validation](download-hardening-validation.md).
 
 Jellyfin 10.11's `DownloadRemoteSubtitles` controller catches its internal
 provider/save exception and still returns HTTP 204, so a successful status is
