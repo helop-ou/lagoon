@@ -140,6 +140,17 @@ final class JellyfinClient {
         return allowed
     }
 
+    /// Re-asks the server for the account's subtitle permission, for the
+    /// Settings status that must reflect a flag an administrator turned on
+    /// after sign-in (HEL-146). nil when the server could not be reached, so
+    /// the caller can say "couldn't check" rather than "not enabled".
+    func refreshSubtitlePermission() async -> Bool? {
+        guard let user = try? await currentUser() else { return nil }
+        let allowed = user.policy?.allowsSubtitleManagement ?? true
+        subtitleManagementAllowed = allowed
+        return allowed
+    }
+
     func currentUser() async throws -> UserDto {
         try await get("Users/Me")
     }
