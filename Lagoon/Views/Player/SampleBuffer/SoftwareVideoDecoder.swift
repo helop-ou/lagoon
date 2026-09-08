@@ -1165,24 +1165,36 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
         let sequence = sequencer.reserve()
         let submitted = Self.now()
-        let heldFrame = held
+        // Both of these are handed to the GPU stage and belong to this
+        // dispatch alone from here on. `heldFrame` is the reference taken
+        // above, owned by the Metal completion thread, which frees it the
+        // moment the kernel is done reading the planes; the surface came
+        // straight out of the pool a few lines up and is written by the GPU,
+        // then read by the delivery queue after that completion, so the two
+        // never touch it at the same time. Neither Core Video nor an FFmpeg
+        // pointer is Sendable, and neither needs to be for a hand-off.
+        nonisolated(unsafe) let heldFrame = held
+        nonisolated(unsafe) let destination = pixelBuffer
         do {
             try converter.convertAsync(
                 luma: .init(base: UnsafeRawPointer(sourceY), stride: planeStride(0), rows: height),
                 cb: .init(base: UnsafeRawPointer(sourceU), stride: planeStride(1), rows: height / 2),
                 cr: .init(base: UnsafeRawPointer(sourceV), stride: planeStride(2), rows: height / 2),
-                into: pixelBuffer
+                into: destination
             ) { [self] result in
                 var pointer: UnsafeMutablePointer<AVFrame>? = heldFrame
                 av_frame_free(&pointer)
                 detailedTimings.record(.gpuConversion, from: submitted, to: Self.now())
                 deliveryQueue.async { [self] in
-                    sequencer.complete(sequence) {
+                    // The sequencer holds this until the frames before it have
+                    // been delivered, so the capture of the decoder is
+                    // explicit, as it is for the two closures around it.
+                    sequencer.complete(sequence) { [self] in
                         switch result {
                         case .success:
-                            Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: pixelBuffer)
+                            Self.apply(outputProperties, pixelAspectRatio: pixelAspectRatio, to: destination)
                             do {
-                                deliver(try makeReadySample(from: pixelBuffer, timing: timing))
+                                deliver(try makeReadySample(from: destination, timing: timing))
                             } catch {
                                 recordGPUFailure(error)
                             }
