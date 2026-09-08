@@ -577,7 +577,7 @@ struct PlayerSystemIntegrationTests {
         let directPlayResult = try client.streamURL(itemId: "item", source: directPlay)
         #expect(directPlayResult.method == .directPlay)
         #expect(directPlayResult.url.path == "/jellyfin/Videos/item/stream")
-        #expect(queryValue("ApiKey", in: directPlayResult.url) == "token")
+        #expect(queryValue("ApiKey", in: directPlayResult.url) == nil)
         #expect(queryValue("api_key", in: directPlayResult.url) == nil)
 
         let directStream = try mediaSource(#"""
@@ -589,7 +589,7 @@ struct PlayerSystemIntegrationTests {
         let directStreamResult = try client.streamURL(itemId: "item", source: directStream)
         #expect(directStreamResult.method == .directStream)
         #expect(directStreamResult.url.path == "/jellyfin/Videos/item/stream.mov")
-        #expect(queryValue("ApiKey", in: directStreamResult.url) == "token")
+        #expect(queryValue("ApiKey", in: directStreamResult.url) == nil)
         #expect(queryValue("api_key", in: directStreamResult.url) == nil)
 
         let transcode = try mediaSource(#"""
@@ -601,17 +601,25 @@ struct PlayerSystemIntegrationTests {
         """#)
         let transcodeResult = try client.streamURL(itemId: "item", source: transcode)
         #expect(transcodeResult.method == .transcode)
-        #expect(transcodeResult.url.path == "/Videos/item/master.m3u8")
+        // A server-relative TranscodingUrl keeps the reverse-proxy base path
+        // (HEL-144): resolving it against the origin alone sent every
+        // transcode on a base-path server to a route that does not exist.
+        #expect(transcodeResult.url.path == "/jellyfin/Videos/item/master.m3u8")
+        // The server's own legacy token is stripped, but its other query
+        // items (here PlaySessionId) survive untouched.
         #expect(queryValue("PlaySessionId", in: transcodeResult.url) == "session")
-        #expect(queryValue("ApiKey", in: transcodeResult.url) == "token")
+        #expect(queryValue("ApiKey", in: transcodeResult.url) == nil)
         #expect(queryValue("api_key", in: transcodeResult.url) == nil)
 
         let sidecar = try #require(client.externalSubtitleURL(
             deliveryUrl: "/Videos/item/source/Subtitles/2/0/Stream.srt?api_key=legacy-token"
         ))
-        #expect(queryValue("ApiKey", in: sidecar) == "token")
+        #expect(sidecar.path == "/jellyfin/Videos/item/source/Subtitles/2/0/Stream.srt")
+        #expect(queryValue("ApiKey", in: sidecar) == nil)
         #expect(queryValue("api_key", in: sidecar) == nil)
 
+        // A foreign origin is never touched at all — not even to strip a
+        // token it never had.
         let externalSidecar = try #require(client.externalSubtitleURL(
             deliveryUrl: "https://subtitles.example.test/item.srt"
         ))
@@ -627,8 +635,45 @@ struct PlayerSystemIntegrationTests {
             extras: .init(chapters: [], trickplay: ["direct": ["320": tile]])
         ))
         let sheet = try #require(trickplay.sheetURLs.first)
-        #expect(queryValue("ApiKey", in: sheet) == "token")
+        #expect(queryValue("ApiKey", in: sheet) == nil)
         #expect(queryValue("api_key", in: sheet) == nil)
+        // The sheet fetch still authenticates: the credential rides with the
+        // source as the header the loader applies per request.
+        let sheetAuthorization = try #require(trickplay.authorization)
+        #expect(sheetAuthorization.applies(to: sheet))
+        #expect(sheetAuthorization.headerValue.contains("Token=\"token\""))
+    }
+
+    /// `serverRelativeURL` is what makes a base-path server work for the
+    /// routes Jellyfin hands back inside response bodies (HEL-144).
+    @Test func serverRelativeRoutesKeepTheBasePath() throws {
+        let client = JellyfinClient(deviceId: "relative-route-test")
+
+        client.configure(serverURL: URL(string: "https://media.test/jellyfin/")!)
+        #expect(
+            client.serverRelativeURL("/videos/abc/master.m3u8?PlaySessionId=s&x=1")?.absoluteString
+                == "https://media.test/jellyfin/videos/abc/master.m3u8?PlaySessionId=s&x=1"
+        )
+        #expect(
+            client.serverRelativeURL("videos/abc/main.m3u8")?.absoluteString
+                == "https://media.test/jellyfin/videos/abc/main.m3u8"
+        )
+        // Percent-encoding in the reference survives as encoded bytes.
+        #expect(
+            client.serverRelativeURL("/Videos/it%20em/Subtitles/2/0/Stream.srt")?.absoluteString
+                == "https://media.test/jellyfin/Videos/it%20em/Subtitles/2/0/Stream.srt"
+        )
+        // An absolute reference is returned as given, wherever it points.
+        #expect(
+            client.serverRelativeURL("https://cdn.example.test/seg.mp4?k=v")?.absoluteString
+                == "https://cdn.example.test/seg.mp4?k=v"
+        )
+
+        client.configure(serverURL: URL(string: "https://media.test:8920")!)
+        #expect(
+            client.serverRelativeURL("/videos/abc/master.m3u8?PlaySessionId=s")?.absoluteString
+                == "https://media.test:8920/videos/abc/master.m3u8?PlaySessionId=s"
+        )
     }
 
     @Test func episodePosterUsesSeriesArtworkInsteadOfTheEpisodeStill() throws {
