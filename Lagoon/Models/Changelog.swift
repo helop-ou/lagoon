@@ -48,6 +48,7 @@ nonisolated enum Changelog {
                 "Dolby Vision profile 7 titles, such as UHD Blu-ray remuxes, now play as Dolby Vision instead of HDR10 on Apple TV. If a title looks wrong, Settings → Advanced → Playback Diagnostics → Dolby Vision Compatibility Mode brings back the HDR10 behavior.",
                 "Jellyfin servers reached through a reverse-proxy path, such as example.com/jellyfin, can now transcode and load external subtitles. Previously those requests went to the wrong address and playback fell back or failed.",
                 "Settings → About now lists the open-source components Lagoon is built on, with their licences, and the same information is reachable from the sign-in screen before you connect to a server.",
+                "Home always opens on featured titles. When nothing has been added recently, it features what you are watching, your favourites, or a pick from your library instead of showing no banner at all.",
             ]
         ),
         ChangelogEntry(
