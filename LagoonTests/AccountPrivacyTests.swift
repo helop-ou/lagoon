@@ -43,7 +43,7 @@ struct AccountPrivacyTests {
         #expect(fixture.credentials.string(for: fixture.a.keychainAccount) == nil)
         #expect(try fixture.credentials.accountNames().filter { $0.hasPrefix("seerr.cookie:\(fixture.a.id)|") }.isEmpty)
         #expect(fixture.credentials.string(for: fixture.cookieB) == "cookie-b")
-        #expect(fixture.credentials.string(for: "opensubtitles.token") == "device-wide-token")
+        #expect(fixture.credentials.string(for: "unrelated.device-wide.token") == "device-wide-token")
         for prefix in Fixture.preferencePrefixes {
             #expect(fixture.defaults.object(forKey: prefix + fixture.a.id) == nil)
             #expect(fixture.defaults.string(forKey: prefix + fixture.b.id) == "B")
@@ -228,7 +228,7 @@ struct AccountPrivacyTests {
             try credentials.set("cookie-a", for: cookieA)
             try credentials.set("old-cookie-a", for: AccountLocalData.seerrCookieKey(a, serverURL: URL(string: "https://old-seerr.privacy.test")!))
             try credentials.set("cookie-b", for: cookieB)
-            try credentials.set("device-wide-token", for: "opensubtitles.token")
+            try credentials.set("device-wide-token", for: "unrelated.device-wide.token")
         }
         func store() -> SessionStore {
             let configuration = URLSessionConfiguration.ephemeral
