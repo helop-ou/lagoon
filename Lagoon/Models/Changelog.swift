@@ -33,6 +33,8 @@ nonisolated enum Changelog {
             released: "September 2026",
             headline: "Clearer subtitle recovery, safer account switching, and easier server setup.",
             changes: [
+                "Subtitle search now uses your Jellyfin server only. Settings → Subtitles shows whether your account is allowed to search for subtitles, and what to ask your server administrator for if it is not.",
+                "The OpenSubtitles account, API key and Search With settings have been removed, and any saved OpenSubtitles sign-in is cleared.",
                 "Changing subtitle tracks keeps your current captions until the new track is ready. If it fails, playback continues and Subtitles offers an explanation and Retry.",
                 "Subtitle files over 8 MB now show a clear size-limit message. Oversized or incomplete artwork uses a placeholder instead of trying to display a broken image.",
                 "If your Jellyfin sign-in expires or is revoked, Lagoon takes you back to sign-in for that account while keeping your saved accounts and preferences.",
