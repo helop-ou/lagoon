@@ -41,9 +41,15 @@ struct MainTabView: View {
         #if os(tvOS)
         .overlay(alignment: .topLeading) {
             if hasMountedServerRefresh || serverSync.activeTarget != nil {
+                // Bound to its declared isolation before it leaves this view.
+                // Passed inline as an argument, the same closure reaches the
+                // button as a bare function value the compiler cannot tell
+                // apart from one another actor might call; it is only ever
+                // called from UIKit's focus handling, on the main actor.
+                let moveDown: (@MainActor @Sendable () -> Void)? = activeRefreshMoveDownAction
                 ServerRefreshButton(
                     target: serverSync.activeTarget,
-                    moveDownAction: activeRefreshMoveDownAction,
+                    moveDownAction: moveDown,
                     topChromeOffset: $refreshTopChromeOffset
                 )
                     // Put the visible circle on the same leading grid line as
