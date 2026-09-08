@@ -51,17 +51,23 @@ sit on custom I/O, so they don't go through FFmpeg's crypto protocol at all:
 instead. `file:` and `data:` opens still go straight to `avio_open2`, since
 neither carries a network trust decision.
 
-The credential travels as a header, not in the URL. Jellyfin media URLs
-carry the access token as a query item, and CFNetwork writes a failed task's
-full URL into the unified log, so every failed segment fetch would have
-logged it. `MediaRequestAuthorization` (built by
+The credential travels as a header, never in the URL. CFNetwork writes a
+failed task's full URL into the unified log, so a query token would have
+leaked into diagnostics on every failed segment fetch; a header never does.
+`MediaRequestAuthorization` (built by
 `JellyfinClient.mediaRequestAuthorization()`, handed from the playback
-controller through `prepare` and the demuxer to the transport) strips
-`ApiKey`/`api_key` from same-origin request URLs and sets the
-`Authorization: MediaBrowser … Token=` header instead; requests to any other
-origin are left exactly as given, and the session delegate drops the header
-on a cross-origin redirect. The playback cache's own ranged requests still
-use the query form.
+controller through `prepare` and the demuxer to the transport) sets the
+`Authorization: MediaBrowser … Token="…"` header on every same-origin
+request instead, and strips `ApiKey`/`api_key` from a URL that already
+carries one — a server-supplied `TranscodingUrl` can still arrive with
+either spelling — before issuing it; requests to any other origin are left
+exactly as given, and the session delegate drops the header on a
+cross-origin redirect. The playback cache
+(`URLSessionPlaybackRangeLoader`/`PlaybackRangeRequest` in
+`Lagoon/Views/Player/PlaybackCache.swift`) applies the same authorization to
+every ranged request it makes, including HLS child playlists and segments
+whose server-generated URLs may still carry `api_key`. No first-party media
+request built by this app carries the token in its URL any more.
 
 Certificate trust is now whatever URLSession enforces: ordinary system trust
 evaluation, which rejects self-signed, expired and wrong-host peers and
@@ -144,7 +150,7 @@ playback, remote revocation and sign-in against a loopback synthetic server.
 2. Pick the first `MediaSource` and resolve a URL via
    `JellyfinClient.streamURL`:
    - `SupportsDirectPlay` → `Videos/{id}/stream?static=true&mediaSourceId=…`
-     (+ `ApiKey`, `deviceId`, `Tag`), PlayMethod `DirectPlay`.
+     (+ `deviceId`, `Tag`), PlayMethod `DirectPlay`.
    - else `SupportsDirectStream` → `Videos/{id}/stream.{container}` with the
      same static query, PlayMethod `DirectStream` (server-must-proxy case;
      container can arrive as an ffprobe list — take the first entry).
@@ -156,13 +162,17 @@ playback, remote revocation and sign-in against a loopback synthetic server.
    so resume is handled the same way as direct play: an initial demuxer
    seek, keeping position reporting absolute in every play method.
 
-`ApiKey` is intentional capitalization, not cosmetic. Jellyfin 12 disables
-the deprecated lowercase `api_key` query parameter by default. Ordinary API
-requests continue to use Lagoon's `Authorization: MediaBrowser … Token=…`
-header; the query fallback exists only for URL-only consumers such as FFmpeg,
-the playback cache, external subtitle loading and trickplay. Server-issued
-media URLs have either credential spelling replaced with the active token,
-and Lagoon never adds it to a different origin.
+The token never rides in a URL any more. Every URL-only consumer — the
+FFmpeg network transport, the playback cache, `ExternalSubtitleLoader` and
+`TrickplayLoader` — builds its request through
+`MediaRequestAuthorization.request(for:)`, which sets the same
+`Authorization: MediaBrowser … Token="…"` header ordinary API requests use
+and never appends the token to the query. A server-issued `TranscodingUrl`
+or subtitle `DeliveryUrl` can still arrive carrying the token as `ApiKey` or
+the deprecated lowercase `api_key`, which Jellyfin 12 disables by default;
+`MediaRequestAuthorization.sanitizedURL(_:)` strips either spelling on the
+Jellyfin origin rather than trusting it, and leaves a URL on any other
+origin untouched.
 
 ### What this device is offered (HEL-102)
 
@@ -2925,8 +2935,10 @@ These are all verified on device, not inferred:
   **milliseconds**. Sheets come from `Videos/{id}/Trickplay/{width}/{n}.jpg`
   — one sprite sheet per `TileWidth × TileHeight` grid of thumbnails, so
   the default 10×10 at 10 s covers ~16 minutes each. Two gotchas: unlike
-  `Items/…/Images/…` this route **401s without credentials**, so the URL
-  carries `ApiKey` the way stream URLs do; and a sheet is ~23 MB decoded,
+  `Items/…/Images/…` this route **401s without credentials**, so
+  `TrickplayLoader` builds its request through `MediaRequestAuthorization`
+  the way stream requests do, carrying the token in its `Authorization`
+  header rather than the URL; and a sheet is ~23 MB decoded,
   which is why `TrickplayLoader` holds its own two rather than going
   through `ImageCache` (one scrub would evict every poster). Tile crops are
   derived from the *decoded* sheet's size, never the declared numbers — the
