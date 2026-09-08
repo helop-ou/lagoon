@@ -109,21 +109,23 @@ extension JellyfinClient {
         // through the server (remote/.strm sources, static-bitrate limits).
         // jellyfin-web requests stream.{container} with static=true here;
         // the container can arrive as an ffprobe list ("mov,mp4,m4a").
-        if source.supportsDirectStream == true, let accessToken,
+        if source.supportsDirectStream == true, accessToken != nil,
            let container = source.container?.split(separator: ",").first {
             return (
-                try url(path: "Videos/\(itemId)/stream.\(container)", query: staticStreamQuery(source: source, accessToken: accessToken)),
+                try url(path: "Videos/\(itemId)/stream.\(container)", query: staticStreamQuery(source: source)),
                 .directStream
             )
         }
-        if let transcodingUrl = source.transcodingUrl, let serverURL {
-            // TranscodingUrl arrives server-relative, query string included.
-            guard let resolvedURL = URL(string: transcodingUrl, relativeTo: serverURL)?.absoluteURL else {
+        if let transcodingUrl = source.transcodingUrl, serverURL != nil {
+            // TranscodingUrl arrives server-relative, query string included,
+            // and must keep the server's base path (HEL-144).
+            guard let resolvedURL = serverRelativeURL(transcodingUrl) else {
                 throw JellyfinError.unplayable
             }
-            let url = accessToken.map {
-                authenticatedMediaURL(resolvedURL, accessToken: $0)
-            } ?? resolvedURL
+            // The server may have stamped its own api_key/ApiKey into this
+            // URL; strip it rather than send two credentials, and never
+            // touch a cross-origin transcode URL at all.
+            let url = mediaRequestAuthorization()?.sanitizedURL(resolvedURL) ?? resolvedURL
             return (url, .transcode)
         }
         throw JellyfinError.unplayable
@@ -132,9 +134,9 @@ extension JellyfinClient {
     /// Resolves an external subtitle stream's DeliveryUrl (server-relative,
     /// not always carrying credentials) into a fetchable absolute URL.
     func externalSubtitleURL(deliveryUrl: String?) -> URL? {
-        guard let deliveryUrl, let serverURL, let accessToken,
-              let url = URL(string: deliveryUrl, relativeTo: serverURL)?.absoluteURL else { return nil }
-        return authenticatedMediaURL(url, accessToken: accessToken)
+        guard let deliveryUrl, serverURL != nil, accessToken != nil,
+              let url = serverRelativeURL(deliveryUrl) else { return nil }
+        return mediaRequestAuthorization()?.sanitizedURL(url) ?? url
     }
 
     // MARK: - Remote subtitles (HEL-49)
