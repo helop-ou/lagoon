@@ -50,6 +50,12 @@ struct SignInView: View {
                     changeServerButton
                         .buttonStyle(.glass)
                         .padding(.top, Metrics.Space.xl)
+
+                    // Last in the column, so the username field keeps the
+                    // initial focus and signing in stays the obvious path
+                    // (HEL-143).
+                    AboutLagoonButton()
+                        .padding(.top, Metrics.Space.l)
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
@@ -179,6 +185,8 @@ struct SignInView: View {
                 changeServerButton
                     .buttonStyle(.plain)
                     .frame(minHeight: Metrics.touchTarget)
+
+                AboutLagoonButton()
             }
             .frame(maxWidth: 700)
             .frame(maxWidth: .infinity)
