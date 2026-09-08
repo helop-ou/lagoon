@@ -17,12 +17,8 @@ server. Discovery, search and media requests may be associated with your server
 account. Artwork shown by Seerr can be downloaded directly from TMDB's image
 service, which receives the requested image path and ordinary network information.
 
-The optional direct OpenSubtitles integration connects to OpenSubtitles using its
-own API key and account. Searches and downloads can include title identifiers,
-language, and a media-file hash and size. This account is separate from your
-Jellyfin account. Subtitles supplied through Jellyfin use your Jellyfin server's
-configuration instead. The public policy must reflect whether the direct
-integration is included in the final release.
+Subtitle search and download use your Jellyfin server's configuration; Lagoon
+has no direct connection of its own to a subtitle provider.
 
 ## Information stored on your device
 
@@ -36,8 +32,7 @@ by the app. The extension has no server credentials and makes no server requests
 
 Forgetting an account removes its saved Lagoon credentials and account-scoped
 local data. This does not delete the account or its history on your Jellyfin or
-Seerr server. Contact that server's operator for server-side deletion. Direct
-OpenSubtitles has a separate device-wide account and sign-out control.
+Seerr server. Contact that server's operator for server-side deletion.
 
 ## Permissions and diagnostics
 
