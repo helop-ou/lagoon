@@ -472,7 +472,7 @@ struct SettingsView: View {
         ) {
             TVSettingsSection(
                 "Playback Diagnostics",
-                footer: "These options can affect playback behavior and are intended for troubleshooting."
+                footer: "These options can affect playback behavior and are intended for troubleshooting. Dolby Vision Compatibility Mode plays Dolby Vision profile 7 titles as HDR10 from the base layer; off (default), Lagoon converts them to Dolby Vision profile 8.1."
             ) {
                 settingsToggle("Show Playback Details", isOn: $showPlaybackHUD)
                     .accessibilityIdentifier("settings.diagnostics.hud")
@@ -912,7 +912,7 @@ struct SettingsView: View {
             } header: {
                 Text("Playback Diagnostics")
             } footer: {
-                Text("These options can affect playback behavior and are intended for troubleshooting. Leave them off during normal viewing.")
+                Text("These options can affect playback behavior and are intended for troubleshooting. Leave them off during normal viewing. Dolby Vision Compatibility Mode plays Dolby Vision profile 7 titles as HDR10 from the base layer; off (default), Lagoon converts them to Dolby Vision profile 8.1.")
             }
         }
     }
