@@ -17,7 +17,7 @@ archived executable has no matching C API or NSUserDefaults imports.
 | Executable/category | Source evidence | Reason and use |
 | --- | --- | --- |
 | App: UserDefaults | `@AppStorage` preferences; `SessionStore`, `RecentSearchStore`, `AccountLocalData`; app-group legacy cleanup in `TopShelfStore` | `CA92.1` app-private preferences; `1C8F.1` the app's own shared-group defaults |
-| App: FileTimestamp | `PlaybackCache.removeStaleDirectories` uses `contentModificationDateKey`; native FFmpeg/GnuTLS import `stat`/`fstat`/`lstat` | `C617.1` app/container file metadata; stale cache cleanup. Native import presence is broader than the runtime paths used by Lagoon. |
+| App: FileTimestamp | `PlaybackCache.removeStaleDirectories` uses `contentModificationDateKey`; native FFmpeg imports `stat`/`fstat`/`lstat` | `C617.1` app/container file metadata; stale cache cleanup. Native import presence is broader than the runtime paths used by Lagoon. |
 | App: DiskSpace | `PlaybackCache` reads `systemFreeSize` to set a cache budget; `fstatfs` supplies block allocation accounting | `E174.1` capacity-sensitive writing and cache eviction |
 | App: SystemBootTime | `PlaybackCache`, `FFmpegDemuxer`, `SoftwareVideoDecoder`, `MetalFrameConverter`, `DiscImage`, playback controls and timing diagnostics use `systemUptime` | `35F9.1` elapsed durations and deadlines; raw boot-time values are not transmitted |
 | Top Shelf | `ContentProvider.swift`: `Data(contentsOf:)`, file existence checks and snapshot decoding | Empty API category list; do not copy the app's categories into an unrelated executable |
@@ -26,20 +26,20 @@ These reason codes were checked against Apple's [required-reason API list](https
 Reassess the reasons whenever file access, diagnostics, app-group usage or native
 build options change. No active-keyboard API use was found.
 
-`scripts/inventory-native-dependencies.py` inspects all 11 binary targets and
-82 declared slices, including Catalyst, visionOS and macOS slices that this app
+`scripts/inventory-native-dependencies.py` inspects all 7 binary targets and
+50 declared slices, including Catalyst, visionOS and macOS slices that this app
 does not ship. [The generated inventory](native-dependency-inventory.json) records
 package URL/checksum pins, per-slice binary hashes/types and required-reason C
-imports. On iOS arm64, libavformat imports `fstat`, `lstat`, `stat`; libavutil
-imports `fstat`; GnuTLS imports `fstat`, `stat`. The other eight have no matches
-in the scanned C-symbol set. This is an aid to review, not exhaustive dynamic
+imports. On iOS arm64, libavformat imports `fstat`, `lstat`, `stat` and
+libavutil imports `fstat`; the other five have no matches in the scanned
+C-symbol set. This is an aid to review, not exhaustive dynamic
 coverage or an Objective-C selector analysis.
 
 FFmpeg's local file protocol/mapping code accounts for its metadata imports.
 Lagoon supplies playback through its scoped byte source and app-owned caches.
-The owned Apple TLS patch excludes GnuTLS's system CA-file discovery call and
-uses Security.framework trust evaluation. Lagoon does not configure arbitrary
-CA/certificate/key files. Adding those features requires reviewing file-access
+libavformat carries no network stack, so certificate trust is URLSession's
+system evaluation. Lagoon does not configure arbitrary CA/certificate/key
+files. Adding those features requires reviewing file-access
 reasons before shipping; the import scan alone cannot establish permitted use.
 
 Both manifests declare no tracking. **The app manifest currently covers
@@ -111,30 +111,33 @@ Do not fill the manifest or App Store Connect with guessed retention claims.
 
 ## Native licensing and encryption assessment
 
-All 11 input frameworks contain static archives. Fresh iOS/tvOS app executables
+All 7 input frameworks contain static archives. Fresh iOS/tvOS app executables
 have no load commands for these native frameworks. Small dynamic framework
 executables in Xcode's product packaging do not establish dynamic linkage of the
 actual libraries. The obligations must follow the static inputs and app linkage.
-No native binary was rebuilt or replaced during this pass; no GCC was invoked.
+libavformat was rebuilt on the transport spike branch (September 8); the other native binaries are unchanged. No GCC was invoked.
 
 | Component | Version evidence | Materials status |
 | --- | --- | --- |
-| libavcodec, libavutil, libswresample | FFmpeg 8.1.2, MPVKit release `1.0.0`, immutable package ZIP hashes | Corresponding upstream source, build changes and exact per-component flags still need a retained release bundle. |
-| libavformat | Owned FFmpeg n8.1.2; `BUILD.json`, source SHA-256, patch hash, compiler/flags and per-file artifact hashes | Build script/Apple trust patch and license texts retained; corresponding-source distribution and application relinking kit are not complete. |
-| GnuTLS | Header 3.8.11; gnutls-build release 3.8.11 | Core LGPL family; dependency licenses must also be satisfied. Build repository's MIT license does not license GnuTLS itself. |
-| GMP | Header 6.2.1; same gnutls-build release | Retain exact source/build changes and verify elected license from that release. |
-| nettle / hogweed | Headers identify Nettle 3.10; same gnutls-build release | Exact patch release/source commit and notices remain to be established; do not label these “3.8.11”. |
+| libavcodec, libavutil, libswresample | FFmpeg 8.1.2, MPVKit release `1.0.0`, immutable package ZIP hashes. Configured upstream with `--enable-version3` (their `config.h` records `CONFIG_VERSION3 1`), so `avcodec_license()` still answers LGPL v3-or-later even though no v3-only component is linked into them | Rebuild these three in-repo without `--enable-version3` (the libavformat script already builds the whole tree) for an unambiguous LGPL-2.1-or-later record; corresponding source, build changes and per-component flags still need a retained release bundle. |
+| libavformat | Owned FFmpeg n8.1.2, built without networking (`scripts/build-ffmpeg-format.py`, transport spike); `BUILD.json` records `network: false` and `license: LGPL-2.1-or-later`; source SHA-256, compiler/flags and per-file artifact hashes | Build script and license texts retained; corresponding-source distribution and application relinking kit are not complete. |
 | dav1d | Owned 1.5.4 with arm64 assembly | Build script retained; add immutable source digest, matching source archive and BSD notices. |
 | lcms2 | Header `LCMS_VERSION=2170`, upstream release 2.17.0 | Retain matching source/build provenance and MIT notices. |
 | uavs3d | Pinned binary release `1.2.1-fix` | Release label is not a complete source commit; resolve upstream changes and retain BSD notices. |
 
-FFmpeg's recorded `--enable-version3` and runtime LGPL-v3-or-later license mean a
-generic LGPL-2.1 attribution copied from a website is insufficient. Do not assume
-optional GPL code listed in FFmpeg's LICENSE was enabled: the owned build does
-not enable GPL/nonfree. Verify the other linked component builds too.
+`--enable-version3` is gone from the FFmpeg build: since the transport spike
+(September 8), libavformat is built without networking and without GnuTLS, so
+the repo-built libavformat records **LGPL-2.1-or-later** rather than
+LGPL-v3-or-later, and the GnuTLS/GMP/nettle/hogweed rows above no longer
+apply. The three MPVKit-built libraries still carry upstream's
+`--enable-version3` election in their binaries until they are rebuilt here. That does not by itself finish compliance — a generic LGPL-2.1
+attribution copied from a website is still insufficient without the matching
+source and build changes the license requires. Do not assume optional GPL
+code listed in FFmpeg's LICENSE was enabled: the owned build does not enable
+GPL/nonfree. Verify the other linked component builds too.
 [FFmpeg's checklist](https://www.ffmpeg.org/legal.html) emphasizes matching sources
-and build changes; [LGPL v3 section 4](https://www.gnu.org/licenses/lgpl-3.0) governs
-combined works and the application code/materials needed for relinking.
+and build changes; [LGPL 2.1 section 6](https://www.gnu.org/licenses/old-licenses/lgpl-2.1)
+governs combined works and the application code/materials needed for relinking.
 
 The concrete candidate solution for the current static engine is a versioned
 recipient bundle containing exact library sources, patches/configurations,
@@ -146,12 +149,16 @@ choosing this route. Validate a modified-library relink on a clean machine.
 This is a proposed implementation route, **not an approved compliance decision**;
 attribution alone and source links to moving upstream branches do not finish it.
 
-Encryption evidence: URLSession/Keychain/Security.framework are used, and the
-native player incorporates GnuTLS, nettle/hogweed and GMP. Apple trust validation
-does not replace GnuTLS's encryption implementation. Record the applicable US
-classification/exemption, reporting obligations and intended territories before
-affirming `ITSAppUsesNonExemptEncryption=NO` or changing it. France remains
-undecided. Check Apple's [encryption documentation table](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/)
+Encryption evidence: as of the transport spike (September 8), the app no
+longer bundles a non-Apple TLS or bignum implementation — GnuTLS, nettle/hogweed
+and GMP are gone along with libavformat's network stack. Transport encryption
+for media now goes through Apple's URLSession, alongside the existing
+Keychain/Security.framework use, which is the ordinary "uses only
+OS-provided encryption" case for the export-compliance declaration. That is
+an assessment worth recording here, not a legal conclusion by itself: still
+record the applicable US classification/exemption, reporting obligations and
+intended territories before affirming `ITSAppUsesNonExemptEncryption=NO` or
+changing it. France remains undecided. Check Apple's [encryption documentation table](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/)
 and [export compliance overview](https://developer.apple.com/help/app-store-connect/manage-app-information/overview-of-export-compliance/)
 against the actual release and retain the supporting assessment/documents.
 
