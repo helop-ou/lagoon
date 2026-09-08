@@ -55,12 +55,6 @@ final class ServerSyncUITests: XCTestCase {
         let settingsTab = app.tabBars.buttons["Settings"]
         XCTAssertTrue(settingsTab.exists)
         XCTAssertLessThan(refresh.frame.maxX, homeTab.frame.minX)
-        XCTAssertEqual(
-            refresh.frame.minX + 4,
-            hero.frame.minX,
-            accuracy: 2,
-            "Refresh's visible glass does not share the hero's leading edge"
-        )
         XCTAssertLessThan(refresh.frame.maxY, hero.frame.minY)
         XCTAssertFalse(refresh.hasFocus, "Refresh must not take initial focus")
 
@@ -69,6 +63,19 @@ final class ServerSyncUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(homeTab.hasFocus)
+        // Measured only now, with focus on the tab bar: initial focus lands on
+        // the hero, and a focused hero is scaled about its centre (1600 →
+        // 1640 pt wide), which pulls its leading edge 20 pt left of the grid
+        // line the resting layout shares with Refresh. The chrome aligns to
+        // the resting geometry, so that is what the assertion compares
+        // against (HEL-135, HEL-144 / audit A18). UIKit's focus frame extends
+        // 4 pt beyond the rendered glass, hence the offset.
+        XCTAssertEqual(
+            refresh.frame.minX + 4,
+            hero.frame.minX,
+            accuracy: 2,
+            "Refresh's visible glass does not share the hero's resting leading edge"
+        )
 
         let discoverTab = app.tabBars.buttons["Discover"]
         remote.press(.right)
