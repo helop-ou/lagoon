@@ -1833,8 +1833,8 @@ final class PlaybackController {
         if let software = engine.softwareDecodeDiagnostic {
             lines.append("SWdec:   \(software)")
         }
-        if let strip = engine.enhancementLayerStripInfo {
-            lines.append("EL strip: \(strip)")
+        if let dovi = engine.dolbyVisionRewriteInfo {
+            lines.append("DoVi P7: \(dovi)")
         }
         #if os(tvOS)
         // Every gate between the request and the glass. Lagoon always asks;
