@@ -31,10 +31,12 @@ server version, and the point where playback fails in a support report. If
 possible, include the media container and audio/video codec information. Different
 server, network and media configurations can affect playback.
 
-Subtitle availability depends on the media and your configured provider. Direct
-OpenSubtitles uses its own account and provider allowances, separate from your
-Jellyfin login. Include the exact provider error when reporting a problem. Update
-this section if direct OpenSubtitles is excluded from public 1.0.
+Subtitle search in Lagoon uses your Jellyfin server, not a direct connection
+from the app. If subtitle search is unavailable, ask your server administrator
+to (a) turn on "Allow subtitle management" for your account in the Jellyfin
+dashboard and (b) install and configure a subtitle provider plugin (for
+example the official OpenSubtitles plugin). Note that the same setting also
+allows uploading subtitles into the library.
 
 ## Sharing a report
 
