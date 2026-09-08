@@ -222,11 +222,35 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             + " decoderDelay=\(stage.decoderDelay)"
     }
 
-    /// Proof the DoVi enhancement-layer strip experiment engaged, for the
-    /// HUD — nil when the toggle is off or the stream has no EL.
-    var enhancementLayerStripInfo: String? {
-        guard let stats = demuxer.enhancementLayerStripStats else { return nil }
-        return String(format: "%d pkts · %.1f MB removed", stats.units, Double(stats.bytes) / 1_000_000)
+    /// Proof the profile 7 rewrite engaged, for the HUD — nil until the
+    /// stream actually carries a Dolby Vision profile 7 track (HEL-145;
+    /// formerly the HEL-64 EL-strip experiment's info line).
+    var dolbyVisionRewriteInfo: String? {
+        guard let stats = demuxer.dolbyVisionRewriteStats else { return nil }
+        let megabytes = Double(stats.bytesRemoved) / 1_000_000
+        switch stats.mode {
+        case .convert:
+            var line = String(
+                format: "convert · %d RPU → 8.1 · %d EL dropped · %.1f MB",
+                stats.rpusConverted,
+                stats.enhancementUnitsDropped,
+                megabytes
+            )
+            if stats.rpusDropped > 0 {
+                line += " · \(stats.rpusDropped) RPU dropped"
+            }
+            if let elType = stats.enhancementLayerType {
+                line += " · \(elType)"
+            }
+            line += " · errors \(stats.errors)"
+            return line
+        case .stripToHDR10:
+            return String(
+                format: "HDR10 fallback · %d units dropped · %.1f MB",
+                stats.rpusDropped + stats.enhancementUnitsDropped,
+                megabytes
+            )
+        }
     }
 
     /// Passthrough audio the demuxer discarded before any renderer saw it.
@@ -410,7 +434,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Debug switches, read once per playback like the HUD's: the strip
         // experiment must not change mid-A/B, and the bench arms in
         // beginPlayback.
-        demuxer.stripEnhancementLayer = UserDefaults.standard.bool(forKey: "debug.stripDoviEL")
+        demuxer.dolbyVisionProfile7Mode = UserDefaults.standard.bool(forKey: "debug.stripDoviEL")
+            ? .stripToHDR10 : .convert
         demuxer.markDroppableFrames = UserDefaults.standard.bool(forKey: "debug.markDroppableFrames")
         benchEnabled = UserDefaults.standard.bool(forKey: "debug.frameLossBench")
 
@@ -1437,10 +1462,18 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // gate states so a remote run is self-describing.
             var gates = "vtime=\"\(videoTimingDiagnostic ?? "container")\""
             gates += " droppable=\"\(demuxer.markDroppableFrames ? "on" : "off")\""
-            if let stats = demuxer.enhancementLayerStripStats {
-                gates += " elStrip=\"on \(stats.units) units \(stats.bytes) bytes\""
+            if let stats = demuxer.dolbyVisionRewriteStats {
+                switch stats.mode {
+                case .convert:
+                    gates += " doviP7=\"convert rpu=\(stats.rpusConverted) rpuDrop=\(stats.rpusDropped)"
+                        + " elDrop=\(stats.enhancementUnitsDropped) bytes=\(stats.bytesRemoved)"
+                        + " errors=\(stats.errors) el=\(stats.enhancementLayerType ?? "unknown")\""
+                case .stripToHDR10:
+                    gates += " doviP7=\"strip rpuDrop=\(stats.rpusDropped) elDrop=\(stats.enhancementUnitsDropped)"
+                        + " bytes=\(stats.bytesRemoved)\""
+                }
             } else {
-                gates += " elStrip=\"off\""
+                gates += " doviP7=\"off\""
             }
             if let software = softwareDecodeBenchField {
                 gates += " swdecode=\"\(software)\""
