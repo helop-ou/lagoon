@@ -68,8 +68,8 @@ open choices; use a setup that is easy to maintain alongside the app.
   with the App Store languages being offered.
 - [ ] Finalize the app's data collection/retention answers, including support
   messages, Apple-provided reports, services and any website hosting logs.
-- [ ] Resolve direct OpenSubtitles inclusion and the dependency licensing
-  materials before finalizing related copy.
+- [x] Direct OpenSubtitles inclusion: removed under HEL-146.
+- [ ] Resolve the dependency licensing materials before finalizing related copy.
 - [ ] Select rights-cleared screenshots and write concise landing-page copy.
 
 ## Suggested work order
