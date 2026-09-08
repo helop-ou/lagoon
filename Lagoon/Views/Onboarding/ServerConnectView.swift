@@ -43,6 +43,8 @@ struct ServerConnectView: View {
                             .multilineTextAlignment(.center)
                     }
                     if localNetworkAccessDenied { LocalNetworkRecoveryView() }
+
+                    AboutLagoonButton()
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
@@ -68,6 +70,13 @@ struct ServerConnectView: View {
                         .foregroundStyle(.red)
                         .multilineTextAlignment(.center)
                 }
+
+                // Legal information without an account: this is the first
+                // screen a new viewer sees, and the only one they see if they
+                // have no server yet (HEL-143). Last in the column, so the
+                // address field keeps the initial focus.
+                AboutLagoonButton()
+                    .padding(.top, Metrics.Space.xl)
             }
             .frame(maxWidth: 700)
             .padding(.horizontal, Metrics.screenGutter)
