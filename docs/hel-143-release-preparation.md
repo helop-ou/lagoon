@@ -96,8 +96,8 @@ the UI/Settings round trip, not the OS prompt or real Network path diagnosis.
 | Viewer-selected Jellyfin server | Login credentials/Quick Connect, account and stable device identity, requested titles, searches, playback progress and actions | Tokens in Keychain; account metadata/preferences locally. Server-side history/log retention belongs to the chosen operator. Document whether any operator is a developer service/partner. |
 | Viewer-selected Seerr | Server requests, Jellyfin authentication/Quick Connect exchange or entered credentials, Seerr session, searches, requests/moderation actions | Cookies in Keychain per Jellyfin account and Seerr origin; local pairing/preferences. Confirm deployment retention and identity linkage. |
 | TMDB image CDN | Artwork paths, ordinary connection/IP information | `SeerrClient.imageURL` directs image requests to `image.tmdb.org`; app image cache. Check current CDN retention/terms before final labels. |
-| Optional direct OpenSubtitles | Consumer API key, OpenSubtitles login/token, title identifiers/query, language, file hash/size where used, download requests | Device-wide Keychain identity; local subtitle files. Its account is separate from Jellyfin. Consumer agreement, retention, attribution and actual quotas remain unresolved. |
-| Jellyfin-provided subtitles | Subtitle/search/download requests through the selected Jellyfin server | Server-side provider behavior may differ from Lagoon's direct integration. Do not imply every provider request goes directly from Lagoon. |
+| Direct OpenSubtitles integration | None; removed under HEL-146 | The optional per-device integration was removed on privacy-policy grounds: OpenSubtitles' REST terms require one API key per application and ban apps that ask users to supply their own, which is what the shipped design did. No data leaves the app for this feature; subtitle search now relies solely on the selected Jellyfin server's permission-gated routes. |
+| Jellyfin-provided subtitles | Subtitle/search/download requests through the selected Jellyfin server | Provider behavior is the server's, configured by its administrator. Do not imply every provider request goes directly from Lagoon. |
 | Recent searches/cache | No additional upload merely to persist recent search history or buffer media; original search/media requests still go to their services | Search history scoped by account, owned media/image caches, account cleanup from HEL-141 |
 | tvOS Top Shelf | None from the extension | App creates sanitized artwork/snapshot in its group; opt-out and account-scoped publication; no extension credentials |
 | Diagnostics/support | Local logs and benchmark durations; user-shared support material and Apple-provided crash/test feedback if enabled | No analytics/ad SDK found. Verify actual receipt, retention and deletion policies for Apple reports and the future support channel. Do not promise that logs contain no personal information. |
@@ -166,11 +166,11 @@ drafts, with no invented contact or live URLs. Publication and pre-login in-app
 privacy/support/acknowledgements access remain open. The same approved content
 must populate App Store Connect, including its tvOS privacy-policy text.
 
-Direct OpenSubtitles remains an internal feature with a per-device key. Before
-public 1.0, retain a verified REST consumer arrangement, current terms, attribution,
-quota behavior and disclosures, or exclude the direct integration from the public
-candidate. The old XML-RPC API shutdown is not evidence of the REST arrangement.
-This pass does not silently remove the feature or claim its arrangement is settled.
+A16 is resolved by exclusion (HEL-146, September 8): the direct OpenSubtitles
+integration and its per-device API key were removed rather than given a
+verified consumer arrangement. Subtitle search now relies solely on Jellyfin's
+permission-gated remote-subtitle routes, and Settings shows the account's
+permission state.
 
 Use [the public checklist](public-release-checklist.md) for metadata, review
 fixtures, signed validation and an explicitly separate public export. HEL-143
