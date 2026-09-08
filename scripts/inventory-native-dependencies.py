@@ -12,6 +12,7 @@ from pathlib import Path
 import plistlib
 import re
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "Packages/LagoonFFmpeg"
@@ -29,7 +30,20 @@ def sha256(path):
 
 
 def output(*args):
-    return subprocess.check_output(args, text=True, stderr=subprocess.PIPE).strip()
+    # Some vendored static archives (Libdovi's Rust-built libdovi.a: the
+    # `dolby_vision` crate is built with a newer LLVM than Xcode's bundled
+    # nm) contain a handful of object members nm cannot parse ("Unknown
+    # attribute kind") and exits 1 over, even though it still printed every
+    # other member's symbols to stdout. Trust the exit code only when it
+    # left us nothing to read; otherwise keep the partial output and say so,
+    # rather than silently dropping a target's required-reason scan.
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        if not result.stdout.strip():
+            raise subprocess.CalledProcessError(result.returncode, args, output=result.stdout, stderr=result.stderr)
+        print(f"warning: {' '.join(args)} exited {result.returncode}; keeping its partial stdout "
+              f"({result.stderr.count(chr(10))} stderr lines, likely per-member parse errors)", file=sys.stderr)
+    return result.stdout.strip()
 
 
 def main():
@@ -70,10 +84,10 @@ def main():
                 "required_reason_imports": {category: sorted(symbols & values) for category, values in API_SYMBOLS.items() if symbols & values},
             })
         targets.append(target)
-    # Seven since the transport spike: libavcodec, libavformat, libavutil,
-    # libswresample, dav1d, lcms2, uavs3d. The GnuTLS stack left with
-    # libavformat's network stack.
-    if len(targets) != 7:
+    # Eight since HEL-145 added libdovi: libavcodec, libavformat, libavutil,
+    # libswresample, dav1d, lcms2, uavs3d, libdovi. The GnuTLS stack left
+    # with libavformat's network stack.
+    if len(targets) != 8:
         raise ValueError(f"Native target set changed ({len(targets)}); review the inventory before regenerating")
     report = {"scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
               "package_sha256": sha256(PACKAGE / "Package.swift"), "dependencies": targets}
