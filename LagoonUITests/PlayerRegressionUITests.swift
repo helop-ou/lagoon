@@ -741,10 +741,10 @@ final class PlayerRegressionUITests: XCTestCase {
                 && $0.int("buffering") == 0
                 && $0.double("time") >= 0
         }
+        try requireNegotiatedTranscode(initial)
         let startTime = initial.double("time")
         let startStalls = initial.int("stalls")
         let startMemory = initial.double("memoryMB")
-        XCTAssertEqual(initial.string("method"), "Transcode")
         XCTAssertEqual(initial.int("cache"), 1)
 
         // Jellyfin's simulator rendition uses short fMP4 segments. Fifteen
@@ -776,10 +776,10 @@ final class PlayerRegressionUITests: XCTestCase {
                 && $0.int("buffering") == 0
                 && $0.double("time") >= 0
         }
+        try requireNegotiatedTranscode(initial)
         let startTime = initial.double("time")
         let startStalls = initial.int("stalls")
         let startMemory = initial.double("memoryMB")
-        XCTAssertEqual(initial.string("method"), "Transcode")
         XCTAssertEqual(initial.int("cache"), 0)
 
         // This is the release transport path: libavformat owns HLS network
@@ -1067,6 +1067,19 @@ final class PlayerRegressionUITests: XCTestCase {
         homeRowsScreenshot.name = "Lagoon native and Home Screen Sections plugin rows"
         homeRowsScreenshot.lifetime = .keepAlways
         add(homeRowsScreenshot)
+        // Row visibility is persisted per account under
+        // `home.sectionPreferences.<accountID>`, and the regression account is
+        // the same on every run. Leaving Continue Watching switched off would
+        // silently change which rails Home draws for every later test on this
+        // simulator — including the ServerSync navigation cases that step a
+        // fixed number of rows down from the hero (HEL-144 / audit A18).
+        // Put it back before moving on.
+        remote.press(.select)
+        XCTAssertEqual(
+            nativeContinueWatching.valueDescription,
+            previousNativeVisibility,
+            "The native row toggle was left flipped for the next test"
+        )
         // Reaching the plugin section means crossing every native row, so a
         // fixed budget rots the moment one is added: the eight curated rows
         // (HEL-120) and Collections (HEL-122) both landed after this was
@@ -1079,6 +1092,14 @@ final class PlayerRegressionUITests: XCTestCase {
         let previousVisibility = myList.valueDescription
         remote.press(.select)
         XCTAssertNotEqual(myList.valueDescription, previousVisibility)
+        // Same persistence as the native rows above: restore it so the next
+        // test sees the account's untouched Home configuration.
+        remote.press(.select)
+        XCTAssertEqual(
+            myList.valueDescription,
+            previousVisibility,
+            "The plugin row toggle was left flipped for the next test"
+        )
         remote.press(.menu)
         XCTAssertTrue(home.waitForExistence(timeout: 5))
 
@@ -2284,6 +2305,50 @@ final class PlayerRegressionUITests: XCTestCase {
             }
         }
         throw RegressionFixtureError(message: "did not resolve a player fixture before timeout")
+    }
+
+    /// Guards the HLS cases against silently testing something else.
+    ///
+    /// Jellyfin, not the client, chooses the delivery method, and it chooses
+    /// it from the device profile. `-debug.simulatorTranscode` swaps in
+    /// `DeviceProfile.simulatorRegression`, which only withdraws HEVC and
+    /// Dolby Vision — it still advertises H.264/VC1 direct play, so a server
+    /// whose items are H.264 answers `DirectPlay` and no HLS playlist is ever
+    /// opened. That is what the public demo does: every item there is H.264,
+    /// so these two cases asserted `Transcode`, failed on the first
+    /// assertion, and never reached the segment-boundary window they exist
+    /// for (HEL-144 / audit A18).
+    ///
+    /// A missing fixture is not a player regression, so the public-demo lane
+    /// skips with an explicit reason. A supplied fixture server is expected to
+    /// carry content that must transcode, so `DirectPlay` there is a genuine
+    /// failure and stays one.
+    private func requireNegotiatedTranscode(
+        _ state: RegressionState,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let method = state.string("method")
+        guard method != "Transcode" else { return }
+        guard let server = ProcessInfo.processInfo.environment["LAGOON_REGRESSION_SERVER"] else {
+            throw XCTSkip("""
+                Fixture server required: playback negotiated \(method), so this run \
+                never opened an HLS playlist and cannot test segment boundaries. \
+                The simulator regression profile still permits H.264 direct play \
+                and every public-demo item is H.264. Supply a server whose content \
+                must transcode through LAGOON_REGRESSION_SERVER / \
+                LAGOON_REGRESSION_USER / LAGOON_REGRESSION_PASS.
+                """)
+        }
+        XCTFail(
+            """
+            Fixture server \(server) negotiated \(method) instead of Transcode, \
+            so the HLS transport was not exercised. State: \(state.raw)
+            """,
+            file: file,
+            line: line
+        )
+        throw RegressionFixtureError(message: "fixture server did not negotiate a transcode")
     }
 
     private func waitForFrameLossResult(
