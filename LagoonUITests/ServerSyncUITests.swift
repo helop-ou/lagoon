@@ -8,6 +8,7 @@ final class ServerSyncUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.serverSyncRegression", "YES",
         ]
         app.launch()
@@ -40,17 +41,14 @@ final class ServerSyncUITests: XCTestCase {
         XCTFail("Returning to the foreground did not advance the server sync generation")
     }
 
-    func testTvOSRefreshActionSharesTopChromeWithoutDisplacingHome() {
+    func testTvOSRefreshActionSharesTopChromeWithoutDisplacingHome() throws {
         let app = launch(interval: 60)
         let homeTab = app.tabBars.buttons["Home"]
         XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
 
         let refresh = app.buttons["server.refresh.home"]
         XCTAssertTrue(refresh.waitForExistence(timeout: 20))
-        let hero = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "home.hero.")
-        ).firstMatch
-        XCTAssertTrue(hero.waitForExistence(timeout: 20))
+        let hero = try requireHomeHero(in: app)
 
         let settingsTab = app.tabBars.buttons["Settings"]
         XCTAssertTrue(settingsTab.exists)
@@ -175,18 +173,15 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable after returning to the top")
     }
 
-    func testRefreshKeepsItsChromeOffsetAcrossADetailRoundTrip() {
+    func testRefreshKeepsItsChromeOffsetAcrossADetailRoundTrip() throws {
         let app = launch(interval: 60)
         let tabBar = app.tabBars.firstMatch
         let homeTab = app.tabBars.buttons["Home"]
         let refresh = app.buttons["server.refresh.home"]
-        let hero = app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "home.hero.")
-        ).firstMatch
 
         XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
         XCTAssertTrue(refresh.waitForExistence(timeout: 20))
-        XCTAssertTrue(hero.waitForExistence(timeout: 20))
+        let hero = try requireHomeHero(in: app)
         let visibleChromeDelta = refresh.frame.midY - tabBar.frame.midY
 
         for _ in 0..<8 where !hero.hasFocus {
@@ -340,6 +335,7 @@ final class ServerSyncUITests: XCTestCase {
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
             "-debug.serverSyncRegression", "YES",
             "-debug.serverSyncIntervalSeconds", String(interval),
         ]
