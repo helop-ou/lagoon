@@ -34,13 +34,21 @@ Authorization: MediaBrowser Client="Lagoon", Device="Apple TV",
                DeviceId="<keychain uuid>", Version="<app version>"[, Token="…"]
 ```
 
-That header is the only credential on normal `URLRequest` API traffic. Media
-consumers such as FFmpeg and the trickplay loader accept a URL rather than a
-request, so same-origin stream, external-subtitle and trickplay URLs carry the
-modern `ApiKey=<token>` query fallback instead. Jellyfin 12 disables the old
-lowercase `api_key` spelling by default. Server-returned media URLs are
-normalized to one current `ApiKey`; a URL on any other origin is left alone so
-the Jellyfin token is never sent to a subtitle provider or CDN.
+That header is now the only credential on media traffic too. Media consumers
+such as FFmpeg's network transport, the playback cache, the external
+subtitle loader and the trickplay loader used to accept a URL rather than a
+request, so same-origin stream, external-subtitle and trickplay URLs carried
+the token as a query item. Since the September 8 transport spike,
+`MediaRequestAuthorization` builds a `URLRequest` for every one of them and
+sets the same `Authorization: MediaBrowser … Token="…"` header instead; no
+first-party media URL carries the token in its query any more. A server can
+still hand back a `TranscodingUrl` or subtitle `DeliveryUrl` carrying the
+token itself — as either `ApiKey` or the deprecated lowercase `api_key`,
+which Jellyfin 12 disables by default — so `MediaRequestAuthorization`
+sanitizes rather than trusts it: `sanitizedURL(_:)` strips either spelling
+when the URL targets the Jellyfin origin, and leaves a URL on any other
+origin byte-identical so the Jellyfin token is never sent to a subtitle
+provider or CDN.
 
 - `POST Users/AuthenticateByName` `{Username, Pw}` → `AccessToken` + `User`.
 - **Quick Connect**: `GET QuickConnect/Enabled` → if true, `POST
@@ -75,17 +83,18 @@ rather than a published compatibility guarantee, which is why these five get
 re-probed, not re-read, when 12.0 ships.
 
 A live 12.0.0 probe verified password authentication and an authenticated
-library request with Lagoon's `Authorization` header. It also established the
-media-URL boundary directly: `ApiKey` succeeds while lowercase `api_key`
-returns 401 on a normal authenticated endpoint. Focused integration coverage
-therefore fixes the spelling in every URL-only consumer and checks that a
-legacy server-returned credential is replaced rather than duplicated.
+library request with Lagoon's `Authorization` header. It also established
+the media-URL boundary directly, on 2026-09-04: `ApiKey` succeeded while
+lowercase `api_key` returned 401 on a normal authenticated endpoint — a fact
+about that server on that day, and the reason a server-returned credential is
+sanitized on sight rather than assumed absent. Focused integration coverage
+now checks the header-only state that replaced the query fallback:
 `playbackURLResolutionPreservesTheNegotiatedTransportMatrix` in
-`LagoonTests/PlayerSystemIntegrationTests.swift` asserts `ApiKey` present and
-`api_key` absent on the direct-play, direct-stream and transcode URLs, on an
-external subtitle sidecar whose delivery URL arrived with the legacy spelling
-and on a trickplay sheet, while a foreign-origin subtitle URL is left
-untouched.
+`LagoonTests/PlayerSystemIntegrationTests.swift` asserts that no same-origin
+media URL — direct-play, direct-stream, transcode, external
+subtitle sidecar or trickplay sheet — carries `ApiKey` or `api_key` in its
+query, that the `Authorization` header carries the token instead, and that a
+foreign-origin subtitle URL is left untouched.
 
 **The app-level run against Jellyfin 12 (2026-09-04).** Lagoon was driven
 against the 12.0.0 public preview on a clean tvOS 26 simulator, pointed there
@@ -103,12 +112,15 @@ returns a transcode for it, so `testNativeHLSPlaybackStartsAndCrossesSegment\
 Boundaries` resolves `DirectPlay` and fails its `Transcode` assertion on
 **both** 10.11.11 and 12.0.0 — a stale expectation in the test rather than a
 Jellyfin 12 regression; it passes against fixture, whose content does
-transcode. So the transcode path was checked directly instead: authenticating
-on 12.0.0 and calling `PlaybackInfo` with a profile that can direct-play
-nothing returns a `TranscodingUrl` carrying `ApiKey`, and that URL's master
-playlist, its variant playlist and its first media segment all return 200 with
-the credential propagated at every hop (620 KB of transport stream on the
-segment). That is the exact chain HEL-138 changed.
+transcode. So the transcode path was checked directly instead, on 2026-09-04
+before the September 8 header-only change: authenticating on 12.0.0 and
+calling `PlaybackInfo` with a profile that can direct-play nothing returned a
+`TranscodingUrl`, and resolving it the way the client did that day — with
+`ApiKey` in the query — reached a master playlist, a variant playlist and a
+first media segment that all returned 200 with the credential propagated at
+every hop (620 KB of transport stream on the segment). That is the exact
+chain HEL-138 changed; the same chain is exercised today with the token in
+the `Authorization` header instead.
 
 Still outstanding: sustained *transcode* playback inside the app on 12, which
 needs a server whose content forces one, and the deployment check on fixture
