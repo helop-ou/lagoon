@@ -38,6 +38,10 @@ class Fixtures:
         self.work = work
         self.servers = []
         self.requests = []
+        # Names of servers reached only by following a redirect issued by a
+        # different origin (never as a fixture's own direct target) — see
+        # violations().
+        self.redirect_targets = set()
         self.cases = []
         self.roots()
         run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
@@ -131,15 +135,25 @@ class Fixtures:
 
             def do_GET(self):
                 path = urlsplit(self.path).path
-                owner.requests.append(dict(server=name, path=self.path))
+                owner.requests.append(dict(
+                    server=name, path=self.path, authorization=self.headers.get("Authorization")
+                ))
                 self.server.reads += 1
                 if path == "/fixtures":
                     return self.send(json.dumps(owner.cases).encode(), "application/json")
                 if path == "/report":
                     return self.send(json.dumps(owner.violations()).encode(), "application/json")
                 if path.startswith("/redirect/"):
+                    target_name = path.split("/")[-1]
+                    if target_name != name:
+                        owner.redirect_targets.add(target_name)
                     self.send_response(302)
-                    self.send_header("Location", owner.urls[path.split("/")[-1]] + "/body?api_key=synthetic-tls-test-token")
+                    # Trust, not token placement, is what the redirect cases
+                    # exercise: Lagoon's own credential now travels as a
+                    # header scoped to its issuing origin (see
+                    # MediaRequestAuthorization), so a redirect target never
+                    # needs the legacy query token to be reachable.
+                    self.send_header("Location", owner.urls[target_name] + "/body")
                     self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
@@ -159,19 +173,26 @@ class Fixtures:
                 if path.startswith("/hls/"):
                     _, _, kind, cert, file = path.split("/")
                     good, child = owner.urls["valid"], owner.urls[cert]
+                    # The synthetic token rides only on same-origin children: the
+                    # app must strip it into a header there, which the log guard
+                    # proves. Children on other origins are trust probes, and a
+                    # token in their URL would only show up in CFNetwork's own
+                    # failure log, which is not the app's leak.
+                    def credential(base, separator="?"):
+                        return f"{separator}api_key=synthetic-tls-test-token" if base == good else ""
                     if file == "master.m3u8":
                         base = child if kind == "variant" else good
-                        body = f"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000\n{base}/hls/{kind}/{cert}/variant.m3u8?api_key=synthetic-tls-test-token\n"
+                        body = f"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000\n{base}/hls/{kind}/{cert}/variant.m3u8{credential(base)}\n"
                     elif file == "variant.m3u8":
                         body = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n"
                         if kind == "key":
-                            body += f'#EXT-X-KEY:METHOD=AES-128,URI="{child}/key.bin?api_key=synthetic-tls-test-token",IV=0x' + "00" * 16 + "\n"
+                            body += f'#EXT-X-KEY:METHOD=AES-128,URI="{child}/key.bin{credential(child)}",IV=0x' + "00" * 16 + "\n"
                         media = "encrypted.ts" if kind == "key" else "segment.ts"
                         # Three segments exercise native persistent connection
                         # reuse and rejection after playback has already begun.
                         for index in range(3):
                             base = child if kind == "segment" or (kind == "later-segment" and index == 2) else good
-                            body += f"#EXTINF:1.0,\n{base}/{media}?segment={index}&api_key=synthetic-tls-test-token\n"
+                            body += f"#EXTINF:1.0,\n{base}/{media}?segment={index}{credential(base, "&")}\n"
                         body += "#EXT-X-ENDLIST\n"
                     else:
                         return self.send(b"missing", code=404)
@@ -200,7 +221,17 @@ class Fixtures:
     def violations(self):
         invalid = [r for r in self.requests if r["server"] in ("self-signed", "expired", "wrong-host")]
         reconnect = [r for r in self.requests if r["server"] == "reconnect-invalid"]
-        return [f'{r["server"]}: {r["path"]}' for r in invalid + reconnect[1:]]
+        # A request that only exists because a different origin redirected
+        # it here must not still carry that origin's credential header —
+        # MediaRequestAuthorization's redirect delegate is what is supposed
+        # to strip it.
+        leaked_header = [
+            r for r in self.requests if r["server"] in self.redirect_targets and r.get("authorization")
+        ]
+        return [f'{r["server"]}: {r["path"]}' for r in invalid + reconnect[1:]] + [
+            f'{r["server"]}: {r["path"]} kept the Authorization header across a cross-origin redirect'
+            for r in leaked_header
+        ]
 
     def close(self):
         (self.work / "requests.json").write_text(json.dumps(self.requests, indent=2) + "\n")
