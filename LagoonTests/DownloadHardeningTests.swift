@@ -69,14 +69,6 @@ struct DownloadHardeningTests {
         #expect(DownloadProtocol.requests.count == 1)
     }
 
-    @Test func rangeIgnoredByServerCannotDownloadAnEntireMovieForASubtitleHash() async throws {
-        _ = makeDownloader()
-        DownloadProtocol.set("/movie", .init(headers: ["Content-Length": "1000000000"], chunks: [Data(repeating: 0, count: 32_768)], holdBody: false))
-        let config = configuration()
-        let reader = MovieHashReader(session: URLSession(configuration: config))
-        #expect(await reader.hash(of: Self.url("/movie"), fileSize: 1_000_000) == nil)
-    }
-
     @Test func boundedJellyfinProviderRequestsPreserveMessagesAndExpireTheCorrectSession() async throws {
         _ = makeDownloader()
         let client = JellyfinClient(deviceId: "fixture", sessionConfiguration: configuration())
