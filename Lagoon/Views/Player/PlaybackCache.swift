@@ -405,7 +405,8 @@ nonisolated private final class PlaybackRangeRequest: @unchecked Sendable {
     init(
         url: URL,
         range: PlaybackByteRange,
-        priority: Float
+        priority: Float,
+        authorization: MediaRequestAuthorization? = nil
     ) {
         requestedRange = range
         taskPriority = priority
@@ -423,6 +424,11 @@ nonisolated private final class PlaybackRangeRequest: @unchecked Sendable {
             request.allowsExpensiveNetworkAccess = false
             request.allowsConstrainedNetworkAccess = false
         }
+        // Strips any query-string token and sets the Authorization header,
+        // but only for the Jellyfin origin — an HLS child playlist or
+        // segment can be server-generated and point elsewhere entirely
+        // (HEL-142/HEL-143).
+        authorization?.apply(to: &request)
         urlRequest = request
     }
 
@@ -600,9 +606,11 @@ nonisolated final class URLSessionPlaybackRangeLoader: NSObject, PlaybackRangeLo
     private var session: URLSession!
     private var active: [Int: PlaybackRangeRequest] = [:]
     private var cancelled = false
+    private let authorization: MediaRequestAuthorization?
 
-    init(configuration: URLSessionConfiguration = .ephemeral) {
+    init(configuration: URLSessionConfiguration = .ephemeral, authorization: MediaRequestAuthorization? = nil) {
         delegateProxy = PlaybackRangeSessionDelegate()
+        self.authorization = authorization
         super.init()
         delegateProxy.owner = self
         let configuration = (configuration.copy() as? URLSessionConfiguration) ?? .ephemeral
@@ -624,7 +632,8 @@ nonisolated final class URLSessionPlaybackRangeLoader: NSObject, PlaybackRangeLo
             let request = PlaybackRangeRequest(
                 url: url,
                 range: range,
-                priority: priority
+                priority: priority,
+                authorization: authorization
             )
             let task = session.dataTask(with: request.urlRequest)
             let identifier = task.taskIdentifier
@@ -753,16 +762,21 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         directory: URL,
         byteLimit: Int64 = 512 * 1_024 * 1_024,
         requestSize: Int64 = 8 * 1_024 * 1_024,
-        loader: PlaybackRangeLoading = URLSessionPlaybackRangeLoader(),
+        loader: PlaybackRangeLoading? = nil,
         storageBudget: PlaybackCacheStorageBudget? = nil,
-        cancelsLoaderOnRemoval: Bool = true
+        cancelsLoaderOnRemoval: Bool = true,
+        authorization: MediaRequestAuthorization? = nil
     ) throws {
         self.itemID = itemID
         self.sourceURL = sourceURL
         self.knownLength = expectedLength.flatMap { $0 > 0 ? $0 : nil }
         self.byteLimit = max(byteLimit, 0)
         self.requestSize = max(requestSize, 1)
-        self.loader = loader
+        // A caller supplying its own loader (tests, or an HLS resource
+        // sharing its parent's) keeps it exactly as before; only the
+        // ordinary default constructs one, and that one needs the
+        // credential (HEL-142/HEL-143).
+        self.loader = loader ?? URLSessionPlaybackRangeLoader(authorization: authorization)
         self.cancelsLoaderOnRemoval = cancelsLoaderOnRemoval
         self.storageBudget = storageBudget
         fileURL = directory.appendingPathComponent("ranges.cache", isDirectory: false)
@@ -1350,7 +1364,8 @@ nonisolated final class HLSPlaybackCacheScope: @unchecked Sendable {
         maxResources: Int = 256,
         requestSize: Int64 = 8 * 1_024 * 1_024,
         resourceLoader: PlaybackRangeLoading? = nil,
-        playlistLoader: PlaybackRangeLoading = URLSessionPlaybackRangeLoader()
+        playlistLoader: PlaybackRangeLoading? = nil,
+        authorization: MediaRequestAuthorization? = nil
     ) throws {
         self.itemID = itemID
         self.sourceURL = sourceURL
@@ -1360,8 +1375,11 @@ nonisolated final class HLSPlaybackCacheScope: @unchecked Sendable {
         resourceByteLimit = max(min(byteLimit, 32 * 1_024 * 1_024), 1)
         self.requestSize = max(min(requestSize, resourceByteLimit), 1)
         storageBudget = PlaybackCacheStorageBudget(byteLimit: byteLimit)
-        self.resourceLoader = resourceLoader ?? URLSessionPlaybackRangeLoader()
-        self.playlistLoader = playlistLoader
+        // Test doubles keep whatever loader they were given; the ordinary
+        // defaults each get their own session, both carrying the credential
+        // segments and the manifest itself need (HEL-142/HEL-143).
+        self.resourceLoader = resourceLoader ?? URLSessionPlaybackRangeLoader(authorization: authorization)
+        self.playlistLoader = playlistLoader ?? URLSessionPlaybackRangeLoader(authorization: authorization)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -1710,7 +1728,8 @@ final class PlaybackCacheCoordinator {
         itemID: String,
         url: URL,
         method: PlayMethod,
-        expectedLength: Int64?
+        expectedLength: Int64?,
+        authorization: MediaRequestAuthorization? = nil
     ) -> PlaybackCacheSession? {
         if let next, next.itemID == itemID, next.sourceURL == url {
             current?.cancelAndRemove()
@@ -1719,7 +1738,7 @@ final class PlaybackCacheCoordinator {
             return next
         }
         current?.cancelAndRemove()
-        current = makeScope(itemID: itemID, url: url, method: method, expectedLength: expectedLength)
+        current = makeScope(itemID: itemID, url: url, method: method, expectedLength: expectedLength, authorization: authorization)
         return current
     }
 
@@ -1727,11 +1746,12 @@ final class PlaybackCacheCoordinator {
         itemID: String,
         url: URL,
         method: PlayMethod,
-        expectedLength: Int64?
+        expectedLength: Int64?,
+        authorization: MediaRequestAuthorization? = nil
     ) -> PlaybackCacheSession? {
         if next?.itemID == itemID, next?.sourceURL == url { return next }
         next?.cancelAndRemove()
-        next = makeScope(itemID: itemID, url: url, method: method, expectedLength: expectedLength)
+        next = makeScope(itemID: itemID, url: url, method: method, expectedLength: expectedLength, authorization: authorization)
         return next
     }
 
@@ -1757,7 +1777,8 @@ final class PlaybackCacheCoordinator {
         itemID: String,
         url: URL,
         method: PlayMethod,
-        expectedLength: Int64?
+        expectedLength: Int64?,
+        authorization: MediaRequestAuthorization?
     ) -> PlaybackCacheSession? {
         guard isEnabled, byteLimit > 0 else { return nil }
         let directory = rootDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1771,7 +1792,8 @@ final class PlaybackCacheCoordinator {
                 expectedLength: expectedLength,
                 directory: directory,
                 byteLimit: resourceLimit,
-                requestSize: 1 * 1_024 * 1_024
+                requestSize: 1 * 1_024 * 1_024,
+                authorization: authorization
             ) else { return nil }
             return PlaybackCacheSession(
                 itemID: itemID,
@@ -1784,7 +1806,8 @@ final class PlaybackCacheCoordinator {
                 itemID: itemID,
                 sourceURL: url,
                 directory: directory,
-                byteLimit: byteLimit
+                byteLimit: byteLimit,
+                authorization: authorization
             ) else { return nil }
             return PlaybackCacheSession(
                 itemID: itemID,
