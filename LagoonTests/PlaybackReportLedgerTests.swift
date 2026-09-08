@@ -4,15 +4,19 @@ import Testing
 
 /// The wait between leaving the player and re-fetching what it played
 /// (HEL-132). Timing assertions use generous bounds: the point is the
-/// ordering, not the milliseconds.
+/// ordering, not the milliseconds. The upper bounds sit far below the
+/// settle timeout and far above anything a loaded test host has produced
+/// (a 100 ms close once took over two seconds to be observed while the
+/// full suite ran in parallel); they prove the wait ended because the
+/// session closed, not because the timeout fired.
 @Suite("Playback report ledger")
 struct PlaybackReportLedgerTests {
     @Test @MainActor func settlingWithNothingOpenReturnsAtOnce() async {
         let ledger = PlaybackReportLedger()
         let clock = ContinuousClock()
         let started = clock.now
-        await ledger.settle(timeout: .seconds(5))
-        #expect(clock.now - started < .seconds(1))
+        await ledger.settle(timeout: .seconds(30))
+        #expect(clock.now - started < .seconds(10))
         #expect(!ledger.hasOpenSessions)
     }
 
@@ -26,10 +30,10 @@ struct PlaybackReportLedgerTests {
             try? await Task.sleep(for: .milliseconds(100))
             ledger.close(session)
         }
-        await ledger.settle(timeout: .seconds(5))
+        await ledger.settle(timeout: .seconds(30))
         let elapsed = clock.now - started
         #expect(elapsed >= .milliseconds(80))
-        #expect(elapsed < .seconds(2))
+        #expect(elapsed < .seconds(10))
         #expect(!ledger.hasOpenSessions)
     }
 
