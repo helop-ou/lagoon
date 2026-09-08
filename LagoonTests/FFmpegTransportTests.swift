@@ -5,25 +5,34 @@ import Libavutil
 import Testing
 @testable import Lagoon
 
-@Suite("Native FFmpeg TLS", .serialized)
+@Suite("Native FFmpeg transport", .serialized)
 struct FFmpegTransportTests {
-    @Test func theLinkedTLSBackendVerifiesByDefault() throws {
-        var tlsClass = try #require(avio_protocol_get_class("tls"))
-        let option = withUnsafeMutablePointer(to: &tlsClass) {
-            av_opt_find($0, "tls_verify", nil, 0, AV_OPT_SEARCH_FAKE_OBJ)
+    /// libavformat is now repo-built without its network stack (HEL-142):
+    /// every network fetch must go through `FFmpegNetworkTransport`'s
+    /// URLSession-backed io_open, never a native protocol. This fails until
+    /// the rebuilt library lands; that is expected and wanted.
+    @Test func nativeNetworkingIsCompiledOut() throws {
+        #expect(avio_protocol_get_class("http") == nil)
+        #expect(avio_protocol_get_class("tls") == nil)
+        let forbidden: Set<String> = ["http", "https", "tcp", "tls"]
+        var opaque: UnsafeMutableRawPointer?
+        var sawFile = false
+        while let entry = avio_enum_protocols(&opaque, 0) {
+            let name = String(cString: entry)
+            #expect(!forbidden.contains(name), "native networking protocol '\(name)' is still linked in")
+            if name == "file" { sawFile = true }
         }
-        #expect(try #require(option).pointee.default_val.i64 == 1)
+        #expect(sawFile, "avio_enum_protocols should still yield the file protocol")
     }
 
     @Test func nativeOpenPreservesParentCancellation() throws {
-        let context = try #require(avformat_alloc_context())
-        defer { avformat_free_context(context) }
-        context.pointee.interrupt_callback = AVIOInterruptCB(callback: { _ in 1 }, opaque: nil)
+        let transport = FFmpegNetworkTransport(isInterrupted: { true })
         var io: UnsafeMutablePointer<AVIOContext>?
-        defer { if io != nil { avio_closep(&io) } }
-        let result = FFmpegNetworkPolicy.open(context: context, output: &io,
-                                             url: "https://127.0.0.1:9/body", flags: AVIO_FLAG_READ, options: nil)
-        #expect(result == -1414092869) // AVERROR_EXIT
+        let result = "https://127.0.0.1:9/body".withCString { url in
+            transport.open(context: nil, output: &io, url: url, flags: AVIO_FLAG_READ, options: nil)
+        }
+        #expect(result == ffmpegErrorExit)
+        #expect(io == nil)
     }
 
     // Run scripts/test-ffmpeg-tls.py for controlled certificates, HTTP logs and
@@ -56,12 +65,38 @@ struct FFmpegTransportTests {
         let reconnect: Bool
     }
 
+    /// Scopes a synthetic credential header to a fixture URL's own origin,
+    /// exactly what `JellyfinClient.mediaRequestAuthorization()` does for
+    /// the real server — so the `api_key` query item every fixture URL
+    /// carries is stripped before URLSession ever sees it. CFNetwork logs a
+    /// failed task's full URL (`NSErrorFailingURLKey`) into the unified
+    /// log, which is what `test-ffmpeg-tls.py`'s "token appeared in
+    /// test.log" guard checks for; leaving the token in the query here
+    /// would make every invalid-peer fixture fail that guard.
+    private nonisolated static func authorization(for urlString: String) -> MediaRequestAuthorization? {
+        guard let url = URL(string: urlString), let scheme = url.scheme, let host = url.host else { return nil }
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = host
+        components.port = url.port
+        guard let origin = components.url else { return nil }
+        return MediaRequestAuthorization(
+            origin: origin,
+            headerName: "Authorization",
+            headerValue: #"MediaBrowser Token="synthetic-tls-test-header""#,
+            queryNames: ["api_key"]
+        )
+    }
+
     private nonisolated func readNative(_ fixture: Fixture) -> Int32 {
+        let transport = FFmpegNetworkTransport(isInterrupted: { false }, authorization: Self.authorization(for: fixture.url))
         var io: UnsafeMutablePointer<AVIOContext>?
         var options: OpaquePointer?
         av_dict_set(&options, "rw_timeout", "5000000", 0)
         if fixture.enforce {
-            // A caller cannot accidentally weaken the application policy.
+            // A caller cannot accidentally weaken the application policy —
+            // there is no longer an unpoliced avio_open2 fallback to escape
+            // through, so these attempts are expected to have no effect.
             av_dict_set(&options, "tls_verify", "0", 0)
             av_dict_set(&options, "verifyhost", "wrong.invalid", 0)
         }
@@ -72,15 +107,11 @@ struct FFmpegTransportTests {
             av_dict_set(&options, "reconnect_max_retries", "1", 0)
         }
         defer {
-            if io != nil { avio_closep(&io) }
+            if io != nil { _ = transport.close(io) }
             av_dict_free(&options)
         }
         let result = fixture.url.withCString { url in
-            if fixture.enforce {
-                return FFmpegNetworkPolicy.open(context: nil, output: &io, url: url,
-                                                flags: AVIO_FLAG_READ, options: &options)
-            }
-            return avio_open2(&io, url, AVIO_FLAG_READ, nil, &options)
+            transport.open(context: nil, output: &io, url: url, flags: AVIO_FLAG_READ, options: &options)
         }
         guard result >= 0, let io else { return result }
         var bytes = [UInt8](repeating: 0, count: 4096)
@@ -96,8 +127,11 @@ struct FFmpegTransportTests {
     }
 
     private nonisolated func readHLS(_ url: String) -> Int32 {
+        let transport = FFmpegNetworkTransport(isInterrupted: { false }, authorization: Self.authorization(for: url))
+        defer { transport.closeAll() }
         guard let allocated = avformat_alloc_context() else { return -12 }
-        FFmpegNetworkPolicy.install(on: allocated)
+        transport.install(on: allocated)
+        allocated.pointee.interrupt_callback = AVIOInterruptCB(callback: { _ in 0 }, opaque: nil)
         var context: UnsafeMutablePointer<AVFormatContext>? = allocated
         var options: OpaquePointer?
         av_dict_set(&options, "rw_timeout", "5000000", 0)
@@ -106,8 +140,10 @@ struct FFmpegTransportTests {
             avformat_close_input(&context)
             av_dict_free(&options)
         }
-        let result = avformat_open_input(&context, url, nil, &options)
-        guard result >= 0, let context, let packet = av_packet_alloc() else { return result }
+        let openResult = avformat_open_input(&context, url, nil, &options)
+        guard openResult >= 0, let context else { return openResult }
+        guard avformat_find_stream_info(context, nil) >= 0 else { return -1 }
+        guard let packet = av_packet_alloc() else { return -12 }
         var packetToFree: UnsafeMutablePointer<AVPacket>? = packet
         defer { av_packet_free(&packetToFree) }
         var packets: Int32 = 0
