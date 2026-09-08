@@ -181,6 +181,18 @@ final class JellyfinClient {
         return header
     }
 
+    /// The header form of the media credential, for transports that would
+    /// otherwise carry it in the URL. nil while signed out.
+    func mediaRequestAuthorization() -> MediaRequestAuthorization? {
+        guard let serverURL, let accessToken else { return nil }
+        return MediaRequestAuthorization(
+            origin: serverURL,
+            headerName: "Authorization",
+            headerValue: authorizationHeader(token: accessToken),
+            queryNames: ["apikey", "api_key"]
+        )
+    }
+
     // MARK: - Requests
 
     func requireUserId() throws -> String {
