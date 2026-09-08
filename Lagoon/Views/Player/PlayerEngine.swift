@@ -305,6 +305,10 @@ nonisolated struct TrickplaySource: Equatable {
     /// Seconds between thumbnails (the wire value is milliseconds).
     let interval: Double
     let thumbnailCount: Int
+    /// The trickplay route 401s without credentials and `sheetURLs` carry no
+    /// query token (HEL-142/HEL-143), so the header credential rides with
+    /// the source for `TrickplayLoader` to apply per fetch.
+    var authorization: MediaRequestAuthorization? = nil
 
     var tilesPerSheet: Int { columns * rows }
 
