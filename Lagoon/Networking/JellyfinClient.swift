@@ -200,6 +200,32 @@ final class JellyfinClient {
         return userId
     }
 
+    /// Resolves a server-relative route Jellyfin hands back inside a
+    /// response body — a `TranscodingUrl` or a subtitle `DeliveryUrl`, in
+    /// absolute-path form with its own query — against the configured
+    /// server, keeping a reverse-proxy base path such as
+    /// `https://host/jellyfin`. `URL(string:relativeTo:)` discards that
+    /// path for an absolute-path reference, which is how every transcode
+    /// and external subtitle on a base-path server resolved to the wrong
+    /// route until HEL-144's regression lane hit demo.jellyfin.org/stable.
+    /// A reference that is already absolute is returned as given.
+    func serverRelativeURL(_ reference: String) -> URL? {
+        guard let serverURL, let reference = URLComponents(string: reference) else { return nil }
+        if reference.scheme != nil || reference.host != nil {
+            return reference.url
+        }
+        guard var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        var basePath = components.percentEncodedPath
+        while basePath.hasSuffix("/") { basePath.removeLast() }
+        let referencePath = reference.percentEncodedPath
+        components.percentEncodedPath = referencePath.hasPrefix("/")
+            ? basePath + referencePath
+            : basePath + "/" + referencePath
+        components.percentEncodedQuery = reference.percentEncodedQuery
+        components.fragment = nil
+        return components.url
+    }
+
     func url(path: String, query: [URLQueryItem] = []) throws -> URL {
         guard let serverURL else { throw JellyfinError.notConfigured }
         guard var components = URLComponents(url: serverURL.appending(path: path), resolvingAgainstBaseURL: false) else {
