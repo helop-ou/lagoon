@@ -31,7 +31,7 @@ let package = Package(
             dependencies: [
                 "LagoonPixelOps",
                 "Libavcodec", "Libavformat", "Libavutil", "Libswresample",
-                "Libdav1d", "Libuavs3d", "lcms2",
+                "Libdav1d", "Libuavs3d", "lcms2", "Libdovi",
             ],
             path: "Sources/_LagoonFFmpeg",
             linkerSettings: [
@@ -103,6 +103,18 @@ let package = Package(
         .binaryTarget(
             name: "Libdav1d",
             path: "Artifacts/Libdav1d.xcframework"
+        ),
+        // libdovi: the dolby_vision crate's C API (dovi_tool, MIT), for
+        // rewriting a Dolby Vision profile 7 RPU into profile 8.1 while the
+        // packet is in flight (HEL-145). Vendored from superuser404notfound/
+        // LibDovi 2.1.0 (dolby_vision 3.4.0), iOS/tvOS/macOS slices only,
+        // static libraries stripped of local symbols. The tvOS simulator slice
+        // is arm64 only: x86_64-apple-tvos is a tier-3 Rust target, so the
+        // project excludes x86_64 for that SDK. Rebuild recipe and provenance:
+        // Artifacts/Libdovi.README.md.
+        .binaryTarget(
+            name: "Libdovi",
+            path: "Artifacts/Libdovi.xcframework"
         ),
         .binaryTarget(
             name: "lcms2",
