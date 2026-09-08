@@ -112,9 +112,7 @@ nonisolated final class FFmpegDemuxer {
     private var formatContext: UnsafeMutablePointer<AVFormatContext>?
     private let capabilities: PlaybackCapabilities
     private var cachedIO: FFmpegCachedIO?
-    private var hlsCache: HLSPlaybackCacheScope?
-    private let childIOLock = NSLock()
-    private var childCachedIO: [UInt: (io: FFmpegCachedIO, lease: HLSPlaybackCacheLease)] = [:]
+    private var transport: FFmpegNetworkTransport?
     private var packet: UnsafeMutablePointer<AVPacket>?
     private var videoStreamIndex: Int32 = -1
     private var videoTimeBase = AVRational(num: 1, den: 1)
@@ -292,9 +290,9 @@ nonisolated final class FFmpegDemuxer {
         url: String,
         cacheSession: PlaybackCacheSession? = nil,
         disc: DiscPlaybackRequest? = nil,
-        recommendedPixelBufferAttributes: CVPixelBufferAttributes
+        recommendedPixelBufferAttributes: CVPixelBufferAttributes,
+        authorization: MediaRequestAuthorization? = nil
     ) throws {
-        avformat_network_init()
         close()
         formatContext = avformat_alloc_context()
         guard let allocated = formatContext else {
@@ -307,7 +305,6 @@ nonisolated final class FFmpegDemuxer {
             // it on failure), so every throw has exactly one cleanup path.
             if !completedOpen { close() }
         }
-        FFmpegNetworkPolicy.install(on: allocated)
         allocated.pointee.interrupt_callback = AVIOInterruptCB(
             callback: { opaque in
                 guard let opaque else { return 0 }
@@ -315,6 +312,20 @@ nonisolated final class FFmpegDemuxer {
             },
             opaque: Unmanaged.passUnretained(self).toOpaque()
         )
+        // Every http/https open this AVFormatContext makes — the top-level
+        // URL as well as every HLS child manifest/segment/key — now goes
+        // through Lagoon's own transport; libavformat's network stack is
+        // gone. Installing unconditionally covers the top-level open too:
+        // when a custom `pb` is set below for direct-cache or disc
+        // playback, libavformat never calls io_open for the root, so this
+        // is a no-op there.
+        let transport = FFmpegNetworkTransport(
+            isInterrupted: { [weak self] in self?.isInterrupted ?? true },
+            hlsCache: cacheSession?.hlsScope,
+            authorization: authorization
+        )
+        self.transport = transport
+        transport.install(on: allocated)
         if let disc, let cacheScope = cacheSession?.directScope {
             // A disc image is a filesystem, not a stream. Mount it, choose
             // the title, and hand libavformat that title's clips laid end to
@@ -345,45 +356,16 @@ nonisolated final class FFmpegDemuxer {
             allocated.pointee.pb = cachedIO.context
             allocated.pointee.flags |= customIOFlag
             self.cachedIO = cachedIO
-        } else if let hlsCache = cacheSession?.hlsScope {
-            // libavformat copies `opaque` into nested HLS format contexts.
-            // Mutable .m3u8 manifests fall through to avio_open2; immutable
-            // media resources get Lagoon AVIO contexts and bounded LRU files.
-            self.hlsCache = hlsCache
-            allocated.pointee.opaque = Unmanaged.passUnretained(self).toOpaque()
-            allocated.pointee.io_open = { context, output, url, flags, options in
-                guard let context, let opaque = context.pointee.opaque else { return -5 }
-                return Unmanaged<FFmpegDemuxer>
-                    .fromOpaque(opaque)
-                    .takeUnretainedValue()
-                    .openChildIO(context: context, output: output, url: url, flags: flags, options: options)
-            }
-            allocated.pointee.io_close2 = { context, ioContext in
-                guard let context, let opaque = context.pointee.opaque else { return -5 }
-                return Unmanaged<FFmpegDemuxer>
-                    .fromOpaque(opaque)
-                    .takeUnretainedValue()
-                    .closeChildIO(ioContext)
-            }
         }
 
-        // Bound every network operation and survive transient drops — an
-        // unbounded connect was capable of wedging playback startup.
+        // hls.c reuses a segment's connection for the next request only
+        // through FFmpeg's own HTTP protocol, which this libavformat no
+        // longer has. Left on, persistence makes every segment fall back to
+        // io_open while keeping the previous context alive, one leaked
+        // AVIOContext per segment for the length of the film. Off, hls.c
+        // closes each segment through io_close2 as it finishes.
         var options: OpaquePointer?
-        av_dict_set(&options, "tls_verify", "1", 0)
-        av_dict_set(&options, "rw_timeout", "15000000", 0) // 15 s per I/O op
-        av_dict_set(&options, "reconnect", "1", 0)
-        av_dict_set(&options, "reconnect_streamed", "1", 0)
-        av_dict_set(&options, "reconnect_delay_max", "2", 0)
-        if hlsCache != nil {
-            // FFmpeg's HLS keep-alive path assumes every segment AVIOContext
-            // wraps its native HTTP URLContext. Lagoon deliberately replaces
-            // immutable segments with file-backed cached AVIO contexts, so a
-            // later segment can otherwise be mistaken for a reusable HTTP
-            // connection and trip hls.c's `av_assert0(uc)`. Open each cached
-            // segment independently; manifests still use native HTTP I/O.
-            av_dict_set(&options, "http_persistent", "0", 0)
-        }
+        av_dict_set(&options, "http_persistent", "0", 0)
         defer { av_dict_free(&options) }
 
         var status = avformat_open_input(&formatContext, url, nil, &options)
@@ -843,9 +825,10 @@ nonisolated final class FFmpegDemuxer {
         guard let ctx = formatContext, let packet else { return .failed("demuxer not open") }
         var status = readFrameTimed(ctx, packet)
         // M6: only AVERROR_EOF means the stream ended. Anything else is a
-        // read failure — retry briefly (the avio reconnect options handle
-        // the socket; this covers errors that surface past them), then
-        // report it instead of silently ending playback mid-file.
+        // read failure — retry briefly (FFmpegNetworkTransport already
+        // retries transient socket errors on its own; this covers errors
+        // that surface past those retries), then report it instead of
+        // silently ending playback mid-file.
         var attempts = 0
         while status < 0, status != avErrorEOF, !isInterrupted, attempts < 2 {
             attempts += 1
@@ -1031,8 +1014,8 @@ nonisolated final class FFmpegDemuxer {
         }
         cachedIO?.close()
         cachedIO = nil
-        closeAllChildIO()
-        hlsCache = nil
+        transport?.closeAll()
+        transport = nil
 
         // These wrappers free AVCodecContext/SWR resources in deinit.
         // close() runs on the demux queue; clearing them here prevents that
@@ -1044,71 +1027,6 @@ nonisolated final class FFmpegDemuxer {
         audioStreams.removeAll(keepingCapacity: false)
         subtitleStreams.removeAll(keepingCapacity: false)
         videoStream = nil
-    }
-
-    private func openChildIO(
-        context: UnsafeMutablePointer<AVFormatContext>,
-        output: UnsafeMutablePointer<UnsafeMutablePointer<AVIOContext>?>?,
-        url: UnsafePointer<CChar>?,
-        flags: Int32,
-        options: UnsafeMutablePointer<OpaquePointer?>?
-    ) -> Int32 {
-        guard let output, let url else { return -22 }
-        let nativeOpen = {
-            FFmpegNetworkPolicy.open(context: context, output: output, url: url, flags: flags, options: options)
-        }
-        guard flags & 1 != 0, flags & 2 == 0,
-              let hlsCache,
-              let resourceURL = URL(string: String(cString: url)) else {
-            return nativeOpen()
-        }
-        do {
-            guard let lease = try hlsCache.leaseResource(at: resourceURL) else {
-                return nativeOpen()
-            }
-            // FFmpeg holds several segment contexts open at once, and a
-            // whole segment fits under the per-resource cap, so these keep the
-            // small buffer: there is no unstorable-read case to amortize here.
-            let io = try FFmpegCachedIO(source: lease.scope, bufferSize: 64 * 1_024)
-            guard let context = io.context else {
-                lease.close()
-                return nativeOpen()
-            }
-            childIOLock.lock()
-            childCachedIO[UInt(bitPattern: context)] = (io, lease)
-            childIOLock.unlock()
-            output.pointee = context
-            return 0
-        } catch {
-            // Cache failure must never make an otherwise playable HLS stream
-            // fail. FFmpeg retains its native reconnect/timeout behavior.
-            return nativeOpen()
-        }
-    }
-
-    private func closeChildIO(_ context: UnsafeMutablePointer<AVIOContext>?) -> Int32 {
-        guard let context else { return 0 }
-        childIOLock.lock()
-        let cached = childCachedIO.removeValue(forKey: UInt(bitPattern: context))
-        childIOLock.unlock()
-        if let cached {
-            cached.io.close()
-            cached.lease.close()
-            return 0
-        }
-        var nativeContext: UnsafeMutablePointer<AVIOContext>? = context
-        return avio_closep(&nativeContext)
-    }
-
-    private func closeAllChildIO() {
-        childIOLock.lock()
-        let cached = Array(childCachedIO.values)
-        childCachedIO.removeAll(keepingCapacity: false)
-        childIOLock.unlock()
-        for resource in cached {
-            resource.io.close()
-            resource.lease.close()
-        }
     }
 
     private static func metadata(_ stream: UnsafeMutablePointer<AVStream>, key: String) -> String? {
