@@ -38,6 +38,11 @@ struct AboutSettingsView: View {
                 .accessibilityIdentifier("settings.about.changelog")
             }
 
+            // Legal information also has to be reachable without signing in,
+            // so this section is a view of its own and the sign-in screens'
+            // About sheet shows the same one (HEL-143).
+            LegalSettingsSection()
+
             TVSettingsSection("Server") {
                 ForEach(serverRows, id: \.title) { row in
                     TVSettingsActionLabel(LocalizedStringKey(row.title), value: row.value)
@@ -84,6 +89,7 @@ struct AboutSettingsView: View {
                 }
                 Button("Changelog") { showingChangelog = true }
             }
+            LegalSettingsSection()
             Section("Server") {
                 ForEach(serverRows, id: \.title) { row in
                     LabeledContent(row.title, value: row.value)
