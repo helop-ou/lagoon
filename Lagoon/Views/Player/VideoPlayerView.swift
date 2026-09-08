@@ -566,11 +566,6 @@ final class PlaybackController {
                 }
                 return preferredSet.contains(language)
             }
-            // The direct provider needs to be told what it is looking at:
-            // Jellyfin's own routes never do, because the server already
-            // knows the item (HEL-92).
-            let providerAccount = OpenSubtitlesAccountStore.shared
-            providerAccount.reloadConfiguration()
             subtitleSearch.configure(
                 client: client,
                 engine: engine,
@@ -579,14 +574,7 @@ final class PlaybackController {
                 streams: orderedSubtitles,
                 preferredLanguages: self.preferredSubtitleLanguages,
                 missingMode: missingSubtitleMode,
-                hasSuitableLocalTrack: hasSuitableLocalTrack,
-                provider: providerAccount.client,
-                context: SubtitleSearchContext.from(
-                    media: media,
-                    streamURL: streamURL,
-                    fileSize: source.size
-                ),
-                sourcePreference: Self.subtitleSourcePreference()
+                hasSuitableLocalTrack: hasSuitableLocalTrack
             ) { [weak self] stream in
                 self?.orderedSubtitleStreams.append(stream)
                 self?.nowPlaying.updateLanguageOptions()
@@ -1026,15 +1014,6 @@ final class PlaybackController {
         // language alone is the durable half of the match.
         guard let language else { return nil }
         return streams.firstIndex { $0.language == language }.map { $0 + 1 }
-    }
-
-    /// Stored as a raw string so Settings can bind it with @AppStorage while
-    /// the controller — which is not a View — reads it directly.
-    static func subtitleSourcePreference(
-        defaults: UserDefaults = .standard
-    ) -> SubtitleSourcePreference {
-        defaults.string(forKey: "subtitles.source")
-            .flatMap(SubtitleSourcePreference.init(rawValue:)) ?? .automatic
     }
 
     private func publishBufferMetrics(_ metrics: PlaybackCacheMetrics?) {
