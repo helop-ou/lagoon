@@ -9,9 +9,6 @@ nonisolated enum SubtitleSearchPhase: Equatable {
     /// remote endpoint answers 403. Distinguished from a failure because it
     /// is a server setting, not something retrying can fix.
     case notPermitted
-    /// The direct provider is selected but has no API key, so it cannot be
-    /// asked anything at all.
-    case providerNotConfigured
     case noResults
     case failed(String)
     case downloading(String)
@@ -66,7 +63,7 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         case .tooLarge:
             "This subtitle exceeds Lagoon's 8 MB download limit. Choose another result or track."
         case .notPermitted:
-            "This Jellyfin account isn't allowed to manage subtitles. Ask the server administrator to enable Subtitle Management for it."
+            "Subtitle search isn't enabled for your account. Ask your server administrator to turn on “Allow subtitle management”."
         case .sessionExpired:
             "This Jellyfin session has expired. Sign in again to download subtitles."
         case .rateLimited:
@@ -294,18 +291,8 @@ final class SubtitleSearchCoordinator {
     private(set) var preferredLanguages: [String] = []
     private(set) var languageChoices: [String] = []
     private(set) var selectedLanguage: String?
-    /// Which source the last search actually used, so the UI can label where
-    /// results came from and whether a download will reach the library.
-    private(set) var activeSource: SubtitleSourceKind?
-    /// The provider's own count, shown only once it has answered.
-    private(set) var providerRemainingDownloads: Int?
 
     @ObservationIgnored private var client: JellyfinClient?
-    @ObservationIgnored private var provider: OpenSubtitlesClient?
-    @ObservationIgnored private var context = SubtitleSearchContext()
-    @ObservationIgnored private var sourcePreference: SubtitleSourcePreference = .automatic
-    @ObservationIgnored private var movieHash: String?
-    @ObservationIgnored private var movieHashTask: Task<Void, Never>?
     @ObservationIgnored private weak var engine: (any PlayerEngine)?
     @ObservationIgnored private var itemID = ""
     @ObservationIgnored private var mediaSourceID = ""
@@ -340,9 +327,6 @@ final class SubtitleSearchCoordinator {
         preferredLanguages: [String],
         missingMode: MissingSubtitleMode,
         hasSuitableLocalTrack: Bool,
-        provider: OpenSubtitlesClient? = nil,
-        context: SubtitleSearchContext = SubtitleSearchContext(),
-        sourcePreference: SubtitleSourcePreference = .automatic,
         onTrackAdded: @escaping (MediaStream) -> Void
     ) {
         cancel()
@@ -351,56 +335,15 @@ final class SubtitleSearchCoordinator {
         self.itemID = itemID
         self.mediaSourceID = mediaSourceID
         self.preferredLanguages = preferredLanguages
-        self.provider = provider
-        self.context = context
-        self.sourcePreference = sourcePreference
         languageChoices = Self.makeLanguageChoices(preferredLanguages: preferredLanguages)
         self.onTrackAdded = onTrackAdded
         selectedLanguage = nil
         results = []
-        activeSource = nil
-        movieHash = nil
         phase = .idle
         existingSignatures = Set(streams.filter { $0.type == "Subtitle" }.map(SubtitleStreamSignature.init))
-        prepareMovieHash()
         if missingMode == .automaticSearch, !hasSuitableLocalTrack {
             startSearch()
         }
-    }
-
-    /// The release-exact hash is worth having before the first search, and it
-    /// costs two 64 KiB ranged reads. It is started in the background because
-    /// a search must never wait on it: a title match is still a match.
-    private func prepareMovieHash() {
-        movieHashTask?.cancel()
-        guard provider?.isConfigured == true,
-              let url = context.streamURL,
-              let size = context.fileSize else { return }
-        movieHashTask = Task { [weak self] in
-            let hash = await MovieHashReader().hash(of: url, fileSize: size)
-            guard !Task.isCancelled else { return }
-            self?.movieHash = hash
-        }
-    }
-
-    /// Which source this search will use, given the viewer's preference, the
-    /// Jellyfin account's permission and whether a provider key exists.
-    private func resolveSource() async -> Result<SubtitleSourceKind, SubtitleSourceUnavailable> {
-        let jellyfinAllowed: Bool
-        if sourcePreference == .openSubtitles {
-            // Do not spend a Users/Me round trip on a permission this search
-            // will not use.
-            jellyfinAllowed = false
-        } else if let client {
-            jellyfinAllowed = await client.canManageSubtitles()
-        } else {
-            jellyfinAllowed = false
-        }
-        return SubtitleSourcePolicy.resolve(
-            preference: sourcePreference,
-            jellyfinAllowed: jellyfinAllowed,
-            providerConfigured: provider?.isConfigured == true
-        )
     }
 
     func selectLanguage(_ language: String?) {
@@ -423,22 +366,18 @@ final class SubtitleSearchCoordinator {
         let requested = selectedLanguage.map { [$0] } ?? preferredLanguages
         let languages = requested.isEmpty ? SubtitlePreferencesStore.systemCaptionLanguages : requested
         searchTask = Task { [weak self] in
-            guard let self else { return }
-            switch await self.resolveSource() {
-            case .failure(let reason):
+            guard let self, let client = self.client else { return }
+            guard await client.canManageSubtitles() else {
                 guard generation == self.searchGeneration else { return }
-                self.phase = reason == .providerNotConfigured ? .providerNotConfigured : .notPermitted
-            case .success(.jellyfin):
-                await self.searchJellyfin(languages: languages, generation: generation)
-            case .success(.openSubtitles):
-                await self.searchProvider(languages: languages, generation: generation)
+                self.phase = .notPermitted
+                return
             }
+            await self.searchJellyfin(languages: languages, generation: generation)
         }
     }
 
     private func searchJellyfin(languages: [String], generation: Int) async {
         guard let client else { return }
-        activeSource = .jellyfin
         let itemID = itemID
 
         // Languages are searched concurrently: one slow provider must not
@@ -513,45 +452,6 @@ final class SubtitleSearchCoordinator {
         }
     }
 
-    private func searchProvider(languages: [String], generation: Int) async {
-        guard let provider else { return }
-        activeSource = .openSubtitles
-        // One request covers every language: the provider takes them as a
-        // comma-separated filter, so the fan-out the Jellyfin path needs has
-        // no equivalent cost here.
-        _ = await movieHashTask?.value
-        guard generation == searchGeneration else { return }
-        let query = OpenSubtitlesQuery(
-            languages: languages,
-            movieHash: movieHash,
-            imdbID: context.imdbID,
-            tmdbID: context.tmdbID,
-            title: context.title,
-            seasonNumber: context.seasonNumber,
-            episodeNumber: context.episodeNumber,
-            isEpisode: context.isEpisode
-        )
-        guard query.isSearchable else {
-            phase = .noResults
-            return
-        }
-        do {
-            let found = try await provider.search(query)
-            guard generation == searchGeneration else { return }
-            results = SubtitleCandidate.ranked(found.map(SubtitleCandidate.init))
-            providerRemainingDownloads = provider.remainingDownloads
-            phase = results.isEmpty ? .noResults : .idle
-        } catch is CancellationError {
-            if generation == searchGeneration { phase = .idle }
-        } catch {
-            guard generation == searchGeneration else { return }
-            let failure = OpenSubtitlesError.classify(error)
-            phase = failure == .notConfigured
-                ? .providerNotConfigured
-                : .failed(failure.localizedDescription)
-        }
-    }
-
     /// A permission or session problem explains every other failure in the
     /// batch, so it wins over whichever language happened to fail first.
     static func mostActionable(_ failures: [SubtitleDownloadError]) -> SubtitleDownloadError? {
@@ -594,90 +494,13 @@ final class SubtitleSearchCoordinator {
         phase = .downloading(candidate.id)
         downloadTask = Task { [weak self] in
             guard let self else { return }
-            switch candidate.source {
-            case .jellyfin:
-                await self.downloadFromJellyfin(candidate, generation: generation, selectionRevision: selectionRevision)
-            case .openSubtitles:
-                await self.downloadFromProvider(candidate, generation: generation, selectionRevision: selectionRevision)
-            }
-        }
-    }
-
-    /// Straight into the player: no library write, no server permission, and
-    /// nothing about the account is disclosed to Jellyfin. A repeat watch is
-    /// served from disk because the provider allowance is measured in a
-    /// handful of downloads per day.
-    private func downloadFromProvider(_ candidate: SubtitleCandidate, generation: Int, selectionRevision: Int) async {
-        guard let provider, let engine, let fileID = candidate.providerFileID else { return }
-        do {
-            let data: Data
-            let url: URL
-            if let cached = SubtitleFileStore.cached(itemID: itemID, candidateID: candidate.id) {
-                (url, data) = (cached.url, cached.data)
-            } else {
-                let fetched = try await provider.download(fileID: fileID)
-                guard let stored = SubtitleFileStore.fileURL(itemID: itemID, candidateID: candidate.id) else {
-                    throw OpenSubtitlesError.invalidResponse
-                }
-                data = fetched
-                url = stored
-            }
-            try Task.checkCancellation()
-            guard generation == downloadGeneration else { return }
-            providerRemainingDownloads = provider.remainingDownloads
-
-            do {
-                _ = try await ExternalSubtitleLoader.parse(data, language: candidate.language)
-            } catch {
-                // Invalid legacy cache entries must not make every retry
-                // serve the same broken bytes. Fresh data is saved only
-                // after validation and the current-request checks below.
-                if !Task.isCancelled { try? FileManager.default.removeItem(at: url) }
-                throw error
-            }
-            try Task.checkCancellation()
-            guard generation == downloadGeneration else { return }
-            guard SubtitleFileStore.store(data, itemID: itemID, candidateID: candidate.id) != nil else {
-                throw OpenSubtitlesError.invalidResponse
-            }
-
-            guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
-            engine.addExternalSubtitle(ExternalSubtitleTrack(
-                url: url,
-                preloadedData: data,
-                title: candidate.name,
-                language: candidate.language,
-                select: true,
-                isForced: candidate.isForced,
-                isHearingImpaired: candidate.isHearingImpaired,
-                isDownloaded: true
-            ))
-            phase = .downloaded
-        } catch is CancellationError {
-            if generation == downloadGeneration { phase = .idle }
-        } catch {
-            guard generation == downloadGeneration else { return }
-            if let subtitle = error as? SubtitleDownloadError {
-                phase = .downloadFailed(subtitle.localizedDescription)
-                return
-            }
-            let failure = OpenSubtitlesError.classify(error)
-            if failure == .notConfigured {
-                phase = .providerNotConfigured
-                return
-            }
-            var message = failure.localizedDescription
-            // The one case where an account genuinely helps: signing in
-            // raises the daily allowance from five to twenty.
-            if failure.invitesSignIn, provider.isSignedIn == false {
-                message += " Signing in to an OpenSubtitles account in Settings raises the daily limit."
-            }
-            phase = .downloadFailed(message)
+            await self.downloadFromJellyfin(candidate, generation: generation, selectionRevision: selectionRevision)
         }
     }
 
     private func downloadFromJellyfin(_ candidate: SubtitleCandidate, generation: Int, selectionRevision: Int) async {
-        guard let client, let engine, let subtitleID = candidate.jellyfinID else { return }
+        guard let client, let engine else { return }
+        let subtitleID = candidate.jellyfinID
         var directFailure: SubtitleDownloadError?
         do {
             guard await client.canManageSubtitles() else {
