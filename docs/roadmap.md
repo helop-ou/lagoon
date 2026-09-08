@@ -45,8 +45,7 @@ bitrate cap on iOS (HEL-108).
 
 **Subtitles and audio.** Audio and subtitle track pickers over the
 server's streams; embedded text, PGS, VobSub and DVB; external subtitles
-with provider search and OpenSubtitles direct fetch, non-UTF-8 decoding,
-and on-screen positioning (M5).
+with provider search, non-UTF-8 decoding, and on-screen positioning (M5).
 
 **Home and browsing.** Top Shelf with Continue Watching, published
 incrementally (HEL-31, builds 57–61). Curated Home rows: Because You
@@ -110,6 +109,11 @@ In the order they are worth doing. Keys are Jira tickets.
 3. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
 
+A post-1.0 idea worth tracking: a Lagoon server plugin exposing fetch-only
+subtitle search to accounts without `EnableSubtitleManagement`, so an
+administrator would not need to grant those accounts library writes just to
+let them search for subtitles. No ticket yet.
+
 **Blocked upstream.** A server-wide Top 10 (HEL-121) needs a Streamystats
 endpoint that does not exist; a personal one was rejected on value.
 
@@ -154,3 +158,6 @@ deployment check on fixture once that server upgrades, so it waits here.
 - A second player path. AVPlayer and mpv were removed rather than kept in
   parallel (HEL-48), and MPVKit is only the source of the pinned FFmpeg
   artifacts.
+- A direct subtitle provider inside the app, removed in HEL-146: OpenSubtitles'
+  REST terms require one API key per application and ban apps that ask users
+  to supply their own, which is what the shipped per-device-key design did.
