@@ -23,24 +23,27 @@ final class ImageCache {
         let task: Task<Void, Never>
         var waiters: [UUID: CheckedContinuation<UIImage?, Never>]
     }
-    private var inFlight: [NSString: Load] = [:]
+    private var inFlight: [String: Load] = [:]
     private let downloader: BoundedDownload
 
     init(downloader: BoundedDownload = .shared) { self.downloader = downloader }
 
-    private func key(_ url: URL, maxPixelSize: Int) -> NSString {
-        "\(url.absoluteString)::w\(maxPixelSize)" as NSString
+    /// A `String`, not the `NSString` the cache is keyed by: the cancellation
+    /// handler runs off the main actor and carries the key with it, and a
+    /// Swift `String` is a value it may hold. Only `NSCache` needs the bridge.
+    private func key(_ url: URL, maxPixelSize: Int) -> String {
+        "\(url.absoluteString)::w\(maxPixelSize)"
     }
 
     /// Synchronous probe so views can skip the placeholder for cached images.
     func image(for url: URL, maxPixelSize: Int) -> UIImage? {
-        cache.object(forKey: key(url, maxPixelSize: maxPixelSize))
+        cache.object(forKey: key(url, maxPixelSize: maxPixelSize) as NSString)
     }
 
     func load(_ url: URL, maxPixelSize: Int) async -> UIImage? {
         guard !Task.isCancelled else { return nil }
         let key = key(url, maxPixelSize: maxPixelSize)
-        if let cached = cache.object(forKey: key) {
+        if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
         let waiter = UUID()
@@ -69,7 +72,7 @@ final class ImageCache {
         }
     }
 
-    private func cancel(key: NSString, waiter: UUID) {
+    private func cancel(key: String, waiter: UUID) {
         guard let continuation = inFlight[key]?.waiters.removeValue(forKey: waiter) else { return }
         continuation.resume(returning: nil)
         if inFlight[key]?.waiters.isEmpty == true {
@@ -77,12 +80,12 @@ final class ImageCache {
         }
     }
 
-    private func finish(key: NSString, id: UUID, image: UIImage?) {
+    private func finish(key: String, id: UUID, image: UIImage?) {
         guard let load = inFlight[key], load.id == id else { return }
         inFlight.removeValue(forKey: key)
         if let image {
             let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
-            cache.setObject(image, forKey: key, cost: cost)
+            cache.setObject(image, forKey: key as NSString, cost: cost)
         }
         for waiter in load.waiters.values { waiter.resume(returning: image) }
     }
