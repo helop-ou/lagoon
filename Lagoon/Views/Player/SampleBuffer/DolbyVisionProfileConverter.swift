@@ -3,7 +3,7 @@ import Foundation
 import Libavutil
 import OSLog
 
-private let log = Logger(subsystem: "ee.helop.lagoon", category: "dovi-p7")
+nonisolated private let log = Logger(subsystem: "ee.helop.lagoon", category: "dovi-p7")
 
 /// Which way a single-track Dolby Vision profile 7 HEVC stream (a UHD
 /// Blu-ray remux: base layer plus type-62 RPU and type-63 enhancement-layer
