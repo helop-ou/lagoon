@@ -46,9 +46,11 @@ are deliberate and manual: `xcrun agvtool new-marketing-version 0.2` (or edit
 ## Facts already encoded in the project
 
 - `ITSAppUsesNonExemptEncryption = NO` is the existing declaration. It is
-  **not a recorded exemption assessment**. HEL-143 must reconcile the bundled
-  GnuTLS stack, distribution territories and required documentation before
-  public distribution; see [release preparation](hel-143-release-preparation.md).
+  **not a recorded exemption assessment**. No third-party TLS or bignum
+  library is bundled any more (libavformat has no network stack; transport
+  encryption is URLSession's), but HEL-143 must still record the assessment,
+  distribution territories and required documentation before public
+  distribution; see [release preparation](hel-143-release-preparation.md).
 - All icon slots are filled (HEL-31), including the 1280×768 App Store
   stack that upload validation requires.
 - ATS enables `NSAllowsLocalNetworking` so home-LAN Jellyfin servers remain
