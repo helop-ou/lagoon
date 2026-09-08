@@ -2,11 +2,17 @@
 
 // HEL-48 M6 dependency slimming: Lagoon's sample-buffer engine needs only
 // FFmpeg's demux/decode libraries, not the mpv stack MPVKit exists for.
-// This package pins the exact binary artifacts from MPVKit's 1.0.0
-// release (FFmpeg 8.1.2) plus the static libraries FFmpeg's build was
-// configured against — the linker pulls only referenced objects, but the
-// archives must be present to resolve them. libmpv, MoltenVK-for-mpv,
-// libplacebo, libass and friends stay out of the project entirely.
+// This package pins libavcodec/libavutil/libswresample from MPVKit's 1.0.0
+// release (FFmpeg 8.1.2). libavformat is built by this repo without its
+// network stack (scripts/build-ffmpeg-format.py, HEL-142): HTTP goes
+// through URLSession in the app, which is also where certificate trust
+// lives, so the GnuTLS/GMP/nettle/hogweed static libraries — and the
+// --enable-version3 that GnuTLS's license required — are gone, making the
+// repo-built libavformat LGPL-2.1-or-later. The three MPVKit binaries still
+// carry upstream's version3 election until they are rebuilt here too. dav1d is also built by this repo
+// (scripts/build-dav1d.sh, HEL-137) with its arm64 assembly kept. libmpv,
+// MoltenVK-for-mpv, libplacebo, libass and friends stay out of the project
+// entirely.
 
 import PackageDescription
 
@@ -25,7 +31,6 @@ let package = Package(
             dependencies: [
                 "LagoonPixelOps",
                 "Libavcodec", "Libavformat", "Libavutil", "Libswresample",
-                "gmp", "nettle", "hogweed", "gnutls",
                 "Libdav1d", "Libuavs3d", "lcms2",
             ],
             path: "Sources/_LagoonFFmpeg",
@@ -68,8 +73,8 @@ let package = Package(
         ),
         .binaryTarget(
             name: "Libavformat",
-            // HEL-142: same FFmpeg release, verification enabled by default
-            // with Apple system trust for GnuTLS's actual peer chain.
+            // HEL-142: same FFmpeg release, built with networking compiled
+            // out (--disable-network --disable-protocols, file/data only).
             // Rebuild/provenance: scripts/build-ffmpeg-format.py.
             path: "Artifacts/Libavformat.xcframework"
         ),
@@ -82,26 +87,6 @@ let package = Package(
             name: "Libswresample",
             url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libswresample.xcframework.zip",
             checksum: "d5c36acf2ff944e15706f4b7bfbf18bb1993ffc5b446c9f67f1aa79de5441f15"
-        ),
-        .binaryTarget(
-            name: "gmp",
-            url: "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gmp.xcframework.zip",
-            checksum: "ad33c7a08f4cdcb9924c8f0e6d9a054dad33d7794b97667bf8b6fb2b236ae585"
-        ),
-        .binaryTarget(
-            name: "nettle",
-            url: "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/nettle.xcframework.zip",
-            checksum: "0fdf3ebf8bd7b8bc8eee837cf27261cb4c52ae520b6576a2f468656aa1691e02"
-        ),
-        .binaryTarget(
-            name: "hogweed",
-            url: "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/hogweed.xcframework.zip",
-            checksum: "25727c9fa67287fa0a4f4722f88bb8be669b23cd7e837e2d00870eb8a25d3f27"
-        ),
-        .binaryTarget(
-            name: "gnutls",
-            url: "https://github.com/mpvkit/gnutls-build/releases/download/3.8.11/gnutls.xcframework.zip",
-            checksum: "3dbec5809339189bf9679e218c6cff387ebf8fb72745927835afc2678f5c9f4d"
         ),
         // Lagoon also builds dav1d itself (HEL-137). mpvkit's dav1d is
         // compiled with -Denable_asm=false, to silence an Xcode 15 linker
