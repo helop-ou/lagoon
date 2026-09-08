@@ -126,7 +126,11 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
     /// may release the source frame the moment this returns.
     func convert(luma: Plane, cb: Plane, cr: Plane, into destination: CVPixelBuffer) throws {
         let done = DispatchSemaphore(value: 0)
-        var outcome: Result<Void, Error> = .success(())
+        // The semaphore is the ownership boundary: this thread owns `outcome`
+        // until `convertAsync` returns, the completion thread owns it until it
+        // signals, and this thread owns it again after `wait()`. The two
+        // accesses can never overlap, which is what the compiler cannot see.
+        nonisolated(unsafe) var outcome: Result<Void, Error> = .success(())
         try convertAsync(luma: luma, cb: cb, cr: cr, into: destination) { result in
             outcome = result
             done.signal()
@@ -152,7 +156,11 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
         let started = ProcessInfo.processInfo.systemUptime
         let source = try sourceBuffer(luma: luma, cb: cb, cr: cr)
         let mapped = ProcessInfo.processInfo.systemUptime
-        let (lumaTexture, chromaTexture) = try destinationTextures(for: destination)
+        // Both wrappers are made here and handed to the command buffer's
+        // completion handler, which is the only other code that touches them
+        // and only after the GPU is done. Neither Core Video type is Sendable
+        // and neither needs to be: this is a hand-off, not sharing.
+        nonisolated(unsafe) let (lumaTexture, chromaTexture) = try destinationTextures(for: destination)
         let elementSize = MemoryLayout<UInt16>.stride
         var parameters = Parameters(
             width: UInt32(configuration.width),
@@ -185,7 +193,11 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
             threadsPerThreadgroup: MTLSize(width: threadWidth, height: threadHeight, depth: 1)
         )
         encoder.endEncoding()
-        let sourceBufferHold = source.buffer
+        // The same hand-off for the source: the buffer is this dispatch's
+        // alone — either a wrapper around the frame's pages or a staging
+        // buffer taken out of the free list — and the completion handler is
+        // where it is released or returned.
+        nonisolated(unsafe) let sourceBufferHold = source.buffer
         commandBuffer.addCompletedHandler { [self] finished in
             // The texture wrappers hold the IOSurface and the no-copy buffer
             // holds the frame's pages; both must outlive the GPU's reads
@@ -288,18 +300,16 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
     /// otherwise copies them into a staging buffer.
     private func sourceBuffer(luma: Plane, cb: Plane, cr: Plane) throws -> SourceBuffer {
         let planes = [luma, cb, cr]
+        // The simulator's Metal driver backs no-copy buffers with XPC shared
+        // memory and traps on ordinary malloc pages; only devices wrap, so the
+        // whole branch is compiled out there instead of left unreachable
+        // behind a constant `false`.
+        #if !targetEnvironment(simulator)
         let lowest = planes.map { Int(bitPattern: $0.base) }.min()!
         let highest = planes.map { Int(bitPattern: $0.base) + $0.stride * $0.rows }.max()!
         let base = lowest & ~(pageSize - 1)
         let length = ((highest - base) + pageSize - 1) & ~(pageSize - 1)
-        // The simulator's Metal driver backs no-copy buffers with XPC shared
-        // memory and traps on ordinary malloc pages; only devices wrap.
-        #if targetEnvironment(simulator)
-        let mayWrap = false
-        #else
-        let mayWrap = true
-        #endif
-        if mayWrap, base == lowest, Self.planesShareOneAllocation(planes, pageSize: pageSize),
+        if base == lowest, Self.planesShareOneAllocation(planes, pageSize: pageSize),
            let buffer = device.makeBuffer(
                bytesNoCopy: UnsafeMutableRawPointer(bitPattern: base)!,
                length: length,
@@ -315,6 +325,7 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
                 staged: false
             )
         }
+        #endif
         // Fallback: pack the three planes, keeping their strides, into a
         // staging buffer of this frame's own.
         let required = planes.reduce(0) { $0 + $1.stride * $1.rows }
