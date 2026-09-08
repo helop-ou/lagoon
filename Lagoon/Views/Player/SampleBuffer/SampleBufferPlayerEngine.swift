@@ -356,6 +356,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var pendingURL: URL?
     @ObservationIgnored nonisolated(unsafe) private var pendingCacheSession: PlaybackCacheSession?
     @ObservationIgnored nonisolated(unsafe) private var pendingDisc: DiscPlaybackRequest?
+    @ObservationIgnored private var pendingAuthorization: MediaRequestAuthorization?
     @ObservationIgnored private var pendingStartSeconds: Double = 0
 
     init(subtitleDownloader: BoundedDownload = .shared) {
@@ -378,11 +379,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         initialSubtitleOrdinal: Int? = nil,
         audioTrackMetadata: [PlayerTrackMetadata] = [],
         embeddedSubtitleMetadata: [PlayerTrackMetadata] = [],
-        externalSubtitles: [ExternalSubtitleTrack] = []
+        externalSubtitles: [ExternalSubtitleTrack] = [],
+        authorization: MediaRequestAuthorization? = nil
     ) {
         pendingURL = url
         pendingCacheSession = cacheSession
         pendingDisc = disc
+        pendingAuthorization = authorization
         pendingStartSeconds = startSeconds
         self.externalSubtitles = externalSubtitles
         shared.withLock {
@@ -465,6 +468,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let startURL = url
         let startCacheSession = pendingCacheSession
         let startDisc = pendingDisc
+        let startAuthorization = pendingAuthorization
         let recommendedPixelBufferAttributes = video.recommendedPixelBufferAttributes
         PlaybackLifecycleDiagnostics.demuxStarted(lifecycleID)
         let demuxLifecycleID = lifecycleID
@@ -480,7 +484,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 url: startURL,
                 cacheSession: startCacheSession,
                 disc: startDisc,
-                recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
+                authorization: startAuthorization
             )
         }
     }
@@ -1698,7 +1703,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         url: URL,
         cacheSession: PlaybackCacheSession?,
         disc: DiscPlaybackRequest?,
-        recommendedPixelBufferAttributes: CVPixelBufferAttributes
+        recommendedPixelBufferAttributes: CVPixelBufferAttributes,
+        authorization: MediaRequestAuthorization?
     ) {
         defer {
             PlaybackLifecycleDiagnostics.demuxEnded(lifecycleID)
@@ -1716,7 +1722,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     url: url.absoluteString,
                     cacheSession: cacheSession,
                     disc: disc,
-                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
+                    authorization: authorization
                 )
             // A disc has no native-transport retry to fall back on: without
             // the cache there is nothing to read the filesystem through, and
@@ -1729,7 +1736,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 try demuxer.open(
                     url: url.absoluteString,
                     cacheSession: nil,
-                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
+                    authorization: authorization
                 )
             }
         } catch {
@@ -1761,7 +1769,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     url: url.absoluteString,
                     cacheSession: deliveryIsCached ? cacheSession : nil,
                     disc: disc,
-                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes
+                    recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
+                    authorization: authorization
                 )
             } catch {
                 let demuxError = error as? DemuxError
