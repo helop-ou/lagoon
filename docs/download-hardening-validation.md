@@ -3,8 +3,10 @@
 Implementation date: September 8, 2026. App version remains `0.1 (90)`.
 
 This addresses [A15 in the release audit](1.0-release-readiness-and-app-store-audit.md#a15--p2-external-subtitle-and-artwork-downloads-need-bounded-explicit-failure-handling).
-It does not close A14's watched/favourite reconciliation, A16's OpenSubtitles
-account/consumer readiness, or the physical-device acceptance matrix.
+It does not close A14's watched/favourite reconciliation or the physical-device
+acceptance matrix. A16's OpenSubtitles account/consumer readiness, also open at
+the time, was later resolved by exclusion (HEL-146): the direct integration
+described below was removed rather than made consumer-ready.
 
 ## Viewer behavior
 
@@ -31,9 +33,9 @@ shared request still needed by another view; the last cancellation stops it.
 | --- | --- | --- |
 | External subtitle sidecar | 8 MiB | HTTP 200, content validation, readable cues before replacement |
 | Jellyfin provider file | 8 MiB | Existing authentication/session checks; validate before insertion/upload |
-| Direct OpenSubtitles file | 8 MiB | Temporary file URL receives no provider API key or bearer token; validate before disk caching |
+| Direct OpenSubtitles file (retired with the integration, HEL-146) | 8 MiB | Temporary file URL receives no provider API key or bearer token; validate before disk caching |
 | Artwork, Top Shelf source, Now Playing art, trickplay sheet | 16 MiB | HTTP/content validation and complete ImageIO source before thumbnail decoding |
-| Moviehash first/last range | 64 KiB each | HTTP 206 and exact byte count; ignored Range cannot download the whole movie |
+| Moviehash first/last range (retired with the integration, HEL-146) | 64 KiB each | HTTP 206 and exact byte count; ignored Range cannot download the whole movie |
 | HTTP error body | At most 16 KiB | 401/403/429 finish at the response header without waiting for a body |
 
 These are binary limits (1 MiB = 1,048,576 bytes); subtitle UI uses the familiar
@@ -82,8 +84,9 @@ HTML; invalid cue times; pre-cancellation and active cancellation; shared image
 waiters; malformed images and successful retry; ignored movie ranges; provider
 errors and account-generation races; retained captions through failed/retried
 replacement; superseded choices, Off, provider results and shutdown.
-`SubtitleProviderTests` also exercises the actual OpenSubtitles file-download
-limit and verifies that the signed file request carries no provider credentials.
+`SubtitleProviderTests` also exercised the actual OpenSubtitles file-download
+limit and verified that the signed file request carried no provider credentials;
+that suite was retired along with the direct integration in HEL-146.
 
 The `--subtitle-downloads` lane in `scripts/test-session-recovery.py` builds and
 runs `SubtitleDownloadUITests` on disposable iPhone and Apple TV simulators.
