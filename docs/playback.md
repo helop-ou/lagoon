@@ -4,39 +4,101 @@
 playback runs through the Lagoon sample-buffer engine. The AVPlayer and mpv
 players were removed the same day the decision was made — no split paths,
 no per-container routing. Since 2026-08-17 (M6) the FFmpeg libraries come
-from the local `Packages/LagoonFFmpeg` package, which pins the four
-Libav* static xcframeworks from MPVKit's 1.0.0 release (FFmpeg 8.1.2)
-plus the static libs FFmpeg's build references (gnutls/nettle/hogweed/gmp
-for TLS, dav1d, uavs3d, lcms2) — MPVKit itself, libmpv, MoltenVK, and
-libplacebo are no longer in the project. The archives are static: the app
-binary links only referenced objects, and the bundle embeds 11 framework
-shells instead of 27. Lagoon now builds two of those artifacts: dav1d for its
-arm64 assembly (HEL-137), and libavformat for Apple TLS trust (HEL-142).
+from the local `Packages/LagoonFFmpeg` package, which pins three Libav*
+static xcframeworks from MPVKit's 1.0.0 release (FFmpeg 8.1.2: avcodec,
+avutil, swresample) plus dav1d, uavs3d and lcms2 — MPVKit itself, libmpv,
+MoltenVK, and libplacebo are no longer in the project. The archives are
+static: the app binary links only referenced objects, and the bundle embeds
+7 framework shells instead of 27. Lagoon builds two of those seven itself:
+dav1d for its arm64 assembly (HEL-137), and libavformat without a network
+stack (HEL-142, see below).
 
-## Native HTTPS verification (HEL-142)
+## Network transport
 
-Native FFmpeg I/O verifies certificates and destination hostnames, including
-direct-file fallback, HLS manifests/segments/keys, redirects and reconnects.
-`FFmpegNetworkPolicy` enforces verification at the app's native opens and
-preserves parent interrupts and protocol restrictions. Cached-HLS native
-fallbacks use this policy too. URLSession-backed cache reads retain system
-trust evaluation.
+libavformat's own network stack is gone. The owned build
+(`scripts/build-ffmpeg-format.py`) passes `--disable-network
+--disable-protocols --enable-protocol=file --enable-protocol=data`, so the
+library that used to speak HTTP/HTTPS/TLS itself now opens only local files
+and `data:` URIs — there is nothing left inside FFmpeg for a certificate to
+fool. That also dropped the GnuTLS/GMP/nettle/hogweed static libraries and
+the `--enable-version3` GnuTLS's license required, so libavformat's build
+is plain LGPL-2.1-or-later, and the xcframework shrank from 19 MB to 15 MB.
+(libavcodec, libavutil and libswresample are still MPVKit's binaries, built
+upstream with version3 on; rebuilding them here the same way is the
+remaining step for an unambiguous licence record.) One
+patch remains, `Patches/0001-hls-scheme-without-network-protocols.patch`:
+hls.c refuses any child URL whose scheme has no registered protocol, which
+without a network stack is every http(s) URL, so the patch lets it classify
+the scheme from the URL text and hand the open to `io_open`. Without it a
+transcode fails to open with "Invalid data found when processing input"
+before the transport is ever asked.
 
-The owned libavformat 8.1.2 build enables `tls_verify` by default. Its GnuTLS
-backend passes the actual peer chain to Apple's server trust policy; upstream
-GnuTLS does not load iOS/tvOS system roots. This also protects internal opens
-when HLS does not propagate the original options. Native persistent HTTP
-connections remain enabled. There is no trust-all fallback or bundled CA list.
-System and installed trust roots apply; servers must send intermediate
-certificates because trust evaluation disables additional network fetches.
-Plain HTTP server support is unchanged.
-FFmpeg's raw stderr logging is disabled because its HLS errors include complete
-token-bearing URLs. Lagoon retains its error-code and playback diagnostics.
+`FFmpegNetworkTransport` installs on every `AVFormatContext` the demuxer
+opens and owns `io_open`/`io_close2`. Every http/https open the demuxer
+makes — the top-level URL, every HLS child playlist, segment and key —
+becomes a `URLSessionByteSource` behind the existing `FFmpegCachedIO`
+bridge: a ranged GET streamed with backpressure (suspended above 8 MiB
+buffered, resumed below 2 MiB), a 206 at the requested offset or a 200 at
+offset 0 (or with a bounded discard up to 4 MiB) both accepted, any other
+status is an I/O error and never reported as EOF, transient errors retry
+from the current position up to 3 times (0.25/0.5/1 s) while 4xx never
+retries, a 15 s idle timeout applies, and the demuxer's interrupt callback is
+polled every 100 ms.
 
-Rebuild with `scripts/build-ffmpeg-format.py`, and run the controlled simulator
-certificate matrix with `scripts/test-ffmpeg-tls.py --all-unit-tests`. Build
-provenance, exact trust behavior, prerequisites and remaining physical-device
-acceptance are documented in
+`crypto+https://…` opens — hls.c's own scheme for AES-128 segments — can't
+sit on custom I/O, so they don't go through FFmpeg's crypto protocol at all:
+`AES128CBCByteSource` fetches and decrypts them in Swift with CommonCrypto
+instead. `file:` and `data:` opens still go straight to `avio_open2`, since
+neither carries a network trust decision.
+
+The credential travels as a header, not in the URL. Jellyfin media URLs
+carry the access token as a query item, and CFNetwork writes a failed task's
+full URL into the unified log, so every failed segment fetch would have
+logged it. `MediaRequestAuthorization` (built by
+`JellyfinClient.mediaRequestAuthorization()`, handed from the playback
+controller through `prepare` and the demuxer to the transport) strips
+`ApiKey`/`api_key` from same-origin request URLs and sets the
+`Authorization: MediaBrowser … Token=` header instead; requests to any other
+origin are left exactly as given, and the session delegate drops the header
+on a cross-origin redirect. The playback cache's own ranged requests still
+use the query form.
+
+Certificate trust is now whatever URLSession enforces: ordinary system trust
+evaluation, which rejects self-signed, expired and wrong-host peers and
+requires a private CA to be installed on the device rather than trusted by
+the app. The experimental HLS cache still leases immutable segments when
+enabled, on the same transport. FFmpeg's raw stderr logging is still
+disabled, because its HLS errors print complete token-bearing URLs; that
+suppression now lives in the transport, alongside Lagoon's error-code and
+playback diagnostics.
+
+The demuxer (`FFmpegDemuxer.swift`) no longer sets `tls_verify`,
+`rw_timeout` or any `reconnect*` option, and no longer calls
+`avformat_network_init` — none of it means anything to a build with no
+network protocols. It does still set `http_persistent` to 0: hls.c's
+keepalive reuses a segment's connection only through FFmpeg's own HTTP
+protocol, and left on it falls back to `io_open` for every segment while
+keeping the previous context alive, one leaked `AVIOContext` per segment.
+Off, each segment closes through `io_close2` as it finishes. `FFmpegNetworkPolicy.swift`, which used to own that
+configuration, is deleted.
+
+Rebuild with `scripts/build-ffmpeg-format.py`, verify with
+`--verify-only` (checksums, absent http/https/tls/tcp/udp protocol symbols,
+no gnutls/nettle/gmp references, `CONFIG_NETWORK 0`, `CONFIG_HLS_DEMUXER 1` —
+read from both `config.h` and `config_components.h`, since FFmpeg 8 split
+component flags into a second header), and run the controlled simulator
+certificate matrix with `scripts/test-ffmpeg-tls.py --all-unit-tests`, which
+now drives the 32-case matrix through `FFmpegNetworkTransport` instead of
+libavformat's own TLS. `LagoonTests/URLSessionByteSourceTests.swift` covers
+the transport itself against a scripted `URLProtocol` stub (streaming, seek
+restart, non-ranged servers, retried and non-retried failures, dropped
+connections, interrupts, AES-128 decryption, close/closeAll), and the
+rewritten `LagoonTests/FFmpegTransportTests.swift` checks that network is
+compiled out of libavformat, that an interrupted open returns
+`AVERROR_EXIT`, and runs the same certificate matrix through the transport.
+Both suites pass on iOS and tvOS simulators.
+
+Build provenance, exact behavior and prerequisites are documented in
 [`Libavformat.README.md`](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
 
 ## Malformed discs and expired sessions (HEL-142)
