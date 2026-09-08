@@ -171,10 +171,9 @@ navigation, details and search results are rebuilt for the next viewer.
 `AccountLocalData` centralizes forgetting (HEL-141). It removes the Jellyfin
 token, all Seerr cookies linked to that account (including previously configured
 Seerr servers), cached libraries, recent searches, and subtitle, track and Home
-preferences. Another account's data and the device-wide OpenSubtitles login
-remain. The shared Seerr server address is removed only when its last Jellyfin
-account is forgotten. Legacy global recent searches are discarded because their
-owner cannot be determined.
+preferences. Another account's data remains. The shared Seerr server address
+is removed only when its last Jellyfin account is forgotten. Legacy global
+recent searches are discarded because their owner cannot be determined.
 
 Local forgetting happens before awaiting remote logout. Immutable client copies
 perform Jellyfin/Seerr revocation so a late completion cannot affect the next
