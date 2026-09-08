@@ -732,6 +732,9 @@ final class PlayerRegressionUITests: XCTestCase {
             extraArguments: [
                 "-debug.regressionFindPlayable", "YES",
                 "-debug.experimentalPlaybackCache", "YES",
+                // Start on the remux rung so the public demo, whose items all
+                // direct-play, still serves a real HLS playlist (audit A18).
+                "-debug.regressionInitialDelivery", "remux",
                 "-playback.autoplayMode", "off",
             ]
         )
@@ -767,6 +770,9 @@ final class PlayerRegressionUITests: XCTestCase {
             title: "native-hls-regression",
             extraArguments: [
                 "-debug.regressionFindPlayable", "YES",
+                // Same remux start as the cached case: HLS for real, on any
+                // server (audit A18).
+                "-debug.regressionInitialDelivery", "remux",
                 "-playback.autoplayMode", "off",
             ]
         )
