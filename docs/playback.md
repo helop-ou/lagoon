@@ -500,10 +500,13 @@ track two thirds of a second later, and that offset is content, not clock.
 
 #### Untested
 
-Dolby Vision profile 7 discs, where the enhancement-layer filter keys off a
-DoVi record that may not survive MPEG-TS; H.264 Blu-rays, meaning everything
-before 4K; and any real DVD image, since the DVD path is verified against a
-disc authored with `dvdauthor` for the purpose and fixture holds none.
+Dolby Vision profile 7 discs: `DolbyVisionProfileConverter` (HEL-145) is out
+of scope for MPEG-TS, whose disc images carry no DoVi configuration record
+for the converter to key off of, so a profile 7 disc still plays as HDR10
+from the base layer, same as before HEL-145. H.264 Blu-rays, meaning
+everything before 4K; and any real DVD image, since the DVD path is verified
+against a disc authored with `dvdauthor` for the purpose and fixture holds
+none.
 
 ## The engine (`Lagoon/Views/Player/SampleBuffer/`)
 
@@ -1621,26 +1624,66 @@ composition cost is more representative than Simulator timing.
   sample entry with a
   `dvcC` atom (IPTPQc2 is unwatchable without the DoVi path), profile 8
   stays `hvc1` plus supplementary `dvvC` (non-DoVi displays fall back to
-  the base layer's HDR10/HLG tags), dual-layer profiles 4/7 get no atom
-  and play as HDR10 from the base layer. Profile 7
-  (`DOVIWithEL`/`DOVIWithELHDR10Plus`) **direct-plays** on that basis:
-  the BL is plain Main 10 HDR10(+), the EL NALs are unspecified types
-  the decoder ignores, and tvOS can't reconstruct dual-layer DoVi anyway
-  — same presentation as the server's strip-to-HDR10 transcode without
-  the lossy re-encode. Hardware verification pending (the simulator has
-  no HDR output; DoVi P5 may not decode in the sim at all).
-  **EL strip experiment** (HEL-64, Settings → Debug → Strip DoVi
-  Enhancement Layer, default off): P7's "ignored" EL/RPU NALs (unspec
-  types 63/62) are not free — on Snowden they are 14.5% of an 86 Mbps
-  bitstream (~11 Mbps, ~4 units per frame) of parse-and-skip work for the
-  hardware decoder. The toggle drops them from each packet before wrapping
-  (`HEVCEnhancementLayerFilter`; malformed payloads pass through
-  untouched, stripped packets lose zero-copy). A same-scene hardware sample
-  with stripping enabled was worse (3.14%, 13 stalls), not better; source
-  throughput degraded across the repeated 91 Mbps pulls, so this is not a
-  clean causal comparison and the experiment remains default-off. The HUD
-  and benchmark stdout report `EL strip` state and removed units/bytes so
-  future controlled A/Bs can prove the gate engaged.
+  the base layer's HDR10/HLG tags); neither changed for HEL-145. Profile 4
+  still gets no atom and plays as HDR10 from the base layer. Profile 7
+  (`DOVIWithEL`/`DOVIWithELHDR10Plus`) used to take that same no-atom path —
+  no DoVi atom, RPU discarded along with the enhancement layer, so a
+  profile 7 UHD Blu-ray remux (HDR10 base layer, type-63 enhancement-layer
+  NAL units and type-62 RPU NAL units interleaved in one HEVC track) played
+  as plain HDR10. `DolbyVisionProfileConverter`
+  (`Lagoon/Views/Player/SampleBuffer/DolbyVisionProfileConverter.swift`,
+  HEL-145) now converts it live instead: every type-62 RPU is rewritten to
+  profile 8.1 with libdovi — `dovi_parse_unspec62_nalu` →
+  `dovi_convert_rpu_with_mode(rpu, 2)` → `dovi_write_unspec62_nalu`, the
+  same transform `dovi_tool -m 2` performs — the type-63 units are dropped,
+  and the demuxer tags the track `hvc1` plus a supplementary profile 8.1
+  `dvvC` synthesized from the source record (profile 8, level and version
+  copied, `rpu_present` 1, `el_present` 0, `bl_present` 1, BL signal
+  compatibility id 1). MEL sources keep their base-layer mapping curves
+  and every trim. FEL sources lose the enhancement layer's residual, which
+  no Apple TV could have used anyway, and libdovi's mode 2 also resets
+  their luma and chroma mapping curves to the identity polynomial, because
+  a FEL mapping was designed to be applied together with that residual
+  (mode 4 is dovi_tool's old mapping-preserving behaviour); the DM trims
+  survive. The RPU header's
+  enhancement-layer type (FEL/MEL) is logged once per playback and shown in
+  the HUD. A libdovi failure on a packet drops that RPU and counts an error
+  rather than stalling the stream; the HUD line reads for example
+  `DoVi P7: convert · 1200 RPU → 8.1 · 1200 EL dropped · 11.3 MB · FEL ·
+  errors 0`. This applies only to a single-track profile 7 with a DoVi
+  configuration record in the container — MKV remuxes; disc images
+  (MPEG-TS, no such record) are untouched, same as before HEL-145.
+  Hardware verification pending (the simulator has no HDR output; DoVi P5
+  may not decode in the sim at all; the TV reporting Dolby Vision and the
+  frame-loss bench for the converted path are still owed). **Dependency**:
+  libdovi, the C API of dovi_tool's `dolby_vision` crate 3.4.0 (MIT, dual
+  MIT/Apache-2.0), vendored as
+  `Packages/LagoonFFmpeg/Artifacts/Libdovi.xcframework` from
+  superuser404notfound/LibDovi tag 2.1.0 (commit
+  0d7cce1d) — iOS/tvOS/macOS slices only, static libraries stripped of
+  local symbols; provenance and per-slice hashes are in
+  `Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md`. The tvOS simulator
+  slice is arm64 only, so the Xcode project sets
+  `EXCLUDED_ARCHS[sdk=appletvsimulator*] = x86_64`. Not built by this repo
+  — the machine has no Rust toolchain — so a rebuild follows upstream's
+  `build.sh`. **Compatibility fallback**: HEL-64's "Strip DoVi Enhancement
+  Layer" experiment is retired into this — Settings → Advanced → Playback
+  Diagnostics → "Dolby Vision Compatibility Mode" (default off,
+  `debug.stripDoviEL`): on, profile 7 plays as HDR10 from the base layer
+  with both unit types dropped, today's pre-HEL-145 behaviour; off, the
+  default, converts as described above. `HEVCEnhancementLayerFilter`
+  became `HEVCNALUnitRewriter`, a general length-prefixed NAL walker with
+  keep/drop/replace, used by both the fallback and the converter (malformed
+  payloads still pass through untouched; a rewritten packet still loses
+  zero-copy). The measurement that motivated keeping a fallback at all:
+  P7's EL/RPU NALs are not free to carry even when unused — on Snowden they
+  were 14.5% of an 86 Mbps bitstream (~11 Mbps, ~4 units per frame) of
+  parse-and-skip work for the hardware decoder — but a same-scene hardware
+  sample with stripping enabled measured worse (3.14%, 13 stalls) than not
+  stripping, and source throughput degraded across the repeated 91 Mbps
+  pulls in that run, so it was never a clean causal comparison. The
+  frame-loss bench needs to be rerun against the HEL-145 converted path
+  before either default is trusted on hardware.
 - **Stall recovery** (M6): when the clock catches up to the last
   delivered video pts with a dry queue and the file isn't over, the
   engine holds the synchronizer (buffering spinner) and auto-resumes
@@ -2240,13 +2283,36 @@ keyed on position, not wall time, so stalls stretch the run without
 diluting the denominator; stalls are reported in the result, not
 discarded.
 
-`scripts/framedrop-bench.sh` automates repeated runs in the simulator:
-seeds a resume point via the Jellyfin API, launches playback through the
-`lagoon://play/{id}` deep link, waits out the window hands-off, and reads
-`Bench Result` back — note the simulator has its own log store
-(`xcrun simctl spawn <udid> log show`), the host's `log show` sees
-nothing. `--set key=bool` flips app defaults between A/B configs. On real
-hardware, read the same number off the HUD's Bench line instead.
+`scripts/framedrop-bench.sh` automates repeated runs in the simulator. It
+does **not** use the `lagoon://` deep link — since HEL-141
+`DeepLinkRouter` only accepts links carrying an `?owner=&generation=`
+pair matching the current Top Shelf publication, so the old
+`lagoon://play/{id}` link is silently dropped. Instead it drives
+`MainTabView`'s launch-time bench hook
+(`launchBenchItemIfRequested()`): each run it force-quits the app
+(`simctl terminate`), writes `debug.frameLossBench`, `debug.playbackHUD`,
+`debug.benchAutoExit`, `debug.benchSearchTerm` (the movie title),
+`debug.benchStartSeconds` (the pinned start position), and optionally
+`debug.benchProductionYear` via `simctl spawn … defaults write`, then
+relaunches (`simctl launch`) so the app's own startup task resolves the
+title against the MOVIES library and jumps straight into playback at
+that position — `debug.benchAutoExit` leaves the player through the
+clean teardown path once the window completes. **The title must exactly
+match a movie's name** (case/diacritic-insensitive); the hook only
+searches `includeTypes: [.movie]`, so TV episodes cannot be benched this
+way, and `--year` disambiguates remakes/re-releases that share a title.
+After the runs it deletes every default it wrote (including any `--set`
+keys), leaving the simulator as it was found. It then waits out the
+window hands-off and reads `Bench Result` back — note the simulator has
+its own log store (`xcrun simctl spawn <udid> log show`), the host's
+`log show` sees nothing. `--set key=bool` flips app defaults between A/B
+configs; the app must already be installed on the target simulator and
+signed in, e.g.:
+
+    scripts/framedrop-bench.sh --title "Deadgirl" --position 600 --runs 3 \
+        --set debug.simulatorTranscode=true
+
+On real hardware, read the same number off the HUD's Bench line instead.
 
 For scripted device A/Bs, pass `-debug.benchStartSeconds <seconds>` at
 launch alongside `-debug.frameLossBench YES`. This pins the engine start
