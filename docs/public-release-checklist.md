@@ -15,8 +15,9 @@ performed by the privacy implementation pass.
 - [x] Direct OpenSubtitles removed (HEL-146); subtitle search relies on Jellyfin.
 - [ ] Publish privacy/support pages with the selected domain, publisher identity
   and monitored contact. Add privacy/support/acknowledgements access before login
-  and in About; verify iPhone/iPad and tvOS presentation. Start with the
-  [website brief](website/README.md) for the proposed address, page scope and work order.
+  and in About; verify iPhone/iPad and tvOS presentation. The pages are built in
+  the `lagoon-website` repository; see the [website brief](website/README.md) for
+  what remains before publication (address, DNS, screenshots).
 - [ ] Complete HEL-144 physical acceptance, including the permission journey from
   HEL-143 and pending HEL-141/142 device checks.
 
