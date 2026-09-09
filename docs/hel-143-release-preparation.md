@@ -166,12 +166,12 @@ against the actual release and retain the supporting assessment/documents.
 
 ## Website, integration and release decisions
 
-The owner intends to create a website. The [website brief](website/README.md)
-records `lagoon.helop.ee` as the proposed starting address, the four-page scope
-and a work order for later implementation. Domain control, hosting and the
-support contact still need confirmation.
-[Privacy copy](website/privacy.md) and [support copy](website/support.md) are local
-drafts, with no invented contact or live URLs. In-app acknowledgements and
+The website is built in the separate `lagoon-website` repository (September 10,
+2026) and not yet published. The [website brief](website/README.md) records
+`lagoon.helop.ee` as the proposed starting address and what remains before
+publication; domain control and the support contact still need confirmation.
+[Privacy copy](website/privacy.md) and [support copy](website/support.md) were the
+local drafts for it and are superseded by the pages in the website repository. In-app acknowledgements and
 pre-login access to legal information are done, closing the in-app half of
 the readiness audit's A06: Settings → About → Legal and the signed-out
 "About Lagoon" action both work today. Publishing the privacy/support pages
