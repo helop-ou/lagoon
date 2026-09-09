@@ -1,8 +1,12 @@
 # Lagoon website brief
 
-Planning record from September 7, 2026, under HEL-143. Start here when website
-work resumes. The site has not been built or published; the existing privacy and
-support documents in this directory are editorial drafts.
+Planning record from September 7, 2026, under HEL-143. The site is built in the
+separate `lagoon-website` repository (SvelteKit, fully prerendered, Cloudflare
+Workers static assets like `helop-website`) as of September 10, 2026, but is not
+yet published: it has no remote, no DNS and no rights-cleared screenshots. The
+privacy and support documents in this directory were the editorial drafts for it;
+the pages in the website repository now carry the current copy, so edit there and
+treat these files as history.
 
 ## Purpose and address
 
@@ -62,7 +66,8 @@ open choices; use a setup that is easy to maintain alongside the app.
 ## Decisions to make when work resumes
 
 - [ ] Confirm `lagoon.helop.ee` as the public address and verify DNS control.
-- [ ] Choose hosting, deployment method and who maintains the site.
+- [x] Choose hosting, deployment method and who maintains the site: Cloudflare
+  Workers static assets via `wrangler.jsonc`, maintained alongside `helop-website`.
 - [ ] Choose a monitored support/privacy contact and confirm publisher identity.
 - [ ] Decide the initial site languages and keep policy/support content aligned
   with the App Store languages being offered.
@@ -70,12 +75,15 @@ open choices; use a setup that is easy to maintain alongside the app.
   messages, Apple-provided reports, services and any website hosting logs.
 - [x] Direct OpenSubtitles inclusion: removed under HEL-146.
 - [ ] Resolve the dependency licensing materials before finalizing related copy.
-- [ ] Select rights-cleared screenshots and write concise landing-page copy.
+- [ ] Select rights-cleared screenshots; the site draws each app layout as a
+  placeholder until a file lands in its `static/screens/` folder.
+- [x] Write concise landing-page copy.
 
 ## Suggested work order
 
 1. Review this brief and the existing drafts; settle address, hosting and contact.
 2. Build the shared layout and the four routes with the app's existing identity.
+   Done in `lagoon-website`: landing, privacy, support, licences and a 404 page.
 3. Finalize the policy, support and licensing materials against the actual release.
    Remove editorial instructions and unresolved placeholders from public copy.
 4. Review a preview on phone and desktop, including keyboard navigation, contrast,
