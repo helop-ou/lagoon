@@ -1,5 +1,9 @@
 # HEL-141 — account privacy validation
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 Date: September 7, 2026. Implements audit findings **A02, A09 and A11**.
 Changes are local and uncommitted, alongside the existing HEL-142 changes.
 Physical Apple TV shared Home-screen acceptance remains required before closing
