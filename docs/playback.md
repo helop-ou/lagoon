@@ -3054,6 +3054,29 @@ These are all verified on device, not inferred:
 
 - The custom player UI (`CustomPlayerView`) talks **only to the
   `PlayerEngine` protocol** — engine internals must never leak into it.
+- **And it never owns the engine** (HEL-152): after an Up Next handoff the
+  lifecycle diagnostics read `engines=2 … destroyed=0` for the rest of the
+  successor. Demux and renderer counts stayed at 1, so nothing overlapped in
+  decoding; what leaked was one drained `SampleBufferPlayerEngine` per
+  episode boundary until the player was dismissed. `leaks --traceTree` named
+  the retainer: a stale `AddGestureModifier<_EndedGesture<TapGesture>>`
+  callback context — the video surface's `onTapGesture` (Select on tvOS)
+  captures `CustomPlayerView` by value, and with it the view's strong
+  `let engine`. The stale copy sits *beside* the refreshed one rather than
+  being replaced by it: after the handoff a further Select paused the new
+  engine, so the live closure was current, and still did not release the old
+  one. Every player view with a gesture had the same shape on iOS — the Up
+  Next card's and skip pill's taps, the scrubber's drag. So no player view
+  holds the engine strongly any more: `PlayerEngineRef`
+  (`Lagoon/Views/Player/PlayerEngineRef.swift`) is a property wrapper with a
+  weak reference, every view declares `@PlayerEngineRef var engine`, call
+  sites are unchanged because the memberwise initializer still takes the
+  engine, `PlaybackController` is the only owner, and a copy that outlives
+  its engine reads `DetachedPlayerEngine.shared` — nothing playing, every
+  control a no-op — instead of crashing. The host's surface builder closure
+  in `VideoPlayerView` captures the engine `[weak]` for the same reason.
+  `PlayerEngineRefTests` pins the wrapper; the handoff journey's
+  `engines == 1` assertion is what caught it.
 - Focus invariants: the video surface is focusable at **all** times (Menu
   would quit the app from an unfocusable screen).
 - **Scrub grammar** (HEL-39 slice 2, reworked in HEL-55): tvOS arrows walk
