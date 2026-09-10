@@ -563,3 +563,38 @@ and AVKit are not alternate playback engines. See [playback.md](playback.md).
   than its `NavigationStack`. On a browse screen it costs the top third of
   the display to a keyboard nobody asked for; on the stack it draws the field
   over pushed detail pages.
+
+## Player input and presentation (HEL-153)
+
+On tvOS the video surface owns focus: Select follows scrub, Skip, Up Next,
+then play/pause priority; light remote touch reveals controls, and Menu
+cancels scrubbing, closes the panel, then exits.
+
+On iPhone and iPad a single surface tap toggles the transport. The centered
+play/pause and 10-second back/forward buttons fade with it after four seconds
+of playing without interaction. Paused playback and VoiceOver keep the
+transport available while the options sheet is closed. Hidden buttons and
+the timeline leave the accessibility tree as well as disabling touch input;
+fading their opacity alone preserves their layout and accessibility elements.
+The iOS content ignores the navigation bar's
+top safe-area changes so hiding the toolbar cannot move the center buttons.
+Double-tapping either half seeks 10 seconds without revealing the transport;
+another double-tap in the 700 ms feedback window accumulates the displayed
+total. Changing direction resets that total. Dragging the rail previews the
+shared trickplay loader's frame and commits on release. Skip Intro/Recap and
+Up Next accept direct taps above the video surface. The Info sheet suppresses
+surface interaction.
+
+The iPhone locks to landscape while fullscreen and releases the lock on exit;
+iPad retains rotation and multitasking support. Audio retains Apple's normal
+movie-playback category: volume keys control output and Silent Mode does not
+silence a movie (confirmed by Jaagop on 2026-09-10).
+
+On iOS `playerPresentation` owns a hosting controller across PiP. Close starts
+PiP when available, otherwise stops playback. Only AVKit's successful start
+callback hides fullscreen, retaining the controller, engine and display layer.
+Restore presents the same hosting controller; closing the popup releases the
+session and sends the stop report. Removing the presenting screen also cleans
+up playback. tvOS continues using its existing SwiftUI full-screen cover.
+PiP availability, background transition timing and captions require physical
+iPhone/iPad acceptance; simulator touch coverage alone does not establish it.
