@@ -18,6 +18,17 @@ import SwiftUI
 /// layer by `MenuPressGate` — scrubbing cancels back to the live position,
 /// else panel open closes the panel, otherwise the player exits (SwiftUI's
 /// `onExitCommand` never fires inside a fullScreenCover on tvOS 26).
+///
+/// Everything the engine moves at tick rate is rendered by a child view that
+/// reads it in its own body — `PlayerTransportOverlay`'s rail and timestamps,
+/// `PlayerSubtitleOverlay`, `PlayerSkipOverlay`, `PlayerNextUpOverlay`, and
+/// the launch-gated `PlayerRegressionValue`. This view owns the remote
+/// grammar and the state those transitions produce, and must stay clear of
+/// `timePosition`, the `currentSubtitle*` properties and anything else the
+/// engine updates ten times a second: Observation tracks reads per body, and
+/// on tvOS one such read here re-hosts `MenuPressGate`'s whole tree with
+/// every tick (HEL-150). Reads from event handlers and task closures run
+/// later and are not body reads, so they are fine.
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     /// Stable media identity, independent of the engine object's lifetime.
@@ -97,16 +108,10 @@ struct CustomPlayerView<Surface: View>: View {
     /// Segments already acted on or waved away, so a committed skip (or a
     /// "no thanks") doesn't re-arm the moment the playhead lands.
     @State private var handledSegmentIDs: Set<String> = []
-    /// 0…1, drives the auto-skip fill. Value-driven, because `withAnimation`
-    /// does not survive the MenuPressGate hosting boundary (see below).
-    @State private var autoSkipFill: Double = 0
     @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
     /// The Up Next card, waved away with Back — stays down for the rest of
     /// the episode rather than re-arming on the next position tick.
     @State private var nextUpDismissed = false
-    /// 0…1, drives the countdown fill, value-driven for the same reason
-    /// `autoSkipFill` is.
-    @State private var nextUpFill: Double = 0
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
@@ -170,11 +175,26 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
+    /// Deliberately free of anything the engine updates at tick rate.
+    ///
+    /// Observation tracks property reads per body, and on tvOS this whole
+    /// tree is rebuilt inside `MenuPressGate.updateUIViewController`, so one
+    /// `engine.timePosition` read in here used to re-host the hosting
+    /// controller's entire view tree ten times a second (HEL-150). The views
+    /// that actually display the playhead, the cues and the skip/Up Next
+    /// windows read those properties in their own bodies instead, and the
+    /// per-tick invalidation stops at them. Reads inside event handlers and
+    /// task closures are not body reads and are fine; the computed properties
+    /// below that touch `engine.timePosition` exist only for those.
     private var playerContent: some View {
         ZStack {
             videoSurface
 
-            subtitleOverlay
+            PlayerSubtitleOverlay(
+                engine: engine,
+                style: subtitleStyle,
+                onDisplayedCaption: reportDisplayedCaption
+            )
 
             if case .failed = engine.subtitleLoadState, !panelOpen {
                 VStack {
@@ -210,11 +230,49 @@ struct CustomPlayerView<Surface: View>: View {
             }
             .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: seekFeedback)
 
-            skipOverlay
+            PlayerSkipOverlay(
+                engine: engine,
+                playbackIdentity: playbackIdentity,
+                segments: info.segments,
+                handledSegmentIDs: handledSegmentIDs,
+                isSuppressed: panelOpen || isScrubbing,
+                skipMode: skipMode,
+                reduceMotion: reduceMotion,
+                onSkip: skip
+            )
 
-            nextUpOverlay
+            PlayerNextUpOverlay(
+                engine: engine,
+                playbackIdentity: playbackIdentity,
+                episode: nextUp,
+                cardStart: nextUpStart,
+                countdownStart: nextUpCountdownStart,
+                isSuppressed: panelOpen || isScrubbing || nextUpDismissed,
+                autoplayMode: autoplayMode,
+                reduceMotion: reduceMotion,
+                hint: hint,
+                onPlayNext: { onPlayNext?() }
+            )
 
-            transportOverlay
+            PlayerTransportOverlay(
+                engine: engine,
+                info: info,
+                scrubTarget: scrubTarget,
+                showsEndTime: showsEndTime,
+                showsPanelHint: showsPanelHint,
+                bufferedFraction: bufferedFraction,
+                bufferedRanges: bufferedRanges,
+                trickplay: trickplay,
+                onScrubPreview: { seconds in
+                    scrubTarget = seconds
+                    pokeControls()
+                },
+                onCommitScrub: { seconds, resume in
+                    commitScrub(to: seconds, resume: resume)
+                },
+                onCancelScrub: cancelScrub,
+                onPoke: pokeControls
+            )
                 .opacity(transportVisible ? 1 : 0)
                 // A faded-out overlay still hit-tests: without this the
                 // invisible iOS scrubber would swallow drags meant for the
@@ -302,48 +360,8 @@ struct CustomPlayerView<Surface: View>: View {
         .onChange(of: scrubTarget) { _, target in
             if let target { trickplay?.update(to: target) }
         }
-        .onChange(of: engine.currentSubtitleText, initial: true) { _, text in
-            reportDisplayedCaption(text)
-        }
         .onDisappear {
             reportDisplayedCaption(nil)
-        }
-        // Arms whenever the playhead crosses into a skippable segment.
-        // Keyed on the segment id, so it fires once per segment rather than
-        // on every position tick.
-        .task(id: activeSegment?.id) {
-            guard let segment = activeSegment else {
-                autoSkipFill = 0
-                return
-            }
-            switch skipMode {
-            case .instant:
-                skip(segment)
-            case .autoDelay:
-                autoSkipFill = 1
-                try? await Task.sleep(for: .seconds(SkipMode.autoDelaySeconds))
-                // Menu may have waved it away, or a scrub may have carried
-                // the playhead out, while the fill was running.
-                guard !Task.isCancelled, activeSegment?.id == segment.id else { return }
-                skip(segment)
-            case .button:
-                break
-            }
-        }
-        // Arms as the playhead crosses into the countdown window. Keyed on
-        // the flag rather than the position so it fires once, not ten times
-        // a second.
-        .task(id: nextUpCountingDown) {
-            guard nextUpCountingDown else {
-                nextUpFill = 0
-                return
-            }
-            nextUpFill = 1
-            try? await Task.sleep(for: .seconds(AutoplayMode.countdownSeconds))
-            // Back may have waved it away, or a scrub carried the playhead
-            // back out of the credits, while the fill was running.
-            guard !Task.isCancelled, nextUpCountingDown else { return }
-            onPlayNext?()
         }
         // Two beats of quiet, both timed from the last press. The first
         // ends the acceleration run, so the next press steps 10 s again.
@@ -419,18 +437,6 @@ struct CustomPlayerView<Surface: View>: View {
     private var videoSurface: some View {
         surface()
             .ignoresSafeArea()
-        #if DEBUG && os(iOS)
-            .overlay(alignment: .topLeading) {
-                if UserDefaults.standard.bool(forKey: "debug.playerRegression") {
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Playback state")
-                        .accessibilityIdentifier("player.regression.state")
-                        .accessibilityValue(regressionAccessibilityValue)
-                }
-            }
-        #endif
         #if os(tvOS)
             // The surface owns focus during playback. It stays eligible
             // during the panel animation so there is never a focusless
@@ -438,20 +444,34 @@ struct CustomPlayerView<Surface: View>: View {
             // that arrives before a tab has accepted focus.
             .focusable()
             .focused($playerFocus, equals: .surface)
+        #endif
             // The regression suite reads state from the surface that owns
-            // focus. A separate invisible accessibility element stole arrow
-            // focus on the first hardware run and therefore tested the
-            // probe, not the player.
-            .accessibilityIdentifier(
-                UserDefaults.standard.bool(forKey: "debug.playerRegression")
-                    ? "player.regression.state"
-                    : ""
+            // focus. The probe is a modifier so the tick-rate values it
+            // reports are read in its body rather than this one (HEL-150).
+            .modifier(
+                PlayerRegressionValue(
+                    engine: engine,
+                    info: info,
+                    playbackIdentity: playbackIdentity,
+                    playerSurfaceIdentity: playerSurfaceIdentity,
+                    playbackMethod: playbackMethod,
+                    deliveryRung: deliveryRung,
+                    isPlaybackCacheActive: isPlaybackCacheActive,
+                    bufferedFraction: bufferedFraction,
+                    bufferedRanges: bufferedRanges,
+                    playheadPrefetchCount: playheadPrefetchCount,
+                    handoffMilliseconds: handoffMilliseconds,
+                    nextUpCardStart: nextUpStart,
+                    isNextUpSuppressed: panelOpen || isScrubbing || nextUpDismissed,
+                    isScrubbing: isScrubbing,
+                    lastCommittedScrubTarget: lastCommittedScrubTarget,
+                    panelOpen: panelOpen,
+                    selectedTab: selectedTab,
+                    focus: playerFocus,
+                    trickplay: trickplay
+                )
             )
-            .accessibilityValue(
-                UserDefaults.standard.bool(forKey: "debug.playerRegression")
-                    ? regressionAccessibilityValue
-                    : ""
-            )
+        #if os(tvOS)
             .onMoveCommand { direction in
                 if panelOpen {
                     // tvOS can retain the full-screen surface until the
@@ -555,9 +575,9 @@ struct CustomPlayerView<Surface: View>: View {
         scrubStepToken += 1
         scrubHopped = false
         handledSegmentIDs.removeAll()
-        autoSkipFill = 0
         nextUpDismissed = false
-        nextUpFill = 0
+        // The skip and Up Next fills belong to their overlays now and are
+        // keyed on `playbackIdentity`, so they clear themselves here.
         trickplay = info.trickplay.map(TrickplayLoader.init(source:))
         reportDisplayedCaption(nil)
         #if os(tvOS)
@@ -660,75 +680,34 @@ struct CustomPlayerView<Surface: View>: View {
         scrubStepToken += 1
     }
 
-    /// The chapter the scrub playhead is sitting in, for the chip's caption.
-    private var scrubChapter: PlayerChapter? {
-        guard let target = scrubTarget else { return nil }
-        return info.chapters.last { $0.start <= target }
-    }
-
-    /// Where the playhead knob sits: the virtual position while scrubbing,
-    /// the engine's otherwise.
-    private var knobFraction: CGFloat {
-        guard engine.duration > 0 else { return 0 }
-        let seconds = scrubTarget ?? engine.timePosition
-        return CGFloat(min(max(seconds / engine.duration, 0), 1))
-    }
-
     // MARK: - Skip intro / recap (HEL-63)
 
     private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
 
-    /// The skippable segment the playhead is inside, if any.
+    /// The skippable segment the playhead is inside, if any. Reached only
+    /// from remote handlers — `PlayerSkipOverlay` computes the same answer in
+    /// its own body, from the same policy, so the pill and Select cannot
+    /// disagree (HEL-150).
     ///
     /// Suppressed while the panel is open or a scrub is up: both own the
     /// screen and the remote, and a button that quietly rewrites what Select
     /// does underneath them would be a trap.
     private var activeSegment: MediaSegment? {
         guard !panelOpen, !isScrubbing else { return nil }
-        return info.segments.first {
-            $0.kind.isSkippable
-                && !handledSegmentIDs.contains($0.id)
-                && $0.contains(engine.timePosition)
-        }
+        return SkipSegmentPolicy.activeSegment(
+            in: info.segments,
+            at: engine.timePosition,
+            handled: handledSegmentIDs
+        )
     }
 
     private func skip(_ segment: MediaSegment) {
         // Marked before seeking: landing near the end would otherwise put
         // the playhead back inside the segment and re-arm the whole thing.
+        // The overlay's fill clears itself when the segment goes inactive.
         handledSegmentIDs.insert(segment.id)
-        autoSkipFill = 0
         engine.seek(to: segment.end)
         pokeControls()
-    }
-
-    /// Bottom-trailing, clear of the transport — the shelf the reference
-    /// players use. Not focusable; Select drives it (see `onTapGesture`).
-    @ViewBuilder
-    private var skipOverlay: some View {
-        Group {
-            if let segment = activeSegment, skipMode != .instant {
-                PlayerSkipPrompt(
-                    title: segment.kind.skipTitle,
-                    showsCountdown: skipMode == .autoDelay,
-                    fill: autoSkipFill
-                )
-                .transition(transientScaleTransition)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, Metrics.screenGutter)
-                .padding(.bottom, SkipMetrics.bottomInset)
-            }
-        }
-        .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: activeSegment?.id)
-        #if os(tvOS)
-        .allowsHitTesting(false)
-        #else
-        .onTapGesture {
-            if let segment = activeSegment, skipMode != .instant {
-                skip(segment)
-            }
-        }
-        .accessibilityAddTraits(.isButton)
-        #endif
     }
 
     // MARK: - Up Next (HEL-66)
@@ -741,72 +720,33 @@ struct CustomPlayerView<Surface: View>: View {
         info.segments.first { $0.kind == .outro }
     }
 
-    /// When the card appears. With an outro that is where the credits start;
-    /// without one it is a short fixed run-out, because guessing any earlier
-    /// would put the card over the closing scene.
+    /// Where the card is due and where its fill starts. Both are handed to
+    /// `PlayerNextUpOverlay`, which is what compares them against the moving
+    /// position; `engine.duration` is safe to read here because it changes
+    /// once per item, not once per tick (HEL-150).
     private var nextUpStart: Double? {
-        guard nextUp != nil, autoplayMode != .off, engine.duration > 0 else { return nil }
-        if let outro { return outro.start }
-        return engine.duration - NextUpMetrics.fallbackLeadIn
+        NextUpPolicy.cardStart(
+            hasEpisode: nextUp != nil,
+            autoplayMode: autoplayMode,
+            duration: engine.duration,
+            outroStart: outro?.start
+        )
     }
 
-    /// When the fill starts, which is not always when the card does.
-    ///
-    /// With an outro there are credits to cut short, so the countdown runs
-    /// from their first frame — the whole point of the feature. Without one
-    /// the server has told us nothing about where the episode stops being
-    /// the episode, so the fill is pinned to the last seconds of the file
-    /// and autoplay can never eat content nobody called credits.
     private var nextUpCountdownStart: Double? {
-        guard let nextUpStart else { return nil }
-        if outro != nil { return nextUpStart }
-        return max(nextUpStart, engine.duration - AutoplayMode.countdownSeconds)
+        NextUpPolicy.countdownStart(
+            cardStart: nextUpStart,
+            outroStart: outro?.start,
+            duration: engine.duration
+        )
     }
 
-    /// Suppressed while the panel is open or a scrub is up, exactly as the
-    /// skip pill is: both own the screen and the remote.
+    /// Reached only from remote handlers, for the same reason `activeSegment`
+    /// is. Suppressed while the panel is open or a scrub is up, exactly as
+    /// the skip pill is: both own the screen and the remote.
     private var showsNextUp: Bool {
         guard let nextUpStart, !nextUpDismissed, !panelOpen, !isScrubbing else { return false }
         return engine.timePosition >= nextUpStart
-    }
-
-    private var nextUpCountingDown: Bool {
-        guard showsNextUp, autoplayMode == .autoDelay, let start = nextUpCountdownStart else { return false }
-        return engine.timePosition >= start
-    }
-
-    /// Bottom-trailing, on the same shelf as the skip pill. The two can
-    /// never be up together — intro and recap live at the front of an
-    /// episode, the credits at the back — so they share the corner rather
-    /// than competing for it.
-    @ViewBuilder
-    private var nextUpOverlay: some View {
-        Group {
-            if showsNextUp, let nextUp {
-                PlayerNextUpCard(
-                    episode: nextUp,
-                    showsCountdown: autoplayMode == .autoDelay,
-                    fill: nextUpFill,
-                    hint: hint
-                )
-                .transition(transientScaleTransition)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, Metrics.screenGutter)
-                .padding(.bottom, NextUpMetrics.bottomInset)
-                #if !os(tvOS)
-                // Touch has no Select to route, so the card takes the tap
-                // itself — see the hit-testing note below.
-                .onTapGesture { onPlayNext?() }
-                #endif
-            }
-        }
-        .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: showsNextUp)
-        // tvOS drives this from the surface's Select, and a focusable card
-        // would move `onMoveCommand` off the surface and kill scrubbing
-        // while it is up — the same trap the skip pill documents.
-        #if os(tvOS)
-        .allowsHitTesting(false)
-        #endif
     }
 
     private var hint: LocalizedStringKey {
@@ -815,102 +755,6 @@ struct CustomPlayerView<Surface: View>: View {
         #else
         "Tap to play now"
         #endif
-    }
-
-    // MARK: - Subtitles (HEL-48 M5)
-
-    /// Bitmap cues (PGS/VobSub) land exactly where they compose on the
-    /// video plane; text cues sit bottom-center Infuse-style.
-    private var subtitleOverlay: some View {
-        GeometryReader { proxy in
-            let videoRect = displayedVideoRect(in: proxy.size)
-            ZStack(alignment: .topLeading) {
-                Color.clear
-                ForEach(Array(engine.currentSubtitleImages.enumerated()), id: \.offset) { _, cue in
-                    Image(decorative: cue.image, scale: 1)
-                        .resizable()
-                        .accessibilityIdentifier("player.subtitle.image")
-                        .frame(
-                            width: videoRect.width * cue.rect.width,
-                            height: videoRect.height * cue.rect.height
-                        )
-                        .position(
-                            x: videoRect.minX + videoRect.width * cue.rect.midX,
-                            y: videoRect.minY + videoRect.height * cue.rect.midY
-                        )
-                }
-                let textCues = engine.currentSubtitleCues
-                if !textCues.isEmpty,
-                   textCues.allSatisfy({ $0.usesDefaultPlacement && $0.usesDefaultStyle }),
-                   let text = engine.currentSubtitleText {
-                    // Preserve the exact pre-HEL-107 path for ordinary SRT,
-                    // WebVTT and unstyled dialogue.
-                    VStack {
-                        Spacer()
-                        PlayerSubtitleText(text: text, style: subtitleStyle)
-                    }
-                    .frame(maxWidth: .infinity)
-                } else if !textCues.isEmpty {
-                    let defaultCues = textCues.filter(\.usesDefaultPlacement)
-                    if !defaultCues.isEmpty {
-                        VStack(spacing: Metrics.Space.xs) {
-                            Spacer()
-                            ForEach(Array(defaultCues.enumerated()), id: \.offset) { index, cue in
-                                PlayerStyledSubtitleText(
-                                    cue: cue,
-                                    style: subtitleStyle,
-                                    accessibilityIdentifier: Self.subtitleIdentifier(index)
-                                )
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, subtitleStyle.bottomPadding)
-                    }
-                    ForEach(
-                        Array(textCues.filter { !$0.usesDefaultPlacement }.enumerated()),
-                        id: \.offset
-                    ) { index, cue in
-                        PositionedSubtitleLayout(
-                            position: cue.position,
-                            alignment: cue.alignment ?? .bottomCenter
-                        ) {
-                            PlayerStyledSubtitleText(
-                                cue: cue,
-                                style: subtitleStyle,
-                                accessibilityIdentifier: Self.subtitleIdentifier(defaultCues.count + index)
-                            )
-                        }
-                        .frame(width: videoRect.width, height: videoRect.height)
-                        .position(x: videoRect.midX, y: videoRect.midY)
-                    }
-                }
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-    }
-
-    /// Where the aspect-fit video actually sits inside the surface.
-    /// The first cue on screen keeps `player.subtitle.text`; the rest are
-    /// suffixed so simultaneous authored cues stay individually addressable
-    /// without making that name ambiguous.
-    static func subtitleIdentifier(_ index: Int) -> String {
-        index == 0 ? "player.subtitle.text" : "player.subtitle.text.\(index)"
-    }
-
-    private func displayedVideoRect(in container: CGSize) -> CGRect {
-        guard let videoSize = engine.videoSize, videoSize.width > 0, videoSize.height > 0,
-              container.width > 0, container.height > 0 else {
-            return CGRect(origin: .zero, size: container)
-        }
-        let scale = min(container.width / videoSize.width, container.height / videoSize.height)
-        let size = CGSize(width: videoSize.width * scale, height: videoSize.height * scale)
-        return CGRect(
-            x: (container.width - size.width) / 2,
-            y: (container.height - size.height) / 2,
-            width: size.width,
-            height: size.height
-        )
     }
 
     private func openPanel() {
@@ -983,373 +827,13 @@ struct CustomPlayerView<Surface: View>: View {
 
     // MARK: - Transport
 
+    /// The transport itself is `PlayerTransportOverlay`; only the hint's
+    /// condition is decided here, because it turns on the subtitle load
+    /// state and the scrub, not on the playhead.
     private var showsPanelHint: Bool {
         if case .failed = engine.subtitleLoadState { return false }
         return !isScrubbing
     }
-
-    private var transportOverlay: some View {
-        VStack {
-            #if os(tvOS)
-            // The subtitle error already supplies guidance in this space.
-            // Down is also unavailable while scrubbing.
-            if showsPanelHint {
-                VStack(spacing: Metrics.Space.hair) {
-                    Text("Swipe down for Info")
-                        .font(.caption.weight(.semibold))
-                    Image(systemName: "chevron.compact.down")
-                        .font(.title3.weight(.bold))
-                }
-                .foregroundStyle(.white.opacity(0.9))
-                .padding(.top, Metrics.railTopPadding)
-            }
-            #endif
-
-            Spacer()
-
-            VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                        if let subtitle = info.subtitle {
-                            Text(subtitle)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(info.title)
-                            .font(.title2.bold())
-                    }
-                    Spacer()
-                    if engine.rate != 1 {
-                        Text(PlaybackRatePolicy.title(engine.rate))
-                            .font(.callout.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("player.playbackRate.value")
-                    }
-                    if engine.isPaused {
-                        Image(systemName: "pause.fill")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                // Scrubbing hands this space to the trickplay frame.
-                .opacity(isScrubbing ? 0 : 1)
-                .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
-                .allowsHitTesting(false)
-
-                scrubber
-
-                timelineLabels
-            }
-            .padding(Metrics.screenGutter)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black.opacity(0.22), location: 0.34),
-                        .init(color: .black.opacity(0.76), location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                // Taps in the gutter belong to the surface underneath —
-                // as do the title and time rows above. On iOS the bar
-                // between them is the one thing here that takes a touch.
-                .allowsHitTesting(false)
-            )
-        }
-        .foregroundStyle(.white)
-    }
-
-    /// Infuse/AVKit-style flat rail: played and buffered ranges stay inside
-    /// the line, while a slim vertical marker appears only during scrubbing.
-    private var scrubber: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(.white.opacity(0.2))
-                if !bufferedRanges.isEmpty {
-                    ForEach(bufferedRanges, id: \.self) { range in
-                        let lower = CGFloat(min(max(range.lowerFraction, 0), 1))
-                        let upper = CGFloat(min(max(range.upperFraction, 0), 1))
-                        Capsule()
-                            .fill(.white.opacity(0.42))
-                            .frame(width: max(width * (upper - lower), 1))
-                            .offset(x: width * lower)
-                    }
-                    .animation(liveMotion, value: bufferedRanges)
-                } else if let bufferedFraction, bufferedFraction > 0 {
-                    Capsule()
-                        .fill(.white.opacity(0.42))
-                        .frame(width: width * CGFloat(min(max(bufferedFraction, 0), 1)))
-                        .animation(liveMotion, value: bufferedFraction)
-                }
-                UnevenRoundedRectangle(
-                    topLeadingRadius: Metrics.scrubberHeight / 2,
-                    bottomLeadingRadius: Metrics.scrubberHeight / 2
-                )
-                    .fill(.white)
-                    .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
-                    // Glides between the engine's 0.1 s position updates
-                    // instead of ticking (HEL-39); big deltas (seeks)
-                    // become a quick slide to the target.
-                    .animation(fillMotion, value: fillFraction)
-                chapterTicks(in: width)
-            }
-            // The marker is deliberately an overlay. As a ZStack child its
-            // 28 pt height enlarged the supposedly 6 pt rail and pushed it
-            // into the timestamp row even while the marker was invisible.
-            .frame(width: width, height: Metrics.scrubberHeight)
-            .overlay(alignment: .leading) { playheadMarker(in: width) }
-            .overlay(alignment: .bottomLeading) { scrubPreview(in: width) }
-            #if os(iOS)
-            // The visible rail is deliberately quiet; its touch target is not.
-            .contentShape(Rectangle().inset(by: -18))
-            .gesture(scrubDrag(in: width))
-            #endif
-        }
-        .frame(height: Metrics.scrubberHeight)
-        #if os(iOS)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Playback position")
-        .accessibilityValue("\(Self.timestamp(scrubTarget ?? engine.timePosition)) of \(Self.timestamp(engine.duration))")
-        .accessibilityAdjustableAction { direction in
-            guard engine.duration.isFinite, engine.duration > 0 else { return }
-            let delta: Double
-            switch direction {
-            case .increment: delta = 10
-            case .decrement: delta = -10
-            @unknown default: return
-            }
-            commitScrub(to: min(max(engine.timePosition + delta, 0), engine.duration), resume: false)
-            pokeControls()
-        }
-        .accessibilityIdentifier("player.seek")
-        #endif
-    }
-
-    @ViewBuilder
-    private func playheadMarker(in width: CGFloat) -> some View {
-        Capsule()
-            .fill(.white)
-            .shadow(color: .black.opacity(0.45), radius: 3)
-            .frame(width: ScrubMetrics.markerWidth, height: ScrubMetrics.markerHeight)
-            .offset(
-                x: min(
-                    max(width * knobFraction - ScrubMetrics.markerWidth / 2, 0),
-                    max(width - ScrubMetrics.markerWidth, 0)
-                )
-            )
-            .opacity(isScrubbing ? 1 : 0)
-            .animation(scrubMotion, value: knobFraction)
-            .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
-    }
-
-    /// Chapter boundaries, drawn over the fill so they read on both halves
-    /// of the bar. Nothing at 0:00 — a tick under the playhead is noise.
-    @ViewBuilder
-    private func chapterTicks(in width: CGFloat) -> some View {
-        if engine.duration > 0 {
-            ForEach(info.chapters.filter { $0.start > 1 && $0.start < engine.duration }) { chapter in
-                Capsule()
-                    .fill(.black.opacity(0.55))
-                    .frame(width: 2)
-                    .offset(x: width * CGFloat(chapter.start / engine.duration))
-            }
-        }
-    }
-
-    /// Trickplay remains above the rail. The timestamp itself belongs below
-    /// the marker, rendered by `timelineLabels`, just like AVKit and Infuse.
-    @ViewBuilder
-    private func scrubPreview(in width: CGFloat) -> some View {
-        Group {
-            if scrubTarget != nil, previewSize != nil || scrubChapter?.name != nil {
-                VStack(spacing: Metrics.Space.s) {
-                    trickplayFrame
-                    if let name = scrubChapter?.name {
-                        Text(name)
-                            .font(.caption2.weight(.medium))
-                            .lineLimit(1)
-                            .shadow(color: .black, radius: 3)
-                    }
-                }
-                .foregroundStyle(.white)
-                .frame(width: chipWidth)
-                .offset(
-                    x: min(max(width * knobFraction - chipWidth / 2, 0), max(width - chipWidth, 0)),
-                    y: -(Metrics.scrubberHeight + Metrics.Space.m)
-                )
-                .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
-                .animation(scrubMotion, value: knobFraction)
-            }
-        }
-        .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
-        .allowsHitTesting(false)
-    }
-
-    /// The elapsed/target label follows the end of the played rail. The
-    /// remaining time stays pinned to the trailing edge unless the two would
-    /// overlap near the end of an item.
-    private var timelineLabels: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let fraction = isScrubbing ? knobFraction : progressFraction
-            let labelWidth = ScrubMetrics.timeLabelWidth
-            let center = min(
-                max(width * fraction, labelWidth / 2),
-                max(width - labelWidth / 2, labelWidth / 2)
-            )
-            let remainingStartsAt = width - labelWidth
-            let elapsedEndsAt = center + labelWidth / 2
-
-            ZStack(alignment: .topLeading) {
-                Text(Self.timestamp(scrubTarget ?? engine.timePosition))
-                    .font(
-                        isScrubbing
-                            ? .callout.monospacedDigit().weight(.semibold)
-                            : .callout.monospacedDigit().weight(.medium)
-                    )
-                    .frame(width: labelWidth)
-                    .offset(x: center - labelWidth / 2)
-                    .animation(scrubMotion, value: fraction)
-                    .accessibilityIdentifier(isScrubbing ? "player.scrub.chip" : "player.elapsed")
-
-                if !isScrubbing {
-                    trailingTimeLabel
-                        .font(.callout.monospacedDigit().weight(.medium))
-                        .frame(width: labelWidth, alignment: .trailing)
-                        .offset(x: max(width - labelWidth, 0))
-                        .opacity(elapsedEndsAt + Metrics.Space.s < remainingStartsAt ? 1 : 0)
-                }
-            }
-            .foregroundStyle(.white.opacity(isScrubbing ? 1 : 0.82))
-        }
-        .frame(height: ScrubMetrics.timeLabelHeight)
-        .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
-        .allowsHitTesting(false)
-    }
-
-    /// Either the time left, or the clock time the item finishes at. The
-    /// projection is redrawn once a second on its own schedule rather than
-    /// with the playhead, because the whole point is that it keeps moving
-    /// while playback is paused and the playhead is not.
-    @ViewBuilder
-    private var trailingTimeLabel: some View {
-        let remaining = max(engine.duration - engine.timePosition, 0)
-        if showsEndTime {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                if let finish = PlaybackFinish.date(
-                    from: context.date,
-                    remaining: remaining,
-                    rate: engine.rate
-                ) {
-                    Text(PlaybackFinish.label(finish))
-                        .accessibilityIdentifier("player.endsAt")
-                        .accessibilityLabel("Ends at \(PlaybackFinish.label(finish))")
-                } else {
-                    // No usable duration, as on a live stream: there is no
-                    // finish to project, so the time left stands.
-                    Text("-" + Self.timestamp(remaining))
-                        .accessibilityIdentifier("player.remaining")
-                }
-            }
-        } else {
-            Text("-" + Self.timestamp(remaining))
-                .accessibilityIdentifier("player.remaining")
-        }
-    }
-
-    /// The preview image, or its empty frame while the sheet downloads —
-    /// reserving the space keeps the chip from resizing under the caption
-    /// when the picture lands.
-    @ViewBuilder
-    private var trickplayFrame: some View {
-        if let size = previewSize {
-            Group {
-                if let image = trickplay?.frame {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else {
-                    Color.black.opacity(0.7)
-                }
-            }
-            .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: Metrics.cardArtRadius)
-                    .strokeBorder(.white.opacity(0.25), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.5), radius: 8, y: 3)
-            .animation(.easeOut(duration: Motion.fast), value: trickplay?.frame == nil)
-            .accessibilityIdentifier("player.scrub.preview")
-        }
-    }
-
-    /// Preview size at the chip's width, in the tiles' own aspect ratio (not
-    /// every library is 16:9).
-    private var previewSize: CGSize? {
-        guard trickplay?.isUnavailable != true,
-              let source = info.trickplay, source.tileSize.width > 0, source.tileSize.height > 0 else { return nil }
-        let width = ScrubMetrics.previewWidth
-        return CGSize(width: width, height: (width * source.tileSize.height / source.tileSize.width).rounded())
-    }
-
-    private var chipWidth: CGFloat {
-        max(previewSize?.width ?? 0, ScrubMetrics.previewWidth)
-    }
-
-    /// The live playhead's curve, matched to the engine's position-update
-    /// cadence so the bar glides instead of ticking.
-    private var liveMotion: Animation { .linear(duration: 0.25) }
-
-    /// Scrub steps snap over; while live the knob must glide on exactly the
-    /// fill's curve, or the two drift apart between position updates.
-    private var scrubMotion: Animation {
-        isScrubbing ? .easeOut(duration: Motion.fast) : liveMotion
-    }
-
-    /// Keep the played edge and vertical marker on the same curve; otherwise
-    /// they visibly separate during quick remote presses.
-    private var fillMotion: Animation {
-        isScrubbing ? scrubMotion : liveMotion
-    }
-
-    /// The played rail follows the preview target while scrubbing. Cancel
-    /// still returns to the live engine position, but the visual stays joined
-    /// to its marker in the native transport style.
-    private var fillFraction: CGFloat {
-        isScrubbing ? knobFraction : progressFraction
-    }
-
-    #if os(iOS)
-    /// Touch grammar: a tap on the bar is a seek, a drag is a scrub —
-    /// both land the same way and neither changes the play state. Only
-    /// the release seeks; every intermediate position would flush the
-    /// engine's queues and re-demux.
-    private func scrubDrag(in width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                guard let seconds = scrubSeconds(at: value.location.x, in: width) else { return }
-                scrubTarget = seconds
-                pokeControls()
-            }
-            .onEnded { value in
-                guard let seconds = scrubSeconds(at: value.location.x, in: width) else {
-                    cancelScrub()
-                    return
-                }
-                commitScrub(to: seconds, resume: false)
-            }
-    }
-
-    private func scrubSeconds(at x: CGFloat, in width: CGFloat) -> Double? {
-        guard width > 0, engine.duration > 0 else { return nil }
-        return Double(min(max(x / width, 0), 1)) * engine.duration
-    }
-    #endif
 
     // MARK: - Panel
 
@@ -1366,215 +850,6 @@ struct CustomPlayerView<Surface: View>: View {
             onDismiss: closePanel
         )
         .equatable()
-    }
-
-    /// A one-pixel, launch-gated accessibility probe for the physical-device
-    /// UI suite. It observes the same view state the viewer sees; it does not
-    /// call player actions or replace the Siri Remote interaction path.
-    private var regressionAccessibilityValue: String {
-        let selectedAudio = engine.audioTracks.first(where: \.isSelected)?.engineID ?? 0
-        let selectedSubtitle = engine.subtitleTracks.first(where: \.isSelected)?.engineID ?? 0
-        let skippable = info.segments.first(where: { $0.kind.isSkippable })
-        let skippableStart: Double = skippable?.start ?? -1
-        let skippableEnd: Double = skippable?.end ?? -1
-        let focusDescription: String = switch playerFocus {
-        case .surface: "surface"
-        case .tab(let tab): "tab-\(String(describing: tab))"
-        case .track(let id): "track-\(id)"
-        case nil: "none"
-        }
-        let memory = MemorySnapshot.current()
-        let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
-        var elements: [String] = [
-            "item=\(playbackIdentity)",
-            "surface=\(playerSurfaceIdentity)",
-            "method=\(playbackMethod.rawValue)",
-            "rung=\(deliveryRung.rawValue)",
-            "cache=\(isPlaybackCacheActive ? 1 : 0)",
-            String(format: "buffered=%.3f", bufferedFraction ?? -1),
-            "bufferRanges=\(bufferedRanges.count)",
-            "playheadPrefetches=\(playheadPrefetchCount)",
-            String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
-            "nextUp=\(showsNextUp ? 1 : 0)",
-            "ready=\(engine.duration > 0 ? 1 : 0)",
-            String(format: "time=%.1f", engine.timePosition),
-            String(format: "duration=%.1f", engine.duration),
-            "paused=\(engine.isPaused ? 1 : 0)",
-            "buffering=\(engine.isBuffering ? 1 : 0)",
-            "stalls=\(engine.stallCount)",
-            "aDry=\(engine.audioStarvationCount)",
-            "audioStalls=\(engine.audioStallCount)",
-            "audioBuffers=\(engine.buffersOnAudioStarvation ? 1 : 0)",
-            String(format: "audioLead=%.3f", engine.audioDeliveryLeadSeconds),
-            "audioReady=\(engine.audioRendererReadyForPlayback ? 1 : 0)",
-            "videoQueued=\(engine.videoQueueCountDiagnostic)",
-            "videoMax=\(engine.maximumVideoBacklogDiagnostic)",
-            "videoHard=\(engine.videoQueueHardLimitDiagnostic)",
-            "videoIntake=\(engine.videoIntakeCountDiagnostic)",
-            "videoIntakeMax=\(engine.maximumVideoIntakeDiagnostic)",
-            "reprimes=\(engine.stallReprimeCount)",
-            "idleRequests=\(engine.idleRequestCallbacks)",
-            "audioRecoveries=\(engine.audioRendererRecoveryCount)",
-            "mediaResetRecoveries=\(engine.mediaServicesResetRecoveryCount)",
-            String(format: "memoryMB=%.1f", memory.footprintMB),
-            "engines=\(lifecycle.liveEngines)",
-            "controllers=\(lifecycle.liveControllers)",
-            "demux=\(lifecycle.activeDemuxLoops)",
-            "renderers=\(lifecycle.attachedRendererSets)",
-            "unclean=\(lifecycle.uncleanEngineDestructions)",
-            "scrubbing=\(isScrubbing ? 1 : 0)",
-            String(format: "lastScrub=%.1f", lastCommittedScrubTarget),
-            "panel=\(panelOpen ? 1 : 0)",
-            "tab=\(String(describing: selectedTab))",
-            "focus=\(focusDescription)",
-            String(format: "rate=%g", engine.rate),
-            "audio=\(selectedAudio)",
-            "audioPath=\(engine.audioOutputPathDiagnostic)",
-            "videoPath=\(engine.videoOutputPathDiagnostic)",
-            "audioCount=\(engine.audioTracks.count)",
-            "subtitle=\(selectedSubtitle)",
-            "subtitleCount=\(engine.subtitleTracks.count)",
-            "subtitleVisible=\((engine.currentSubtitleText != nil || !engine.currentSubtitleImages.isEmpty) ? 1 : 0)",
-            "chapters=\(info.chapters.count)",
-            "trickplay=\(info.trickplay == nil ? 0 : 1)",
-            "trickplayFrame=\(trickplay?.frame == nil ? 0 : 1)",
-            "segments=\(info.segments.count)",
-            String(format: "skippableStart=%.1f", skippableStart),
-            String(format: "skippableEnd=%.1f", skippableEnd),
-        ]
-        #if DEBUG
-        elements.append(contentsOf: [
-            "audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)",
-            "deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)",
-        ])
-        #endif
-        return elements.joined(separator: " ")
-    }
-
-    private var progressFraction: CGFloat {
-        guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(engine.timePosition / engine.duration, 0), 1))
-    }
-
-    private static func timestamp(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        let total = Int(seconds.rounded())
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let secs = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
-        }
-        return String(format: "%d:%02d", minutes, secs)
-    }
-}
-
-/// Shared player chrome rendered by both live playback and the Debug-only
-/// component gallery. Keeping one implementation means gallery approval is
-/// approval of the view that actually ships.
-struct PlayerSkipPrompt: View {
-    let title: String
-    let showsCountdown: Bool
-    let fill: Double
-    var accessibilityIdentifier = "player.skip"
-
-    var body: some View {
-        HStack(spacing: Metrics.Space.s) {
-            Image(systemName: "forward.end.alt.fill")
-                .font(.caption.weight(.bold))
-            Text(title)
-                .font(.callout.weight(.semibold))
-        }
-        .accessibilityIdentifier(accessibilityIdentifier)
-        .foregroundStyle(.black)
-        .frame(width: SkipMetrics.width, height: SkipMetrics.height)
-        .background(alignment: .leading) {
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.55))
-                if showsCountdown {
-                    Capsule()
-                        .fill(.white)
-                        .frame(width: SkipMetrics.width * min(max(fill, 0), 1))
-                        .animation(
-                            .linear(duration: SkipMode.autoDelaySeconds),
-                            value: fill
-                        )
-                }
-            }
-        }
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
-    }
-}
-
-struct PlayerNextUpCard: View {
-    let episode: NextUpEpisode
-    let showsCountdown: Bool
-    let fill: Double
-    let hint: LocalizedStringKey
-    var accessibilityIdentifier = "player.nextUp"
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            Text("Up Next")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: Metrics.Space.m) {
-                CachedAsyncImage(
-                    url: episode.imageURL,
-                    maxPixelSize: Int(NextUpMetrics.thumbnailWidth * 2)
-                ) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.white.opacity(0.08)
-                }
-                .frame(
-                    width: NextUpMetrics.thumbnailWidth,
-                    height: (NextUpMetrics.thumbnailWidth * 9 / 16).rounded()
-                )
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-
-                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                    if let subtitle = episode.subtitle {
-                        Text(subtitle)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(episode.title)
-                        .font(.callout.weight(.semibold))
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 0)
-            }
-
-            if showsCountdown {
-                Capsule()
-                    .fill(.white.opacity(0.25))
-                    .frame(height: NextUpMetrics.barHeight)
-                    .overlay(alignment: .leading) {
-                        GeometryReader { proxy in
-                            Capsule()
-                                .fill(.white)
-                                .frame(width: proxy.size.width * min(max(fill, 0), 1))
-                                .animation(
-                                    .linear(duration: AutoplayMode.countdownSeconds),
-                                    value: fill
-                                )
-                        }
-                    }
-                    .frame(height: NextUpMetrics.barHeight)
-            }
-
-            Text(hint)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(Metrics.Space.l)
-        .frame(width: NextUpMetrics.width, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
-        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
@@ -1642,77 +917,13 @@ struct PlayerStyledSubtitleText: View {
     }
 }
 
-/// Places one authored cue inside the aspect-fit video rect. `Layout` can
-/// place a subview by an arbitrary anchor, which is the semantic difference
-/// between ASS `\an1` and `\an3` at the same `\pos` coordinate.
-private struct PositionedSubtitleLayout: Layout {
-    let position: SubtitleTextPosition?
-    let alignment: SubtitleTextAlignment
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
-        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        guard let subview = subviews.first else { return }
-        let point = position ?? alignment.defaultPosition
-        let proposedWidth = max(bounds.width * 0.9, 1)
-        let size = subview.sizeThatFits(ProposedViewSize(width: proposedWidth, height: nil))
-        subview.place(
-            at: CGPoint(
-                x: bounds.minX + bounds.width * CGFloat(point.x),
-                y: bounds.minY + bounds.height * CGFloat(point.y)
-            ),
-            anchor: alignment.unitPoint,
-            proposal: ProposedViewSize(width: min(size.width, proposedWidth), height: size.height)
-        )
-    }
-}
-
 private extension SubtitleTextAlignment {
-    var unitPoint: UnitPoint {
-        switch self {
-        case .bottomLeft: .bottomLeading
-        case .bottomCenter: .bottom
-        case .bottomRight: .bottomTrailing
-        case .middleLeft: .leading
-        case .middleCenter: .center
-        case .middleRight: .trailing
-        case .topLeft: .topLeading
-        case .topCenter: .top
-        case .topRight: .topTrailing
-        }
-    }
-
     var textAlignment: TextAlignment {
         switch self {
         case .bottomLeft, .middleLeft, .topLeft: .leading
         case .bottomCenter, .middleCenter, .topCenter: .center
         case .bottomRight, .middleRight, .topRight: .trailing
         }
-    }
-
-    var defaultPosition: SubtitleTextPosition {
-        let x: Double = switch self {
-        case .bottomLeft, .middleLeft, .topLeft: 0.04
-        case .bottomCenter, .middleCenter, .topCenter: 0.5
-        case .bottomRight, .middleRight, .topRight: 0.96
-        }
-        let y: Double = switch self {
-        case .topLeft, .topCenter, .topRight: 0.04
-        case .middleLeft, .middleCenter, .middleRight: 0.5
-        case .bottomLeft, .bottomCenter, .bottomRight: 0.96
-        }
-        return SubtitleTextPosition(x: x, y: y)
     }
 }
 
@@ -1744,76 +955,6 @@ struct PlayerSeekIndicator: View {
         .allowsHitTesting(false)
         .accessibilityIdentifier(accessibilityIdentifier)
     }
-}
-
-/// Skip-button geometry (HEL-63). Fixed width so the countdown fill can be
-/// sized from it without a GeometryReader.
-private enum SkipMetrics {
-    #if os(tvOS)
-    static let width: CGFloat = 260
-    static let height: CGFloat = 56
-    /// Clears the transport so the two never overlap.
-    static let bottomInset: CGFloat = 240
-    #else
-    static let width: CGFloat = 170
-    static let height: CGFloat = 40
-    static let bottomInset: CGFloat = 130
-    #endif
-}
-
-private enum NextUpMetrics {
-    #if os(tvOS)
-    static let width: CGFloat = 520
-    static let thumbnailWidth: CGFloat = 150
-    /// Clears the transport so the two never overlap, same as `SkipMetrics`.
-    static let bottomInset: CGFloat = 240
-    static let barHeight: CGFloat = 6
-    #else
-    static let width: CGFloat = 300
-    static let thumbnailWidth: CGFloat = 88
-    static let bottomInset: CGFloat = 130
-    static let barHeight: CGFloat = 4
-    #endif
-    /// With no `Outro` segment there is nothing to say where the credits
-    /// begin, so the card appears on a fixed run-out instead. Long enough
-    /// to read and act on, short enough not to sit over the closing scene.
-    static let fallbackLeadIn: Double = 15
-}
-
-/// Scrub-bar geometry. Lives outside `CustomPlayerView` because the view is
-/// generic over its surface, and generics can't hold static storage. The
-/// time label has a fixed width so the edge clamping is exact.
-private enum ScrubMetrics {
-    /// No input for this long and the acceleration run expires, so the next
-    /// press is a 10 s step again rather than a 60 s one.
-    static let runExpiry: Duration = .milliseconds(600)
-    /// A further beat after that and the scrub lands itself. This is what
-    /// keeps a single press a plain 10 s skip now that scrub opens during
-    /// playback (HEL-55) — tune it on hardware, not in the simulator: too
-    /// short and a preview can't be read, too long and a nudge feels stuck.
-    static let selfCommit: Duration = .milliseconds(600)
-    /// A chapter hop waits longer than a step before landing. Found on
-    /// hardware (HEL-55, 2026-08-18): a hop is a *survey* gesture — you are
-    /// reading where chapter 13 starts — where an arrow step is a nudge, and
-    /// sharing the step's window turned browsing past the next chapter into
-    /// a race against the timer.
-    static let chapterSelfCommit: Duration = .milliseconds(2000)
-
-    #if os(tvOS)
-    static let markerWidth: CGFloat = 3
-    static let markerHeight: CGFloat = 22
-    static let timeLabelWidth: CGFloat = 150
-    static let timeLabelHeight: CGFloat = 36
-    /// Smaller than the source tile on purpose: a 320 pt frame dominates a
-    /// ten-foot UI even though the underlying Jellyfin image is 320 px.
-    static let previewWidth: CGFloat = 240
-    #else
-    static let markerWidth: CGFloat = 3
-    static let markerHeight: CGFloat = 20
-    static let timeLabelWidth: CGFloat = 96
-    static let timeLabelHeight: CGFloat = 30
-    static let previewWidth: CGFloat = 160
-    #endif
 }
 
 /// When an item will finish in real time, kept apart from the view so the

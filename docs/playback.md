@@ -1272,6 +1272,80 @@ Release builds also emit a `Player Panel Reveal` interval in the existing
 the Animation Hitches instrument for physical-Apple-TV validation, where GPU
 composition cost is more representative than Simulator timing.
 
+`testLivePlayerPanelSweepPerformance` is the same sweep over **live**
+playback rather than the Debug gallery's static preview: the gallery has no
+engine behind it, so it cannot show what the player's own per-tick work costs
+the panel's focus animations. It bootstraps the public demo, waits for the
+position to advance, opens the panel and measures Right ×3 → Down into the
+track rows → Up → Left ×3, five times. It carries no timing assertion on
+purpose — the presses are remote-input-bound, so wall time is a constant and
+only the CPU figures move.
+
+#### The player's Observation scope (HEL-150)
+
+`CustomPlayerView` had one flat Observation scope. Because Observation tracks
+property reads **per body**, a single `engine.timePosition` read anywhere in
+`playerContent` re-evaluated the whole player ten times a second — video
+surface, subtitle overlay, skip and Up Next overlays, the transport with its
+nested `GeometryReader`s, and the panel host — and on tvOS that tree is built
+inside `MenuPressGate.updateUIViewController`, so every tick also reassigned
+the hosting controller's `rootView` and re-diffed its tree. On an Apple TV
+the `CPUTrace` line showed `main=229–267 ms` per two-second window during
+plain playback with no chrome on screen. That is the work that was competing
+with the panel's focus animations.
+
+The fix is a scope split, not new machinery. Everything that follows the
+playhead is now its own view and reads the tick-rate properties in its own
+body: `PlayerTransportOverlay` (whose `PlayerScrubber` and
+`PlayerTimelineLabels` are the two leaves that legitimately tick),
+`PlayerSubtitleOverlay`, `PlayerSkipOverlay`, `PlayerNextUpOverlay`, and the
+launch-gated `PlayerRegressionValue` — a `ViewModifier` precisely because a
+modifier has a body of its own, and the tvOS probe has to decorate the
+focusable video surface rather than a sibling element that would steal arrow
+focus. The per-view `@State` moved with them: `autoSkipFill` into the skip
+overlay, `nextUpFill` into the Up Next overlay, each armed by a `.task(id:)`
+keyed on its own transition *and* on `playbackIdentity`, so autoplay cannot
+inherit the outgoing episode's fill. The parent hears about real transitions
+through closures (`onSkip`, `onPlayNext`, …), never per tick.
+
+Two rules keep it that way, and both are easy to break by accident:
+
+- **Nothing in `body`/`playerContent`, and nothing in the `id:`/`value:`
+  argument of a modifier on them, may touch `timePosition`, the
+  `currentSubtitle*` properties, or any other property the engine writes at
+  tick rate.** `isPaused`, `isBuffering`, `duration`, `subtitleLoadState` and
+  `videoSize` change per item or per viewer action and are fine. The
+  computed properties that do read the position — `activeSegment`,
+  `showsNextUp` — survive only for `handleMenu`, `onTapGesture`,
+  `onMoveCommand` and `onPlayPauseCommand`; reads in a closure that runs
+  later are not body reads.
+- **A leaf that can answer without the position must not read it.**
+  `PlayerSkipOverlay` returns nil before touching `timePosition` when the
+  item has no skippable segment, and `PlayerNextUpOverlay` before touching it
+  when there is no successor or autoplay is off — which is every movie. The
+  subscription is the read.
+
+`PlayerControlPanelHost`'s `Equatable` boundary is unrelated and still needed:
+it stops the panel's *interior* from re-rendering when the player above it
+does re-render.
+
+Measured on the tvOS 26.5 simulator, `-debug.decodeTrace YES` over plain
+demo playback with no chrome visible (two runs each, `CPUTrace` lines 20–45):
+main-thread CPU fell from 79 ms to 54 ms average per two-second window, and
+from 61 ms to 34 ms median — the mean is dominated by an unrelated periodic
+spike present in both, so the median is the honest number. `-debug.
+playerRegression YES` was on for both, which keeps the probe itself ticking;
+a shipping build never assembles it at all.
+
+The live panel sweep moved much less — two runs each, five iterations per
+run: app CPU 0.384 s → 0.375 s, cycles 1.374 → 1.312 billion (−4.5%),
+retired instructions 2.497 → 2.412 billion (−3.4%), wall time unchanged at
+1.756 s because the presses are remote-input-bound. That is expected: with
+the panel open the skip and Up Next overlays are suppressed and the panel's
+interior is already behind its `Equatable` boundary, so only the player's own
+body was left to save. The win this change is for is the one measured above,
+during ordinary playback, where the competing work actually lives.
+
 - **Why compressed packets stay zero-copy**: Matroska stores h264/hevc
   mp4-style (avcC/hvcC extradata + length-prefixed NALs), so demuxed
   packets wrap directly as compressed sample buffers. The display layer

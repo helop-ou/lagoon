@@ -1226,6 +1226,90 @@ final class PlayerRegressionUITests: XCTestCase {
         XCTAssertTrue(account.waitForExistence(timeout: 5))
     }
 
+    /// The same panel sweep as `testPlayerPanelPreviewPerformance`, but over
+    /// live playback instead of the Debug gallery's static preview (HEL-150).
+    /// The gallery has no engine behind it, so it cannot show what the
+    /// player's own per-tick invalidation costs the panel's focus animations;
+    /// this case is the number that can.
+    ///
+    /// Deliberately assertion-free inside the measured block: the focus
+    /// queries are there to make each press settle before the next one, and a
+    /// hard assertion on focus over live playback is exactly the kind of
+    /// flake that would make the measurement unusable. What the sweep
+    /// actually did is checked once, outside the block.
+    ///
+    /// `XCTHitchMetric` is asked for to match `testPlayerPanelPreviewPerformance`,
+    /// but the tvOS simulator reports no hitch figures for either case; the
+    /// CPU counters are the numbers to read here. Wall time is
+    /// remote-input-bound and will not move.
+    func testLivePlayerPanelSweepPerformance() throws {
+        let app = launchPlayer(
+            title: "live-panel-sweep-regression",
+            simulatorTranscode: false,
+            extraArguments: [
+                "-debug.regressionFindPlayable", "YES",
+                "-debug.regressionRequireAudio", "YES",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 60) { $0.int("ready") == 1 && $0.int("buffering") == 0 }
+        // Position has to be advancing, or this measures a still frame.
+        let startingTime = state(in: app).double("time")
+        waitForState(in: app, timeout: 15) { $0.double("time") > startingTime + 1 }
+
+        remote.press(.down)
+        waitForState(in: app, timeout: 8) { $0.int("panel") == 1 }
+        waitForPanelReveal()
+        let infoTab = app.buttons["player.tab.info"]
+        let subtitleTab = app.buttons["player.tab.subtitles"]
+        XCTAssertTrue(infoTab.waitForExistence(timeout: 8))
+        XCTAssertTrue(subtitleTab.waitForExistence(timeout: 8))
+        // The video surface deliberately keeps focus until a tab accepts it,
+        // and `onMoveCommand` bridges the first command either way (see
+        // CustomPlayerView's header). Walk out to Subtitles and back once
+        // here, outside the measurement, so every measured iteration starts
+        // from the same place whichever way that settled.
+        moveRight(toTab: "subtitles", in: app)
+        moveLeft(toTab: "info", in: app)
+
+        let options = XCTMeasureOptions()
+        options.iterationCount = 5
+        measure(
+            metrics: [
+                XCTClockMetric(),
+                XCTCPUMetric(application: app),
+                XCTMemoryMetric(application: app),
+                XCTHitchMetric(application: app),
+            ],
+            options: options
+        ) {
+            for _ in 0..<3 { remote.press(.right) }
+            _ = subtitleTab.hasFocus
+            // Into the track rows and back out — the deep half of the sweep,
+            // where the card's own focus animation runs.
+            remote.press(.down)
+            remote.press(.up)
+            _ = subtitleTab.hasFocus
+            for _ in 0..<3 { remote.press(.left) }
+            _ = infoTab.hasFocus
+        }
+
+        let resting = waitForState(in: app, timeout: 8) { $0.string("tab") == "info" }
+        XCTAssertEqual(resting.int("panel"), 1, "The sweep left the panel closed")
+        let sweepScreenshot = XCTAttachment(screenshot: app.screenshot())
+        sweepScreenshot.name = "Live player panel after the sweep"
+        sweepScreenshot.lifetime = .keepAlways
+        add(sweepScreenshot)
+
+        // Playback has to have survived the sweep, or the number above is the
+        // cost of a stalled player rather than of a working one.
+        let afterSweep = state(in: app).double("time")
+        waitForState(in: app, timeout: 15) { $0.double("time") > afterSweep + 1 }
+
+        remote.press(.menu)
+        waitForState(in: app, timeout: 8) { $0.int("panel") == 0 }
+    }
+
     func testPlayerPanelPreviewPerformance() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -2429,6 +2513,14 @@ final class PlayerRegressionUITests: XCTestCase {
     private func moveRight(toTab target: String, in app: XCUIApplication) {
         for _ in 0..<3 where state(in: app).string("tab") != target {
             remote.press(.right)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        waitForState(in: app, timeout: 4) { $0.string("tab") == target }
+    }
+
+    private func moveLeft(toTab target: String, in app: XCUIApplication) {
+        for _ in 0..<3 where state(in: app).string("tab") != target {
+            remote.press(.left)
             Thread.sleep(forTimeInterval: 0.15)
         }
         waitForState(in: app, timeout: 4) { $0.string("tab") == target }
