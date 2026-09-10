@@ -367,6 +367,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var stallConfirmationID: UUID?
     @ObservationIgnored private var stallSignpostActive = false
     @ObservationIgnored private var shutdownRequested = false
+    /// HEL-148 soak diagnostics: cost and cadence of the 10 Hz main-actor
+    /// tick (`observeTime`), accumulated only while `ProcessCPUTrace.enabled`
+    /// and drained into one DecodeTrace field every two seconds. Report-only.
+    @ObservationIgnored private var mainTick = MainTickStatistics()
+    @ObservationIgnored private var lastTickInstant: ContinuousClock.Instant?
     @ObservationIgnored private var rendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var audioRendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var rendererRecoveryInProgress = false
@@ -556,7 +561,20 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func pause() {
         guard !isPaused || synchronizer.rate > 0 else { return }
         clearPendingStallConfirmation()
-        synchronizer.rate = 0
+        // HEL-148 soak diagnostic: this is the one call in the pause path
+        // that reaches AVFoundation's own state; a pause that starts taking
+        // real wall time is what "pause takes a minute" looks like from the
+        // inside. Report-only.
+        if ProcessCPUTrace.enabled {
+            let waitStart = ContinuousClock.now
+            synchronizer.rate = 0
+            print(String(
+                format: "SoakWait name=pauseRate ms=%.1f",
+                Self.milliseconds(ContinuousClock.now - waitStart)
+            ))
+        } else {
+            synchronizer.rate = 0
+        }
         isPaused = true
         rearmBench(at: timePosition)
     }
@@ -849,6 +867,39 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
+    // MARK: - HEL-148 soak diagnostics (report-only)
+
+    /// Drains the main-actor tick accumulator into one DecodeTrace field and
+    /// resets it for the next window.
+    func drainMainTickDiagnostic() -> String { mainTick.drain() }
+
+    /// Cue count the subtitle overlay is currently scanning, so a leak
+    /// there over a long film shows up beside the other soak figures.
+    var subtitleCueCountDiagnostic: Int { subtitleStore.count }
+
+    /// Renderer notification observers still registered. Should hold
+    /// steady across a film; growth means a recovery path is re-observing
+    /// without releasing what came before.
+    var rendererObserverCountDiagnostic: Int {
+        rendererNotificationTokens.count + audioRendererNotificationTokens.count
+    }
+
+    /// A ping that measures how long anything handed to the pump queue
+    /// waits behind whatever is already running there. Touches no engine
+    /// state — the queue itself is the only thing being measured.
+    nonisolated func measurePumpQueueLatency(_ completion: @escaping @Sendable (Duration) -> Void) {
+        let start = ContinuousClock.now
+        pumpQueue.async {
+            completion(ContinuousClock.now - start)
+        }
+    }
+
+    /// Wall-clock milliseconds for a `Duration`, shared by every `SoakWait`
+    /// print below.
+    nonisolated private static func milliseconds(_ duration: Duration) -> Double {
+        Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
+    }
+
     nonisolated private func finishRendererShutdown() {
         // Nil first so any kickPumps block already queued behind this one
         // becomes a no-op instead of enqueueing after the flush.
@@ -887,6 +938,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // The synchronizer otherwise retains both renderers until the
         // main-actor engine dies. Removing them asynchronously lets their
         // decoder resources retire without hitching the returning UI.
+        //
+        // HEL-148 soak diagnostic: `retirementStart` spans exactly this
+        // DispatchGroup, from the first `removeRenderer` call to the
+        // `notify` below firing — how long hardware actually takes to
+        // retire a decoder and its queued surfaces. Report-only.
+        let retirementStart = ProcessCPUTrace.enabled ? ContinuousClock.now : nil
         let removals = DispatchGroup()
         if let video {
             removals.enter()
@@ -904,7 +961,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 removals.leave()
             }
         }
-        removals.notify(queue: pumpQueue) { [performanceSignpostID, lifecycleID] in
+        removals.notify(queue: pumpQueue) { [performanceSignpostID, lifecycleID, retirementStart] in
+            if let retirementStart {
+                print(String(
+                    format: "SoakWait name=rendererRetirement ms=%.1f",
+                    Self.milliseconds(ContinuousClock.now - retirementStart)
+                ))
+            }
             PlaybackLifecycleDiagnostics.renderersDetached(lifecycleID)
             os_signpost(
                 .end,
@@ -934,7 +997,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Enqueue, flush, and queue reset share the pump queue. This makes
         // Apple's post-flush keyframe rule deterministic: an in-flight old
         // sample cannot race in after the flush.
-        pumpQueue.sync { [self] in
+        let flushAndResetQueues: () -> Void = { [self] in
             videoRenderer?.flush()
             audioRenderer?.flush()
             videoIntake.removeAll()
@@ -945,6 +1008,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 $0.lastEnqueuedAudioEndSeconds = nil
                 $0.endOfFilePendingIntake = false
             }
+        }
+        // HEL-148 soak diagnostic: this is the pumpQueue.sync every seek
+        // (and every recovery path that re-seeks) blocks the caller on.
+        // Report-only.
+        if ProcessCPUTrace.enabled {
+            let waitStart = ContinuousClock.now
+            pumpQueue.sync(execute: flushAndResetQueues)
+            print(String(
+                format: "SoakWait name=pumpSync ms=%.1f",
+                Self.milliseconds(ContinuousClock.now - waitStart)
+            ))
+        } else {
+            pumpQueue.sync(execute: flushAndResetQueues)
         }
         // The pts chain restarts at the target; the first buffer after a
         // flush must not read as a discontinuity.
@@ -1368,6 +1444,24 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     private func observeTime(_ time: CMTime) {
+        // HEL-148 soak diagnostic: cost and cadence of this 10 Hz
+        // main-actor tick, accumulated into `mainTick` and drained into one
+        // DecodeTrace field every two seconds. Guarded on the trace flag so
+        // the normal path pays nothing beyond the one Bool read.
+        let tick: (start: ContinuousClock.Instant, interval: Duration?)?
+        if ProcessCPUTrace.enabled {
+            let start = ContinuousClock.now
+            let interval = lastTickInstant.map { start - $0 }
+            lastTickInstant = start
+            tick = (start, interval)
+        } else {
+            tick = nil
+        }
+        defer {
+            if let tick {
+                mainTick.record(duration: ContinuousClock.now - tick.start, interval: tick.interval)
+            }
+        }
         let seconds = time.seconds
         guard seconds.isFinite else { return }
         // 0.1 s granularity so the animated scrubber has fresh targets to

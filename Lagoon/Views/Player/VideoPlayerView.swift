@@ -24,6 +24,20 @@ nonisolated struct PlayerItem: Identifiable {
 
 private let reportLog = Logger(subsystem: "ee.helop.lagoon", category: "playback-reports")
 
+/// HEL-148 soak diagnostic: milliseconds for a `Duration`, shared by the
+/// DecodeTrace loop's `mainLateMs`/`pumpMs`/`Soak*` lines.
+private func ms(_ duration: Duration) -> Double {
+    Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
+}
+
+/// HEL-148 soak diagnostic: holds the DecodeTrace loop's pump-queue ping
+/// result. A box rather than a local var because the callback that fills it
+/// runs on the main actor a tick later than the print that reads it.
+@MainActor
+private final class PumpPing {
+    var lastMs: Double = -1
+}
+
 /// Negotiates the stream with Jellyfin, runs the Lagoon engine (the app's
 /// only player since HEL-48 went all-in), and owns progress reporting.
 @Observable
@@ -123,6 +137,15 @@ final class PlaybackController {
     /// Visible in the HUD and hardware accessibility probe for regression
     /// comparisons; nil before the first episode handoff.
     private(set) var lastHandoffMilliseconds: Double?
+    /// HEL-148 soak hook (`debug.soakExitAtSeconds`): flips once the film
+    /// reaches the configured position, so the view's `onChange` can drive
+    /// the same `dismiss()` a real exit would. Observable so that onChange
+    /// fires; kept separate from `didFinish`, which means something
+    /// different (the file actually ran out).
+    private(set) var soakExitRequested = false
+    /// When the soak exit was requested, so `close()` can report how long
+    /// the whole exit — not just `beginStop()` — took from that instant.
+    @ObservationIgnored private var soakExitRequestedAt: ContinuousClock.Instant?
     /// What the viewer picked in the track panel, carried into the next
     /// episode (HEL-66). Nil on a first load — there is nothing to carry.
     private var trackPreference: TrackPreference?
@@ -475,6 +498,16 @@ final class PlaybackController {
                         selectedAudioLanguage: selectedAudioLanguage
                     )
                 }
+            }
+            // Hands-off soak/bench hook (HEL-148), mirroring
+            // `debug.benchSearchTerm`: forces a subtitle language on so a
+            // scripted long-film run always has cues to count, independent
+            // of whatever this server/account's track preferences resolve
+            // to.
+            if let language = UserDefaults.standard.string(forKey: "debug.benchSubtitleLanguage"),
+               !language.isEmpty,
+               let ordinal = Self.ordinal(matchingLanguage: language, title: nil, in: orderedSubtitles) {
+                initialSubtitleOrdinal = ordinal
             }
             audioStreams = embeddedAudio
             orderedSubtitleStreams = orderedSubtitles
@@ -1166,8 +1199,24 @@ final class PlaybackController {
         guard UserDefaults.standard.bool(forKey: "debug.decodeTrace") else { return }
         decodeTraceTask = Task { [weak self] in
             let cpuTrace = ProcessCPUTrace()
+            let pumpPing = PumpPing()
+            // HEL-148 soak hooks: a hands-off pause/resume and a hands-off
+            // exit at fixed media-time positions, each off (0) unless set.
+            // Read once so a value that changes mid-soak (it shouldn't)
+            // can't retrigger either one.
+            let soakPauseAtSeconds = UserDefaults.standard.double(forKey: "debug.soakPauseAtSeconds")
+            let soakExitAtSeconds = UserDefaults.standard.double(forKey: "debug.soakExitAtSeconds")
+            var didSoakPause = false
+            var didSoakExit = false
             while !Task.isCancelled {
+                // HEL-148 soak diagnostic: overshoot past the requested 2 s
+                // sleep is time the main actor was unavailable to resume
+                // this task — this loop runs on the main actor because it
+                // was created inside `PlaybackController`, a `@MainActor`
+                // type.
+                let sleepStart = ContinuousClock.now
                 try? await Task.sleep(for: .seconds(2))
+                let mainLateMs = max(0, ms(ContinuousClock.now - sleepStart) - 2_000)
                 guard let self, let engine = self.engine else { return }
                 // Whether frames take the direct-display path or are being
                 // composited with UI — readable here with the HUD off, which
@@ -1176,6 +1225,17 @@ final class PlaybackController {
                 let performance = engine.videoPerformance
                 let memory = MemorySnapshot.current()
                 let depths = engine.queueDepths
+                // Last tick's completed pump-queue ping; the one fired below
+                // lands in time for the next tick to read.
+                let lastPumpMs = pumpPing.lastMs
+                let thermalName: String
+                switch ProcessInfo.processInfo.thermalState {
+                case .nominal: thermalName = "nominal"
+                case .fair: thermalName = "fair"
+                case .serious: thermalName = "serious"
+                case .critical: thermalName = "critical"
+                @unknown default: thermalName = "unknown"
+                }
                 // The renderer-side audio signal (HEL-123) rides on the same
                 // line, so a device console can correlate it with position
                 // and the queues without the HUD or the accessibility probe.
@@ -1196,12 +1256,49 @@ final class PlaybackController {
                     + " opt=\(performance?.optimizedCompositingFrames ?? -1)"
                     + " dropped=\(performance?.droppedFrames ?? -1)"
                     + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\""
+                    // HEL-148 soak diagnostics: main-actor scheduling
+                    // latency, pump-queue ping, the 10 Hz tick summary,
+                    // subtitle cue count, renderer observer count, thermal
+                    // state — everything the 100-minute soak needs to show
+                    // whether the engine degrades over a long film.
+                    + String(format: " mainLateMs=%.0f pumpMs=%.1f", mainLateMs, lastPumpMs)
+                    + " \(engine.drainMainTickDiagnostic())"
+                    + " cues=\(engine.subtitleCueCountDiagnostic)"
+                    + " observers=\(engine.rendererObserverCountDiagnostic)"
+                    + " thermal=\(thermalName)"
                 #if DEBUG
                 trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"
                     + " deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)"
                 #endif
                 print(trace)
                 print(cpuTrace.tick())
+                engine.measurePumpQueueLatency { duration in
+                    Task { @MainActor in pumpPing.lastMs = ms(duration) }
+                }
+
+                if soakPauseAtSeconds > 0, !didSoakPause,
+                   engine.timePosition >= soakPauseAtSeconds, !engine.isPaused {
+                    didSoakPause = true
+                    let pauseStart = ContinuousClock.now
+                    engine.pause()
+                    print(String(
+                        format: "SoakPause position=%.2f pauseCallMs=%.1f",
+                        engine.timePosition, ms(ContinuousClock.now - pauseStart)
+                    ))
+                    try? await Task.sleep(for: .seconds(5))
+                    let resumeStart = ContinuousClock.now
+                    engine.play()
+                    print(String(
+                        format: "SoakResume position=%.2f playCallMs=%.1f",
+                        engine.timePosition, ms(ContinuousClock.now - resumeStart)
+                    ))
+                }
+                if soakExitAtSeconds > 0, !didSoakExit, engine.timePosition >= soakExitAtSeconds {
+                    didSoakExit = true
+                    self.soakExitRequested = true
+                    self.soakExitRequestedAt = ContinuousClock.now
+                    print(String(format: "SoakExit requested position=%.2f", engine.timePosition))
+                }
             }
         }
     }
@@ -1355,7 +1452,17 @@ final class PlaybackController {
     @discardableResult
     func close() -> Task<Void, Never>? {
         isClosed = true
-        return beginStop()
+        guard let soakExitRequestedAt else { return beginStop() }
+        // HEL-148 soak diagnostic: `soakExitRequestedAt` is only ever set by
+        // the (decodeTrace-gated) soak-exit hook, so this print needs no
+        // separate gate. `closeMs` is `beginStop()` alone; `sinceRequestMs`
+        // is the whole exit, from the soak hook's request to here.
+        let closeStart = ContinuousClock.now
+        let result = beginStop()
+        let closeMs = ms(ContinuousClock.now - closeStart)
+        let sinceRequestMs = ms(ContinuousClock.now - soakExitRequestedAt)
+        print(String(format: "SoakExit closeMs=%.1f sinceRequestMs=%.1f", closeMs, sinceRequestMs))
+        return result
     }
 
     private func stop(
@@ -2078,6 +2185,14 @@ struct VideoPlayerView: View {
         // device runs never kill the app mid-playback again.
         .onChange(of: controller.engine?.benchCompleted) { _, completed in
             if completed == true, UserDefaults.standard.bool(forKey: "debug.benchAutoExit") {
+                dismiss()
+            }
+        }
+        // HEL-148 soak hook (debug.soakExitAtSeconds): the film reached the
+        // configured position, so leave through the same clean teardown
+        // path a real exit takes.
+        .onChange(of: controller.soakExitRequested) { _, requested in
+            if requested {
                 dismiss()
             }
         }

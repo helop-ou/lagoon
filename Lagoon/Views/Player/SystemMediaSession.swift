@@ -121,6 +121,22 @@ final class PlaybackAudioSession {
         let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason) ?? .unknown
         let previousRoute = notification.userInfo?[AVAudioSessionRouteChangePreviousRouteKey]
             as? AVAudioSessionRouteDescription
+        if ProcessCPUTrace.enabled {
+            // HEL-149 report-only diagnostic: route churn on the same
+            // console as DecodeTrace/SoakWait, gated identically. Never
+            // changes behaviour below.
+            let previousPortTypes = (previousRoute?.outputs.map(\.portType.rawValue) ?? [])
+                .joined(separator: ",")
+            let currentPortTypes = session.currentRoute.outputs.map(\.portType.rawValue)
+                .joined(separator: ",")
+            print(String(
+                format: "RouteTrace reason=%@ previous=[%@] current=[%@] uptime=%.3f",
+                Self.routeChangeReasonName(reason),
+                previousPortTypes,
+                currentPortTypes,
+                ProcessInfo.processInfo.systemUptime
+            ))
+        }
         if Self.shouldPauseAfterRouteLoss(
             reason: reason,
             previousOutputs: previousRoute?.outputs.map(\.portType) ?? []
@@ -128,6 +144,23 @@ final class PlaybackAudioSession {
             onPauseRequested?()
         }
         onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
+    }
+
+    /// Name for the `RouteTrace` line (HEL-149) — not used for any playback
+    /// decision, which is why `shouldPauseAfterRouteLoss` below switches on
+    /// the raw `AVAudioSession.RouteChangeReason` itself instead of this.
+    private static func routeChangeReasonName(_ reason: AVAudioSession.RouteChangeReason) -> String {
+        switch reason {
+        case .unknown: "unknown"
+        case .newDeviceAvailable: "newDeviceAvailable"
+        case .oldDeviceUnavailable: "oldDeviceUnavailable"
+        case .categoryChange: "categoryChange"
+        case .override: "override"
+        case .wakeFromSleep: "wakeFromSleep"
+        case .noSuitableRouteForCategory: "noSuitableRouteForCategory"
+        case .routeConfigurationChange: "routeConfigurationChange"
+        @unknown default: "unknown"
+        }
     }
 
     private func restoreAfterMediaServicesReset() {

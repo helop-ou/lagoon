@@ -166,6 +166,15 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// HEL-148 soak diagnostic: how many cues the store is holding, so a
+    /// leak in subtitle bookkeeping over a long film is visible alongside
+    /// the other DecodeTrace figures. Report-only.
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return cues.count
+    }
+
     func active(at seconds: Double) -> (textCues: [SubtitleTextCue], images: [SubtitleImage]) {
         lock.lock()
         defer { lock.unlock() }
