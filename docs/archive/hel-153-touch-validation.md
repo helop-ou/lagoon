@@ -1,5 +1,9 @@
 # HEL-153 touch player continuation — 2026-09-10
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 Claude's interrupted session left the center controls, double-tap feedback,
 iPhone orientation lock, and initial tests uncommitted. The saved Jira response
 identified HEL-153 and its acceptance criteria. Live Jira access was unavailable
