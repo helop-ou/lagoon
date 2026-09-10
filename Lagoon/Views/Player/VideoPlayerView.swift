@@ -2036,6 +2036,11 @@ final class PlaybackController {
 
 struct VideoPlayerView: View {
     let playerItem: PlayerItem
+    var registerPresentationCleanup: ((@escaping () -> Void) -> Void)? = nil
+    var onPresentationClose: (() -> Void)? = nil
+    var onPictureInPictureStarted: (() -> Void)? = nil
+    var onPictureInPictureRestore: ((@escaping (Bool) -> Void) -> Void)? = nil
+    @State private var leftForPictureInPicture = false
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -2084,7 +2089,11 @@ struct VideoPlayerView: View {
                     bufferedRanges: controller.bufferedRanges,
                     playheadPrefetchCount: controller.playheadPrefetchCount,
                     info: fallbackInfo,
-                    onDismiss: { dismiss() },
+                    onDismiss: {
+                        if onPictureInPictureStarted != nil, pictureInPicture.isPossible {
+                            pictureInPicture.toggle()
+                        } else { closePlayer() }
+                    },
                     onPanelToggle: { panelOpen = $0 },
                     nextUp: nextUpEpisode,
                     onPlayNext: { advance() },
@@ -2146,6 +2155,30 @@ struct VideoPlayerView: View {
         }
         .interactiveDismissDisabled()
         .task {
+            registerPresentationCleanup? { [controller, pictureInPicture] in
+                pictureInPicture.onStarted = nil
+                pictureInPicture.onStopped = nil
+                pictureInPicture.onRestore = nil
+                pictureInPicture.detach()
+                controller.close()
+            }
+            pictureInPicture.onStarted = {
+                guard onPictureInPictureStarted != nil else { return }
+                leftForPictureInPicture = true
+                onPictureInPictureStarted?()
+            }
+            pictureInPicture.onStopped = {
+                if leftForPictureInPicture { closePlayer() }
+            }
+            pictureInPicture.onRestore = { completion in
+                if let onPictureInPictureRestore {
+                    onPictureInPictureRestore { restored in
+                        if restored { leftForPictureInPicture = false }
+                        completion(restored)
+                    }
+                } else { completion(true) }
+            }
+            guard controller.engine == nil else { return }
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
             trackPreferences.configure(accountID: session.activeAccount?.id)
             await controller.start(
@@ -2174,7 +2207,7 @@ struct VideoPlayerView: View {
                 // out while the successor is still being prepared, and
                 // dismissing there tears down a handoff the viewer asked for
                 // and drops them back on the browse screen (HEL-144).
-                dismiss()
+                closePlayer()
             }
         }
         .onChange(of: controller.engine?.displayMatchRequest) { _, request in
@@ -2240,7 +2273,7 @@ struct VideoPlayerView: View {
         // device runs never kill the app mid-playback again.
         .onChange(of: controller.engine?.benchCompleted) { _, completed in
             if completed == true, UserDefaults.standard.bool(forKey: "debug.benchAutoExit") {
-                dismiss()
+                closePlayer()
             }
         }
         // HEL-148 soak hook (debug.soakExitAtSeconds): the film reached the
@@ -2248,14 +2281,36 @@ struct VideoPlayerView: View {
         // path a real exit takes.
         .onChange(of: controller.soakExitRequested) { _, requested in
             if requested {
-                dismiss()
+                closePlayer()
             }
         }
+        // The phone plays landscape only, locked for the duration of the
+        // player (HEL-153); the iPad keeps its normal orientations.
+        #if os(iOS)
+        .onAppear { PlayerOrientationLock.lockToLandscape() }
+        #endif
         .onDisappear {
+            #if os(iOS)
+            PlayerOrientationLock.unlock()
+            #endif
+            guard !leftForPictureInPicture else { return }
             applyDisplayMatch(nil)
+            pictureInPicture.onStarted = nil
+            pictureInPicture.onStopped = nil
+            pictureInPicture.onRestore = nil
             pictureInPicture.detach()
             controller.close()
         }
+    }
+
+    private func closePlayer() {
+        leftForPictureInPicture = false
+        pictureInPicture.onStarted = nil
+        pictureInPicture.onStopped = nil
+        pictureInPicture.onRestore = nil
+        pictureInPicture.detach()
+        controller.close()
+        if let onPresentationClose { onPresentationClose() } else { dismiss() }
     }
 
     /// tvOS Match Content (HEL-64): ask the display for the video's own
@@ -2324,13 +2379,13 @@ struct VideoPlayerView: View {
                 .frame(maxWidth: 700)
                 .multilineTextAlignment(.center)
             Button("Back") {
-                dismiss()
+                closePlayer()
             }
             .buttonStyle(.glass)
         }
         #if os(tvOS)
         .onExitCommand {
-            dismiss()
+            closePlayer()
         }
         #endif
     }
