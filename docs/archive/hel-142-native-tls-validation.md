@@ -1,10 +1,14 @@
 # HEL-142: transport, malformed-media and session-recovery validation
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 **Superseded, September 8, 2026:** the GnuTLS-based `tls_verify`
 verification this record documents was replaced on the `spike/urlsession-transport`
 branch by `FFmpegNetworkTransport`, which moves every HTTP open onto
 URLSession and removes libavformat's network stack (and GnuTLS with it) —
-see "Network transport" in [`playback.md`](playback.md). The 32-case
+see "Network transport" in [`playback.md`](../reference/playback.md). The 32-case
 certificate fixture matrix below is unchanged and remains the acceptance
 test, now run through the new transport instead of libavformat's own TLS.
 This document otherwise stands as the historical record of the GnuTLS-based
@@ -40,7 +44,7 @@ playback diagnostics remain available.
 
 The exact trust behavior, source checksum, patch, rebuild command, notices and
 artifact provenance are in
-[`Libavformat.README.md`](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
+[`Libavformat.README.md`](../../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
 Apple system and installed roots apply. Network fetching during trust
 evaluation is disabled, so servers must send their intermediate certificates.
 There is no trust-all fallback, private API or additional app dependency.
