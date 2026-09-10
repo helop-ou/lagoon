@@ -505,9 +505,15 @@ final class PlaybackController {
             // of whatever this server/account's track preferences resolve
             // to.
             if let language = UserDefaults.standard.string(forKey: "debug.benchSubtitleLanguage"),
-               !language.isEmpty,
-               let ordinal = Self.ordinal(matchingLanguage: language, title: nil, in: orderedSubtitles) {
-                initialSubtitleOrdinal = ordinal
+               !language.isEmpty {
+                if language == "off" {
+                    // The system caption preference can turn a track on by
+                    // itself; a bench arm that means "no subtitles" has to
+                    // say so explicitly.
+                    initialSubtitleOrdinal = 0
+                } else if let ordinal = Self.ordinal(matchingLanguage: language, title: nil, in: orderedSubtitles) {
+                    initialSubtitleOrdinal = ordinal
+                }
             }
             audioStreams = embeddedAudio
             orderedSubtitleStreams = orderedSubtitles
