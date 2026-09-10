@@ -98,18 +98,61 @@ server, offers Use Another Server, and leaves the active Jellyfin and Seerr
 sessions intact until a new account is verified. System-managed subtitle
 appearance hides Lagoon controls that would have no effect.
 
+## Toward 1.0
+
+What 1.0 still owes, functionally and as release gates, in the order they
+are worth doing (decided 2026-09-10). Keys are Jira tickets; the two audit
+tickets hold the detailed acceptance lists so they are not repeated here.
+
+1. **Touch player controls on iPhone and iPad** (HEL-153). The iOS player
+   has a top bar with Close, Info and Play/Pause, a tap to show the
+   controls, a drag scrubber and Picture in Picture inside the panel, and
+   nothing else by gesture. 1.0 needs the grammar every phone player has:
+   a large centred play/pause with 10 s back and forward beside it,
+   double-tap on either half of the picture to seek, landscape lock while
+   playing, the mute switch and volume keys respected, trickplay thumbnails
+   while scrubbing by touch, Skip Intro and Up Next tappable, and Picture
+   in Picture when leaving the player as the phone's popup behaviour. An
+   in-app mini player is a 1.1 idea.
+2. **Physical-device acceptance** (HEL-144, with HEL-41 for iPhone/iPad):
+   the audit's matrix on real hardware — iPhone and iPad touch, rotation,
+   keyboards, VoiceOver, large text, interruptions and the lock screen,
+   AirPlay to a receiver, Picture in Picture captions, and a full film with
+   captions on watched on the Apple TV from a TestFlight build, which is
+   what retires HEL-148 for good. The iPad layout has never been looked at
+   on a device.
+3. **App Store preparation** (HEL-143): privacy nutrition labels, the
+   privacy policy and support URLs, review notes with a demo server and
+   account, the export-compliance answer for the FFmpeg build (HTTPS only,
+   through URLSession), the age rating, and a signed archive checked before
+   upload.
+4. **Known defects to close first**: the outgoing engine retained across an
+   episode handoff (HEL-152), a slow creep over a binge rather than a crash.
+   The subtitle-over-HDR frame drops (HEL-148) are better but not zero and
+   can ship as they are, with the ticket open.
+5. **The website** (`../lagoon-website`, HEL-143): screenshots of both
+   platforms in the current design, the privacy policy page App Store
+   Connect links to, a support/contact page, the App Store or TestFlight
+   link, and a short setup page covering the three questions the app already
+   answers in-line — server address and proxy paths, the subtitle-search
+   permission, and captions appearance following system settings. The
+   non-goals below make a good "what Lagoon is not" paragraph.
+
 ## Next
 
-In the order they are worth doing. Keys are Jira tickets.
+After 1.0, in the order they are worth doing. Keys are Jira tickets.
 
-1. **iPhone/iPad validation** (HEL-41): the implementation pass above is in
-   place. Next is dedicated iPad layout coverage and physical-device checks
-   for touch, keyboards, large text, VoiceOver, and playback controls.
-2. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
+1. **1080i H.264 without a transcode** (HEL-127, remainder): hardware
    decode has no deinterlacing stage; needs a CVPixelBuffer-side pass and
    its own frame-loss measurement.
-3. **Live TV**, if the server has it: guide and channels. A big lift with
+2. **Live TV**, if the server has it: guide and channels. A big lift with
    no ticket yet.
+3. **A route-loss main-thread block** (follow-up to HEL-149): removing
+   AirPods while paused blocked the main actor for 862 ms in the trace;
+   the AirPods gap itself measured as a two-second re-prime on connect while
+   playing and nothing while paused, so no new route path is planned.
+4. **An in-app mini player on iPhone** once HEL-153's Picture in Picture on
+   exit has been lived with.
 
 A post-1.0 idea worth tracking: a Lagoon server plugin exposing fetch-only
 subtitle search to accounts without `EnableSubtitleManagement`, so an
