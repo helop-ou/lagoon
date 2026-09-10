@@ -40,8 +40,12 @@ not new feature requests or a live Jira status report:
 - Account/privacy cleanup, local-network permission recovery, and native
   transport device checks (HEL-141/142/143); evidence is in the
   [archive index](archive/README.md).
-- Jellyfin 12 deployment acceptance (HEL-138) when the private server upgrades;
-  the [API guide](jellyfin-api.md) records the narrower tested compatibility.
+- Jellyfin 12 deployment acceptance (HEL-138) when the private server upgrades
+  from 10.11.11. The public demo's stable channel is already 12.0.0, and on
+  2026-09-11 browsing, direct play and HLS on the remux rung passed there
+  inside the app; the [API guide](jellyfin-api.md#jellyfin-12-compatibility-hel-138)
+  records what that covers and that a sustained video transcode on 12 is
+  still unexercised.
 
 ## Next
 

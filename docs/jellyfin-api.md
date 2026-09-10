@@ -1,10 +1,13 @@
 # Jellyfin API
 
 Checked against the public Jellyfin **10.11.11** stable and **12.0.0**
-unstable servers on 2026-09-04. The unstable demo is a pre-release of 12.0,
+unstable servers on 2026-09-04. The unstable demo was a pre-release of 12.0,
 but nothing it exposes says which one: `System/Info/Public`, authenticated
 `System/Info` and its OpenAPI document all report the version as `12.0.0`, so
-that is the string used throughout these docs.
+that is the string used throughout these docs. Since then the public demo's
+stable channel has moved to 12.0.0 as well (both channels report it on
+2026-09-11), so the 10.11.11 coverage now comes from the private fixture
+server, which is still on that version.
 
 Lagoon keeps using the user-scoped `Users/{id}/…` routes because both servers
 answer them. That is a runtime observation, not a schema guarantee — several
@@ -122,9 +125,21 @@ every hop (620 KB of transport stream on the segment). That is the exact
 chain HEL-138 changed; the same chain is exercised today with the token in
 the `Authorization` header instead.
 
-Still outstanding: sustained *transcode* playback inside the app on 12, which
-needs a server whose content forces one, and the deployment check on fixture
-once it upgrades.
+**The stable channel on 12.0.0 (2026-09-11).** With the public demo's stable
+channel reporting 12.0.0, the same lane was run again on a clean tvOS 26
+simulator against `demo.jellyfin.org/stable`, this time with the header-only
+credential and the base-path fix in place: `testBufferedDirectH264Playback\
+StartsAndSustains` passed, and `testNativeHLSPlaybackStartsAndCrossesSegment\
+Boundaries` passed on the remux rung (`-debug.regressionInitialDelivery
+remux`, since the demo direct-plays everything), so HLS master, variant and
+segment routes behind a base path all answer the `Authorization` header on
+12.0.0 inside the app. Browsing on the same server (views, latest, resume,
+next up, seasons, search, images) was probed the same day and answered as
+before.
+
+Still outstanding: sustained *video transcode* playback inside the app on 12,
+which needs a server whose content forces one, and the deployment check on
+fixture once it upgrades from 10.11.11.
 
 ## Library endpoints
 
