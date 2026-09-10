@@ -363,7 +363,8 @@ extension JellyfinClient {
     /// comma-joined list, and filtering client-side costs nothing at these
     /// sizes.
     func mediaSegments(itemId: String) async -> [MediaSegment] {
-        let page: MediaSegmentsPage? = try? await get("MediaSegments/\(itemId)")
+        // 10.10+ only; an older server's 404 is an answer, not a fault.
+        let page: MediaSegmentsPage? = try? await get("MediaSegments/\(itemId)", probe: true)
         return (page?.items ?? [])
             .map {
                 MediaSegment(
