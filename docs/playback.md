@@ -801,6 +801,75 @@ decoder setting, so when six back-to-back runs pushed it from 4.8 ms to 9.1 ms
 that was the device degrading under continuous load, not the settings. Leave
 five minutes between runs and discard any run where it is not near 4.8.
 
+#### Long-film soak lane (HEL-148)
+
+Build 90 degraded over a long film on the Apple TV — subtitles fell behind,
+pause and Menu took about a minute at the 90-minute mark. That is a backlog
+that grows for an hour, which no 60-second bench window can see, so the trace
+gained what a whole film needs and a hands-off lane drives it:
+
+```sh
+DEVICECTL_CHILD_LAGOON_REGRESSION_SERVER=… DEVICECTL_CHILD_LAGOON_REGRESSION_USER=… \
+DEVICECTL_CHILD_LAGOON_REGRESSION_PASS=… \
+xcrun devicectl device process launch --device <udid> --console --terminate-existing \
+  ee.helop.lagoon -- -debug.playerRegression YES -debug.regressionBootstrapPublicDemo YES \
+  -debug.benchSearchTerm "The Hangover" -debug.benchProductionYear 2009 \
+  -debug.benchSubtitleLanguage eng -debug.decodeTrace YES \
+  -debug.simulateAudioStarvation NO \
+  -debug.soakPauseAtSeconds 5400 -debug.soakExitAtSeconds 5460
+```
+
+`debug.benchSubtitleLanguage` forces a subtitle track on the way
+`benchSearchTerm` forces the title; `soakPauseAtSeconds` pauses for five
+seconds and resumes, `soakExitAtSeconds` leaves through the same `dismiss()`
+a Menu press takes, and each prints how long the call took (`SoakPause`,
+`SoakResume`, `SoakExit closeMs=… sinceRequestMs=…`). The `DecodeTrace` line
+carries, beside the queue and audio fields: `mainLateMs` (how late the
+trace's own 2 s sleep resumed — main-actor unavailability), `pumpMs` (a ping
+through the pump queue), `tick=n tickAvgMs tickMaxMs tickGapMaxMs` (the cost
+and cadence of the engine's 10 Hz `observeTime`), `cues` (subtitle store
+size), `observers` (renderer notification tokens) and `thermal`. `SoakWait`
+lines time the pause rate change, the seek path's `pumpQueue.sync` and
+renderer retirement. All of it is off unless `-debug.decodeTrace YES`.
+
+Build the app from a `git archive` of the commit rather than the working
+tree when agents are editing it, use `generic/platform=tvOS` as the build
+destination (a rebooting device is not a valid `id:` destination), and run
+the console process under `nohup` — the run outlives any tool timeout.
+
+**2026-09-10, main at `11c7a1a` (the September 8 transport work plus this
+instrumentation), Release, Apple TV 4K (3rd generation) rebooted first, The
+Hangover (2009) from fixture: HEVC Main 10 3840×1600 Dolby Vision profile 5,
+AC-3 5.1, English CC on, 91 minutes hands-off.** Nothing grew:
+
+| position | footprint | dropped / shown | mainLateMs | tickMaxMs | cues | thermal | main-thread ms per 2 s (median over the slice) |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: |
+| 10 min | 542 MB | 104 / 14 392 | 2 | 0.2 | 202 | nominal | 255 |
+| 30 min | 541 MB | 298 / 43 239 | 4 | 0.2 | 674 | nominal | 256 |
+| 50 min | 541 MB | 513 / 72 008 | 68 | 0.2 | 1 181 | nominal | 247 |
+| 70 min | 541 MB | 692 / 100 826 | 12 | 0.2 | 1 618 | nominal | 252 |
+| 90 min | 541 MB | 859 / 129 620 | 18 | 0.2 | 2 075 | nominal | 259 |
+
+Zero stalls, zero audio dry-ups, zero reprimes, four renderer observers
+throughout, `mainLateMs` p99 99 ms with a 115 ms maximum, `tickMaxMs` never
+above 1.8 ms, the pump ping never above 2.2 ms, thermal state nominal for
+the whole film. At 90 minutes the pause call returned in 72 ms (all of it
+`synchronizer.rate = 0`), resume in 40 ms, and the exit's `beginStop()` in
+122 ms with 730 ms from request to `close()` and 3.4 ms of renderer
+retirement. So the build-90 symptom does not reproduce on this build. Build
+90 fetched the stream through libavformat's own HTTP stack with GnuTLS; that
+layer is gone (HEL-142), and it is the one place a 100-minute backlog could
+have lived that this run cannot see. The next check is the same film on the
+next TestFlight build by eye; a side-by-side with build 90 is only worth the
+evening if it recurs.
+
+Two things the run did show that are not HEL-148: the drop rate is a steady
+0.66% (one frame every 5–6 s) with `opt=0` throughout — the known Dolby
+Vision behaviour on this device, every frame through ordinary composition —
+and the main thread spends about 250 ms of every 2 s window on that
+composition path with nothing on screen, which is what the HEL-150
+observation-scope split addresses.
+
 #### Thermal state and rearranging work
 
 Relaunching on a device hammered for ten minutes once reproduced the cold curve
