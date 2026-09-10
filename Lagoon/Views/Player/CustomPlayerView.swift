@@ -64,7 +64,7 @@ private extension View {
 }
 
 struct CustomPlayerView<Surface: View>: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     /// Stable media identity, independent of the engine object's lifetime.
     /// Changing it resets episode-only chrome while preserving this view's
     /// structural position and its UIKit video surface.
