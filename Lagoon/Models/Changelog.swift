@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "95",
+            released: "September 2026",
+            headline: "No more blank cards for titles that only have a poster.",
+            changes: [
+                "A film or show with a poster but no wide artwork now shows its poster on Home rows such as Recently Added and Favorites instead of an empty grey card. The rare title with no artwork at all shows its name.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "94",
             released: "September 2026",
             headline: "Touch controls for the iPhone and iPad player, Picture in Picture on the way out, and a tidier iPad Home.",
