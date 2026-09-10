@@ -176,15 +176,12 @@ struct HomeView: View {
         // neither the rail nor the Top Shelf refreshed (HEL-119). The stop
         // report is still in flight when this fires; `settle()` waits for
         // it so the rails read the new position, not the old (HEL-132).
-        .fullScreenCover(item: $playerItem, onDismiss: {
+        .playerPresentation(item: $playerItem, onDismiss: {
             Task {
                 await session.client.playbackReports.settle()
                 await refreshUserData()
             }
-        }) { item in
-            VideoPlayerView(playerItem: item)
-                .preferredColorScheme(.dark)
-        }
+        })
     }
 
     /// Marking something watched or favourited from a card menu can move it
