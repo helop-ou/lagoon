@@ -41,15 +41,29 @@ nonisolated private let avErrorEOF: Int32 = -541_478_725 // AVERROR_EOF = -MKTAG
 nonisolated private let customIOFlag: Int32 = 0x0080 // AVFMT_FLAG_CUSTOM_IO
 
 nonisolated enum DemuxError: LocalizedError {
-    case openFailed(String)
-    case seekFailed(String)
+    /// `code` is the AVERROR where libavformat gave one, else 0.
+    case openFailed(String, code: Int32 = 0)
+    case seekFailed(String, code: Int32 = 0)
     case unsupportedVideo(String)
 
     var errorDescription: String? {
         switch self {
-        case .openFailed(let detail): "The stream could not be opened (\(detail))."
-        case .seekFailed(let detail): "The stream could not seek to that position (\(detail))."
+        case .openFailed(let detail, _): "The stream could not be opened (\(detail))."
+        case .seekFailed(let detail, _): "The stream could not seek to that position (\(detail))."
         case .unsupportedVideo(let codec): "The Lagoon engine can't decode \(codec) yet."
+        }
+    }
+
+    /// Stage and AVERROR for the diagnostic report; the codec name of an
+    /// unsupported stream is already a fact of the attempt.
+    var diagnosticDetail: PlaybackFailureDetail {
+        switch self {
+        case .openFailed(_, let code):
+            PlaybackFailureDetail(stage: .open, domain: "ffmpeg", code: code == 0 ? nil : Int(code))
+        case .seekFailed(_, let code):
+            PlaybackFailureDetail(stage: .seek, domain: "ffmpeg", code: code == 0 ? nil : Int(code))
+        case .unsupportedVideo:
+            PlaybackFailureDetail(stage: .decode, domain: "ffmpeg.unsupported")
         }
     }
 
@@ -389,11 +403,11 @@ nonisolated final class FFmpegDemuxer {
 
         var status = avformat_open_input(&formatContext, url, nil, &options)
         guard status >= 0, let ctx = formatContext else {
-            throw DemuxError.openFailed(Self.errorText(status))
+            throw DemuxError.openFailed(Self.errorText(status), code: status)
         }
         status = avformat_find_stream_info(ctx, nil)
         guard status >= 0 else {
-            throw DemuxError.openFailed(Self.errorText(status))
+            throw DemuxError.openFailed(Self.errorText(status), code: status)
         }
 
         if ctx.pointee.duration > 0 {
@@ -883,7 +897,7 @@ nonisolated final class FFmpegDemuxer {
 
     static func validateSeekStatus(_ status: Int32) throws {
         guard status >= 0 else {
-            throw DemuxError.seekFailed(errorText(status))
+            throw DemuxError.seekFailed(errorText(status), code: status)
         }
     }
 
