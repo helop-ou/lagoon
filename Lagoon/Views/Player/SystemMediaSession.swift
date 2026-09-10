@@ -100,6 +100,7 @@ final class PlaybackAudioSession {
         switch type {
         case .began:
             wasPlayingBeforeInterruption = isPlaying()
+            Diagnostics.record(.audioInterruption, ["interruption": .string("began"), "paused": .bool(!wasPlayingBeforeInterruption)])
             if wasPlayingBeforeInterruption {
                 onPauseRequested?()
             }
@@ -107,6 +108,7 @@ final class PlaybackAudioSession {
             let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
             let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
             let shouldResume = wasPlayingBeforeInterruption && options.contains(.shouldResume)
+            Diagnostics.record(.audioInterruption, ["interruption": .string(shouldResume ? "endedResume" : "ended")])
             wasPlayingBeforeInterruption = false
             if shouldResume {
                 onResumeRequested?()
@@ -121,6 +123,7 @@ final class PlaybackAudioSession {
         let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason) ?? .unknown
         let previousRoute = notification.userInfo?[AVAudioSessionRouteChangePreviousRouteKey]
             as? AVAudioSessionRouteDescription
+        Diagnostics.record(.audioRoute, ["routeReason": .string(Self.routeChangeReasonName(reason))])
         if ProcessCPUTrace.enabled {
             // HEL-149 report-only diagnostic: route churn on the same
             // console as DecodeTrace/SoakWait, gated identically. Never
