@@ -29,6 +29,13 @@ import SwiftUI
 /// on tvOS one such read here re-hosts `MenuPressGate`'s whole tree with
 /// every tick (HEL-150). Reads from event handlers and task closures run
 /// later and are not body reads, so they are fine.
+/// Bench hook (`debug.benchBareSurface`): nothing but the video surface, so
+/// a hardware run can say whether the chrome layered over an HDR frame is
+/// what keeps it off the display's optimized composition path. Read once; a
+/// shipping launch never sets it. File-private because the view is generic
+/// and cannot hold a static stored property.
+private let benchBareSurface = UserDefaults.standard.bool(forKey: "debug.benchBareSurface")
+
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     /// Stable media identity, independent of the engine object's lifetime.
@@ -186,130 +193,133 @@ struct CustomPlayerView<Surface: View>: View {
     /// per-tick invalidation stops at them. Reads inside event handlers and
     /// task closures are not body reads and are fine; the computed properties
     /// below that touch `engine.timePosition` exist only for those.
+
     private var playerContent: some View {
         ZStack {
             videoSurface
 
-            PlayerSubtitleOverlay(
-                engine: engine,
-                style: subtitleStyle,
-                onDisplayedCaption: reportDisplayedCaption
-            )
-
-            if case .failed = engine.subtitleLoadState, !panelOpen {
-                VStack {
-                    Label("Subtitles couldn't load. Open Subtitles to retry or choose another track.", systemImage: "exclamationmark.triangle")
-                        .font(.callout)
-                        .padding(Metrics.Space.l)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.Space.l))
-                        .padding(.horizontal, Metrics.screenGutter)
-                        .padding(.top, Metrics.Space.xl)
-                        .accessibilityIdentifier("player.subtitleLoad.notice")
-                    Spacer()
-                }
-                .allowsHitTesting(false)
-            }
-
-            // Every animation in here is value-driven (.animation + value:).
-            // withAnimation doesn't survive the MenuPressGate hosting
-            // boundary, and neither do transitions — see the panel below and
-            // the write-up in docs/playback.md.
-            Group {
-                if showsBuffering {
-                    ProgressView()
-                        .tint(.white)
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut(duration: Motion.fast), value: showsBuffering)
-
-            Group {
-                if let feedback = seekFeedback {
-                    seekIndicator(feedback)
-                }
-            }
-            .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: seekFeedback)
-
-            PlayerSkipOverlay(
-                engine: engine,
-                playbackIdentity: playbackIdentity,
-                segments: info.segments,
-                handledSegmentIDs: handledSegmentIDs,
-                isSuppressed: panelOpen || isScrubbing,
-                skipMode: skipMode,
-                reduceMotion: reduceMotion,
-                onSkip: skip
-            )
-
-            PlayerNextUpOverlay(
-                engine: engine,
-                playbackIdentity: playbackIdentity,
-                episode: nextUp,
-                cardStart: nextUpStart,
-                countdownStart: nextUpCountdownStart,
-                isSuppressed: panelOpen || isScrubbing || nextUpDismissed,
-                autoplayMode: autoplayMode,
-                reduceMotion: reduceMotion,
-                hint: hint,
-                onPlayNext: { onPlayNext?() }
-            )
-
-            PlayerTransportOverlay(
-                engine: engine,
-                info: info,
-                scrubTarget: scrubTarget,
-                showsEndTime: showsEndTime,
-                showsPanelHint: showsPanelHint,
-                bufferedFraction: bufferedFraction,
-                bufferedRanges: bufferedRanges,
-                trickplay: trickplay,
-                onScrubPreview: { seconds in
-                    scrubTarget = seconds
-                    pokeControls()
-                },
-                onCommitScrub: { seconds, resume in
-                    commitScrub(to: seconds, resume: resume)
-                },
-                onCancelScrub: cancelScrub,
-                onPoke: pokeControls
-            )
-                .opacity(transportVisible ? 1 : 0)
-                // A faded-out overlay still hit-tests: without this the
-                // invisible iOS scrubber would swallow drags meant for the
-                // video (and the button row taps). tvOS is never touched —
-                // Select goes to the focused surface — so nothing down
-                // there may take a press at all.
-                #if os(tvOS)
-                .allowsHitTesting(false)
-                #else
-                .allowsHitTesting(transportVisible)
-                #endif
-                // Asymmetric: target-state-conditional animation — fast
-                // in, gentle out.
-                .animation(
-                    controlsVisible ? .easeOut(duration: Motion.fast) : .easeInOut(duration: Motion.slow),
-                    value: controlsVisible
+            if !benchBareSurface {
+                PlayerSubtitleOverlay(
+                    engine: engine,
+                    style: subtitleStyle,
+                    onDisplayedCaption: reportDisplayedCaption
                 )
-                .animation(.easeInOut(duration: Motion.fast), value: engine.isPaused)
-                .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
 
-            // The panel stays mounted and slides out of frame rather than
-            // being inserted. A *transition* needs an animation transaction
-            // at the moment of insertion, and none survives MenuPressGate's
-            // rootView reassignment — tried twice, including forwarding
-            // context.transaction, and frame capture showed it still popping
-            // between two frames 0.04 s apart. A plain value change does
-            // survive, so the slide is an offset. Disabled while closed so
-            // its buttons stay out of the focus engine's reach.
-            #if os(tvOS)
-            panel
-                .focusScope(panelFocusScope)
-                .offset(y: panelOpen ? 0 : -panelSlideDistance)
-                .opacity(panelOpen ? 1 : 0)
-                .disabled(!panelOpen)
-                .animation(panelMotion, value: panelOpen)
-            #endif
+                if case .failed = engine.subtitleLoadState, !panelOpen {
+                    VStack {
+                        Label("Subtitles couldn't load. Open Subtitles to retry or choose another track.", systemImage: "exclamationmark.triangle")
+                            .font(.callout)
+                            .padding(Metrics.Space.l)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.Space.l))
+                            .padding(.horizontal, Metrics.screenGutter)
+                            .padding(.top, Metrics.Space.xl)
+                            .accessibilityIdentifier("player.subtitleLoad.notice")
+                        Spacer()
+                    }
+                    .allowsHitTesting(false)
+                }
 
+                // Every animation in here is value-driven (.animation + value:).
+                // withAnimation doesn't survive the MenuPressGate hosting
+                // boundary, and neither do transitions — see the panel below and
+                // the write-up in docs/playback.md.
+                Group {
+                    if showsBuffering {
+                        ProgressView()
+                            .tint(.white)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: Motion.fast), value: showsBuffering)
+
+                Group {
+                    if let feedback = seekFeedback {
+                        seekIndicator(feedback)
+                    }
+                }
+                .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: seekFeedback)
+
+                PlayerSkipOverlay(
+                    engine: engine,
+                    playbackIdentity: playbackIdentity,
+                    segments: info.segments,
+                    handledSegmentIDs: handledSegmentIDs,
+                    isSuppressed: panelOpen || isScrubbing,
+                    skipMode: skipMode,
+                    reduceMotion: reduceMotion,
+                    onSkip: skip
+                )
+
+                PlayerNextUpOverlay(
+                    engine: engine,
+                    playbackIdentity: playbackIdentity,
+                    episode: nextUp,
+                    cardStart: nextUpStart,
+                    countdownStart: nextUpCountdownStart,
+                    isSuppressed: panelOpen || isScrubbing || nextUpDismissed,
+                    autoplayMode: autoplayMode,
+                    reduceMotion: reduceMotion,
+                    hint: hint,
+                    onPlayNext: { onPlayNext?() }
+                )
+
+                PlayerTransportOverlay(
+                    engine: engine,
+                    info: info,
+                    scrubTarget: scrubTarget,
+                    showsEndTime: showsEndTime,
+                    showsPanelHint: showsPanelHint,
+                    bufferedFraction: bufferedFraction,
+                    bufferedRanges: bufferedRanges,
+                    trickplay: trickplay,
+                    onScrubPreview: { seconds in
+                        scrubTarget = seconds
+                        pokeControls()
+                    },
+                    onCommitScrub: { seconds, resume in
+                        commitScrub(to: seconds, resume: resume)
+                    },
+                    onCancelScrub: cancelScrub,
+                    onPoke: pokeControls
+                )
+                    .opacity(transportVisible ? 1 : 0)
+                    // A faded-out overlay still hit-tests: without this the
+                    // invisible iOS scrubber would swallow drags meant for the
+                    // video (and the button row taps). tvOS is never touched —
+                    // Select goes to the focused surface — so nothing down
+                    // there may take a press at all.
+                    #if os(tvOS)
+                    .allowsHitTesting(false)
+                    #else
+                    .allowsHitTesting(transportVisible)
+                    #endif
+                    // Asymmetric: target-state-conditional animation — fast
+                    // in, gentle out.
+                    .animation(
+                        controlsVisible ? .easeOut(duration: Motion.fast) : .easeInOut(duration: Motion.slow),
+                        value: controlsVisible
+                    )
+                    .animation(.easeInOut(duration: Motion.fast), value: engine.isPaused)
+                    .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
+
+                // The panel stays mounted and slides out of frame rather than
+                // being inserted. A *transition* needs an animation transaction
+                // at the moment of insertion, and none survives MenuPressGate's
+                // rootView reassignment — tried twice, including forwarding
+                // context.transaction, and frame capture showed it still popping
+                // between two frames 0.04 s apart. A plain value change does
+                // survive, so the slide is an offset. Disabled while closed so
+                // its buttons stay out of the focus engine's reach.
+                #if os(tvOS)
+                panel
+                    .focusScope(panelFocusScope)
+                    .offset(y: panelOpen ? 0 : -panelSlideDistance)
+                    .opacity(panelOpen ? 1 : 0)
+                    .disabled(!panelOpen)
+                    .animation(panelMotion, value: panelOpen)
+                #endif
+
+            }
         }
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
