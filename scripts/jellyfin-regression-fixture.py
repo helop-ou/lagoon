@@ -16,7 +16,7 @@ from threading import Lock
 from urllib.parse import parse_qs, urlsplit
 
 
-def media(directory, duration):
+def media(directory, duration, embedded_subtitles=False):
     directory.mkdir(parents=True, exist_ok=True)
     subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -26,6 +26,22 @@ def media(directory, duration):
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-movflags", "+faststart",
         str(directory / "movie.mp4"),
     ], check=True)
+    if embedded_subtitles:
+        # A real embedded track, so the engine lists it from the container
+        # rather than from anything the fixture claims in PlaybackInfo.
+        def stamp(seconds):
+            return f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d},000"
+
+        (directory / "embedded.srt").write_text("\n\n".join(
+            f"{n + 1}\n{stamp(n * 10)} --> {stamp(n * 10 + 9)}\nEmbedded caption {n + 1}"
+            for n in range(duration // 10)) + "\n")
+        subprocess.run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-i", str(directory / "movie.mp4"), "-i", str(directory / "embedded.srt"),
+            "-map", "0:v", "-map", "0:a", "-map", "1:s", "-c", "copy", "-c:s", "srt",
+            "-metadata:s:s:0", "language=eng", "-metadata:s:s:0", "title=Embedded English",
+            str(directory / "movie.mkv"),
+        ], check=True)
     subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(directory / "movie.mp4"),
         "-c", "copy", "-f", "hls", "-hls_time", "2", "-hls_list_size", "0",
@@ -39,15 +55,19 @@ def main():
     parser.add_argument("--base-path", action="append", default=[],
                         help="Require one of these proxy prefixes for API requests (repeatable; fixture controls remain at root)")
     parser.add_argument("--subtitle-downloads", action="store_true", help="Expose working, failing, and oversized external subtitle tracks")
+    parser.add_argument("--subtitle-provider", action="store_true",
+                        help="Expose a provider search, an embedded track, and the sidecar the download attaches")
     args = parser.parse_args()
     if any(not p.startswith("/") or p.endswith("/") or "?" in p or "#" in p for p in args.base_path):
         parser.error("Base paths must start with / and have no trailing slash, query, or fragment")
     directory = args.work.resolve()
-    duration = 300 if args.subtitle_downloads else 90
-    media(directory, duration)
+    duration = 300 if args.subtitle_downloads or args.subtitle_provider else 90
+    media(directory, duration, embedded_subtitles=args.subtitle_provider)
     lock = Lock()
-    state = {"mode": "direct", "generation": 0, "revoked": [], "requests": [], "drop_connections": False, "subtitle_recovered": False}
-    user = {"Id": "fixture-user", "Name": "Fixture viewer"}
+    state = {"mode": "direct", "generation": 0, "revoked": [], "requests": [], "drop_connections": False, "subtitle_recovered": False,
+             "uploaded": False, "searches": 0, "downloads": 0}
+    user = {"Id": "fixture-user", "Name": "Fixture viewer",
+            "Policy": {"EnableSubtitleManagement": True, "IsAdministrator": False}}
     movie = {"Id": "fixture", "Name": "Session fixture movie", "Type": "Movie", "MediaType": "Video",
              "RunTimeTicks": duration * 10_000_000, "UserData": {"Played": False, "PlaybackPositionTicks": 0},
              "Chapters": [], "Trickplay": {}, "Genres": []}
@@ -83,7 +103,7 @@ def main():
             token = match.group(1) if match else query.get("ApiKey", [""])[0]
             with lock:
                 if path == "/__fixture/reset":
-                    state.update(mode=query.get("mode", ["direct"])[0], generation=0, revoked=[], requests=[], drop_connections=False, subtitle_recovered=False)
+                    state.update(mode=query.get("mode", ["direct"])[0], generation=0, revoked=[], requests=[], drop_connections=False, subtitle_recovered=False, uploaded=False, searches=0, downloads=0)
                     return self.reply({"ok": True})
                 if path == "/__fixture/connectivity":
                     state["drop_connections"] = query.get("drop", ["0"])[0] == "1"
@@ -136,6 +156,33 @@ def main():
                                       headers={"Content-Encoding": "gzip"})
                 text = "Recovered captions" if path.endswith("retry.vtt") else "Working captions"
                 return self.reply(f"WEBVTT\n\n00:00:00.000 --> 00:05:00.000\n{text}\n".encode(), kind="text/vtt")
+            if args.subtitle_provider:
+                # The provider search, the provider file, and the upload that
+                # attaches it to the item — the three calls a real download
+                # makes (HEL-151).
+                if re.fullmatch(r"/Items/fixture/RemoteSearch/Subtitles/[a-z]{2,3}", path):
+                    with lock:
+                        state["searches"] += 1
+                    return self.reply([{
+                        "Id": "provider-candidate", "Name": "Provider English",
+                        "ThreeLetterISOLanguageName": "eng", "ProviderName": "Synthetic",
+                        "Format": "vtt", "DownloadCount": 42, "IsHashMatch": True,
+                        "HearingImpaired": False, "IsForced": False,
+                    }])
+                if path == "/Providers/Subtitles/Subtitles/provider-candidate":
+                    with lock:
+                        state["downloads"] += 1
+                    return self.reply(
+                        b"WEBVTT\n\n00:00:00.000 --> 00:05:00.000\nDownloaded captions\n",
+                        kind="text/vtt")
+                if path == "/Videos/fixture/Subtitles":
+                    with lock:
+                        state["uploaded"] = True
+                    return self.reply(b"", 204)
+                if path == "/Subtitles/downloaded.vtt":
+                    return self.reply(
+                        b"WEBVTT\n\n00:00:00.000 --> 00:05:00.000\nDownloaded captions\n",
+                        kind="text/vtt")
             if path == "/Users/Me":
                 return self.reply(user)
             if path.endswith("/Views"):
@@ -150,6 +197,27 @@ def main():
                           "MediaStreams": [{"Type": "Video", "Codec": "h264", "Index": 0,
                                             "Width": 320, "Height": 180, "RealFrameRate": 24},
                                            {"Type": "Audio", "Codec": "aac", "Index": 1, "Channels": 2}]}
+                if args.subtitle_provider:
+                    source["Container"] = "mkv"
+                    source["Size"] = (directory / "movie.mkv").stat().st_size
+                    source["MediaStreams"].append(
+                        {"Type": "Subtitle", "Codec": "subrip", "Index": 2, "Language": "eng",
+                         "DisplayTitle": "English - SUBRIP", "IsExternal": False,
+                         "IsTextSubtitleStream": True, "DeliveryMethod": "Embed"})
+                    with lock:
+                        uploaded = state["uploaded"]
+                    if uploaded:
+                        # Jellyfin renumbers a source's streams when a sidecar
+                        # is attached: the new external stream takes index 0
+                        # and everything already in the container moves up.
+                        for stream in source["MediaStreams"]:
+                            stream["Index"] += 1
+                        source["MediaStreams"].insert(0, {
+                            "Type": "Subtitle", "Codec": "webvtt", "Index": 0, "Language": "eng",
+                            "DisplayTitle": "English - WEBVTT - External", "IsExternal": True,
+                            "IsTextSubtitleStream": True, "DeliveryMethod": "External",
+                            "DeliveryUrl": "/Subtitles/downloaded.vtt"})
+                        source["DefaultAudioStreamIndex"] = 2
                 if args.subtitle_downloads:
                     source["DefaultSubtitleStreamIndex"] = 2
                     source["MediaStreams"] += [
@@ -179,8 +247,9 @@ def main():
                 playlist = "\n".join(f"{line}?ApiKey={token}" if line and not line.startswith("#") else line
                                      for line in playlist.splitlines()) + "\n"
                 return self.reply(playlist.encode(), kind="application/vnd.apple.mpegurl")
-            name = "movie.mp4" if path == "/Videos/fixture/stream" else path.removeprefix("/media/")
-            if name in {"movie.mp4", "init.mp4"} or re.fullmatch(r"variant\d+\.m4s", name):
+            stream_name = "movie.mkv" if args.subtitle_provider else "movie.mp4"
+            name = stream_name if path == "/Videos/fixture/stream" else path.removeprefix("/media/")
+            if name in {"movie.mp4", "movie.mkv", "init.mp4"} or re.fullmatch(r"variant\d+\.m4s", name):
                 file = directory / name
                 if file.is_file():
                     body = file.read_bytes()

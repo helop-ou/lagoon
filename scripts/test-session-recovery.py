@@ -36,9 +36,12 @@ def main():
     journeys.add_argument("--local-network", action="store_true", help="Run iOS denial guidance and retry with a simulated path diagnosis")
     journeys.add_argument("--server-address", action="store_true", help="Run proxy setup and HTTP disclosure checks")
     journeys.add_argument("--subtitle-downloads", action="store_true", help="Run subtitle failure, retry, and oversized download checks during playback")
+    journeys.add_argument("--subtitle-provider", action="store_true", help="Run the provider download followed by an embedded track switch (tvOS)")
     args = parser.parse_args()
     if args.local_network:
         args.platforms = ["iOS"]  # tvOS does not implement local-network privacy.
+    if args.subtitle_provider:
+        args.platforms = ["tvOS"]  # The journey is driven with the Siri Remote.
     work = (args.work or Path(tempfile.mkdtemp(prefix="lagoon-session-tests-"))).resolve()
     directory = work / datetime.now().strftime("%Y%m%d-%H%M%S")
     directory.mkdir(parents=True)
@@ -48,6 +51,8 @@ def main():
         fixture_command += ["--base-path", "/services/jellyfin", "--base-path", "/services/seerr"]
     if args.subtitle_downloads:
         fixture_command += ["--subtitle-downloads"]
+    if args.subtitle_provider:
+        fixture_command += ["--subtitle-provider"]
     fixture = subprocess.Popen(fixture_command, stdout=subprocess.PIPE, text=True)
     try:
         url = fixture.stdout.readline().strip()
@@ -83,19 +88,21 @@ def main():
                 spec = plistlib.loads(spec_path.read_bytes())
                 environment(spec, url)
                 spec_path.write_bytes(plistlib.dumps(spec))
-                suite = "SubtitleDownloadUITests" if args.subtitle_downloads else "ServerAddressUITests" if args.server_address else "LocalNetworkUITests" if args.local_network else "AccountPrivacyUITests" if args.account_privacy else "SessionExpiryUITests"
+                suite = "PlayerRegressionUITests/testDownloadedSubtitleThenEmbeddedSwitchKeepsPlaying" if args.subtitle_provider else \
+                    "SubtitleDownloadUITests" if args.subtitle_downloads else "ServerAddressUITests" if args.server_address else "LocalNetworkUITests" if args.local_network else "AccountPrivacyUITests" if args.account_privacy else "SessionExpiryUITests"
                 command = ["xcodebuild", "test-without-building", "-xctestrun", str(spec_path),
                            "-destination", destination, "-parallel-testing-enabled", "NO",
                            f"-only-testing:LagoonUITests/{suite}", "-resultBundlePath", str(results / "Recovery.xcresult")]
                 with (results / "test.log").open("w") as log:
                     subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
-                expected = 1 if args.account_privacy or args.local_network or args.server_address or args.subtitle_downloads else 2
+                expected = 1 if args.account_privacy or args.local_network or args.server_address or args.subtitle_downloads or args.subtitle_provider else 2
                 if f"Executed {expected} test" not in (results / "test.log").read_text():
                     raise RuntimeError("The selected UI cases did not execute")
                 # Each case resets the fixture; the final case must complete
                 # reauthentication, not merely return a passing skip result.
                 state = json.loads((directory / "fixture/requests.json").read_text())
-                if not (args.account_privacy or args.local_network or args.server_address or args.subtitle_downloads) and (state["generation"] != 2 or not state["revoked"]):
+                if not (args.account_privacy or args.local_network or args.server_address or args.subtitle_downloads
+                        or args.subtitle_provider) and (state["generation"] != 2 or not state["revoked"]):
                     raise RuntimeError("Recovery cases were skipped or did not revoke and replace a token")
                 if args.account_privacy and state["generation"] != 2 * (platform_index + 1):
                     raise RuntimeError("The privacy journey did not authenticate both synthetic accounts")
@@ -107,6 +114,8 @@ def main():
                                 "/services/seerr/api/v1/status", "/services/seerr/api/v1/settings/public"}
                     if state["generation"] != 1 or not required.issubset(paths):
                         raise RuntimeError("The server-address journey did not complete both proxy connections")
+                if args.subtitle_provider and not (state["searches"] and state["downloads"] and state["uploaded"]):
+                    raise RuntimeError("The provider journey did not search, download, and attach a subtitle")
                 if args.subtitle_downloads:
                     paths = [r["path"] for r in state["requests"]]
                     if not state["subtitle_recovered"] or paths.count("/Subtitles/retry.vtt") != 2 or \
@@ -117,7 +126,8 @@ def main():
                 (results / "requests.json").write_text(json.dumps(state, indent=2))
                 run(["xcrun", "xcresulttool", "export", "attachments", "--path", results / "Recovery.xcresult",
                      "--output-path", results / "screenshots"])
-                journey = "subtitle failure, retry, and decompressed byte limit" if args.subtitle_downloads else "proxy setup and HTTP disclosure" if args.server_address else "simulated denial guidance and retry to sign-in" if args.local_network else "account picker and search isolation" if args.account_privacy else "direct/HLS playback, revocation, sign-in and resumed playback"
+                journey = "provider download then embedded track switch" if args.subtitle_provider else \
+                    "subtitle failure, retry, and decompressed byte limit" if args.subtitle_downloads else "proxy setup and HTTP disclosure" if args.server_address else "simulated denial guidance and retry to sign-in" if args.local_network else "account picker and search isolation" if args.account_privacy else "direct/HLS playback, revocation, sign-in and resumed playback"
                 print(f"Passed {platform}: {journey}", flush=True)
             finally:
                 if device:

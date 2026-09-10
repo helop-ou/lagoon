@@ -609,6 +609,205 @@ final class PlayerRegressionUITests: XCTestCase {
         )
     }
 
+    /// An external (sidecar) track is the only subtitle selection that is
+    /// not committed synchronously: it fetches a file first, and the panel
+    /// shows "Loading …" until it lands. That makes it the only switch path
+    /// that can strand a viewer in a load that never ends, which is exactly
+    /// what the first Apple TV build of 2026-09-10 was reported doing.
+    ///
+    /// The journey is a full round trip rather than one selection: external →
+    /// Off → embedded → the same external track again. A second load of a
+    /// track already loaded once is where a stale cancel token, a consumed
+    /// one-shot task or a panel that stopped observing the load state would
+    /// show, and none of those survive the first switch alone.
+    func testExternalSubtitleTrackLoadsSwitchesAndClears() throws {
+        // Top Gear S1E1 on the fixture fixture: 576p H.264 (direct play under
+        // the device profile as well as the simulator one), one embedded
+        // SubRip stream and one external eng SubRip sidecar. The device
+        // profile is deliberate — it is what a real Apple TV negotiates, and
+        // it is the profile under which the server converts the sidecar to
+        // WebVTT on the way out.
+        let app = launchPlayer(title: "Episode 1", series: "Top Gear", simulatorTranscode: false)
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) {
+            $0.int("ready") == 1 && $0.int("subtitleCount") > 0
+        }
+        let started = state(in: app).double("time")
+        waitForState(in: app, timeout: 15) { $0.double("time") > started + 1.5 }
+
+        openSubtitleTab(in: app)
+        let rows = subtitleTrackRows(in: app)
+        guard let externalRow = rows.first(where: { $0.label.contains("External") })?.identifier
+            .replacingOccurrences(of: "player.track.", with: ""),
+            let externalOrdinal = Int(externalRow.dropFirst("subtitle-".count)) else {
+            XCTFail("""
+                The fixture item must expose an external subtitle track. \
+                Rows: \(rows.map { "\($0.identifier)=\($0.label)" }). \
+                State: \(state(in: app).raw)
+                """)
+            return
+        }
+        // Embedded tracks are listed before external ones, so anything with a
+        // lower ordinal is one — used below to prove the two paths coexist.
+        let embeddedRow = rows.first {
+            $0.identifier != "player.track.subtitle-off" && !$0.label.contains("External")
+                && !$0.label.contains("Downloaded")
+        }?.identifier.replacingOccurrences(of: "player.track.", with: "")
+        print("""
+            ExternalSubtitleRegression rows=\(rows.map { "\($0.identifier)=\($0.label)" }) \
+            external=\(externalRow) embedded=\(embeddedRow ?? "none") \
+            state=\(state(in: app).raw)
+            """)
+
+        selectTrackRow(externalRow, in: app)
+        assertSubtitleLoadFinishes(ordinal: externalOrdinal, in: app, stage: "first external load")
+        remote.press(.menu)
+        waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
+        waitForSubtitleCue(in: app, stage: "first external load")
+
+        // Off must clear the cue and leave no load behind it.
+        openSubtitleTab(in: app)
+        selectTrackRow("subtitle-off", in: app)
+        let cleared = waitForState(in: app, timeout: 8) {
+            $0.int("subtitle") == 0 && $0.int("subtitleVisible") == 0
+        }
+        XCTAssertEqual(cleared.string("subtitleLoad"), "idle", "Off left a subtitle load running")
+        remote.press(.menu)
+        waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
+        XCTAssertFalse(
+            app.staticTexts["player.subtitle.text"].exists,
+            "Off must remove the cue that the external track was showing"
+        )
+
+        if let embeddedRow, let embeddedOrdinal = Int(embeddedRow.dropFirst("subtitle-".count)) {
+            openSubtitleTab(in: app)
+            selectTrackRow(embeddedRow, in: app)
+            // An embedded switch commits without a load, and re-demuxes from
+            // the current position to put a line up straight away.
+            let embedded = waitForState(in: app, timeout: 30) {
+                $0.int("subtitle") == embeddedOrdinal && $0.int("buffering") == 0
+            }
+            XCTAssertEqual(
+                embedded.string("subtitleLoad"), "idle",
+                "an embedded track must not enter the external load state"
+            )
+            remote.press(.menu)
+            waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
+            waitForSubtitleCue(in: app, stage: "embedded track")
+        }
+
+        // Back to the same external track: the second load is the one that a
+        // stale token or an already-finished task would swallow.
+        openSubtitleTab(in: app)
+        selectTrackRow(externalRow, in: app)
+        assertSubtitleLoadFinishes(ordinal: externalOrdinal, in: app, stage: "second external load")
+        let reloaded = XCTAttachment(screenshot: app.screenshot())
+        reloaded.name = "External subtitle reselected"
+        reloaded.lifetime = .keepAlways
+        add(reloaded)
+        remote.press(.menu)
+        waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
+        waitForSubtitleCue(in: app, stage: "second external load")
+
+        // The whole journey must have left playback running.
+        let end = state(in: app)
+        XCTAssertEqual(end.int("paused"), 0, "subtitle switching must not pause playback")
+        waitForState(in: app, timeout: 12) { $0.double("time") > end.double("time") + 1 }
+    }
+
+    /// Jaagop's 2026-09-10 report, exactly: download a subtitle from the
+    /// provider, go back to the player, come back to Subtitles and switch to
+    /// another track. A downloaded track is the one selection that changes
+    /// the item on the server — the sidecar is uploaded and attached — and
+    /// Jellyfin renumbers a source's streams when that happens, so the
+    /// switch after it is the one that could hand the demuxer a stream index
+    /// meant for a different stream and leave the picture stopped on a
+    /// spinner. The journey therefore asserts the playhead keeps moving,
+    /// not merely that the selection changed, and repeats the switch after a
+    /// relaunch, when the attached sidecar is a permanent part of the item.
+    ///
+    /// Runs against the synthetic provider fixture
+    /// (`scripts/jellyfin-regression-fixture.py --subtitle-provider`, driven
+    /// by `scripts/test-session-recovery.py --subtitle-provider`); no public
+    /// server offers a provider whose results can be downloaded on demand.
+    func testDownloadedSubtitleThenEmbeddedSwitchKeepsPlaying() throws {
+        guard let address = ProcessInfo.processInfo.environment["LAGOON_SESSION_FIXTURE"],
+              let server = URL(string: address), server.host == "127.0.0.1" else {
+            throw XCTSkip("Requires the synthetic subtitle provider fixture")
+        }
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
+            "-debug.benchSearchTerm", "Session fixture movie",
+            "-debug.regressionFindPlayable", "YES",
+            "-playback.autoplayMode", "off",
+        ]
+        app.launchEnvironment = [
+            "LAGOON_REGRESSION_SERVER": address,
+            "LAGOON_REGRESSION_USER": "Fixture viewer",
+            "LAGOON_REGRESSION_PASS": "",
+        ]
+        app.launch()
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) { $0.int("ready") == 1 }
+
+        openSubtitleTab(in: app)
+        let embeddedCount = subtitleTrackRows(in: app).count - 1
+        XCTAssertGreaterThan(
+            embeddedCount, 0,
+            "the provider fixture must carry an embedded track to switch back to"
+        )
+
+        // Search, then download the first candidate.
+        selectTrackRow("subtitle-search", in: app)
+        let result = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "player.subtitleResult.")
+        ).firstMatch
+        guard result.waitForExistence(timeout: 20) else {
+            throw XCTSkip("The fixture provider returned no candidates")
+        }
+        let resultID = result.identifier.replacingOccurrences(of: "player.subtitleResult.", with: "")
+        selectTrackRow("subtitle-result-\(resultID)", in: app)
+
+        // A finished download hands the track list back with the new track
+        // selected — the ordinal after every track the item already had.
+        let downloadedOrdinal = embeddedCount + 1
+        let downloaded = waitForState(in: app, timeout: 40) {
+            $0.int("subtitleCount") > embeddedCount && $0.int("subtitle") == downloadedOrdinal
+        }
+        XCTAssertEqual(
+            downloaded.string("subtitleLoad"), "idle",
+            "the downloaded track must not leave the panel loading"
+        )
+        XCTAssertTrue(
+            subtitleTrackRows(in: app).contains { $0.label.contains("Downloaded") },
+            "the downloaded track must be listed as one"
+        )
+        remote.press(.menu)
+        waitForState(in: app, timeout: 6) { $0.int("panel") == 0 }
+        waitForSubtitleCue(in: app, stage: "downloaded track")
+
+        assertEmbeddedSwitchKeepsPlaying(in: app, stage: "after download")
+
+        // The sidecar is attached to the item now, so a fresh session sees a
+        // renumbered stream list. Switching again must still be harmless.
+        app.terminate()
+        app.launch()
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) { $0.int("ready") == 1 }
+        openSubtitleTab(in: app)
+        let rows = subtitleTrackRows(in: app)
+        XCTAssertTrue(
+            rows.contains { $0.label.contains("External") },
+            "the attached sidecar must come back as an external track: \(rows.map(\.label))"
+        )
+        remote.press(.menu)
+        waitForState(in: app, timeout: 6) { $0.int("panel") == 0 }
+        assertEmbeddedSwitchKeepsPlaying(in: app, stage: "after relaunch")
+    }
+
     func testEpisodeHandoffKeepsSurfaceMountedAndStartsSuccessor() throws {
         let app = launchPlayer(
             title: "episode-handoff-regression",
@@ -2317,6 +2516,120 @@ final class PlayerRegressionUITests: XCTestCase {
         waitForState(in: app, timeout: 8) { $0.int("subtitle") == 1 }
         remote.press(.menu)
         waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
+    }
+
+    /// Opens the panel (or reopens it on the tab it was left on) and settles
+    /// on Subtitles with the track list mounted.
+    private func openSubtitleTab(in app: XCUIApplication) {
+        remote.press(.down)
+        waitForState(in: app, timeout: 5) { $0.int("panel") == 1 }
+        waitForPanelReveal()
+        moveRight(toTab: "subtitles", in: app)
+        XCTAssertTrue(
+            app.buttons["player.track.subtitle-off"].waitForExistence(timeout: 5),
+            "the Subtitles tab must list the tracks"
+        )
+    }
+
+    /// Every track row in the Subtitles tab, Off included, in list order.
+    private func subtitleTrackRows(in app: XCUIApplication) -> [XCUIElement] {
+        let matches = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "player.track.subtitle-")
+        )
+        return (0..<matches.count).map { matches.element(boundBy: $0) }
+    }
+
+    /// Walks focus onto a track row and presses Select. Down first, because
+    /// the rows sit below Search and the language menu and the last row
+    /// absorbs an overshoot; then up, for a row above where focus already is.
+    private func selectTrackRow(_ id: String, in app: XCUIApplication) {
+        for direction in [XCUIRemote.Button.down, .up] {
+            for _ in 0..<12 where state(in: app).string("focus") != "track-\(id)" {
+                remote.press(direction)
+                Thread.sleep(forTimeInterval: 0.2)
+            }
+        }
+        waitForState(in: app, timeout: 4) { $0.string("focus") == "track-\(id)" }
+        remote.press(.select)
+    }
+
+    /// The load may already be over by the time the first sample is read —
+    /// a local sidecar lands in well under the polling interval — so its
+    /// appearance is recorded, not required. What is required is that it
+    /// ends: idle, that ordinal selected, no error, and no "Loading …" row
+    /// left in the panel. A load that never ends is the reported bug.
+    private func assertSubtitleLoadFinishes(
+        ordinal: Int,
+        in app: XCUIApplication,
+        stage: String
+    ) {
+        let loading = app.descendants(matching: .any)["player.subtitleLoad.loading"]
+        let sawLoading = loading.exists
+            || state(in: app).string("subtitleLoad").hasPrefix("loading")
+        // Comfortably past the loader's own 30 s request timeout would only
+        // hide a hang; 20 s is far past a sidecar fetch and still short
+        // enough that a stuck state fails rather than stalls the suite.
+        let settled = waitForState(in: app, timeout: 20) {
+            $0.string("subtitleLoad") == "idle" && $0.int("subtitle") == ordinal
+        }
+        XCTAssertEqual(
+            settled.string("subtitleLoad"), "idle",
+            "\(stage): the subtitle load never left the loading state"
+        )
+        XCTAssertEqual(
+            settled.int("subtitle"), ordinal,
+            "\(stage): the external track never became the selection"
+        )
+        let error = app.staticTexts["player.subtitleLoad.error"]
+        XCTAssertFalse(
+            error.exists,
+            "\(stage): the panel reported a subtitle load error: \(error.label)"
+        )
+        XCTAssertFalse(
+            loading.exists,
+            "\(stage): the panel is still showing the Loading… row"
+        )
+        print("ExternalSubtitleRegression \(stage) sawLoadingState=\(sawLoading)")
+    }
+
+    /// Switches to the first embedded track and proves the picture survived
+    /// it: no buffering left, the selection landed, the playhead moved on,
+    /// and a cue from the newly selected track reached the overlay. An
+    /// embedded selection re-demuxes from the current position, so this is
+    /// the assertion a stalled re-prime fails.
+    private func assertEmbeddedSwitchKeepsPlaying(in app: XCUIApplication, stage: String) {
+        openSubtitleTab(in: app)
+        let before = state(in: app)
+        selectTrackRow("subtitle-1", in: app)
+        let switched = waitForState(in: app, timeout: 30) {
+            $0.int("subtitle") == 1 && $0.int("buffering") == 0
+        }
+        XCTAssertEqual(switched.int("subtitle"), 1, "\(stage): the embedded track was not selected")
+        XCTAssertEqual(switched.int("buffering"), 0, "\(stage): playback is still buffering")
+        let advanced = waitForState(in: app, timeout: 20) {
+            $0.double("time") > before.double("time") + 3
+        }
+        XCTAssertGreaterThan(
+            advanced.double("time"), before.double("time") + 3,
+            "\(stage): the playhead stopped after the switch. State: \(advanced.raw)"
+        )
+        XCTAssertEqual(
+            advanced.int("stalls"), before.int("stalls"),
+            "\(stage): the switch stalled playback"
+        )
+        remote.press(.menu)
+        waitForState(in: app, timeout: 6) { $0.int("panel") == 0 }
+        waitForSubtitleCue(in: app, stage: "\(stage) embedded cue")
+    }
+
+    private func waitForSubtitleCue(in app: XCUIApplication, stage: String) {
+        let shown = waitForState(in: app, timeout: 30) { $0.int("subtitleVisible") == 1 }
+        XCTAssertEqual(shown.int("subtitleVisible"), 1, "\(stage): no cue reached the overlay")
+        XCTAssertTrue(
+            app.staticTexts["player.subtitle.text"].waitForExistence(timeout: 5)
+                || app.descendants(matching: .any)["player.subtitle.image"].exists,
+            "\(stage): the overlay reports a cue the view never rendered"
+        )
     }
 
     private func launchPlayer(

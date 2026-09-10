@@ -82,6 +82,16 @@ struct PlayerRegressionValue: ViewModifier {
     private var value: String {
         let selectedAudio = engine.audioTracks.first(where: \.isSelected)?.engineID ?? 0
         let selectedSubtitle = engine.subtitleTracks.first(where: \.isSelected)?.engineID ?? 0
+        // An external (sidecar) track is the only selection that is not
+        // committed synchronously, so it is the only one that can strand the
+        // panel on "Loading …". Reported here rather than read off the panel
+        // because the panel exists only while it is open, and a stuck load
+        // has to be observable after it closes.
+        let subtitleLoad: String = switch engine.subtitleLoadState {
+        case .idle: "idle"
+        case .loading(let id, _): "loading-\(id)"
+        case .failed(let id, _, _): "failed-\(id)"
+        }
         let skippable = info.segments.first(where: { $0.kind.isSkippable })
         let skippableStart: Double = skippable?.start ?? -1
         let skippableEnd: Double = skippable?.end ?? -1
@@ -142,6 +152,7 @@ struct PlayerRegressionValue: ViewModifier {
             "audioCount=\(engine.audioTracks.count)",
             "subtitle=\(selectedSubtitle)",
             "subtitleCount=\(engine.subtitleTracks.count)",
+            "subtitleLoad=\(subtitleLoad)",
             "subtitleVisible=\((engine.currentSubtitleText != nil || !engine.currentSubtitleImages.isEmpty) ? 1 : 0)",
             "chapters=\(info.chapters.count)",
             "trickplay=\(info.trickplay == nil ? 0 : 1)",
