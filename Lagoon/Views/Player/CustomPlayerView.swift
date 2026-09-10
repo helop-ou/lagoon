@@ -36,6 +36,33 @@ import SwiftUI
 /// and cannot hold a static stored property.
 private let benchBareSurface = UserDefaults.standard.bool(forKey: "debug.benchBareSurface")
 
+/// Bench hook (`debug.benchFlatCues`): HDR frame-loss bench on Apple TV
+/// found the subtitle cue text costing dropped frames — its shadow/outline
+/// (`SubtitleEdgeModifier`) and translucent background are filtered every
+/// composited frame while the cue is on screen. `rasterizedCue()` bakes
+/// those into one Metal-rendered texture via `.drawingGroup()` so steady
+/// cues cost the compositor nothing extra; setting this flag skips that and
+/// keeps the old per-frame path, for an on-device A/B from the same binary.
+/// Read once; default off, i.e. the cache is on by default. File-private
+/// for the same reason as `benchBareSurface`.
+private let benchFlatCues = UserDefaults.standard.bool(forKey: "debug.benchFlatCues")
+
+private extension View {
+    /// Rasterizes the cue (shadow/outline + background already applied) into
+    /// a single offscreen texture instead of re-filtering a live layer every
+    /// frame. Must be applied after those modifiers and before any
+    /// accessibility identifier/label, which stay outside the drawing group
+    /// so `player.subtitle.text` is still queryable by UI tests.
+    @ViewBuilder
+    func rasterizedCue() -> some View {
+        if benchFlatCues {
+            self
+        } else {
+            self.drawingGroup()
+        }
+    }
+}
+
 struct CustomPlayerView<Surface: View>: View {
     let engine: any PlayerEngine
     /// Stable media identity, independent of the engine object's lifetime.
@@ -881,6 +908,7 @@ struct PlayerSubtitleText: View {
                 style.backgroundColor.opacity(style.backgroundOpacity),
                 in: RoundedRectangle(cornerRadius: 10)
             )
+            .rasterizedCue()
             .padding(.bottom, style.bottomPadding)
             .accessibilityIdentifier(accessibilityIdentifier)
     }
@@ -909,6 +937,7 @@ struct PlayerStyledSubtitleText: View {
                 style.backgroundColor.opacity(style.backgroundOpacity),
                 in: RoundedRectangle(cornerRadius: 10)
             )
+            .rasterizedCue()
             .accessibilityLabel(cue.text)
             .accessibilityIdentifier(accessibilityIdentifier)
     }
