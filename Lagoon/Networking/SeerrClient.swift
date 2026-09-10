@@ -340,6 +340,11 @@ final class SeerrClient {
         do {
             return try decoder.decode(T.self, from: payload)
         } catch {
+            if let url = serverURL?.appending(path: "api/v1").appending(path: path) {
+                var request = URLRequest(url: url)
+                request.httpMethod = method
+                APIDiagnostics.decodeFailed(error, request: request, serverURL: serverURL, client: "seerr")
+            }
             throw SeerrError.invalidResponse
         }
     }
@@ -381,10 +386,12 @@ final class SeerrClient {
         }
 
         let responsePayload: ResponsePayload
+        let startedAt = ProcessInfo.processInfo.systemUptime
         do {
             responsePayload = try await response(for: request)
         } catch {
             guard configurationGeneration == requestGeneration else { throw CancellationError() }
+            APIDiagnostics.transportFailed(error, request: request, serverURL: serverURL, client: "seerr", startedAt: startedAt)
             let explained = await LocalNetworkAccess.explain(error, at: serverURL)
             guard configurationGeneration == requestGeneration else { throw CancellationError() }
             throw explained
@@ -398,6 +405,7 @@ final class SeerrClient {
         guard let http = response as? HTTPURLResponse else { throw SeerrError.invalidResponse }
         captureSessionCookie(from: http, url: url)
         guard (200..<300).contains(http.statusCode) else {
+            APIDiagnostics.statusFailed(http.statusCode, request: request, serverURL: serverURL, client: "seerr", startedAt: startedAt)
             if authenticated && http.statusCode == 401 {
                 throw SeerrError.unauthenticated
             }
