@@ -11,7 +11,7 @@ import SwiftUI
 /// Bitmap cues (PGS/VobSub) land exactly where they compose on the video
 /// plane; text cues sit bottom-center Infuse-style.
 struct PlayerSubtitleOverlay: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     let style: SubtitleRenderStyle
     /// Custom renderers must tell Media Accessibility which caption text is
     /// currently onscreen. The report is driven from here because this is the
