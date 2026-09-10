@@ -9,7 +9,7 @@ import SwiftUI
 /// position tick repaints them and leaves the rest of the transport, and the
 /// player above it, alone.
 struct PlayerTransportOverlay: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     let info: PlayerItemInfo
     /// Whether the transport is actually on screen. `CustomPlayerView` keeps
     /// this view mounted at `.opacity(0)` so the fade can animate, so the
@@ -130,7 +130,7 @@ struct PlayerTransportOverlay: View {
 /// One of the two views in the player that legitimately follows the playhead
 /// at tick rate, which is exactly why it is its own view (HEL-150).
 struct PlayerScrubber: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     /// See `PlayerTransportOverlay.isVisible`.
     let isVisible: Bool
     let chapters: [PlayerChapter]
@@ -408,7 +408,7 @@ struct PlayerScrubber: View {
 ///
 /// The player's second legitimate tick-rate leaf (HEL-150).
 struct PlayerTimelineLabels: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     /// See `PlayerTransportOverlay.isVisible`.
     let isVisible: Bool
     let scrubTarget: Double?
