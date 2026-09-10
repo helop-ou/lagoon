@@ -19,6 +19,14 @@ import SwiftUI
 /// else panel open closes the panel, otherwise the player exits (SwiftUI's
 /// `onExitCommand` never fires inside a fullScreenCover on tvOS 26).
 ///
+/// iOS touch grammar (HEL-153): a tap toggles the transport instead of only
+/// revealing it, a double-tap on either half of the video surface seeks
+/// ±10 s and stacks a further ±10 s on another double-tap inside the
+/// glyph's dismiss window, and the centred cluster puts play/pause and a
+/// ±10 s skip either side under the thumb as buttons rather than remote
+/// directions. The scrubber is dragged directly, and the Skip/Up Next pills
+/// are tapped rather than selected.
+///
 /// Everything the engine moves at tick rate is rendered by a child view that
 /// reads it in its own body — `PlayerTransportOverlay`'s rail and timestamps,
 /// `PlayerSubtitleOverlay`, `PlayerSkipOverlay`, `PlayerNextUpOverlay`, and
@@ -114,6 +122,9 @@ struct CustomPlayerView<Surface: View>: View {
     private struct SeekFeedback: Equatable {
         let forward: Bool
         let token: Int
+        /// Stacked total for the iOS double-tap grammar (HEL-153); always
+        /// 10 for the tvOS remote's plain ±10 s seek.
+        var seconds: Int = 10
     }
 
     @State private var controlsVisible = true
@@ -154,6 +165,12 @@ struct CustomPlayerView<Surface: View>: View {
     @Namespace private var panelFocusScope
     @Environment(\.resetFocus) private var resetFocus
     #endif
+    #if os(iOS)
+    /// The video surface's width, read via `.onGeometryChange` so a
+    /// double-tap's x position can be read as "back half" vs "forward half"
+    /// of the screen (HEL-153).
+    @State private var surfaceWidth: CGFloat = 0
+    #endif
     @State private var panelRevealSignpostActive = false
     private let panelSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
@@ -182,20 +199,20 @@ struct CustomPlayerView<Surface: View>: View {
         #else
         NavigationStack {
             playerContent
+                // Toolbar visibility changes the navigation safe area. Keep
+                // the video and its centered controls in stable screen bounds.
+                .ignoresSafeArea(.container, edges: .top)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Close", systemImage: "xmark", role: .close, action: onDismiss)
                             .accessibilityIdentifier("player.close")
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        // Play/Pause moved to the centred touch cluster
+                        // (HEL-153), which owns the accessibility identifier
+                        // now; Info stays here.
                         Button("Info", systemImage: "info.circle", action: openPanel)
                             .accessibilityIdentifier("player.info")
-                        Button(engine.isPaused ? "Play" : "Pause",
-                               systemImage: engine.isPaused ? "play.fill" : "pause.fill") {
-                            engine.togglePause()
-                            pokeControls()
-                        }
-                        .accessibilityIdentifier("player.playPause")
                     }
                 }
                 .toolbarBackground(.hidden, for: .navigationBar)
@@ -320,6 +337,7 @@ struct CustomPlayerView<Surface: View>: View {
                     .allowsHitTesting(false)
                     #else
                     .allowsHitTesting(transportVisible)
+                    .accessibilityHidden(!transportVisible)
                     #endif
                     // Asymmetric: target-state-conditional animation — fast
                     // in, gentle out.
@@ -329,6 +347,32 @@ struct CustomPlayerView<Surface: View>: View {
                     )
                     .animation(.easeInOut(duration: Motion.fast), value: engine.isPaused)
                     .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
+
+                #if os(iOS)
+                // The touch grammar's equivalent of the remote's Select and
+                // left/right (HEL-153): the same transport visibility and
+                // scrub suppression the bottom bar uses, so both fade and
+                // hide together instead of drifting out of sync.
+                PlayerTouchTransportCluster(
+                    engine: engine,
+                    onSkip: { forward in
+                        engine.seek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
+                        showSeekFeedback(forward: forward)
+                        pokeControls()
+                    },
+                    onTogglePlayPause: {
+                        engine.togglePause()
+                        pokeControls()
+                    }
+                )
+                .opacity(transportVisible && !isScrubbing ? 1 : 0)
+                .allowsHitTesting(transportVisible && !isScrubbing)
+                // Opacity preserves layout; explicitly hide unavailable
+                // controls from assistive navigation as well as touch input.
+                .accessibilityHidden(!transportVisible || isScrubbing)
+                .animation(.easeInOut(duration: Motion.fast), value: controlsVisible)
+                .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
+                #endif
 
                 // The panel stays mounted and slides out of frame rather than
                 // being inserted. A *transition* needs an animation transaction
@@ -420,7 +464,7 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private func seekIndicator(_ feedback: SeekFeedback) -> some View {
-        PlayerSeekIndicator(forward: feedback.forward)
+        PlayerSeekIndicator(forward: feedback.forward, seconds: feedback.seconds)
             .transition(transientScaleTransition)
     }
 
@@ -472,6 +516,29 @@ struct CustomPlayerView<Surface: View>: View {
         pokeControls()
     }
 
+    #if os(iOS)
+    /// A double-tap on either half of the surface seeks ±10 s and, unlike
+    /// every other touch gesture here, does not summon the transport — every
+    /// phone player leaves double-tap seek silent on chrome, and popping the
+    /// bars under the thumb mid-tap would fight repeated double-taps
+    /// (HEL-153). Ignored mid-scrub and while the panel owns the
+    /// screen, same as the single tap beside it.
+    private func handleTouchSeek(at point: CGPoint) {
+        guard !panelOpen, !isScrubbing else { return }
+        let forward = point.x >= surfaceWidth / 2
+        engine.seek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
+        // A further double-tap on the same side inside the glyph's dismiss
+        // window (the `.task(id: seekFeedback?.token)` below) adds another
+        // step rather than resetting it, so three quick double-taps forward read
+        // "30 s" instead of restarting at 10 each time.
+        let total = TouchSeekPolicy.accumulated(
+            previous: seekFeedback?.seconds,
+            sameDirection: seekFeedback?.forward == forward
+        )
+        showSeekFeedback(forward: forward, seconds: total)
+    }
+    #endif
+
     private var videoSurface: some View {
         surface()
             .ignoresSafeArea()
@@ -502,6 +569,7 @@ struct CustomPlayerView<Surface: View>: View {
                     nextUpCardStart: nextUpStart,
                     isNextUpSuppressed: panelOpen || isScrubbing || nextUpDismissed,
                     isScrubbing: isScrubbing,
+                    isTransportVisible: transportVisible,
                     lastCommittedScrubTarget: lastCommittedScrubTarget,
                     panelOpen: panelOpen,
                     selectedTab: selectedTab,
@@ -558,6 +626,17 @@ struct CustomPlayerView<Surface: View>: View {
                     break
                 }
                 pokeControls()
+            }
+        #endif
+        #if os(iOS)
+            // Attached before the single-tap gesture below so SwiftUI
+            // recognizes the double-tap and delays the single tap while it
+            // waits to see whether a second one follows — the standard
+            // trade-off every phone player makes for a working double-tap
+            // (HEL-153).
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { surfaceWidth = $0 }
+            .onTapGesture(count: 2, coordinateSpace: .local) { point in
+                handleTouchSeek(at: point)
             }
         #endif
             .onTapGesture {
@@ -623,8 +702,8 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
-    private func showSeekFeedback(forward: Bool) {
-        seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1)
+    private func showSeekFeedback(forward: Bool, seconds: Int = 10) {
+        seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1, seconds: seconds)
     }
 
     /// Custom renderers must tell Media Accessibility which caption text is
@@ -980,16 +1059,32 @@ private extension SubtitleTextColor {
 
 struct PlayerSeekIndicator: View {
     let forward: Bool
+    /// The iOS double-tap grammar's stacked total (HEL-153); tvOS's remote
+    /// seek never exceeds the base step, so this stays at its default there
+    /// and the glyph alone renders exactly as before.
+    var seconds: Int = 10
     var accessibilityIdentifier = "player.seekFeedback"
 
     var body: some View {
-        HStack {
-            if forward { Spacer() }
-            Image(systemName: forward ? "goforward.10" : "gobackward.10")
-                .font(Typography.glyph.weight(.semibold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.6), radius: 6)
-            if !forward { Spacer() }
+        VStack(spacing: Metrics.Space.xs) {
+            HStack {
+                if forward { Spacer() }
+                Image(systemName: forward ? "goforward.10" : "gobackward.10")
+                    .font(Typography.glyph.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.6), radius: 6)
+                if !forward { Spacer() }
+            }
+            if seconds > 10 {
+                HStack {
+                    if forward { Spacer() }
+                    Text("\(seconds) s")
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.6), radius: 6)
+                    if !forward { Spacer() }
+                }
+            }
         }
         .padding(.horizontal, Metrics.screenGutter * 2)
         .allowsHitTesting(false)
