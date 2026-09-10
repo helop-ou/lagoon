@@ -1,5 +1,9 @@
 # HEL-143: privacy and release preparation
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 September 7, 2026. Implementation based on `0a63c4c`, version 0.1 (90).
 **In Progress.** This pass implements required-reason manifests and local-network
 recovery, records native artifact evidence, and prepares website copy. It does
@@ -28,7 +32,7 @@ build options change. No active-keyboard API use was found.
 
 `scripts/inventory-native-dependencies.py` inspects all 8 binary targets and
 55 declared slices, including Catalyst, visionOS and macOS slices that this app
-does not ship. [The generated inventory](native-dependency-inventory.json) records
+does not ship. [The generated inventory](../reference/native-dependency-inventory.json) records
 package URL/checksum pins, per-slice binary hashes/types and required-reason C
 imports. On iOS arm64, libavformat imports `fstat`, `lstat`, `stat` and
 libavutil imports `fstat`; the other six (including the new libdovi target,
@@ -186,7 +190,7 @@ verified consumer arrangement. Subtitle search now relies solely on Jellyfin's
 permission-gated remote-subtitle routes, and Settings shows the account's
 permission state.
 
-Use [the public checklist](public-release-checklist.md) for metadata, review
+Use [the public checklist](../release.md#public-release) for metadata, review
 fixtures, signed validation and an explicitly separate public export. HEL-143
 remains In Progress while these decisions and implementation steps remain open.
 
