@@ -50,7 +50,7 @@ extension JellyfinClient {
         guard let userId else { return [] }
         let page: HomeSectionsPage? = try? await get("HomeScreen/Sections", query: [
             URLQueryItem(name: "userId", value: userId),
-        ])
+        ], probe: true)
         return page?.items ?? []
     }
 
@@ -60,7 +60,7 @@ extension JellyfinClient {
         guard let userId else { return [] }
         let page: ItemsPage? = try? await get("HomeScreen/Section/\(section)", query: [
             URLQueryItem(name: "userId", value: userId),
-        ])
+        ], probe: true)
         return page?.items ?? []
     }
 }
