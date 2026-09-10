@@ -20,10 +20,14 @@ nonisolated struct PlaybackEngineFailure: Equatable {
     let cause: Cause
     /// What the viewer is told if the ladder runs out of rungs.
     let message: String
+    /// The same failure in codes, for the diagnostic report (HEL-159):
+    /// which stage, which error domain, which code. Never the message.
+    let detail: PlaybackFailureDetail?
 
-    init(cause: Cause, message: String) {
+    init(cause: Cause, message: String, detail: PlaybackFailureDetail? = nil) {
         self.cause = cause
         self.message = message
+        self.detail = detail
     }
 }
 
