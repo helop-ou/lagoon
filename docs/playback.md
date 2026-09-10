@@ -965,7 +965,15 @@ The cue's shadow edge and translucent background were being filtered by
 Core Animation on every frame over a 4K HDR composition; each cue view is
 now a drawing group (`2590f57`), rendered once per change and composited as
 one texture, with `debug.benchFlatCues` keeping the old path for an A/B
-from the same binary. The two hooks that made the isolation possible are
+from the same binary. That A/B, interleaved in one session: rasterized
+5 · 3 · 3 dropped per window against flat 9 · 4 (and the matrix's 6 · 6 · 6
+on the same path) — roughly 40% fewer, not zero, and the drops do not line
+up with cue arrivals in the trace. So the subtitle layer's remaining cost on
+the HDR composited path is a layer-tree change over a 4K HDR frame rather
+than per-frame filtering, and the next experiments are a text layer that
+stays mounted and toggles opacity instead of being inserted per cue, and a
+UIKit label outside SwiftUI layout. The two hooks that made the isolation
+possible are
 `debug.benchSubtitleLanguage off` (the system caption preference otherwise
 turns a track on by itself) and `debug.benchBareSurface`.
 
