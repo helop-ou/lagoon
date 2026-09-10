@@ -7,6 +7,7 @@ struct SettingsView: View {
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
+    @AppStorage(DiagnosticsPreference.reportingEnabledKey) private var diagnosticReports = DiagnosticsPreference.defaultReportingEnabled
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
     /// HEL-137 lever 2, on a device that cannot be paired to Xcode: the only
@@ -492,6 +493,14 @@ struct SettingsView: View {
                 #endif
             }
 
+            TVSettingsSection(
+                "Diagnostic Reports",
+                footer: Self.diagnosticReportsFooter
+            ) {
+                settingsToggle("Send Diagnostic Reports", isOn: $diagnosticReports)
+                    .accessibilityIdentifier("settings.diagnostics.reports")
+            }
+
             #if os(tvOS)
             let status = TopShelfStore.status()
             TVSettingsSection(
@@ -914,9 +923,22 @@ struct SettingsView: View {
             } footer: {
                 Text("These options can affect playback behavior and are intended for troubleshooting. Leave them off during normal viewing. Dolby Vision Compatibility Mode plays Dolby Vision profile 7 titles as HDR10 from the base layer; off (default), Lagoon converts them to Dolby Vision profile 8.1.")
             }
+
+            Section {
+                Toggle("Send Diagnostic Reports", isOn: $diagnosticReports)
+                    .accessibilityIdentifier("settings.diagnostics.reports")
+            } header: {
+                Text("Diagnostic Reports")
+            } footer: {
+                Text(Self.diagnosticReportsFooter)
+            }
         }
     }
     #endif
+
+    /// What a report contains, stated the way it is collected (HEL-159).
+    /// Kept in one string so both platforms make the same promise.
+    private static let diagnosticReportsFooter: LocalizedStringKey = "When playback or a server request fails unexpectedly, Lagoon sends a technical report to the developer: app build, device model and OS version, codec and delivery details, error codes, and about a minute of playback measurements. Reports never include your account, server address, media titles, subtitles, or screenshots. Reports are kept for 30 days."
 
     private var appearanceTitle: String {
         subtitlePreferences.values.followsSystemAppearance
