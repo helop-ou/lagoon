@@ -1,9 +1,13 @@
 # Transport spike: FFmpeg without a network stack
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 September 8, 2026, branch `spike/urlsession-transport`, based on build 0.1 (91)
 after HEL-146. This is the measured record behind a go/no-go on moving every
 HTTP byte libavformat reads onto URLSession and dropping the GnuTLS stack.
-The mechanism itself is documented in [playback.md § Network transport](playback.md#network-transport);
+The mechanism itself is documented in [playback.md § Network transport](../reference/playback.md#network-transport);
 this file records why, what was found on the way, and what the numbers say.
 
 ## Why
@@ -133,7 +137,7 @@ stalls and 1475 frames again.
   linked into them. Rebuilding them in-repo the way libavformat is built is the
   remaining step for an unambiguous licence record.
 - **`scripts/inventory-native-dependencies.py` hard-coded eleven targets.**
-  Changed to seven; `docs/native-dependency-inventory.json` regenerated with
+  Changed to seven; `docs/reference/native-dependency-inventory.json` regenerated with
   7 dependencies and 50 slices.
 
 ## What this does not settle
