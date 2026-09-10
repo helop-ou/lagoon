@@ -66,6 +66,8 @@ enum Metrics {
     /// A landscape banner at standard text sizes; HeroSection grows for
     /// Dynamic Type when its title and synopsis need more room.
     static let heroHeight: CGFloat = 200
+    /// More artwork above the copy in regular-width iPad windows.
+    static let expandedHeroHeight: CGFloat = 360
     static let gridColumns = 2
     static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
@@ -91,6 +93,8 @@ enum Metrics {
     static let logoMaxHeight: CGFloat = 70
     static let heroLogoHeight: CGFloat = 54
     static let heroTextWidth: CGFloat = .infinity
+    /// Keep iPad hero copy readable without spanning the whole banner.
+    static let expandedHeroTextWidth: CGFloat = 520
     static let heroTextInset: CGFloat = 20
     static let lockupSymbolHeight: CGFloat = 78
     static let lockupHeaderSymbolHeight: CGFloat = 34
@@ -163,6 +167,8 @@ enum Metrics {
     static let focusHaloOpacity: Double = 0.55
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
+    /// iOS hero clipping; tvOS heroes use the native card shape.
+    static let heroCornerRadius: CGFloat = 16
     static let progressBarHeight: CGFloat = 6
     static let touchTarget: CGFloat = 44
 }
