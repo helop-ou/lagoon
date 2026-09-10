@@ -468,6 +468,15 @@ Worth knowing when this comes back: only the compressed path reaches
 and neither does any HLS rung — Jellyfin's fMP4 segments start on IDRs, which
 is why the transcode the ladder fell to always played.
 
+And where it was seen: the tvOS **simulator**, on the developer's own account.
+The same bench start at 480 s on the Apple TV, before the fix, played clean
+twice (0 dropped, direct play, optimized path) — the A15's hardware decoder
+tolerates the two leading pictures the simulator's decoder refuses. After the
+fix the device drops the same two packets (`SeekLeadingPictures dropped=2
+anchor=479.479`) and plays exactly as before. So this was never a hardware
+regression; it is what keeps the simulator lane honest on open-GOP encodes and
+what stops a future container from costing a film on the device.
+
 ### Disc images (HEL-133)
 
 A disc image is a filesystem, not a stream, and Jellyfin describes one
