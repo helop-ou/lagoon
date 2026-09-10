@@ -1,5 +1,9 @@
 # Server address handling: audit A13
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 Implemented September 7, 2026, against app version `0.1 (90)`.
 
 ## Behavior
