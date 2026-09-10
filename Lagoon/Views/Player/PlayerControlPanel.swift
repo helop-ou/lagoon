@@ -895,7 +895,7 @@ private enum PlayerPanelMetrics {
 /// panel actually displays. Equatable identity prevents unrelated parent
 /// updates from walking the tabs and track rows again.
 struct PlayerControlPanelHost: View, Equatable {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     @Binding var selectedTab: PlayerPanelTab
     let focus: FocusState<PlayerControlFocus?>.Binding
     let info: PlayerItemInfo
