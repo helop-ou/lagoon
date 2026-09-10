@@ -105,7 +105,7 @@ struct SeriesDetailView: View {
         // The highlight belongs to the season it came from.
         .onChange(of: viewModel.selectedSeasonId) { _, _ in highlighted = nil }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
-        .fullScreenCover(item: $playerItem, onDismiss: {
+        .playerPresentation(item: $playerItem, onDismiss: {
             // Watching an episode moves the show on, so this reloads what's
             // up next as well as the rail — once the stop report that moves
             // it has landed (HEL-132).
@@ -113,10 +113,7 @@ struct SeriesDetailView: View {
                 await session.client.playbackReports.settle()
                 await viewModel.reloadUserData(client: session.client, seriesId: item.id)
             }
-        }) { player in
-            VideoPlayerView(playerItem: player)
-                .preferredColorScheme(.dark)
-        }
+        })
     }
 
     /// Play the episode that's up next, then the toggles, then the season
