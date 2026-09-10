@@ -28,7 +28,7 @@ nonisolated enum PlayerRegressionProbe {
 /// itself: a separate invisible accessibility element stole arrow focus on
 /// the first hardware run and therefore tested the probe, not the player.
 struct PlayerRegressionValue: ViewModifier {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     let info: PlayerItemInfo
     let playbackIdentity: String
     let playerSurfaceIdentity: String
