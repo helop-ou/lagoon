@@ -29,6 +29,20 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "94",
+            released: "September 2026",
+            headline: "Touch controls for the iPhone and iPad player, Picture in Picture on the way out, and a tidier iPad Home.",
+            changes: [
+                "The iPhone and iPad player has a large centered play/pause button with ten-second back and forward beside it. Tap the video to show or hide the controls; while a film plays, they fade on their own after a few seconds.",
+                "Double-tap the left or right half of the video to skip back or forward ten seconds without bringing up the controls. Double-tap again within a moment to add another ten seconds.",
+                "Closing the player on iPhone or iPad continues the video in Picture in Picture when it is available, and returning from the picture brings you back to the full player where you left it.",
+                "On iPhone, the player stays in landscape while it is open and lets the screen rotate again when you close it. The volume keys control the film, and the Silent switch does not mute it.",
+                "The Home banner on iPhone and iPad has gently rounded corners instead of very round ones. On iPad it is taller, with a narrower text column that is easier to read.",
+                "Watching several episodes in a row no longer keeps each finished episode's player in memory until you close the player.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "93",
             released: "September 2026",
             headline: "A roomier subtitle search, a smoother player, and cleaner episode handoffs.",
