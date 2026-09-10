@@ -45,7 +45,7 @@ nonisolated enum NextUpPolicy {
 /// intro and recap live at the front of an episode, the credits at the back —
 /// so they share the corner rather than competing for it.
 struct PlayerNextUpOverlay: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     /// Changing it re-arms the task, which is what clears a fill left running
     /// by the item that just ended.
     let playbackIdentity: String
