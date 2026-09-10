@@ -145,7 +145,9 @@ struct LandscapeCard: View {
             .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
             .clipped()
 
-            if showsMetadata {
+            // A card with no artwork at all still needs to say what it is;
+            // without the label it is an anonymous grey tile (HEL-157).
+            if showsMetadata || thumbURL == nil {
                 LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
                     .frame(height: Metrics.landscapeHeight * 0.55)
                     .frame(maxWidth: .infinity, alignment: .bottom)

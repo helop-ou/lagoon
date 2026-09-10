@@ -494,7 +494,11 @@ extension JellyfinClient {
                 return nil
             }
         case .thumb:
-            // Episode stills live in the Primary slot; prefer them, then backdrops.
+            // Episode stills live in the Primary slot; prefer them, then
+            // Thumb, then backdrops. A title with only a poster still gets
+            // that poster rather than an empty card: jellyfin-web's card
+            // builder ends the same chain with Primary, and the demo's 1910
+            // King Lear has no wide artwork at all (HEL-157).
             if item.type == .episode, let primaryTag = item.imageTags?["Primary"] {
                 tag = primaryTag
             } else if let thumbTag = item.imageTags?["Thumb"] {
@@ -502,6 +506,7 @@ extension JellyfinClient {
                 tag = thumbTag
             } else {
                 return imageURL(for: item, kind: .backdrop, maxWidth: maxWidth)
+                    ?? imageURL(for: item, kind: .poster, maxWidth: maxWidth)
             }
         }
 

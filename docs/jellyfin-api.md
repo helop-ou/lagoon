@@ -228,7 +228,10 @@ item's image **tag** (cache-buster) and falls back through parent artwork the
 way official clients do: episode primary → series poster
 (`SeriesPrimaryImageTag`), own backdrop → `ParentBackdropItemId`'s backdrop.
 `kind: .thumb` prefers episode stills (their Primary slot), then `Thumb`,
-then backdrops.
+then backdrops, then the poster, so a title with only a Primary image still
+fills a landscape card instead of leaving it blank (HEL-157; jellyfin-web
+ends its card chain the same way). A landscape card with no artwork at all
+shows its title.
 
 ## Remote subtitles (HEL-49)
 
