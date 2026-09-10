@@ -566,6 +566,33 @@ final class SubtitleSearchCoordinator {
                     isHearingImpaired: candidate.isHearingImpaired,
                     isDownloaded: true
                 ))
+                // The controller keeps its own ordered stream list beside the
+                // engine's tracks, and maps the selected track through it to
+                // carry the choice into the next episode. The server has no
+                // stream for this file until the upload below lands, so hand
+                // it the candidate's own description; without it the list
+                // ran one short and a downloaded track was never carried.
+                onTrackAdded?(MediaStream(
+                    type: "Subtitle",
+                    codec: candidate.format,
+                    displayTitle: candidate.name,
+                    language: candidate.language,
+                    index: nil,
+                    isDefault: nil,
+                    isOriginal: nil,
+                    isExternal: true,
+                    isForced: candidate.isForced,
+                    isHearingImpaired: candidate.isHearingImpaired,
+                    deliveryUrl: nil,
+                    profile: nil,
+                    videoRangeType: nil,
+                    channels: nil,
+                    width: nil,
+                    height: nil,
+                    bitDepth: nil,
+                    bitRate: nil,
+                    realFrameRate: nil
+                ))
                 phase = .downloaded
                 // The chosen result is now a track. Hand the viewer back the
                 // track list with it selected rather than leaving them in a

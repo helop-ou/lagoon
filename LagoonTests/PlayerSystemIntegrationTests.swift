@@ -779,6 +779,7 @@ struct PlayerSystemIntegrationTests {
         let coordinator = SubtitleSearchCoordinator(
             downloadedSubtitlePoller: DownloadedSubtitlePoller(refreshDelays: [.zero])
         )
+        let addedStreams = AddedStreams()
         coordinator.configure(
             client: client,
             engine: engine,
@@ -788,7 +789,7 @@ struct PlayerSystemIntegrationTests {
             preferredLanguages: ["en"],
             missingMode: .ask,
             hasSuitableLocalTrack: false,
-            onTrackAdded: { _ in }
+            onTrackAdded: { addedStreams.streams.append($0) }
         )
 
         // This is the same search/download sequence triggered by the
@@ -798,6 +799,16 @@ struct PlayerSystemIntegrationTests {
         let result = try #require(coordinator.results.first)
         coordinator.startDownload(result)
         try await waitUntil { coordinator.phase == .downloaded }
+        // The direct path has no server stream yet; the controller still
+        // needs one entry per engine track to carry the choice into the
+        // next episode.
+        let added = try #require(addedStreams.streams.first)
+        #expect(addedStreams.streams.count == 1)
+        #expect(added.type == "Subtitle")
+        #expect(added.language == "eng")
+        #expect(added.displayTitle == result.name)
+        #expect(added.isExternal == true)
+        #expect(added.isHearingImpaired == true)
         try await waitUntil {
             SubtitleDownloadURLProtocol.requests.contains {
                 $0.method == "POST" && $0.path == "/Videos/item-1/Subtitles"
@@ -1750,4 +1761,9 @@ struct DemuxReadAheadPolicyTests {
             hasAudio: true
         ) == .read)
     }
+}
+
+@MainActor
+private final class AddedStreams {
+    var streams: [MediaStream] = []
 }
