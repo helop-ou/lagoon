@@ -288,7 +288,7 @@ The normal captured-session check still precedes response handling, so an old
 account's late 401 cannot expire the account now in use. Oversized and invalid
 files have explicit errors and do not invoke the compatibility download.
 The same file-size limit applies to sidecars and to provider files fetched
-through Jellyfin; see [download hardening validation](download-hardening-validation.md).
+through Jellyfin; see [download hardening validation](archive/download-hardening-validation.md).
 
 Jellyfin 10.11's `DownloadRemoteSubtitles` controller catches its internal
 provider/save exception and still returns HTTP 204, so a successful status is
@@ -378,7 +378,7 @@ authentication and Seerr discovery. iOS exercises typed setup and invalid-input
 recovery; tvOS exercises restored sign-in and remote focus, then a synthetic
 account with a restored Seerr pairing. HTTPS disclosure is checked using a
 restored URL; that UI check is not a TLS-handshake test. See the
-[server address validation record](server-address-validation.md) for evidence
+[server address validation record](archive/server-address-validation.md) for evidence
 and remaining physical-network acceptance.
 
 ## Home Screen Sections plugin (HEL-47)
