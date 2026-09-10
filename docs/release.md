@@ -62,7 +62,12 @@ The project currently declares `ITSAppUsesNonExemptEncryption=NO`, local-network
 usage text, and local-network ATS access without an arbitrary-load exception.
 These values are implementation facts, not a completed public-release approval.
 The app and Top Shelf have distinct privacy manifests; review the reasons when
-file access, diagnostics, app-group use, or native build options change.
+file access, diagnostics, app-group use, or native build options change. The
+app manifest declares diagnostic and performance data collection for the
+automatic failure reports (HEL-159); App Store Connect's privacy answers and
+the Settings footer must match the [diagnostics reference](reference/playback/diagnostics.md#tester-controls-and-disclosure).
+Before a TestFlight round, confirm the Sentry project's quota and the
+*Prevent Storing of IP Addresses* setting there.
 
 New native dependencies need an acknowledgement entry, bundled license text,
 and matching provenance. `AcknowledgementsTests` checks the notice resources.
