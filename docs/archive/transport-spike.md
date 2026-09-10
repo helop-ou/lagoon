@@ -7,7 +7,7 @@ to the recorded work. Use the [current guides](../README.md) and
 September 8, 2026, branch `spike/urlsession-transport`, based on build 0.1 (91)
 after HEL-146. This is the measured record behind a go/no-go on moving every
 HTTP byte libavformat reads onto URLSession and dropping the GnuTLS stack.
-The mechanism itself is documented in [playback.md § Network transport](../reference/playback.md#network-transport);
+The mechanism itself is documented in [playback.md § Network transport](../reference/playback/transport.md#network-transport);
 this file records why, what was found on the way, and what the numbers say.
 
 ## Why

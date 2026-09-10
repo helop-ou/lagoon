@@ -15,7 +15,7 @@ guides describe the current code and workflow.
 
 ## Supporting material
 
-- `reference/` holds detailed [playback](reference/playback.md),
+- `reference/` holds detailed [playback](reference/playback/README.md),
   [architecture](reference/architecture.md), and
   [design](reference/design-system.md) engineering notes. Read these for the
   reasoning and measurements behind a particular implementation. Dated

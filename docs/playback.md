@@ -3,7 +3,7 @@
 All media plays through `PlayerEngine` and Lagoon's sample-buffer engine.
 The UI uses that protocol; do not add an alternative AVPlayer or mpv path.
 Read this guide before changing player behavior, then follow the focused links
-into the [engineering notes](reference/playback.md) for implementation details.
+into the [engineering notes](reference/playback/README.md) for implementation details.
 
 ## Ownership and pipeline
 
@@ -35,7 +35,7 @@ Media credentials use the authorization header rather than token-bearing URLs.
 Keep endpoint/cross-origin rules in the shared authorization and transport
 helpers. Cache incompatibility changes the byte-source strategy, not the
 security policy. Failures remain errors; only a successfully read resource's
-end is EOF. See [transport details](reference/playback.md#network-transport),
+end is EOF. See [transport details](reference/playback/transport.md#network-transport),
 [TLS validation](archive/hel-142-native-tls-validation.md), and the
 [libavformat build record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
 
@@ -59,9 +59,9 @@ its Atmos objects are not preserved. Subtitles come from embedded streams or
 Jellyfin's permission-gated subtitle routes; there is no direct provider login.
 Disc images use the app's bounded byte source and UDF handling.
 
-See [negotiation and delivery](reference/playback.md#stream-resolution),
-[disc images](reference/playback.md#disc-images-hel-133), and
-[decode details](reference/playback.md#the-engine-lagoonviewsplayersamplebuffer).
+See [negotiation and delivery](reference/playback/stream-resolution.md#stream-resolution),
+[disc images](reference/playback/stream-resolution.md#disc-images-hel-133), and
+[decode details](reference/playback/engine.md#the-engine-lagoonviewsplayersamplebuffer).
 
 ## Lifecycle and memory
 
@@ -105,8 +105,8 @@ hidden timeline. Observation subscribes to reads that actually execute.
 
 The panel host's `Equatable` boundary separately protects its interior from
 unnecessary renders. Preserve both boundaries. See the
-[scope measurements](reference/playback.md#the-players-observation-scope-hel-150)
-and [memory/lifecycle notes](reference/playback.md#decoded-frame-memory-ceiling-hel-109).
+[scope measurements](reference/playback/engine.md#the-players-observation-scope-hel-150)
+and [memory/lifecycle notes](reference/playback/frame-loss-bench.md#decoded-frame-memory-ceiling-hel-109).
 
 ## Progress reporting
 
@@ -118,7 +118,7 @@ Presenting screens await `client.playbackReports.settle()` before fetching
 watch state after dismissal. Keep API cache bypass and `MediaItem` value
 equality: both are needed for the fetched resume point to reach the UI.
 Test far enough into a title to pass the server's configured resume threshold.
-See [reporting details](reference/playback.md#progress-reporting).
+See [reporting details](reference/playback/controls-and-reporting.md#progress-reporting).
 
 ## Controls and presentation
 
@@ -148,8 +148,8 @@ On tvOS, the video surface owns focus. Select prioritizes scrub, Skip,
 Up Next, then play/pause. A light Siri Remote touch is a separate input that
 reveals controls; it must not become Select. Menu cancels scrubbing, closes the
 panel, then exits. Keep the mounted panel and remote command ordering intact.
-See [remote reveal](reference/playback.md#siri-remote-transport-reveal) and
-[tvOS gotchas](reference/playback.md#player-view-gotchas-learned-the-hard-way-on-tvos).
+See [remote reveal](reference/playback/controls-and-reporting.md#siri-remote-transport-reveal) and
+[tvOS gotchas](reference/playback/controls-and-reporting.md#player-view-gotchas-learned-the-hard-way-on-tvos).
 
 ## Regression checks
 
@@ -171,4 +171,4 @@ media-time window, build configuration, and display path over at least three
 untouched runs. Release measurements without coverage and diagnostic-overlay
 interference are the useful device comparison. Keep physical full-film,
 captions/HDR, and teardown acceptance separate from simulator results.
-See the [frame-loss procedure](reference/playback.md#frame-loss-bench-hel-64).
+See the [frame-loss procedure](reference/playback/frame-loss-bench.md#frame-loss-bench-hel-64).

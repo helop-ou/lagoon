@@ -4,6 +4,7 @@ The maintained site and copy now live in the separate `lagoon-website`
 repository. These app-repository drafts were prepared for the HEL-143 handoff
 and are retained as historical evidence:
 
+- [Website brief](brief.md): purpose, address, page plan, and open decisions
 - [Privacy draft](privacy.md)
 - [Support draft](support.md)
 

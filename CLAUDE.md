@@ -24,17 +24,12 @@ licence text under `Lagoon/Resources/Licenses` — `AcknowledgementsTests`
 fails the unit suite otherwise.
 
 **Start at [docs/README.md](docs/README.md), follow [coding standards](docs/standards.md),
-and read the relevant guide before working on an area.** Current guides link to
-engineering notes in `docs/reference/` and dated evidence in `docs/archive/`;
-keep routine session history out of the guides.
-
-- `docs/architecture.md` — layout, SessionStore phases, navigation, **tvOS focus invariants**
-- `docs/jellyfin-api.md` — endpoints, auth header, PascalCase/ticks quirks, image fallbacks
-- `docs/playback.md` — device profile, stream resolution, progress reporting; player gotchas
-- `docs/design-system.md` — tokens, focus strategy, hero/glow, image cache rules
-- `docs/roadmap.md` — remaining product work and physical-device acceptance
-- `docs/release.md` — TestFlight flow, **build numbers owned by the repo**
-  (never let Xcode manage them at upload), and how to write changelog entries
+and read the guide for the area you are changing before working on it.** The
+index lists the six current guides. They link to engineering notes in
+`docs/reference/` and dated evidence in `docs/archive/`; keep routine session
+history out of the guides. Two rules from those guides that are easy to miss:
+build numbers are owned by the repo (never let Xcode manage them at upload,
+see docs/release.md), and tvOS focus invariants live in docs/architecture.md.
 
 Quick rules that prevent regressions:
 

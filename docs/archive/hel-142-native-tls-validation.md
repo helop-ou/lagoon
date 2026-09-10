@@ -8,7 +8,7 @@ to the recorded work. Use the [current guides](../README.md) and
 verification this record documents was replaced on the `spike/urlsession-transport`
 branch by `FFmpegNetworkTransport`, which moves every HTTP open onto
 URLSession and removes libavformat's network stack (and GnuTLS with it) —
-see "Network transport" in [`playback.md`](../reference/playback.md). The 32-case
+see "Network transport" in [`playback.md`](../reference/playback/README.md). The 32-case
 certificate fixture matrix below is unchanged and remains the acceptance
 test, now run through the new transport instead of libavformat's own TLS.
 This document otherwise stands as the historical record of the GnuTLS-based

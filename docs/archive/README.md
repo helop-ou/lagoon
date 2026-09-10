@@ -20,7 +20,7 @@ Use the [current guides](../README.md) for implementation guidance and
 | [Transport spike](transport-spike.md) | Migration away from FFmpeg's native network stack |
 | [Player audit](player-audit.md) | Earlier player investigation and regression findings |
 | [1.0 readiness audit](1.0-release-readiness-and-app-store-audit.md) | Broad historical code/release assessment and acceptance matrix |
-| [Website drafts](website/README.md) | Superseded privacy/support handoff copy |
+| [Website drafts](website/README.md) | Superseded website brief and privacy/support handoff copy |
 
 For the detailed reasoning behind engine, navigation, and design constraints,
 use the engineering notes linked from the [documentation index](../README.md#supporting-material).
