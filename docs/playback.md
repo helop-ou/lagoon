@@ -151,6 +151,20 @@ panel, then exits. Keep the mounted panel and remote command ordering intact.
 See [remote reveal](reference/playback/controls-and-reporting.md#siri-remote-transport-reveal) and
 [tvOS gotchas](reference/playback/controls-and-reporting.md#player-view-gotchas-learned-the-hard-way-on-tvos).
 
+## Diagnostic reporting
+
+Unexpected playback and request failures are reported automatically
+(HEL-159) through `Diagnostics.shared`: a vendor-neutral hub with a rolling
+history and a Sentry envelope transport the app owns. There is no SDK. Only
+keys in `DiagnosticSchema.fields` can leave the device; a title, URL, message
+or `localizedDescription` handed to it is dropped and counted. When adding a
+failure path, give `PlaybackEngineFailure` a `PlaybackFailureDetail` (stage,
+error domain, code) rather than relying on its message, record the moment
+with `Diagnostics.record`, and report with a fingerprint that never varies
+per occurrence. Keep `record` cheap and off the pump queues; the hub already
+runs the sink on its own queue. Detectors, thresholds, limits, tester
+controls and the Sentry setup are in the [diagnostics reference](reference/playback/diagnostics.md).
+
 ## Regression checks
 
 Build both platforms and run the relevant pure logic tests. Use
