@@ -1272,6 +1272,14 @@ final class PlaybackController {
                     + " cues=\(engine.subtitleCueCountDiagnostic)"
                     + " observers=\(engine.rendererObserverCountDiagnostic)"
                     + " thermal=\(thermalName)"
+                #if os(tvOS)
+                // Whether the display actually matched the content: a
+                // 60 Hz SDR mode left in place makes the compositor
+                // cadence-convert and tone-map every HDR frame, which is
+                // the standing suspect for the composited-path drops.
+                trace += " display=\"\(DisplayModeMatcher.statusDescription)"
+                    + " · \(UIScreen.main.maximumFramesPerSecond) Hz\""
+                #endif
                 #if DEBUG
                 trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"
                     + " deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)"
