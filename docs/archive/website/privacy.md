@@ -1,5 +1,8 @@
 # Lagoon privacy policy — publication draft
 
+Historical handoff draft. Maintained copy is in `lagoon-website`; see the
+[publication guidance](../../release.md#website).
+
 Editorial status: not yet a published policy. Before publication, confirm the
 publisher/controller identity, contact method, effective date, support/crash-report
 retention, service practices and final 1.0 integration scope using the HEL-143
