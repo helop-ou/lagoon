@@ -1,5 +1,8 @@
 import XCTest
 
+// Siri Remote journeys: tvOS only. The target also builds for iOS (HEL-153), where these are compiled out.
+#if os(tvOS)
+
 final class PlayerRegressionUITests: XCTestCase {
     private let remote = XCUIRemote.shared
 
@@ -3010,3 +3013,5 @@ private extension XCUIElement {
         value as? String ?? ""
     }
 }
+
+#endif
