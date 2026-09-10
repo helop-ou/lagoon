@@ -21,8 +21,8 @@ sample-buffer player with resume and progress sync.
   transcode when it doesn't; watch progress syncs back to the server
 - Search your Jellyfin library and Seerr, with recent searches, See All, and
   paginated full results
-- Larger iOS posters, roomier rows, adaptive detail actions, and native
-  player toolbar controls and playback-options sheet
+- Larger iOS posters, roomier rows, adaptive detail actions, and centered
+  touch-player controls with a native playback-options sheet
 - Settings organised into separate categories on iOS and tvOS
 - Multiple accounts and servers with keychain-persisted sessions; Add Account
   starts on the current server, with Use Another Server available when needed
@@ -48,13 +48,10 @@ To try it without a home server, connect to the public Jellyfin demo:
 
 ## Documentation
 
-Technical docs live in [`docs/`](docs/):
-
-- [Architecture](docs/architecture.md) — layout, session lifecycle, navigation, tvOS invariants
-- [Jellyfin API](docs/jellyfin-api.md) — endpoints, auth, wire-format quirks, image fallbacks
-- [Playback](docs/playback.md) — device profile, stream resolution, progress reporting
-- [Design system](docs/design-system.md) — tokens, focus strategy, components, image cache
-- [Roadmap](docs/roadmap.md) — what the MVP covers and what's next
+Start with the [documentation index](docs/README.md) and
+[coding standards](docs/standards.md). The current guides cover architecture,
+design, Jellyfin API, playback, release, and roadmap, with detailed engineering
+notes and dated validation evidence linked separately.
 
 ## Compatibility
 
