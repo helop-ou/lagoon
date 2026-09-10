@@ -4,7 +4,7 @@ import OSLog
 import SwiftUI
 import UIKit
 
-private enum PlaybackStartError: LocalizedError {
+nonisolated enum PlaybackStartError: LocalizedError {
     case previousEngineDidNotRetire
 
     var errorDescription: String? {
@@ -56,6 +56,9 @@ final class PlaybackController {
     private(set) var didFinish = false
     private(set) var isExternalPlaybackRouteActive = false
     let subtitleSearch = SubtitleSearchCoordinator()
+    /// Reports failures, recoveries and degraded sessions to the
+    /// diagnostics hub, one attempt at a time (HEL-159).
+    let incidents = PlaybackIncidentMonitor()
 
     /// The episode queued behind this one, resolved once at start so the Up
     /// Next card can appear the instant the credits do (HEL-66). Nil for
@@ -293,6 +296,9 @@ final class PlaybackController {
             ? SubtitlePreferencesStore.systemCaptionLanguages
             : preferredSubtitleLanguages
         self.missingSubtitleMode = missingSubtitleMode
+        // How far the attempt got, for the report if it fails: nothing
+        // negotiated, or an engine that never became ready.
+        var startStage: PlaybackFailureDetail.Stage = .negotiate
         do {
             // Chapters and trickplay ride alongside the negotiation rather
             // than after it — neither is in PlaybackInfo, and waiting for a
@@ -376,6 +382,14 @@ final class PlaybackController {
                 resumeSeconds = Ticks.seconds(ticks)
             }
             resumeOverride = nil
+            incidents.beginAttempt(
+                delivery: delivery,
+                method: method,
+                source: source,
+                cached: transportCache != nil || playbackURL.isFileURL,
+                disc: discRequest != nil,
+                resumeSeconds: resumeSeconds
+            )
             if UserDefaults.standard.bool(forKey: "debug.frameLossBench") {
                 let pinnedStart = UserDefaults.standard.double(forKey: "debug.benchStartSeconds")
                 if pinnedStart > 0 {
@@ -553,6 +567,7 @@ final class PlaybackController {
             }
 
             let engine = SampleBufferPlayerEngine()
+            startStage = .start
             // Episode handoff and delivery fallback replace the engine while
             // the viewer remains in one player session. Carry their chosen
             // speed across that internal swap.
@@ -573,6 +588,7 @@ final class PlaybackController {
             engine.onPlaybackStarted = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
                 self.finishEpisodeHandoff(outcome: "ready")
+                self.incidents.playbackReady(engine: engine)
                 if playbackURL.isFileURL {
                     self.publishBufferMetrics(cacheSession?.metrics)
                 } else {
@@ -681,6 +697,9 @@ final class PlaybackController {
             // This also claims the exactly-once stop report if cancellation
             // landed after the playback session became active.
             finishEpisodeHandoff(outcome: error is CancellationError ? "cancelled" : "failed")
+            if !(error is CancellationError) {
+                incidents.startFailed(error, delivery: delivery, stage: startStage)
+            }
             _ = beginStop()
             if !(error is CancellationError) {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -1404,6 +1423,7 @@ final class PlaybackController {
         subtitleSearch.detach()
         let seconds = engine?.timePosition ?? lastKnownPosition
         lastKnownPosition = seconds
+        incidents.endAttempt(engine: engine, outcome: stopOutcome)
 
         // Keep the dismissal-critical main-actor phase measurable and tiny.
         // The engine now serializes renderer flushing and queued-buffer
@@ -1528,8 +1548,10 @@ final class PlaybackController {
 
     private func handleEngineError(_ failure: PlaybackEngineFailure, engine: SampleBufferPlayerEngine) {
         lastKnownPosition = engine.timePosition
-        if !isClosed, !isFallingBack, currentMedia != nil, client != nil,
-           let next = PlaybackFallbackPolicy.next(after: delivery, cause: failure.cause) {
+        let canFallBack = !isClosed && !isFallingBack && currentMedia != nil && client != nil
+        let next = canFallBack ? PlaybackFallbackPolicy.next(after: delivery, cause: failure.cause) : nil
+        incidents.engineFailed(failure, delivery: delivery, next: next, engine: engine)
+        if let next {
             isFallingBack = true
             // This engine has said its piece; anything it reports from here
             // belongs to a session that is already being torn down.
@@ -1538,6 +1560,7 @@ final class PlaybackController {
             return
         }
         finishEpisodeHandoff(outcome: "failed")
+        incidents.endAttempt(engine: engine, outcome: "failed")
         let report = beginStop()
         errorMessage = failure.message
         // beginStop claims reporting ownership before returning, so a later
@@ -1837,8 +1860,19 @@ final class PlaybackController {
         }
     }
 
+    /// What the diagnostics history calls the end of an attempt. A failure
+    /// is recorded by its own path before this runs.
+    private var stopOutcome: String {
+        if errorMessage != nil { return "failed" }
+        if didFinish { return "finished" }
+        if handoffStartedAt != nil { return "handoff" }
+        if isFallingBack { return "fallback" }
+        return "stopped"
+    }
+
     private func beginEpisodeHandoff(to next: MediaItem) {
         guard handoffStartedAt == nil else { return }
+        incidents.handoffBegan()
         lastHandoffMilliseconds = nil
         isTransitionOverlayVisible = false
         let startedAt = ProcessInfo.processInfo.systemUptime
@@ -1874,6 +1908,7 @@ final class PlaybackController {
         if outcome == "ready" {
             lastHandoffMilliseconds = milliseconds
         }
+        incidents.handoffFinished(outcome: outcome, milliseconds: milliseconds)
         os_signpost(
             .end,
             log: PlaybackPerformance.log,
