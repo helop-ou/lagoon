@@ -34,4 +34,34 @@ nonisolated struct SubtitleCandidate: Identifiable, Equatable, Sendable {
         isAITranslated = info.aiTranslated == true
         jellyfinID = info.id
     }
+
+    #if DEBUG
+    /// Fixture for the Debug component gallery, which has no server to ask.
+    init(
+        id: String,
+        name: String?,
+        language: String?,
+        providerName: String?,
+        format: String?,
+        downloadCount: Int? = nil,
+        isHashMatch: Bool = false,
+        isHearingImpaired: Bool = false,
+        isForced: Bool = false,
+        isMachineTranslated: Bool = false,
+        isAITranslated: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.language = language
+        self.providerName = providerName
+        self.format = format
+        self.downloadCount = downloadCount
+        self.isHashMatch = isHashMatch
+        self.isHearingImpaired = isHearingImpaired
+        self.isForced = isForced
+        self.isMachineTranslated = isMachineTranslated
+        self.isAITranslated = isAITranslated
+        jellyfinID = id
+    }
+    #endif
 }

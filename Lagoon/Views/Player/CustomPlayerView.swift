@@ -384,6 +384,15 @@ struct CustomPlayerView<Surface: View>: View {
             // Menu still means "leave".
             nextUpDismissed = true
             onCancelNextUp?()
+        } else if panelOpen,
+                  selectedTab == .subtitles,
+                  let subtitleSearch,
+                  subtitleSearch.isBrowsingResults {
+            // One more level of the same nesting the panel itself follows:
+            // Back leaves the results browser before it would close the panel,
+            // just as it closes the panel before it would leave playback.
+            subtitleSearch.closeResults()
+            playerFocus = .track("subtitle-search")
         } else if panelOpen {
             closePanel()
         } else {

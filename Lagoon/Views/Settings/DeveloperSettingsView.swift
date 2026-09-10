@@ -393,6 +393,10 @@ private struct PlayerPanelComponentPreview: View {
     @State private var selectedTab = PlayerPanelTab.info
     @State private var engine = PlayerPanelPreviewEngine()
     @State private var isPictureInPictureActive = false
+    // Opens on the results browser so the Subtitles tab shows the state that
+    // needs approving; Done in the panel reveals the track list behind it.
+    @State private var subtitleSearch = SubtitleSearchCoordinator
+        .previewingResults(PlayerPanelComponentPreview.subtitleResults)
     @FocusState private var panelFocus: PlayerControlFocus?
 
     var body: some View {
@@ -401,6 +405,7 @@ private struct PlayerPanelComponentPreview: View {
             selectedTab: $selectedTab,
             focus: $panelFocus,
             info: previewInfo,
+            subtitleSearch: subtitleSearch,
             isPictureInPicturePossible: true,
             isPictureInPictureActive: isPictureInPictureActive,
             onTogglePictureInPicture: {
@@ -447,6 +452,78 @@ private struct PlayerPanelComponentPreview: View {
         )
     }
 
+    /// A representative page of results: several providers and formats, a hash
+    /// match, an SDH and a forced entry, and download counts spread wide
+    /// enough to show how long the detail line really gets.
+    static let subtitleResults: [SubtitleCandidate] = [
+        SubtitleCandidate(
+            id: "preview-1",
+            name: "Rick.and.Morty.S01E01.1080p.BluRay.x264-DEMAND",
+            language: "eng",
+            providerName: "OpenSubtitles",
+            format: "srt",
+            downloadCount: 48_213,
+            isHashMatch: true
+        ),
+        SubtitleCandidate(
+            id: "preview-2",
+            name: "Rick and Morty - Pilot (English SDH)",
+            language: "eng",
+            providerName: "OpenSubtitles",
+            format: "srt",
+            downloadCount: 9_104,
+            isHearingImpaired: true
+        ),
+        SubtitleCandidate(
+            id: "preview-3",
+            name: "Rick.and.Morty.S01E01.WEB-DL.forced",
+            language: "eng",
+            providerName: "Subscene",
+            format: "ass",
+            downloadCount: 412,
+            isForced: true
+        ),
+        SubtitleCandidate(
+            id: "preview-4",
+            name: "Rick ja Morty - Pilootosa",
+            language: "est",
+            providerName: "OpenSubtitles",
+            format: "srt",
+            downloadCount: 87
+        ),
+        SubtitleCandidate(
+            id: "preview-5",
+            name: "Rick.and.Morty.S01E01.720p.HDTV.x264-IMMERSE",
+            language: "eng",
+            providerName: "Addic7ed",
+            format: "vtt",
+            downloadCount: 2_760
+        ),
+        SubtitleCandidate(
+            id: "preview-6",
+            name: "Rick y Morty - Piloto (Latino)",
+            language: "spa",
+            providerName: "Subscene",
+            format: "srt",
+            downloadCount: 15_940,
+            isMachineTranslated: true
+        ),
+        SubtitleCandidate(
+            id: "preview-7",
+            name: "Rick et Morty - Pilote",
+            language: "fra",
+            providerName: "OpenSubtitles",
+            format: "sub",
+            downloadCount: 631
+        ),
+        SubtitleCandidate(
+            id: "preview-8",
+            name: "Rick and Morty S01E01 (retail)",
+            language: "nld",
+            providerName: "Addic7ed",
+            format: "srt"
+        ),
+    ]
 }
 
 /// Local production-host fixture: performance and focus tests exercise the

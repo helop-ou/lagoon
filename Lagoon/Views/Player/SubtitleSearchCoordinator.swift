@@ -288,6 +288,11 @@ struct DownloadedSubtitlePoller {
 final class SubtitleSearchCoordinator {
     private(set) var phase: SubtitleSearchPhase = .idle
     private(set) var results: [SubtitleCandidate] = []
+    /// The Subtitles tab is either choosing a track or browsing search
+    /// results, never both. Results used to be stacked above the track list
+    /// with no way back, which left two rows of candidates squeezed over the
+    /// tracks a viewer was actually trying to reach (HEL-150).
+    private(set) var isBrowsingResults = false
     private(set) var preferredLanguages: [String] = []
     private(set) var languageChoices: [String] = []
     private(set) var selectedLanguage: String?
@@ -339,21 +344,29 @@ final class SubtitleSearchCoordinator {
         self.onTrackAdded = onTrackAdded
         selectedLanguage = nil
         results = []
+        isBrowsingResults = false
         phase = .idle
         existingSignatures = Set(streams.filter { $0.type == "Subtitle" }.map(SubtitleStreamSignature.init))
         if missingMode == .automaticSearch, !hasSuitableLocalTrack {
+            // Automatic search opens straight onto the results browser: the
+            // viewer asked for candidates, not for the track list.
             startSearch()
         }
     }
 
+    /// Changing the language while browsing re-runs the search, because the
+    /// results on screen are the answer to the previous language and nothing
+    /// else in the panel would reflect the change.
     func selectLanguage(_ language: String?) {
         selectedLanguage = language
+        if isBrowsingResults { startSearch() }
     }
 
     func cycleLanguage() {
         let options: [String?] = [nil] + languageChoices.map(Optional.some)
         let next = (options.firstIndex(where: { $0 == selectedLanguage }).map { $0 + 1 } ?? 0) % options.count
         selectedLanguage = options[next]
+        if isBrowsingResults { startSearch() }
     }
 
     func startSearch() {
@@ -361,6 +374,7 @@ final class SubtitleSearchCoordinator {
         searchTask?.cancel()
         searchGeneration &+= 1
         let generation = searchGeneration
+        isBrowsingResults = true
         phase = .searching
         results = []
         let requested = selectedLanguage.map { [$0] } ?? preferredLanguages
@@ -373,6 +387,24 @@ final class SubtitleSearchCoordinator {
                 return
             }
             await self.searchJellyfin(languages: languages, generation: generation)
+        }
+    }
+
+    /// Leaves the results browser for the track list. A search still running
+    /// is abandoned, but a download is deliberately left alone: it is already
+    /// fetching the file the viewer chose, and its outcome is what the status
+    /// line above the track list is there to report.
+    func closeResults() {
+        searchTask?.cancel()
+        searchTask = nil
+        searchGeneration &+= 1
+        results = []
+        isBrowsingResults = false
+        switch phase {
+        case .downloading, .downloaded, .downloadFailed:
+            break
+        default:
+            phase = .idle
         }
     }
 
@@ -535,6 +567,10 @@ final class SubtitleSearchCoordinator {
                     isDownloaded: true
                 ))
                 phase = .downloaded
+                // The chosen result is now a track. Hand the viewer back the
+                // track list with it selected rather than leaving them in a
+                // list of candidates they have finished with.
+                finishBrowsing()
 
                 persistenceTask?.cancel()
                 persistenceTask = Task { [weak self] in
@@ -594,6 +630,7 @@ final class SubtitleSearchCoordinator {
             ))
             onTrackAdded?(stream)
             phase = .downloaded
+            finishBrowsing()
         } catch is CancellationError {
             if generation == downloadGeneration { phase = .idle }
         } catch {
@@ -610,6 +647,13 @@ final class SubtitleSearchCoordinator {
                 ? .notPermitted
                 : .downloadFailed(failure.localizedDescription)
         }
+    }
+
+    /// Returns to the track list without touching `phase`, so the "Downloaded
+    /// and selected" line survives the transition and explains the new track.
+    private func finishBrowsing() {
+        results = []
+        isBrowsingResults = false
     }
 
     func cancelDownload() {
@@ -640,8 +684,22 @@ final class SubtitleSearchCoordinator {
         mediaSourceID = ""
         existingSignatures.removeAll()
         results.removeAll()
+        isBrowsingResults = false
         phase = .idle
     }
+
+    #if DEBUG
+    /// Fixture for the Debug component gallery: the results browser with a
+    /// representative page of candidates and no server behind it.
+    static func previewingResults(_ results: [SubtitleCandidate]) -> SubtitleSearchCoordinator {
+        let coordinator = SubtitleSearchCoordinator()
+        coordinator.results = results
+        coordinator.isBrowsingResults = true
+        coordinator.languageChoices = ["eng", "est"]
+        coordinator.phase = .idle
+        return coordinator
+    }
+    #endif
 
     static func makeLanguageChoices(preferredLanguages: [String]) -> [String] {
         // Settings retains the exhaustive language catalogue. Inside active

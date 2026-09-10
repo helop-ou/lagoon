@@ -52,6 +52,9 @@ struct PlayerControlPanel: View {
     var onDismiss: (() -> Void)? = nil
 
     private static var subtitleOffID: String { "subtitle-off" }
+    private static var subtitleSearchID: String { "subtitle-search" }
+    private static var subtitleSearchCloseID: String { "subtitle-search-close" }
+    private static var subtitleResultPrefix: String { "subtitle-result-" }
     /// Room a focused track row needs before its ScrollView clips it.
     private var rowFocusInset: CGFloat { 20 }
     /// A track row at rest; the card sizes itself from this plus the gap.
@@ -59,6 +62,20 @@ struct PlayerControlPanel: View {
     /// Keep large libraries scrollable without letting the sheet dominate
     /// the video behind it.
     private var trackListMaxHeight: CGFloat { 360 }
+    /// A result row at rest: its title over the provider/format detail line,
+    /// measured in the panel rather than guessed, so a capped list ends on a
+    /// row boundary instead of a clipped sliver.
+    private var resultRowHeight: CGFloat { 99 }
+    /// Results are the whole tab while browsing, not a strip above the track
+    /// list, so they take considerably more of the sheet than tracks do: five
+    /// rows and their focus insets, which is what fits above the safe area.
+    private var resultListMaxHeight: CGFloat {
+        #if os(tvOS)
+        583
+        #else
+        320
+        #endif
+    }
 
     var body: some View {
         #if os(iOS)
@@ -97,8 +114,41 @@ struct PlayerControlPanel: View {
         }
         .padding(.top, Metrics.railTopPadding)
         .defaultFocus(focus, .tab(selectedTab))
+        // Both edges of the subtitle mode switch remove the row focus is
+        // sitting on, so focus has to be placed deliberately or tvOS drops it
+        // somewhere arbitrary in the card.
+        .onChange(of: subtitleSearch?.isBrowsingResults) { _, isBrowsing in
+            moveFocusForSubtitleBrowsing(isBrowsing)
+        }
         #endif
     }
+
+    #if os(tvOS)
+    /// Leaving the browser lands on the track that was just downloaded, and
+    /// otherwise back on Search — the control the viewer opened it from.
+    /// Entering it moves the same press onto Done, which takes Search's place.
+    private func moveFocusForSubtitleBrowsing(_ isBrowsing: Bool?) {
+        guard let isBrowsing, case .track(let id)? = focus.wrappedValue else { return }
+        let target: PlayerControlFocus?
+        if isBrowsing {
+            target = id == Self.subtitleSearchID ? .track(Self.subtitleSearchCloseID) : nil
+        } else if id == Self.subtitleSearchCloseID || id.hasPrefix(Self.subtitleResultPrefix) {
+            if subtitleSearch?.phase == .downloaded,
+               let selected = subtitleTracks.first(where: \.isSelected) {
+                target = .track(selected.id)
+            } else {
+                target = .track(Self.subtitleSearchID)
+            }
+        } else {
+            target = nil
+        }
+        guard let target else { return }
+        // The control being claimed is created by this same update and is not
+        // in the focus system yet, so an immediate assignment is dropped and
+        // tvOS parks focus back on the tab bar. Claim it on the next turn.
+        Task { focus.wrappedValue = target }
+    }
+    #endif
 
     // Native buttons only: the system's focused lozenge IS the Infuse
     // white-pill look — never draw custom focus chrome around it. The
@@ -471,108 +521,175 @@ struct PlayerControlPanel: View {
         }
     }
 
+    /// The tab is either choosing a track or browsing search results, never
+    /// both. Stacking results above the tracks gave the candidates two visible
+    /// rows and left no way back to a track list they were now burying
+    /// (HEL-150).
     private var subtitleCard: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            subtitleLoadStatus
-            if let subtitleSearch {
-                cardHeader("Find Subtitles")
-                VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    Button {
-                        subtitleSearch.startSearch()
-                    } label: {
-                        Label("Search subtitles…", systemImage: "magnifyingglass")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .disabled(subtitleSearch.phase.isBusy)
-                    .focused(focus, equals: .track("subtitle-search"))
-                    .accessibilityIdentifier("player.subtitleSearch")
+            if let subtitleSearch, subtitleSearch.isBrowsingResults {
+                subtitleResultsBrowser(subtitleSearch)
+            } else {
+                subtitleTrackChooser
+            }
+        }
+    }
 
-                    Menu {
-                        Button("Preferred Languages") {
-                            subtitleSearch.selectLanguage(nil)
-                        }
-                        ForEach(subtitleSearch.languageChoices, id: \.self) { language in
-                            Button(SubtitlePreferencesStore.displayName(for: language)) {
-                                subtitleSearch.selectLanguage(language)
-                            }
-                        }
+    @ViewBuilder
+    private var subtitleTrackChooser: some View {
+        subtitleLoadStatus
+        if let subtitleSearch {
+            cardHeader("Find Subtitles")
+            VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                Button {
+                    subtitleSearch.startSearch()
+                } label: {
+                    Label("Search subtitles…", systemImage: "magnifyingglass")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .disabled(subtitleSearch.phase.isBusy)
+                .focused(focus, equals: .track(Self.subtitleSearchID))
+                .accessibilityIdentifier("player.subtitleSearch")
+
+                subtitleLanguageMenu(subtitleSearch)
+            }
+
+            // Only the phases that outlive the browser reach this: what a
+            // finished download did, or why one could not start.
+            subtitleSearchStatus(subtitleSearch)
+
+            Divider()
+        }
+
+        // Discovery stays above this potentially very long list. A
+        // library with dozens of embedded/external tracks should still
+        // reach Find Subtitles with one Down press from the tab bar.
+        trackCard(
+            rows: [(Self.subtitleOffID, String(localized: "Off"), !subtitleTracks.contains(where: \.isSelected))]
+                + subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
+        ) { rowID in
+            if rowID == Self.subtitleOffID {
+                onSelectSubtitleTrack(nil)
+            } else {
+                onSelectSubtitleTrack(subtitleTracks.first(where: { $0.id == rowID })?.engineID)
+            }
+        }
+    }
+
+    /// Done takes the Search button's place, so the press that opened the
+    /// browser is also the press that leaves it. Menu does the same thing one
+    /// level up, exactly as it closes the panel before it would exit playback.
+    @ViewBuilder
+    private func subtitleResultsBrowser(_ search: SubtitleSearchCoordinator) -> some View {
+        cardHeader("Subtitle Results")
+
+        #if os(tvOS)
+        HStack(spacing: Metrics.Space.m) {
+            subtitleResultsCloseButton(search)
+                .frame(maxWidth: .infinity)
+            subtitleLanguageMenu(search)
+                .frame(maxWidth: .infinity)
+        }
+        #else
+        subtitleResultsCloseButton(search)
+        subtitleLanguageMenu(search)
+        #endif
+
+        subtitleSearchStatus(search)
+
+        if !search.results.isEmpty {
+            Text(String(localized: "From your Jellyfin server · saved to the library"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            subtitleResultList(search)
+        }
+    }
+
+    private func subtitleResultsCloseButton(_ search: SubtitleSearchCoordinator) -> some View {
+        Button {
+            search.closeResults()
+        } label: {
+            Label("Done", systemImage: "xmark")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .focused(focus, equals: .track(Self.subtitleSearchCloseID))
+        .accessibilityIdentifier("player.subtitleSearch.close")
+        #if os(iOS)
+        // Multiple controls share this Form row; an automatic button would
+        // also fire the neighbouring one.
+        .buttonStyle(.borderless)
+        #endif
+    }
+
+    private func subtitleLanguageMenu(_ search: SubtitleSearchCoordinator) -> some View {
+        Menu {
+            Button("Preferred Languages") {
+                search.selectLanguage(nil)
+            }
+            ForEach(search.languageChoices, id: \.self) { language in
+                Button(SubtitlePreferencesStore.displayName(for: language)) {
+                    search.selectLanguage(language)
+                }
+            }
+        } label: {
+            HStack(spacing: Metrics.Space.m) {
+                Label(search.selectedLanguageTitle, systemImage: "globe")
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.bold())
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .disabled(search.phase.isBusy)
+        .focused(focus, equals: .track("subtitle-search-language"))
+        .accessibilityIdentifier("player.subtitleSearch.language")
+    }
+
+    private func subtitleResultList(_ search: SubtitleSearchCoordinator) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
+                ForEach(search.results) { result in
+                    Button {
+                        search.startDownload(result)
                     } label: {
                         HStack(spacing: Metrics.Space.m) {
-                            Label(subtitleSearch.selectedLanguageTitle, systemImage: "globe")
-                                .lineLimit(1)
+                            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                                Text(result.name ?? String(localized: "Subtitle"))
+                                    .lineLimit(1)
+                                Text(subtitleResultDetails(result))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                             Spacer(minLength: 0)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption.bold())
+                            if search.phase == .downloading(result.id) {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "arrow.down.circle")
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .disabled(subtitleSearch.phase.isBusy)
-                    .focused(focus, equals: .track("subtitle-search-language"))
-                    .accessibilityIdentifier("player.subtitleSearch.language")
-                }
-
-                subtitleSearchStatus(subtitleSearch)
-
-                if !subtitleSearch.results.isEmpty {
-                    Text(String(localized: "From your Jellyfin server · saved to the library"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if !subtitleSearch.results.isEmpty {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
-                            ForEach(subtitleSearch.results) { result in
-                                Button {
-                                    subtitleSearch.startDownload(result)
-                                } label: {
-                                    HStack(spacing: Metrics.Space.m) {
-                                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                                            Text(result.name ?? String(localized: "Subtitle"))
-                                                .lineLimit(1)
-                                            Text(subtitleResultDetails(result))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                        Spacer(minLength: 0)
-                                        if subtitleSearch.phase == .downloading(result.id) {
-                                            ProgressView()
-                                        } else {
-                                            Image(systemName: "arrow.down.circle")
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .disabled(subtitleSearch.phase.isBusy)
-                                .focused(focus, equals: .track("subtitle-result-\(result.id)"))
-                                .accessibilityIdentifier("player.subtitleResult.\(result.id)")
-                            }
-                        }
-                        .padding(.horizontal, rowFocusInset)
-                        .padding(.vertical, rowFocusInset)
-                    }
-                    .padding(.horizontal, -rowFocusInset)
-                    .frame(maxHeight: 280)
-                }
-
-                Divider()
-            }
-
-            // Discovery stays above this potentially very long list. A
-            // library with dozens of embedded/external tracks should still
-            // reach Find Subtitles with one Down press from the tab bar.
-            trackCard(
-                rows: [(Self.subtitleOffID, String(localized: "Off"), !subtitleTracks.contains(where: \.isSelected))]
-                    + subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
-            ) { rowID in
-                if rowID == Self.subtitleOffID {
-                    onSelectSubtitleTrack(nil)
-                } else {
-                    onSelectSubtitleTrack(subtitleTracks.first(where: { $0.id == rowID })?.engineID)
+                    .disabled(search.phase.isBusy)
+                    .focused(focus, equals: .track("\(Self.subtitleResultPrefix)\(result.id)"))
+                    .accessibilityIdentifier("player.subtitleResult.\(result.id)")
+                    #if os(iOS)
+                    .buttonStyle(.borderless)
+                    #endif
                 }
             }
+            .padding(.horizontal, rowFocusInset)
+            .padding(.vertical, rowFocusInset)
         }
+        .padding(.horizontal, -rowFocusInset)
+        .frame(
+            maxHeight: min(
+                CGFloat(search.results.count) * (resultRowHeight + Metrics.Space.m) + rowFocusInset * 2,
+                resultListMaxHeight
+            )
+        )
     }
 
     @ViewBuilder
