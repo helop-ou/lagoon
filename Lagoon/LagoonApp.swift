@@ -2,6 +2,12 @@ import SwiftUI
 
 @main
 struct LagoonApp: App {
+    // Lets the player narrow iPhone orientations to landscape at run time;
+    // see PlayerOrientationLock.
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(LagoonAppDelegate.self) private var appDelegate
+    #endif
+
     @State private var deepLinks = DeepLinkRouter()
 
     init() {
