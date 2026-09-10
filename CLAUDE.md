@@ -23,13 +23,16 @@ when you do, add an entry to `Lagoon/Models/Acknowledgements.swift` and its
 licence text under `Lagoon/Resources/Licenses` — `AcknowledgementsTests`
 fails the unit suite otherwise.
 
-**Full technical docs are in `docs/` — read the relevant file before working on an area:**
+**Start at [docs/README.md](docs/README.md), follow [coding standards](docs/standards.md),
+and read the relevant guide before working on an area.** Current guides link to
+engineering notes in `docs/reference/` and dated evidence in `docs/archive/`;
+keep routine session history out of the guides.
 
 - `docs/architecture.md` — layout, SessionStore phases, navigation, **tvOS focus invariants**
 - `docs/jellyfin-api.md` — endpoints, auth header, PascalCase/ticks quirks, image fallbacks
 - `docs/playback.md` — device profile, stream resolution, progress reporting; player gotchas
 - `docs/design-system.md` — tokens, focus strategy, hero/glow, image cache rules
-- `docs/roadmap.md` — MVP scope and planned features (seerr, subtitles, Top Shelf, …)
+- `docs/roadmap.md` — remaining product work and physical-device acceptance
 - `docs/release.md` — TestFlight flow, **build numbers owned by the repo**
   (never let Xcode manage them at upload), and how to write changelog entries
 
@@ -55,7 +58,7 @@ Quick rules that prevent regressions:
   ever touching it: without the assembly it still decodes everything
   correctly, roughly ten times slower, and nothing fails (HEL-137).
 - Use design tokens (`Metrics`/`Motion`), not literals; brand colors
-  (`.lagoonTeal`/`.lagoonDeep`) only for branding — system semantics elsewhere.
+  (`.lagoonAqua`/`.lagoonShore`/`.lagoonNavy`) only for branding — system semantics elsewhere.
 - `@Observable` + `@MainActor` default isolation; model types are
   `nonisolated struct`s with defensive decoding (`decodeIfPresent` + defaults).
 - Jellyfin JSON is PascalCase; the client's global key strategies handle it —
