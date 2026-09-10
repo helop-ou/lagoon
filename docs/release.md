@@ -1,275 +1,167 @@
-# Releasing to TestFlight
+# Release
 
-Internal TestFlight only for now — no App Review involved, builds reach
-testers minutes after processing. Tracked under HEL-44.
+This is the single release checklist. The repository's upload tooling targets
+internal TestFlight. Public distribution has additional gates below; recorded
+simulator results and unsigned archives do not complete them.
 
-## One-time setup (App Store Connect / developer portal)
+## Version and changelog
 
-1. **Register devices** on team `9GLTW5844P` at developer.apple.com —
-   at least one Apple TV and one iPhone. Without a device per platform,
-   archiving fails with *"team has no devices"* (verified).
-   Apple TV pairing: Settings → Remotes and Devices → Remote App and
-   Devices, then Xcode's Devices window on the same network.
-2. **Create the app record**: App Store Connect → New App → platforms
-   iOS **and** tvOS, bundle id `ee.helop.lagoon`. The store-facing name
-   must be globally unique — "Lagoon" alone is likely taken; the home-screen
-   name stays "Lagoon" regardless of the store name.
-3. **Internal testers**: give each person an App Store Connect role
-   (Users & Access), then add them to the internal group under the app's
-   TestFlight tab. Up to 100 internal testers.
+Lagoon owns its build numbers. Bump only when preparing a build to distribute,
+not for every commit. Run `scripts/bump-build.sh` to advance all configurations
+and the app/Top Shelf together; `--set <number>` selects an explicit higher
+number. The script rejects backwards numbering and configuration drift.
+Marketing version changes use `xcrun agvtool new-marketing-version <version>`.
 
-## Cutting a build (Xcode GUI, same flow as Moony Weather)
+Write the matching entry in
+[`Changelog.swift`](../Lagoon/Models/Changelog.swift) before archiving. Entries
+are newest first and contain the version, build, release month, headline, and
+viewer-visible changes. Tests require the installed version/build to have an
+entry. Builds before the changelog's introduction are not reconstructed from
+commit messages.
 
-Once per platform (the multiplatform target archives separately for
-tvOS and iOS):
+Write one line per noticeable improvement, with the most useful first. Describe
+a fixed symptom and any setup needed. Omit ticket keys, filenames, internal
+refactors, tests, docs, and fixes to work that never shipped. Do not use em
+dashes; `ChangelogTests` enforces this. Release notes are written for a release,
+not generated per commit. The installed build is badged in About.
 
-0. **Bump and write the changelog first** (see *Build numbers* below):
-   `scripts/bump-build.sh`, then add the matching `ChangelogEntry`. Run the
-   unit suites explicitly, including `ChangelogTests`, before archiving.
-   Product → Archive does not run the test action or enforce those tests.
-1. Select an **Any tvOS Device** destination → Product → **Archive**.
-2. Organizer → Distribute App → **Custom** → **TestFlight Internal Only**, and
-   **uncheck "Manage version and build number"**. Only the Custom method shows
-   that checkbox; every other tile answers the options pages for you with it
-   on.
-3. Repeat with an **Any iOS Device** destination.
+## Internal TestFlight
 
-**Lagoon owns its build number; Xcode must not touch it.** This used to say the
-opposite, because it did: until HEL-94 the project stayed at
-`CURRENT_PROJECT_VERSION = 1` and the distribute flow stamped whatever number
-came next. That is what left roughly 43 tvOS builds and 20 iOS builds on two
-silently diverged sequences with nothing tying a changelog entry to any of
-them. Bump in the repository, keep the checkbox off. Marketing version changes
-are deliberate and manual: `xcrun agvtool new-marketing-version 0.2` (or edit
-`MARKETING_VERSION`).
+One-time setup uses development team `9GLTW5844P` and bundle ID
+`ee.helop.lagoon` for both platforms. The App Store Connect record must include
+both platforms. Xcode may need a registered physical device to create initial
+development profiles; connect a device or register its UDID in the portal.
 
-## Facts already encoded in the project
+1. Choose the revision, bump the build, and write its changelog entry.
+2. Run iOS and tvOS unit suites, including `ChangelogTests`, plus the UI and
+   physical journeys relevant to the changes. Archive does not run tests.
+3. Archive separately for generic tvOS and iOS devices in Xcode. Use the
+   internal-only TestFlight distribution flow.
+4. Keep **Automatically manage version and build number unchecked**. Verify
+   the uploaded platform and build match the repository, then retain the
+   archives, app/extension dSYMs, and validation results.
 
-- `ITSAppUsesNonExemptEncryption = NO` is the existing declaration. It is
-  **not a recorded exemption assessment**. No third-party TLS or bignum
-  library is bundled any more (libavformat has no network stack; transport
-  encryption is URLSession's), but HEL-143 must still record the assessment,
-  distribution territories and required documentation before public
-  distribution; see [release preparation](hel-143-release-preparation.md).
-- All icon slots are filled (HEL-31), including the 1280×768 App Store
-  stack that upload validation requires.
-- ATS enables `NSAllowsLocalNetworking` so home-LAN Jellyfin servers remain
-  reachable. The app does not enable the broad `NSAllowsArbitraryLoads`
-  exception.
-- A new native dependency needs an entry in `Lagoon/Models/Acknowledgements.swift`
-  and its licence text bundled under `Lagoon/Resources/Licenses`.
-  `AcknowledgementsTests` enforces this: it fails if a binary target in
-  `Packages/LagoonFFmpeg/Package.swift` has no matching acknowledgement, or if
-  an entry's licence text is missing from the bundle.
-- **"Upload Symbols Failed" warnings for the Lib*.framework artifacts are
-  expected and harmless.** The FFmpeg binary artifacts originally sourced
-  from MPVKit's release ship with no dSYMs
-  anywhere (verified against the release assets), so App Store Connect
-  can't symbolicate crash frames inside those libraries — the build still
-  uploads and processes, and Lagoon's own code symbolicates normally from
-  the archive's dSYM. HEL-48 M6 slimming (2026-08-17) cut the set from
-  ~28 frameworks to the 11 the engine actually links
-  (`Packages/LagoonFFmpeg`); the rest of the warnings only go away if we
-  ever build FFmpeg ourselves with dSYMs kept.
-
-## Changelog (HEL-94)
-
-Settings → About → Changelog shows every shipped build. It is a hand-written
-list, not something generated from git: a changelog answers what changed *for
-the viewer*, which a few hundred `feat:`/`fix:` subjects do not.
-
-The list is `Changelog.entries` in `Lagoon/Models/Changelog.swift`, newest
-first. **Adding a release is one entry at the top:**
-
-```swift
-ChangelogEntry(
-    version: "0.2",             // MARKETING_VERSION
-    build: "51",                // CURRENT_PROJECT_VERSION
-    released: "September 2026", // month, not a day
-    headline: "One line naming the theme of this build.",
-    changes: [
-        "One line per thing a viewer would notice.",
-    ]
-),
-```
-
-Version and build together identify the entry, because one marketing version
-spans many builds. The entry matching the running bundle is badged
-**Installed** in the panel.
-
-### How to write the notes
-
-The reader is someone who watches things in Lagoon. They have not read the
-code, do not know the ticket numbers, and are not looking for credit — they
-want to know what is different since they last opened the app. Everything
-below follows from that.
-
-**Say what changed for them, not what was built.** The same change, both ways:
-
-| commit | changelog |
-| --- | --- |
-| `feat: buffer large titles through a sliding cache window` | A long film no longer starts stuttering partway through. |
-| `fix: report the real cause of a subtitle failure` | Subtitle failures say what actually went wrong rather than always blaming the provider. |
-
-**For a fix, name the symptom that is gone.** People recognise the annoyance,
-not the repair. "No longer stutters an hour in" lands; "corrected the eviction
-policy" does not.
-
-**One line per noticeable thing — not per commit, and not per ticket.** HEL-92
-was seven commits and became two lines. A ticket that produced nothing visible
-gets no line at all.
-
-**Leave out everything invisible.** Refactors, tests, documentation, and fixes
-to bugs that never shipped. If it was broken and repaired inside the same
-release cycle, it never happened as far as the viewer is concerned.
-
-**No ticket keys, no file names, no type names** — with one exception: when the
-technical fact *is* the claim. "A playback engine of Lagoon's own, with no
-AVPlayer in the path" earns its jargon, because the sort of person who installs
-a third-party Jellyfin client cares about exactly that. "Sized the AVIO buffer
-to the cache request size" does not.
-
-**If a change needs setup, say where.** "Add a key in Settings → Subtitles"
-saves someone hunting for it.
-
-**No em-dashes.** Jaagop's call, and it is enforced rather than remembered:
-`ChangelogTests.notesAvoidEmDashes` fails the build on one. An em-dash is
-almost always doing a job a comma, a colon or a full stop does better, and the
-rewrite is usually the clearer sentence. "the reason your server gave — an
-exhausted provider allowance, say — instead of guessing" became "the reason
-your server gave, such as an exhausted provider allowance, instead of
-guessing". This applies to the changelog only; prose in `docs/` is unaffected.
-
-**Put the most noticeable thing first.** The panel shows the top of the list
-before anything is scrolled.
-
-**Admit the gaps.** The 0.1 (50) entry closes by saying builds 1–50 predate the
-changelog and are not itemised. A list that quietly skips things is worse than
-one that says what it is missing — the same reasoning as the "This build isn't
-listed" state.
-
-Quick check before committing an entry: read each line and ask *would someone
-who has never seen the code know what is different?* If not, rewrite it or drop
-it.
-
-### Why this is not generated from commits
-
-The mechanics would be easy — the history has conventional prefixes and Jira
-keys, so filtering and grouping is a short script. It is the output that fails.
-Commit subjects are addressed to whoever maintains the code, the granularity is
-wrong (seven commits, two lines), and most commits describe work no viewer can
-see. A generated list would read like a commit log, which is precisely what a
-changelog is not.
-
-A generator that *drafts* an entry for editing is worth having if writing them
-ever becomes a chore. Publishing one unedited is not.
-
-## Build numbers are owned by the repository
-
-**Xcode's "Automatically manage version and build number" must stay unchecked
-in the upload sheet.** Lagoon sets its own `CURRENT_PROJECT_VERSION`, because
-letting Xcode assign one at upload meant the repository could not say what
-shipped as what: the project said build 1 while roughly 43 tvOS builds and 20
-iOS builds existed, from the same setting, on two sequences that had silently
-diverged. Nothing could match a changelog entry to a build, and the test below
-would have been gating a number nobody shipped.
-
-The setting is project-level, so one value covers the app and the Top Shelf
-extension — App Store Connect requires those to match.
-
-The sequence restarted at **50** (clear of both platforms' high-water marks;
-App Store Connect only requires the number to increase per platform, so the
-gap on iOS is fine). Before archiving:
+The CLI uses the same committed policy:
 
 ```sh
-scripts/bump-build.sh          # next build
-scripts/bump-build.sh --set 60 # jump to a specific number
-```
-
-It refuses to go backwards and refuses to run if the configurations have
-drifted apart. Commit the bump together with the changelog entry.
-
-**Bump when a build is about to go out, not when a change lands.** A build
-number names something that shipped; minting one per change produces a
-changelog full of builds nobody ever ran, which is worse than a single entry
-listing everything in the build that did. Land the work, then bump once with
-one entry covering it.
-
-If a number *has* been minted and not uploaded, it can be reclaimed: nothing
-outside the repository knows about it yet. `bump-build.sh` deliberately will
-not do this — its refusal to go backwards exists because reusing a number that
-App Store Connect already holds fails only at upload, minutes later — so edit
-`CURRENT_PROJECT_VERSION` by hand (it appears once per configuration), fold the
-orphaned changelog entries into the one you are keeping, and check App Store
-Connect first if there is any doubt about what was uploaded.
-
-`ChangelogTests.theBuildThisProjectDeclaresHasChangelogNotes` fails when the
-declared version and build have no entry. This enforces the rule only when
-tests are run; Xcode's Archive and Organizer upload do not run it automatically.
-The CLI upload script separately checks for notes. `LagoonTests` is app-hosted,
-so the test reads the app bundle's real values.
-
-If a build somehow ships without notes, `Changelog.runningBuildIsListed()`
-still detects it at runtime: the About row reads "This build isn't listed" and
-the panel says so at the top. A list that quietly omits the build someone is
-running is worse than one that admits the gap.
-
-Builds between 1 and 50 predate all of this and are not itemised.
-
-### Turning the renumbering off
-
-In the Organizer this is a per-upload checkbox, **"Manage version and build
-number"**, and only the **Custom** method shows it — every other tile is
-labelled "Use recommended settings…", which means Xcode answers the options
-pages itself and the default is on. There is no project setting for it.
-
-So: Distribute App → **Custom** → App Store Connect → Upload → untick it on the
-options page. Confirm afterwards that App Store Connect shows the same build
-number the repository declares. A higher one means it was still on.
-
-## Uploading from the command line
-
-`scripts/upload-testflight.sh` does the same thing without the checkbox,
-because `ExportOptions.plist` pins the setting in a committed file:
-
-```sh
-scripts/upload-testflight.sh both --dry-run   # print the commands only
+scripts/upload-testflight.sh both --dry-run
 scripts/upload-testflight.sh tvos
 scripts/upload-testflight.sh both
 ```
 
-It refuses to start if the declared version and build have no changelog entry —
-the same rule `ChangelogTests` enforces, checked before spending minutes on an
-archive rather than after.
+The script checks the version/changelog before archiving.
+[`ExportOptions.plist`](../ExportOptions.plist) sets
+`testFlightInternalTestingOnly=true` and
+`manageAppVersionAndBuildNumber=false`. Keep those settings for this flow.
+The API-key environment is `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH`;
+the `.p8` belongs outside the repository. GUI distribution remains available.
 
-`ExportOptions.plist` sets `testFlightInternalTestingOnly`, which does more
-than default to internal: the build **cannot** be added to an external group at
-all, so it can never reach Beta App Review. Uploading never triggers review
-either way; that only happens when a build is submitted to an external group.
-Every key in the file is verified present in Xcode 26.6's IDEDistribution
-framework.
+## Project declarations and native inputs
 
-Authentication uses an App Store Connect API key, because `xcodebuild` cannot
-reuse Xcode's signed-in account non-interactively. Create one under **App Store
-Connect → Users and Access → Integrations → App Store Connect API**, then:
+The project currently declares `ITSAppUsesNonExemptEncryption=NO`, local-network
+usage text, and local-network ATS access without an arbitrary-load exception.
+These values are implementation facts, not a completed public-release approval.
+The app and Top Shelf have distinct privacy manifests; review the reasons when
+file access, diagnostics, app-group use, or native build options change.
 
-```sh
-export ASC_KEY_ID=XXXXXXXXXX
-export ASC_ISSUER_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-export ASC_KEY_PATH=~/private_keys/AuthKey_XXXXXXXXXX.p8
-```
+New native dependencies need an acknowledgement entry, bundled license text,
+and matching provenance. `AcknowledgementsTests` checks the notice resources.
+Some pinned prebuilt native frameworks lack usable dSYMs: an upload warning for
+those inputs limits native symbolication and must be distinguished from missing
+app or extension symbols. Review the actual archive warnings.
 
-**Keep the `.p8` out of the repository** — it is a credential for the whole
-account, and it cannot be re-downloaded after issue.
+The [release preparation record](archive/hel-143-release-preparation.md)
+contains the data-flow, native licensing, encryption, and required-reason API
+assessment. The [native inventory](reference/native-dependency-inventory.json)
+is generated by `scripts/inventory-native-dependencies.py`; keep exact input
+hashes and build records with the candidate. That historical assessment must
+be reconciled with the actual release before making distribution declarations.
 
-The GUI flow above remains perfectly fine; this exists so the setting is
-enforced by a file rather than by remembering a checkbox.
+## Public release
 
-## Preparing a public release (HEL-143)
+HEL-143. These gates remain separate from the internal TestFlight procedure.
+Check them against the final signed candidate, not an earlier audit revision.
 
-The internal upload script and `ExportOptions.plist` remain internal-only.
-Use the separate [public release checklist](public-release-checklist.md) for
-an external TestFlight/App Store candidate. Privacy packaging checks can run
-against an unsigned local archive, but that is not a substitute for signed
-archive validation, the Organizer privacy report, physical acceptance or the
-external release decisions in HEL-143.
+### Decisions before a public candidate
+
+- [ ] Complete the licensing decision and deliver/test the corresponding-source,
+  notices and relinking materials for every native component.
+- [ ] Record encryption classification and territories, including France; align
+  build declarations and retain any required documentation.
+- [ ] Approve data collection/retention answers, complete the app's collection
+  manifest and App Privacy labels, and generate/review Xcode's privacy report.
+- [x] Direct OpenSubtitles removed (HEL-146); subtitle search relies on Jellyfin.
+- [x] In-app legal and acknowledgements access exists before login and in About.
+- [ ] Publish privacy/support pages with the selected domain, publisher identity
+  and monitored contact; fill `LegalDestinations` with verified URLs and check
+  their iPhone/iPad and tvOS presentation. See [Website](#website).
+- [ ] Complete HEL-144 physical acceptance, including the permission journey from
+  HEL-143 and pending HEL-141/142 device checks.
+
+### Prepare and verify the exact release
+
+1. Select the final source revision, deliberate marketing version and next unused
+   repository-owned build number; write the corresponding changelog entry.
+2. Explicitly run the iOS and tvOS unit suites and applicable UI/hardware journeys.
+   Archive does **not** automatically run those tests. Retain result bundles and
+   device/OS/media/server details for that revision.
+3. Archive separately for generic iOS and tvOS devices using the distribution
+   team/signing configuration. Keep both archives and their app/extension dSYMs.
+   Verify signing identities, profiles, app-group entitlements, bundle identifiers,
+   deployment targets, app/extension versions and the intended device support.
+4. Run `python3 scripts/validate-release-privacy.py /path/to/Lagoon.xcarchive`
+   for both archives. Generate the Organizer privacy report and validate the
+   signed archives with Xcode. Review icons/Top Shelf artwork, frameworks, native
+   symbols and any App Store validation messages. The script checks resources
+   and basic bundle consistency; it is not Apple's validation or legal approval.
+5. Retain per-slice dependency hashes/build records with the exact release and
+   regenerate the inventory if an input changes. Match the recipient license/
+   source/relink package to those same inputs.
+
+### Public export procedure
+
+Keep `ExportOptions.plist` and `scripts/upload-testflight.sh` internal-only.
+After the decisions above, make a **separate** public export configuration with
+`method=app-store-connect`, `destination=export`,
+`testFlightInternalTestingOnly=false`, `manageAppVersionAndBuildNumber=false`
+and `uploadSymbols=true`, plus the verified team/signing choices. Compare these
+options with `xcodebuild -help` from the release Xcode installation before using
+them. Export a local reviewable artifact from each signed archive first.
+
+Use Organizer's App Store Connect distribution flow or a separately reviewed
+public upload command for those candidates. Verify the resulting build numbers
+and platform assignments in App Store Connect. External TestFlight review and
+App Store submission are separate actions; an internal-only uploaded build
+cannot be repurposed as a public candidate.
+
+### Review package
+
+- [ ] Store name, subtitle, description, keywords and support/privacy URLs match
+  the release; no unverified claims of universal format/HDR/server support.
+- [ ] Current age-rating, content rights and applicable trader declarations are
+  completed by the publisher for the actual app and territories.
+- [ ] Screenshots cover the supported devices and use rights-cleared artwork and
+  media. Do not expose a household library, tokens or private server addresses.
+- [ ] Review notes explain the Jellyfin server requirement, supported sign-in,
+  Seerr/subtitle setup and any hardware-specific behavior.
+- [ ] Provide a reliable, maintained review server with a non-administrator
+  account and rights-cleared media. Test access from outside the developer's LAN.
+  Keep its private credentials out of the repository and public website.
+- [ ] A publisher has reviewed the final candidate and explicitly authorized its
+  upload/submission/release. Record processing/review results and follow up on
+  any App Store warnings rather than treating an unsigned archive as acceptance.
+
+## Website
+
+The site source and maintained copy live in the separate `lagoon-website`
+repository (the sibling checkout is `../lagoon-website`). It contains the
+prerendered SvelteKit site and Cloudflare configuration. The app repository's
+[old website drafts](archive/website/README.md) are historical handoff material.
+
+Publication remains a release task: confirm the domain (proposed
+`lagoon.helop.ee`), publisher/contact, DNS, current rights-cleared screenshots,
+and the App Store/TestFlight destination. Check the live privacy and support
+pages before filling `Lagoon/Models/LegalDestinations.swift` and App Store
+Connect. Those URLs are currently nil so the app cannot link to unpublished
+pages. Keep the site and store copy consistent with the actual supported
+formats, devices, server setup, and subtitle permissions.
