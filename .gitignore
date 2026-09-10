@@ -16,3 +16,6 @@ xcuserdata/
 
 # Supplied artwork sources (see docs/design-system.md)
 art/
+
+# Sentry CLI auth token, if a wizard ever writes one again (HEL-159)
+.sentryclirc
