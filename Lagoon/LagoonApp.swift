@@ -9,8 +9,12 @@ struct LagoonApp: App {
     #endif
 
     @State private var deepLinks = DeepLinkRouter()
+    /// Holds the process-event observers for the diagnostics history
+    /// (HEL-159) for the life of the app.
+    private let diagnosticsObserver: DiagnosticsProcessObserver
 
     init() {
+        diagnosticsObserver = DiagnosticsConfiguration.install()
         // The path has to be under observation before the first negotiation
         // asks what it costs (HEL-108). Until the monitor has reported,
         // `NetworkPathObserver` answers "unrestricted", which is the
