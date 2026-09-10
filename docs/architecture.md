@@ -116,8 +116,8 @@ server-defined rail layout.
 
 ## Refactoring priorities
 
-Assessment from the September 10, 2026 checkout. These are proposed steps,
-not completed migrations. Line counts identify places to inspect; ownership
+Assessment from the September 10, 2026 checkout, tracked as HEL-155. These
+are proposed steps, not completed migrations. Line counts identify places to inspect; ownership
 and repeated behavior determine what should actually be extracted.
 
 1. **Separate player orchestration from its view.**

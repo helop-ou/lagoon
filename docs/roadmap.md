@@ -59,7 +59,7 @@ Potential later work: a server plugin for fetch-only subtitle search without
 granting library writes. A server-wide Top 10 (HEL-121) remains dependent on an
 upstream Streamystats endpoint. A personal most-watched row was declined.
 
-Code organization work has its own bounded sequence in
+Code organization work (HEL-155) has its own bounded sequence in
 [Architecture](architecture.md#refactoring-priorities): controller ownership,
 playback infrastructure placement, request/settings composition, and shared
 test support. It should not be represented as a viewer-facing feature.

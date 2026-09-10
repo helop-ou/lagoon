@@ -26,7 +26,8 @@ or a particular third-party architecture framework.
 ## Folder structure
 
 The target convention is organization by feature, with explicitly shared
-infrastructure. This is a migration destination, not a claim about today's tree:
+infrastructure. This is a migration destination, not a claim about today's
+tree; the migration itself is HEL-155:
 
 ```text
 Lagoon/
