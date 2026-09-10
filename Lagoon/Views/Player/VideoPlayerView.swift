@@ -2094,13 +2094,23 @@ struct VideoPlayerView: View {
                     onTogglePictureInPicture: { pictureInPicture.toggle() },
                     subtitleStyle: subtitlePreferences.renderStyle,
                     subtitleSearch: controller.subtitleSearch
-                ) {
-                    SampleBufferVideoSurface(engine: engine) { displayLayer in
-                        let identity = String(ObjectIdentifier(displayLayer).hashValue)
-                        Task { @MainActor in
-                            controller.recordPlayerSurface(identity: identity)
+                ) { [weak engine] in
+                    // Weak for the same reason the player views hold the
+                    // engine through `PlayerEngineRef` (HEL-152): SwiftUI
+                    // keeps copies of `CustomPlayerView`, this closure
+                    // included, past the next episode handoff, and a strong
+                    // capture here would pin the outgoing engine just as the
+                    // view's own field did. The controller has the engine
+                    // for every body evaluation that actually builds the
+                    // surface, so the `nil` branch is never what is shown.
+                    if let engine {
+                        SampleBufferVideoSurface(engine: engine) { displayLayer in
+                            let identity = String(ObjectIdentifier(displayLayer).hashValue)
+                            Task { @MainActor in
+                                controller.recordPlayerSurface(identity: identity)
+                            }
+                            pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
                         }
-                        pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
                     }
                 }
             } else {
