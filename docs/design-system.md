@@ -13,14 +13,18 @@ screen-specific copies of its values.
 | `cardSpacing` | 40 | 14 |
 | `posterWidth` | 280 | 160 baseline, scales with Dynamic Type |
 | `landscapeWidth` | 360 | 240 |
-| `heroHeight` | 620 | 200 baseline, adapts to layout and text size |
+| `heroHeight` | 620 | 200 baseline on iPhone and compact-width iPad windows |
+| `expandedHeroHeight` | Not used | 360 on regular-width iPad windows |
+| `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad windows |
 | `gridColumns` | 5 | 2 baseline, adaptive |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
 `Metrics.Space` provides `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
 `xxl=40`, and `section=56`. Use it for internal spacing; structural gutters
 and card dimensions have their own tokens. Shared radii are card 12, artwork
-10, badge 6, and hero 32. `Motion` durations are fast 0.2, standard 0.4,
+10, badge 6, and panel 32. iOS Home and Discover heroes use the dedicated
+`heroCornerRadius` of 16; tvOS heroes retain the native card shape.
+`Motion` durations are fast 0.2, standard 0.4,
 slow 0.6, and crossfade 0.8 seconds.
 
 Use semantic type: `largeTitle` for screen titles, `title2` for the player's
@@ -64,7 +68,10 @@ need an explicit appropriate control style. Test focused and unfocused states.
   focus padding intact. tvOS Library has five columns; iOS uses `PosterLayout`.
 - **Heroes:** use the contained banner, artwork wash, and existing native
   paging behavior. Keep the focused/tappable control stable while artwork
-  transitions. Ambient glow uses the shared palette and `AmbientGlowView`.
+  transitions. Home and Discover share the taller iPad layout, with the
+  title and two-line synopsis in a bounded text column. Height can grow
+  further for Dynamic Type. Ambient glow uses the shared palette and
+  `AmbientGlowView`.
 - **Details:** use `DetailPageScaffold`, `DetailMetadataHeader`,
   `AdaptiveActionStack`, and `MetadataFlowLayout`. Reuse title art and cast
   components; the shared scaffolding serves Jellyfin and Seerr screens.
