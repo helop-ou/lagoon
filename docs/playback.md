@@ -928,6 +928,38 @@ and the main thread spends about 250 ms of every 2 s window on that
 composition path with nothing on screen, which is what the HEL-150
 observation-scope split addresses.
 
+#### Where the composited-path drops come from (2026-09-10)
+
+The soak's steady 0.66% drop rate on a Dolby Vision title asked for the
+frame-loss bench rather than a guess. Same scene at 600 s, 10 s warm-up,
+60 s window, five minutes of cool-down between runs, arms interleaved so
+heat and time of day could not favour one; Match Content was on and the
+display switched once in every run; Release, main at `2522c7c` and after:
+
+| arm | dropped / frames, three runs | optimized composition |
+| --- | --- | --- |
+| The Hangover, Dolby Vision P5 3840×1600, English CC on | 6/1438 · 6/1440 · 6/1439 (0.42%) | 0 |
+| The Hangover, system captions on (meant as "off") | 4/1439 · 6/1438 · 7/1451 | 0 |
+| Alien: Covenant, HDR10 3840×2160, CC on | 3/1445 · 3/1463 · 2/1463 (0.14–0.21%) | 0 |
+| AvP: Requiem, 1080p H.264 SDR, CC on (691 cues) | 1/1465 · 0/1465 · 1/1443 | 1457–1463 of 1465 |
+| The Hangover, subtitles really off (`benchSubtitleLanguage off`) | 0/1454 · 0/1453 · 0/1442 | 0 |
+| The Hangover, nothing but the surface (`benchBareSurface`) | 0/1439 | 0 |
+
+Three things fell out. The engine is never the bottleneck: zero stalls,
+zero audio dry-ups and a decoded queue never below 29 of 30 in every run.
+HDR output never reaches the optimized display path on this device, with
+or without anything drawn over it — SDR does, with hundreds of cues on
+screen — so every HDR frame goes through ordinary composition. And on that
+composited path the drops are the subtitle text layer: the same window
+drops six frames with a cue on screen and none without, three runs each.
+The cue's shadow edge and translucent background were being filtered by
+Core Animation on every frame over a 4K HDR composition; each cue view is
+now a drawing group (`2590f57`), rendered once per change and composited as
+one texture, with `debug.benchFlatCues` keeping the old path for an A/B
+from the same binary. The two hooks that made the isolation possible are
+`debug.benchSubtitleLanguage off` (the system caption preference otherwise
+turns a track on by itself) and `debug.benchBareSurface`.
+
 #### Thermal state and rearranging work
 
 Relaunching on a device hammered for ten minutes once reproduced the cold curve
