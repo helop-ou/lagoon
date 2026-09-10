@@ -1,5 +1,9 @@
 # Subtitle and artwork download hardening — audit A15
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 Implementation date: September 8, 2026. App version remains `0.1 (90)`.
 
 This addresses [A15 in the release audit](1.0-release-readiness-and-app-store-audit.md#a15--p2-external-subtitle-and-artwork-downloads-need-bounded-explicit-failure-handling).
