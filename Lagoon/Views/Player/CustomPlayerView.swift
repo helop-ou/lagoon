@@ -266,6 +266,7 @@ struct CustomPlayerView<Surface: View>: View {
                 PlayerTransportOverlay(
                     engine: engine,
                     info: info,
+                    isVisible: transportVisible,
                     scrubTarget: scrubTarget,
                     showsEndTime: showsEndTime,
                     showsPanelHint: showsPanelHint,

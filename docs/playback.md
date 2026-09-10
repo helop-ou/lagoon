@@ -1473,6 +1473,15 @@ timeline leaves, which still follow the tick at opacity 0, and the trace's
 own sampling; skipping the position read while the transport is hidden is
 the next cut if it is ever needed.
 
+The hidden transport was the next cut. `CustomPlayerView` keeps the
+transport mounted at opacity 0 so the fade can animate, and its scrubber and
+timeline leaves kept following the tick while nobody could see them. They now
+take an `isVisible` flag and read `engine.timePosition` only on the visible
+branch — Observation registers reads that happen, so the un-taken branch
+drops the subscription — rendering the last shown position while hidden.
+Simulator, same hands-off demo measurement, two runs each: median
+main-thread ms per 2 s window 32.5 → 16.5, mean 49.4 → 36.7.
+
 The live panel sweep moved much less — two runs each, five iterations per
 run: app CPU 0.384 s → 0.375 s, cycles 1.374 → 1.312 billion (−4.5%),
 retired instructions 2.497 → 2.412 billion (−3.4%), wall time unchanged at

@@ -11,6 +11,11 @@ import SwiftUI
 struct PlayerTransportOverlay: View {
     let engine: any PlayerEngine
     let info: PlayerItemInfo
+    /// Whether the transport is actually on screen. `CustomPlayerView` keeps
+    /// this view mounted at `.opacity(0)` so the fade can animate, so the
+    /// tick-following leaves below need their own signal to stop following
+    /// the playhead while nobody can see it (HEL-150).
+    let isVisible: Bool
     /// The virtual playhead's position while scrubbing; nil when the
     /// transport is live (HEL-39 slice 2).
     let scrubTarget: Double?
@@ -77,6 +82,7 @@ struct PlayerTransportOverlay: View {
 
                 PlayerScrubber(
                     engine: engine,
+                    isVisible: isVisible,
                     chapters: info.chapters,
                     trickplaySource: info.trickplay,
                     scrubTarget: scrubTarget,
@@ -91,6 +97,7 @@ struct PlayerTransportOverlay: View {
 
                 PlayerTimelineLabels(
                     engine: engine,
+                    isVisible: isVisible,
                     scrubTarget: scrubTarget,
                     showsEndTime: showsEndTime
                 )
@@ -124,6 +131,8 @@ struct PlayerTransportOverlay: View {
 /// at tick rate, which is exactly why it is its own view (HEL-150).
 struct PlayerScrubber: View {
     let engine: any PlayerEngine
+    /// See `PlayerTransportOverlay.isVisible`.
+    let isVisible: Bool
     let chapters: [PlayerChapter]
     let trickplaySource: TrickplaySource?
     let scrubTarget: Double?
@@ -135,7 +144,21 @@ struct PlayerScrubber: View {
     var onCancelScrub: () -> Void = {}
     var onPoke: () -> Void = {}
 
+    /// The last position shown while the transport was visible. Rendered
+    /// in place of `engine.timePosition` while hidden so the un-taken
+    /// `isVisible` branch below never reads it — Observation only
+    /// registers reads that actually happen, so that is what drops the
+    /// hidden transport's subscription to the tick (HEL-150).
+    @State private var lastShownSeconds: Double = 0
+
     private var isScrubbing: Bool { scrubTarget != nil }
+
+    /// The position this view renders. Only the `isVisible` branch touches
+    /// the engine; the hidden branch reads state that never changes on its
+    /// own, so nothing here ticks while the transport is faded out.
+    private var seconds: Double {
+        isVisible ? (scrubTarget ?? engine.timePosition) : lastShownSeconds
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -184,10 +207,16 @@ struct PlayerScrubber: View {
             #endif
         }
         .frame(height: Metrics.scrubberHeight)
+        // Tracks the live position into `lastShownSeconds` while visible,
+        // so the instant the transport hides again it freezes on the frame
+        // the viewer last saw rather than snapping to 0 (HEL-150).
+        .onChange(of: seconds) { _, newValue in
+            if isVisible { lastShownSeconds = newValue }
+        }
         #if os(iOS)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Playback position")
-        .accessibilityValue("\(PlaybackTimestamp.text(scrubTarget ?? engine.timePosition)) of \(PlaybackTimestamp.text(engine.duration))")
+        .accessibilityValue("\(PlaybackTimestamp.text(seconds)) of \(PlaybackTimestamp.text(engine.duration))")
         .accessibilityAdjustableAction { direction in
             guard engine.duration.isFinite, engine.duration > 0 else { return }
             let delta: Double
@@ -311,16 +340,16 @@ struct PlayerScrubber: View {
     }
 
     /// Where the playhead knob sits: the virtual position while scrubbing,
-    /// the engine's otherwise.
+    /// the engine's otherwise. Both read `seconds`, never the engine
+    /// directly, so they freeze along with it while hidden.
     private var knobFraction: CGFloat {
         guard engine.duration > 0 else { return 0 }
-        let seconds = scrubTarget ?? engine.timePosition
         return CGFloat(min(max(seconds / engine.duration, 0), 1))
     }
 
     private var progressFraction: CGFloat {
         guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(engine.timePosition / engine.duration, 0), 1))
+        return CGFloat(min(max(seconds / engine.duration, 0), 1))
     }
 
     /// The played rail follows the preview target while scrubbing. Cancel
@@ -380,10 +409,20 @@ struct PlayerScrubber: View {
 /// The player's second legitimate tick-rate leaf (HEL-150).
 struct PlayerTimelineLabels: View {
     let engine: any PlayerEngine
+    /// See `PlayerTransportOverlay.isVisible`.
+    let isVisible: Bool
     let scrubTarget: Double?
     let showsEndTime: Bool
 
+    /// See `PlayerScrubber.lastShownSeconds` — same freeze, same reason.
+    @State private var lastShownSeconds: Double = 0
+
     private var isScrubbing: Bool { scrubTarget != nil }
+
+    /// Only the `isVisible` branch touches the engine.
+    private var seconds: Double {
+        isVisible ? (scrubTarget ?? engine.timePosition) : lastShownSeconds
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -398,7 +437,7 @@ struct PlayerTimelineLabels: View {
             let elapsedEndsAt = center + labelWidth / 2
 
             ZStack(alignment: .topLeading) {
-                Text(PlaybackTimestamp.text(scrubTarget ?? engine.timePosition))
+                Text(PlaybackTimestamp.text(seconds))
                     .font(
                         isScrubbing
                             ? .callout.monospacedDigit().weight(.semibold)
@@ -421,6 +460,9 @@ struct PlayerTimelineLabels: View {
         }
         .frame(height: ScrubMetrics.timeLabelHeight)
         .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
+        .onChange(of: seconds) { _, newValue in
+            if isVisible { lastShownSeconds = newValue }
+        }
         .allowsHitTesting(false)
     }
 
@@ -430,7 +472,7 @@ struct PlayerTimelineLabels: View {
     /// while playback is paused and the playhead is not.
     @ViewBuilder
     private var trailingTimeLabel: some View {
-        let remaining = max(engine.duration - engine.timePosition, 0)
+        let remaining = max(engine.duration - seconds, 0)
         if showsEndTime {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 if let finish = PlaybackFinish.date(
@@ -456,13 +498,12 @@ struct PlayerTimelineLabels: View {
 
     private var knobFraction: CGFloat {
         guard engine.duration > 0 else { return 0 }
-        let seconds = scrubTarget ?? engine.timePosition
         return CGFloat(min(max(seconds / engine.duration, 0), 1))
     }
 
     private var progressFraction: CGFloat {
         guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(engine.timePosition / engine.duration, 0), 1))
+        return CGFloat(min(max(seconds / engine.duration, 0), 1))
     }
 
     private var scrubMotion: Animation {
