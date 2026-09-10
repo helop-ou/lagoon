@@ -29,6 +29,19 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "93",
+            released: "September 2026",
+            headline: "A roomier subtitle search, a smoother player, and cleaner episode handoffs.",
+            changes: [
+                "Searching for subtitles now opens a full list of results, five at a time, instead of two squeezed above your tracks. Done or the Back button returns you to the track list, changing the language searches again, and a downloaded subtitle takes you straight back to your tracks with it selected.",
+                "The player's control panel and remote response are smoother during playback: the player no longer redraws all of its controls ten times a second while a film plays.",
+                "Fewer dropped frames on HDR and Dolby Vision titles while subtitles are showing on Apple TV.",
+                "Choosing Play Next before an episode ends no longer drops you back to the browse screen, and the next episode starts sooner instead of waiting for its buffer to fill.",
+                "A subtitle you download during an episode now carries over to the next episode like any other track choice.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "92",
             released: "September 2026",
             headline: "Dolby Vision for disc remuxes, transcoding behind proxy paths, and a Home that always has featured titles.",
