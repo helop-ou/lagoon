@@ -104,16 +104,14 @@ What 1.0 still owes, functionally and as release gates, in the order they
 are worth doing (decided 2026-09-10). Keys are Jira tickets; the two audit
 tickets hold the detailed acceptance lists so they are not repeated here.
 
-1. **Touch player controls on iPhone and iPad** (HEL-153). The iOS player
-   has a top bar with Close, Info and Play/Pause, a tap to show the
-   controls, a drag scrubber and Picture in Picture inside the panel, and
-   nothing else by gesture. 1.0 needs the grammar every phone player has:
-   a large centred play/pause with 10 s back and forward beside it,
-   double-tap on either half of the picture to seek, landscape lock while
-   playing, the mute switch and volume keys respected, trickplay thumbnails
-   while scrubbing by touch, Skip Intro and Up Next tappable, and Picture
-   in Picture when leaving the player as the phone's popup behaviour. An
-   in-app mini player is a 1.1 idea.
+1. **Touch player controls on iPhone and iPad** (HEL-153). The implementation
+   now has centered play/pause and 10 s skip buttons, double-tap seeking,
+   iPhone landscape lock, and an iOS PiP presentation owner. Touch and scrub
+   journeys pass in iPhone/iPad simulators; the controls no longer depend on
+   the toolbar's top safe-area inset while fading. Normal movie-player audio
+   is retained. Physical PiP, thumbnails, Skip/Up Next touch journeys and
+   VoiceOver acceptance remain; see [the validation record](hel-153-touch-validation.md).
+   This does not establish live Jira status or a shipped build.
 2. **Physical-device acceptance** (HEL-144, with HEL-41 for iPhone/iPad):
    the audit's matrix on real hardware — iPhone and iPad touch, rotation,
    keyboards, VoiceOver, large text, interruptions and the lock screen,
