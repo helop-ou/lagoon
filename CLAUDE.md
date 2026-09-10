@@ -75,6 +75,11 @@ Quick rules that prevent regressions:
 - All playback goes through the Lagoon sample-buffer engine behind the
   `PlayerEngine` protocol — never add AVPlayer/AVKit playback paths; the
   player UI must only talk to the protocol.
+- Player views hold the engine through `@PlayerEngineRef var engine`, never a
+  strong `let`, and closures handed to SwiftUI — gestures, view builders —
+  never capture an engine. SwiftUI keeps copies of a view past the next
+  episode handoff, which is how each handoff leaked a drained engine
+  (HEL-152).
 - A renderer's `requestMediaDataWhenReady` block is armed only while its
   queue has something to give (`armVideoRequests`/`rearmRequestsIfNeeded` in
   the engine). A block that returns empty-handed is called again at once, and
