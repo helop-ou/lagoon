@@ -1,5 +1,9 @@
 # Lagoon player audit — codec coverage and performance
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 Audit date: August 27, 2026. Commit `ba40300`, version `0.1` build `62`.
 
 Scope: the ~16,700 lines under `Lagoon/Views/Player` and
