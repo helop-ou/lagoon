@@ -28,7 +28,7 @@ nonisolated enum SkipSegmentPolicy {
 /// video surface, because taking focus would move `onMoveCommand` off the
 /// surface and kill scrubbing while it is up.
 struct PlayerSkipOverlay: View {
-    let engine: any PlayerEngine
+    @PlayerEngineRef var engine: any PlayerEngine
     /// Changing it re-arms the task, which is what clears a fill left running
     /// by the item that just ended.
     let playbackIdentity: String
