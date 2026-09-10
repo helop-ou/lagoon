@@ -1,5 +1,9 @@
 # Validation run, September 8, 2026
 
+Archived validation/audit record. Dates, ticket states, and results below apply
+to the recorded work. Use the [current guides](../README.md) and
+[release checklist](../release.md#public-release) for ongoing work.
+
 A full simulator validation of `main` at `bd4fedf` after the day's batches:
 the HEL-146 subtitle cleanup, the URLSession transport spike, HEL-145 Dolby
 Vision profile 7 conversion, HEL-143 header-only credentials and
