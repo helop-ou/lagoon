@@ -124,6 +124,10 @@ final class PlaybackController {
     private var lastKnownPosition: Double = 0
     private var nextUpTask: Task<Void, Never>?
     private var nextPreparationTask: Task<PreparedNextPlayback?, Never>?
+    /// The successor's byte warm-up, held separately from the preparation
+    /// task around it so an accepted Up Next offer can end the trickle
+    /// without discarding the negotiation it is nested in (HEL-144).
+    private var nextWarmTask: Task<Void, Never>?
     private var preparedNext: PreparedNextPlayback?
     /// Guards the hand-off: `didFinish` and an expiring countdown can both
     /// arrive at the end of a file, and advancing twice would skip an
@@ -855,6 +859,8 @@ final class PlaybackController {
         nextUpTask?.cancel()
         nextPreparationTask?.cancel()
         nextPreparationTask = nil
+        nextWarmTask?.cancel()
+        nextWarmTask = nil
         preparedNext = nil
         playbackCache.discardNext()
         nextUp = nil
@@ -907,7 +913,19 @@ final class PlaybackController {
                     expectedLength: source.size,
                     authorization: client.mediaRequestAuthorization()
                 )
-                await self.warmPreparedNext(scope, byteCount: 8 * 1_024 * 1_024)
+                // The warm-up runs in a task of its own so an advance can end
+                // it without cancelling the preparation around it: what the
+                // handoff needs from here is the negotiated source and the
+                // staged scope, not a full cushion (HEL-144).
+                if !self.isAdvancing {
+                    let warm = Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        await self.warmPreparedNext(scope, byteCount: 8 * 1_024 * 1_024)
+                    }
+                    self.nextWarmTask = warm
+                    await warm.value
+                    self.nextWarmTask = nil
+                }
                 guard !Task.isCancelled, self.nextUp?.id == next.id else {
                     self.playbackCache.discardNext(itemID: next.id)
                     return nil
@@ -979,8 +997,15 @@ final class PlaybackController {
         defer { isAdvancing = false }
         beginEpisodeHandoff(to: next)
         prepareNextIfNeeded(force: true)
+        // The warm-up exists to make *this* moment instant; it is not
+        // something to sit out once the moment has arrived. Its cooperative
+        // pacing spreads eight MiB over tens of seconds on a slow server,
+        // and the viewer is already watching a spinner. `isAdvancing` covers
+        // a warm that has not started yet (HEL-144).
+        nextWarmTask?.cancel()
         let prepared = await nextPreparationTask?.value
         nextPreparationTask = nil
+        nextWarmTask = nil
         guard !isClosed else { return }
         captureTrackPreference()
         let outgoingResourcesRetired = await stop(
@@ -1372,6 +1397,8 @@ final class PlaybackController {
         if !preservingPreparedNext {
             nextPreparationTask?.cancel()
             nextPreparationTask = nil
+            nextWarmTask?.cancel()
+            nextWarmTask = nil
             preparedNext = nil
         }
         subtitleSearch.detach()
@@ -2130,9 +2157,13 @@ struct VideoPlayerView: View {
             // taken up on it twice.
             if autoplayMode == .autoDelay, !autoplayCancelled, controller.nextUp != nil {
                 advance()
-            } else {
+            } else if !controller.isAdvancing {
                 // `.card` means never acting alone, so an offer that went
                 // unanswered closes the player exactly as `.off` does.
+                // An *accepted* offer is a different thing: the file can run
+                // out while the successor is still being prepared, and
+                // dismissing there tears down a handoff the viewer asked for
+                // and drops them back on the browse screen (HEL-144).
                 dismiss()
             }
         }

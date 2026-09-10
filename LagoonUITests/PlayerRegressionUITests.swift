@@ -78,8 +78,12 @@ final class PlayerRegressionUITests: XCTestCase {
         // Down opens the panel; left/right walk the tabs.
         remote.press(.down)
         waitForState(in: app, timeout: 5) { $0.int("panel") == 1 }
-        remote.press(.right)
-        waitForState(in: app, timeout: 5) { $0.string("tab") == "video" }
+        // `panel=1` is published before the panel's own focus claim, which
+        // openPanel() defers by 225 ms so the reveal can be applied first.
+        // A Right sent inside that window is swallowed, so retry the move
+        // and wait on the app's tab state between presses instead of
+        // sleeping past the claim.
+        pressUntil(tab: "video", in: app, press: .right)
 
         // Down drops into the card, onto the speed steppers.
         remote.press(.down)
@@ -92,12 +96,22 @@ final class PlayerRegressionUITests: XCTestCase {
         }
 
         // Focus enters the section on the leftmost control, which is minus.
+        let decrease = app.buttons["player.playbackRate.decrease"]
+        let increase = app.buttons["player.playbackRate.increase"]
+        XCTAssertTrue(
+            waitForFocus(decrease),
+            "Down from the Video tab should land on the speed minus button"
+        )
         remote.press(.select)
         let lowered = waitForState(in: app, timeout: 8) { $0.string("rate") == "0.75" }
         XCTAssertEqual(lowered.string("rate"), "0.75", "minus should step down one value")
 
         // Right crosses the value label to plus, which steps back up.
         remote.press(.right)
+        XCTAssertTrue(
+            waitForFocus(increase),
+            "Right from minus should cross the value label onto plus"
+        )
         remote.press(.select)
         let restored = waitForState(in: app, timeout: 8) { $0.string("rate") == "1" }
         XCTAssertEqual(restored.string("rate"), "1", "plus should step back up")
@@ -1585,7 +1599,34 @@ final class PlayerRegressionUITests: XCTestCase {
         // Lazy track construction must not trade performance for broken
         // focus navigation. Exercise the full 30-track stress fixture.
         for _ in 0..<3 { remote.press(.right) }
-        remote.press(.down) // Off
+        // Since HEL-150 the tab shows either the track chooser or the search
+        // results browser, never both, and the gallery deliberately opens on
+        // the browser. Done puts the chooser back; without it the walk below
+        // counts result rows and never reaches a track.
+        let doneButton = app.buttons["player.subtitleSearch.close"]
+        if doneButton.waitForExistence(timeout: 3) {
+            // Done shares its row with the language menu, and Down from the
+            // rightmost tab lands on whichever of the two is nearer, so walk
+            // left first and up only if that was not enough.
+            remote.press(.down)
+            for direction in [XCUIRemote.Button.left, .up] {
+                for _ in 0..<3 where !doneButton.hasFocus {
+                    remote.press(direction)
+                    Thread.sleep(forTimeInterval: 0.2)
+                }
+            }
+            XCTAssertTrue(waitForFocus(doneButton), "Could not reach Done in the results browser")
+            remote.press(.select)
+        }
+        // Off is the first row under Find Subtitles and its language menu.
+        // Walking onto it by focus rather than by a fixed press count keeps
+        // the 30-row stress walk itself the only thing being counted.
+        let subtitleOff = app.buttons["player.track.subtitle-off"]
+        XCTAssertTrue(
+            subtitleOff.waitForExistence(timeout: 5),
+            "Leaving the results browser must reveal the track chooser"
+        )
+        moveFocus(to: subtitleOff, maxPresses: 6) { remote.press(.down) }
         for _ in 0..<30 { remote.press(.down) }
         let finalTrack = app.buttons["player.track.subtitle-40"]
         XCTAssertTrue(finalTrack.hasFocus)
@@ -2391,6 +2432,40 @@ final class PlayerRegressionUITests: XCTestCase {
                 "The genre heading should scroll away instead of covering the poster grid"
             )
         }
+    }
+
+    /// Walks the panel's tab bar by pressing, then waiting on the app's own
+    /// tab state before deciding to press again. A press swallowed by the
+    /// panel's deferred focus claim is retried; a press that did land is
+    /// never doubled into an overshoot, which a fixed cadence cannot promise.
+    private func pressUntil(
+        tab target: String,
+        in app: XCUIApplication,
+        press direction: XCUIRemote.Button,
+        attempts: Int = 4
+    ) {
+        for _ in 0..<attempts {
+            if state(in: app).string("tab") == target { return }
+            remote.press(direction)
+            let deadline = Date().addingTimeInterval(1.5)
+            repeat {
+                if state(in: app).string("tab") == target { return }
+                Thread.sleep(forTimeInterval: 0.1)
+            } while Date() < deadline
+        }
+        waitForState(in: app, timeout: 3) { $0.string("tab") == target }
+    }
+
+    /// Focus lands a frame or two after the press that moved it, and the
+    /// player panel claims it asynchronously. Poll for it instead of sleeping
+    /// a guessed interval, so the next press is never sent into the gap.
+    private func waitForFocus(_ element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.hasFocus { return true }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        return false
     }
 
     private func moveFocus(
