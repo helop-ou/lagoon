@@ -1,5 +1,8 @@
 # Lagoon support — publication draft
 
+Historical handoff draft. Maintained copy is in `lagoon-website`; see the
+[publication guidance](../../release.md#website).
+
 Editorial status: domain, support contact and public 1.0 availability remain
 undecided. Add a monitored contact route before publishing this page.
 
