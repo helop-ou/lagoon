@@ -46,6 +46,7 @@ struct PlayerRegressionValue: ViewModifier {
     /// Panel open, scrub up, or the card already waved away with Back.
     let isNextUpSuppressed: Bool
     let isScrubbing: Bool
+    let isTransportVisible: Bool
     let lastCommittedScrubTarget: Double
     let panelOpen: Bool
     let selectedTab: PlayerPanelTab
@@ -141,6 +142,7 @@ struct PlayerRegressionValue: ViewModifier {
             "renderers=\(lifecycle.attachedRendererSets)",
             "unclean=\(lifecycle.uncleanEngineDestructions)",
             "scrubbing=\(isScrubbing ? 1 : 0)",
+            "transport=\(isTransportVisible ? 1 : 0)",
             String(format: "lastScrub=%.1f", lastCommittedScrubTarget),
             "panel=\(panelOpen ? 1 : 0)",
             "tab=\(String(describing: selectedTab))",
