@@ -221,3 +221,33 @@ nonisolated enum PlaybackFallbackPolicy {
         }
     }
 }
+
+/// Whether a video decode failure is a verdict on the stream or only on the
+/// point playback was restarted from (HEL-151).
+///
+/// The ladder's `.undecodable` rung is expensive and one-way: it costs the
+/// viewer three seconds of reload, the embedded subtitle tracks, and the
+/// server minutes of CPU per viewer. It should answer "this device cannot
+/// decode this bitstream", and a decode failure a few samples after a
+/// renderer flush usually is not that — it is the decoder refusing where the
+/// seek put it, on a stream whose every other second decodes perfectly. One
+/// in-place retry (flush, re-seek to the same position) separates the two,
+/// and costs a scrub a hiccup instead of a restart.
+///
+/// Bounded on purpose. Only one retry is allowed per playback generation, so
+/// a stream that really is undecodable descends the ladder on its second
+/// failure, exactly as it did before, one seek later.
+nonisolated enum PlaybackRestartPointPolicy {
+    /// How close to the flush a failure has to be. An open GOP's leading
+    /// pictures arrive immediately behind the picture the seek landed on;
+    /// three samples covers a B-pyramid's worth and nothing beyond it.
+    static let samplesAfterFlush = 3
+
+    static func shouldRetryInPlace(
+        videoSamplesSinceFlush: Int,
+        alreadyRetriedThisGeneration: Bool
+    ) -> Bool {
+        guard !alreadyRetriedThisGeneration else { return false }
+        return videoSamplesSinceFlush <= samplesAfterFlush
+    }
+}

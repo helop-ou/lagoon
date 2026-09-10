@@ -167,6 +167,15 @@ nonisolated final class FFmpegDemuxer {
     /// Set when the video track arrives start-code delimited, which is every
     /// MPEG-TS and so every Blu-ray clip the disc reader opens (HEL-133).
     private var videoUsesStartCodes = false
+    /// HEL-151: what the compressed video payloads handed to the renderer are,
+    /// so a post-seek packet can be asked whether a decoder can *start* on it
+    /// rather than only whether the container would seek to it. Both nil for
+    /// software-decoded video and for any codec this cannot read, which
+    /// leaves that stream on exactly its pre-HEL-151 path.
+    private var videoRandomAccessCodec: VideoRandomAccessPoint.Codec?
+    private var videoPayloadNALLengthSize: Int?
+    /// Where a seek left the video stream (HEL-151). Demux-queue use only.
+    private var postSeekVideoFilter: PostSeekVideoFilter = .idle
     /// Per stream, the container origin to subtract from its timestamps.
     /// Empty for every container that already starts at zero.
     private var streamStartOffsets: [Int32: Int64] = [:]
@@ -537,6 +546,30 @@ nonisolated final class FFmpegDemuxer {
                 frameRateNum: guessedRate.num,
                 frameRateDen: guessedRate.den
             )
+            // HEL-151: only the compressed path reaches the renderer, and
+            // only these two codecs are length-prefixed NAL streams there.
+            switch videoPar.pointee.codec_id {
+            case AV_CODEC_ID_H264: videoRandomAccessCodec = .h264
+            case AV_CODEC_ID_HEVC: videoRandomAccessCodec = .hevc
+            default: videoRandomAccessCodec = nil
+            }
+            if let codec = videoRandomAccessCodec {
+                // A converted start-code payload carries four-byte lengths
+                // whatever the container's own record said (HEL-133).
+                videoPayloadNALLengthSize = videoUsesStartCodes
+                    ? Int(AnnexBStream.nalUnitHeaderLength)
+                    : videoPar.pointee.extradata.flatMap { extradata in
+                        videoPar.pointee.extradata_size > 0
+                            ? VideoRandomAccessPoint.nalLengthSize(
+                                configurationRecord: Data(
+                                    bytes: extradata,
+                                    count: Int(videoPar.pointee.extradata_size)
+                                ),
+                                codec: codec
+                            )
+                            : nil
+                    }
+            }
         }
         videoStream = DemuxedStream(
             streamIndex: bestVideo,
@@ -800,6 +833,11 @@ nonisolated final class FFmpegDemuxer {
             status = av_seek_frame(ctx, videoStreamIndex, timestamp, seekBackwardFlag)
         }
         try Self.validateSeekStatus(status)
+        // HEL-151: the packet the container seeks to is not necessarily one
+        // a hardware decoder can be started on, and the packets right behind
+        // it may be presented before it. Both are decided on the first video
+        // packet this seek produces.
+        postSeekVideoFilter = videoRandomAccessCodec != nil ? .awaitingAnchor : .idle
         cachedIO?.setTimelineAnchor(seconds: seconds, duration: durationSeconds)
         didDrainAudioAtEOF = false
         for decoder in audioDecoders.values {
@@ -886,6 +924,113 @@ nonisolated final class FFmpegDemuxer {
         stripStats = stats
         stripStatsLock.unlock()
         return filtered
+    }
+
+    /// What a seek left the compressed video stream doing (HEL-151).
+    private enum PostSeekVideoFilter {
+        case idle
+        /// Nothing has been read since the seek: the next video packet is
+        /// wherever the decoder is about to be restarted.
+        case awaitingAnchor
+        /// The seek landed on an *open* GOP — a picture the container flags
+        /// as a keyframe, that a decoder can start on, but that has pictures
+        /// behind it in decode order presented *before* it. Those reference
+        /// the GOP the renderer's flush has already destroyed.
+        case droppingLeadingPictures(anchor: Int64, dropped: Int)
+    }
+
+    /// How many packets the leading-picture drop may consume before it gives
+    /// up and lets everything through. Real open GOPs carry one B-pyramid's
+    /// worth (measured: two); this only exists so a stream that lies about
+    /// its timestamps cannot lose its video track.
+    private static let leadingPictureDropLimit = 32
+
+    /// Whether this video packet is one of the open GOP's leading pictures.
+    ///
+    /// The renderer flush that precedes every seek destroys the decoder's
+    /// reference pictures, so a picture that references the GOP *before* the
+    /// point the seek landed on cannot be decoded — `AVSampleBufferVideoRenderer`
+    /// answers one with `didFailToDecodeNotification`, and the delivery
+    /// ladder reads that as `.undecodable` and drops the viewer onto a
+    /// server transcode for the rest of the film (HEL-151). libavcodec is
+    /// forgiving here and Apple's decoder is not, which is why this had never
+    /// shown up in a software-decoded path.
+    ///
+    /// Every such picture is presented before the point the seek landed on,
+    /// which is at or before the position the viewer asked for, so nothing
+    /// dropped here was ever going to be shown.
+    ///
+    /// Armed only when the anchor is a genuine keyframe that is *not* an
+    /// IDR/IRAP: an IDR closes its GOP by definition, so closed-GOP content —
+    /// which is nearly everything — takes exactly its pre-HEL-151 path.
+    private func postSeekVideoDecision(
+        packet: UnsafeMutablePointer<AVPacket>,
+        payload: Data?
+    ) -> PostSeekVideoDecision {
+        switch postSeekVideoFilter {
+        case .idle:
+            return .keep
+        case .awaitingAnchor:
+            postSeekVideoFilter = .idle
+            guard let codec = videoRandomAccessCodec,
+                  let lengthSize = videoPayloadNALLengthSize,
+                  let anchor = Self.presentationTimestamp(packet) else { return .keep }
+            let isStartPoint: Bool? = if let payload {
+                payload.withUnsafeBytes {
+                    VideoRandomAccessPoint.isDecoderStartPoint(
+                        lengthPrefixed: $0, lengthSize: lengthSize, codec: codec
+                    )
+                }
+            } else if let data = packet.pointee.data {
+                VideoRandomAccessPoint.isDecoderStartPoint(
+                    lengthPrefixed: UnsafeRawBufferPointer(
+                        start: data, count: Int(packet.pointee.size)
+                    ),
+                    lengthSize: lengthSize,
+                    codec: codec
+                )
+            } else {
+                nil
+            }
+            // nil is "cannot tell", and a payload this cannot read must not
+            // be acted on. false is the open GOP.
+            if isStartPoint == false {
+                postSeekVideoFilter = .droppingLeadingPictures(anchor: anchor, dropped: 0)
+            }
+            return .keep
+        case .droppingLeadingPictures(let anchor, let dropped):
+            guard let pts = Self.presentationTimestamp(packet), dropped < Self.leadingPictureDropLimit else {
+                postSeekVideoFilter = .idle
+                return .keep
+            }
+            guard pts < anchor else {
+                // Decode order has passed the anchor; everything from here
+                // is a trailing picture.
+                postSeekVideoFilter = .idle
+                if ProcessCPUTrace.enabled, dropped > 0 {
+                    print(String(
+                        format: "SeekLeadingPictures dropped=%d anchor=%.3f",
+                        dropped,
+                        Double(anchor) * Double(videoTimeBase.num) / Double(max(videoTimeBase.den, 1))
+                    ))
+                }
+                return .keep
+            }
+            postSeekVideoFilter = .droppingLeadingPictures(anchor: anchor, dropped: dropped + 1)
+            return .drop
+        }
+    }
+
+    private enum PostSeekVideoDecision {
+        case keep
+        case drop
+    }
+
+    private static func presentationTimestamp(
+        _ packet: UnsafeMutablePointer<AVPacket>
+    ) -> Int64? {
+        let stamp = packet.pointee.pts != avNoPTS ? packet.pointee.pts : packet.pointee.dts
+        return stamp != avNoPTS ? stamp : nil
     }
 
     func readNext() -> ReadResult {
@@ -1008,6 +1153,12 @@ nonisolated final class FFmpegDemuxer {
                         decodeTimeStamp: dts
                     )
                 }
+            }
+            // HEL-151. Ahead of the frame-grid snap below, so a dropped
+            // packet never anchors the timeline on a stamp that is about to
+            // be stepped backwards over.
+            if case .drop = postSeekVideoDecision(packet: packet, payload: strippedPayload) {
+                return .skipped
             }
             guard let buffer = SampleBufferFactory.sampleBuffer(
                 packet: packet,

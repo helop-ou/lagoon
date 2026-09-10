@@ -410,6 +410,64 @@ paired device; an Apple TV that cannot be paired (HDCP 2.2) could not be asked
 what went wrong. The playback HUD now carries it (`Rung:` / `Fell n:` /
 `Why n:`), appearing only once a rung has actually been descended.
 
+#### A seek that lands in an open GOP (HEL-151)
+
+Exit 8 (2025) — mkv, H.264 High 1080p 23.976, DTS-HD MA 7.1, 11 embedded
+SubRip tracks — direct-played for minutes and then fell to a transcode on the
+first **seek**: a 10-second scrub, an embedded subtitle switch (which re-seeks
+to the same position), or simply opening the title at a resume point. Three
+seconds of "loading", then a server re-encode and WebVTT sidecars for the rest
+of the film.
+
+The demuxer trace named the cause on the first post-seek packet:
+
+```
+SeekPacket pts=479.479 key=1 size=324156 lengthSize=4 nals=7,8,6,6,6,1,1,1,1
+SeekPacket pts=479.396 key=0 nals=6,1,1,1,1
+SeekPacket pts=479.437 key=0 nals=6,1,1,1,1
+RendererFailure domain=AVFoundationErrorDomain code=-11800
+  NSUnderlyingError=NSOSStatusErrorDomain -12350
+  AVErrorPresentationTimeStampKey={11505494/24000 = 479.396}
+```
+
+Read it in order. `avformat_seek_file` lands on a Matroska block flagged
+`AV_PKT_FLAG_KEY`, carrying its own SPS (7) and PPS (8), a recovery-point SEI
+(6) — and four slices of NAL type **1**, a coded slice of a *non-IDR* picture.
+That is an **open GOP**, and the flag means only that the muxer is willing to
+seek there. Nothing is missing and the picture itself decodes: the failing
+sample is the one after it, at **479.396**, one of the two *leading pictures*
+that follow the seek point in decode order and are presented before it. They
+reference the GOP the renderer's `flush()` has just destroyed. libavcodec
+tolerates that and lets a few frames come out wrong; VideoToolbox does not,
+and `AVSampleBufferVideoRenderer` answers with `didFailToDecodeNotification`,
+which is `.undecodable`, which is the bottom rung. A whole film re-encoded
+because two frames nobody was ever going to see could not be decoded.
+
+So the demuxer drops them. `VideoRandomAccessPoint` (pure, unit-tested)
+classifies the first video packet after every seek: an IDR for H.264, the IRAP
+range 16–21 for HEVC. When it *is* one — closed-GOP content, which is nearly
+everything — nothing changes at all. When it is a keyframe that is not one,
+the following packets presented before it are dropped until decode order
+passes it, bounded at 32 packets. Everything dropped sits before the point the
+seek landed on, which is at or before the position the viewer asked for, so
+none of it was ever going to be shown. Measured on Exit 8: two packets, at
+every seek, `SeekLeadingPictures dropped=2` under `-debug.decodeTrace YES`.
+
+The ladder also got tolerant of this shape of failure, because the next
+container to invent one should cost a hiccup rather than a film.
+`PlaybackRestartPointPolicy`: a decode failure within the first three video
+samples after a flush earns **one** in-place recovery — flush, re-seek to the
+same position through the ordinary seek path — before `.undecodable` is
+reported. The retry is recorded against the playback generation the re-seek
+starts, so a second failure at the same position descends the ladder exactly
+as it did before, one seek later, and a later seek by the viewer earns its own
+retry. It cannot loop.
+
+Worth knowing when this comes back: only the compressed path reaches
+`AVSampleBufferVideoRenderer`, so a software-decoded stream never showed this,
+and neither does any HLS rung — Jellyfin's fMP4 segments start on IDRs, which
+is why the transcode the ladder fell to always played.
+
 ### Disc images (HEL-133)
 
 A disc image is a filesystem, not a stream, and Jellyfin describes one

@@ -375,6 +375,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var rendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var audioRendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var rendererRecoveryInProgress = false
+    /// The playback generation whose one restart-point retry has been spent
+    /// (HEL-151). nil until a decode failure has earned one.
+    @ObservationIgnored private var restartPointRetryGeneration: Int?
     @ObservationIgnored private var audioRendererRecoveryInProgress = false
     /// Non-nil while a fresh audio renderer is being swapped in. Both paths
     /// that replace one share it, so a flush notification cannot start a
@@ -1007,6 +1010,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 $0.firstEnqueuedVideoPTS = nil
                 $0.lastEnqueuedAudioEndSeconds = nil
                 $0.endOfFilePendingIntake = false
+                $0.videoSamplesSinceFlush = 0
             }
         }
         // HEL-148 soak diagnostic: this is the pumpQueue.sync every seek
@@ -1432,6 +1436,48 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let notificationError = notification.userInfo?[
             AVSampleBufferVideoRenderer.didFailToDecodeNotificationErrorKey
         ] as? Error
+        // What the ladder is about to act on, for a hands-off device run.
+        // `AVErrorPresentationTimeStampKey` is the field that matters: it
+        // names which sample the decoder refused, which is how HEL-151 was
+        // told apart from the seek point itself.
+        if ProcessCPUTrace.enabled {
+            let underlying = (notificationError ?? renderer.error) as NSError?
+            print(String(
+                format: "RendererFailure position=%.3f samplesSinceFlush=%d domain=%@ code=%d info=%@",
+                timePosition,
+                shared.withLock { $0.videoSamplesSinceFlush },
+                underlying?.domain ?? "none",
+                underlying?.code ?? 0,
+                String(describing: underlying?.userInfo ?? [:])
+            ))
+        }
+        // A failure this soon after a flush is about the restart point, not
+        // the bitstream: one flush-and-re-seek before the ladder descends
+        // (HEL-151). Once per generation, so it cannot loop.
+        let (samplesSinceFlush, generation) = shared.withLock {
+            ($0.videoSamplesSinceFlush, $0.playbackGeneration)
+        }
+        if PlaybackRestartPointPolicy.shouldRetryInPlace(
+            videoSamplesSinceFlush: samplesSinceFlush,
+            alreadyRetriedThisGeneration: restartPointRetryGeneration == generation
+        ) {
+            let recoveryPosition = timePosition
+            os_signpost(
+                .event,
+                log: PlaybackPerformance.log,
+                name: "Renderer Recovery",
+                signpostID: performanceSignpostID,
+                "position=%{public}.3f reason=restartPoint",
+                recoveryPosition
+            )
+            seek(to: recoveryPosition)
+            // Recorded *after* the seek, because `seek` bumps the
+            // generation: the retry is spent against the attempt it starts,
+            // so a second failure at the same position descends the ladder
+            // while a later seek by the viewer earns its own retry.
+            restartPointRetryGeneration = shared.withLock { $0.playbackGeneration }
+            return
+        }
         let detail = notificationError?.localizedDescription
             ?? renderer.error?.localizedDescription
             ?? "unknown renderer error"
@@ -2764,12 +2810,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 return
             }
             let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
-            if pts.isValid {
-                shared.withLock { state in
-                    if state.firstEnqueuedVideoPTS == nil {
-                        state.firstEnqueuedVideoPTS = pts
-                    }
+            shared.withLock { state in
+                if pts.isValid, state.firstEnqueuedVideoPTS == nil {
+                    state.firstEnqueuedVideoPTS = pts
                 }
+                state.videoSamplesSinceFlush += 1
             }
             let enqueueStarted = ProcessInfo.processInfo.systemUptime
             renderer.enqueue(buffer)
@@ -3126,6 +3171,11 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var playbackRate: Double = 1
         /// First sample actually accepted by the renderer after attach/flush.
         var firstEnqueuedVideoPTS: CMTime?
+        /// How many video samples the renderer has taken since the last
+        /// flush. A decode failure inside the first few of them is a
+        /// restart-point failure rather than a verdict on the stream, and
+        /// earns one in-place retry before the ladder descends (HEL-151).
+        var videoSamplesSinceFlush = 0
         /// Furthest audio presentation end actually handed to AVFoundation.
         /// Compared with the synchronizer clock for HEL-123; unlike the app
         /// queue it includes samples AVFoundation already owns.

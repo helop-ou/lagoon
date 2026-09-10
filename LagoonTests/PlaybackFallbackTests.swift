@@ -341,4 +341,49 @@ struct MeteredPathTests {
         )
         #expect(reversed.conditions.first { $0.property == "Width" }?.value == "1280")
     }
+
+    // MARK: - Restart-point retry (HEL-151)
+
+    @Test func aDecodeFailureRightAfterAFlushEarnsOneRetryBeforeTheLadder() {
+        // Exit 8's shape: the picture the seek landed on, then the open
+        // GOP's two leading pictures, and the failure names the second of
+        // those. Every one of those is inside the window.
+        for samples in 0...PlaybackRestartPointPolicy.samplesAfterFlush {
+            #expect(
+                PlaybackRestartPointPolicy.shouldRetryInPlace(
+                    videoSamplesSinceFlush: samples,
+                    alreadyRetriedThisGeneration: false
+                ),
+                "\(samples) samples after a flush is a restart-point failure"
+            )
+        }
+    }
+
+    @Test func aFailureInSteadyPlaybackIsAVerdictOnTheStream() {
+        // Minutes into a film the decoder has proved nothing about the
+        // restart point; this is the ladder's own case and must stay it.
+        #expect(
+            !PlaybackRestartPointPolicy.shouldRetryInPlace(
+                videoSamplesSinceFlush: PlaybackRestartPointPolicy.samplesAfterFlush + 1,
+                alreadyRetriedThisGeneration: false
+            )
+        )
+        #expect(
+            !PlaybackRestartPointPolicy.shouldRetryInPlace(
+                videoSamplesSinceFlush: 4_000,
+                alreadyRetriedThisGeneration: false
+            )
+        )
+    }
+
+    @Test func theRetryCannotLoop() {
+        // The second failure at the same position descends the ladder,
+        // exactly as every failure did before HEL-151 — one seek later.
+        #expect(
+            !PlaybackRestartPointPolicy.shouldRetryInPlace(
+                videoSamplesSinceFlush: 0,
+                alreadyRetriedThisGeneration: true
+            )
+        )
+    }
 }
