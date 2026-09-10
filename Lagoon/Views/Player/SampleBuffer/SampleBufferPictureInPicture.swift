@@ -14,6 +14,10 @@ final class SampleBufferPictureInPicture: NSObject {
     private(set) var isTransitioning = false
     private(set) var errorMessage: String?
 
+    @ObservationIgnored var onStarted: (() -> Void)?
+    @ObservationIgnored var onStopped: (() -> Void)?
+    @ObservationIgnored var onRestore: ((@escaping (Bool) -> Void) -> Void)?
+
     @ObservationIgnored private weak var engine: (any PlayerEngine)?
     @ObservationIgnored private var controller: AVPictureInPictureController?
     @ObservationIgnored private var possibilityObservation: NSKeyValueObservation?
@@ -135,6 +139,7 @@ extension SampleBufferPictureInPicture: AVPictureInPictureControllerDelegate {
     ) {
         isTransitioning = false
         isActive = true
+        onStarted?()
     }
 
     func pictureInPictureController(
@@ -157,13 +162,15 @@ extension SampleBufferPictureInPicture: AVPictureInPictureControllerDelegate {
     ) {
         isTransitioning = false
         isActive = false
+        onStopped?()
     }
 
     func pictureInPictureController(
         _ pictureInPictureController: AVPictureInPictureController,
         restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
     ) {
-        completionHandler(true)
+        if let onRestore { onRestore(completionHandler) }
+        else { completionHandler(true) }
     }
 }
 
