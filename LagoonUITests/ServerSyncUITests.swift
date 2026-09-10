@@ -1,5 +1,8 @@
 import XCTest
 
+// Siri Remote journeys: tvOS only. The target also builds for iOS (HEL-153), where these are compiled out.
+#if os(tvOS)
+
 final class ServerSyncUITests: XCTestCase {
     private let remote = XCUIRemote.shared
 
@@ -368,3 +371,5 @@ final class ServerSyncUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 }
+
+#endif
