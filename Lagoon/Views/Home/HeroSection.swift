@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 /// What the hero needs of a title, independent of where the title came from.
 ///
@@ -27,13 +30,33 @@ struct HeroSection<Route: Hashable>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @ScaledMetric(relativeTo: .callout) private var textHeight = Metrics.heroHeight / 2
+
+    #if os(iOS)
+    private var usesExpandedLayout: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+    }
+    #endif
 
     private var panelHeight: CGFloat {
         #if os(tvOS)
         Metrics.heroHeight
         #else
-        max(Metrics.heroHeight, textHeight + Metrics.heroLogoHeight + Metrics.Space.xxl)
+        let baseHeight = usesExpandedLayout
+            ? Metrics.expandedHeroHeight
+            : Metrics.heroHeight
+        return max(baseHeight, textHeight + Metrics.heroLogoHeight + Metrics.Space.xxl)
+        #endif
+    }
+
+    private var textColumnWidth: CGFloat {
+        #if os(tvOS)
+        Metrics.heroTextWidth
+        #else
+        usesExpandedLayout ? Metrics.expandedHeroTextWidth : Metrics.heroTextWidth
         #endif
     }
 
@@ -141,7 +164,7 @@ struct HeroSection<Route: Hashable>: View {
             .onScrollPhaseChange { _, phase in
                 isScrolling = phase != .idle
             }
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.heroCornerRadius))
             .overlay(alignment: .bottom) {
                 dots.padding(.bottom, Metrics.Space.l)
                     .allowsHitTesting(false)
@@ -215,14 +238,9 @@ struct HeroSection<Route: Hashable>: View {
                 ))
                 #endif
             }
-            // Bounded by the width actually available, not by a constant.
-            // The card button style proposes an *unbounded* width to its
-            // label, so the panel grew past the screen and a `.infinity` text
-            // column grew with it — which is why the synopsis kept running
-            // off the right edge on a phone however the padding was arranged
-            // (HEL-41). tvOS lands on its usual 640 because that's the
-            // smaller of the two.
-            .frame(maxWidth: max(0, min(Metrics.heroTextWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
+            // Card button labels receive an unbounded width. Keep the text
+            // inside the panel, and cap its line length on iPad and tvOS.
+            .frame(maxWidth: max(0, min(textColumnWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
             #if os(iOS)
             // Anchor the copy low in the shorter banner, leaving artwork
@@ -233,7 +251,7 @@ struct HeroSection<Route: Hashable>: View {
         }
         .frame(width: width, height: panelHeight)
         #if os(iOS)
-        .clipShape(RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.heroCornerRadius))
         #else
         .overlay(alignment: .bottomLeading) {
             dots.padding(.leading, Metrics.Space.section).padding(.bottom, Metrics.Space.xl)
