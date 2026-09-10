@@ -127,9 +127,10 @@ tickets hold the detailed acceptance lists so they are not repeated here.
    through URLSession), the age rating, and a signed archive checked before
    upload.
 4. **Known defects to close first**: the outgoing engine retained across an
-   episode handoff (HEL-152), a slow creep over a binge rather than a crash.
-   The subtitle-over-HDR frame drops (HEL-148) are better but not zero and
-   can ship as they are, with the ticket open.
+   episode handoff (HEL-152) was fixed on 2026-09-10 — player views now hold
+   the engine weakly — and waits on a hardware look. The subtitle-over-HDR
+   frame drops (HEL-148) are better but not zero and can ship as they are,
+   with the ticket open.
 5. **The website** (`../lagoon-website`, HEL-143): screenshots of both
    platforms in the current design, the privacy policy page App Store
    Connect links to, a support/contact page, the App Store or TestFlight
@@ -179,10 +180,11 @@ Apple TV (HEL-127), the recent-searches row (HEL-129), the iOS cellular
 cap (HEL-108), the detail page turning Play into Resume after playback
 (HEL-132), the Dolby Vision profile 7 → 8.1 conversion (HEL-145, waiting on
 an Apple TV reporting Dolby Vision and a rerun of the frame-loss bench
-against the converted path), and both halves of HEL-134: the light Siri
+against the converted path), both halves of HEL-134: the light Siri
 Remote touch-surface tap
 that reveals the player transport, shipped in 0.1 (87), and the further tap
-that swaps remaining time for the clock time playback will finish, in 0.1 (88).
+that swaps remaining time for the clock time playback will finish, in 0.1 (88),
+and the engine no longer retained across an episode handoff (HEL-152).
 Seerr media and request details refresh pending approval every 30 seconds and
 active download/import progress every 10 seconds while visible and foregrounded
 (HEL-136); that one was verified against a live Jellyseerr on 2026-09-04 and is
