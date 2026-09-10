@@ -1406,6 +1406,15 @@ spike present in both, so the median is the honest number. `-debug.
 playerRegression YES` was on for both, which keeps the probe itself ticking;
 a shipping build never assembles it at all.
 
+On the Apple TV 4K (3rd generation), Release, The Hangover (Dolby Vision
+profile 5, English CC on), the same 2 s windows at positions 40–93 s, one
+run each with a five-minute cool-down between: main-thread CPU per window
+259 ms → 186 ms median (275 → 197 mean), with the trace itself still
+sampling every thread. What remains is the hidden transport's scrubber and
+timeline leaves, which still follow the tick at opacity 0, and the trace's
+own sampling; skipping the position read while the transport is hidden is
+the next cut if it is ever needed.
+
 The live panel sweep moved much less — two runs each, five iterations per
 run: app CPU 0.384 s → 0.375 s, cycles 1.374 → 1.312 billion (−4.5%),
 retired instructions 2.497 → 2.412 billion (−3.4%), wall time unchanged at
