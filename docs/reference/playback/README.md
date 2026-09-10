@@ -25,3 +25,4 @@ stack (HEL-142).
 | Rendering | [Queues and renderers](queues-and-renderers.md), [system media, display mode and HUD](system-integration.md) |
 | Measurement and ownership | [Frame-loss bench and memory ceiling](frame-loss-bench.md), [cache and teardown](cache-and-teardown.md) |
 | UI and server state | [Progress reporting and player controls](controls-and-reporting.md) |
+| Failure reporting | [Diagnostic reporting](diagnostics.md): schema, detectors, limits, Sentry setup |
