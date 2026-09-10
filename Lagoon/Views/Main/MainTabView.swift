@@ -90,10 +90,7 @@ struct MainTabView: View {
         // Presented from the TabView rather than a screen, so a Top Shelf
         // selection resumes playback whichever tab happens to be showing.
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
-        .fullScreenCover(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded) { item in
-            VideoPlayerView(playerItem: item)
-                .preferredColorScheme(.dark)
-        }
+        .playerPresentation(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded)
         #if DEBUG
         .overlay(alignment: .topLeading) {
             VStack(alignment: .leading) {
