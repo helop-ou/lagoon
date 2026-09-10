@@ -29,6 +29,16 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "96",
+            released: "September 2026",
+            headline: "Playback problems now reach the developer on their own.",
+            changes: [
+                "When playback fails unexpectedly, stalls badly, or a server request goes wrong, Lagoon sends a short technical report so the problem can be fixed without you having to describe it. Reports contain the app build, device model, codec and delivery details, error codes, and about a minute of playback measurements. They never include your account, server address, titles, subtitles, or screenshots.",
+                "Reporting can be turned off at any time under Settings, Advanced, Diagnostic Reports, which also discards anything not yet sent.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "95",
             released: "September 2026",
             headline: "No more blank cards for titles that only have a poster.",
