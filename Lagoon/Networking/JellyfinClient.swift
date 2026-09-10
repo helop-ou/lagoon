@@ -263,8 +263,11 @@ final class JellyfinClient {
         return url
     }
 
-    func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
-        try await send(request(for: url(path: path, query: query), method: "GET"))
+    /// `probe` marks a request whose failure is an answer, not a fault: an
+    /// optional plugin route, a newer-server endpoint. It is still thrown
+    /// to the caller but never reported as an incident (HEL-159).
+    func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [], probe: Bool = false) async throws -> T {
+        try await send(request(for: url(path: path, query: query), method: "GET", probe: probe))
     }
 
     func getData(_ path: String, query: [URLQueryItem] = []) async throws -> Data {
@@ -343,6 +346,8 @@ final class JellyfinClient {
     private struct PreparedRequest {
         let request: URLRequest
         let session: SessionIdentity?
+        /// Failures are expected and go unreported; see `get(_:query:probe:)`.
+        var probe = false
     }
 
     private func request(
@@ -350,7 +355,8 @@ final class JellyfinClient {
         method: String,
         body: Data? = nil,
         timeout: TimeInterval? = nil,
-        authenticated: Bool = true
+        authenticated: Bool = true,
+        probe: Bool = false
     ) -> PreparedRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -366,17 +372,25 @@ final class JellyfinClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
         }
-        return PreparedRequest(request: request, session: authenticated ? sessionIdentity : nil)
+        return PreparedRequest(request: request, session: authenticated ? sessionIdentity : nil, probe: probe)
     }
 
     private func send<T: Decodable>(_ request: PreparedRequest) async throws -> T {
         let data = try await data(for: request)
-        return try Self.decoder.decode(T.self, from: data)
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            if !request.probe {
+                APIDiagnostics.decodeFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin")
+            }
+            throw error
+        }
     }
 
     private func data(for request: PreparedRequest, maximumBytes: Int? = nil) async throws -> Data {
         let data: Data
         let status: Int
+        let startedAt = ProcessInfo.processInfo.systemUptime
         if let maximumBytes {
             do {
                 data = try await downloads.data(for: request.request, limit: maximumBytes, content: .subtitle)
@@ -386,11 +400,22 @@ final class JellyfinClient {
                 status = code
             } catch {
                 if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
+                if !request.probe {
+                    APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+                }
                 throw error
             }
         } else {
             let response: URLResponse
-            (data, response) = try await session.data(for: request.request)
+            do {
+                (data, response) = try await session.data(for: request.request)
+            } catch {
+                if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
+                if !request.probe {
+                    APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+                }
+                throw error
+            }
             guard let http = response as? HTTPURLResponse else { throw JellyfinError.server(status: 0) }
             status = http.statusCode
         }
@@ -402,12 +427,16 @@ final class JellyfinClient {
             return data
         case 401:
             if let identity = request.session {
+                APIDiagnostics.statusFailed(status, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
                 clearSession()
                 onSessionExpired?(identity)
                 throw JellyfinError.sessionExpired
             }
             throw JellyfinError.unauthorized
         default:
+            if !request.probe {
+                APIDiagnostics.statusFailed(status, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+            }
             throw JellyfinError.server(
                 status: status,
                 message: Self.serverMessage(from: data)
