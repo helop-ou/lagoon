@@ -553,6 +553,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func play() {
         guard isPaused || synchronizer.rate == 0 else { return }
         isPaused = false
+        Diagnostics.record(.playbackPlay, ["position": .double(timePosition.rounded(toPlaces: 1))])
         // A buffering engine resumes when its queue gate is satisfied;
         // forcing the clock here would run its timebase ahead of the samples.
         if !isBuffering {
@@ -564,6 +565,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     func pause() {
         guard !isPaused || synchronizer.rate > 0 else { return }
         clearPendingStallConfirmation()
+        Diagnostics.record(.playbackPause, ["position": .double(timePosition.rounded(toPlaces: 1))])
         // HEL-148 soak diagnostic: this is the one call in the pause path
         // that reaches AVFoundation's own state; a pause that starts taking
         // real wall time is what "pause takes a minute" looks like from the
@@ -609,6 +611,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func selectAudioTrack(id: Int?) {
         guard let id, id - 1 < audioTracks.count else { return }
+        Diagnostics.record(.playbackTrack, [
+            "track": .string("audio"),
+            "trackSource": .string(audioTracks.first { $0.engineID == id }?.source.rawValue ?? "embedded"),
+            "position": .double(timePosition.rounded(toPlaces: 1)),
+        ])
         shared.withLock { $0.selectedAudioOrdinal = id }
         audioTracks = audioTracks.map {
             PlayerTrack(
@@ -643,6 +650,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let ordinal = id ?? 0
         guard !shutdownRequested, ordinal >= 0,
               ordinal <= embeddedSubtitleCount + externalSubtitles.count else { return }
+        Diagnostics.record(.playbackTrack, [
+            "track": .string("subtitle"),
+            "trackSource": .string(ordinal == 0 ? "off" : ordinal > embeddedSubtitleCount ? "external" : "embedded"),
+            "position": .double(timePosition.rounded(toPlaces: 1)),
+        ])
         cancelExternalSubtitleLoad()
         if ordinal > embeddedSubtitleCount {
             loadExternalSubtitle(ordinal: ordinal)
@@ -721,6 +733,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 guard !Task.isCancelled, let self, !self.shutdownRequested, self.externalLoadToken == token else { return }
                 self.subtitleLoadState = .failed(id: ordinal, title: title, message: ExternalSubtitleLoader.message(for: error))
                 self.externalLoadTask = nil
+                // Playback continues without the track; worth a report
+                // because the viewer asked for it and did not get it.
+                let detail = PlaybackFailureDetail(stage: .subtitle, error: error)
+                var fields = detail.fields
+                fields["track"] = .string("subtitle")
+                fields["trackSource"] = .string(track.isDownloaded ? "downloaded" : "external")
+                Diagnostics.record(.playbackSubtitleLoadFailed, fields)
+                Diagnostics.report(.playbackSubtitleLoadFailed, level: .warning, variant: detail.fingerprint, fields: fields)
             }
         }
     }
@@ -985,6 +1005,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     func seek(to target: Double) {
         let clamped = max(0, duration > 0 ? min(target, duration - 1) : target)
+        Diagnostics.record(.playbackSeek, ["position": .double(clamped.rounded(toPlaces: 1))])
         // Optimistic: the playhead moves the instant the seek is asked
         // for (HEL-39) — the engine will resume from exactly here.
         timePosition = clamped
@@ -1111,6 +1132,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         guard isCurrent, !didFinish else { return }
         didFinish = true
         removeFinishObserver()
+        Diagnostics.record(.playbackFinished, ["position": .double(timePosition.rounded(toPlaces: 1))])
         onFinished?()
     }
 
@@ -1280,6 +1302,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // renderer cannot re-report its terminal state while being retired.
         removeAudioRendererObservers()
         let outgoingError = outgoingAudio.error?.localizedDescription
+        let outgoingFailure = PlaybackFailureDetail(stage: .audioRenderer, error: outgoingAudio.error)
+        Diagnostics.record(.playbackRendererRecovery, outgoingFailure.fields.merging([
+            "recovery": .string(replacement.reason.description),
+            "position": .double(recoveryPosition.rounded(toPlaces: 1)),
+        ]) { _, new in new })
         os_signpost(
             .event,
             log: PlaybackPerformance.log,
@@ -1310,7 +1337,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         self.audioRendererReplacementID = nil
                         self.onError?(PlaybackEngineFailure(
                             cause: .delivery,
-                            message: replacement.failureMessage(detail: outgoingError)
+                            message: replacement.failureMessage(detail: outgoingError),
+                            detail: outgoingFailure
                         ))
                         return
                     }
@@ -1326,6 +1354,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         self.audioRendererRecoveryCount += 1
                     }
                     self.audioRendererReplacementID = nil
+                    Diagnostics.report(
+                        .playbackRendererRecovery,
+                        level: .warning,
+                        variant: [replacement.reason.description] + outgoingFailure.fingerprint.dropFirst(),
+                        fields: outgoingFailure.fields.merging([
+                            "recovery": .string(replacement.reason.description),
+                            "outcome": .string("recovered"),
+                            "position": .double(recoveryPosition.rounded(toPlaces: 1)),
+                        ]) { _, new in new }
+                    )
                     // Refills both queues and re-anchors the clock. A paused
                     // engine repositions without starting, which is what the
                     // media-services case requires.
@@ -1420,6 +1458,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             "position=%{public}.3f reason=requiresFlush",
             recoveryPosition
         )
+        let detail = PlaybackFailureDetail(stage: .videoRenderer, error: renderer.error)
+        let fields = detail.fields.merging([
+            "recovery": .string("requiresFlush"),
+            "position": .double(recoveryPosition.rounded(toPlaces: 1)),
+        ]) { _, new in new }
+        Diagnostics.record(.playbackRendererRecovery, fields)
+        Diagnostics.report(.playbackRendererRecovery, level: .warning, variant: ["requiresFlush"] + detail.fingerprint.dropFirst(), fields: fields)
         seek(to: recoveryPosition)
         rendererRecoveryInProgress = false
     }
@@ -1470,6 +1515,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 "position=%{public}.3f reason=restartPoint",
                 recoveryPosition
             )
+            let detail = PlaybackFailureDetail(stage: .videoRenderer, error: notificationError ?? renderer.error)
+            let fields = detail.fields.merging([
+                "recovery": .string("restartPoint"),
+                "position": .double(recoveryPosition.rounded(toPlaces: 1)),
+                "samplesSinceFlush": .int(samplesSinceFlush),
+            ]) { _, new in new }
+            Diagnostics.record(.playbackRendererRecovery, fields)
+            Diagnostics.report(.playbackRendererRecovery, level: .warning, variant: ["restartPoint"] + detail.fingerprint.dropFirst(), fields: fields)
             seek(to: recoveryPosition)
             // Recorded *after* the seek, because `seek` bumps the
             // generation: the retry is spent against the attempt it starts,
@@ -1485,7 +1538,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // those samples were delivered will change its verdict.
         onError?(PlaybackEngineFailure(
             cause: .undecodable,
-            message: "Playback failed in the Lagoon video renderer (\(detail))."
+            message: "Playback failed in the Lagoon video renderer (\(detail)).",
+            detail: PlaybackFailureDetail(stage: .videoRenderer, error: notificationError ?? renderer.error)
         ))
     }
 
@@ -1694,6 +1748,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         if cause == .audio {
             audioStallCount += 1
         }
+        Diagnostics.record(.playbackStallBegin, [
+            "position": .double(timePosition.rounded(toPlaces: 1)),
+            "stallCause": .string(cause.rawValue),
+            "stalls": .int(stallCount),
+            "videoQueued": .int(videoQueue.count),
+            "audioLead": .double(audioDeliveryLeadSeconds.rounded(toPlaces: 2)),
+        ])
         if !stallSignpostActive {
             stallSignpostActive = true
             os_signpost(
@@ -1734,6 +1795,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     continue
                 case .resume:
                     self.isBuffering = false
+                    self.recordStallEnd(outcome: "recovered", since: recoveryStarted, cause: cause)
                     if self.stallSignpostActive {
                         self.stallSignpostActive = false
                         os_signpost(
@@ -1752,6 +1814,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 case .reprime:
                     self.stallReprimeCount += 1
                     let recoveryPosition = self.timePosition
+                    self.recordStallEnd(outcome: "reprimed", since: recoveryStarted, cause: cause)
                     if self.stallSignpostActive {
                         self.stallSignpostActive = false
                         os_signpost(
@@ -1779,6 +1842,30 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     return
                 }
             }
+        }
+    }
+
+    /// A stall that ended, and a report when it was long enough to be seen:
+    /// a reprime means the clock sat at zero for `reprimeAfter`, and a
+    /// resume past `sustainedStallSeconds` was a visible freeze either way.
+    static let sustainedStallSeconds: Double = 8
+
+    private func recordStallEnd(outcome: String, since: ContinuousClock.Instant, cause: PlaybackStarvation) {
+        let elapsedMs = Self.milliseconds(ContinuousClock.now - since)
+        let fields: [String: DiagnosticValue] = [
+            "position": .double(timePosition.rounded(toPlaces: 1)),
+            "outcome": .string(outcome),
+            "stallCause": .string(cause.rawValue),
+            "elapsedMs": .double(elapsedMs.rounded()),
+            "stalls": .int(stallCount),
+            "reprimes": .int(stallReprimeCount),
+            "videoQueued": .int(videoQueue.count),
+        ]
+        Diagnostics.record(.playbackStallEnd, fields)
+        if outcome == "reprimed" {
+            Diagnostics.report(.playbackStall, level: .warning, variant: ["reprime", cause.rawValue], fields: fields)
+        } else if elapsedMs >= Self.sustainedStallSeconds * 1_000 {
+            Diagnostics.report(.playbackStall, level: .warning, variant: ["sustained", cause.rawValue], fields: fields)
         }
     }
 
@@ -1908,6 +1995,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             } catch where cacheSession != nil && disc == nil {
                 demuxer.close()
                 deliveryIsCached = false
+                Diagnostics.record(.playbackCacheFallback, ["recovery": .string("cacheFallback")])
                 Task { @MainActor in self.onPlaybackCacheFallback?() }
                 try demuxer.open(
                     url: url.absoluteString,
@@ -1920,7 +2008,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             let demuxError = error as? DemuxError
             let failure = PlaybackEngineFailure(
                 cause: demuxError?.cause ?? .delivery,
-                message: demuxError?.errorDescription ?? "The stream could not be opened."
+                message: demuxError?.errorDescription ?? "The stream could not be opened.",
+                detail: demuxError?.diagnosticDetail ?? PlaybackFailureDetail(stage: .open, error: error)
             )
             Task { @MainActor in self.onError?(failure) }
             return
@@ -1953,7 +2042,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 let failure = PlaybackEngineFailure(
                     cause: demuxError?.cause ?? .delivery,
                     message: demuxError?.errorDescription
-                        ?? "The stream could not be opened."
+                        ?? "The stream could not be opened.",
+                    detail: demuxError?.diagnosticDetail ?? PlaybackFailureDetail(stage: .open, error: error)
                 )
                 Task { @MainActor in self.onError?(failure) }
                 return
@@ -2143,7 +2233,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         let failure = PlaybackEngineFailure(
                             cause: demuxError?.cause ?? .delivery,
                             message: demuxError?.errorDescription
-                                ?? "The stream could not seek to that position."
+                                ?? "The stream could not seek to that position.",
+                            detail: demuxError?.diagnosticDetail ?? PlaybackFailureDetail(stage: .seek, error: error)
                         )
                         shared.withLock { $0.cancelled = true }
                         videoQueue.markFinished()
@@ -2450,7 +2541,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // the transport, not the samples.
             let failure = PlaybackEngineFailure(
                 cause: .delivery,
-                message: "Playback failed in the Lagoon engine (\(message))."
+                message: "Playback failed in the Lagoon engine (\(message)).",
+                detail: PlaybackFailureDetail(stage: .read, domain: "ffmpeg.read")
             )
             Task { @MainActor in self.onError?(failure) }
             shared.withLock { $0.cancelled = true }
@@ -2520,11 +2612,33 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // bitstream cannot change that.
         let failure = PlaybackEngineFailure(
             cause: .undecodable,
-            message: "Playback failed in the Lagoon engine (\(detail))."
+            message: "Playback failed in the Lagoon engine (\(detail)).",
+            detail: Self.decodeFailureDetail(error)
         )
         Task { @MainActor in
             self.onError?(failure)
         }
+    }
+
+    /// VideoToolbox failures carry an OSStatus worth keeping; every other
+    /// decoder error reports its domain and case index only.
+    nonisolated private static func decodeFailureDetail(_ error: Error) -> PlaybackFailureDetail {
+        if let failure = error as? VideoToolboxDecoder.DecoderError {
+            switch failure {
+            case .sessionCreation(let status):
+                return PlaybackFailureDetail(stage: .decode, domain: "VideoToolbox.sessionCreation", code: Int(status))
+            case .decode(let status):
+                return PlaybackFailureDetail(stage: .decode, domain: "VideoToolbox.decode", code: Int(status))
+            case .outputFormat(let status):
+                return PlaybackFailureDetail(stage: .decode, domain: "VideoToolbox.outputFormat", code: Int(status))
+            case .outputSample(let status):
+                return PlaybackFailureDetail(stage: .decode, domain: "VideoToolbox.outputSample", code: Int(status))
+            }
+        }
+        if error is SoftwareVideoDecoder.DecoderError {
+            return PlaybackFailureDetail(stage: .decode, domain: "SoftwareVideoDecoder", code: (error as NSError).code)
+        }
+        return PlaybackFailureDetail(stage: .decode, error: error)
     }
 
     /// Fill the queues enough that playback can start cleanly, then hand
