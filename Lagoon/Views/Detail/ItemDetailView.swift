@@ -27,7 +27,7 @@ struct ItemDetailView: View {
             Task { await loadFromServer() }
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
-        .fullScreenCover(item: $playerItem, onDismiss: {
+        .playerPresentation(item: $playerItem, onDismiss: {
             Task {
                 // The stop report that moves the resume point is still in
                 // flight here; read the item back only once it has landed
@@ -35,10 +35,7 @@ struct ItemDetailView: View {
                 await session.client.playbackReports.settle()
                 detail = try? await session.client.item(id: item.id)
             }
-        }) { player in
-            VideoPlayerView(playerItem: player)
-                .preferredColorScheme(.dark)
-        }
+        })
     }
 
     /// Refreshing in place preserves the detail and recommendation rail when
