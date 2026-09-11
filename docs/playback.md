@@ -139,9 +139,11 @@ amount; changing direction resets it. Dragging the timeline previews trickplay
 and commits on release. Skip and Up Next accept direct taps. Close and Info
 live in the native toolbar; the options sheet suppresses surface interaction.
 
-iPhone fullscreen locks to landscape and releases the lock on exit. iPad
-retains rotation/multitasking. Audio uses normal movie-playback behavior:
-volume keys control output, and Silent Mode does not silence the movie.
+The player follows the device on iPhone and iPad and never forces a rotation:
+a title opened in portrait plays letterboxed in portrait until the viewer turns
+the phone (HEL-162 feedback, superseding the HEL-153 landscape lock). Audio
+uses normal movie-playback behavior: volume keys control output, and Silent
+Mode does not silence the movie.
 
 On iOS, screens only *request* playback through `playerPresentation`; the one
 `playerPresentationHost` at the tab root (`PlayerPresentationHub`) presents it
