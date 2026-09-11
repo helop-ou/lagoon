@@ -47,8 +47,9 @@ struct AcknowledgementsTests {
 
     @Test func binaryTargetsCoverExactlyWhatPackageSwiftDeclares() throws {
         let thisFile = URL(fileURLWithPath: #filePath)
-        // LagoonTests/AcknowledgementsTests.swift -> repo root
+        // LagoonTests/Settings/AcknowledgementsTests.swift -> repo root
         let repoRoot = thisFile
+            .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let packageSwiftURL = repoRoot
