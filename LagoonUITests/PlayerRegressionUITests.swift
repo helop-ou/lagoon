@@ -3,7 +3,7 @@ import XCTest
 // Siri Remote journeys: tvOS only. The target also builds for iOS (HEL-153), where these are compiled out.
 #if os(tvOS)
 
-final class PlayerRegressionUITests: XCTestCase {
+final class PlayerRegressionUITests: PlayerUITestCase {
     private let remote = XCUIRemote.shared
 
     override func setUpWithError() throws {
@@ -2710,87 +2710,6 @@ final class PlayerRegressionUITests: XCTestCase {
         )
     }
 
-    private func launchPlayer(
-        title: String,
-        year: Int? = nil,
-        series: String? = nil,
-        simulatorTranscode: Bool = true,
-        extraArguments: [String] = []
-    ) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.benchSearchTerm", title,
-            "-debug.playbackHUD", "YES",
-        ]
-        if simulatorTranscode {
-            app.launchArguments += ["-debug.simulatorTranscode", "YES"]
-        }
-        if let year {
-            app.launchArguments += ["-debug.benchProductionYear", String(year)]
-        }
-        if let series {
-            app.launchArguments += ["-debug.regressionSeriesName", series]
-        }
-        app.launchArguments += extraArguments
-        for key in [
-            "LAGOON_REGRESSION_SERVER",
-            "LAGOON_REGRESSION_USER",
-            "LAGOON_REGRESSION_PASS",
-        ] {
-            if let value = ProcessInfo.processInfo.environment[key] {
-                app.launchEnvironment[key] = value
-            }
-        }
-        app.launch()
-        return app
-    }
-
-    /// Distinguishes a player failure from a server that simply lacks the
-    /// specialized media fixture. The public Jellyfin demo currently has no
-    /// subtitle, multi-audio, chapter, or intro-segment item; those journeys
-    /// run when a fixture server is supplied through LAGOON_REGRESSION_*.
-    private func requireRegressionFixture(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) throws {
-        // A cold simulator launch has two independent network handshakes:
-        // authenticate the ephemeral regression account, then resolve the
-        // requested media. A transient failure in the first handshake leaves
-        // the app on Sign In, where neither player probe exists. Retry that
-        // launch once instead of reporting a player failure for work that
-        // never reached the player. Explicit fixture/API results remain
-        // terminal so a real regression is never hidden by the retry.
-        for launchAttempt in 0..<2 {
-            let deadline = Date().addingTimeInterval(timeout)
-            let resolution = app.descendants(matching: .any)["player.regression.resolution"]
-            repeat {
-                if app.descendants(matching: .any)["player.regression.state"].exists { return }
-                if resolution.exists {
-                    let value = resolution.value as? String ?? ""
-                    if value.hasPrefix("missing:") {
-                        throw XCTSkip(
-                            "Fixture server " + String(value.dropFirst("missing:".count))
-                        )
-                    }
-                    if value.hasPrefix("error:") {
-                        throw RegressionFixtureError(message: String(value.dropFirst("error:".count)))
-                    }
-                }
-                Thread.sleep(forTimeInterval: 0.2)
-            } while Date() < deadline
-
-            if launchAttempt == 0 {
-                app.terminate()
-                Thread.sleep(forTimeInterval: 0.5)
-                app.launch()
-            }
-        }
-        throw RegressionFixtureError(message: "did not resolve a player fixture before timeout")
-    }
-
     /// Guards the HLS cases against silently testing something else.
     ///
     /// Jellyfin, not the client, chooses the delivery method, and it chooses
@@ -2852,49 +2771,6 @@ final class PlayerRegressionUITests: XCTestCase {
         throw RegressionFixtureError(message: "frame-loss window did not finish before timeout")
     }
 
-    @discardableResult
-    private func waitForState(
-        in app: XCUIApplication,
-        timeout: TimeInterval,
-        predicate: (RegressionState) -> Bool
-    ) -> RegressionState {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = RegressionState("")
-        repeat {
-            latest = state(in: app)
-            if predicate(latest) { return latest }
-            Thread.sleep(forTimeInterval: 0.2)
-        } while Date() < deadline
-        XCTFail("Timed out waiting for player state. Latest: \(latest.raw)")
-        return latest
-    }
-
-    private func state(in app: XCUIApplication) -> RegressionState {
-        let element = app.descendants(matching: .any)["player.regression.state"]
-        guard element.exists else { return RegressionState("") }
-        return RegressionState(element.value as? String ?? "")
-    }
-
-    @discardableResult
-    private func waitForLifecycle(
-        in app: XCUIApplication,
-        timeout: TimeInterval,
-        predicate: (RegressionState) -> Bool
-    ) -> RegressionState {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = RegressionState("")
-        repeat {
-            let element = app.descendants(matching: .any)["app.lifecycle.state"]
-            if element.exists {
-                latest = RegressionState(element.value as? String ?? "")
-                if predicate(latest) { return latest }
-            }
-            Thread.sleep(forTimeInterval: 0.2)
-        } while Date() < deadline
-        XCTFail("Timed out waiting for playback lifecycle. Latest: \(latest.raw)")
-        return latest
-    }
-
     private func waitForPanelReveal() {
         // The panel's spring is 200 ms; retain extra room for focus settlement
         // on physical tvOS before issuing the next synthetic remote command.
@@ -2949,11 +2825,6 @@ final class PlayerRegressionUITests: XCTestCase {
     }
 }
 
-private struct RegressionFixtureError: LocalizedError {
-    let message: String
-    var errorDescription: String? { "Regression fixture resolution failed: \(message)" }
-}
-
 private struct FrameLossRegressionResult {
     let lossPercent: Double
     let dropped: Int
@@ -2989,23 +2860,6 @@ private struct FrameLossRegressionResult {
         self.stalls = stalls
         self.audioGaps = audioGaps
     }
-}
-
-private struct RegressionState {
-    let raw: String
-    private let values: [String: String]
-
-    init(_ raw: String) {
-        self.raw = raw
-        values = Dictionary(uniqueKeysWithValues: raw.split(separator: " ").compactMap { token in
-            let pair = token.split(separator: "=", maxSplits: 1).map(String.init)
-            return pair.count == 2 ? (pair[0], pair[1]) : nil
-        })
-    }
-
-    func string(_ key: String) -> String { values[key] ?? "" }
-    func int(_ key: String) -> Int { Int(values[key] ?? "") ?? -1 }
-    func double(_ key: String) -> Double { Double(values[key] ?? "") ?? -1 }
 }
 
 private extension XCUIElement {
