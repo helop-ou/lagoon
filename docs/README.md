@@ -36,6 +36,6 @@ including the revision, environment, result, and remaining acceptance work.
 Add the record to the archive index instead of appending a session transcript
 to a guide. Keep unresolved release gates in [Release](release.md#public-release).
 
-Jira owns live ticket status. [Changelog.swift](../Lagoon/Models/Changelog.swift)
+Jira owns live ticket status. [Changelog.swift](../Lagoon/Features/Settings/Changelog.swift)
 owns release history. Published website copy belongs to the separate
 `lagoon-website` repository. None of those needs a second running history here.
