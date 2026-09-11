@@ -179,14 +179,18 @@ final class PlaybackSuccessorPreparation {
                 }
                 continue
             }
-            let before = session.metrics
-            guard await session.prefetchNextChunk() else { return }
-            let after = session.metrics
+            // A failed or exhausted warm-up chunk ends the warm-up: the
+            // successor's own fill loop takes over once it starts, and this
+            // one must never hold the link during the handoff.
+            guard case .fetched(_, let requestSeconds) = await session.prefetchNextChunk() else { return }
             guard !Task.isCancelled, let state = playbackState() else { return }
             if !state.isPaused {
-                let requestSeconds = max(after.networkRequestSeconds - before.networkRequestSeconds, 0.125)
+                let measured = max(requestSeconds, PlaybackFillPolicy.minimumMeasuredRequestSeconds)
                 do {
-                    try await Task.sleep(for: .seconds(min(requestSeconds * 4, 8)))
+                    try await Task.sleep(for: .seconds(min(
+                        measured * PlaybackFillPolicy.relaxedPacingMultiplier,
+                        PlaybackFillPolicy.relaxedPacingCapSeconds
+                    )))
                 } catch {
                     return
                 }
