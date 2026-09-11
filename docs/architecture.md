@@ -12,18 +12,22 @@ rules for new code. The layout below describes the current implementation.
 
 | Location | Responsibility |
 | --- | --- |
-| `Lagoon/LagoonApp.swift` | App entry and shared environment |
-| `Lagoon/Models/` | Value types, wire DTOs, preferences, release metadata |
-| `Lagoon/Networking/` | Jellyfin and Seerr clients, credentials, bounded downloads, image cache |
-| `Lagoon/ViewModels/` | Account/session stores and screen state |
-| `Lagoon/Views/Components/` | Shared visual primitives, navigation and presentation helpers |
-| `Lagoon/Views/{Home,Library,Discovery,Detail,Search,Settings,Onboarding}/` | Feature screens |
-| `Lagoon/Views/Player/` | Player UI and, currently, playback orchestration, cache, and engine code |
+| `Lagoon/App/` | App entry, root composition, navigation, refresh coordination, Top Shelf publishing |
+| `Lagoon/Features/Accounts/` | Connection, sign-in, account selection and session ownership |
+| `Lagoon/Features/{Home,Library,Discovery,Detail,Search,Settings}/` | Feature screens, models and local helpers |
+| `Lagoon/Features/Playback/` | Controller, reporting, successor preparation, track preferences and system media |
+| `Lagoon/Features/Playback/{Views,Engine,Transport,Subtitles,Diagnostics}/` | Player presentation, decode/render pipeline, byte sources/cache, subtitles and sampling |
+| `Lagoon/Shared/UI/` | Visual components, design tokens, artwork and presentation helpers shared across features |
+| `Lagoon/Shared/Networking/` | Jellyfin/Seerr clients, request authorization, bounded downloads and image cache |
+| `Lagoon/Shared/Models/` | Shared wire DTOs and values |
+| `Lagoon/Shared/Persistence/` | Credential storage, account data cleanup and legacy storage cleanup |
+| `Lagoon/Shared/Diagnostics/` | Diagnostic schema/history/reporting and Sentry transport |
 | `LagoonTopShelf/` | Credential-free Top Shelf extension |
-| `LagoonTests/`, `LagoonUITests/` | Pure logic, integration, and platform journeys |
+| `LagoonTests/`, `LagoonUITests/` | Pure logic, integration, platform journeys and shared UI-test support |
 
-The player folder's mixed responsibilities are a cleanup target, not the
-recommended pattern for new features. See [refactoring priorities](#refactoring-priorities).
+Feature-owned state stays with its feature even when another feature presents
+its controls. For example, Settings binds to playback/Home preference stores;
+it does not own another copy of their values.
 
 ## State and ownership
 
@@ -116,38 +120,17 @@ server-defined rail layout.
 
 ## Refactoring priorities
 
-Assessment from the September 10, 2026 checkout, tracked as HEL-155. These
-are proposed steps, not completed migrations. Line counts identify places to inspect; ownership
-and repeated behavior determine what should actually be extracted.
+HEL-155 establishes the layout above. `PlaybackController` has its own file;
+reporting, successor preparation and optional HUD/trace sampling have explicit
+owners. `VideoPlayerView` retains the controller with `@State`. Seerr request
+list/detail models have separate homes, and Settings category views bind back
+to the root's existing stores. `LagoonUITests/Support/` owns shared player
+launching, fixture resolution and state waits; platform gestures remain in
+their suites. The [migration plan](reference/source-migration-plan.md) records
+verification progress and remaining acceptance.
 
-1. **Separate player orchestration from its view.**
-   `VideoPlayerView.swift` is 2,392 lines; `PlaybackController` occupies roughly
-   2,000 before the actual view starts. First give the controller its own file
-   without changing lifetime, visibility, or behavior. Then extract reporting,
-   successor preparation, and diagnostic sampling around explicit ownership
-   and cancellation boundaries. Existing subtitle, audio-session, Now Playing,
-   and cache coordinators show this approach already works here.
-2. **Give playback a cohesive feature area.** Move the controller, engine,
-   demux/transport, cache, and subtitle processing into
-   `Lagoon/Features/Playback/` in reviewable steps. Keep SwiftUI surfaces and
-   controls in that feature's `Views/` subfolder, following the
-   [target structure](standards.md#folder-structure).
-   `SampleBufferPlayerEngine.swift` is 3,671 lines and
-   `PlaybackCache.swift` is 1,863; later extractions should follow queue and
-   resource ownership. Splitting the engine into arbitrary extensions would
-   leave its coupling intact. Preserve the [playback invariants](playback.md#lifecycle-and-memory).
-3. **Separate screens that currently share a file.**
-   `SeerrRequestsView.swift` contains list state, list UI, cards, detail state,
-   and detail UI. Split list/detail responsibilities and give their observable
-   models explicit homes. `SettingsView.swift` is 1,044 lines; its native
-   platform/category composition is another bounded extraction, keeping
-   common setting behavior shared and platform controls native.
-4. **Share the repeated player test harness.** `TouchPlayerUITests` explicitly
-   copies launch, fixture, state parsing, and waiting helpers from
-   `PlayerRegressionUITests`. Extract those helpers into test support while
-   leaving touch and Siri Remote interactions in their platform suites.
-
-Validate each step with both platform builds and the relevant existing tests.
-Playback ownership changes also need dismissal/replay, episode handoff, PiP,
-and physical performance checks. Keep behavior changes in separate work from
-the structural move so a regression has a narrow cause.
+Further engine/cache extractions should follow queue and resource ownership.
+Line counts alone do not justify splitting a coupled implementation into
+extensions. Preserve the [playback invariants](playback.md#lifecycle-and-memory)
+and validate ownership changes with dismissal/replay, episode handoff, PiP
+and physical performance checks in addition to both platform builds/tests.
