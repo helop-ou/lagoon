@@ -7,16 +7,10 @@ import XCTest
 /// to seek ±10 s (with the `player.seekFeedback` glyph), and the centre
 /// play/pause/skip cluster that took over the toolbar's old play/pause
 /// identifier (`PlayerTouchTransportCluster` in
-/// `Lagoon/Views/Player/PlayerTouchControls.swift`). tvOS keeps its own
+/// `Lagoon/Features/Playback/Views/PlayerTouchControls.swift`). tvOS keeps its own
 /// `XCUIRemote`-based suites (`PlayerRegressionUITests` and friends); this
 /// file exists only on iOS, where those gestures do.
-///
-/// Helpers below are deliberately copies of the small private ones in
-/// `PlayerRegressionUITests.swift` (`launchPlayer`, `requireRegressionFixture`,
-/// `waitForState`, `state(in:)`, `RegressionState`) rather than shared code —
-/// UI test targets can't expose another file's `private` members, and the
-/// surface here is small enough that a copy is cheaper than a refactor.
-final class TouchPlayerUITests: XCTestCase {
+final class TouchPlayerUITests: PlayerUITestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
@@ -66,7 +60,7 @@ final class TouchPlayerUITests: XCTestCase {
         for _ in 0..<3 {
             if state(in: app).int("paused") == 1 { break }
             revealTransportIfNeeded()
-            playPause.tap()
+            tapCenter(of: playPause)
         }
         waitForState(in: app, timeout: 5) { $0.int("paused") == 1 }
         snapshot(app, name: "transport")
@@ -96,12 +90,12 @@ final class TouchPlayerUITests: XCTestCase {
         // Skip buttons mirror the same ±10 s as the double-tap gesture.
         revealTransportIfNeeded()
         let beforeSkipForward = state(in: app).double("time")
-        app.buttons["player.skipForward"].tap()
+        tapCenter(of: app.buttons["player.skipForward"])
         waitForState(in: app, timeout: 5) { $0.double("time") >= beforeSkipForward + 8 }
 
         revealTransportIfNeeded()
         let beforeSkipBack = state(in: app).double("time")
-        app.buttons["player.skipBack"].tap()
+        tapCenter(of: app.buttons["player.skipBack"])
         waitForState(in: app, timeout: 5) { $0.double("time") <= beforeSkipBack - 6 }
 
         // A real drag commits a scrub through the same rail as tvOS.
@@ -127,7 +121,7 @@ final class TouchPlayerUITests: XCTestCase {
         // four-second dwell; resuming must arm auto-hide again.
         Thread.sleep(forTimeInterval: 4.5)
         XCTAssertTrue(playPause.isHittable, "paused transport should remain available")
-        playPause.tap()
+        tapCenter(of: playPause)
         waitForState(in: app, timeout: 5) { $0.int("paused") == 0 }
 
         func assertTransportAutoHides() throws {
@@ -200,6 +194,12 @@ final class TouchPlayerUITests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func tapCenter(of button: XCUIElement) {
+        // XCTest can choose an activation point near a bounding-box corner,
+        // outside a circular button's Circle contentShape. Use its center.
+        button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
     private func elementSnapshot(
         _ identifier: String,
         in snapshot: XCUIElementSnapshot
@@ -210,123 +210,5 @@ final class TouchPlayerUITests: XCTestCase {
         }
         return nil
     }
-
-    private func launchPlayer(
-        title: String,
-        year: Int? = nil,
-        series: String? = nil,
-        simulatorTranscode: Bool = true,
-        extraArguments: [String] = []
-    ) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.benchSearchTerm", title,
-            "-debug.playbackHUD", "NO",
-        ]
-        if simulatorTranscode {
-            app.launchArguments += ["-debug.simulatorTranscode", "YES"]
-        }
-        if let year {
-            app.launchArguments += ["-debug.benchProductionYear", String(year)]
-        }
-        if let series {
-            app.launchArguments += ["-debug.regressionSeriesName", series]
-        }
-        app.launchArguments += extraArguments
-        for key in [
-            "LAGOON_REGRESSION_SERVER",
-            "LAGOON_REGRESSION_USER",
-            "LAGOON_REGRESSION_PASS",
-        ] {
-            if let value = ProcessInfo.processInfo.environment[key] {
-                app.launchEnvironment[key] = value
-            }
-        }
-        app.launch()
-        return app
-    }
-
-    /// Distinguishes a player failure from a server that simply lacks the
-    /// specialized media fixture — see the original in
-    /// PlayerRegressionUITests.swift for the full rationale.
-    private func requireRegressionFixture(
-        in app: XCUIApplication,
-        timeout: TimeInterval = 25
-    ) throws {
-        for launchAttempt in 0..<2 {
-            let deadline = Date().addingTimeInterval(timeout)
-            let resolution = app.descendants(matching: .any)["player.regression.resolution"]
-            repeat {
-                if app.descendants(matching: .any)["player.regression.state"].exists { return }
-                if resolution.exists {
-                    let value = resolution.value as? String ?? ""
-                    if value.hasPrefix("missing:") {
-                        throw XCTSkip(
-                            "Fixture server " + String(value.dropFirst("missing:".count))
-                        )
-                    }
-                    if value.hasPrefix("error:") {
-                        throw RegressionFixtureError(message: String(value.dropFirst("error:".count)))
-                    }
-                }
-                Thread.sleep(forTimeInterval: 0.2)
-            } while Date() < deadline
-
-            if launchAttempt == 0 {
-                app.terminate()
-                Thread.sleep(forTimeInterval: 0.5)
-                app.launch()
-            }
-        }
-        throw RegressionFixtureError(message: "did not resolve a player fixture before timeout")
-    }
-
-    @discardableResult
-    private func waitForState(
-        in app: XCUIApplication,
-        timeout: TimeInterval,
-        predicate: (RegressionState) -> Bool
-    ) -> RegressionState {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = RegressionState("")
-        repeat {
-            latest = state(in: app)
-            if predicate(latest) { return latest }
-            Thread.sleep(forTimeInterval: 0.2)
-        } while Date() < deadline
-        XCTFail("Timed out waiting for player state. Latest: \(latest.raw)")
-        return latest
-    }
-
-    private func state(in app: XCUIApplication) -> RegressionState {
-        let element = app.descendants(matching: .any)["player.regression.state"]
-        guard element.exists else { return RegressionState("") }
-        return RegressionState(element.value as? String ?? "")
-    }
-}
-
-private struct RegressionFixtureError: LocalizedError {
-    let message: String
-    var errorDescription: String? { "Regression fixture resolution failed: \(message)" }
-}
-
-private struct RegressionState {
-    let raw: String
-    private let values: [String: String]
-
-    init(_ raw: String) {
-        self.raw = raw
-        values = Dictionary(uniqueKeysWithValues: raw.split(separator: " ").compactMap { token in
-            let pair = token.split(separator: "=", maxSplits: 1).map(String.init)
-            return pair.count == 2 ? (pair[0], pair[1]) : nil
-        })
-    }
-
-    func string(_ key: String) -> String { values[key] ?? "" }
-    func int(_ key: String) -> Int { Int(values[key] ?? "") ?? -1 }
-    func double(_ key: String) -> Double { Double(values[key] ?? "") ?? -1 }
 }
 #endif
