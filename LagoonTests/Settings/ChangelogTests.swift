@@ -21,7 +21,7 @@ struct ChangelogTests {
             """
             No Changelog entry for \(version) (\(build)).
             Add one at the top of Changelog.entries in \
-            Lagoon/Models/Changelog.swift before shipping this build.
+            Lagoon/Features/Settings/Changelog.swift before shipping this build.
             """
         )
     }
