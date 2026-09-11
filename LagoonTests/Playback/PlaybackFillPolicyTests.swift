@@ -121,12 +121,14 @@ struct PlaybackFillPolicyTests {
         expectWait(decision, 0.1)
     }
 
-    @Test func hurriedPacingCapsItsYield() {
+    @Test func hurriedPacingKeepsItsShareOnASlowLink() {
+        // A slow link still yields the same fraction, so foreground reads
+        // keep a third of it however long a chunk takes.
         var policy = PlaybackFillPolicy()
         var snapshot = PlaybackFillPolicy.Snapshot()
         snapshot.aheadSeconds = 30
         let decision = policy.afterFetch(.fetched(bytes: 1_000, seconds: 4), snapshot)
-        expectWait(decision, PlaybackFillPolicy.hurriedYieldCapSeconds)
+        expectWait(decision, 2)
     }
 
     @Test func anUnknownCushionIsTreatedAsHurried() {
