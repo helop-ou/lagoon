@@ -167,6 +167,39 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertFalse(probe.exists, "Close should dismiss the player and its probe")
     }
 
+    /// The iPhone swipe grammar (HEL-162 feedback): swipe up over free video
+    /// opens the options panel, Close closes outright, and a swipe down
+    /// minimizes — into Picture in Picture on a phone, and where PiP is not
+    /// possible, as on the simulator, it closes instead.
+    func testSwipesOpenThePanelAndMinimize() throws {
+        let app = launchPlayer(
+            title: "swipe-grammar-regression",
+            extraArguments: [
+                "-debug.regressionFindEpisodeWithSuccessor", "YES",
+                "-debug.regressionRequireDirectH264Successor", "YES",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) { $0.int("ready") == 1 && $0.int("buffering") == 0 }
+        let surface = app.windows.allElementsBoundByIndex.first { $0.frame.width > 100 && $0.frame.height > 100 }!
+
+        // Up: the panel. Start low on the screen, away from the toolbar and
+        // the centre cluster, and travel most of the height.
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+            .press(forDuration: 0.05, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
+        let tabs = app.descendants(matching: .any)["player.panel.tabs"]
+        XCTAssertTrue(tabs.waitForExistence(timeout: 5), "a swipe up should open the options panel")
+        snapshot(app, name: "swipe-up-panel")
+        app.buttons["player.panel.close"].tap()
+        XCTAssertTrue(tabs.waitForNonExistence(timeout: 5))
+
+        // Down: minimize. No PiP on the simulator, so the player closes.
+        let probe = app.descendants(matching: .any)["player.regression.state"]
+        surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            .press(forDuration: 0.05, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
+        XCTAssertTrue(probe.waitForNonExistence(timeout: 10), "a swipe down should minimize, which closes without PiP")
+    }
+
     /// HEL-162: a player started from a pushed detail page closed itself about
     /// a second after opening, on every title reached through Library, Search
     /// or Discover. The bench journeys above never saw it because they present
