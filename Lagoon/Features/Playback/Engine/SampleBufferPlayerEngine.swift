@@ -1985,10 +1985,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // uncached, and a direct play that fell back to the native
         // transport is.
         var deliveryIsCached = cacheSession != nil
+        // libavformat's file protocol takes a path, not a URL: it does not
+        // percent-decode, so "Application Support" in a file URL arrives as
+        // a directory that does not exist (HEL-166).
+        let openTarget = url.isFileURL ? url.path(percentEncoded: false) : url.absoluteString
         do {
             do {
                 try demuxer.open(
-                    url: url.absoluteString,
+                    url: openTarget,
                     cacheSession: cacheSession,
                     disc: disc,
                     recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
@@ -2004,7 +2008,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 Diagnostics.record(.playbackCacheFallback, ["recovery": .string("cacheFallback")])
                 Task { @MainActor in self.onPlaybackCacheFallback?() }
                 try demuxer.open(
-                    url: url.absoluteString,
+                    url: openTarget,
                     cacheSession: nil,
                     recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,
                     authorization: authorization
@@ -2037,7 +2041,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             demuxer.disableVideoToolboxAV1()
             do {
                 try demuxer.open(
-                    url: url.absoluteString,
+                    url: openTarget,
                     cacheSession: deliveryIsCached ? cacheSession : nil,
                     disc: disc,
                     recommendedPixelBufferAttributes: recommendedPixelBufferAttributes,

@@ -403,6 +403,9 @@ nonisolated final class FFmpegDemuxer {
 
         var status = avformat_open_input(&formatContext, url, nil, &options)
         guard status >= 0, let ctx = formatContext else {
+            #if DEBUG
+            print("FFmpegDemuxer open failed \(status) for \(url)")
+            #endif
             throw DemuxError.openFailed(Self.errorText(status), code: status)
         }
         status = avformat_find_stream_info(ctx, nil)
