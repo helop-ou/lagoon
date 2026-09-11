@@ -9,8 +9,8 @@ import Foundation
 /// every 1 MiB chunk while playing, a fixed ~20% duty cycle that capped
 /// read-ahead near 2 MiB/s however fast the link was. Now the cushion decides:
 /// below `targetAheadSeconds` of cached media the next chunk follows the last
-/// one after a yield proportional to the request it just made, so a fast link
-/// fills fast and a slow one still leaves room for foreground reads; above
+/// one after a yield of half the request it just made, so a fast link fills
+/// fast and a slow one still leaves a third of the link to foreground reads; above
 /// the target the old pacing returns, since there is no hurry. A failed
 /// fetch backs off and is retried; only cancellation, a complete file, or
 /// an exhausted whole-file cap end the loop.
@@ -43,10 +43,11 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     /// Cached media ahead of the playhead the scheduler tries to keep.
     static let targetAheadSeconds: Double = 120
     /// Below the target: yield this fraction of the last request's own time
-    /// between chunks, so foreground requests can slot in on a saturated
-    /// link without the fill ever idling on a fast one.
+    /// between chunks, so foreground requests keep a fixed share of the link
+    /// however slow it is, and a fast link never idles. Deliberately not
+    /// capped in seconds: a cap would shrink that share on exactly the slow
+    /// links where the hurried branch is the steady state.
     static let hurriedYieldFraction: Double = 0.5
-    static let hurriedYieldCapSeconds: TimeInterval = 0.5
     /// Above the target: the pre-HEL-160 pacing, roughly a 20% duty cycle.
     static let relaxedPacingMultiplier: Double = 4
     static let relaxedPacingCapSeconds: TimeInterval = 8
@@ -95,7 +96,7 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
             if let ahead = snapshot.aheadSeconds, ahead >= Self.targetAheadSeconds {
                 return .wait(min(measured * Self.relaxedPacingMultiplier, Self.relaxedPacingCapSeconds))
             }
-            return .wait(min(seconds * Self.hurriedYieldFraction, Self.hurriedYieldCapSeconds))
+            return .wait(max(seconds, 0) * Self.hurriedYieldFraction)
         }
     }
 
