@@ -38,10 +38,10 @@ nonisolated enum Acknowledgements {
             name: "FFmpeg",
             version: "8.1.2",
             summary: "Reads the container and decodes audio and video the hardware cannot.",
-            licenseName: "GNU LGPL 2.1 or later",
+            licenseName: "GNU LGPL 2.1 or later and 3.0 or later",
             copyright: "Copyright (c) 2000-2026 the FFmpeg developers",
             sourceURL: URL(string: "https://github.com/FFmpeg/FFmpeg/tree/n8.1.2")!,
-            notes: "libavformat is built by this repository from the same release with its network stack compiled out (scripts/build-ffmpeg-format.py, HEL-142); libavcodec, libavutil and libswresample are MPVKit's 1.0.0 prebuilt slices of the same FFmpeg release. The build enables no GPL or nonfree components.",
+            notes: "libavformat is built by this repository from the same release with its network stack compiled out (scripts/build-ffmpeg-format.py, HEL-142); libavcodec, libavutil and libswresample are MPVKit's 1.0.0 prebuilt slices of the same FFmpeg release. The build enables no GPL or nonfree components. Two licence versions apply: the repository-built libavformat is configured without --enable-version3 and is LGPL 2.1 or later, while the three MPVKit slices keep upstream's version3 election and are LGPL 3.0 or later, so the bundled notice prints both texts.",
             licenseFile: "ffmpeg",
             binaryTargets: ["Libavcodec", "Libavformat", "Libavutil", "Libswresample"]
         ),
