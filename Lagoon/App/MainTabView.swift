@@ -15,6 +15,11 @@ struct MainTabView: View {
     @State private var libraries: [LibraryTab] = []
     @State private var librariesLoaded = false
     @State private var playerItem: PlayerItem?
+    #if os(iOS)
+    /// The one iOS player host (HEL-162); every screen's `playerPresentation`
+    /// requests through it. See `PlayerPresentationHub`.
+    @State private var playerHub = PlayerPresentationHub()
+    #endif
     @State private var deepLinkError: String?
     @State private var deepLinkRetry = 0
     @State private var lifecycleBenchmarkMedia: MediaItem?
@@ -91,6 +96,10 @@ struct MainTabView: View {
         // selection resumes playback whichever tab happens to be showing.
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .playerPresentation(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded)
+        #if os(iOS)
+        .environment(playerHub)
+        .playerPresentationHost(playerHub)
+        #endif
         #if DEBUG
         .overlay(alignment: .topLeading) {
             VStack(alignment: .leading) {
