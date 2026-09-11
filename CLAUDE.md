@@ -7,6 +7,9 @@ AVPlayer path and no third-party Swift dependency.
 
 ## Where the rules live
 
+`AGENTS.md` is a symlink to this file, so Codex and other agents read the
+same instructions. Edit CLAUDE.md, never the link.
+
 **Start at [docs/README.md](docs/README.md), follow the
 [coding standards](docs/standards.md), and read the guide for the area you
 are changing before working on it.** This file is a map and a session
@@ -62,6 +65,10 @@ out of the guides (see "Keeping this clean" in docs/README.md).
   and deep scrolls, not just the landing state.
 - End-to-end: the public demo server (`demo.jellyfin.org/stable`, user
   `demo`, empty password) supports the full flow including playback.
+- Report only what was verified. Before saying a change is done, run the
+  builds and the relevant tests and say what ran. If a step was skipped or
+  a check failed, say so with the output; never describe an unrun check as
+  passed.
 
 ## Working with subagents
 
