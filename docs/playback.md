@@ -192,7 +192,10 @@ Build both platforms and run the relevant pure logic tests. Use
 `TouchPlayerUITests` for iPhone/iPad touch and auto-hide, and
 `PlayerRegressionUITests` for remote input, reporting, handoff, and teardown.
 The [touch validation record](archive/hel-153-touch-validation.md) records the
-passing simulator journeys and remaining physical checks.
+passing simulator journeys and remaining physical checks. What a journey may
+assume about the server and the simulator's state, and the resolver flags
+that open a title by property, are in the
+[regression lane reference](reference/regression-lane.md).
 
 XCTest can expose faded buttons and nonzero frames even with
 `accessibilityHidden`. For auto-hide, assert the launch-gated `transport`

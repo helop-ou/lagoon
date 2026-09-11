@@ -56,6 +56,9 @@ xcodebuild test -scheme LagoonHardwareRegression \
 ```
 
 Fixture-backed tests skip explicitly when the server has no matching media.
+The [regression lane reference](docs/reference/regression-lane.md) lists the
+three fixture tiers, the resolver flags, and the state-reset rules; run the
+lane only on a simulator kept for it, because the reset wipes stored accounts.
 
 ## Pointing the app at a server
 
