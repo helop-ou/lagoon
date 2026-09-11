@@ -101,6 +101,17 @@ struct PlaybackDegradationPolicyTests {
         let lowRatio = PlaybackDegradationPolicy.Counters(playedSeconds: 600, droppedFrames: 100, totalFrames: 100_000)
         #expect(PlaybackDegradationPolicy.reasons(for: lowRatio).isEmpty)
     }
+
+    @Test func optingOutMakesSessionWideDegradationCountersIneligible() {
+        // These totals could all have accumulated during the opt-out gap.
+        // Comparing them with only the sampled playing time is misleading.
+        let counters = PlaybackDegradationPolicy.Counters(
+            playedSeconds: 60, droppedFrames: 100, totalFrames: 10_000,
+            stalls: 3, reprimes: 1, audioStarvation: 5
+        )
+        #expect(!PlaybackDegradationPolicy.reasons(for: counters).isEmpty)
+        #expect(PlaybackDegradationPolicy.reasons(for: counters, sampledWholeAttempt: false).isEmpty)
+    }
 }
 
 @Suite("Playback failure detail")
