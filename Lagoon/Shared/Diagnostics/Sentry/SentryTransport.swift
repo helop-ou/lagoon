@@ -163,8 +163,9 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
             outcome = .backoff
         }
         let now = ProcessInfo.processInfo.systemUptime
-        var continueDraining = false
-        state.withLock { state in
+        // The lock's closure is `Sendable`, so the decision to keep draining
+        // is its return value rather than a captured variable.
+        let continueDraining: Bool = state.withLock { state in
             state.inFlight = false
             switch outcome {
             case .accepted(let pause):
@@ -173,22 +174,24 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
                 if let pause {
                     state.notBefore = now + pause
                     scheduleRetry(after: pause, state: &state)
-                } else {
-                    continueDraining = true
+                    return false
                 }
+                return true
             case .discard:
                 state.consecutiveFailures = 0
                 try? FileManager.default.removeItem(at: file)
                 Self.log.error("envelope rejected with status \(response?.statusCode ?? 0, privacy: .public)")
-                continueDraining = true
+                return true
             case .retryAfter(let delay):
                 state.notBefore = now + delay
                 scheduleRetry(after: delay, state: &state)
+                return false
             case .backoff:
                 state.consecutiveFailures += 1
                 let delay = policy.backoff(afterConsecutiveFailures: state.consecutiveFailures)
                 state.notBefore = now + delay
                 scheduleRetry(after: delay, state: &state)
+                return false
             }
         }
         if continueDraining {

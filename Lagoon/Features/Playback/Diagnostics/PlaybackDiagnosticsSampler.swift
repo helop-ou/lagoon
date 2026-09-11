@@ -127,7 +127,7 @@ final class PlaybackDiagnosticsSampler {
                 // cadence-convert and tone-map every HDR frame, which is
                 // the standing suspect for the composited-path drops.
                 trace += " display=\"\(DisplayModeMatcher.statusDescription)"
-                    + " · \(UIScreen.main.maximumFramesPerSecond) Hz\""
+                    + " · \(DisplayModeMatcher.maximumFramesPerSecond.map(String.init) ?? "?") Hz\""
                 #endif
                 #if DEBUG
                 trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"

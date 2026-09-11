@@ -63,6 +63,13 @@ enum DisplayModeMatcher {
         return status
     }
 
+    /// The refresh rate of the screen the app's scene is on, for the decode
+    /// trace. `UIScreen.main` is deprecated in favour of a screen found
+    /// through a window's scene; nil before any window exists.
+    static var maximumFramesPerSecond: Int? {
+        windows().first?.windowScene?.screen.maximumFramesPerSecond
+    }
+
     private static func displayManager() -> AVDisplayManager? {
         // Any window of the scene reaches the screen's manager — do not
         // insist on the key window (during a fullScreenCover the key flag
