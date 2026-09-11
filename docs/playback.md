@@ -200,6 +200,9 @@ state, toolbar disappearance, and screenshots together. Use full-screen
 screenshots for landscape; app screenshots can be cropped. Simulator evidence
 does not establish physical VoiceOver or PiP acceptance.
 
+For background fill, `scripts/fill-bench.sh` plays one title hands-off on a
+simulator and reports cached and network megabytes over time from the decode
+trace, so two builds can be compared on the same asset and link (HEL-160).
 For performance, use `scripts/framedrop-bench.sh` and
 `scripts/playback-lifecycle-bench.sh`. Compare the same fixture, scene,
 media-time window, build configuration, and display path over at least three
