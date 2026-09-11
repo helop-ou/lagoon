@@ -131,12 +131,48 @@ struct PlaybackFillPolicyTests {
         expectWait(decision, 2)
     }
 
-    @Test func anUnknownCushionIsTreatedAsHurried() {
+    @Test func anUnknownCushionKeepsTheGentlePace() {
+        // Without a measurable cushion the policy cannot see gain, so it
+        // never competes with playback on the strength of a guess.
         var policy = PlaybackFillPolicy()
         var snapshot = PlaybackFillPolicy.Snapshot()
         snapshot.aheadSeconds = nil
         let decision = policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot)
-        expectWait(decision, 0.1)
+        expectWait(decision, 0.8)
+    }
+
+    @Test func eagerPacingLastsOnlyWhileTheCushionGrows() {
+        // A link with headroom: each chunk adds cushion, so fill stays eager.
+        var policy = PlaybackFillPolicy()
+        var snapshot = PlaybackFillPolicy.Snapshot()
+        snapshot.aheadSeconds = 10
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
+        snapshot.aheadSeconds = 14
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
+        // A link that can barely carry the title: playback consumes what the
+        // chunk added, the cushion stops growing, and the gentle pace returns
+        // before any stall has to force it.
+        snapshot.aheadSeconds = 14.1
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.8)
+        snapshot.aheadSeconds = 13
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.8)
+        // Headroom comes back (playback paused elsewhere, link recovered):
+        // the next chunk that gains re-enables eager pacing.
+        snapshot.aheadSeconds = 16
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
+    }
+
+    @Test func aSeekThatDropsTheCushionReEvaluatesOnTheNextChunk() {
+        var policy = PlaybackFillPolicy()
+        var snapshot = PlaybackFillPolicy.Snapshot()
+        snapshot.aheadSeconds = 60
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
+        // The playhead jumped past the cushion: one gentle chunk, then eager
+        // again as soon as the new cushion is seen to grow.
+        snapshot.aheadSeconds = 2
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.8)
+        snapshot.aheadSeconds = 5
+        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
     }
 
     // MARK: - afterFetch: fetched, playing, at/above the cushion target (relaxed)
