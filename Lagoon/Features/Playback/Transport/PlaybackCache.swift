@@ -68,6 +68,17 @@ nonisolated struct PlaybackByteRangeSet: Equatable, Sendable {
         ranges.contains { $0.contains(range) }
     }
 
+    /// End of the cached island that holds `offset`, or `offset` itself when
+    /// that byte is not cached. The scheduler reads this at the playhead to
+    /// know how far ahead playback can run without touching the network
+    /// (HEL-160).
+    func contiguousUpperBound(from offset: Int64) -> Int64 {
+        for range in ranges where range.lowerBound <= offset {
+            if range.upperBound > offset { return range.upperBound }
+        }
+        return offset
+    }
+
     /// Returns the first hole at or after `offset`, bounded by both the
     /// caller's scheduling window and the next cached island. Proactive
     /// buffering uses this instead of blindly extending the byte-zero
@@ -187,6 +198,15 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     /// window that travels with the playhead instead of accumulating the
     /// whole file. Proactive fill never finishes in that mode.
     let isWindowed: Bool
+    /// Cached bytes contiguous from the most recent foreground read onward:
+    /// the cushion the fill scheduler protects (HEL-160).
+    let cachedBytesAheadOfPlayhead: Int64
+    /// Bytes downloaded that were already on disk when they arrived — the
+    /// cost of a foreground read overtaking a prefetch of the same range.
+    let duplicateNetworkBytes: Int64
+    /// Foreground reads that waited for an in-flight prefetch of their
+    /// bytes instead of downloading them again.
+    let sharedFetchCount: Int
 
     init(
         cachedBytes: Int64,
@@ -202,7 +222,10 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         cachedByteRanges: [PlaybackByteRange] = [],
         playheadPrefetchCount: Int = 0,
         timelineAnchor: PlaybackTimelineAnchor? = nil,
-        isWindowed: Bool = false
+        isWindowed: Bool = false,
+        cachedBytesAheadOfPlayhead: Int64 = 0,
+        duplicateNetworkBytes: Int64 = 0,
+        sharedFetchCount: Int = 0
     ) {
         self.cachedBytes = cachedBytes
         self.networkBytes = networkBytes
@@ -218,6 +241,9 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
         self.playheadPrefetchCount = playheadPrefetchCount
         self.timelineAnchor = timelineAnchor
         self.isWindowed = isWindowed
+        self.cachedBytesAheadOfPlayhead = cachedBytesAheadOfPlayhead
+        self.duplicateNetworkBytes = duplicateNetworkBytes
+        self.sharedFetchCount = sharedFetchCount
     }
 
     var bufferedFraction: Double? {
@@ -368,6 +394,34 @@ nonisolated struct PlaybackRangeResponse: Sendable {
 nonisolated protocol PlaybackRangeLoading: AnyObject, Sendable {
     func load(url: URL, range: PlaybackByteRange, priority: Float) throws -> PlaybackRangeResponse
     func cancelAll()
+    /// A foreground read has caught up with an in-flight low-priority
+    /// request for `range`: finish it at foreground priority rather than
+    /// letting a second request for the same bytes race it (HEL-160).
+    /// Optional for loaders that have no priority to raise.
+    func promote(range: PlaybackByteRange)
+}
+
+extension PlaybackRangeLoading {
+    func promote(range: PlaybackByteRange) {}
+}
+
+/// What one proactive fetch did. The scheduler needs to tell a fetch that
+/// failed (and should be retried after a backoff) from one that found
+/// nothing left to fetch (the file is complete under the cap, or the
+/// window is full); a Boolean collapsed both into "stop" (HEL-160).
+nonisolated enum PlaybackPrefetchOutcome: Equatable, Sendable {
+    /// A chunk landed: the bytes the request returned and how long that one
+    /// request took, so pacing measures the prefetch itself rather than the
+    /// cache's aggregate including foreground traffic.
+    case fetched(bytes: Int, seconds: Double)
+    case exhausted
+    case failed
+    case cancelled
+
+    var advanced: Bool {
+        if case .fetched = self { return true }
+        return false
+    }
 }
 
 nonisolated enum PlaybackCacheError: LocalizedError {
@@ -437,6 +491,15 @@ nonisolated private final class PlaybackRangeRequest: @unchecked Sendable {
         self.task = task
         lock.unlock()
         task.priority = taskPriority
+    }
+
+    var range: PlaybackByteRange { requestedRange }
+
+    func promote() {
+        lock.lock()
+        let task = task
+        lock.unlock()
+        task?.priority = URLSessionTask.highPriority
     }
 
     func waitForResult() throws -> PlaybackRangeResponse {
@@ -679,6 +742,13 @@ nonisolated final class URLSessionPlaybackRangeLoader: NSObject, PlaybackRangeLo
         session.invalidateAndCancel()
     }
 
+    func promote(range: PlaybackByteRange) {
+        lock.lock()
+        let requests = active.values.filter { $0.range == range }
+        lock.unlock()
+        requests.forEach { $0.promote() }
+    }
+
     fileprivate func receive(
         response: URLResponse,
         taskIdentifier: Int,
@@ -739,11 +809,18 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     private var storageDisabled = false
     private var reservedBytes: Int64 = 0
     private var inFlight: [UUID: (range: PlaybackByteRange, priority: Float)] = [:]
+    /// How long a foreground read waits for a promoted prefetch of its own
+    /// bytes before fetching them itself. Two seconds covers a 1 MiB chunk on
+    /// any link that can play the title at all; a seek past a stalled one
+    /// pays at most this before it goes its own way.
+    static let sharedFetchWaitSeconds: TimeInterval = 2
     /// The end of the most recent foreground demux read. FFmpeg has already
     /// translated media time into the correct container byte position here,
     /// so this is safer than estimating bytes from a VBR timeline fraction.
     private var preferredPrefetchOffset: Int64 = 0
     private var playheadPrefetchCount = 0
+    private var duplicateNetworkBytes: Int64 = 0
+    private var sharedFetchCount = 0
     private var timelineAnchor: PlaybackTimelineAnchor?
     /// Sparse-file granularity. Blocks are the only unit the filesystem can
     /// give back, so eviction punches the block-aligned interior of a range
@@ -831,7 +908,12 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             cachedByteRanges: cached.ranges,
             playheadPrefetchCount: playheadPrefetchCount,
             timelineAnchor: timelineAnchor,
-            isWindowed: isWindowedLocked
+            isWindowed: isWindowedLocked,
+            cachedBytesAheadOfPlayhead: max(
+                cached.contiguousUpperBound(from: preferredPrefetchOffset) - preferredPrefetchOffset, 0
+            ),
+            duplicateNetworkBytes: duplicateNetworkBytes,
+            sharedFetchCount: sharedFetchCount
         )
     }
 
@@ -928,6 +1010,27 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
             lock.unlock()
             return try read(offset: offset, length: length, priority: priority, readAhead: readAhead)
         }
+        // Playback caught up with a prefetch of these very bytes. Starting a
+        // second request used to move 2 MiB to store 1; instead promote the
+        // one in flight to foreground priority and give it a bounded moment
+        // to land. Past the bound the read falls through to its own request,
+        // so a seek onto a slow prefetch never waits behind it (HEL-160).
+        if priority > URLSessionTask.lowPriority,
+           let pending = inFlight.values.first(where: { $0.range.contains(requested) }) {
+            loader.promote(range: pending.range)
+            let deadline = Date().addingTimeInterval(Self.sharedFetchWaitSeconds)
+            // The condition is broadcast for every finished fetch, so keep
+            // waiting until these bytes are on disk, the promoted fetch has
+            // gone away (failed or cancelled), or the bound has passed.
+            while !cached.contains(requested),
+                  inFlight.values.contains(where: { $0.range == pending.range }),
+                  lock.wait(until: deadline) {}
+            if cached.contains(requested) {
+                sharedFetchCount += 1
+                lock.unlock()
+                return try read(offset: offset, length: length, priority: priority, readAhead: readAhead)
+            }
+        }
 
         // Make room before deciding how much to ask for. A read whose bytes
         // cannot be kept must fetch only what the caller asked for: pulling a
@@ -981,6 +1084,7 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
                 try file.write(contentsOf: storable)
                 let added = cached.insert(PlaybackByteRange(response.offset, response.offset + storableCount))
                 reservedBytes += added
+                duplicateNetworkBytes += storableCount - added
                 storageBudget?.release(storableCount - added)
             } catch {
                 storageBudget?.release(storableCount)
@@ -1016,17 +1120,26 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
     /// prefix. The controller deliberately schedules one chunk at a time so
     /// foreground playback can pause or throttle proactive traffic between
     /// requests instead of being trapped behind a whole-title download.
-    func prefetchNextChunk() async -> Bool {
+    func prefetchNextChunk() async -> PlaybackPrefetchOutcome {
         await Task.detached(priority: .utility) { [weak self] in
-            guard let self, !Task.isCancelled else { return false }
+            guard let self, !Task.isCancelled else { return .cancelled }
             let (offset, count) = self.nextPrefetchWindow()
-            guard count > 0, !Task.isCancelled else { return false }
-            guard let data = try? self.read(
-                offset: offset,
-                length: count,
-                priority: URLSessionTask.lowPriority
-            ) else { return false }
-            return !data.isEmpty
+            guard count > 0 else { return .exhausted }
+            guard !Task.isCancelled else { return .cancelled }
+            let started = ProcessInfo.processInfo.systemUptime
+            do {
+                let data = try self.read(
+                    offset: offset,
+                    length: count,
+                    priority: URLSessionTask.lowPriority
+                )
+                guard !data.isEmpty else { return .exhausted }
+                return .fetched(bytes: data.count, seconds: max(ProcessInfo.processInfo.systemUptime - started, 0))
+            } catch PlaybackCacheError.cancelled {
+                return .cancelled
+            } catch {
+                return .failed
+            }
         }.value
     }
 
@@ -1670,14 +1783,14 @@ nonisolated final class PlaybackCacheSession: @unchecked Sendable {
         }
     }
 
-    func prefetchNextChunk() async -> Bool {
+    func prefetchNextChunk() async -> PlaybackPrefetchOutcome {
         switch storage {
         case .direct(let scope):
             return await scope.prefetchNextChunk()
         case .hls:
             // HLS progress is segment-shaped rather than a contiguous byte
             // timeline. Its bounded warmup remains explicit in prefetch(_:).
-            return false
+            return .exhausted
         }
     }
 
