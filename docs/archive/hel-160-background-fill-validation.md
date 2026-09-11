@@ -86,6 +86,19 @@ a promoted prefetch also re-checks cancellation before starting its own
 request. The A/B above was run before these fixes; the fast-link numbers are
 unaffected (a 0.2 s chunk yields 0.1 s either way).
 
+## Cushion-growth guard, same evening
+
+Jaagop asked whether forward buffering could ever stall playback. The honest
+answer was "not on a link with headroom, possibly on one without": the eager
+branch persisted while the cushion stayed below two minutes, which on a link
+that can barely carry the title means indefinitely, with only the stall
+cooldown to interrupt it. The policy now allows the eager yield only while
+the cushion grew by at least 0.25 s since the previous chunk; otherwise, and
+whenever the cushion cannot be measured, the gentle pace applies. On the
+1080p bench the cushion grows every chunk, so the fast-link numbers stand.
+`eagerPacingLastsOnlyWhileTheCushionGrows` and
+`aSeekThatDropsTheCushionReEvaluatesOnTheNextChunk` pin it.
+
 ## Unit coverage
 
 `PlaybackFillPolicyTests` walks the policy through completion, stall, paused,
