@@ -31,6 +31,22 @@ nonisolated enum PlaybackBufferPolicy {
             defaults.bool(forKey: "debug.experimentalPlaybackCache")
         }
     }
+
+    /// Whether the engine is handed the cache session at all. A complete
+    /// cache file is played straight from disk, so the session would only
+    /// add a layer, except for a disc image: the demuxer mounts a disc
+    /// through the session's byte source and cannot read the image from a
+    /// plain file, so without the session a fully cached disc fell to the
+    /// server remux HEL-133 exists to avoid (HEL-167).
+    static func engineUsesCacheSession(
+        playsFromCompleteFile: Bool,
+        disc: Bool,
+        method: PlayMethod,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard customIOEnabled(for: method, defaults: defaults) else { return false }
+        return disc || !playsFromCompleteFile
+    }
 }
 
 /// A half-open byte interval stored in a playback cache file.

@@ -329,10 +329,13 @@ final class PlaybackController {
                 authorization: client.mediaRequestAuthorization()
             )
             let playbackURL = cacheSession?.completeFileURL ?? streamURL
-            let transportCache = !playbackURL.isFileURL
-                && PlaybackBufferPolicy.customIOEnabled(for: method)
-                ? cacheSession
-                : nil
+            // A complete file plays from disk without the session, except a
+            // disc image, whose reader lives behind the session (HEL-167).
+            let transportCache = PlaybackBufferPolicy.engineUsesCacheSession(
+                playsFromCompleteFile: playbackURL.isFileURL,
+                disc: discRequest != nil,
+                method: method
+            ) ? cacheSession : nil
             publishBufferMetrics(cacheSession?.metrics)
 
             var resumeSeconds: Double = 0
