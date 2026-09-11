@@ -8,10 +8,11 @@ import Foundation
 /// The old loop slept `min(max(requestSeconds, 0.125) * 4, 8)` seconds after
 /// every 1 MiB chunk while playing, a fixed ~20% duty cycle that capped
 /// read-ahead near 2 MiB/s however fast the link was. Now the cushion decides:
-/// below `targetAheadSeconds` of cached media the next chunk follows the last
-/// one after a yield of half the request it just made, so a fast link fills
-/// fast and a slow one still leaves a third of the link to foreground reads; above
-/// the target the old pacing returns, since there is no hurry. A failed
+/// below `targetAheadSeconds` of cached media, and only while the cushion is
+/// growing from chunk to chunk, the next chunk follows the last one after a
+/// yield of half the request it just made, so a link with headroom fills at
+/// its pace; a link without headroom shows no gain and gets the old gentle
+/// pacing, as does anything above the target. A failed
 /// fetch backs off and is retried; only cancellation, a complete file, or
 /// an exhausted whole-file cap end the loop.
 nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
@@ -22,9 +23,8 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     }
 
     /// What the scheduler sees between fetches. `aheadSeconds` is nil when
-    /// the title's duration or length is unknown; the policy then treats
-    /// the cushion as short, because starving a title it cannot measure is
-    /// the worse failure.
+    /// the title's duration or length is unknown; the policy then cannot
+    /// tell whether fill is gaining on playback and keeps the gentle pace.
     struct Snapshot: Equatable, Sendable {
         var isPaused = false
         var isBuffering = false
@@ -56,6 +56,15 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     static let failureBackoffCapSeconds: TimeInterval = 30
 
     private(set) var consecutiveFailures = 0
+    /// The cushion after the previous fetched chunk. Eager pacing is allowed
+    /// only while the cushion grows from one chunk to the next: on a link
+    /// with headroom it does, and fill uses that headroom; on a link that can
+    /// barely carry the title it does not, and the fill drops back to the
+    /// gentle pace instead of competing with playback until a stall forces
+    /// the cooldown. That makes the scheduler self-limiting on tight links.
+    private(set) var lastAheadSeconds: Double?
+    /// Growth below this is playback noise, not headroom.
+    static let cushionGainThresholdSeconds: Double = 0.25
 
     /// Before a fetch: a title that fits under the cap finishes and the loop
     /// ends; a stall or buffering renderer gets the link to itself for a
@@ -88,13 +97,19 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
             return snapshot.isWindowed ? .wait(Self.idlePollSeconds) : .stop
         case .fetched(_, let seconds):
             consecutiveFailures = 0
+            let previousAhead = lastAheadSeconds
+            lastAheadSeconds = snapshot.aheadSeconds
             if snapshot.isPaused {
                 // No foreground demux request is consuming: full speed.
                 return .fetch
             }
             let measured = max(seconds, Self.minimumMeasuredRequestSeconds)
-            if let ahead = snapshot.aheadSeconds, ahead >= Self.targetAheadSeconds {
-                return .wait(min(measured * Self.relaxedPacingMultiplier, Self.relaxedPacingCapSeconds))
+            let relaxed = Decision.wait(min(measured * Self.relaxedPacingMultiplier, Self.relaxedPacingCapSeconds))
+            guard let ahead = snapshot.aheadSeconds else { return relaxed }
+            if ahead >= Self.targetAheadSeconds { return relaxed }
+            // The first chunk has no baseline; every later one must show gain.
+            if let previousAhead, ahead - previousAhead < Self.cushionGainThresholdSeconds {
+                return relaxed
             }
             return .wait(max(seconds, 0) * Self.hurriedYieldFraction)
         }
