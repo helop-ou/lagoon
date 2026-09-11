@@ -16,6 +16,14 @@ struct VideoPlayerView: View {
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var panelOpen = false
+    #if os(iOS)
+    /// The iPhone's swipe grammar (HEL-162). A downward drag carries the
+    /// whole player with the finger, YouTube-style, and past the threshold
+    /// minimizes it into the phone's popup player, Picture in Picture; an
+    /// upward swipe opens the options panel. Close closes, nothing else.
+    @State private var minimizeDrag: CGFloat = 0
+    #endif
+    @State private var openPanelRequest = 0
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Back was pressed on the Up Next card. Outlives the card itself,
@@ -56,12 +64,9 @@ struct VideoPlayerView: View {
                     bufferedRanges: controller.bufferedRanges,
                     playheadPrefetchCount: controller.playheadPrefetchCount,
                     info: fallbackInfo,
-                    onDismiss: {
-                        if onPictureInPictureStarted != nil, pictureInPicture.isPossible {
-                            pictureInPicture.toggle()
-                        } else { closePlayer() }
-                    },
+                    onDismiss: { closePlayer() },
                     onPanelToggle: { panelOpen = $0 },
+                    openPanelRequest: openPanelRequest,
                     nextUp: nextUpEpisode,
                     onPlayNext: { advance() },
                     onCancelNextUp: { autoplayCancelled = true },
@@ -121,6 +126,14 @@ struct VideoPlayerView: View {
             #endif
         }
         .interactiveDismissDisabled()
+        #if os(iOS)
+        // No clip here: a clip shape bounds the view to the safe area and
+        // cuts the black that `ignoresSafeArea` paints beyond it, which let
+        // the screen underneath show through at the bottom.
+        .offset(y: minimizeDrag)
+        .scaleEffect(1 - min(minimizeDrag / 1600, 0.25), anchor: .center)
+        .gesture(minimizeGesture)
+        #endif
         .task {
             registerPresentationCleanup? { [controller, pictureInPicture] in
                 pictureInPicture.onStarted = nil
@@ -132,6 +145,9 @@ struct VideoPlayerView: View {
             pictureInPicture.onStarted = {
                 guard onPictureInPictureStarted != nil else { return }
                 leftForPictureInPicture = true
+                #if os(iOS)
+                minimizeDrag = 0
+                #endif
                 onPictureInPictureStarted?()
             }
             pictureInPicture.onStopped = {
@@ -261,6 +277,47 @@ struct VideoPlayerView: View {
             controller.close()
         }
     }
+
+    #if os(iOS)
+    /// Vertical only, and a child gesture wins: the timeline's own drag, the
+    /// buttons, and the surface taps all take precedence, so this sees only
+    /// swipes over free video area. The panel sheet covers everything while
+    /// it is up, so no gesture reaches here then.
+    private var minimizeGesture: some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .local)
+            .onChanged { value in
+                guard !panelOpen, abs(value.translation.height) > abs(value.translation.width) else { return }
+                minimizeDrag = max(0, value.translation.height)
+            }
+            .onEnded { value in
+                guard !panelOpen else { return }
+                let vertical = value.translation.height
+                let predicted = value.predictedEndTranslation.height
+                guard abs(vertical) > abs(value.translation.width) else {
+                    withAnimation(.spring(duration: Motion.standard)) { minimizeDrag = 0 }
+                    return
+                }
+                if vertical < -60 {
+                    openPanelRequest += 1
+                } else if vertical > 140 || predicted > 320 {
+                    minimize()
+                    return
+                }
+                withAnimation(.spring(duration: Motion.standard)) { minimizeDrag = 0 }
+            }
+    }
+
+    /// The popup player is Picture in Picture; where PiP is not possible
+    /// (the simulator, an unsupported route) the swipe closes instead, which
+    /// is the nearest thing to the gesture's meaning.
+    private func minimize() {
+        if onPictureInPictureStarted != nil, pictureInPicture.isPossible {
+            pictureInPicture.toggle()
+        } else {
+            closePlayer()
+        }
+    }
+    #endif
 
     private func closePlayer() {
         leftForPictureInPicture = false

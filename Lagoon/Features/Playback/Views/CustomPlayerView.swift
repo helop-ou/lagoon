@@ -102,6 +102,9 @@ struct CustomPlayerView<Surface: View>: View {
     /// Lets the host react to the panel opening (the debug HUD hides so
     /// it can't sit on top of the track card).
     var onPanelToggle: ((Bool) -> Void)? = nil
+    /// Incremented by the host when a gesture it owns (the iOS swipe up,
+    /// HEL-162) asks for the options panel; the view opens it as Info would.
+    var openPanelRequest = 0
     /// The episode queued behind this one (HEL-66). Nil for movies, at the
     /// end of a series, and until the lookup lands.
     var nextUp: NextUpEpisode? = nil
@@ -222,6 +225,10 @@ struct CustomPlayerView<Surface: View>: View {
                 panel
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
+            }
+            .onChange(of: openPanelRequest) { _, _ in
+                guard !panelOpen else { return }
+                openPanel()
             }
         #endif
     }

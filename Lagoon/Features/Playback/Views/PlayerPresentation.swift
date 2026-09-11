@@ -118,6 +118,9 @@ private struct PlayerPresentationBridge: UIViewControllerRepresentable {
         // included (HEL-162). Keeping the hierarchy is also what lets
         // `restore` find the presenter in a window after PiP.
         host.modalPresentationStyle = .overFullScreen
+        // The player paints its own black; a clear host lets the requesting
+        // screen show through while a swipe carries the player down.
+        host.view.backgroundColor = .clear
         coordinator.host = host
         coordinator.presenter = presenter
         // Representable updates can precede insertion in the window hierarchy.
