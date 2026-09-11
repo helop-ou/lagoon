@@ -14,6 +14,9 @@ final class PlaybackDiagnosticsSampler {
 
     private var decodeTraceTask: Task<Void, Never>?
     private var hudTask: Task<Void, Never>?
+    /// Supplied by the controller so the decode trace can print the cache's
+    /// fill progress next to the engine counters (HEL-160).
+    var cacheMetrics: (() -> PlaybackCacheMetrics?)?
 
     deinit {
         decodeTraceTask?.cancel()
@@ -130,6 +133,19 @@ final class PlaybackDiagnosticsSampler {
                 trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"
                     + " deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)"
                 #endif
+                // HEL-160: the cache's fill progress on the same line, so a
+                // console run can read the fill rate against position.
+                if let cache = cacheMetrics?() {
+                    trace += String(
+                        format: " cacheMB=%.1f aheadMB=%.1f netMB=%.1f dupMB=%.1f shared=%d req=%d",
+                        Double(cache.cachedBytes) / 1_048_576,
+                        Double(cache.cachedBytesAheadOfPlayhead) / 1_048_576,
+                        Double(cache.networkBytes) / 1_048_576,
+                        Double(cache.duplicateNetworkBytes) / 1_048_576,
+                        cache.sharedFetchCount,
+                        cache.requestCount
+                    )
+                }
                 print(trace)
                 print(cpuTrace.tick())
                 engine.measurePumpQueueLatency { duration in
@@ -329,6 +345,14 @@ final class PlaybackDiagnosticsSampler {
                 cache.averageRequestMilliseconds,
                 cache.resourceCount,
                 cache.evictionCount
+            ))
+            // HEL-160: the cushion the fill scheduler is protecting, and what
+            // overtaking a prefetch cost or saved.
+            lines.append(String(
+                format: "Ahead:   %.1f MB cached past the playhead · %.1f MB duplicate · %d shared fetches",
+                Double(cache.cachedBytesAheadOfPlayhead) / 1_048_576,
+                Double(cache.duplicateNetworkBytes) / 1_048_576,
+                cache.sharedFetchCount
             ))
         }
         if let videoTiming = engine.videoTimingDiagnostic {
