@@ -3,7 +3,7 @@
 Product priorities and remaining acceptance as recorded on September 10, 2026.
 Jira is authoritative for live ticket status; this page does not claim a
 TestFlight upload or a public release. Shipped feature history belongs in
-[`Changelog.swift`](../Lagoon/Models/Changelog.swift), with the current feature
+[`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift), with the current feature
 overview in the [repository README](../README.md).
 
 ## Toward 1.0
