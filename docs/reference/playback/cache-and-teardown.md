@@ -36,8 +36,8 @@ large background request: one 1 MiB chunk at a time, with
 `PlaybackFillPolicy` (a pure, unit-tested value type) deciding what follows
 each chunk from the cushion of cached media ahead of the playhead (HEL-160).
 Below `targetAheadSeconds` (120 s) the next chunk follows after a yield of half
-the request's own duration, capped at 0.5 s, so a fast link fills fast and a
-slow one still leaves room for foreground reads; at or above the target the
+the request's own duration, uncapped so foreground reads keep a third of the
+link however slow it is while a fast link never idles; at or above the target the
 older pacing returns: four times the measured request duration, capped at 8 s.
 The pre-HEL-160 loop applied that pacing always, a fixed ~20% duty cycle that
 capped read-ahead near 2 MiB/s however fast the link was. Pacing measures the
