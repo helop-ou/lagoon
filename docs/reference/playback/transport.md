@@ -54,7 +54,7 @@ either spelling — before issuing it; requests to any other origin are left
 exactly as given, and the session delegate drops the header on a
 cross-origin redirect. The playback cache
 (`URLSessionPlaybackRangeLoader`/`PlaybackRangeRequest` in
-`Lagoon/Views/Player/PlaybackCache.swift`) applies the same authorization to
+`Lagoon/Features/Playback/Transport/PlaybackCache.swift`) applies the same authorization to
 every ranged request it makes, including HLS child playlists and segments
 whose server-generated URLs may still carry `api_key`. No first-party media
 request built by this app carries the token in its URL any more.
@@ -84,10 +84,10 @@ read from both `config.h` and `config_components.h`, since FFmpeg 8 split
 component flags into a second header), and run the controlled simulator
 certificate matrix with `scripts/test-ffmpeg-tls.py --all-unit-tests`, which
 drives its 32 cases through `FFmpegNetworkTransport` instead of libavformat's
-own TLS. `LagoonTests/URLSessionByteSourceTests.swift` covers the transport
+own TLS. `LagoonTests/Playback/URLSessionByteSourceTests.swift` covers the transport
 against a scripted `URLProtocol` stub (streaming, seek restart, non-ranged
 servers, retried and non-retried failures, dropped connections, interrupts,
-AES-128 decryption, close/closeAll), and `LagoonTests/FFmpegTransportTests.swift`
+AES-128 decryption, close/closeAll), and `LagoonTests/Playback/FFmpegTransportTests.swift`
 checks that network is compiled out of libavformat, that an interrupted open
 returns `AVERROR_EXIT`, and runs the same certificate matrix through the
 transport.
