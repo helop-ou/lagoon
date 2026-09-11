@@ -7,6 +7,7 @@ struct SeerrRequestsView: View {
     @State private var onlyMine = false
     @State private var refreshID = 0
     let posterLayout = PosterLayout()
+    @State private var gridWidth: CGFloat = 0
 
     var body: some View {
         Group {
@@ -57,11 +58,12 @@ struct SeerrRequestsView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 400)
                 } else {
-                    LazyVGrid(columns: posterLayout.columns, spacing: Metrics.gridRowSpacing) {
+                    let grid = posterLayout.grid(fitting: gridWidth)
+                    LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(Array(viewModel.requests.enumerated()), id: \.element.id) { index, request in
                             SeerrRequestCard(request: request)
                                 .onAppear {
-                                    guard index >= viewModel.requests.count - Metrics.gridColumns * 3 else {
+                                    guard index >= viewModel.requests.count - grid.columnCount * 3 else {
                                         return
                                     }
                                     Task {
@@ -75,6 +77,8 @@ struct SeerrRequestsView: View {
                                 }
                         }
                     }
+                    .environment(\.posterCardWidth, grid.cardWidth)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                 }
 
                 if viewModel.isLoading, !viewModel.requests.isEmpty {

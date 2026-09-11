@@ -58,17 +58,21 @@ enum Metrics {
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
-    /// Two comfortable columns on a typical portrait phone, shared with
-    /// poster rails so recommendations aren't reduced to thumbnails.
+    /// The rail card: recommendations aren't reduced to thumbnails. Grids
+    /// size their own cards to the column instead (`PosterLayout.grid`).
     static let posterWidth: CGFloat = 160
     static let accessibilityPosterWidth: CGFloat = 240
+    /// Smallest grid card before a column is dropped: three across on every
+    /// portrait phone down to the SE and six on its side; four or more on an
+    /// iPad (HEL-161).
+    static let phoneGridPosterMinimum: CGFloat = 100
+    static let padGridPosterMinimum: CGFloat = 150
     static let landscapeWidth: CGFloat = 240
     /// A landscape banner at standard text sizes; HeroSection grows for
     /// Dynamic Type when its title and synopsis need more room.
     static let heroHeight: CGFloat = 200
     /// More artwork above the copy in regular-width iPad windows.
     static let expandedHeroHeight: CGFloat = 360
-    static let gridColumns = 2
     static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
     static let landscapeCaptionHeight: CGFloat = 60

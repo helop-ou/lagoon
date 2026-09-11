@@ -74,12 +74,14 @@ struct SearchResultsView: View {
     @State private var model = SearchResultsViewModel()
     @State private var loadID = 0
     private let layout = PosterLayout()
+    @State private var gridWidth: CGFloat = 0
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Metrics.Space.xl) {
                 Text(query).font(.title.bold()).accessibilityAddTraits(.isHeader)
-                LazyVGrid(columns: layout.columns, spacing: Metrics.gridRowSpacing) {
+                let grid = layout.grid(fitting: gridWidth)
+                LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
                     ForEach(model.items) { item in
                         Group {
                             switch item {
@@ -89,6 +91,8 @@ struct SearchResultsView: View {
                         }
                     }
                 }
+                .environment(\.posterCardWidth, grid.cardWidth)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                 if model.isLoading {
                     ProgressView("Loading Results")
                         .frame(maxWidth: .infinity)

@@ -250,7 +250,8 @@ struct GenreLibraryView: View {
     @State private var viewModel = GenreLibraryViewModel()
 
     let posterLayout = PosterLayout()
-    private var columns: [GridItem] { posterLayout.columns }
+    @State private var gridWidth: CGFloat = 0
+    private var grid: PosterGrid { posterLayout.grid(fitting: gridWidth) }
 
     var body: some View {
         ZStack {
@@ -281,12 +282,12 @@ struct GenreLibraryView: View {
                             .accessibilityIdentifier("genre.library.title")
                         #endif
 
-                        LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
+                        LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
                             ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
                                 PosterCard(item: item)
                                     .itemUserDataMenu(item: item)
                                     .onAppear {
-                                        if index >= viewModel.items.count - Metrics.gridColumns * 3 {
+                                        if index >= viewModel.items.count - grid.columnCount * 3 {
                                             Task {
                                                 await viewModel.loadMore(
                                                     client: session.client,
@@ -298,6 +299,8 @@ struct GenreLibraryView: View {
                                     }
                             }
                         }
+                        .environment(\.posterCardWidth, grid.cardWidth)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
                     .padding(.vertical, Metrics.Space.xxl)

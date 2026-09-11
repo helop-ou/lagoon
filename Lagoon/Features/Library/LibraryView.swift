@@ -14,6 +14,7 @@ struct LibraryView: View {
     @State private var genreRetry = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let posterLayout = PosterLayout()
+    @State private var gridWidth: CGFloat = 0
 
     private struct DecadeRequest: Hashable {
         let scope: LibraryYearScope
@@ -245,17 +246,20 @@ struct LibraryView: View {
                 LoadingView()
             }
         } else {
-            LazyVGrid(columns: posterLayout.columns, spacing: Metrics.gridRowSpacing) {
+            let grid = posterLayout.grid(fitting: gridWidth)
+            LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
                 ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
                     PosterCard(item: item)
                         .itemUserDataMenu(item: item)
                         .onAppear {
-                            if index >= viewModel.items.count - Metrics.gridColumns * 3 {
+                            if index >= viewModel.items.count - grid.columnCount * 3 {
                                 Task { await viewModel.loadMore(fetch: session.client.libraryItems) }
                             }
                         }
                 }
             }
+            .environment(\.posterCardWidth, grid.cardWidth)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
             if let error = viewModel.errorMessage, !viewModel.isLoading {
                 InlineRetryView(message: error) {
                     Task { await viewModel.loadMore(fetch: session.client.libraryItems) }

@@ -51,7 +51,8 @@ struct CollectionDetailView: View {
     private var displayed: MediaItem { viewModel.detail ?? item }
 
     let posterLayout = PosterLayout()
-    private var columns: [GridItem] { posterLayout.columns }
+    @State private var gridWidth: CGFloat = 0
+    private var grid: PosterGrid { posterLayout.grid(fitting: gridWidth) }
 
     var body: some View {
         DetailPageScaffold(backdropURL: backdropURL) {
@@ -94,7 +95,7 @@ struct CollectionDetailView: View {
             }
             .padding(.horizontal, Metrics.screenGutter)
         } else {
-            LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
+            LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
                 ForEach(viewModel.items) { title in
                     PosterCard(item: title)
                         .itemUserDataMenu(item: title) {
@@ -102,6 +103,8 @@ struct CollectionDetailView: View {
                         }
                 }
             }
+            .environment(\.posterCardWidth, grid.cardWidth)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
             .padding(.horizontal, Metrics.screenGutter)
         }
     }

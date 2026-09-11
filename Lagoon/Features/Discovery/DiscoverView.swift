@@ -255,7 +255,8 @@ struct SeerrCatalogView: View {
     @State private var viewModel = SeerrCatalogViewModel()
 
     let posterLayout = PosterLayout()
-    private var columns: [GridItem] { posterLayout.columns }
+    @State private var gridWidth: CGFloat = 0
+    private var grid: PosterGrid { posterLayout.grid(fitting: gridWidth) }
 
     var body: some View {
         ScrollView {
@@ -275,7 +276,7 @@ struct SeerrCatalogView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
-                    LazyVGrid(columns: columns, spacing: Metrics.gridRowSpacing) {
+                    LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
                         ForEach(viewModel.items) { item in
                             SeerrMediaCard(item: item)
                                 .onAppear {
@@ -284,9 +285,12 @@ struct SeerrCatalogView: View {
                                 }
                         }
                         if viewModel.isLoading {
-                            ProgressView().frame(width: Metrics.posterWidth, height: Metrics.posterHeight)
+                            let width = grid.cardWidth ?? Metrics.posterWidth
+                            ProgressView().frame(width: width, height: (width * 3 / 2).rounded())
                         }
                     }
+                    .environment(\.posterCardWidth, grid.cardWidth)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
 
                     if let error = viewModel.errorMessage, !viewModel.isLoading {
                         InlineRetryView(message: error) {

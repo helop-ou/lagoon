@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 /// Actions keep their natural label width, then stack when a phone cannot
 /// fit them. tvOS retains its horizontal focus geometry.
@@ -64,6 +67,22 @@ struct MetadataFlowLayout: Layout {
     }
 }
 
+extension EnvironmentValues {
+    /// Set by a poster grid on its cards so they fill their column instead
+    /// of keeping the rail width (HEL-161). Rails leave it nil.
+    @Entry var posterCardWidth: CGFloat?
+}
+
+/// What a grid resolved for the width it was given: the column set, how
+/// many there are (paging thresholds scale with it), and the card width to
+/// hand its cards through `posterCardWidth`.
+struct PosterGrid {
+    let columns: [GridItem]
+    let columnCount: Int
+    /// nil until the grid has been measured, so cards keep their default.
+    let cardWidth: CGFloat?
+}
+
 /// Cards and their grids must scale together; scaling just the caption
 /// leaves accessibility text crowded into a three-column phone grid.
 struct PosterLayout: DynamicProperty {
@@ -71,12 +90,45 @@ struct PosterLayout: DynamicProperty {
     @ScaledMetric(relativeTo: .caption) private var scaledCaptionHeight = Metrics.posterCaptionHeight
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.posterCardWidth) private var gridCardWidth
 
     var width: CGFloat {
         #if os(tvOS)
         Metrics.posterWidth
         #else
-        min(scaledWidth, Metrics.accessibilityPosterWidth)
+        gridCardWidth ?? min(scaledWidth, Metrics.accessibilityPosterWidth)
+        #endif
+    }
+
+    /// iOS grids size their cards to the column rather than the column to a
+    /// rail-sized card: a portrait phone gets three across, an iPad four or
+    /// more, and a wider window simply adds columns (HEL-161). The minimum
+    /// is per idiom, not per size class: a Pro Max reports regular width in
+    /// landscape, and a phone on its side wants six small posters, not four
+    /// iPad-sized ones. The minimum scales with Dynamic Type the way the
+    /// rail width does, so accessibility sizes still drop to fewer, larger
+    /// cards. tvOS keeps its fixed five-column rhythm. A width of zero means
+    /// "not measured yet".
+    func grid(fitting availableWidth: CGFloat) -> PosterGrid {
+        #if os(tvOS)
+        return PosterGrid(columns: Metrics.posterGridColumns, columnCount: Metrics.gridColumns, cardWidth: nil)
+        #else
+        guard availableWidth > 0 else {
+            return PosterGrid(columns: columns, columnCount: 2, cardWidth: nil)
+        }
+        let baseMinimum = UIDevice.current.userInterfaceIdiom == .pad
+            ? Metrics.padGridPosterMinimum
+            : Metrics.phoneGridPosterMinimum
+        let typeScale = scaledWidth / Metrics.posterWidth
+        let minimum = min(baseMinimum * typeScale, Metrics.accessibilityPosterWidth)
+        let spacing = Metrics.cardSpacing
+        let count = max(1, Int(((availableWidth + spacing) / (minimum + spacing)).rounded(.down)))
+        let cardWidth = ((availableWidth - spacing * CGFloat(count - 1)) / CGFloat(count)).rounded(.down)
+        return PosterGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: count),
+            columnCount: count,
+            cardWidth: cardWidth
+        )
         #endif
     }
 
