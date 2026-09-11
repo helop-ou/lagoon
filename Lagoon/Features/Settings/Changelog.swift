@@ -37,6 +37,7 @@ nonisolated enum Changelog {
                 "The iPhone player no longer turns the screen to landscape by itself. A film opened in portrait plays in portrait until you turn the phone.",
                 "Swipe down on the video to shrink the player into Picture in Picture; it follows your finger on the way down. Swipe up to open the options panel with subtitles, audio and speed. The Close button now simply closes the player.",
                 "Library, search results, Discover and Requests show three posters per row on iPhone instead of two, more when the phone is on its side, and four or more on iPad.",
+                "Films played directly from your server buffer ahead as fast as your connection allows once playback is running, instead of at a fixed trickle, until about two minutes are cached. A momentary network failure no longer stops buffering for the rest of the film, and catching up with the buffer no longer downloads the same part twice.",
             ]
         ),
         ChangelogEntry(
