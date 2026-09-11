@@ -3,8 +3,8 @@
 Read this before adding a feature or reorganizing code. The Apple/Swift
 guidance below was checked on September 10, 2026. The concrete folder names,
 file rules, and migration sequence are Lagoon conventions adopted from those
-principles; they are not an Apple-mandated template or an already-completed
-reorganization. [Architecture](architecture.md) describes the current checkout.
+principles; they are not an Apple-mandated template.
+[Architecture](architecture.md) describes the current checkout.
 
 ## Guidance from Apple and Swift
 
@@ -25,9 +25,7 @@ or a particular third-party architecture framework.
 
 ## Folder structure
 
-The target convention is organization by feature, with explicitly shared
-infrastructure. This is a migration destination, not a claim about today's
-tree; the migration itself is HEL-155:
+Code is organized by feature, with explicitly shared infrastructure (HEL-155):
 
 ```text
 Lagoon/
@@ -52,6 +50,7 @@ Lagoon/
     Networking/                Shared clients, request/auth/download handling
     Models/                    Shared DTOs and value types
     Persistence/               Credential and account storage infrastructure
+    Diagnostics/               Shared reporting schema, history and transport
   Resources/                   Bundled notices and other resources
   Assets.xcassets/
 LagoonTests/                    Unit/integration tests, grouped by subject
@@ -66,13 +65,11 @@ helpers stay beside their feature. Move code to `Shared` when independent
 features need the same contract, not simply because its name ends in `Manager`.
 Avoid generic `Utils`, `Helpers`, or `Common` dumping grounds.
 
-The existing `Views/<Feature>`, `ViewModels`, `Models`, and `Networking`
-locations remain valid while migration is incomplete. Follow a feature's
-current location when making a small fix. For a new feature or a deliberate
-extraction, follow the target convention and update the current architecture
+Follow the feature's existing home when making a small fix. For a new feature
+or deliberate extraction, follow this convention and update the architecture
 map. Move one cohesive area at a time; do not maintain parallel copies of a
-type in both layouts. The [refactoring sequence](architecture.md#refactoring-priorities)
-starts with the player.
+type. See [refactoring priorities](architecture.md#refactoring-priorities) for
+ownership boundaries and verification requirements.
 
 ## Files and reusable components
 
