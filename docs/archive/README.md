@@ -10,6 +10,7 @@ Use the [current guides](../README.md) for implementation guidance and
 
 | Record | Evidence or context |
 | --- | --- |
+| [iOS detail-page player dismissal, HEL-162](hel-162-detail-page-player-dismissal.md) | Why a pushed detail page closed the player, what was ruled out, and the tab-root host fix |
 | [Source migration, HEL-155](hel-155-source-migration-validation.md) | Feature ownership, diagnostics opt-out, platform tests, and remaining hardware checks |
 | [Touch player, HEL-153](hel-153-touch-validation.md) | iPhone/iPad gestures, clear glass, auto-hide, and remaining physical checks |
 | [September 8 validation](validation-2026-09-08.md) | Build, test, and transport validation snapshot |
