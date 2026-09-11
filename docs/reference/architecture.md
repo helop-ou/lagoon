@@ -139,8 +139,10 @@ quarantined rather than left restorable.
 
 Each of the five stable tabs (HEL-140) owns a `NavigationStack`, and
 `ItemDetailRouter` resolves a `ContentNavigationRoute` — `.series` →
-`SeriesDetailView`, everything else → `ItemDetailView`. Playback is a
-`fullScreenCover(item:)` on whichever screen started it.
+`SeriesDetailView`, everything else → `ItemDetailView`. On tvOS playback is a
+`fullScreenCover(item:)` on whichever screen started it; on iOS the screen
+requests it and the tab root's single host presents it
+([Playback](../playback.md#controls-and-presentation), HEL-162).
 
 Library combines movies and series in one paged grid. Every filter — media type,
 sort order, source library, genre, decade, unwatched, favorites, 4K movies — is

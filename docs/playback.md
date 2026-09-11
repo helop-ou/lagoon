@@ -143,10 +143,20 @@ iPhone fullscreen locks to landscape and releases the lock on exit. iPad
 retains rotation/multitasking. Audio uses normal movie-playback behavior:
 volume keys control output, and Silent Mode does not silence the movie.
 
-On iOS, `playerPresentation` retains the hosting controller across PiP. Close
-requests PiP when available; only its successful start callback hides fullscreen.
-Restore reuses the same controller; closing PiP or removing the presenter
-cleans up the session. Physical PiP/background/caption acceptance remains open.
+On iOS, screens only *request* playback through `playerPresentation`; the one
+`playerPresentationHost` at the tab root (`PlayerPresentationHub`) presents it
+and retains the hosting controller across PiP. Close requests PiP when
+available; only its successful start callback hides fullscreen. Restore reuses
+the same controller; closing PiP or withdrawing the request cleans up the
+session, and `onDismiss` still reaches the requesting screen. Physical
+PiP/background/caption acceptance remains open. Never present from inside a
+`NavigationStack` destination again: a presenter hosted in a pushed detail page
+made the stack briefly show its root, a view update in that window dropped the
+destination, and its teardown closed the player about a second after it opened
+from any detail page (HEL-162). Only Home and Continue Watching, which are not
+pushed, survived, which is why it looked title-dependent. The host is presented
+`.overFullScreen`: `.fullScreen` removes the presenting hierarchy and re-runs
+the `.task`s underneath, the regression bootstrap included.
 
 On tvOS, the video surface owns focus. Select prioritizes scrub, Skip,
 Up Next, then play/pause. A light Siri Remote touch is a separate input that
