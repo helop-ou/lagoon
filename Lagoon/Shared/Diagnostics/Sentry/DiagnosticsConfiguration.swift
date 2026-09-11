@@ -10,7 +10,8 @@ nonisolated enum DiagnosticsConfiguration {
     static let sentryDSN = "https://5d3867dd694aedb6e4446a2767c2b4c1@o4512064306282496.ingest.de.sentry.io/4512064311722064"
     static let dsnOverrideKey = "diagnostics.sentryDSN"
 
-    /// Called once from the app's initialiser.
+    /// Called once from the app's initialiser, on the main actor.
+    @MainActor
     static func install() -> DiagnosticsProcessObserver {
         let configured = UserDefaults.standard.string(forKey: dsnOverrideKey) ?? sentryDSN
         if let dsn = SentryDSN(string: configured) {

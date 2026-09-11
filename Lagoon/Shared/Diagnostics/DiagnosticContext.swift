@@ -22,6 +22,9 @@ nonisolated struct DiagnosticContext: Equatable, Sendable {
     /// Sentry's release identity: `bundle@version+build`.
     var release: String { "\(bundleIdentifier)@\(appVersion)+\(build)" }
 
+    /// Built once at install, on the main actor, because the iPad check
+    /// reads `UIDevice`; the value is then a plain Sendable snapshot.
+    @MainActor
     static func current(engineVersion: String) -> DiagnosticContext {
         let bundle = Bundle.main
         let info = bundle.infoDictionary ?? [:]
@@ -43,6 +46,7 @@ nonisolated struct DiagnosticContext: Equatable, Sendable {
         )
     }
 
+    @MainActor
     private static var osName: String {
         #if os(tvOS)
         return "tvOS"
