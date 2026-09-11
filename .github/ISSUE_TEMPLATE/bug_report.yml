@@ -1,0 +1,136 @@
+name: Bug report
+description: Something in Lagoon behaves wrong on Apple TV, iPhone or iPad.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Playback problems are much easier to place when
+        the media details are included, so please fill those in when the bug
+        involves the player. Do not paste server addresses, tokens or account
+        names. Anything with security or privacy impact goes to
+        [SECURITY.md](https://github.com/helop-ou/lagoon/blob/main/SECURITY.md)
+        instead of an issue.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version and build
+      description: Settings → About lists both.
+      placeholder: 1.4 (312)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - tvOS (Apple TV)
+        - iOS (iPhone)
+        - iPadOS (iPad)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: tvOS 26.2
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Device or simulator
+      description: The model, or which simulator you used.
+      placeholder: Apple TV 4K (3rd generation), 128 GB
+    validations:
+      required: true
+
+  - type: input
+    id: server-version
+    attributes:
+      label: Jellyfin server version
+      description: Dashboard → About in the Jellyfin web client.
+      placeholder: 10.11.11
+    validations:
+      required: true
+
+  - type: dropdown
+    id: delivery
+    attributes:
+      label: How was the title being delivered?
+      description: The playback details overlay names the rung in use.
+      options:
+        - Not a playback problem
+        - Direct play
+        - Remux (server repackages, no re-encode)
+        - Transcode (server re-encodes)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: media
+    attributes:
+      label: Media details
+      description: >
+        For playback problems: the container, video codec, HDR profile and
+        audio codec. Turn on Settings → Advanced → Show Playback Details and
+        read them off the overlay during playback, or copy them from the
+        server's media info. For example "Container: mkv", "Video: HEVC Main
+        10, 3840x2160, Dolby Vision profile 7", "Audio: TrueHD with Atmos,
+        7.1".
+      value: |
+        Container:
+        Video:
+        Audio:
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a series detail page
+        2. Press Play on the second episode
+        3. Seek forward two minutes
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Screenshots or a screen recording help, especially for focus and layout problems.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: demo
+    attributes:
+      label: Does the public demo server reproduce it?
+      description: >
+        demo.jellyfin.org/stable, user demo, empty password. It has no 4K or
+        HDR media, so format-specific problems cannot be checked there.
+      options:
+        - "Yes"
+        - "No, my server only"
+        - Cannot be tested there
+        - Not tried
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: How often it happens, when it started, other clients' behaviour with the same title.
