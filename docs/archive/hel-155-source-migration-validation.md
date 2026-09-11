@@ -146,9 +146,9 @@ references in scripts/current documentation. Markdown links, release-script
 syntax, tracked diffs and untracked-file whitespace checks passed. Specialized
 fixture skips listed above remain coverage gaps.
 
-Physical dismissal/replay, episode handoff and supported PiP/background flows
-remain required. No physical Apple TV was attached, so simulator checks cannot
-establish device performance parity or close the ticket's hardware gate.
+The Apple TV session later the same day (below) covered the frame-loss
+comparison, dismissal/replay and episode handoff. PiP, the suspended-startup
+dismissal and the sampler on/off cost remain open; see "Still open" below.
 
 For the device comparison, use the same fixture, scene, media-time window,
 Release configuration and display path on both builds, with at least three
@@ -159,3 +159,103 @@ comparison measures incremental sampler overhead; it does not measure the full
 cost of enabling metric reads in otherwise uninstrumented playback. Retain a
 bench-disabled CPU/energy observation for that distinction. An opt-out no
 longer leaves the two-second incident sampler running.
+
+## Hardware acceptance (2026-09-11 afternoon)
+
+Living Room Apple TV 4K (3rd generation), tvOS 26.6, paired over `devicectl`,
+rebooted before the session. Pre-migration arm: `2722d3a` (build 96, the
+build already on the device). Post-migration arm: `f14de68` (main after the
+migration). Both arms were built from the same Mac and installed with
+`devicectl device install app`; the Release apps carry no code differences
+other than the commits under review. Raw console logs and the run scripts are
+under `/tmp/lagoon-hel155-bench/` (temporary evidence).
+
+### Same-scene frame-loss comparison (Release)
+
+"The Creator" (2023) from fixture: 3840×2160 HEVC, Dolby Vision profile 8,
+E-AC3, VideoToolbox hardware decode, start pinned at 600 s, 10 s warm-up,
+60 s window keyed on media time. HUD off, decode trace off, subtitles forced
+off with `debug.benchSubtitleLanguage off`, five-minute cool-down between
+runs, arms interleaved pre/post three times. The device was untouched during
+every window. As on 2026-09-10, HDR output never reaches the optimized
+display path (`optimized=0` in all six runs), so this is the composited path.
+
+| run | arm | dropped/frames | stalls | audio dry/stalls/gaps | min video queue | footprint start → peak (MB) | growth (MB) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | pre | 0 / 1454 | 0 | 0 / 0 / 0 | 29 | 730.5 → 731.5 | 0.9 |
+| 1 | post | 0 / 1457 | 0 | 0 / 0 / 0 | 29 | 723.4 → 725.2 | 1.8 |
+| 2 | pre | 0 / 1456 | 0 | 0 / 0 / 0 | 29 | 723.7 → 724.7 | 1.1 |
+| 2 | post | 0 / 1454 | 0 | 0 / 0 / 0 | 29 | 723.3 → 724.3 | 1.0 |
+| 3 | pre | 0 / 1456 | 0 | 0 / 0 / 0 | 29 | 728.1 → 732.5 | 4.3 |
+| 3 | post | 1 / 1454 | 0 | 0 / 0 / 0 | 29 | 723.8 → 725.0 | 1.1 |
+
+Five of six windows dropped nothing; the single dropped frame in the last
+post-migration window (0.069%) is below the 0.14–0.4% the 2026-09-10 matrix
+recorded for composited HDR and is not distinguishable from noise at three
+runs. No arm stalled, starved audio or let the decoded queue fall below 29 of
+30. Footprint and growth are within run-to-run variation. No change.
+
+### Dismissal/replay (Debug hooks over devicectl)
+
+`XCUIApplication.launch()` from the UI-test runner fails on this device in
+about two seconds with `FBSOpenApplicationServiceErrorDomain` /
+`PBProcessManager ServiceUnavailable … process is not running`, for both
+arms, with the Main Thread Checker and antipattern checker on or off, and
+with no crash report; the same Debug binary launches from `devicectl` and as
+the unit-test host. The player UI journeys therefore could not run on the
+device. The lifecycle checks used the app's own Debug hooks instead, driven
+hands-off through `devicectl device process launch --console` against the
+public demo (in-memory regression bootstrap, no state reset, so the device's
+own account was untouched):
+
+`-debug.regressionFindPlayable -debug.lifecycleReplayBenchmark
+-debug.lifecycleReplayCount 3 -debug.lifecycleReplayDelaySeconds 12
+-debug.frameLossBench -debug.benchAutoExit`. The bench auto-exit dismisses
+the player through the normal teardown path after each 60 s window and the
+replay hook reopens the same title 12 s later, three times. "Earthfall"
+(Pioneer One S1E1, 1080p H.264 SDR) resolved on both arms.
+
+| arm | snapshot before replay 2 / 3 / 4 | per-session dropped/frames |
+| --- | --- | --- |
+| pre | engines 0, controllers 0, demux 0, renderers 0, created = destroyed = 1 / 2 / 3, unclean 0, memory 31.5 / 31.3 / 31.2 MB | 0/1449, 0/1443, 1/1433 |
+| post | engines 0, controllers 0, demux 0, renderers 0, created = destroyed = 1 / 2 / 3, unclean 0, memory 31.8 / 31.7 / 31.1 MB | 0/1469, 1/1466, 1/1446 |
+
+Every dismissal left no live engine, controller, demux loop or renderer set,
+every engine destruction was clean, and the idle footprint returned to the
+same 31 MB on both arms. No change.
+
+### Episode handoff (Debug hooks over devicectl)
+
+`-debug.regressionFindEpisodeWithSuccessor -debug.regressionRequireDirectH264Successor
+-debug.regressionStartNearEnd -debug.regressionRendererRetirementDelaySeconds 7
+-playback.autoplayMode autoDelay`, decode trace on. Earthfall starts about
+45 s before its end and Up Next advances automatically into "The Man From
+Mars" (S1E2, H.264). Before each arm the demo account's played state for both
+episodes was cleared (`DELETE /Users/{uid}/PlayedItems/{id}`): the first
+post-migration attempt had started the successor at 137 s because the killed
+pre-migration run had left a resume point, which is a harness order effect
+and not a player difference.
+
+| arm | last predecessor trace | first successor trace | renderer retirement wait | drops across boundary | stalls | footprint (MB) |
+| --- | --- | --- | --- | --- | --- | --- |
+| pre | 1896.0 s | 2.0 s | 2.8 ms | 6 → 7 | 0 | 38.0 → 39.7 |
+| post | 1894.5 s | 2.0 s | 2.9 ms | 7 → 7 | 0 | 37.7 → 39.2 |
+
+Both arms handed off on the same surface (the presentation frame counter
+continued across the boundary), started the successor from its beginning
+within one trace interval, and ran 110 s into it with no stall and a flat
+footprint. No change.
+
+### Still open
+
+- Picture in Picture and the suspended-startup dismissal need a remote press
+  that neither `devicectl` nor, on this device, the UI-test runner can
+  deliver. Both remain a hand check.
+- Sampler cost with reporting on versus off was not measured; the frame-loss
+  arms above ran with the device's stored reporting preference, identical
+  for both arms.
+- The UI-test runner's launch failure on tvOS 26.6 is unexplained and blocks
+  the `LagoonHardwareRegression` lane on hardware until understood.
+- `AcknowledgementsTests/binaryTargetsCoverExactlyWhatPackageSwiftDeclares`
+  reads `Package.swift` through `#filePath` and fails when the unit bundle
+  runs on a device; the rest of the suite that was tried on the device passed.

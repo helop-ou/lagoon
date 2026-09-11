@@ -63,7 +63,10 @@ behavior changes must be distinguishable in review.
   touch journeys, and Settings binding/persistence/accessibility journeys.
   Settings screenshots were inspected on tvOS, iPhone and iPad. Fixture skips
   and corrected test-driver failures are recorded with their evidence.
-- Physical Apple TV performance, dismissal/replay, handoff and supported PiP
-  remain separate acceptance gates. Sampler on/off cost is still unmeasured.
-  See the [validation record](../archive/hel-155-source-migration-validation.md)
-  for exact results and limits; the hardware gate prevents closing HEL-155.
+- Apple TV acceptance on 2026-09-11: the same-scene frame-loss comparison
+  (three interleaved Release runs per arm), dismissal/replay and episode
+  handoff showed no change against the pre-migration build. PiP, the
+  suspended-startup dismissal and the sampler on/off cost remain open; the
+  UI-test runner cannot launch the app on that device, so the lifecycle checks
+  ran through the app's Debug hooks over `devicectl`. See the
+  [validation record](../archive/hel-155-source-migration-validation.md).
