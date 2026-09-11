@@ -64,7 +64,13 @@ nonisolated final class DiagnosticsHub: Sendable {
         state.withLock { $0.ambientFields = validated }
     }
 
+    /// Whether the tester has reporting on. Callers that do periodic work
+    /// only for the history (the playback sampler) check this so "off"
+    /// costs nothing at all.
+    var isReportingEnabled: Bool { reportingEnabled() }
+
     func record(_ code: DiagnosticEventCode, _ fields: [String: DiagnosticValue] = [:]) {
+        guard reportingEnabled() else { return }
         let event = DiagnosticEvent(code: code, uptime: uptime(), fields: fields)
         state.withLock { $0.history.append(event) }
     }
