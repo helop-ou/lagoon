@@ -536,7 +536,11 @@ final class PlaybackIncidentMonitor {
     /// switched a track, merged with `extra`.
     private func incidentFields(extra: [String: DiagnosticValue]) -> [String: DiagnosticValue] {
         var fields = facts
-        fields["attempt"] = .string(attempt)
+        // A negotiation failure precedes the attempt; an empty token would
+        // only be rejected by the schema and counted as a call-site mistake.
+        if !attempt.isEmpty {
+            fields["attempt"] = .string(attempt)
+        }
         if let since = hub.millisecondsSince(.playbackSeek), since < 30_000 {
             fields["sinceSeekMs"] = .double(since.rounded())
         }

@@ -674,15 +674,30 @@ final class PlaybackController {
         } catch {
             // This also claims the exactly-once stop report if cancellation
             // landed after the playback session became active.
-            finishEpisodeHandoff(outcome: error is CancellationError ? "cancelled" : "failed")
-            if !(error is CancellationError) {
+            let cancelled = Self.isStartCancellation(error, taskCancelled: Task.isCancelled, closed: isClosed)
+            finishEpisodeHandoff(outcome: cancelled ? "cancelled" : "failed")
+            if !cancelled {
                 incidents.startFailed(error, delivery: delivery, stage: startStage)
             }
             _ = beginStop()
-            if !(error is CancellationError) {
+            if !cancelled {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         }
+    }
+
+    /// Whether a start-path error is the viewer leaving rather than a
+    /// failure. A dismissed cover cancels the start task, and a request
+    /// suspended in URLSession at that moment surfaces as
+    /// `URLError.cancelled` (-999), not `CancellationError`; reported as
+    /// is, it filed a `playback.startFailed` at error level for every
+    /// back-out during a slow negotiation. The URL error only counts when
+    /// the task or the controller was actually cancelled, so a session the
+    /// transport tore down on its own still reports.
+    nonisolated static func isStartCancellation(_ error: Error, taskCancelled: Bool, closed: Bool) -> Bool {
+        if error is CancellationError { return true }
+        guard let urlError = error as? URLError, urlError.code == .cancelled else { return false }
+        return taskCancelled || closed
     }
 
     private nonisolated static func trackMetadata(_ stream: MediaStream) -> PlayerTrackMetadata {
