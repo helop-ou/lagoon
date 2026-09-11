@@ -11,12 +11,13 @@ screen-specific copies of its values.
 | --- | --- | --- |
 | `screenGutter` | 80 | 20 |
 | `cardSpacing` | 40 | 14 |
-| `posterWidth` | 280 | 160 baseline, scales with Dynamic Type |
+| `posterWidth` | 280 | 160 rail card baseline, scales with Dynamic Type |
+| `phoneGridPosterMinimum` / `padGridPosterMinimum` | Not used | 100 / 150; grids fit as many columns as these allow and size cards to the column |
 | `landscapeWidth` | 360 | 240 |
 | `heroHeight` | 620 | 200 baseline on iPhone and compact-width iPad windows |
 | `expandedHeroHeight` | Not used | 360 on regular-width iPad windows |
 | `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad windows |
-| `gridColumns` | 5 | 2 baseline, adaptive |
+| `gridColumns` | 5 | Not used; the count follows the width (three across on a portrait phone) |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
 `Metrics.Space` provides `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,

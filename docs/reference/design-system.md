@@ -323,11 +323,14 @@ opening or navigating between categories must not change a saved preference.
 - **Library grid**: 5 columns on tvOS, not 6. The cards are fixed width, so a
   flexible column can't widen a gap without room to grow into — dropping a
   column is what actually buys the spacing, and the caption under each poster
-  needs the vertical room too. On iOS, the 160 × 240 pt poster baseline gives
-  typical portrait phones two columns; narrower layouts and larger text use
-  fewer, while wider layouts fit more. The same baseline applies to poster
-  rails, including More Like This, Search and Discover. It is a Lagoon design
-  choice, not an Apple-prescribed poster size.
+  needs the vertical room too. On iOS the grid sizes its cards to the column,
+  not the column to the card (HEL-161): `PosterLayout.grid(fitting:)` fits as
+  many columns as a 100 pt minimum allows on iPhone (150 pt on iPad; per idiom,
+  because a Pro Max reports regular width on its side) and hands the resulting card width to the cards through the
+  `posterCardWidth` environment value, so a portrait phone shows three
+  across, an iPad four or more, and larger text drops columns. Poster rails,
+  including More Like This, keep the 160 × 240 pt card. Both are Lagoon
+  design choices, not Apple-prescribed poster sizes.
 - **Hero** (`HeroSection`): a *contained* rounded panel, not a full-bleed
   banner, with the backdrop filling **all** of it. On tvOS it sets **no
   `clipShape` of its own** — the `.card` button style draws its plate at the
