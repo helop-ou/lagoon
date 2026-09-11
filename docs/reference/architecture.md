@@ -311,9 +311,9 @@ nm -m Lagoon.app/PlugIns/LagoonTopShelf.appex/LagoonTopShelf | grep -i extension
 Check the entry point *first*: entitlements, app group,
 `NSExtensionPointIdentifier`, principal class, `CFBundlePackageType`, signing,
 embedding and architecture were all already correct and cost three sessions to
-re-verify, and the `ENABLE_DEBUG_DYLIB = NO` difference against the reference app that
-looked significant was a side effect of the same wrong product type rather than
-a second problem. `tv-app-extension` also supplied `-framework TVServices` for
+re-verify, and the `ENABLE_DEBUG_DYLIB = NO` difference against a working
+extension elsewhere that looked significant was a side effect of the same wrong
+product type rather than a second problem. `tv-app-extension` also supplied `-framework TVServices` for
 free, so the target now carries `OTHER_LDFLAGS = "-framework TVServices"`
 explicitly. Nothing else about Top Shelf is configured in App Store Connect; the
 only portal requirement is the App Group on both App IDs, which signing already

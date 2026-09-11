@@ -5,9 +5,8 @@ September 10, 2026 documentation cleanup. Start with the [current design system 
 Earlier experiments, ticket states, and measurements below describe their recorded
 revision; they are not a release checklist or proof of current hardware acceptance.
 
-The visual language is adapted from a 2026 streaming-app redesign: dark-locked,
-system-semantic-first, tvOS 26 Liquid Glass, with brand color reserved for
-genuine branding. Token values live in the guide and in
+The visual language is dark-locked, system-semantic-first, tvOS 26 Liquid
+Glass, with brand color reserved for genuine branding. Token values live in the guide and in
 `Lagoon/Shared/UI/DesignSystem.swift`; what follows is why they are shaped the
 way they are.
 
@@ -363,7 +362,7 @@ opening or navigating between categories must not change a saved preference.
   4-bit RGB histogram ranked by `count × (saturation+0.05) × (brightness+0.1)`
   (the floors stop letterbox bars from winning), sampled at 64×64 off-main,
   memoized per URL in `ArtworkPaletteCache`.
-- **Detail pages** (HEL-46, built against Jaagop's Infuse reference — the
+- **Detail pages** (HEL-46, built against Jaagop's Infuse reference; the
   earlier poster-left composition is gone): the backdrop **is** the artwork,
   full-bleed. On tvOS legibility comes from a **leading wash** (0.9 → clear by
   68 %) rather than a uniform scrim, because the info block is left-aligned:
