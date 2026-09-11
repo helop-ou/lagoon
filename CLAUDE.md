@@ -1,7 +1,7 @@
 # Lagoon — session notes
 
 Jellyfin client for tvOS 26 + iOS 26 (one multiplatform app target, SwiftUI,
-with unit and tvOS UI test targets). Design language adapted from a 2026 streaming-app redesign
+with unit and multiplatform UI test targets). Design language adapted from a 2026 streaming-app redesign
 . **The only dependency is the
 local `Packages/LagoonFFmpeg` package** (HEL-48 M6): it pins exactly the
 FFmpeg static xcframeworks the Lagoon sample-buffer engine links —
@@ -19,7 +19,7 @@ for the profile 7 → 8.1 Dolby Vision RPU conversion (HEL-145) — see
 docs/playback.md. All compiler roles use Apple Clang.
 MPVKit/libmpv/MoltenVK/libplacebo have been out of the project entirely since
 2026-08-17. Don't add other dependencies without serious deliberation, and
-when you do, add an entry to `Lagoon/Models/Acknowledgements.swift` and its
+when you do, add an entry to `Lagoon/Features/Settings/Acknowledgements.swift` and its
 licence text under `Lagoon/Resources/Licenses` — `AcknowledgementsTests`
 fails the unit suite otherwise.
 
