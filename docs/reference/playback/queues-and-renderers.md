@@ -47,7 +47,7 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   along with the enhancement layer — so a profile 7 UHD Blu-ray remux (HDR10
   base layer, type-63 enhancement-layer and type-62 RPU NAL units interleaved
   in one HEVC track) played as plain HDR10. `DolbyVisionProfileConverter`
-  (`Lagoon/Views/Player/SampleBuffer/`) converts it live instead: every type-62 RPU is rewritten to profile 8.1
+  (`Lagoon/Features/Playback/Engine/`) converts it live instead: every type-62 RPU is rewritten to profile 8.1
   with libdovi — `dovi_parse_unspec62_nalu` →
   `dovi_convert_rpu_with_mode(rpu, 2)` → `dovi_write_unspec62_nalu`, the same
   transform `dovi_tool -m 2` performs — the type-63 units are dropped, and
