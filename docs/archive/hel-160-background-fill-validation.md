@@ -99,6 +99,16 @@ whenever the cushion cannot be measured, the gentle pace applies. On the
 `eagerPacingLastsOnlyWhileTheCushionGrows` and
 `aSeekThatDropsTheCushionReEvaluatesOnTheNextChunk` pin it.
 
+**Superseded on 2026-09-12.** A review of that guard against the production
+chunk size found it unreachable for 4K: a 1 MiB chunk holds 0.25 s of media
+only below about 33 Mbps, and consumption during the request and yield lowers
+the bar further, so every high-bitrate direct file kept the gentle pace and
+the 6.6 Mbps bench above could not show it. The guard was replaced by a
+per-request throughput rule (the chunk's media duration must exceed the
+request plus its yield at the playback rate with a 10 % margin), pinned by
+the HEL-160 4K cases in `PlaybackFillPolicyTests`. The fast-link numbers
+above still stand: on that link the new rule is eager on every chunk too.
+
 ## Unit coverage
 
 `PlaybackFillPolicyTests` walks the policy through completion, stall, paused,

@@ -34,15 +34,23 @@ The active direct file begins proactive fill only after the initial playback
 cushion has reached the renderer, and fills cooperatively rather than in one
 large background request: one 1 MiB chunk at a time, with
 `PlaybackFillPolicy` (a pure, unit-tested value type) deciding what follows
-each chunk from the cushion of cached media ahead of the playhead (HEL-160).
-Below `targetAheadSeconds` (120 s), and only while the cushion grew since the
-previous chunk, the next chunk follows after a yield of half the request's own
-duration, uncapped so foreground reads keep a third of the link while a fast
-link never idles. A link that can barely carry the title shows no gain and gets
-the gentle pace before any stall has to force it, so the scheduler is
-self-limiting on tight links; an unmeasurable cushion (no duration or length)
-also keeps the gentle pace. At or above the target the
-older pacing returns: four times the measured request duration, capped at 8 s.
+each chunk from the cushion of cached media ahead of the playhead and the
+throughput the chunk just measured (HEL-160). Below `targetAheadSeconds`
+(120 s of wall-clock playback at the current rate), the next chunk follows
+after a yield of half the request's own duration, uncapped so foreground reads
+keep a third of the link while a fast link never idles, but only when the
+chunk's media duration (its bytes over the title's average bitrate) exceeds
+the request plus that yield at the playback rate with a 10 % margin: in
+effect the link must carry about 1.65 × the title's bitrate. A link that can
+barely carry the title fails that test and gets the gentle pace before any
+stall has to force it, so the scheduler is self-limiting on tight links; an
+unknown cushion, bitrate or rate also keeps the gentle pace. The decision is
+per request with no history, so a seek, pause or rate change needs no reset.
+The first version of this guard required the cushion to have grown by 0.25 s
+since the previous chunk; a 1 MiB chunk holds 0.25 s of media only below
+about 33 Mbps, so every 4K title fell back to the gentle pace and the 1080p
+bench could not see it. At or above the target the older pacing returns:
+four times the measured request duration, capped at 8 s.
 The pre-HEL-160 loop applied that pacing always, a fixed ~20% duty cycle that
 capped read-ahead near 2 MiB/s however fast the link was. Pacing measures the
 prefetch's own request, never the cache's aggregate that foreground traffic
