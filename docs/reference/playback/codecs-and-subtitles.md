@@ -230,6 +230,21 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   retained when a downloaded subtitle is inserted into the running engine. Not
   covered: an embedded subtitle rendition inside an HLS master — remote
   downloads arrive as external files and do work.
+- **Cue lifetime** (HEL-163): `SubtitleStore` is a window, not an archive,
+  for embedded tracks. The demux loop appends cues as it reads ahead; the
+  10 Hz display refresh removes every cue whose end has passed the playhead,
+  so an expired PGS/VobSub cue releases its RGBA `CGImage` during
+  uninterrupted playback instead of at the next seek, and each lookup scans
+  only the read-ahead window. Eviction keys off the playback position handed
+  to `active(at:)`, never the demux cursor, so read-ahead cannot remove a
+  still-visible cue; open-ended PGS cues stay until a later composition or
+  clear closes them, and a clear decoded ahead of the clock closes at its own
+  timestamp. A seek or an embedded track change resets the window and the
+  demuxer refills it. A downloaded external track keeps its complete cue list
+  behind a forward cursor that rebuilds only when time moves backward, so
+  backward seeks need no second download. Before this, the store kept every
+  decoded cue until a seek; a 91-minute text-subtitle soak stayed flat, but a
+  bitmap track would have held a film's worth of images.
 - **Subtitle download safety** (audit A15): external sidecars and Jellyfin
   provider files share an 8 MiB response cap. The `BoundedDownload` URLSession
   delegate validates HTTP status and checks each delivered chunk, including

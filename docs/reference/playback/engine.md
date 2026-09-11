@@ -267,7 +267,8 @@ way `benchSearchTerm` forces the title, and `-debug.soakPauseAtSeconds` /
 trace on, `DecodeTrace` adds what a growing backlog would show up in:
 `mainLateMs` (how late the trace's own 2 s sleep resumed — main-actor
 unavailability), `pumpMs` (a ping through the pump queue), the cost and
-cadence of the engine's 10 Hz `observeTime`, the subtitle store size, the
+cadence of the engine's 10 Hz `observeTime`, the subtitle store size (since
+HEL-163 the embedded read-ahead window, so it no longer grows with the film), the
 renderer notification-token count and thermal state, with `SoakWait` lines
 timing the pause rate change, `pumpQueue.sync` and renderer retirement.
 
