@@ -79,9 +79,16 @@ like a session expiry.
   portrait plays letterboxed. `PlayerOrientationLock` and the app delegate
   that existed for it were removed; the touch journeys pass in portrait.
 
+- The iPhone swipe grammar Jaagop asked for: Close closes outright (it used
+  to request PiP), a swipe up over free video opens the options panel, and a
+  swipe down carries the player with the finger and minimizes it into Picture
+  in Picture, or closes where PiP is not possible. A clip added for rounded
+  corners during the drag briefly bounded the player to the safe area and let
+  the screen underneath show at the bottom; removed the same afternoon.
+  `TouchPlayerUITests.testSwipesOpenThePanelAndMinimize` covers both swipes
+  on the simulator.
+
 ## Still open from the same report
 
-- Info button reachability on the phone and a swipe-down to open the panel.
-  In the simulator Close and Info show with the transport in both
-  orientations; iOS never had a swipe gesture for the panel, the "Swipe down
-  for Info" hint is tvOS-only. Needs Jaagop's description of what he sees.
+- Physical checks of the swipe-to-PiP hand-off and the panel swipe on the
+  iPhone; the simulator cannot start PiP.

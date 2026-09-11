@@ -138,6 +138,11 @@ Repeated double-taps within the 700 ms feedback window accumulate the shown
 amount; changing direction resets it. Dragging the timeline previews trickplay
 and commits on release. Skip and Up Next accept direct taps. Close and Info
 live in the native toolbar; the options sheet suppresses surface interaction.
+Close closes the player outright. A swipe up over free video opens the options
+panel; a swipe down carries the whole player with the finger, YouTube-style,
+and past the threshold minimizes it into the phone's popup player, which is
+Picture in Picture (where PiP is not possible it closes instead). The
+timeline's own drag and every button win over the swipe (HEL-162 feedback).
 
 The player follows the device on iPhone and iPad and never forces a rotation:
 a title opened in portrait plays letterboxed in portrait until the viewer turns
@@ -147,8 +152,8 @@ Mode does not silence the movie.
 
 On iOS, screens only *request* playback through `playerPresentation`; the one
 `playerPresentationHost` at the tab root (`PlayerPresentationHub`) presents it
-and retains the hosting controller across PiP. Close requests PiP when
-available; only its successful start callback hides fullscreen. Restore reuses
+and retains the hosting controller across PiP. The swipe down requests PiP
+when available; only its successful start callback hides fullscreen. Restore reuses
 the same controller; closing PiP or withdrawing the request cleans up the
 session, and `onDismiss` still reaches the requesting screen. Physical
 PiP/background/caption acceptance remains open. Never present from inside a
