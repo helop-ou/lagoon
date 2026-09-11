@@ -32,13 +32,31 @@ TestFlight.
 
 The active direct file begins proactive fill only after the initial playback
 cushion has reached the renderer, and fills cooperatively rather than in one
-large background request: one 1 MiB chunk at a time, pausing for four times the
-measured request duration while video plays, and entering a 20-second cooldown
-whenever buffering or a new stall is observed. Pause allows full-speed fill;
-backgrounding cancels proactive work. The explicit scheduler exists because
-Apple documents URLSession priority as a hint rather than a bandwidth
-guarantee. Foreground misses stay high priority, and proactive requests
-disallow constrained or expensive paths.
+large background request: one 1 MiB chunk at a time, with
+`PlaybackFillPolicy` (a pure, unit-tested value type) deciding what follows
+each chunk from the cushion of cached media ahead of the playhead (HEL-160).
+Below `targetAheadSeconds` (120 s) the next chunk follows after a yield of half
+the request's own duration, capped at 0.5 s, so a fast link fills fast and a
+slow one still leaves room for foreground reads; at or above the target the
+older pacing returns: four times the measured request duration, capped at 8 s.
+The pre-HEL-160 loop applied that pacing always, a fixed ~20% duty cycle that
+capped read-ahead near 2 MiB/s however fast the link was. Pacing measures the
+prefetch's own request, never the cache's aggregate that foreground traffic
+also feeds. A 20-second cooldown follows buffering or a new stall. Pause allows
+full-speed fill; backgrounding cancels proactive work. The explicit scheduler
+exists because Apple documents URLSession priority as a hint rather than a
+bandwidth guarantee. Foreground misses stay high priority, and proactive
+requests disallow constrained or expensive paths.
+
+When playback catches up with a prefetch of the very bytes it needs, the
+foreground read promotes that in-flight request to foreground priority and
+waits up to two seconds for it rather than starting a second request for the
+same range, which used to move 2 MiB to store 1; past the bound it fetches for
+itself, so a seek onto a stalled prefetch never waits behind it. The metrics
+count both outcomes (`sharedFetchCount`, `duplicateNetworkBytes`) and the
+HUD's "Ahead" line and the decode trace's `cacheMB`/`aheadMB`/`dupMB` fields
+show them; `scripts/fill-bench.sh` compares two builds' fill rates on one
+title.
 
 The coordinator preserves 256 MiB of free volume space and permits one half of
 the remainder for the current title. A declared resource smaller than that cap
@@ -81,10 +99,16 @@ observable within a minute instead of after gigabytes.
 A failed cache read returns an I/O error, never EOF: EOF is reserved for a
 successfully read resource ending. URL loading retries transient failures;
 deterministic range incompatibility does not retry, because the fallback open
-is both faster and safer. Reaching the disk cap does not end proactive fill for
-a windowed title — "nothing to fetch" means the read-ahead is full, so the
+is both faster and safer. A proactive fetch reports a `PlaybackPrefetchOutcome`
+rather than a Boolean: a `.failed` chunk (the loader exhausted its retries)
+backs off, doubling from 1 s to a 30 s cap, and is retried, so fill resumes on
+its own once the link recovers, without a seek or a new session; before
+HEL-160 a failure was indistinguishable from completion and ended fill for the
+rest of the title, with the finished task handle also blocking
+`resumeBufferFill`. Reaching the disk cap does not end proactive fill for a
+windowed title — `.exhausted` there means the read-ahead is full, so the
 controller waits for the playhead to make room rather than giving up on the
-rest of the movie. A sparse file is exposed as a normal local playback URL only
+rest of the movie; for a title under the cap it means the file is complete. A sparse file is exposed as a normal local playback URL only
 after the complete server-declared byte range has been validated and
 synchronized, so a hole can never masquerade as EOF.
 
