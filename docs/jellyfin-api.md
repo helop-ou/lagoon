@@ -93,7 +93,7 @@ about that server on that day, and the reason a server-returned credential is
 sanitized on sight rather than assumed absent. Focused integration coverage
 now checks the header-only state that replaced the query fallback:
 `playbackURLResolutionPreservesTheNegotiatedTransportMatrix` in
-`LagoonTests/PlayerSystemIntegrationTests.swift` asserts that no same-origin
+`LagoonTests/Playback/PlayerSystemIntegrationTests.swift` asserts that no same-origin
 media URL — direct-play, direct-stream, transcode, external
 subtitle sidecar or trickplay sheet — carries `ApiKey` or `api_key` in its
 query, that the `Authorization` header carries the token instead, and that a
@@ -357,7 +357,7 @@ disclosure without broadening the transport exceptions.
 
 ## Server address entry and discovery (audit A13)
 
-Jellyfin and Seerr use `Networking/ServerAddress.swift` to parse user-entered
+Jellyfin and Seerr use `Shared/Networking/ServerAddress.swift` to parse user-entered
 service roots. An address may include a hostname, port, and reverse-proxy base
 path. Explicit `http://` or `https://` selects exactly that transport and port;
 discovery never downgrades an explicit HTTPS address or adds a default port to
