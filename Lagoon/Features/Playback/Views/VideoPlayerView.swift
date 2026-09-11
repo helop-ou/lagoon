@@ -251,15 +251,7 @@ struct VideoPlayerView: View {
                 closePlayer()
             }
         }
-        // The phone plays landscape only, locked for the duration of the
-        // player (HEL-153); the iPad keeps its normal orientations.
-        #if os(iOS)
-        .onAppear { PlayerOrientationLock.lockToLandscape() }
-        #endif
         .onDisappear {
-            #if os(iOS)
-            PlayerOrientationLock.unlock()
-            #endif
             guard !leftForPictureInPicture else { return }
             applyDisplayMatch(nil)
             pictureInPicture.onStarted = nil
