@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "97",
+            released: "September 2026",
+            headline: "The iPhone and iPad player no longer closes itself, and it gets swipe controls.",
+            changes: [
+                "Playing a title from its detail page, Library, Search or Discover on iPhone or iPad no longer closes the player a moment after it opens. Titles started from Home and Continue Watching were never affected, which made it look as if only some films were broken.",
+                "The iPhone player no longer turns the screen to landscape by itself. A film opened in portrait plays in portrait until you turn the phone.",
+                "Swipe down on the video to shrink the player into Picture in Picture; it follows your finger on the way down. Swipe up to open the options panel with subtitles, audio and speed. The Close button now simply closes the player.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "96",
             released: "September 2026",
             headline: "Playback problems now reach the developer on their own.",
