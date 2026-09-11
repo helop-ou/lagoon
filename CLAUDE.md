@@ -63,6 +63,18 @@ out of the guides (see "Keeping this clean" in docs/README.md).
 - End-to-end: the public demo server (`demo.jellyfin.org/stable`, user
   `demo`, empty password) supports the full flow including playback.
 
+## Working with subagents
+
+Use subagents where they make sense, and do the small things yourself.
+Delegate when a task is a broad search across many files, when there are
+independent pieces that can run in parallel (the tvOS and iOS builds, a
+sweep of several guides, a set of mechanical edits with a precise spec), or
+when a review benefits from fresh eyes on a diff. Give each agent a precise
+spec and check its result; the main session plans, reviews, and verifies.
+Do the work directly when it is a single-file edit, a lookup in a file or
+symbol you already know, or anything where explaining the task would take
+longer than doing it. Never claim an agent's result before it has come back.
+
 ## Invariants that have regressed before
 
 Each is explained, with its ticket and evidence, in the guide named. This
