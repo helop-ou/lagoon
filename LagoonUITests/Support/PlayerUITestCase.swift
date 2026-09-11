@@ -20,22 +20,32 @@ class PlayerUITestCase: XCTestCase {
         simulatorTranscode: Bool = true,
         extraArguments: [String] = []
     ) -> XCUIApplication {
+        var arguments = ["-debug.benchSearchTerm", title]
+        if let year {
+            arguments += ["-debug.benchProductionYear", String(year)]
+        }
+        if let series {
+            arguments += ["-debug.regressionSeriesName", series]
+        }
+        return launchSignedIn(simulatorTranscode: simulatorTranscode, extraArguments: arguments + extraArguments)
+    }
+
+    /// The same regression launch without a bench fixture: the app lands on
+    /// Home signed into the lane's server, and the test drives the screens
+    /// itself. For journeys where the way *into* the player is the subject.
+    func launchSignedIn(
+        simulatorTranscode: Bool = true,
+        extraArguments: [String] = []
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-debug.playerRegression", "YES",
             "-debug.regressionBootstrapPublicDemo", "YES",
             "-debug.regressionResetState", "YES",
-            "-debug.benchSearchTerm", title,
             "-debug.playbackHUD", playbackHUDEnabled ? "YES" : "NO",
         ]
         if simulatorTranscode {
             app.launchArguments += ["-debug.simulatorTranscode", "YES"]
-        }
-        if let year {
-            app.launchArguments += ["-debug.benchProductionYear", String(year)]
-        }
-        if let series {
-            app.launchArguments += ["-debug.regressionSeriesName", series]
         }
         app.launchArguments += extraArguments
         for key in [

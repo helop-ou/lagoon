@@ -175,6 +175,46 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertFalse(probe.exists, "Close should dismiss the player and its probe")
     }
 
+    /// HEL-162: a player started from a pushed detail page closed itself about
+    /// a second after opening, on every title reached through Library, Search
+    /// or Discover. The bench journeys above never saw it because they present
+    /// from the tab root. Presenting from inside a `NavigationStack`
+    /// destination made the stack briefly show its root, a view update in
+    /// that window dropped the destination, and its teardown closed the
+    /// player; every screen now requests playback from the tab root's host.
+    func testPlayerStartedFromDetailPageStaysOpen() throws {
+        let app = launchSignedIn()
+        let home = app.tabBars.buttons["Home"]
+        XCTAssertTrue(home.waitForExistence(timeout: 30))
+        let library = app.tabBars.buttons["Library"]
+        XCTAssertTrue(library.waitForExistence(timeout: 10))
+        library.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["library.view"].waitForExistence(timeout: 15))
+
+        let poster = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'media.poster.'"))
+            .firstMatch
+        XCTAssertTrue(poster.waitForExistence(timeout: 25), "the library grid should list at least one title")
+        let itemID = poster.identifier.replacingOccurrences(of: "media.poster.", with: "")
+        poster.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["detail.item.\(itemID)"].waitForExistence(timeout: 15))
+
+        let play = app.buttons["Play"].exists ? app.buttons["Play"] : app.buttons["Resume"]
+        XCTAssertTrue(play.waitForExistence(timeout: 10), "the detail page should offer Play")
+        play.tap()
+
+        let probe = app.descendants(matching: .any)["player.regression.state"]
+        XCTAssertTrue(probe.waitForExistence(timeout: 30), "the player should present")
+        waitForState(in: app, timeout: 45) { $0.int("ready") == 1 && $0.int("buffering") == 0 }
+        let startTime = state(in: app).double("time")
+        // Long enough for the presentation transition to end and for the old
+        // teardown to have happened several times over.
+        Thread.sleep(forTimeInterval: 6)
+        XCTAssertTrue(probe.exists, "the player should still be up after its presentation settles")
+        XCTAssertGreaterThan(state(in: app).double("time"), startTime, "playback should still be advancing")
+        snapshot(app, name: "detail-page-player")
+    }
+
     /// Writes a PNG of the app to `LAGOON_UI_SCREENSHOT_DIR` when that
     /// environment variable is set, so a scripted run can look at the
     /// touch chrome afterwards; a plain test run writes nothing.
