@@ -1034,9 +1034,17 @@ final class PlaybackController {
             }
             var policy = PlaybackFillPolicy()
             var observedStalls = engine?.stallCount ?? 0
-            @MainActor func snapshot(_ metrics: PlaybackCacheMetrics, engine: SampleBufferPlayerEngine) -> PlaybackFillPolicy.Snapshot {
+            // Only the pre-fetch snapshot consumes a stall: the policy acts
+            // on it there, so a stall that lands while a chunk is in flight
+            // must survive the post-fetch snapshot and take the cooldown on
+            // the next pass instead of being discarded.
+            @MainActor func snapshot(
+                _ metrics: PlaybackCacheMetrics,
+                engine: SampleBufferPlayerEngine,
+                consumingStall: Bool = true
+            ) -> PlaybackFillPolicy.Snapshot {
                 let newStall = engine.stallCount > observedStalls
-                observedStalls = engine.stallCount
+                if consumingStall { observedStalls = engine.stallCount }
                 return .init(
                     isPaused: engine.isPaused,
                     isBuffering: engine.isBuffering,
@@ -1092,7 +1100,7 @@ final class PlaybackController {
                     Double(after.cachedBytesAheadOfPlayhead) / 1_048_576,
                     String(describing: outcome)
                 )
-                switch policy.afterFetch(outcome, snapshot(after, engine: engine)) {
+                switch policy.afterFetch(outcome, snapshot(after, engine: engine, consumingStall: false)) {
                 case .stop:
                     return
                 case .wait(let seconds):
