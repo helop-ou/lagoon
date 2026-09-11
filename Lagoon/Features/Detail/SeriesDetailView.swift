@@ -38,7 +38,10 @@ final class SeriesDetailViewModel {
     /// After a watched/favourite toggle or a playback session: the show's own
     /// flags, the episode rail, and *which episode is up next* can all have
     /// moved — marking one watched advances it to the following one.
-    func reloadUserData(client: JellyfinClient, seriesId: String) async {
+    /// Returns whether every part the action row acts on was re-read: the
+    /// show's own flags, the up-next episode, and the episode rail.
+    @discardableResult
+    func reloadUserData(client: JellyfinClient, seriesId: String) async -> Bool {
         async let detailTask = client.item(id: seriesId)
         async let upNextTask = client.nextUpEpisode(seriesId: seriesId)
         let refreshedDetail = try? await detailTask
@@ -50,21 +53,25 @@ final class SeriesDetailViewModel {
         }
         if let refreshedDetail { detail = refreshedDetail }
         if case .success(let item) = refreshedUpNext { upNext = item }
-        await loadEpisodes(client: client, seriesId: seriesId)
+        let episodesRefreshed = await loadEpisodes(client: client, seriesId: seriesId)
+        guard case .success = refreshedUpNext else { return false }
+        return refreshedDetail != nil && episodesRefreshed
     }
 
-    private func loadEpisodes(client: JellyfinClient, seriesId: String) async {
-        guard let selectedSeasonId else { return }
+    /// Returns whether the visible season's rail was replaced by a fresh read.
+    @discardableResult
+    private func loadEpisodes(client: JellyfinClient, seriesId: String) async -> Bool {
+        guard let selectedSeasonId else { return true }
         isLoadingEpisodes = true
         let loaded = try? await client.episodes(seriesId: seriesId, seasonId: selectedSeasonId)
         // Stale-response guard: a slow season fetch must not clobber a newer pick.
-        if self.selectedSeasonId == selectedSeasonId {
-            // A foreground sync is opportunistic. Preserve the visible rail
-            // when the server is asleep rather than turning a full season
-            // into an empty one (HEL-135).
-            if let loaded { episodes = loaded }
-            isLoadingEpisodes = false
-        }
+        guard self.selectedSeasonId == selectedSeasonId else { return false }
+        // A foreground sync is opportunistic. Preserve the visible rail
+        // when the server is asleep rather than turning a full season
+        // into an empty one (HEL-135).
+        if let loaded { episodes = loaded }
+        isLoadingEpisodes = false
+        return loaded != nil
     }
 }
 
@@ -139,7 +146,15 @@ struct SeriesDetailView: View {
                 // show. Each control targets what it plausibly means next to
                 // a Play button that starts one specific episode.
                 ItemActionRow(item: displayed, playedItem: subject) {
-                    await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+                    let refreshed = await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+                    // A hand-picked episode lives in this view's state, which
+                    // no reload touches: re-match it from the refreshed rail
+                    // so its watched flag is the server's, not the pick's.
+                    if let picked = highlighted {
+                        guard let fresh = viewModel.episodes.first(where: { $0.id == picked.id }) else { return false }
+                        highlighted = fresh
+                    }
+                    return refreshed
                 }
             }
 

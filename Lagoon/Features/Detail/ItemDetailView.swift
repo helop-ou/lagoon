@@ -33,7 +33,9 @@ struct ItemDetailView: View {
                 // flight here; read the item back only once it has landed
                 // (HEL-132).
                 await session.client.playbackReports.settle()
-                detail = try? await session.client.item(id: item.id)
+                if let fresh = try? await session.client.item(id: item.id) {
+                    detail = fresh
+                }
             }
         })
     }
@@ -112,7 +114,11 @@ struct ItemDetailView: View {
 
     private var actionRow: some View {
         ItemActionRow(item: displayed) {
-            detail = try? await session.client.item(id: item.id)
+            // A failed re-read keeps the detail on screen; the row keeps the
+            // viewer's choice until a later read succeeds.
+            guard let fresh = try? await session.client.item(id: item.id) else { return false }
+            detail = fresh
+            return true
         }
     }
 
