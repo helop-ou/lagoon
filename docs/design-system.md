@@ -2,7 +2,7 @@
 
 Lagoon is dark-locked, with black backgrounds, system semantic text colors,
 and native Liquid Glass actions. Use the shared implementation in
-[`DesignSystem.swift`](../Lagoon/Views/Components/DesignSystem.swift), not
+[`DesignSystem.swift`](../Lagoon/Shared/UI/DesignSystem.swift), not
 screen-specific copies of its values.
 
 ## Tokens
