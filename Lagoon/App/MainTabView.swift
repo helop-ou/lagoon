@@ -520,12 +520,19 @@ struct MainTabView: View {
                 regressionResolution = "error:playable library scan failed"
                 return
             }
+            // Journeys written for the public demo's direct-play catalogue
+            // ask for a direct-play source explicitly, so a fixture server
+            // whose first playable title transcodes hands them a matching
+            // title or an explicit missing-fixture skip instead of a
+            // timeout (HEL-144, audit A18).
+            let requireDirectPlay = UserDefaults.standard.bool(forKey: "debug.regressionRequireDirectPlay")
+            let requireAudio = UserDefaults.standard.bool(forKey: "debug.regressionRequireAudio")
             for item in page.items {
                 guard let info = try? await session.client.playbackInfo(itemId: item.id),
                       let source = info.mediaSources.first,
                       (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }),
-                      !UserDefaults.standard.bool(forKey: "debug.regressionRequireAudio")
-                        || (source.mediaStreams ?? []).contains(where: { $0.type == "Audio" }) else {
+                      !requireDirectPlay || source.supportsDirectPlay == true,
+                      !requireAudio || (source.mediaStreams ?? []).contains(where: { $0.type == "Audio" }) else {
                     continue
                 }
                 print("RegressionResolve playable title=\"\(item.name ?? "?")\" id=\(item.id)")
@@ -534,8 +541,8 @@ struct MainTabView: View {
                 playerItem = PlayerItem(media: item, startFromBeginning: true)
                 return
             }
-            print("RegressionResolve no playable item")
-            regressionResolution = "missing:playable item"
+            print("RegressionResolve no playable item (directPlay=\(requireDirectPlay), audio=\(requireAudio))")
+            regressionResolution = requireDirectPlay ? "missing:direct-play playable item" : "missing:playable item"
             return
         }
         if regressionRun,
