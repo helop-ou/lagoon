@@ -91,6 +91,9 @@ struct MainTabView: View {
         // UI for this launch-only diagnostic hook.
         .task {
             await launchBenchItemIfRequested()
+            #if DEBUG
+            await openDetailIfRequested()
+            #endif
             #if DEBUG && os(iOS)
             await startDownloadSpikeIfRequested()
             #endif
@@ -298,6 +301,18 @@ struct MainTabView: View {
             delay = min(delay * 2, .seconds(30))
         }
     }
+
+    #if DEBUG
+    /// Hands-off simulator runs: `-debug.openDetailItemID <id>` pushes the
+    /// item's detail page on Home the way a Top Shelf link would, without
+    /// the ownership token a real link carries or the system's "Open in
+    /// Lagoon?" prompt that `simctl openurl` raises.
+    private func openDetailIfRequested() async {
+        guard let itemID = UserDefaults.standard.string(forKey: "debug.openDetailItemID"), !itemID.isEmpty,
+              let item = try? await session.client.item(id: itemID) else { return }
+        homeNavigationPath.append(ContentNavigationRoute.item(item))
+    }
+    #endif
 
     #if DEBUG && os(iOS)
     /// HEL-166 spike, hands-off: `-debug.downloadSpikeItemID <id>
