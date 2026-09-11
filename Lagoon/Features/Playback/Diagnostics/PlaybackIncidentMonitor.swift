@@ -134,8 +134,10 @@ nonisolated enum PlaybackDegradationPolicy {
     /// stably. Empty for a healthy or too-short session. Frozen playback
     /// and renderer recoveries have their own incidents and are carried as
     /// counters only.
-    static func reasons(for counters: Counters) -> [String] {
-        guard counters.playedSeconds >= minimumPlayedSeconds else { return [] }
+    static func reasons(for counters: Counters, sampledWholeAttempt: Bool = true) -> [String] {
+        // Engine totals cover the entire attempt. A partial sampling window
+        // cannot compare those totals fairly with observed playing time.
+        guard sampledWholeAttempt, counters.playedSeconds >= minimumPlayedSeconds else { return [] }
         var reasons: [String] = []
         if counters.droppedFrames >= droppedFramesMinimum, counters.totalFrames > 0,
            Double(counters.droppedFrames) / Double(counters.totalFrames) >= droppedFramesRatio {
@@ -168,6 +170,8 @@ final class PlaybackIncidentMonitor {
     private var attemptStartedAt: TimeInterval?
     private var readyAt: TimeInterval?
     private var sampleTask: Task<Void, Never>?
+    private weak var samplingEngine: SampleBufferPlayerEngine?
+    private var preferenceObserver: NSObjectProtocol?
     private var freeze = PlaybackFreezeDetector()
     private var counters = PlaybackDegradationPolicy.Counters()
     private var lastSampleAt: TimeInterval?
@@ -176,11 +180,16 @@ final class PlaybackIncidentMonitor {
     private var lastStallCount = 0
     private var frequentStallsReported = false
     private var attemptEnded = true
+    /// Session-wide degradation can only be assessed after uninterrupted
+    /// sampling of this attempt.
+    private(set) var sampledWholeAttempt = false
     /// A fallback whose report waits for the successor's verdict: the
     /// dashboard should say whether the other rung actually played
     /// (`recovered`), failed too, or was abandoned by the viewer.
     private var pendingFallback: PendingFallback?
     private let hub: DiagnosticsHub
+    private let notificationCenter: NotificationCenter
+    private let sleep: @MainActor (Duration) async throws -> Void
 
     private struct PendingFallback {
         var variant: [String]
@@ -188,8 +197,43 @@ final class PlaybackIncidentMonitor {
         var failedAt: TimeInterval
     }
 
-    init(hub: DiagnosticsHub = Diagnostics.shared) {
+    init(
+        hub: DiagnosticsHub = Diagnostics.shared,
+        notificationCenter: NotificationCenter = .default,
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
         self.hub = hub
+        self.notificationCenter = notificationCenter
+        self.sleep = sleep
+        // Preference changes are infrequent and do not belong in a view's
+        // Observation scope. Keep listening while opted out so this same
+        // attempt can resume sampling without polling or retaining its engine.
+        preferenceObserver = notificationCenter.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self, hub] _ in
+            let observedAt = ProcessInfo.processInfo.systemUptime
+            let enabled = hub.isReportingEnabled
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Preserve an observed opt-out even if it is turned back on
+                // before this main-actor callback runs. A queued change from
+                // the outgoing attempt must not reset its enabled successor.
+                if !enabled, let startedAt = self.attemptStartedAt, observedAt >= startedAt {
+                    self.sampledWholeAttempt = false
+                    self.endSampling()
+                }
+                self.updateSamplingPreference()
+            }
+        }
+    }
+
+    isolated deinit {
+        sampleTask?.cancel()
+        if let preferenceObserver {
+            notificationCenter.removeObserver(preferenceObserver)
+        }
     }
 
     /// A new attempt: a fresh random token, the negotiated facts, and clean
@@ -203,6 +247,7 @@ final class PlaybackIncidentMonitor {
         resumeSeconds: Double
     ) {
         endSampling()
+        samplingEngine = nil
         attempt = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
         attemptStartedAt = ProcessInfo.processInfo.systemUptime
         readyAt = nil
@@ -214,6 +259,7 @@ final class PlaybackIncidentMonitor {
         lastStallCount = 0
         frequentStallsReported = false
         attemptEnded = false
+        sampledWholeAttempt = hub.isReportingEnabled
         facts = Self.facts(delivery: delivery, method: method, source: source, cached: cached, disc: disc)
         var fields = facts
         fields["position"] = .double(resumeSeconds.rounded(toPlaces: 1))
@@ -243,6 +289,8 @@ final class PlaybackIncidentMonitor {
         hub.record(.playbackFailure, fields)
         hub.report(.playbackStartFailed, level: .error, variant: detail.fingerprint, fields: fields)
         attemptEnded = true
+        endSampling()
+        samplingEngine = nil
         hub.setAmbientFields([:])
     }
 
@@ -261,7 +309,9 @@ final class PlaybackIncidentMonitor {
         publishAmbientFields()
         hub.record(.playbackReady, fields)
         resolvePendingFallback(outcome: "recovered")
-        beginSampling(engine: engine)
+        endSampling()
+        samplingEngine = engine
+        updateSamplingPreference()
     }
 
     /// The engine failed. `next` is the rung the ladder is about to try,
@@ -334,10 +384,11 @@ final class PlaybackIncidentMonitor {
         if outcome != "fallback" {
             resolvePendingFallback(outcome: "cancelled")
         }
-        if let engine {
+        if hub.isReportingEnabled, let engine {
             accumulate(engine: engine, at: ProcessInfo.processInfo.systemUptime)
         }
         endSampling()
+        samplingEngine = nil
         var fields = incidentFields(extra: countersFields)
         if DiagnosticSchema.outcomeChoices.contains(outcome) {
             fields["outcome"] = .string(outcome)
@@ -347,7 +398,7 @@ final class PlaybackIncidentMonitor {
         }
         hub.record(.playbackStop, fields)
         defer { hub.setAmbientFields([:]) }
-        let reasons = PlaybackDegradationPolicy.reasons(for: counters)
+        let reasons = PlaybackDegradationPolicy.reasons(for: counters, sampledWholeAttempt: sampledWholeAttempt)
         guard !reasons.isEmpty, outcome != "failed" else { return }
         fields["degradation"] = .string(reasons.joined(separator: ","))
         hub.report(.playbackDegraded, level: .warning, variant: reasons, fields: fields)
@@ -355,18 +406,42 @@ final class PlaybackIncidentMonitor {
 
     // MARK: - Sampling
 
+    private func updateSamplingPreference() {
+        guard hub.isReportingEnabled else {
+            sampledWholeAttempt = false
+            endSampling()
+            return
+        }
+        guard !attemptEnded, sampleTask == nil, let engine = samplingEngine else { return }
+        beginSampling(engine: engine)
+    }
+
     private func beginSampling(engine: SampleBufferPlayerEngine) {
-        endSampling()
+        // Off means off: with reporting disabled there is nothing to feed,
+        // so the 2 s tick does not run at all.
+        guard hub.isReportingEnabled else { return }
+        // An opt-out interval is not a frozen picture, played time, or a
+        // burst of stalls. Reset the window before resuming this attempt.
+        freeze = PlaybackFreezeDetector()
+        tick = 0
+        stallUptimes = []
         lastSampleAt = ProcessInfo.processInfo.systemUptime
         lastStallCount = engine.stallCount
-        sampleTask = Task { [weak self, weak engine] in
+        sampleTask = Task { [weak self, weak engine, sleep] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: Self.sampleInterval)
+                    try await sleep(Self.sampleInterval)
                 } catch {
                     return
                 }
-                guard let self, let engine else { return }
+                // Cancellation may race a completed sleep. An outgoing task
+                // must never sample an ended attempt or a restarted window.
+                guard !Task.isCancelled, let self, let engine else { return }
+                guard self.hub.isReportingEnabled else {
+                    self.sampledWholeAttempt = false
+                    self.endSampling()
+                    return
+                }
                 self.sample(engine: engine)
             }
         }
@@ -375,6 +450,7 @@ final class PlaybackIncidentMonitor {
     private func endSampling() {
         sampleTask?.cancel()
         sampleTask = nil
+        lastSampleAt = nil
     }
 
     private func sample(engine: SampleBufferPlayerEngine) {
