@@ -46,12 +46,26 @@ sample-buffer player.
 To try it without a home server, connect to the public Jellyfin demo:
 `demo.jellyfin.org/stable`, user `demo`, empty password.
 
+### Third-party notices
+
+The native libraries Lagoon links carry their own licences. The bundled texts
+are in [`Lagoon/Resources/Licenses`](Lagoon/Resources/Licenses), and the app
+shows the same list under Settings → About → Acknowledgements with the version
+and source each binary was built from. The vendored artifacts keep their
+provenance and rebuild instructions beside them, in
+[`Libavformat.README.md`](Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md)
+and [`Libdovi.README.md`](Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md).
+
 ## Documentation
 
 Start with the [documentation index](docs/README.md) and
 [coding standards](docs/standards.md). The current guides cover architecture,
 design, Jellyfin API, playback, release, and roadmap, with detailed engineering
 notes and dated validation evidence linked separately.
+
+[Contributing](CONTRIBUTING.md) has the prerequisites, build and test commands,
+and repository conventions; [security reports](SECURITY.md) go privately by
+email rather than into an issue.
 
 ## Compatibility
 
