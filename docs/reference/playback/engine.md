@@ -4,7 +4,7 @@ Playback engineering notes retained during the September 10, 2026 documentation
 cleanup. Start with the [current playback guide](../../playback.md) and the
 [notes index](README.md).
 
-## The engine (`Lagoon/Views/Player/SampleBuffer/`)
+## The engine (`Lagoon/Features/Playback/Engine/`)
 
 libavformat demux → codec-specific stages → `AVSampleBufferDisplayLayer` +
 `AVSampleBufferAudioRenderer` under one `AVSampleBufferRenderSynchronizer`.
