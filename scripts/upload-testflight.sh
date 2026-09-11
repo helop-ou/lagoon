@@ -49,12 +49,12 @@ build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0
 # Pre-flight, because an archive takes minutes and a missing changelog entry is
 # the easy thing to forget. ChangelogTests enforces the same rule, but only
 # once something has been built.
-changelog="$root/Lagoon/Models/Changelog.swift"
+changelog="$root/Lagoon/Features/Settings/Changelog.swift"
 if ! grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${build}\""; then
     cat >&2 <<EOF
 error: no Changelog entry for ${version} (${build}).
 
-Add one at the top of Lagoon/Models/Changelog.swift, then commit it with the
+Add one at the top of Lagoon/Features/Settings/Changelog.swift, then commit it with the
 build-number bump. Shipping a build nobody wrote notes for is the thing this
 whole setup exists to prevent.
 EOF
