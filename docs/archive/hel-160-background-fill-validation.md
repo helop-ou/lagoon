@@ -16,7 +16,8 @@ request for them.
 
 - `PlaybackFillPolicy` (new, pure): below 120 s of cached media ahead of the
   playhead the next chunk follows after a yield of half its own request time
-  (capped at 0.5 s); at or above the target the old pacing returns; a failed
+  (uncapped, so a slow link keeps a third of itself for foreground reads); at
+  or above the target the old pacing returns; a failed
   chunk backs off 1, 2, 4 … 30 s and is retried; `.exhausted` ends a whole-file
   fill and idle-polls a windowed one; a stall or buffering renderer still gets
   the 20 s cooldown; pause still fills at full speed.
@@ -72,6 +73,18 @@ transcode to the simulator, so it never has a direct cache and the fill
 scheduler does not apply to it there; the first bench attempt on it produced
 no cache fields at all. Direct-play verification needs a title the simulator
 profile direct-plays.
+
+## Review fixes, same day
+
+A read of the diff found two things the bench could not show. The post-fetch
+snapshot advanced the stall counter without anything acting on it, so a stall
+landing while a chunk was in flight lost its 20 s cooldown; only the pre-fetch
+snapshot consumes a stall now. The hurried yield had an absolute 0.5 s cap,
+which let fill take ~95% of a link where a chunk takes 10 s, the opposite of
+the intent; the yield is now a plain fraction. A foreground read that outwaits
+a promoted prefetch also re-checks cancellation before starting its own
+request. The A/B above was run before these fixes; the fast-link numbers are
+unaffected (a 0.2 s chunk yields 0.1 s either way).
 
 ## Unit coverage
 
