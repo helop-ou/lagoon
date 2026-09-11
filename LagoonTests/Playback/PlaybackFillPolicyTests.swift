@@ -4,6 +4,11 @@ import Testing
 
 /// Pure scheduler-policy coverage (HEL-160): no cache, no clock, no engine —
 /// just the decision table `PlaybackController.startBufferFill` drives.
+///
+/// Eager pacing is judged from measured throughput against the title's
+/// average bitrate, not from whether the cushion grew between chunks: that
+/// growth guard is gone because production chunks are 1 MiB, too little
+/// media at realistic 4K bitrates to move a fixed per-chunk threshold.
 @Suite("Playback fill policy")
 struct PlaybackFillPolicyTests {
     // MARK: - beforeFetch
@@ -117,6 +122,9 @@ struct PlaybackFillPolicyTests {
         var policy = PlaybackFillPolicy()
         var snapshot = PlaybackFillPolicy.Snapshot()
         snapshot.aheadSeconds = 30
+        // Throughput headroom clearly holds: 1,000 bytes at 100 bytes/s is
+        // 10 s of media, far past the 0.33 s this 0.2 s request requires.
+        snapshot.averageBytesPerSecond = 100
         let decision = policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot)
         expectWait(decision, 0.1)
     }
@@ -127,6 +135,9 @@ struct PlaybackFillPolicyTests {
         var policy = PlaybackFillPolicy()
         var snapshot = PlaybackFillPolicy.Snapshot()
         snapshot.aheadSeconds = 30
+        // 1,000 bytes at 100 bytes/s is 10 s of media, past the 6.6 s this
+        // 4 s request requires.
+        snapshot.averageBytesPerSecond = 100
         let decision = policy.afterFetch(.fetched(bytes: 1_000, seconds: 4), snapshot)
         expectWait(decision, 2)
     }
@@ -139,40 +150,6 @@ struct PlaybackFillPolicyTests {
         snapshot.aheadSeconds = nil
         let decision = policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot)
         expectWait(decision, 0.8)
-    }
-
-    @Test func eagerPacingLastsOnlyWhileTheCushionGrows() {
-        // A link with headroom: each chunk adds cushion, so fill stays eager.
-        var policy = PlaybackFillPolicy()
-        var snapshot = PlaybackFillPolicy.Snapshot()
-        snapshot.aheadSeconds = 10
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
-        snapshot.aheadSeconds = 14
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
-        // A link that can barely carry the title: playback consumes what the
-        // chunk added, the cushion stops growing, and the gentle pace returns
-        // before any stall has to force it.
-        snapshot.aheadSeconds = 14.1
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.8)
-        snapshot.aheadSeconds = 13
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.8)
-        // Headroom comes back (playback paused elsewhere, link recovered):
-        // the next chunk that gains re-enables eager pacing.
-        snapshot.aheadSeconds = 16
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
-    }
-
-    @Test func aSeekThatDropsTheCushionReEvaluatesOnTheNextChunk() {
-        var policy = PlaybackFillPolicy()
-        var snapshot = PlaybackFillPolicy.Snapshot()
-        snapshot.aheadSeconds = 60
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
-        // The playhead jumped past the cushion: one gentle chunk, then eager
-        // again as soon as the new cushion is seen to grow.
-        snapshot.aheadSeconds = 2
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.8)
-        snapshot.aheadSeconds = 5
-        expectWait(policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot), 0.1)
     }
 
     // MARK: - afterFetch: fetched, playing, at/above the cushion target (relaxed)
@@ -201,6 +178,176 @@ struct PlaybackFillPolicyTests {
         expectWait(decision, PlaybackFillPolicy.relaxedPacingCapSeconds)
     }
 
+    // MARK: - afterFetch: fetched, playing, throughput headroom (HEL-160 4K)
+
+    private func relaxedWait(_ seconds: Double) -> Double {
+        min(
+            max(seconds, PlaybackFillPolicy.minimumMeasuredRequestSeconds) * PlaybackFillPolicy.relaxedPacingMultiplier,
+            PlaybackFillPolicy.relaxedPacingCapSeconds
+        )
+    }
+
+    @Test func aOneMebibyteChunkStaysEagerAtHighBitrateWhenTheLinkHasHeadroom() {
+        // A 1 MiB chunk carries well under 0.25 s of even a 120 Mbps title —
+        // exactly the case the old fixed cushion-gain guard could never pass,
+        // since a single chunk could never grow the cushion by that much.
+        for titleMbps in [40.0, 80.0, 120.0] {
+            var policy = PlaybackFillPolicy()
+            var snapshot = PlaybackFillPolicy.Snapshot()
+            snapshot.aheadSeconds = 30
+            snapshot.averageBytesPerSecond = mbps(titleMbps)
+            snapshot.playbackRate = 1
+            let seconds = Double(mebibyte) / mbps(400)
+            let decision = policy.afterFetch(.fetched(bytes: mebibyte, seconds: seconds), snapshot)
+            expectWait(decision, seconds * PlaybackFillPolicy.hurriedYieldFraction)
+        }
+    }
+
+    @Test func aLinkNearPlaybackDemandKeepsTheGentlePace() {
+        for titleMbps in [40.0, 80.0, 120.0] {
+            var policy = PlaybackFillPolicy()
+            var snapshot = PlaybackFillPolicy.Snapshot()
+            snapshot.aheadSeconds = 30
+            snapshot.averageBytesPerSecond = mbps(titleMbps)
+            snapshot.playbackRate = 1
+            let seconds = Double(mebibyte) / mbps(titleMbps * 1.2)
+            let decision = policy.afterFetch(.fetched(bytes: mebibyte, seconds: seconds), snapshot)
+            expectWait(decision, relaxedWait(seconds))
+        }
+    }
+
+    @Test func eagerPacingNeedsRoughlyOneAndTwoThirdsOfTheTitleBitrate() {
+        // Threshold link factor is (1 + hurriedYieldFraction) * minimumHeadroomRatio
+        // = 1.5 * 1.1 = 1.65x the title bitrate.
+        let titleMbps = 80.0
+        var snapshot = PlaybackFillPolicy.Snapshot()
+        snapshot.aheadSeconds = 30
+        snapshot.averageBytesPerSecond = mbps(titleMbps)
+        snapshot.playbackRate = 1
+
+        var justUnderPolicy = PlaybackFillPolicy()
+        let justUnderSeconds = Double(mebibyte) / mbps(titleMbps * 1.6)
+        let justUnderDecision = justUnderPolicy.afterFetch(.fetched(bytes: mebibyte, seconds: justUnderSeconds), snapshot)
+        expectWait(justUnderDecision, relaxedWait(justUnderSeconds))
+
+        var justOverPolicy = PlaybackFillPolicy()
+        let justOverSeconds = Double(mebibyte) / mbps(titleMbps * 1.7)
+        let justOverDecision = justOverPolicy.afterFetch(.fetched(bytes: mebibyte, seconds: justOverSeconds), snapshot)
+        expectWait(justOverDecision, justOverSeconds * PlaybackFillPolicy.hurriedYieldFraction)
+    }
+
+    @Test func fasterPlaybackRaisesTheBarAndShrinksTheCushion() {
+        let titleMbps = 40.0
+        let linkSeconds = Double(mebibyte) / mbps(100)
+
+        // At normal speed a 100 Mbps link clears 1.65x the 40 Mbps title.
+        var normalRateSnapshot = PlaybackFillPolicy.Snapshot()
+        normalRateSnapshot.aheadSeconds = 30
+        normalRateSnapshot.averageBytesPerSecond = mbps(titleMbps)
+        normalRateSnapshot.playbackRate = 1
+        var normalRatePolicy = PlaybackFillPolicy()
+        let normalRateDecision = normalRatePolicy.afterFetch(.fetched(bytes: mebibyte, seconds: linkSeconds), normalRateSnapshot)
+        expectWait(normalRateDecision, linkSeconds * PlaybackFillPolicy.hurriedYieldFraction)
+
+        // Doubling playback rate doubles the bar: 100 < 2 * 1.65 * 40 = 132.
+        var doubleRateSnapshot = normalRateSnapshot
+        doubleRateSnapshot.playbackRate = 2
+        var doubleRatePolicy = PlaybackFillPolicy()
+        let doubleRateDecision = doubleRatePolicy.afterFetch(.fetched(bytes: mebibyte, seconds: linkSeconds), doubleRateSnapshot)
+        expectWait(doubleRateDecision, relaxedWait(linkSeconds))
+
+        // Doubling the rate also halves the wall-clock cushion: 200 s of
+        // ahead at 2x is only a 100 s cushion, still under the 120 s target,
+        // so a link fast enough to clear 2 * 1.65 * 40 = 132 Mbps stays eager.
+        var wideCushionSnapshot = PlaybackFillPolicy.Snapshot()
+        wideCushionSnapshot.aheadSeconds = 200
+        wideCushionSnapshot.averageBytesPerSecond = mbps(titleMbps)
+        wideCushionSnapshot.playbackRate = 2
+        let fastLinkSeconds = Double(mebibyte) / mbps(400)
+        var wideCushionPolicy = PlaybackFillPolicy()
+        let wideCushionDecision = wideCushionPolicy.afterFetch(.fetched(bytes: mebibyte, seconds: fastLinkSeconds), wideCushionSnapshot)
+        expectWait(wideCushionDecision, fastLinkSeconds * PlaybackFillPolicy.hurriedYieldFraction)
+
+        // 250 s of ahead at 2x is a 125 s cushion: over target, so it is
+        // relaxed even on the same fast link.
+        var narrowCushionSnapshot = wideCushionSnapshot
+        narrowCushionSnapshot.aheadSeconds = 250
+        var narrowCushionPolicy = PlaybackFillPolicy()
+        let narrowCushionDecision = narrowCushionPolicy.afterFetch(.fetched(bytes: mebibyte, seconds: fastLinkSeconds), narrowCushionSnapshot)
+        expectWait(narrowCushionDecision, relaxedWait(fastLinkSeconds))
+    }
+
+    @Test func anUnknownBitrateKeepsTheGentlePace() {
+        var policy = PlaybackFillPolicy()
+        var snapshot = PlaybackFillPolicy.Snapshot()
+        snapshot.aheadSeconds = 30
+        snapshot.averageBytesPerSecond = nil
+        let decision = policy.afterFetch(.fetched(bytes: 1_000, seconds: 0.2), snapshot)
+        expectWait(decision, relaxedWait(0.2))
+    }
+
+    @Test func anEmptyOrUnmeasurableFetchKeepsTheGentlePace() {
+        var snapshot = PlaybackFillPolicy.Snapshot()
+        snapshot.aheadSeconds = 30
+        snapshot.averageBytesPerSecond = mbps(80)
+        snapshot.playbackRate = 1
+
+        var zeroBytesPolicy = PlaybackFillPolicy()
+        let zeroBytesDecision = zeroBytesPolicy.afterFetch(.fetched(bytes: 0, seconds: 0.2), snapshot)
+        expectWait(zeroBytesDecision, relaxedWait(0.2))
+
+        var infiniteSecondsPolicy = PlaybackFillPolicy()
+        let infiniteSecondsDecision = infiniteSecondsPolicy.afterFetch(.fetched(bytes: 1_000, seconds: .infinity), snapshot)
+        expectWait(infiniteSecondsDecision, 0.5)
+
+        var negativeSecondsPolicy = PlaybackFillPolicy()
+        let negativeSecondsDecision = negativeSecondsPolicy.afterFetch(.fetched(bytes: 1_000, seconds: -1), snapshot)
+        expectWait(negativeSecondsDecision, 0.5)
+    }
+
+    @Test func throughputIsJudgedPerRequestWithNoHistory() {
+        var policy = PlaybackFillPolicy()
+        var snapshot = PlaybackFillPolicy.Snapshot()
+        snapshot.aheadSeconds = 30
+        snapshot.averageBytesPerSecond = mbps(80)
+        snapshot.playbackRate = 1
+
+        // Fast link: eager.
+        let fastSeconds = Double(mebibyte) / mbps(400)
+        expectWait(
+            policy.afterFetch(.fetched(bytes: mebibyte, seconds: fastSeconds), snapshot),
+            fastSeconds * PlaybackFillPolicy.hurriedYieldFraction
+        )
+
+        // Slow link, same policy value: relaxed, with no memory of the
+        // previous eager decision.
+        let slowSeconds = Double(mebibyte) / mbps(90)
+        expectWait(
+            policy.afterFetch(.fetched(bytes: mebibyte, seconds: slowSeconds), snapshot),
+            relaxedWait(slowSeconds)
+        )
+
+        // Fast link again: eager again immediately, unaffected by the
+        // intervening relaxed chunk.
+        expectWait(
+            policy.afterFetch(.fetched(bytes: mebibyte, seconds: fastSeconds), snapshot),
+            fastSeconds * PlaybackFillPolicy.hurriedYieldFraction
+        )
+    }
+
+    @Test func averageBytesPerSecondNeedsAKnownLengthAndDuration() {
+        let bytesPerSecond = PlaybackFillPolicy.averageBytesPerSecond(
+            contentLength: Int64(600 * mebibyte), durationSeconds: 6_000
+        )
+        #expect(bytesPerSecond != nil)
+        #expect(abs((bytesPerSecond ?? 0) - 104_857.6) < 1e-6)
+
+        #expect(PlaybackFillPolicy.averageBytesPerSecond(contentLength: nil, durationSeconds: 6_000) == nil)
+        #expect(PlaybackFillPolicy.averageBytesPerSecond(contentLength: 0, durationSeconds: 6_000) == nil)
+        #expect(PlaybackFillPolicy.averageBytesPerSecond(contentLength: Int64(600 * mebibyte), durationSeconds: 0) == nil)
+        #expect(PlaybackFillPolicy.averageBytesPerSecond(contentLength: Int64(600 * mebibyte), durationSeconds: .infinity) == nil)
+    }
+
     // MARK: - aheadSeconds(cachedBytesAhead:contentLength:durationSeconds:)
 
     @Test func aheadSecondsProjectsCachedBytesThroughTheAverageBitrate() {
@@ -224,6 +371,13 @@ struct PlaybackFillPolicyTests {
     }
 
     // MARK: - Helpers
+
+    private let mebibyte = 1_024 * 1_024
+
+    /// Megabits per second, converted to bytes per second.
+    private func mbps(_ x: Double) -> Double {
+        x * 1_000_000 / 8
+    }
 
     private func waitSeconds(_ decision: PlaybackFillPolicy.Decision) -> Double? {
         if case .wait(let seconds) = decision { return seconds }
