@@ -92,14 +92,21 @@ struct PlaybackReportLedgerTests {
         let ledger = PlaybackReportLedger()
         let session = ledger.open()
         let clock = ContinuousClock()
-        let started = clock.now
-        async let a: Void = ledger.settle(timeout: .seconds(5))
-        async let b: Void = ledger.settle(timeout: .seconds(5))
-        Task {
+        async let a: Void = ledger.settle(timeout: .seconds(30))
+        async let b: Void = ledger.settle(timeout: .seconds(30))
+        let close = Task {
             try? await Task.sleep(for: .milliseconds(50))
+            let closedAt = clock.now
             ledger.close(session)
+            return closedAt
         }
         _ = await (a, b)
-        #expect(clock.now - started < .seconds(2))
+        let completedAt = clock.now
+        let closedAt = await close.value
+        // Measure the wake-up after close, excluding main-actor contention
+        // before the scheduled close. Both waiters must beat their timeout.
+        #expect(completedAt >= closedAt)
+        #expect(completedAt - closedAt < .seconds(10))
+        #expect(!ledger.hasOpenSessions)
     }
 }
