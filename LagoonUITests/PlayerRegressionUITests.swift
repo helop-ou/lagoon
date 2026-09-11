@@ -429,6 +429,10 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             extraArguments: [
                 "-debug.regressionFindPlayable", "YES",
                 "-debug.regressionRequireAudio", "YES",
+                // Written for the compressed direct-play path (the 120-frame
+                // coast below); a fixture server's first playable title can
+                // be a transcode, which never reaches the held state in time.
+                "-debug.regressionRequireDirectPlay", "YES",
                 "-debug.simulateDeliveryStall", "YES",
                 "-debug.starvationInjectionDelaySeconds", "8",
                 // The compressed path coasts on up to 120 queued frames
@@ -1465,6 +1469,10 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             extraArguments: [
                 "-debug.regressionFindPlayable", "YES",
                 "-debug.regressionRequireAudio", "YES",
+                // The sweep needs an advancing direct-play position; a
+                // fixture server's transcode can still be encoding when the
+                // position check runs.
+                "-debug.regressionRequireDirectPlay", "YES",
             ]
         )
         try requireRegressionFixture(in: app)
