@@ -42,6 +42,27 @@ struct PlaybackCacheTests {
         #endif
     }
 
+    @Test func aCompleteFilePlaysWithoutTheSessionUnlessItIsADisc() {
+        let suiteName = "PlaybackCacheTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        // Streaming: the session is the transport.
+        #expect(PlaybackBufferPolicy.engineUsesCacheSession(
+            playsFromCompleteFile: false, disc: false, method: .directPlay, defaults: defaults))
+        // A complete ordinary file plays straight from disk.
+        #expect(!PlaybackBufferPolicy.engineUsesCacheSession(
+            playsFromCompleteFile: true, disc: false, method: .directPlay, defaults: defaults))
+        // A complete disc image still needs the session: the UDF reader
+        // mounts it through the session's byte source, and without one the
+        // raw image reached libavformat and fell to a server remux (HEL-167).
+        #expect(PlaybackBufferPolicy.engineUsesCacheSession(
+            playsFromCompleteFile: true, disc: true, method: .directPlay, defaults: defaults))
+        // A transcode never gets the session in Release, disc or not.
+        #expect(!PlaybackBufferPolicy.engineUsesCacheSession(
+            playsFromCompleteFile: false, disc: true, method: .transcode, defaults: defaults))
+    }
+
     @Test func adaptiveCapacityPreservesFreeSpaceAndHonorsMaximum() {
         let mebibyte: Int64 = 1_024 * 1_024
 
