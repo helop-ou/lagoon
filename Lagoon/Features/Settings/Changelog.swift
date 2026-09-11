@@ -29,6 +29,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "98",
+            released: "September 2026",
+            headline: "4K films buffer ahead properly, and image subtitles stop piling up over a long film.",
+            changes: [
+                "4K films played directly from your server now buffer ahead at your connection's pace like everything else. The previous build only did this for lower-bitrate titles and quietly kept the old trickle for 4K.",
+                "Image subtitles such as those on Blu-ray rips no longer keep every picture they have shown in memory until you seek. Over a long film that could add up to hundreds of megabytes and slow the player down.",
+                "When marking something watched or adding a favorite fails, the button now says so briefly instead of silently flipping back. After the server accepts a change, the page re-reads it so a change made on another device shows up too.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "97",
             released: "September 2026",
             headline: "The iPhone and iPad player no longer closes itself, and it gets swipe controls.",
