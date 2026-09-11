@@ -35,9 +35,13 @@ cushion has reached the renderer, and fills cooperatively rather than in one
 large background request: one 1 MiB chunk at a time, with
 `PlaybackFillPolicy` (a pure, unit-tested value type) deciding what follows
 each chunk from the cushion of cached media ahead of the playhead (HEL-160).
-Below `targetAheadSeconds` (120 s) the next chunk follows after a yield of half
-the request's own duration, uncapped so foreground reads keep a third of the
-link however slow it is while a fast link never idles; at or above the target the
+Below `targetAheadSeconds` (120 s), and only while the cushion grew since the
+previous chunk, the next chunk follows after a yield of half the request's own
+duration, uncapped so foreground reads keep a third of the link while a fast
+link never idles. A link that can barely carry the title shows no gain and gets
+the gentle pace before any stall has to force it, so the scheduler is
+self-limiting on tight links; an unmeasurable cushion (no duration or length)
+also keeps the gentle pace. At or above the target the
 older pacing returns: four times the measured request duration, capped at 8 s.
 The pre-HEL-160 loop applied that pacing always, a fixed ~20% duty cycle that
 capped read-ahead near 2 MiB/s however fast the link was. Pacing measures the
