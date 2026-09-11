@@ -50,5 +50,5 @@ marketing="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-
 echo "Build ${current} -> ${next} (version ${marketing})"
 echo
 echo "Next: add a ChangelogEntry for ${marketing} (${next}) at the top of"
-echo "Lagoon/Models/Changelog.swift, then commit both. ChangelogTests fails"
+echo "Lagoon/Features/Settings/Changelog.swift, then commit both. ChangelogTests fails"
 echo "until that entry exists."
