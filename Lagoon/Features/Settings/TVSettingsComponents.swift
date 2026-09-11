@@ -245,4 +245,24 @@ struct TVSettingsActionLabel: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+/// A native toggle with the same row geometry as the other tvOS settings controls.
+struct TVSettingsToggle: View {
+    let title: LocalizedStringKey
+    @Binding var isOn: Bool
+
+    init(_ title: LocalizedStringKey, isOn: Binding<Bool>) {
+        self.title = title
+        _isOn = isOn
+    }
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            Text(title)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, Metrics.Space.l)
+        .frame(minHeight: 66)
+    }
+}
 #endif
