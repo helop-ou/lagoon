@@ -133,7 +133,7 @@ Platform limits, all verified on device rather than inferred:
   view by value and SwiftUI keeps that stale copy beside the refreshed one, so
   a strong `let engine` leaked one drained `SampleBufferPlayerEngine` per Up
   Next handoff. Every view declares `@PlayerEngineRef var engine`
-  (`Lagoon/Views/Player/PlayerEngineRef.swift`, weak, with the memberwise
+  (`Lagoon/Features/Playback/Views/PlayerEngineRef.swift`, weak, with the memberwise
   initializer unchanged), `PlaybackController` is the only owner,
   `VideoPlayerView`'s surface builder captures `[weak]`, and a copy that
   outlives its engine reads `DetachedPlayerEngine.shared` instead of crashing.
@@ -315,5 +315,5 @@ Platform limits, all verified on device rather than inferred:
 - tvOS does not restore focus to the presenting screen after the player cover
   dismisses (custom focusable content inside), so every screen that presents
   the player wraps in `.restoresFocusAfterPlayer(isPresented:)`
-  (`Lagoon/Views/Components/FocusRestoration.swift`: focus scope + `resetFocus`
+  (`Lagoon/Shared/UI/FocusRestoration.swift`: focus scope + `resetFocus`
   timed past the dismissal transition).
