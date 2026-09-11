@@ -189,11 +189,14 @@ footer states the same number and must change with it.
   that project and nothing else.
 - Project → Settings → Security & Privacy: *Prevent Storing of IP Addresses*
   on. No data scrubbing rules are relied on; the app never sends the fields
-  they would scrub. The app sends no `user` or `request` object, but the
-  event declares `platform: cocoa`, and for that platform Sentry's ingest
-  fills `user.ip_address` from the connection and derives a location from
-  it unless this setting is on. On 2026-09-11 the dashboard showed an IP and
-  geography for a device report, so the setting was off at that point.
+  they would scrub. The app sends no `user` or `request` object. Until
+  2026-09-12 the event declared `platform: cocoa`, and for that platform
+  Sentry's ingest fills `user.ip_address` from the connection and derives a
+  location from it unless this setting is on; on 2026-09-11 the dashboard
+  showed an IP and geography for a device report, so the setting was off at
+  that point. The event now declares `platform: native`, which Sentry does
+  not infer an address for, so the project setting is the second line rather
+  than the only one. `SentryEnvelopeTests` pins the platform.
 - Quota: Developer plan, 5,000 errors per month, one dashboard seat. Check
   Settings → Subscription monthly; the client-side limits above bound a
   worst case at a few dozen reports per process.
