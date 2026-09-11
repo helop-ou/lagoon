@@ -33,9 +33,9 @@ Lagoon/Shared/Diagnostics/            vendor-neutral core
 Lagoon/Shared/Diagnostics/Sentry/     app-owned adapter
   SentryDSN, SentryEnvelope, SentryTransportPolicy, SentryTransport
   DiagnosticsConfiguration            DSN and launch wiring
-Lagoon/Views/Player/PlaybackIncidentMonitor.swift
+Lagoon/Features/Playback/Diagnostics/PlaybackIncidentMonitor.swift
   PlaybackFreezeDetector, PlaybackDegradationPolicy, the per-attempt monitor
-Lagoon/Networking/APIDiagnostics.swift  request/decode failure classification
+Lagoon/Shared/Networking/APIDiagnostics.swift  request/decode failure classification
 ```
 
 `DiagnosticsHub.record` is a lock and an array append and may be called from
@@ -129,7 +129,10 @@ per occurrence (positions, durations) never enter a fingerprint.
   sessions that did not fail): requires ≥ 30 s played; reasons are
   `droppedFrames` (≥ 60 dropped and ≥ 0.5 % of frames), `stalls` (≥ 3),
   `reprimes` (≥ 1), `audioStarvation` (≥ 5). Frozen and renderer-recovery
-  counts ride along as fields. Healthy sessions send nothing.
+  counts ride along as fields. An attempt that started with reporting off
+  or was opted out midway has no degraded-session summary: its cumulative
+  engine counters cannot be judged against only the observed playing time.
+  Healthy sessions send nothing.
 - **Samples**: every third tick (6 s) writes `playback.sample` with queue
   depths, audio lead, counters, memory, thermal and app state, so an
   incident's attachment shows roughly the last minute of the pipeline.
@@ -159,8 +162,18 @@ per occurrence (positions, durations) never enter a fingerprint.
 ## Tester controls and disclosure
 
 Settings → Advanced → Diagnostic Reports → *Send Diagnostic Reports*
-(`diagnostics.reportingEnabled`). Release builds default on; Debug builds
-default off so development never spends quota, and a run turns it on with
+(`diagnostics.reportingEnabled`). Off means off: the history stops
+recording, the playback sampler does not run, and the pending queue is
+discarded. Changing the switch during playback cancels the sampler's timer;
+turning it back on resumes sampling the same attempt with fresh freeze and
+frequent-stall windows. An asynchronous renderer metrics request already in
+flight may finish; the monitor starts no further requests while opted out.
+HUD, decode-trace, and benchmark sampling keep their independent controls.
+The renderer metrics load every two seconds while reports are enabled is
+asynchronous and does not add SwiftUI body reads. Its performance cost remains
+unmeasured until a matched device benchmark compares reporting on and off.
+Release builds default on; Debug builds default off so
+development never spends quota, and a run turns it on with
 `-diagnostics.reportingEnabled YES`. The footer under the toggle states what
 a report contains. `PrivacyInfo.xcprivacy` declares *Other Diagnostic Data*
 and *Performance Data*, not linked, not used for tracking; App Store Connect's
@@ -192,7 +205,7 @@ Unit tests: `DiagnosticSchemaTests`, `DiagnosticHistoryTests`,
 `IncidentSuppressorTests`, `DiagnosticsHubTests`,
 `DiagnosticRouteTemplateTests`, `SentryEnvelopeTests`,
 `SentryTransportPolicyTests`, `PlaybackFreezeDetectorTests`,
-`PlaybackDegradationPolicyTests`, `PlaybackFailureDetailTests`,
+`PlaybackDegradationPolicyTests`, `PlaybackIncidentMonitorTests`, `PlaybackFailureDetailTests`,
 `DiagnosticPrivacyTests`.
 
 Payload inspection without touching Sentry:
