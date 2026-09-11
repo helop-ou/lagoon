@@ -1030,6 +1030,13 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
                 lock.unlock()
                 return try read(offset: offset, length: length, priority: priority, readAhead: readAhead)
             }
+            // A scope cancelled during the wait must not start one more request.
+            do {
+                try checkCancellation()
+            } catch {
+                lock.unlock()
+                throw error
+            }
         }
 
         // Make room before deciding how much to ask for. A read whose bytes
