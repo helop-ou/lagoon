@@ -77,7 +77,12 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
         return [
             "event_id": eventID ?? identifier(incident.id),
             "timestamp": incident.timestamp.timeIntervalSince1970,
-            "platform": "cocoa",
+            // Not "cocoa": for that platform (and "javascript") Sentry's
+            // ingest fills user.ip_address from the connection and derives
+            // a location from it unless the project setting forbids it. The
+            // app sends no user object and wants none inferred; "native" is
+            // a valid platform that Sentry leaves alone (HEL-159).
+            "platform": "native",
             "level": incident.level.rawValue,
             "logger": sdkName,
             "release": context.release,
