@@ -96,7 +96,7 @@ Incidents (`DiagnosticIncidentCode`, the reports) and their fingerprints:
 
 | Code | Level | Fingerprint variant | Fires when |
 | --- | --- | --- | --- |
-| `playback.startFailed` | error | stage, error domain, code | negotiation or engine start threw |
+| `playback.startFailed` | error | stage, error domain, code | negotiation or engine start threw; not when the viewer left (`CancellationError`, or URLSession's `-999` while the start task or controller was cancelled) |
 | `playback.fallback` | warning / error | cause, stage, domain, code, `afterTrackSwitch` | reported once the next rung has a verdict: `recovered` (warning, with the reload time in `elapsedMs`), `failed`, or `cancelled` by the viewer |
 | `playback.failed` | error | same as fallback | the ladder is spent |
 | `playback.rendererRecovery` | warning | reason, domain, code | audio renderer replaced, video renderer flushed, restart-point retry |
