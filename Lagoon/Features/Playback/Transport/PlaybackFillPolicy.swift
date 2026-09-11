@@ -5,16 +5,12 @@ import Foundation
 /// (HEL-160). `PlaybackController.startBufferFill` owns the loop; this owns
 /// what the loop does next.
 ///
-/// The old loop slept `min(max(requestSeconds, 0.125) * 4, 8)` seconds after
-/// every 1 MiB chunk while playing, a fixed ~20% duty cycle that capped
-/// read-ahead near 2 MiB/s however fast the link was. Now the cushion decides:
-/// below `targetAheadSeconds` of cached media, and only while the cushion is
-/// growing from chunk to chunk, the next chunk follows the last one after a
-/// yield of half the request it just made, so a link with headroom fills at
-/// its pace; a link without headroom shows no gain and gets the old gentle
-/// pacing, as does anything above the target. A failed
-/// fetch backs off and is retried; only cancellation, a complete file, or
-/// an exhausted whole-file cap end the loop.
+/// Below the cushion target, the measured fetch throughput must exceed the
+/// title's consumption rate even after yielding time to foreground reads.
+/// Use actual returned bytes: a production 1 MiB chunk contains much less
+/// than 0.25 seconds of high-bitrate 4K media, so a fixed per-chunk cushion
+/// gain cannot identify spare capacity. Throughput also remains measurable
+/// after gentle pacing, which would otherwise hide that capacity indefinitely.
 nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     enum Decision: Equatable, Sendable {
         case fetch
@@ -24,12 +20,14 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
 
     /// What the scheduler sees between fetches. `aheadSeconds` is nil when
     /// the title's duration or length is unknown; the policy then cannot
-    /// tell whether fill is gaining on playback and keeps the gentle pace.
+    /// compare fetch throughput with playback and keeps the gentle pace.
     struct Snapshot: Equatable, Sendable {
         var isPaused = false
         var isBuffering = false
         var newStall = false
         var aheadSeconds: Double?
+        var averageBytesPerSecond: Double?
+        var playbackRate: Double = 1
         var isWindowed = false
         var bufferedFraction: Double?
     }
@@ -40,7 +38,8 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     static let stallCooldownSeconds: TimeInterval = 20
     /// A full window waits for the playhead to make room.
     static let idlePollSeconds: TimeInterval = 2
-    /// Cached media ahead of the playhead the scheduler tries to keep.
+    /// Wall-clock seconds of cached playback the scheduler tries to keep at
+    /// the viewer's current rate, within the existing disk cache capacity.
     static let targetAheadSeconds: Double = 120
     /// Below the target: yield this fraction of the last request's own time
     /// between chunks, so foreground requests keep a fixed share of the link
@@ -48,6 +47,10 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     /// capped in seconds: a cap would shrink that share on exactly the slow
     /// links where the hurried branch is the steady state.
     static let hurriedYieldFraction: Double = 0.5
+    /// Leave a margin beyond break-even throughput after the foreground
+    /// yield. An average container bitrate is an estimate, and a link that
+    /// only just carries playback should keep the gentle background pace.
+    static let minimumHeadroomRatio: Double = 1.1
     /// Above the target: the pre-HEL-160 pacing, roughly a 20% duty cycle.
     static let relaxedPacingMultiplier: Double = 4
     static let relaxedPacingCapSeconds: TimeInterval = 8
@@ -56,15 +59,6 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     static let failureBackoffCapSeconds: TimeInterval = 30
 
     private(set) var consecutiveFailures = 0
-    /// The cushion after the previous fetched chunk. Eager pacing is allowed
-    /// only while the cushion grows from one chunk to the next: on a link
-    /// with headroom it does, and fill uses that headroom; on a link that can
-    /// barely carry the title it does not, and the fill drops back to the
-    /// gentle pace instead of competing with playback until a stall forces
-    /// the cooldown. That makes the scheduler self-limiting on tight links.
-    private(set) var lastAheadSeconds: Double?
-    /// Growth below this is playback noise, not headroom.
-    static let cushionGainThresholdSeconds: Double = 0.25
 
     /// Before a fetch: a title that fits under the cap finishes and the loop
     /// ends; a stall or buffering renderer gets the link to itself for a
@@ -95,32 +89,47 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
             // make room rather than give up on the rest of the movie. A
             // whole-file cache with nothing left is done.
             return snapshot.isWindowed ? .wait(Self.idlePollSeconds) : .stop
-        case .fetched(_, let seconds):
+        case .fetched(let bytes, let seconds):
             consecutiveFailures = 0
-            let previousAhead = lastAheadSeconds
-            lastAheadSeconds = snapshot.aheadSeconds
             if snapshot.isPaused {
                 // No foreground demux request is consuming: full speed.
                 return .fetch
             }
-            let measured = max(seconds, Self.minimumMeasuredRequestSeconds)
+            let validMeasurement = seconds.isFinite && seconds >= 0
+            let measured = validMeasurement ? max(seconds, Self.minimumMeasuredRequestSeconds)
+                : Self.minimumMeasuredRequestSeconds
             let relaxed = Decision.wait(min(measured * Self.relaxedPacingMultiplier, Self.relaxedPacingCapSeconds))
-            guard let ahead = snapshot.aheadSeconds else { return relaxed }
-            if ahead >= Self.targetAheadSeconds { return relaxed }
-            // The first chunk has no baseline; every later one must show gain.
-            if let previousAhead, ahead - previousAhead < Self.cushionGainThresholdSeconds {
-                return relaxed
-            }
-            return .wait(max(seconds, 0) * Self.hurriedYieldFraction)
+            guard validMeasurement, bytes > 0,
+                  let ahead = snapshot.aheadSeconds, ahead.isFinite,
+                  let bytesPerSecond = snapshot.averageBytesPerSecond,
+                  bytesPerSecond.isFinite, bytesPerSecond > 0,
+                  snapshot.playbackRate.isFinite, snapshot.playbackRate > 0,
+                  ahead / snapshot.playbackRate < Self.targetAheadSeconds else { return relaxed }
+
+            let fetchedMediaSeconds = Double(bytes) / bytesPerSecond
+            let pacedRequestSeconds = seconds * (1 + Self.hurriedYieldFraction)
+            let requiredMediaSeconds = pacedRequestSeconds * snapshot.playbackRate * Self.minimumHeadroomRatio
+            guard fetchedMediaSeconds > requiredMediaSeconds else { return relaxed }
+            // No cushion history crosses a seek, pause, rate change, failure,
+            // or full-window wait. Each request measures today's capacity,
+            // including any contention with foreground reads during it.
+            return .wait(seconds * Self.hurriedYieldFraction)
         }
     }
 
     /// Seconds of media a byte cushion represents, assuming the title's
     /// average bitrate. Nil when either side is unknown.
     static func aheadSeconds(cachedBytesAhead: Int64, contentLength: Int64?, durationSeconds: Double) -> Double? {
-        guard let contentLength, contentLength > 0, durationSeconds > 0 else { return nil }
-        let bytesPerSecond = Double(contentLength) / durationSeconds
-        guard bytesPerSecond > 0 else { return nil }
+        guard let bytesPerSecond = averageBytesPerSecond(
+            contentLength: contentLength, durationSeconds: durationSeconds
+        ) else { return nil }
         return Double(max(cachedBytesAhead, 0)) / bytesPerSecond
+    }
+
+    static func averageBytesPerSecond(contentLength: Int64?, durationSeconds: Double) -> Double? {
+        guard let contentLength, contentLength > 0,
+              durationSeconds.isFinite, durationSeconds > 0 else { return nil }
+        let bytesPerSecond = Double(contentLength) / durationSeconds
+        return bytesPerSecond.isFinite && bytesPerSecond > 0 ? bytesPerSecond : nil
     }
 }

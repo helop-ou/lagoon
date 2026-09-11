@@ -1069,6 +1069,11 @@ final class PlaybackController {
                         contentLength: metrics.contentLength,
                         durationSeconds: engine.duration
                     ),
+                    averageBytesPerSecond: PlaybackFillPolicy.averageBytesPerSecond(
+                        contentLength: metrics.contentLength,
+                        durationSeconds: engine.duration
+                    ),
+                    playbackRate: engine.rate,
                     isWindowed: metrics.isWindowed,
                     bufferedFraction: metrics.bufferedFraction
                 )
