@@ -99,6 +99,10 @@ enum Metrics {
     static let heroTextWidth: CGFloat = .infinity
     /// Keep iPad hero copy readable without spanning the whole banner.
     static let expandedHeroTextWidth: CGFloat = 520
+    /// The detail header's information column in a regular-width iPad
+    /// window: a leading column beside the artwork, the way the TV lays it
+    /// out, rather than a synopsis running the full width of the screen.
+    static let expandedDetailColumnWidth: CGFloat = 640
     static let heroTextInset: CGFloat = 20
     static let lockupSymbolHeight: CGFloat = 78
     static let lockupHeaderSymbolHeight: CGFloat = 34

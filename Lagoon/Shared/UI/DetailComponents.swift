@@ -205,15 +205,24 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         self.buttons = buttons()
     }
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    /// A regular-width iPad window gets the TV's composition: a leading
+    /// information column beside the artwork. A phone keeps one full-width
+    /// column with the title centred over it.
+    private var usesLeadingColumn: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+    }
+    #endif
+
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.detailHeaderSpacing) {
             #if os(tvOS)
             title
             #else
-            // The phone has one full-width information column, rather than
-            // tvOS's leading column beside the artwork.
             title
-                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: usesLeadingColumn ? .leading : .center)
             #endif
 
             if let subtitle, !subtitle.isEmpty {
@@ -240,6 +249,11 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         // Let SwiftUI size the glass labels, circles and hit areas together.
         // This also covers the synopsis button in the header.
         .controlSize(.large)
+        .frame(
+            maxWidth: usesLeadingColumn ? Metrics.expandedDetailColumnWidth : .infinity,
+            alignment: .leading
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
         #endif
         .padding(.horizontal, Metrics.screenGutter)
     }
