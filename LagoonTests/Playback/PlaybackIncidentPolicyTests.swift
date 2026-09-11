@@ -119,7 +119,7 @@ struct PlaybackFailureDetailTests {
     @Test func onlyDomainAndCodeSurviveAnError() {
         let error = NSError(domain: "NSURLErrorDomain", code: -1200, userInfo: [
             NSLocalizedDescriptionKey: "An SSL error has occurred and a secure connection to https://fixture.example.eu cannot be made.",
-            NSURLErrorFailingURLStringErrorKey: "https://fixture.example.eu/Videos/1/stream?api_key=secret",
+            NSURLErrorFailingURLErrorKey: URL(string: "https://fixture.example.eu/Videos/1/stream?api_key=secret") as Any,
         ])
         let detail = PlaybackFailureDetail(stage: .open, error: error)
         #expect(detail.fields == ["stage": .string("open"), "errorDomain": .string("NSURLErrorDomain"), "errorCode": .int(-1200)])

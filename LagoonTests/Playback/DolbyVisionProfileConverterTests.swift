@@ -74,7 +74,7 @@ struct DolbyVisionProfileConverterTests {
         let directMode2MatchesFixture: Bool
     }
 
-    static let fixtures: [RPUFixture] = [
+    nonisolated static let fixtures: [RPUFixture] = [
         RPUFixture(
             label: "MEL",
             originalBase64: melOriginalBase64,

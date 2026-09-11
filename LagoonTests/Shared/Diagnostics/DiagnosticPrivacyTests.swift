@@ -49,7 +49,7 @@ struct DiagnosticPrivacyTests {
         // The API helper, as both clients call it.
         let transportError = NSError(domain: NSURLErrorDomain, code: URLError.secureConnectionFailed.rawValue, userInfo: [
             NSLocalizedDescriptionKey: "A secure connection to fixture.example.eu could not be made",
-            NSURLErrorFailingURLStringErrorKey: Self.request().url!.absoluteString,
+            NSURLErrorFailingURLErrorKey: Self.request().url! as Any,
         ])
         APIDiagnostics.transportFailed(transportError, request: Self.request(), serverURL: server, client: "jellyfin", startedAt: 0, hub: hub)
         APIDiagnostics.statusFailed(500, request: Self.request(), serverURL: server, client: "jellyfin", startedAt: 0, hub: hub)

@@ -259,7 +259,7 @@ private nonisolated struct DownloadFixture: Sendable {
     var holdResponse = false
 }
 
-private nonisolated final class DownloadProtocol: URLProtocol, @unchecked Sendable {
+private nonisolated final class DownloadProtocol: URLProtocol {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var fixtures: [String: DownloadFixture] = [:]
     private nonisolated(unsafe) static var recorded: [URLRequest] = []

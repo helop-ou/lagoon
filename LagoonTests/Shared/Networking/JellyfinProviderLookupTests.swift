@@ -35,7 +35,7 @@ struct JellyfinProviderLookupTests {
     }
 }
 
-private nonisolated final class JellyfinProviderLookupURLProtocol: URLProtocol, @unchecked Sendable {
+private nonisolated final class JellyfinProviderLookupURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recordedURL: URL?
     private nonisolated(unsafe) static var providerID = ""

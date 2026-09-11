@@ -92,7 +92,7 @@ struct DolbyVisionFixtureTests {
         let block = try #require(CMSampleBufferGetDataBuffer(buffer))
         let length = CMBlockBufferGetDataLength(block)
         var data = Data(count: length)
-        try data.withUnsafeMutableBytes { raw in
+        data.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress else { return }
             let status = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: base)
             #expect(status == noErr)

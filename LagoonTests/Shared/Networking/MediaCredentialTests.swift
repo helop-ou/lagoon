@@ -151,7 +151,7 @@ private nonisolated struct MediaCredentialFixture: Sendable {
 /// one (partial-content, for the range loader), serves the whole body as a
 /// plain 200 otherwise (for the subtitle downloader), and records every
 /// request's URL and headers for assertions.
-private nonisolated final class MediaCredentialStub: URLProtocol, @unchecked Sendable {
+private nonisolated final class MediaCredentialStub: URLProtocol {
     static let host = "media-credential.test"
 
     private static let lock = NSLock()
