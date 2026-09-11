@@ -112,15 +112,15 @@ struct PlaybackCacheTests {
         #expect(scope.metrics.bufferedFraction == 0)
         #expect(!scope.metrics.isWindowed)
         #expect(scope.completeFileURL == nil)
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(scope.metrics.contiguousCachedBytes == 32)
         #expect(scope.metrics.bufferedFraction == 1.0 / 3.0)
         #expect(scope.completeFileURL == nil)
-        #expect(await scope.prefetchNextChunk())
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(scope.metrics.bufferedFraction == 1)
         #expect(scope.completeFileURL == scope.fileURL)
-        #expect(!(await scope.prefetchNextChunk()))
+        #expect(await scope.prefetchNextChunk() == .exhausted)
     }
 
     @Test func seekMovesProactiveFillToPlayheadThenWrapsBackWithoutLosingPrefix() async throws {
@@ -141,7 +141,7 @@ struct PlaybackCacheTests {
 
         // Establish the ordinary byte-zero prefix, then model FFmpeg's real
         // high-priority range read after a seek to the middle of the file.
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(try scope.read(offset: 128, length: 8) == payload.subdata(in: 128..<136))
         #expect(loader.requestedRanges == [
             PlaybackByteRange(0, 32),
@@ -150,7 +150,7 @@ struct PlaybackCacheTests {
 
         // Proactive traffic must continue after the seek's cached island,
         // not resume at byte 32. Both islands remain visible to the UI.
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(loader.requestedRanges.last == PlaybackByteRange(160, 192))
         #expect(scope.metrics.cachedByteRanges == [
             PlaybackByteRange(0, 32),
@@ -164,13 +164,13 @@ struct PlaybackCacheTests {
 
         // Finish playhead-to-EOF first, then verify the scheduler wraps back
         // to the earliest hole and can still promote a complete sparse file.
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(loader.requestedRanges.last == PlaybackByteRange(192, 224))
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(loader.requestedRanges.last == PlaybackByteRange(224, 256))
-        #expect(await scope.prefetchNextChunk())
+        #expect((await scope.prefetchNextChunk()).advanced)
         #expect(loader.requestedRanges.last == PlaybackByteRange(32, 64))
-        while await scope.prefetchNextChunk() {}
+        while (await scope.prefetchNextChunk()).advanced {}
 
         #expect(scope.metrics.cachedByteRanges == [PlaybackByteRange(0, 256)])
         #expect(scope.metrics.bufferedFraction == 1)
@@ -352,7 +352,7 @@ struct PlaybackCacheTests {
         // that much of the cap unspent.
         _ = try scope.read(offset: 0, length: Int(requestSize))
         var chunks = 0
-        while chunks < 64, await scope.prefetchNextChunk() { chunks += 1 }
+        while chunks < 64, (await scope.prefetchNextChunk()).advanced { chunks += 1 }
 
         let filled = scope.metrics
         #expect(filled.cachedBytes == byteLimit)
@@ -361,8 +361,8 @@ struct PlaybackCacheTests {
         // Full, with nothing outside the window to give back: proactive fill
         // has to stop rather than spend requests it cannot keep.
         let requests = loader.requestCount
-        let advanced = await scope.prefetchNextChunk()
-        #expect(!advanced)
+        let outcome = await scope.prefetchNextChunk()
+        #expect(outcome == .exhausted)
         #expect(loader.requestCount == requests)
     }
 
@@ -753,6 +753,217 @@ struct PlaybackCacheTests {
         #expect(coordinator.current == nil)
         #expect(coordinator.next == nil)
     }
+
+    @Test func aFailedPrefetchIsReportedAsFailedAndTheNextOneRecovers() async throws {
+        let payload = Data((0..<96).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "episode-flaky",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        loader.failNextLoads = 1
+        let failed = await scope.prefetchNextChunk()
+        #expect(failed == .failed)
+        #expect(scope.metrics.cachedBytes == 0)
+
+        let recovered = await scope.prefetchNextChunk()
+        guard case .fetched(let bytes, _) = recovered else {
+            Issue.record("Expected a fetched outcome, got \(recovered)")
+            return
+        }
+        #expect(bytes == 32)
+        #expect(scope.metrics.contiguousCachedBytes == 32)
+
+        // Fill's momentum survives the failure: it resumes without any seek
+        // or new session and still reaches a complete file.
+        #expect((await scope.prefetchNextChunk()).advanced)
+        #expect((await scope.prefetchNextChunk()).advanced)
+        #expect(scope.metrics.bufferedFraction == 1)
+        #expect(await scope.prefetchNextChunk() == .exhausted)
+    }
+
+    @Test func aFetchedOutcomeReportsItsOwnRequestTime() async throws {
+        let payload = Data((0..<64).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "episode-timed",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        let outcome = await scope.prefetchNextChunk()
+        guard case .fetched(let bytes, let seconds) = outcome else {
+            Issue.record("Expected a fetched outcome, got \(outcome)")
+            return
+        }
+        #expect(bytes == 32)
+        #expect(seconds >= 0)
+    }
+
+    @Test func aForegroundReadWaitsForAPromotedPrefetchInsteadOfDownloadingTwice() async throws {
+        let payload = Data((0..<128).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-shared-fetch",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        loader.hold(range: PlaybackByteRange(0, 32))
+        let prefetch = Task { await scope.prefetchNextChunk() }
+        try await Self.eventually { loader.requestCount == 1 }
+
+        async let readResult = Self.blockingRead(scope, offset: 0, length: 16, priority: URLSessionTask.highPriority)
+        try await Task.sleep(for: .milliseconds(100))
+        loader.release()
+
+        let outcome = await prefetch.value
+
+        #expect(outcome.advanced)
+        #expect(try await readResult == payload.subdata(in: 0..<16))
+        #expect(loader.requestCount == 1)
+        #expect(loader.promotedRanges == [PlaybackByteRange(0, 32)])
+        #expect(scope.metrics.sharedFetchCount == 1)
+        #expect(scope.metrics.duplicateNetworkBytes == 0)
+    }
+
+    @Test func aForegroundReadPastTheSharedWaitFallsThroughToItsOwnRequest() async throws {
+        let payload = Data((0..<128).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-shared-fetch-timeout",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        loader.hold(range: PlaybackByteRange(0, 32))
+        let prefetch = Task { await scope.prefetchNextChunk() }
+        try await Self.eventually { loader.requestCount == 1 }
+
+        // Never release before the read comes back: the shared-fetch wait
+        // must time out and fall through to its own request rather than
+        // hang behind a prefetch that never lands.
+        let readResult = try await Self.blockingRead(
+            scope, offset: 0, length: 16, priority: URLSessionTask.highPriority
+        )
+
+        #expect(readResult == payload.subdata(in: 0..<16))
+        #expect(loader.requestCount == 2)
+
+        loader.release()
+        _ = await prefetch.value
+
+        // The prefetch's bytes were already cached by the foreground's own
+        // request by the time it landed.
+        #expect(scope.metrics.duplicateNetworkBytes > 0)
+    }
+
+    @Test func contiguousUpperBoundFromAnOffsetReportsTheIslandEnd() {
+        var ranges = PlaybackByteRangeSet()
+        #expect(ranges.contiguousUpperBound(from: 10) == 10)
+
+        ranges.insert(PlaybackByteRange(0, 40))
+        ranges.insert(PlaybackByteRange(60, 100))
+
+        #expect(ranges.contiguousUpperBound(from: 20) == 40)
+        #expect(ranges.contiguousUpperBound(from: 50) == 50)
+        // Half-open: sitting exactly at an island's upper bound is not inside it.
+        #expect(ranges.contiguousUpperBound(from: 40) == 40)
+    }
+
+    @Test func metricsReportTheCushionAheadOfTheLastForegroundRead() async throws {
+        let payload = Data((0..<128).map(UInt8.init))
+        let loader = PlaybackCacheLoaderStub(payload: payload)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let scope = try PlaybackCacheScope(
+            itemID: "movie-cushion",
+            sourceURL: URL(string: "https://media.test/video.mkv")!,
+            expectedLength: Int64(payload.count),
+            directory: directory,
+            byteLimit: Int64(payload.count),
+            requestSize: 32,
+            loader: loader
+        )
+        defer { scope.cancelAndRemove() }
+
+        #expect(scope.metrics.cachedBytesAheadOfPlayhead == 0)
+
+        let read = try scope.read(offset: 0, length: 16, priority: URLSessionTask.highPriority)
+        #expect(read.count == 16)
+        #expect(scope.metrics.cachedBytesAheadOfPlayhead == 32 - 16)
+
+        #expect((await scope.prefetchNextChunk()).advanced)
+        #expect((await scope.prefetchNextChunk()).advanced)
+
+        let islandEnd = scope.metrics.cachedByteRanges.first?.upperBound ?? 0
+        #expect(islandEnd > 32)
+        #expect(scope.metrics.cachedBytesAheadOfPlayhead == islandEnd - 16)
+    }
+
+    private static func eventually(_ predicate: () -> Bool) async throws {
+        for _ in 0..<600 {
+            if predicate() { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        Issue.record("Timed out waiting for the observable result")
+        throw PlaybackCacheError.cancelled
+    }
+
+    /// Runs a blocking `PlaybackCacheScope.read` on a dedicated thread rather
+    /// than the cooperative pool. `read` can block for real (an `NSCondition`
+    /// wait up to `sharedFetchWaitSeconds`) while promoting an in-flight
+    /// prefetch; parking that wait on the pool competes with the pool thread
+    /// the test itself needs to wake from `Task.sleep` and call `release()`,
+    /// which is what turned a same-run promotion into a false shared-fetch
+    /// timeout under load.
+    private static func blockingRead(
+        _ scope: PlaybackCacheScope,
+        offset: Int64,
+        length: Int,
+        priority: Float
+    ) async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            Thread.detachNewThread {
+                do {
+                    let data = try scope.read(offset: offset, length: length, priority: priority)
+                    continuation.resume(returning: data)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
 }
 
 private nonisolated final class PlaybackCacheURLProtocol: URLProtocol, @unchecked Sendable {
@@ -802,6 +1013,10 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
     private var requests = 0
     private var ranges: [PlaybackByteRange] = []
     private var cancelled = false
+    private var failuresRemaining = 0
+    private var heldRange: PlaybackByteRange?
+    private var holdSemaphore: DispatchSemaphore?
+    private var promoted: [PlaybackByteRange] = []
 
     init(payload: Data) {
         self.payload = payload
@@ -825,14 +1040,85 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
         return cancelled
     }
 
-    func load(url: URL, range: PlaybackByteRange, priority: Float) throws -> PlaybackRangeResponse {
+    /// While positive, the next `load` calls decrement this and fail instead
+    /// of serving their range, without recording the range as served.
+    var failNextLoads: Int {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return failuresRemaining
+        }
+        set {
+            lock.lock()
+            failuresRemaining = newValue
+            lock.unlock()
+        }
+    }
+
+    /// Ranges a foreground read promoted while they were still in flight.
+    var promotedRanges: [PlaybackByteRange] {
         lock.lock()
         defer { lock.unlock() }
-        guard !cancelled else { throw PlaybackCacheError.cancelled }
+        return promoted
+    }
+
+    /// Makes the next `load` for exactly this range block outside the lock
+    /// until `release()` is called, so a test can land a foreground read
+    /// while the matching prefetch is still in flight (HEL-160). Consumed by
+    /// the first matching call; later calls for the same range are unaffected.
+    func hold(range: PlaybackByteRange) {
+        lock.lock()
+        heldRange = range
+        holdSemaphore = DispatchSemaphore(value: 0)
+        lock.unlock()
+    }
+
+    func release() {
+        lock.lock()
+        let semaphore = holdSemaphore
+        holdSemaphore = nil
+        lock.unlock()
+        semaphore?.signal()
+    }
+
+    func load(url: URL, range: PlaybackByteRange, priority: Float) throws -> PlaybackRangeResponse {
+        lock.lock()
+        guard !cancelled else {
+            lock.unlock()
+            throw PlaybackCacheError.cancelled
+        }
         requests += 1
+        // Capture the semaphore without clearing the stored property: `hold`
+        // and `release` race with this call from another thread, and if
+        // `release` ran first (or `holdSemaphore` were cleared here before
+        // waiting) the signal would land on nobody and this wait would never
+        // return. Only the matched range is consumed, so a later `load` for
+        // the same range does not also block.
+        var waitSemaphore: DispatchSemaphore?
+        if heldRange == range {
+            heldRange = nil
+            waitSemaphore = holdSemaphore
+        }
+        lock.unlock()
+        if let waitSemaphore {
+            waitSemaphore.wait()
+            lock.lock()
+            guard !cancelled else {
+                lock.unlock()
+                throw PlaybackCacheError.cancelled
+            }
+        } else {
+            lock.lock()
+        }
+        if failuresRemaining > 0 {
+            failuresRemaining -= 1
+            lock.unlock()
+            throw PlaybackCacheError.invalidResponse
+        }
         ranges.append(range)
         let lower = min(Int(range.lowerBound), payload.count)
         let upper = min(Int(range.upperBound), payload.count)
+        lock.unlock()
         return PlaybackRangeResponse(
             data: payload.subdata(in: lower..<upper),
             offset: Int64(lower),
@@ -843,6 +1129,14 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
     func cancelAll() {
         lock.lock()
         cancelled = true
+        let semaphore = holdSemaphore
+        lock.unlock()
+        semaphore?.signal()
+    }
+
+    func promote(range: PlaybackByteRange) {
+        lock.lock()
+        promoted.append(range)
         lock.unlock()
     }
 }
