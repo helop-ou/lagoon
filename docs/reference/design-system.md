@@ -8,7 +8,7 @@ revision; they are not a release checklist or proof of current hardware acceptan
 The visual language is adapted from a 2026 streaming-app redesign: dark-locked,
 system-semantic-first, tvOS 26 Liquid Glass, with brand color reserved for
 genuine branding. Token values live in the guide and in
-`Views/Components/DesignSystem.swift`; what follows is why they are shaped the
+`Lagoon/Shared/UI/DesignSystem.swift`; what follows is why they are shaped the
 way they are.
 
 ## Spacing and type
