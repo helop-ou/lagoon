@@ -157,6 +157,20 @@ struct PlaybackIncidentMonitorTests {
         #expect(incident.fields["httpStatus"] == .int(500))
         #expect(incident.fields["errorDomain"] == .string("JellyfinError.server"))
         #expect(incident.fingerprint == ["playback.startFailed", "negotiate", "JellyfinError.server", "500"])
+        // No attempt exists yet at the negotiate stage: the token is left
+        // out rather than sent empty and rejected by the schema.
+        #expect(incident.fields["attempt"] == nil)
+        #expect(incident.fields["schemaRejected"] == nil)
+    }
+
+    @Test func aDismissalDuringNegotiationIsNotAStartFailure() {
+        let cancelled = URLError(.cancelled)
+        #expect(PlaybackController.isStartCancellation(cancelled, taskCancelled: true, closed: false))
+        #expect(PlaybackController.isStartCancellation(cancelled, taskCancelled: false, closed: true))
+        #expect(PlaybackController.isStartCancellation(CancellationError(), taskCancelled: false, closed: false))
+        // A -999 nobody asked for is the transport's failure and still reports.
+        #expect(!PlaybackController.isStartCancellation(cancelled, taskCancelled: false, closed: false))
+        #expect(!PlaybackController.isStartCancellation(URLError(.timedOut), taskCancelled: true, closed: true))
     }
 
     @Test func optingOutCancelsTheTimerAndOptingBackInStartsAFreshWindow() async throws {
