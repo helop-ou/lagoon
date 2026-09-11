@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import Lagoon
 
@@ -212,6 +213,17 @@ struct DiagnosticsHubTests {
         let validated = DiagnosticSchema.validated(fields)
         #expect(validated.rejected == 0)
         #expect(validated.accepted.count == fields.count)
+    }
+
+    @Test func recordingStopsWhenReportingIsOff() {
+        let enabled = OSAllocatedUnfairLock(initialState: false)
+        let hub = DiagnosticsHub(reportingEnabled: { enabled.withLock { $0 } })
+        hub.record(.playbackPlay)
+        #expect(hub.snapshot().isEmpty)
+        #expect(!hub.isReportingEnabled)
+        enabled.withLock { $0 = true }
+        hub.record(.playbackPlay)
+        #expect(hub.snapshot().count == 1)
     }
 
     @Test func nothingIsReportedWithoutASink() {
