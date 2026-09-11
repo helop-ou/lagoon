@@ -72,9 +72,16 @@ like a session expiry.
   advancing six seconds after it becomes ready. It failed on the old code
   against the demo on both simulators and passes with the fix.
 
+## Also done from the same report
+
+- The forced rotation to landscape is gone (Jaagop's call, superseding the
+  HEL-153 scope): the player follows the device, and a title opened in
+  portrait plays letterboxed. `PlayerOrientationLock` and the app delegate
+  that existed for it were removed; the touch journeys pass in portrait.
+
 ## Still open from the same report
 
-- No forced rotation to landscape on iPhone (Jaagop's call, superseding the
-  HEL-153 scope).
-- Info button reachability on the phone and a swipe-down to open the panel;
-  iOS never had a swipe gesture for it, the "Swipe down for Info" hint is tvOS-only.
+- Info button reachability on the phone and a swipe-down to open the panel.
+  In the simulator Close and Info show with the transport in both
+  orientations; iOS never had a swipe gesture for the panel, the "Swipe down
+  for Info" hint is tvOS-only. Needs Jaagop's description of what he sees.
