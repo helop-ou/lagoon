@@ -305,8 +305,12 @@ than Jellyfin.
 **An image is read here.** `UDFVolume` resolves a name to its extents and
 `DiscStreamMap` presents a title's extents to the demuxer as one linear stream,
 through the byte-range AVIO the playback cache already provided; mounting a
-Blu-ray costs about 15 range requests and under a megabyte. Four things about
-that were not obvious:
+Blu-ray costs about 15 range requests and under a megabyte. Because the reader
+lives behind the cache session, a disc keeps its session even once the image
+is completely cached: an ordinary complete file plays straight from disk
+without one, but a disc handed to libavformat as a plain file is the raw
+image again and fell to the server remux (`PlaybackBufferPolicy
+.engineUsesCacheSession`, HEL-167). Four things about that were not obvious:
 
 - **UDF 2.50 hides every file entry inside a metadata partition** — a file in
   the physical partition that the volume then addresses as a partition of its
