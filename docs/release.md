@@ -13,7 +13,7 @@ number. The script rejects backwards numbering and configuration drift.
 Marketing version changes use `xcrun agvtool new-marketing-version <version>`.
 
 Write the matching entry in
-[`Changelog.swift`](../Lagoon/Models/Changelog.swift) before archiving. Entries
+[`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift) before archiving. Entries
 are newest first and contain the version, build, release month, headline, and
 viewer-visible changes. Tests require the installed version/build to have an
 entry. Builds before the changelog's introduction are not reconstructed from
@@ -166,7 +166,7 @@ prerendered SvelteKit site and Cloudflare configuration. The app repository's
 Publication remains a release task: confirm the domain (proposed
 `lagoon.helop.ee`), publisher/contact, DNS, current rights-cleared screenshots,
 and the App Store/TestFlight destination. Check the live privacy and support
-pages before filling `Lagoon/Models/LegalDestinations.swift` and App Store
+pages before filling `Lagoon/Features/Settings/LegalDestinations.swift` and App Store
 Connect. Those URLs are currently nil so the app cannot link to unpublished
 pages. Keep the site and store copy consistent with the actual supported
 formats, devices, server setup, and subtitle permissions.
