@@ -417,6 +417,9 @@ struct SettingsView: View {
                 touchSettingsDestination("Developer", systemImage: ContentIcon.Settings.developer, id: "developer") {
                     DeveloperSettingsView(subtitleStyle: subtitlePreferences.renderStyle)
                 }
+                touchSettingsDestination("Downloads Spike", systemImage: "arrow.down.circle", id: "downloadsSpike") {
+                    DownloadSpikeView()
+                }
                 #endif
                 touchSettingsDestination("About", systemImage: ContentIcon.Settings.about, id: "about") {
                     AboutSettingsView()

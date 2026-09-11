@@ -271,8 +271,8 @@ final class PlaybackController {
             async let segments = client.mediaSegments(itemId: media.id)
             let info: PlaybackInfoResponse
             let source: MediaSource
-            let streamURL: URL
-            let method: PlayMethod
+            var streamURL: URL
+            var method: PlayMethod
             if let prepared, prepared.mediaID == media.id {
                 info = prepared.info
                 source = prepared.source
@@ -306,6 +306,16 @@ final class PlaybackController {
                 source = resolvedSource
                 (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
             }
+            #if DEBUG && os(iOS)
+            // HEL-166 spike: a title the spike has on disk plays from there.
+            // The server's negotiation still ran above, so track metadata
+            // and reporting stay as for a stream; the bytes are local.
+            if let local = DownloadSpikeStore.shared.completedLocalURL(itemID: media.id) {
+                streamURL = local
+                method = .directPlay
+                DownloadSpikeStore.log.info("playing \(media.id, privacy: .public) from \(local.path(percentEncoded: false), privacy: .public)")
+            }
+            #endif
             mediaSourceId = source.id
             playMethod = method
             // A disc image Lagoon can read is played by reading it, not by
@@ -321,7 +331,8 @@ final class PlaybackController {
                     runtimeSeconds: source.runTimeTicks.map(Ticks.seconds)
                 )
                 : nil
-            let cacheSession = playbackCache.activate(
+            // A local file needs no cache in front of it.
+            let cacheSession = streamURL.isFileURL ? nil : playbackCache.activate(
                 itemID: media.id,
                 url: streamURL,
                 method: method,
