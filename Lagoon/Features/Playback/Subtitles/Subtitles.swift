@@ -134,41 +134,66 @@ nonisolated enum SubtitleEvent {
     case clear(at: Double)
 }
 
-/// Thread-safe cue collection: the demux loop appends, the main-actor
-/// display refresh reads. Small enough (a few thousand cues) that active
-/// lookup is a plain scan.
+/// The demux loop appends embedded cues; display refresh releases them as
+/// they expire. Seeking an embedded track resets this window and re-demuxes
+/// it. Downloaded tracks retain their complete timeline for backward seeks.
+/// Every mutable field is protected by `lock`, including the lookup cursor;
+/// no caller receives a reference to mutable storage.
 nonisolated final class SubtitleStore: @unchecked Sendable {
+    private enum Source {
+        case embedded
+        case external
+    }
+
     private let lock = NSLock()
+    private var source: Source = .embedded
     private var cues: [SubtitleCue] = []
+    private var externalNextIndex = 0
+    private var externalActiveIndices: [Int] = []
+    private var externalLastSeconds: Double?
 
     func add(_ cue: SubtitleCue) {
         lock.lock()
+        defer { lock.unlock() }
+        guard source == .embedded else { return }
         closeOpenCuesLocked(at: cue.start)
         cues.append(cue)
-        lock.unlock()
     }
 
     func closeOpenCues(at seconds: Double) {
         lock.lock()
+        defer { lock.unlock() }
+        guard source == .embedded else { return }
         closeOpenCuesLocked(at: seconds)
+    }
+
+    func replaceExternalTrack(with newCues: [SubtitleCue]) {
+        // Sorting is independent of the live store and must not hold up the
+        // display tick's lock. Preserve authored order at equal timestamps.
+        let sorted = newCues.enumerated().sorted {
+            $0.element.start == $1.element.start
+                ? $0.offset < $1.offset : $0.element.start < $1.element.start
+        }.map(\.element)
+        lock.lock()
+        source = .external
+        cues = sorted
+        resetExternalCursorLocked()
         lock.unlock()
     }
 
-    func replaceAll(_ newCues: [SubtitleCue]) {
+    /// Call when selecting an embedded track or seeking it. The engine
+    /// serializes this reset against demux writes using its seek generation.
+    func resetForEmbeddedPlayback() {
         lock.lock()
-        cues = newCues
-        lock.unlock()
-    }
-
-    func removeAll() {
-        lock.lock()
+        source = .embedded
         cues.removeAll()
+        resetExternalCursorLocked()
         lock.unlock()
     }
 
     /// HEL-148 soak diagnostic: how many cues the store is holding, so a
-    /// leak in subtitle bookkeeping over a long film is visible alongside
-    /// the other DecodeTrace figures. Report-only.
+    /// growing embedded window is visible alongside the other DecodeTrace
+    /// figures. External tracks intentionally retain their full cue count.
     var count: Int {
         lock.lock()
         defer { lock.unlock() }
@@ -178,13 +203,51 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
     func active(at seconds: Double) -> (textCues: [SubtitleTextCue], images: [SubtitleImage]) {
         lock.lock()
         defer { lock.unlock() }
+        guard seconds.isFinite else { return ([], []) }
         var textCues: [SubtitleTextCue] = []
         var images: [SubtitleImage] = []
-        for cue in cues where cue.start <= seconds && seconds < cue.end {
-            textCues.append(contentsOf: cue.textCues)
-            images.append(contentsOf: cue.images)
+        switch source {
+        case .embedded:
+            // HEL-163: remove the elements themselves so expired CGImages
+            // are released, not just skipped behind an advancing index.
+            // Only the demuxer's current read-ahead window remains to scan;
+            // future and overlapping/open-ended compositions stay intact.
+            cues.removeAll { $0.end <= seconds }
+            for cue in cues where cue.start <= seconds && seconds < cue.end {
+                textCues.append(contentsOf: cue.textCues)
+                images.append(contentsOf: cue.images)
+            }
+        case .external:
+            updateExternalCursorLocked(at: seconds)
+            for index in externalActiveIndices {
+                textCues.append(contentsOf: cues[index].textCues)
+                images.append(contentsOf: cues[index].images)
+            }
         }
         return (textCues, images)
+    }
+
+    private func resetExternalCursorLocked() {
+        externalNextIndex = 0
+        externalActiveIndices.removeAll()
+        externalLastSeconds = nil
+    }
+
+    private func updateExternalCursorLocked(at seconds: Double) {
+        if let previous = externalLastSeconds, seconds < previous {
+            resetExternalCursorLocked()
+        }
+        externalActiveIndices.removeAll { cues[$0].end <= seconds }
+        // Each cue is visited once during forward playback. Rebuild only
+        // when time moves backward; retaining the full track makes that
+        // independent of another download or demux seek.
+        while externalNextIndex < cues.count, cues[externalNextIndex].start <= seconds {
+            if seconds < cues[externalNextIndex].end {
+                externalActiveIndices.append(externalNextIndex)
+            }
+            externalNextIndex += 1
+        }
+        externalLastSeconds = seconds
     }
 
     private func closeOpenCuesLocked(at seconds: Double) {

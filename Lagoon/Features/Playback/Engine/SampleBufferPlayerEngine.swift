@@ -681,8 +681,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 ? state.embeddedSubtitleStreamIndices[ordinal - 1] : -1
             // The demux subtitle callback holds this same lock through its
             // cue write, so an old embedded packet cannot append after the
-            // external replacement is committed.
-            subtitleStore.replaceAll(cues)
+            // external replacement is committed. An embedded track (or off)
+            // starts an empty window that the demuxer fills and display
+            // refresh prunes (HEL-163).
+            if ordinal > embeddedSubtitleCount {
+                subtitleStore.replaceExternalTrack(with: cues)
+            } else {
+                subtitleStore.resetForEmbeddedPlayback()
+            }
         }
         currentSubtitleText = nil
         currentSubtitleCues = []
@@ -1057,7 +1063,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             return state.selectedSubtitleStreamIndex >= 0
         }
         if embeddedSubtitleActive {
-            subtitleStore.removeAll()
+            subtitleStore.resetForEmbeddedPlayback()
         }
         currentSubtitleText = nil
         currentSubtitleCues = []
