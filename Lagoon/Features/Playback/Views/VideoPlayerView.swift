@@ -1,0 +1,359 @@
+import SwiftUI
+import UIKit
+
+struct VideoPlayerView: View {
+    let playerItem: PlayerItem
+    var registerPresentationCleanup: ((@escaping () -> Void) -> Void)? = nil
+    var onPresentationClose: (() -> Void)? = nil
+    var onPictureInPictureStarted: (() -> Void)? = nil
+    var onPictureInPictureRestore: ((@escaping (Bool) -> Void) -> Void)? = nil
+    @State private var leftForPictureInPicture = false
+
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @State private var controller = PlaybackController()
+    @State private var pictureInPicture = SampleBufferPictureInPicture()
+    @State private var subtitlePreferences = SubtitlePreferencesStore()
+    @State private var trackPreferences = TrackPreferencesStore()
+    @State private var panelOpen = false
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
+    /// Back was pressed on the Up Next card. Outlives the card itself,
+    /// because the episode still has its credits to run and the end of the
+    /// file must not undo the answer that was already given.
+    @State private var autoplayCancelled = false
+
+    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
+
+    /// What the Up Next card draws, or nil when there is nothing queued.
+    private var nextUpEpisode: NextUpEpisode? {
+        guard let next = controller.nextUp else { return nil }
+        return NextUpEpisode(
+            title: next.name ?? "",
+            subtitle: next.episodeLabel,
+            imageURL: session.client.imageURL(for: next, kind: .thumb, maxWidth: 480)
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if let errorMessage = controller.errorMessage {
+                // The engine is gone on purpose: the error overlay carries
+                // its own focus and exit handling so Menu never strands.
+                errorOverlay(errorMessage)
+            } else if let engine = controller.engine {
+                CustomPlayerView(
+                    engine: engine,
+                    playbackIdentity: controller.playbackIdentity,
+                    playerSurfaceIdentity: controller.playerSurfaceIdentity,
+                    handoffMilliseconds: controller.lastHandoffMilliseconds,
+                    playbackMethod: controller.activePlayMethod,
+                    deliveryRung: controller.activeDeliveryRung,
+                    isPlaybackCacheActive: controller.isPlaybackCacheActive,
+                    bufferedFraction: controller.bufferedFraction,
+                    bufferedRanges: controller.bufferedRanges,
+                    playheadPrefetchCount: controller.playheadPrefetchCount,
+                    info: fallbackInfo,
+                    onDismiss: {
+                        if onPictureInPictureStarted != nil, pictureInPicture.isPossible {
+                            pictureInPicture.toggle()
+                        } else { closePlayer() }
+                    },
+                    onPanelToggle: { panelOpen = $0 },
+                    nextUp: nextUpEpisode,
+                    onPlayNext: { advance() },
+                    onCancelNextUp: { autoplayCancelled = true },
+                    isPictureInPicturePossible: pictureInPicture.isPossible,
+                    isPictureInPictureActive: pictureInPicture.isActive,
+                    onTogglePictureInPicture: { pictureInPicture.toggle() },
+                    subtitleStyle: subtitlePreferences.renderStyle,
+                    subtitleSearch: controller.subtitleSearch
+                ) { [weak engine] in
+                    // Weak for the same reason the player views hold the
+                    // engine through `PlayerEngineRef` (HEL-152): SwiftUI
+                    // keeps copies of `CustomPlayerView`, this closure
+                    // included, past the next episode handoff, and a strong
+                    // capture here would pin the outgoing engine just as the
+                    // view's own field did. The controller has the engine
+                    // for every body evaluation that actually builds the
+                    // surface, so the `nil` branch is never what is shown.
+                    if let engine {
+                        SampleBufferVideoSurface(engine: engine) { displayLayer in
+                            let identity = String(ObjectIdentifier(displayLayer).hashValue)
+                            Task { @MainActor in
+                                controller.recordPlayerSurface(identity: identity)
+                            }
+                            pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
+                        }
+                    }
+                }
+            } else {
+                LoadingView()
+            }
+
+            if !controller.hudLines.isEmpty, !panelOpen {
+                playbackHUD
+            }
+
+            // Keep CustomPlayerView and, critically, its UIKit-backed
+            // AVSampleBufferDisplayLayer mounted while the old renderer set
+            // retires and the successor attaches. The cover therefore never
+            // flashes back to its presenting view between episodes.
+            if controller.isTransitionOverlayVisible, controller.errorMessage == nil {
+                episodeTransition
+            }
+
+            #if DEBUG
+            if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
+               let bench = controller.hudLines.first(where: { $0.hasPrefix("Bench:") }) {
+                Text("Frame-loss regression")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Frame-loss regression")
+                    .accessibilityValue(bench)
+                    .accessibilityIdentifier("player.regression.frameLoss")
+                    .allowsHitTesting(false)
+            }
+            #endif
+        }
+        .interactiveDismissDisabled()
+        .task {
+            registerPresentationCleanup? { [controller, pictureInPicture] in
+                pictureInPicture.onStarted = nil
+                pictureInPicture.onStopped = nil
+                pictureInPicture.onRestore = nil
+                pictureInPicture.detach()
+                controller.close()
+            }
+            pictureInPicture.onStarted = {
+                guard onPictureInPictureStarted != nil else { return }
+                leftForPictureInPicture = true
+                onPictureInPictureStarted?()
+            }
+            pictureInPicture.onStopped = {
+                if leftForPictureInPicture { closePlayer() }
+            }
+            pictureInPicture.onRestore = { completion in
+                if let onPictureInPictureRestore {
+                    onPictureInPictureRestore { restored in
+                        if restored { leftForPictureInPicture = false }
+                        completion(restored)
+                    }
+                } else { completion(true) }
+            }
+            guard controller.engine == nil else { return }
+            subtitlePreferences.configure(accountID: session.activeAccount?.id)
+            trackPreferences.configure(accountID: session.activeAccount?.id)
+            await controller.start(
+                media: playerItem.media,
+                startFromBeginning: playerItem.startFromBeginning,
+                client: session.client,
+                trackPreferences: trackPreferences.values,
+                preferredAudioLanguages: trackPreferences.preferredAudioLanguages,
+                preferredSubtitleLanguages: subtitlePreferences.preferredLanguages,
+                missingSubtitleMode: subtitlePreferences.values.missingMode
+            )
+        }
+        .onChange(of: controller.didFinish) { _, finished in
+            guard finished else { return }
+            // A countdown still running when the file ran out finishes the
+            // job here — without an `Outro` segment to anchor it the two
+            // land within a frame of each other, and whichever arrives
+            // first should win. `playNextEpisode` is guarded against being
+            // taken up on it twice.
+            if autoplayMode == .autoDelay, !autoplayCancelled, controller.nextUp != nil {
+                advance()
+            } else if !controller.isAdvancing {
+                // `.card` means never acting alone, so an offer that went
+                // unanswered closes the player exactly as `.off` does.
+                // An *accepted* offer is a different thing: the file can run
+                // out while the successor is still being prepared, and
+                // dismissing there tears down a handoff the viewer asked for
+                // and drops them back on the browse screen (HEL-144).
+                closePlayer()
+            }
+        }
+        .onChange(of: controller.engine?.displayMatchRequest) { _, request in
+            // A shutting-down engine temporarily has no successor criteria.
+            // Preserve the current display mode until the next engine can
+            // state its own request, avoiding an unnecessary HDMI mode round
+            // trip at every episode boundary.
+            if request != nil || !controller.isAdvancing {
+                applyDisplayMatch(request)
+            }
+        }
+        .onChange(of: controller.errorMessage) { _, message in
+            if message != nil {
+                applyDisplayMatch(nil)
+            }
+        }
+        .onChange(of: controller.engine?.isPaused) { _, _ in
+            pictureInPicture.invalidatePlaybackState()
+        }
+        .onChange(of: controller.engine?.rate) { _, _ in
+            pictureInPicture.invalidatePlaybackState()
+            controller.updateNowPlayingTimeline()
+        }
+        .onChange(of: controller.engine?.duration) { _, _ in
+            pictureInPicture.invalidatePlaybackState()
+        }
+        // Backgrounding mid-playback must hand the display back — the
+        // home screen has no business running at the content's mode — and
+        // returning re-requests it (HEL-64).
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                controller.suspendBufferFill()
+                applyDisplayMatch(nil)
+                if !pictureInPicture.isActive,
+                   !pictureInPicture.isTransitioning,
+                   !controller.isExternalPlaybackRouteActive {
+                    controller.engine?.pause()
+                }
+            case .inactive:
+                // Control Center, route pickers, permission alerts, and the
+                // first phase of automatic PiP all make a scene inactive.
+                // None means the user asked playback to stop — and the
+                // display is deliberately *kept* for the same reason. Handing
+                // it back here cost two HDMI renegotiations for an overlay
+                // that never interrupted the film: the TV blanked to its idle
+                // mode on the way in and blanked again re-matching on the way
+                // out. Only `.background` releases it. AVPlayerViewController,
+                // which DisplayModeMatcher hand-rolls, does not blink here
+                // either; nothing in preferredDisplayCriteria asks it to.
+                break
+            case .active:
+                subtitlePreferences.refreshSystemAppearance()
+                controller.resumeBufferFill()
+                applyDisplayMatch(controller.engine?.displayMatchRequest)
+            @unknown default:
+                break
+            }
+        }
+        // Harness hook (debug.benchAutoExit): a completed bench window
+        // leaves the player through the clean teardown path — stop
+        // report, renderer teardown, display-mode restore — so scripted
+        // device runs never kill the app mid-playback again.
+        .onChange(of: controller.engine?.benchCompleted) { _, completed in
+            if completed == true, UserDefaults.standard.bool(forKey: "debug.benchAutoExit") {
+                closePlayer()
+            }
+        }
+        // HEL-148 soak hook (debug.soakExitAtSeconds): the film reached the
+        // configured position, so leave through the same clean teardown
+        // path a real exit takes.
+        .onChange(of: controller.soakExitRequested) { _, requested in
+            if requested {
+                closePlayer()
+            }
+        }
+        // The phone plays landscape only, locked for the duration of the
+        // player (HEL-153); the iPad keeps its normal orientations.
+        #if os(iOS)
+        .onAppear { PlayerOrientationLock.lockToLandscape() }
+        #endif
+        .onDisappear {
+            #if os(iOS)
+            PlayerOrientationLock.unlock()
+            #endif
+            guard !leftForPictureInPicture else { return }
+            applyDisplayMatch(nil)
+            pictureInPicture.onStarted = nil
+            pictureInPicture.onStopped = nil
+            pictureInPicture.onRestore = nil
+            pictureInPicture.detach()
+            controller.close()
+        }
+    }
+
+    private func closePlayer() {
+        leftForPictureInPicture = false
+        pictureInPicture.onStarted = nil
+        pictureInPicture.onStopped = nil
+        pictureInPicture.onRestore = nil
+        pictureInPicture.detach()
+        controller.close()
+        if let onPresentationClose { onPresentationClose() } else { dismiss() }
+    }
+
+    /// tvOS Match Content (HEL-64): ask the display for the video's own
+    /// frame rate and dynamic range instead of letting the compositor
+    /// cadence-convert and tone-map every full-4K frame. Lagoon always
+    /// provides the criteria; the system's own Match Content settings are
+    /// the user-facing gate beneath that request.
+    private func applyDisplayMatch(_ request: DisplayMatchRequest?) {
+        #if os(tvOS)
+        DisplayModeMatcher.apply(request)
+        #endif
+    }
+
+    /// The next episode starts with a clean slate: a "no" belongs to the
+    /// episode it was said during, not to the rest of the binge.
+    private func advance() {
+        autoplayCancelled = false
+        Task { await controller.playNextEpisode() }
+    }
+
+    private var fallbackInfo: PlayerItemInfo {
+        controller.playerInfo ?? PlayerItemInfo(
+            title: playerItem.media.railTitle,
+            subtitle: playerItem.media.railSubtitle,
+            overview: playerItem.media.overview,
+            facts: [],
+            videoSummary: nil,
+            posterURL: nil
+        )
+    }
+
+    private var episodeTransition: some View {
+        ProgressView()
+            .controlSize(.large)
+            .tint(.white)
+            .accessibilityLabel("Loading next episode")
+            .accessibilityIdentifier("player.episodeTransition")
+        // Focus stays on the persistent video surface so the transition
+        // cannot create a focusless frame or steal the Siri Remote.
+        .allowsHitTesting(false)
+    }
+
+    private var playbackHUD: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+            ForEach(Array(controller.hudLines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+            }
+        }
+        .font(.caption.monospaced())
+        .foregroundStyle(.white.opacity(0.85))
+        .padding(Metrics.Space.m)
+        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(Metrics.screenGutter)
+        .allowsHitTesting(false)
+    }
+
+    private func errorOverlay(_ message: String) -> some View {
+        VStack(spacing: Metrics.Space.l) {
+            Image(systemName: "play.slash")
+                .font(Typography.largeGlyph)
+                .foregroundStyle(.secondary)
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 700)
+                .multilineTextAlignment(.center)
+            Button("Back") {
+                closePlayer()
+            }
+            .buttonStyle(.glass)
+        }
+        #if os(tvOS)
+        .onExitCommand {
+            closePlayer()
+        }
+        #endif
+    }
+}
