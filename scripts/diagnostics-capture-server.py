@@ -88,14 +88,15 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--bind", default="127.0.0.1", help="interface to listen on; 0.0.0.0 for a paired device on the LAN")
     parser.add_argument("--out", default="/tmp/lagoon-diagnostics")
     parser.add_argument("--status", type=int, default=200, help="HTTP status to answer with (200, 429, 500)")
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
     Handler.out_dir = args.out
     Handler.status = args.status
-    print(f"capturing envelopes on http://127.0.0.1:{args.port} into {args.out} (status {args.status})", flush=True)
-    HTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
+    print(f"capturing envelopes on http://{args.bind}:{args.port} into {args.out} (status {args.status})", flush=True)
+    HTTPServer((args.bind, args.port), Handler).serve_forever()
 
 
 if __name__ == "__main__":

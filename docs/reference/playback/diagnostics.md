@@ -170,8 +170,9 @@ frequent-stall windows. An asynchronous renderer metrics request already in
 flight may finish; the monitor starts no further requests while opted out.
 HUD, decode-trace, and benchmark sampling keep their independent controls.
 The renderer metrics load every two seconds while reports are enabled is
-asynchronous and does not add SwiftUI body reads. Its performance cost remains
-unmeasured until a matched device benchmark compares reporting on and off.
+asynchronous and does not add SwiftUI body reads. On the Apple TV it was not
+measurable in frame delivery: see the reporting on/off comparison under
+[physical device verification](#physical-device-verification-2026-09-11).
 Release builds default on; Debug builds default off so
 development never spends quota, and a run turns it on with
 `-diagnostics.reportingEnabled YES`. The footer under the toggle states what
@@ -188,7 +189,11 @@ footer states the same number and must change with it.
   that project and nothing else.
 - Project → Settings → Security & Privacy: *Prevent Storing of IP Addresses*
   on. No data scrubbing rules are relied on; the app never sends the fields
-  they would scrub.
+  they would scrub. The app sends no `user` or `request` object, but the
+  event declares `platform: cocoa`, and for that platform Sentry's ingest
+  fills `user.ip_address` from the connection and derives a location from
+  it unless this setting is on. On 2026-09-11 the dashboard showed an IP and
+  geography for a device report, so the setting was off at that point.
 - Quota: Developer plan, 5,000 errors per month, one dashboard seat. Check
   Settings → Subscription monthly; the client-side limits above bound a
   worst case at a few dozen reports per process.
@@ -217,6 +222,77 @@ xcrun simctl launch <udid> ee.helop.lagoon \
   -diagnostics.sentryDSN http://key@127.0.0.1:8765/1 \
   -debug.regressionFailFirstDelivery delivery
 ```
+
+On a paired Apple TV the same capture works over the LAN: start the server
+with `--bind 0.0.0.0`, point the DSN override at the Mac's address (the app's
+`NSAllowsLocalNetworking` permits plain HTTP there), and launch a Debug build
+with `xcrun devicectl device process launch --console --terminate-existing
+ee.helop.lagoon -- <arguments>`. `-debug.playerRegression YES
+-debug.regressionBootstrapPublicDemo YES -debug.regressionFindPlayable YES`
+signs into the demo in memory and picks a title; the injection hooks
+(`-debug.regressionFailFirstDelivery delivery|undecodable`,
+`-debug.simulateDeliveryStall YES` with
+`-debug.starvationInjectionDelaySeconds` / `-debug.starvationInjectionDurationSeconds`)
+are Debug-only, so a Release build can only send what really happens. The
+transport's outcome logs are `os_log` and do not reach the devicectl console;
+`devicectl device copy from --domain-type appDataContainer
+--domain-identifier ee.helop.lagoon --source Library/Caches/Diagnostics`
+shows whether the pending queue drained.
+
+### Physical device verification (2026-09-11)
+
+Living Room Apple TV 4K (3rd generation), tvOS 26.6, Debug build of main at
+`056ff87` (build 96), reporting on, DSN pointed at the capture server on the
+Mac. Each scenario launched hands-off against the public demo; the app stayed
+running throughout. Envelopes were read from the capture server's files and
+scanned for the demo host, the Mac's address and port, the synthetic server
+name, both item ids, both titles, the account name, `Authorization`,
+`MediaBrowser`, `localizedDescription` and the private server's name: no hits
+in any envelope.
+
+| Scenario | Injection | Result |
+| --- | --- | --- |
+| Healthy session | 70 s window, bench auto-exit | no envelope |
+| Recovered fallback | `regressionFailFirstDelivery delivery` | `playback.fallback` (`delivery`), `outcome=recovered`, `elapsedMs=4304`, `to` remux |
+| Undecodable fallback | `regressionFailFirstDelivery undecodable` | `playback.fallback` (`undecodable`), `outcome=recovered`, reloaded on the transcode rung in 6.8 s |
+| 12 s delivery suspension | `simulateDeliveryStall`, 4 s audio lead | ~6 s stall, no reprime: no envelope (below the 8 s and reprime thresholds, as designed) |
+| 30 s delivery suspension | same, 30 s | `playback.stall` (`reprime`, `video`), `elapsedMs=5214`; then at auto-exit `playback.degraded` (`reprimes`), `outcome=stopped`, `reprimes=1 stalls=1` |
+| API failure | synthetic server: probe 200, `POST /Users/AuthenticateByName` and `GET /QuickConnect/Enabled` 500 | `api.requestFailed` (`jellyfin`, `QuickConnect.Enabled`, `status500`), route `QuickConnect/Enabled`, `elapsedMs=21` |
+
+Every event carried `release ee.helop.lagoon@0.1+96`, `dist 96`,
+`environment debug`, device `AppleTV14,1` / Apple TV, `simulator false`,
+`tvOS 26.6`, `engine lavf62.12.102`, the codec/container/delivery tags, a
+`history.json` attachment (0.4–7.8 KB) and no `user` object. The
+authentication 500 itself was classified as a lost connection, because the
+synthetic server closed the socket without reading the request body; the
+quick-connect probe that followed was the reported one. An exhausted recovery
+ladder could not be forced against the demo, which serves every rung.
+
+A final recovered-fallback run with the production DSN drained the device's
+`Caches/Diagnostics/pending` queue within 40 s of the incident. Sentry's edge
+answers 200 to any key, so acceptance is confirmed only by the event
+appearing under Issues (fingerprint `playback.fallback delivery unknown`,
+about 13:15 EEST on 2026-09-11); it did, with Sentry-inferred IP and location
+attached (see Sentry setup above). Not yet verified: a physical iPhone, and a
+Release build sending a naturally occurring incident.
+
+Reporting on versus off (criterion 6), Release build of the same commit,
+"The Creator" at 600 s, 4K Dolby Vision profile 8 over VideoToolbox, HUD and
+decode trace off, subtitles off, interleaved, cool-downs of five minutes then
+one; the third pair was dropped at the developer's request:
+
+| run | reporting | dropped/frames | stalls | footprint start → peak (MB) |
+| --- | --- | --- | --- | --- |
+| 1 | on | 0 / 1462 | 0 | 724.5 → 726.2 |
+| 1 | off | 0 / 1462 | 0 | 723.9 → 724.4 |
+| 2 | on | 0 / 1439 | 0 | 723.9 → 725.3 |
+| 2 | off | 0 / 1463 | 0 | 724.5 → 725.5 |
+
+No frame was dropped in either arm and the footprint differs by under 2 MB.
+The bench itself reads renderer metrics, so this measures the incremental
+cost of the sampler over an already instrumented run; CPU and energy with
+the bench disabled were not observed.
+
 
 Play any direct-play title: four seconds in, the regression hook injects a
 delivery failure, the ladder falls to the remux rung, and a
