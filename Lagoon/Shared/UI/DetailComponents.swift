@@ -112,9 +112,9 @@ struct DetailPageScaffold<Content: View>: View {
 /// Title, metadata, capability badges, actions and synopsis — the block that
 /// sits at the bottom of a detail page's first screen.
 ///
-/// No poster: the backdrop is the artwork here (the poster-left composition
-/// this replaced came from the reference app). Everything is left-aligned on the
-/// screen gutter so title, badges, buttons and synopsis share one edge.
+/// No poster: the backdrop is the artwork here, which replaced an earlier
+/// poster-left composition. Everything is left-aligned on the screen gutter
+/// so title, badges, buttons and synopsis share one edge.
 struct DetailHeader<Buttons: View>: View {
     let item: MediaItem
     /// On a series page, the episode a Play press would start. Its label and
