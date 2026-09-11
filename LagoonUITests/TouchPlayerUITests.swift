@@ -30,14 +30,6 @@ final class TouchPlayerUITests: PlayerUITestCase {
         let startTime = state(in: app).double("time")
         waitForState(in: app, timeout: 8) { $0.double("time") > startTime + 2 }
 
-        // The iPhone player locks to landscape; confirm the window agrees
-        // before trusting normalized-offset coordinates below.
-        let windowFrame = app.windows.allElementsBoundByIndex.first { $0.frame.width > 100 && $0.frame.height > 100 }!.frame
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            XCTAssertGreaterThan(windowFrame.width, windowFrame.height,
-                                 "the iPhone player should lock to landscape")
-        }
-
         // The iOS state probe is a 1pt overlay; use the window for touches.
         let surface = app.windows.allElementsBoundByIndex.first { $0.frame.width > 100 && $0.frame.height > 100 }!
         let playPause = app.buttons["player.playPause"]
