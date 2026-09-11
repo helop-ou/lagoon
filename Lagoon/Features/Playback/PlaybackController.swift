@@ -98,6 +98,7 @@ final class PlaybackController {
     @ObservationIgnored private var reporting: PlaybackReportingSession?
     @ObservationIgnored private let diagnosticSampler = PlaybackDiagnosticsSampler()
     private var bufferFillTask: Task<Void, Never>?
+    private var bufferFillGeneration = UUID()
     private var isClosed = false
     private var lastKnownPosition: Double = 0
     private var nextUpTask: Task<Void, Never>?
@@ -652,6 +653,7 @@ final class PlaybackController {
                 return
             }
             startProgressLoop()
+            diagnosticSampler.cacheMetrics = { [weak self] in self?.playbackCache.current?.metrics }
             diagnosticSampler.startTrace(engine: engine) { [weak self] in
                 self?.soakExitRequested = true
                 self?.soakExitRequestedAt = ContinuousClock.now
@@ -999,9 +1001,11 @@ final class PlaybackController {
     }
 
     /// Proactive fill starts only after the player has presented its initial
-    /// cushion. It advances in 1 MiB requests, yields between every request,
-    /// and enters a long cooldown after any renderer stall. That makes native
-    /// foreground playback—not URLSession priority hints—the hard priority.
+    /// cushion and advances in 1 MiB requests. `PlaybackFillPolicy` decides
+    /// the pace from the cushion of cached media ahead of the playhead, backs
+    /// off after a failed fetch instead of giving up, and gives the link to
+    /// the foreground after a stall (HEL-160). Native foreground playback —
+    /// not URLSession priority hints — stays the hard priority.
     private func startBufferFill(
         session: PlaybackCacheSession?,
         engine: SampleBufferPlayerEngine
@@ -1012,13 +1016,40 @@ final class PlaybackController {
             publishBufferMetrics(session?.metrics)
             return
         }
+        let generation = UUID()
+        bufferFillGeneration = generation
         bufferFillTask = Task { [weak self, weak engine] in
+            // A finished loop clears its handle so `resumeBufferFill` can
+            // start a fresh one; a loop that was replaced leaves the newer
+            // handle alone.
+            defer {
+                if let self, self.bufferFillGeneration == generation {
+                    self.bufferFillTask = nil
+                }
+            }
             do {
-                try await Task.sleep(for: .seconds(3))
+                try await Task.sleep(for: .seconds(PlaybackFillPolicy.warmupSeconds))
             } catch {
                 return
             }
+            var policy = PlaybackFillPolicy()
             var observedStalls = engine?.stallCount ?? 0
+            @MainActor func snapshot(_ metrics: PlaybackCacheMetrics, engine: SampleBufferPlayerEngine) -> PlaybackFillPolicy.Snapshot {
+                let newStall = engine.stallCount > observedStalls
+                observedStalls = engine.stallCount
+                return .init(
+                    isPaused: engine.isPaused,
+                    isBuffering: engine.isBuffering,
+                    newStall: newStall,
+                    aheadSeconds: PlaybackFillPolicy.aheadSeconds(
+                        cachedBytesAhead: metrics.cachedBytesAheadOfPlayhead,
+                        contentLength: metrics.contentLength,
+                        durationSeconds: engine.duration
+                    ),
+                    isWindowed: metrics.isWindowed,
+                    bufferedFraction: metrics.bufferedFraction
+                )
+            }
             while !Task.isCancelled {
                 guard let self, let engine,
                       self.engine === engine,
@@ -1026,25 +1057,21 @@ final class PlaybackController {
 
                 let before = session.metrics
                 self.publishBufferMetrics(before)
-                // A title that fits under the cap finishes and the loop ends.
-                // A larger one is buffered through a window that travels with
-                // the playhead, so reaching capacity is its steady state, not
-                // its end: the loop has to keep running for the whole title.
-                if before.bufferedFraction == 1 {
+                switch policy.beforeFetch(snapshot(before, engine: engine)) {
+                case .stop:
                     return
-                }
-
-                if engine.isBuffering || engine.stallCount > observedStalls {
-                    observedStalls = engine.stallCount
+                case .wait(let seconds):
                     do {
-                        try await Task.sleep(for: .seconds(20))
+                        try await Task.sleep(for: .seconds(seconds))
                     } catch {
                         return
                     }
                     continue
+                case .fetch:
+                    break
                 }
 
-                let advanced = await session.prefetchNextChunk()
+                let outcome = await session.prefetchNextChunk()
                 guard !Task.isCancelled,
                       self.engine === engine,
                       self.playbackCache.current === session else { return }
@@ -1055,41 +1082,27 @@ final class PlaybackController {
                     log: PlaybackPerformance.log,
                     name: "Playback Buffer Progress",
                     signpostID: self.performanceSignpostID,
-                    "cachedMB=%{public}.1f totalMB=%{public}.1f prefixFraction=%{public}.3f ranges=%{public}d playheadPrefetches=%{public}d stalls=%{public}d",
+                    "cachedMB=%{public}.1f totalMB=%{public}.1f prefixFraction=%{public}.3f ranges=%{public}d playheadPrefetches=%{public}d stalls=%{public}d aheadMB=%{public}.1f outcome=%{public}s",
                     Double(after.cachedBytes) / 1_048_576,
                     Double(after.contentLength ?? 0) / 1_048_576,
                     after.bufferedFraction ?? -1,
                     after.bufferedRanges.count,
                     after.playheadPrefetchCount,
-                    engine.stallCount
+                    engine.stallCount,
+                    Double(after.cachedBytesAheadOfPlayhead) / 1_048_576,
+                    String(describing: outcome)
                 )
-                if !advanced {
-                    // Nothing to fetch right now. For a windowed cache that
-                    // means the read-ahead is full and the loop waits for the
-                    // playhead to make room rather than giving up on the rest
-                    // of the movie.
-                    guard after.isWindowed else { return }
+                switch policy.afterFetch(outcome, snapshot(after, engine: engine)) {
+                case .stop:
+                    return
+                case .wait(let seconds):
                     do {
-                        try await Task.sleep(for: .seconds(2))
+                        try await Task.sleep(for: .seconds(seconds))
                     } catch {
                         return
                     }
+                case .fetch:
                     continue
-                }
-
-                if !engine.isPaused {
-                    // Keep proactive traffic at roughly <=20% of the link
-                    // time it just measured. A paused viewer gets full-speed
-                    // fill because no foreground demux request is consuming.
-                    let requestSeconds = max(
-                        after.networkRequestSeconds - before.networkRequestSeconds,
-                        0.125
-                    )
-                    do {
-                        try await Task.sleep(for: .seconds(min(requestSeconds * 4, 8)))
-                    } catch {
-                        return
-                    }
                 }
             }
         }
