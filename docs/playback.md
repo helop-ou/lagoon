@@ -9,7 +9,11 @@ into the [engineering notes](reference/playback/README.md) for implementation de
 
 ```text
 PlaybackController
-  ├─ Jellyfin negotiation, reporting, next episode, subtitles, system media
+  ├─ Jellyfin negotiation, subtitles and system media
+  ├─ PlaybackReportingSession → start/progress/stop and report ledger
+  ├─ PlaybackSuccessorPreparation → next episode negotiation and warm-up
+  ├─ PlaybackDiagnosticsSampler → optional HUD and decode trace
+  ├─ PlaybackIncidentMonitor → opt-in incident sampling
   ├─ PlaybackCacheCoordinator → scoped file/range cache
   └─ SampleBufferPlayerEngine
        ├─ FFmpegDemuxer → compressed packets
@@ -17,11 +21,11 @@ PlaybackController
        └─ audio/video queues → AVSampleBuffer renderers and synchronizer
 ```
 
-`PlaybackController` currently lives in `VideoPlayerView.swift`. The UI lives
-in `CustomPlayerView`, the transport, panel, subtitle, Skip, and Up Next views.
-Engine implementation is under `Lagoon/Views/Player/SampleBuffer/`.
-These are current locations; [Architecture](architecture.md#refactoring-priorities)
-records the proposed cleanup.
+Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift` owns
+the session; `Views/VideoPlayerView.swift` retains it with `@State`. Surfaces,
+controls, overlays and PiP presentation live in `Views/`, the demux/decode/render
+pipeline in `Engine/`, byte sources and cache in `Transport/`, subtitle
+processing in `Subtitles/`, and sampling/benchmarks in `Diagnostics/`.
 
 ## Network transport
 
@@ -61,7 +65,7 @@ Disc images use the app's bounded byte source and UDF handling.
 
 See [negotiation and delivery](reference/playback/stream-resolution.md#stream-resolution),
 [disc images](reference/playback/stream-resolution.md#disc-images-hel-133), and
-[decode details](reference/playback/engine.md#the-engine-lagoonviewsplayersamplebuffer).
+[decode details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
 
 ## Lifecycle and memory
 
