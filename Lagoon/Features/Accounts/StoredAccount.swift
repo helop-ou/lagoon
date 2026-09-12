@@ -13,6 +13,11 @@ nonisolated struct StoredAccount: Codable, Identifiable, Hashable {
     let serverName: String?
     let userId: String
     let userName: String?
+    /// Jellyfin's tag for the user's profile picture, nil when there is
+    /// none. Taken at sign-in and refreshed from `Users/Me` whenever the
+    /// account is activated, so a picture set or changed on the web follows
+    /// (HEL-168). Records written before the field decode without it.
+    var primaryImageTag: String? = nil
 
     /// Identity is the server and the user id, never the display names:
     /// an admin renaming the server, or a user changing their display name,
@@ -25,4 +30,11 @@ nonisolated struct StoredAccount: Codable, Identifiable, Hashable {
     /// of its own when more than one is signed in — see `AccountPickerView`.
     var displayName: String { userName ?? "User" }
     var serverLabel: String { serverName ?? serverURL.host() ?? serverURL.absoluteString }
+
+    /// The profile picture at the account's own server, so the picker can
+    /// show every remembered account whichever one is active. nil without
+    /// a picture; the views draw initials then.
+    func avatarURL(maxWidth: Int) -> URL? {
+        JellyfinClient.userImageURL(serverURL: serverURL, userId: userId, tag: primaryImageTag, maxWidth: maxWidth)
+    }
 }
