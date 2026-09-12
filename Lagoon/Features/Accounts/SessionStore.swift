@@ -119,6 +119,11 @@ final class SessionStore {
         recentSearches.configure(accountID: activeAccount?.id)
         TopShelfStore.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
+        #if os(iOS)
+        // Downloads follow the account the same way (HEL-166): restore,
+        // sign-in, switch, sign-out and removal all land here.
+        DownloadStore.shared.activate(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
+        #endif
     }
 
     func retryCredentialCleanup() {
