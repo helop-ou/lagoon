@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "99",
+            released: "September 2026",
+            headline: "Your Jellyfin profile picture shows up in Lagoon.",
+            changes: [
+                "The account picker and Settings now show your Jellyfin profile picture instead of only your initials. Accounts without a picture keep the initials, and a picture changed on the web is picked up the next time the account is opened.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "98",
             released: "September 2026",
             headline: "4K films buffer ahead properly, and image subtitles stop piling up over a long film.",
