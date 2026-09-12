@@ -61,7 +61,7 @@ nonisolated struct QuickConnectResult: Decodable {
 
 // MARK: - Items
 
-nonisolated enum MediaItemType: String, Decodable, Hashable {
+nonisolated enum MediaItemType: String, Codable, Hashable {
     case movie = "Movie"
     case series = "Series"
     case season = "Season"
