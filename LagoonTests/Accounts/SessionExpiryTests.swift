@@ -66,7 +66,10 @@ struct SessionExpiryTests {
         }
         #expect(store.phase == .signedIn)
         #expect(store.client.accessToken == "first-token")
-        #expect(SessionExpiryProtocol.requests.last?.value(forHTTPHeaderField: "Authorization")?.contains("Token=") == false)
+        // Activation also reads the profile (HEL-168) with the live token;
+        // the request under test is the sign-in itself.
+        let signIn = try #require(SessionExpiryProtocol.requests.last { $0.url?.path.hasSuffix("AuthenticateByName") == true })
+        #expect(signIn.value(forHTTPHeaderField: "Authorization")?.contains("Token=") == false)
     }
 
     @Test(arguments: [403, 404, 500, 503])
