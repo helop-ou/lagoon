@@ -6,22 +6,95 @@ import SwiftUI
 /// exactly where the words are.
 struct DetailBackdropView: View {
     let url: URL?
+    /// Portrait artwork for the compact touch layout (HEL-169). On a phone
+    /// or a compact iPad window the poster is the hero: it fills the width
+    /// at the top and fades into the reading surface, and the landscape
+    /// backdrop is not drawn at all. Regular-width iPad windows keep the
+    /// backdrop, whose shape suits a wide window the way a poster does not.
+    var posterURL: URL? = nil
+    /// The height the poster hero occupies, decided by the scaffold so the
+    /// content inset and the fade agree on where the words begin.
+    var posterHeight: CGFloat = 0
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         ZStack {
             Color.black
-            CachedAsyncImage(url: url, maxPixelSize: 1920) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Color.black
+            #if os(iOS)
+            if usesPosterHero {
+                // Anchored to the top of a centred stack, so the backdrop
+                // composition below keeps the centring it always had.
+                VStack(spacing: 0) {
+                    posterHero
+                    Spacer(minLength: 0)
+                }
+            } else {
+                backdrop
             }
-            .animation(.easeInOut(duration: Motion.crossfade), value: url)
+            #else
+            backdrop
+            #endif
         }
-        .overlay(readabilityWash)
+        .overlay {
+            #if os(iOS)
+            if !usesPosterHero { readabilityWash }
+            #else
+            readabilityWash
+            #endif
+        }
         .ignoresSafeArea()
     }
+
+    private var backdrop: some View {
+        CachedAsyncImage(url: url, maxPixelSize: 1920) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            Color.black
+        }
+        .animation(.easeInOut(duration: Motion.crossfade), value: url)
+    }
+
+    #if os(iOS)
+    /// The scaffold decides: it hands over a height only for the compact,
+    /// portrait composition, and zero whenever the backdrop should draw.
+    private var usesPosterHero: Bool {
+        posterURL != nil && posterHeight > 0
+    }
+
+    private var posterHero: some View {
+        CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            Color.black
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: posterHeight)
+        .clipped()
+        .overlay(posterFade)
+        .animation(.easeInOut(duration: Motion.crossfade), value: posterURL)
+    }
+
+    /// Photographic at the top, a reading surface by the time the title
+    /// arrives, black where the poster ends so the page continues seamlessly.
+    private var posterFade: some View {
+        let heavy = contrast == .increased || reduceTransparency
+        return LinearGradient(
+            stops: [
+                .init(color: .black.opacity(heavy ? 0.35 : 0), location: 0),
+                .init(color: .black.opacity(heavy ? 0.5 : 0.08), location: 0.42),
+                .init(color: .black.opacity(heavy ? 0.9 : 0.72), location: 1 - Metrics.detailPosterContentOverlap),
+                .init(color: .black.opacity(heavy ? 1 : 0.94), location: 0.9),
+                .init(color: .black, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+    #endif
 
     @ViewBuilder
     private var readabilityWash: some View {
@@ -41,23 +114,53 @@ struct DetailBackdropView: View {
             )
         }
         #else
-        // A phone's content spans the whole screen. A leading-only wash left
-        // half the metadata over bare artwork and the lower sections over a
-        // bright still. Keep the top recognisably photographic, then settle
-        // into a near-black reading surface before the rails begin.
-        ZStack {
-            Color.black.opacity(contrast == .increased || reduceTransparency ? 0.9 : 0.55)
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.08), location: 0),
-                    .init(color: .black.opacity(0.65), location: 0.28),
-                    .init(color: .black.opacity(0.82), location: 0.55),
-                    .init(color: .black.opacity(0.96), location: 0.76),
-                    .init(color: .black, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+        let heavy = contrast == .increased || reduceTransparency
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
+            // A regular-width iPad window is laid out like the TV: the
+            // information column on the leading half, so the wash is the
+            // TV's leading fade and the trailing half stays vivid, with a
+            // bottom fade for the rails that scroll up over it (HEL-169).
+            ZStack {
+                Color.black.opacity(heavy ? 0.85 : 0.18)
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.85), location: 0),
+                        .init(color: .black.opacity(0.55), location: 0.4),
+                        .init(color: .clear, location: 0.75),
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .clear, location: 0.45),
+                        .init(color: .black.opacity(0.85), location: 0.78),
+                        .init(color: .black, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        } else {
+            // A phone's content spans the whole screen: a landscape phone,
+            // or a compact page without a poster hero. Keep the top
+            // recognisably photographic, then settle into a near-black
+            // reading surface before the rails begin.
+            ZStack {
+                Color.black.opacity(heavy ? 0.9 : 0.3)
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black.opacity(0.35), location: 0.3),
+                        .init(color: .black.opacity(0.8), location: 0.55),
+                        .init(color: .black.opacity(0.95), location: 0.76),
+                        .init(color: .black, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
         }
         #endif
     }
@@ -80,12 +183,20 @@ struct DetailBackdropView: View {
 /// it is, and the rails below rely on their own artwork for contrast.
 struct DetailPageScaffold<Content: View>: View {
     let backdropURL: URL?
+    /// Portrait artwork for the compact touch hero (HEL-169); nil keeps the
+    /// backdrop composition on every platform.
+    var posterURL: URL? = nil
     @ViewBuilder let content: Content
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     var body: some View {
         GeometryReader { proxy in
+            let posterHeight = posterHeroHeight(in: proxy.size)
             ZStack {
-                DetailBackdropView(url: backdropURL)
+                DetailBackdropView(url: backdropURL, posterURL: posterURL, posterHeight: posterHeight)
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Metrics.detailSectionSpacing) {
@@ -101,13 +212,56 @@ struct DetailPageScaffold<Content: View>: View {
                     // pinned to the screen it belongs to.
                     .frame(width: proxy.size.width, alignment: .leading)
                 }
-                .contentMargins(.top, Metrics.detailHeroSpace, for: .scrollContent)
+                .contentMargins(.top, heroSpace(posterHeight: posterHeight, safeTop: proxy.safeAreaInsets.top), for: .scrollContent)
                 .scrollClipDisabled()
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
     }
+
+    /// A 2:3 poster at the window's width, capped at a share of the height
+    /// so the title is never pushed off-screen. Zero where the poster hero
+    /// is not in use: the wide iPad composition, and a landscape phone,
+    /// where a portrait poster would be reduced to a band across its middle
+    /// and the landscape backdrop is the artwork that fits.
+    private func posterHeroHeight(in size: CGSize) -> CGFloat {
+        #if os(iOS)
+        guard posterURL != nil,
+              !DetailLayout.usesLeadingColumn(horizontalSizeClass),
+              size.height > size.width else { return 0 }
+        return min((size.width * 3 / 2).rounded(), (size.height * Metrics.detailPosterHeroMaxShare).rounded())
+        #else
+        return 0
+        #endif
+    }
+
+    /// Where the content begins. Over a poster hero the block rises into
+    /// the poster's fade; the poster ignores the safe area and the scroll
+    /// view does not, so the inset is taken from the same origin.
+    private func heroSpace(posterHeight: CGFloat, safeTop: CGFloat) -> CGFloat {
+        #if os(iOS)
+        guard posterHeight > 0 else {
+            return DetailLayout.usesLeadingColumn(horizontalSizeClass)
+                ? Metrics.expandedDetailHeroSpace
+                : Metrics.detailHeroSpace
+        }
+        return max(0, (posterHeight * (1 - Metrics.detailPosterContentOverlap)).rounded() - safeTop)
+        #else
+        return Metrics.detailHeroSpace
+        #endif
+    }
 }
+
+#if os(iOS)
+/// The one question every touch detail component asks: is this the wide
+/// composition (a regular-width iPad window, laid out like the TV) or the
+/// compact one (a phone, or an iPad window narrow enough to read like one)?
+enum DetailLayout {
+    static func usesLeadingColumn(_ horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+    }
+}
+#endif
 
 /// Title, metadata, capability badges, actions and synopsis — the block that
 /// sits at the bottom of a detail page's first screen.
@@ -117,6 +271,9 @@ struct DetailPageScaffold<Content: View>: View {
 /// so title, badges, buttons and synopsis share one edge.
 struct DetailHeader<Buttons: View>: View {
     let item: MediaItem
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     /// On a series page, the episode a Play press would start. Its label and
     /// synopsis take over from the show's, because what you're deciding about
     /// is the next episode, not the premise of the series (Infuse does the
@@ -138,7 +295,14 @@ struct DetailHeader<Buttons: View>: View {
             communityRating: item.communityRating,
             overview: upNext?.overview ?? item.overview
         ) {
+            #if os(iOS)
+            TitleArtView(
+                item: item,
+                alignment: DetailLayout.usesLeadingColumn(horizontalSizeClass) ? .leading : .center
+            )
+            #else
             TitleArtView(item: item)
+            #endif
         } buttons: {
             buttons
         }
@@ -210,40 +374,59 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
 
     /// A regular-width iPad window gets the TV's composition: a leading
     /// information column beside the artwork. A phone keeps one full-width
-    /// column with the title centred over it.
+    /// column with the title and facts centred over the poster hero.
     private var usesLeadingColumn: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+        DetailLayout.usesLeadingColumn(horizontalSizeClass)
+    }
+
+    private var compactAlignment: Alignment {
+        usesLeadingColumn ? .leading : .center
+    }
+
+    private var flowAlignment: HorizontalAlignment {
+        usesLeadingColumn ? .leading : .center
     }
     #endif
 
+    private var stackAlignment: HorizontalAlignment {
+        #if os(tvOS)
+        .leading
+        #else
+        flowAlignment
+        #endif
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.detailHeaderSpacing) {
+        VStack(alignment: stackAlignment, spacing: Metrics.detailHeaderSpacing) {
             #if os(tvOS)
             title
-            #else
-            title
-                .frame(maxWidth: .infinity, alignment: usesLeadingColumn ? .leading : .center)
-            #endif
-
-            if let subtitle, !subtitle.isEmpty {
-                Text(subtitle)
-                    .font(.title3.weight(.semibold))
-                    #if os(tvOS)
-                    .lineLimit(1)
-                    #else
-                    .fixedSize(horizontal: false, vertical: true)
-                    #endif
-            }
-
+            subtitleView
             facts
             supportingFacts
-
-            if let overview, !overview.isEmpty {
-                DetailOverview(text: overview)
-            }
-
+            overviewView
             buttons
                 .padding(.top, Metrics.Space.xs)
+            #else
+            // Touch order (HEL-169): the decision first. Title, facts and
+            // the actions form one block over the artwork, and the synopsis
+            // follows in full below it; a synopsis you have to expand was
+            // the one thing every viewer tapped and nobody wanted to. The
+            // stack's own alignment centres the block on a phone, so an
+            // absent row costs nothing and every client of this header,
+            // Seerr and collections included, gets the same composition.
+            title
+                .frame(maxWidth: .infinity, alignment: compactAlignment)
+            subtitleView
+                .multilineTextAlignment(usesLeadingColumn ? .leading : .center)
+            facts
+            supportingFacts
+            buttons
+                .frame(maxWidth: .infinity, alignment: compactAlignment)
+                .padding(.top, Metrics.Space.s)
+            overviewView
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Metrics.Space.s)
+            #endif
         }
         #if os(iOS)
         // Let SwiftUI size the glass labels, circles and hit areas together.
@@ -256,6 +439,26 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         #endif
         .padding(.horizontal, Metrics.screenGutter)
+    }
+
+    @ViewBuilder
+    private var subtitleView: some View {
+        if let subtitle, !subtitle.isEmpty {
+            Text(subtitle)
+                .font(.title3.weight(.semibold))
+                #if os(tvOS)
+                .lineLimit(1)
+                #else
+                .fixedSize(horizontal: false, vertical: true)
+                #endif
+        }
+    }
+
+    @ViewBuilder
+    private var overviewView: some View {
+        if let overview, !overview.isEmpty {
+            DetailOverview(text: overview)
+        }
     }
 
     @ViewBuilder
@@ -274,12 +477,12 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         // of producing "1 h 56" / "min" and "TrueHD" / "7.1" fragments.
         VStack(alignment: .leading, spacing: Metrics.Space.s) {
             if !factTokens.isEmpty || officialRating != nil {
-                MetadataFlowLayout {
+                MetadataFlowLayout(alignment: flowAlignment) {
                     primaryFactViews
                 }
             }
             if !qualityTokens.isEmpty {
-                MetadataFlowLayout {
+                MetadataFlowLayout(alignment: flowAlignment) {
                     qualityFactViews
                 }
             }
@@ -340,7 +543,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         }
         #else
         if !genres.isEmpty || communityRating != nil {
-            MetadataFlowLayout(spacing: Metrics.Space.l) {
+            MetadataFlowLayout(spacing: Metrics.Space.l, alignment: flowAlignment) {
                 if !genres.isEmpty {
                     genreText(genres)
                 }
@@ -376,48 +579,25 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     }
 }
 
-/// Keep the compact TV overview; touch can expand the same text without
-/// leaving the detail page. Changing the episode resets the expansion.
+/// The synopsis. Three lines at 10 feet, where the page is a glance and the
+/// rest of the block has to fit beside the artwork; the whole text on touch,
+/// where the page scrolls and an expand button only stood between the viewer
+/// and the paragraph they had already started reading (HEL-169).
 private struct DetailOverview: View {
     let text: String
-    @State private var isExpanded = false
-    @State private var fullHeight: CGFloat = 0
-    @State private var visibleHeight: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.s) {
-            Text(text)
-                .font(.callout)
-                #if os(tvOS)
-                .foregroundStyle(.secondary)
-                #else
-                .foregroundStyle(.primary)
-                #endif
-                .lineLimit(isExpanded ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 1000, alignment: .leading)
-                #if os(iOS)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
-                .background {
-                    Text(text)
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .hidden()
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
-                }
-                #endif
-            #if os(iOS)
-            if isExpanded || fullHeight > visibleHeight + 1 {
-                Button(isExpanded ? "Show Less" : "Read Synopsis") {
-                    isExpanded.toggle()
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("detail.overview.expand")
-                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            }
+        Text(text)
+            .font(.callout)
+            #if os(tvOS)
+            .foregroundStyle(.secondary)
+            .lineLimit(3)
+            #else
+            .foregroundStyle(.primary)
             #endif
-        }
-        .onChange(of: text) { _, _ in isExpanded = false }
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 1000, alignment: .leading)
+            .accessibilityIdentifier("detail.overview")
     }
 }
 
@@ -430,6 +610,9 @@ struct TitleArtView: View {
     let item: MediaItem
     /// The hero wants a smaller box than a detail page does.
     var maxHeight: CGFloat = Metrics.logoMaxHeight
+    /// Where the art sits in its box, and how a wrapped title is set:
+    /// centred under the phone's poster hero, leading everywhere else.
+    var alignment: HorizontalAlignment = .leading
 
     @Environment(SessionStore.self) private var session
 
@@ -437,7 +620,8 @@ struct TitleArtView: View {
         TitleArtImage(
             url: session.client.imageURL(for: item, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)),
             title: item.name ?? "",
-            maxHeight: maxHeight
+            maxHeight: maxHeight,
+            alignment: alignment
         )
     }
 }
@@ -450,6 +634,7 @@ struct TitleArtImage: View {
     let url: URL?
     let title: String
     var maxHeight: CGFloat = Metrics.logoMaxHeight
+    var alignment: HorizontalAlignment = .leading
 
     var body: some View {
         artwork
@@ -470,7 +655,7 @@ struct TitleArtImage: View {
                 // logo's full height would leave a hole on every load.
                 titleText
             }
-            .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: maxHeight, alignment: .leading)
+            .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: maxHeight, alignment: Alignment(horizontal: alignment, vertical: .center))
         } else {
             titleText
         }
@@ -482,6 +667,7 @@ struct TitleArtImage: View {
             #if os(tvOS)
             .lineLimit(2)
             #endif
+            .multilineTextAlignment(alignment == .center ? .center : (alignment == .trailing ? .trailing : .leading))
             .fixedSize(horizontal: false, vertical: true)
     }
 }
