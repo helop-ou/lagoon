@@ -79,18 +79,42 @@ struct ItemDetailView: View {
         return ticks
     }
 
+    /// The actions and, once there is a resume point, where Resume starts
+    /// from. Wide compositions keep that caption under the row; on a phone
+    /// it belongs to the Resume pill (HEL-169): directly under it in
+    /// portrait, under the trailing end of the landscape row, where the
+    /// pill sits.
+    @ViewBuilder
     private var playButtons: some View {
+        #if os(iOS)
+        if usesLandscapeRow {
+            VStack(alignment: .trailing, spacing: Metrics.Space.xs) {
+                actions
+                resumeCaption
+            }
+        } else if !usesLeadingColumn {
+            actions
+        } else {
+            captionedActions
+        }
+        #else
+        captionedActions
+        #endif
+    }
+
+    private var captionedActions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             actions
+            resumeCaption
+        }
+    }
 
-            if let resumeTicks {
-                Text("Resume from \(Self.timestamp(resumeTicks))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    #if os(iOS)
-                    .frame(maxWidth: .infinity, alignment: compactAlignment)
-                    #endif
-            }
+    @ViewBuilder
+    private var resumeCaption: some View {
+        if let resumeTicks {
+            Text("Resume from \(Self.timestamp(resumeTicks))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -101,13 +125,6 @@ struct ItemDetailView: View {
 
     private var usesLandscapeRow: Bool {
         DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
-    }
-
-    /// Centred under the poster hero on a portrait phone; on the leading
-    /// edge in a regular-width iPad window, where the block is a column
-    /// beside the art, and in a landscape phone's row.
-    private var compactAlignment: Alignment {
-        usesLeadingColumn || usesLandscapeRow ? .leading : .center
     }
 
     /// The Play pill's width: natural in the wide iPad row, capped on a
@@ -144,25 +161,29 @@ struct ItemDetailView: View {
             }
         } else if usesLandscapeRow {
             // A landscape phone (HEL-169): the circles then Play, on one
-            // line with the title art along the poster's lower part.
+            // line with the title art along the poster's lower part. Every
+            // secondary control is a circle here, so the line never has to
+            // fold.
             HStack(spacing: Metrics.detailActionSpacing) {
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
-                    fromBeginningButton
-                    actionRow
-                    #if DEBUG
-                    downloadSpikeMenu
-                    #endif
-                }
+                fromBeginningButton
+                actionRow
+                #if DEBUG
+                downloadSpikeMenu
+                #endif
                 playButton
             }
         } else {
             // A portrait phone (HEL-169): one wide Play, the decision the
-            // page exists for, then the secondary controls as a row of
-            // glass circles under it. From Beginning joins that row only
-            // once there is a resume point to start from.
+            // page exists for, with its resume caption tucked under it, then
+            // the secondary controls as a row of glass circles. From
+            // Beginning joins that row as a circle only once there is a
+            // resume point to start from.
             VStack(spacing: Metrics.Space.m) {
-                playButton
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                VStack(spacing: Metrics.Space.xs) {
+                    playButton
+                    resumeCaption
+                }
+                HStack(spacing: Metrics.detailActionSpacing) {
                     fromBeginningButton
                     actionRow
                     #if DEBUG
@@ -219,7 +240,11 @@ struct ItemDetailView: View {
             Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
             #else
             Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
-                .font(.title3.weight(.semibold))
+            .font(.title3.weight(.semibold))
+                // One line always: a Label squeezed for width stacks its icon
+                // over its text, which folded the landscape row's pill into a
+                // column once four circles shared the line.
+                .fixedSize()
                 .frame(maxWidth: playButtonMaxWidth)
                 .padding(.vertical, Metrics.Space.xs)
             #endif
@@ -231,15 +256,30 @@ struct ItemDetailView: View {
         #endif
     }
 
+    /// A labelled pill beside Play on the TV and a wide iPad; a glass
+    /// circle in the phone's row of secondary controls, where a pill made
+    /// the row fold into a column once four controls shared it.
     @ViewBuilder
     private var fromBeginningButton: some View {
         if resumeTicks != nil {
             Button {
                 playerItem = PlayerItem(media: displayed, startFromBeginning: true)
             } label: {
+                #if os(iOS)
+                if usesLeadingColumn {
+                    Label("From Beginning", systemImage: "arrow.counterclockwise")
+                } else {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                #else
                 Label("From Beginning", systemImage: "arrow.counterclockwise")
+                #endif
             }
             .buttonStyle(.glass)
+            #if os(iOS)
+            .buttonBorderShape(usesLeadingColumn ? .automatic : .circle)
+            .accessibilityLabel("From Beginning")
+            #endif
         }
     }
 
