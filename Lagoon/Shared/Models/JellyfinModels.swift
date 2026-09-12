@@ -26,6 +26,11 @@ nonisolated struct UserDto: Codable, Identifiable {
 nonisolated struct UserPolicy: Codable {
     let isAdministrator: Bool?
     let enableSubtitleManagement: Bool?
+    /// "Allow media downloading" (HEL-166): gates `Items/{id}/Download`.
+    let enableContentDownloading: Bool?
+    /// "Allow video remuxing/transcoding": without it every progressive
+    /// transcode the download picker could otherwise ask for answers 403.
+    let enableVideoPlaybackTranscoding: Bool?
 
     /// Whether to let a subtitle search start.
     ///
