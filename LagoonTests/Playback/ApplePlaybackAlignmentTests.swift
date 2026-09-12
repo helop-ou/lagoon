@@ -787,7 +787,7 @@ struct ApplePlaybackAlignmentTests {
         } == true)
         // The conditions the envelope already carried have to survive.
         #expect(h264?.conditions.contains { $0.property == "VideoLevel" } == true)
-        #expect(h264?.conditions.contains { $0.property == "IsInterlaced" } == true)
+        #expect(h264?.conditions.contains { $0.property == "VideoProfile" } == true)
 
         // Hardware that can decode HEVC keeps 4K H.264, which it can also
         // decode: the ceiling belongs to the reduced profile alone.
@@ -825,7 +825,8 @@ struct ApplePlaybackAlignmentTests {
         // Interlaced content still goes to the server for everything that
         // decodes in hardware, where there is no deinterlacing stage. MPEG-2
         // is the exception, because it decodes in software and that path
-        // deinterlaces (HEL-127).
+        // deinterlaces (HEL-127), and so is H.264, whose interlaced streams
+        // the demuxer sends down the same software path (HEL-170).
         let guarded = DeviceProfile.everything.codecProfiles.filter { profile in
             profile.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
@@ -835,7 +836,160 @@ struct ApplePlaybackAlignmentTests {
             !profile.conditions.contains { $0.property == "IsInterlaced" }
         }
         #expect(guarded.count + unguarded.count == DeviceProfile.everything.codecProfiles.count)
-        #expect(unguarded.map(\.codec) == ["mpeg2video"])
+        #expect(unguarded.map(\.codec) == ["h264", "mpeg2video"])
+    }
+
+    @Test func interlacedH264IsRoutedToTheSoftwareDecoderAndProgressiveIsNot() {
+        // HEL-170: a 1080i broadcast recording used to transcode because the
+        // H.264 profile carried an interlace guard, VideoToolbox having no
+        // deinterlacing stage. The guard is gone and the split is now the
+        // demuxer's own field-order check: interlaced H.264 decodes in
+        // software, where the deinterlacer lives, and progressive H.264 is
+        // exactly where it was.
+        let capabilities = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_H264, capabilities: capabilities, interlaced: false
+        ))
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_H264, capabilities: capabilities, interlaced: true
+        ))
+        // The software decoder takes H.264 only on the interlaced route, so a
+        // hardware description that fails for progressive H.264 keeps
+        // failing the way it does today instead of quietly decoding on the
+        // CPU.
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, interlaced: true))
+        #expect(!SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264))
+        #expect(!SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, interlaced: false))
+
+        // HEVC has no software route and interlaced HEVC is not something a
+        // library holds: it stays compressed whatever the field order says,
+        // and the profile keeps asking the server for it.
+        #expect(FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_HEVC, capabilities: capabilities, interlaced: true
+        ))
+        #expect(!SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_HEVC, interlaced: true))
+        let hevc = DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }
+        #expect(hevc?.conditions.contains {
+            $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
+        } == true)
+
+        // Every field order libavformat can report. Unknown is progressive:
+        // it is what a stream that never said reports, and sending that to
+        // the CPU would take ordinary H.264 off the hardware for nothing.
+        for order in [AV_FIELD_TT, AV_FIELD_BB, AV_FIELD_TB, AV_FIELD_BT] {
+            #expect(FFmpegDemuxer.isInterlaced(fieldOrder: order))
+        }
+        #expect(!FFmpegDemuxer.isInterlaced(fieldOrder: AV_FIELD_PROGRESSIVE))
+        #expect(!FFmpegDemuxer.isInterlaced(fieldOrder: AV_FIELD_UNKNOWN))
+
+        // The profile no longer refuses it; AC-3 beside software-decoded
+        // video already goes local, which is what a broadcast recording
+        // pairs it with.
+        let h264 = DeviceProfile.everything.codecProfiles.first { $0.codec == "h264" }
+        #expect(h264?.conditions.contains { $0.property == "IsInterlaced" } == false)
+        #expect(AudioDecodePolicy.requiresLocalPCM(
+            codecID: AV_CODEC_ID_AC3,
+            softwareVideoDecoded: true
+        ))
+    }
+
+    /// Point `LAGOON_INTERLACED_H264_FIXTURE_URL` at an interlaced H.264 file
+    /// (a 1080i recording, or `ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=25
+    /// -vf tinterlace=interleave_top,setfield=tff -c:v libx264 -flags +ilme+ildct
+    /// -x264-params tff=1`) and this opens it the way the player does: the
+    /// demuxer must take the software route and every decoded frame must
+    /// come out progressive, not woven. `LAGOON_PROGRESSIVE_H264_FIXTURE_URL`
+    /// is the control: the same encoder without the interlace flags has to
+    /// stay on the compressed VideoToolbox path.
+    @Test func interlacedH264FixtureDecodesInSoftwareWithoutCombing() throws {
+        if let progressive = ProcessInfo.processInfo.environment["LAGOON_PROGRESSIVE_H264_FIXTURE_URL"],
+           !progressive.isEmpty {
+            let demuxer = FFmpegDemuxer(
+                capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+            )
+            defer { demuxer.close() }
+            try demuxer.open(
+                url: progressive,
+                recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+            )
+            #expect(demuxer.videoStream?.codecName == "h264")
+            #expect(!demuxer.outputsDecodedVideo)
+            #expect(demuxer.takeSoftwareVideoDecoder() == nil)
+        }
+
+        guard let rawURL = ProcessInfo.processInfo.environment["LAGOON_INTERLACED_H264_FIXTURE_URL"],
+              !rawURL.isEmpty else { return }
+        let demuxer = FFmpegDemuxer(
+            capabilities: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        )
+        defer { demuxer.close() }
+        try demuxer.open(
+            url: rawURL,
+            recommendedPixelBufferAttributes: CVPixelBufferAttributes()
+        )
+        #expect(demuxer.videoStream?.codecName == "h264")
+        #expect(demuxer.outputsDecodedVideo)
+        let decoder = try #require(demuxer.takeSoftwareVideoDecoder())
+
+        var decodedFrames = 0
+        var reads = 0
+        var worstCombing = 0.0
+        readLoop: while decodedFrames < 24, reads < 2_000 {
+            reads += 1
+            switch demuxer.readNext() {
+            case .videoPacket(let packet):
+                for buffer in try decoder.decode(packet: packet.packet) {
+                    #expect(CMSampleBufferDataIsReady(buffer))
+                    let image = try #require(CMSampleBufferGetImageBuffer(buffer))
+                    let format = CVPixelBufferGetPixelFormatType(image)
+                    #expect(
+                        format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+                            || format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                    )
+                    worstCombing = max(worstCombing, Self.combingRatio(luma: image))
+                    decodedFrames += 1
+                    if decodedFrames == 24 { break }
+                }
+            case .failed(let message):
+                Issue.record("interlaced h264 fixture failed: \(message)")
+                break readLoop
+            case .endOfFile:
+                break readLoop
+            default:
+                continue
+            }
+        }
+        #expect(decodedFrames == 24)
+        // A woven field pair on motion alternates row by row, so adjacent
+        // rows differ far more than rows two apart; a progressive picture
+        // has adjacent rows at least as alike as rows two apart. yadif on
+        // the synthetic fixture lands around 0.7; the woven frames land
+        // above 1.5.
+        #expect(worstCombing < 1.0, "worst combing ratio \(worstCombing)")
+    }
+
+    /// Mean absolute difference between adjacent luma rows, over the same
+    /// between rows two apart. Above one the rows alternate, which on a
+    /// moving picture is what a woven field pair looks like.
+    private static func combingRatio(luma image: CVPixelBuffer) -> Double {
+        CVPixelBufferLockBaseAddress(image, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(image, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddressOfPlane(image, 0) else { return .infinity }
+        let stride = CVPixelBufferGetBytesPerRowOfPlane(image, 0)
+        let width = CVPixelBufferGetWidthOfPlane(image, 0)
+        let height = CVPixelBufferGetHeightOfPlane(image, 0)
+        let bytes = base.assumingMemoryBound(to: UInt8.self)
+        var adjacent = 0, apart = 0
+        for row in 0..<(height - 2) {
+            let a = bytes + row * stride
+            let b = a + stride
+            let c = b + stride
+            for x in 0..<width {
+                adjacent += abs(Int(a[x]) - Int(b[x]))
+                apart += abs(Int(a[x]) - Int(c[x]))
+            }
+        }
+        return apart == 0 ? 0 : Double(adjacent) / Double(apart)
     }
 
     /// Point `LAGOON_MPEG4_FIXTURE_URL` at a Jellyfin direct-play URL for an
