@@ -32,8 +32,11 @@ processing in `Subtitles/`, and sampling/benchmarks in `Diagnostics/`.
 Every HTTP open uses `FFmpegNetworkTransport` over URLSession, including HLS
 playlists and segments. Repo-built libavformat has its network stack disabled.
 Do not restore native FFmpeg HTTP/TLS as a cache fallback. System certificate
-trust, account-scoped authorization, redirect rules, cancellation, and bounded
-downloads must apply to every media path.
+trust, account-scoped authorization, redirect rules, cancellation, and the
+size-capped fetches `BoundedDownload` applies to subtitles and artwork must
+apply to every streamed media path. That bound is a transport safeguard, not
+the offline Downloads feature: see [Downloads](#downloads-hel-166) below for
+the feature that keeps a whole file on disk.
 
 Media credentials use the authorization header rather than token-bearing URLs.
 Keep endpoint/cross-origin rules in the shared authorization and transport
@@ -100,6 +103,50 @@ The repo builds dav1d with arm64 assembly. After changing its artifact, run
 Software 10-bit conversion uses the asynchronous Metal path; synchronous
 conversion changes its performance characteristics. Native dependency
 changes also need matching acknowledgements, license text, and build evidence.
+
+### Downloads (HEL-166)
+
+Before negotiating, and before consulting a prepared successor, the
+controller asks `DownloadStore` whether the item is a finished download. When
+one exists, playback never touches the network to start: negotiation,
+`playbackInfo` and `streamURL` are skipped outright, the method is direct
+play, and the stream is the file on disk. This keeps the existing rule that a
+local file needs no cache in front of it; a downloaded title plays with no
+`PlaybackCacheCoordinator` scope at all, the same as any other file URL.
+
+Track metadata depends on what was actually downloaded. An original-quality
+download is the stored file, so its source's stream list still describes it
+and drives audio/subtitle selection exactly as a negotiated stream would. A
+high/standard download is a transcode the server built for offline use, a
+different container carrying one audio track and no external subtitles, so
+its source's stream list does not describe the file on disk; the controller
+hands the engine empty track metadata rather than stale descriptions, and
+both the engine's own track construction and the ordinal selection policies
+already degrade to what the file demuxes to when given nothing. The picker
+panel reflects whatever the engine actually finds; only the language/title
+labels are lost for a transcode, not track selection itself.
+
+A downloaded title also has no chapters, trickplay, or skip segments: the
+garnish requests that ride alongside negotiation for a streamed title are
+skipped rather than awaited, since asking an unreachable server for them
+would burn the client's full request timeout before the engine ever starts.
+Losing chapters, trickplay, and skip segments offline is an accepted gap for
+this feature's first pass. The start report follows the same reasoning: it
+is fired without being awaited for a downloaded title, so a server the
+device cannot currently reach never delays the progress loop, HUD, or
+next-up warm-up.
+
+Position handling runs in both directions. Starting a downloaded title
+prefers its own locally recorded resume point over the server's last known
+position, since there was no negotiation to fetch a fresh one; choosing to
+start from beginning still starts at 0 for a downloaded title exactly as it
+does for a streamed one. Stopping one
+records the position back through `DownloadStore.recordPosition`, cleared
+once the position lands in the last 2% of the runtime, so a downloaded title
+resumes correctly the next time it plays with no server involved. Whether or
+not an item is downloaded, a stop report the server refuses or cannot reach
+is queued as a `PendingPlaybackReport` and flushed on reconnect, so a
+session's true stopping point is never silently lost to a bad connection.
 
 ### The player's Observation scope (HEL-150)
 
