@@ -36,9 +36,28 @@ final class ImageCache {
     }
 
     /// Synchronous probe so views can skip the placeholder for cached images.
+    /// Only the in-memory cache is consulted here: a downloaded title's
+    /// artwork lives on disk and needs the same off-main decode a network
+    /// fetch gets, which `load` below does (HEL-166).
     func image(for url: URL, maxPixelSize: Int) -> UIImage? {
-        cache.object(forKey: key(url, maxPixelSize: maxPixelSize) as NSString)
+        let key = key(url, maxPixelSize: maxPixelSize)
+        return cache.object(forKey: key as NSString)
     }
+
+    #if os(iOS)
+    /// A downloaded title's own poster or backdrop, decoded the same way a
+    /// network fetch would be, before ever touching the network (HEL-166).
+    /// Reads the file and decodes it off the main actor, same as the
+    /// network path, since a 4K backdrop is exactly the decode this cache
+    /// exists to keep off the render thread.
+    private func localImage(for url: URL, maxPixelSize: Int) async -> UIImage? {
+        guard let fileURL = DownloadStore.localArtworkURL(matching: url) else { return nil }
+        return await Task.detached(priority: .utility) {
+            guard let data = try? Data(contentsOf: fileURL) else { return nil }
+            return ArtworkDecoder.image(from: data, maxPixelSize: maxPixelSize)
+        }.value
+    }
+    #endif
 
     func load(_ url: URL, maxPixelSize: Int) async -> UIImage? {
         guard !Task.isCancelled else { return nil }
@@ -46,6 +65,13 @@ final class ImageCache {
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
+        #if os(iOS)
+        if let local = await localImage(for: url, maxPixelSize: maxPixelSize) {
+            let cost = Int(local.size.width * local.size.height * local.scale * local.scale * 4)
+            cache.setObject(local, forKey: key as NSString, cost: cost)
+            return local
+        }
+        #endif
         let waiter = UUID()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
