@@ -36,6 +36,8 @@ nonisolated enum Changelog {
                 "4K films played directly from your server now buffer ahead at your connection's pace like everything else. The previous build only did this for lower-bitrate titles and quietly kept the old trickle for 4K.",
                 "Image subtitles such as those on Blu-ray rips no longer keep every picture they have shown in memory until you seek. Over a long film that could add up to hundreds of megabytes and slow the player down.",
                 "When marking something watched or adding a favorite fails, the button now says so briefly instead of silently flipping back. After the server accepts a change, the page re-reads it so a change made on another device shows up too.",
+                "Scrubbing backwards right after another jump no longer gets ignored. The player could restart its clock at the old position and race the picture forward to it instead of landing where you asked.",
+                "On an iPad in a full-width window, a film or series page now keeps its title, details and buttons in a column beside the artwork, the way the TV lays it out, instead of spreading the synopsis across the whole screen.",
             ]
         ),
         ChangelogEntry(
