@@ -155,9 +155,6 @@ struct ItemDetailView: View {
                 playButton
                 fromBeginningButton
                 actionRow
-                #if DEBUG
-                downloadSpikeMenu
-                #endif
             }
         } else if usesLandscapeRow {
             // A landscape phone (HEL-169): the circles then Play, on one
@@ -167,9 +164,6 @@ struct ItemDetailView: View {
             HStack(spacing: Metrics.detailActionSpacing) {
                 fromBeginningButton
                 actionRow
-                #if DEBUG
-                downloadSpikeMenu
-                #endif
                 playButton
             }
         } else {
@@ -186,41 +180,11 @@ struct ItemDetailView: View {
                 HStack(spacing: Metrics.detailActionSpacing) {
                     fromBeginningButton
                     actionRow
-                    #if DEBUG
-                    downloadSpikeMenu
-                    #endif
                 }
             }
         }
         #endif
     }
-
-    #if DEBUG && os(iOS)
-    /// HEL-166 spike: take this title off the server as the original file
-    /// or a progressive transcode. Debug builds only; the real feature gets
-    /// its own control.
-    private var downloadSpikeMenu: some View {
-        Menu {
-            Button("Download original") { startSpikeDownload(.original) }
-            Button("Download transcode (1080p, 8 Mbps)") { startSpikeDownload(.transcode) }
-        } label: {
-            Image(systemName: DownloadSpikeStore.shared.completedLocalURL(itemID: displayed.id) == nil
-                  ? "arrow.down.circle" : "arrow.down.circle.fill")
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .accessibilityLabel("Download (spike)")
-    }
-
-    private func startSpikeDownload(_ kind: DownloadSpikeEntry.Kind) {
-        Task {
-            // The detail read carries media sources; a rail item does not.
-            let fresh = displayed.mediaSources == nil ? try? await session.client.item(id: item.id) : displayed
-            guard let source = (fresh ?? displayed).mediaSources?.first else { return }
-            DownloadSpikeStore.shared.start(item: displayed, source: source, kind: kind, client: session.client)
-        }
-    }
-    #endif
 
     private var actionRow: some View {
         ItemActionRow(item: displayed) {
