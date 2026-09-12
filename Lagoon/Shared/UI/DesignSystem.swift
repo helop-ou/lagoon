@@ -96,6 +96,16 @@ enum Metrics {
     /// How far the metadata block rises over the poster hero, as a share of
     /// the poster's height. The fade beneath the block is drawn to match.
     static let detailPosterContentOverlap: CGFloat = 0.36
+    /// A landscape phone shows the poster as the whole hero and lays the
+    /// title, actions and Play along its lower part in one row; the row
+    /// starts at this share of the window height (HEL-169).
+    static let detailLandscapeRowShare: CGFloat = 0.6
+    /// The phone's Play pill: wide enough to be the page's one big target,
+    /// capped so it never becomes a bar across the screen (HEL-169, after
+    /// Infuse's proportions). The landscape row shares its width with the
+    /// title art and the circles, so its cap is smaller.
+    static let detailPlayButtonMaxWidth: CGFloat = 360
+    static let detailLandscapePlayButtonMaxWidth: CGFloat = 260
     static let detailHeaderSpacing: CGFloat = 12
     static let detailSectionSpacing: CGFloat = 32
     /// The liquid tab bar floats over scroll content. The final rail needs
