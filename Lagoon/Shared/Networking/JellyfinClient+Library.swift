@@ -133,6 +133,14 @@ extension JellyfinClient {
         return try await get("Users/\(userId)/Items/\(id)")
     }
 
+    /// The item endpoint's raw body, for a download's snapshot (HEL-166):
+    /// saved as-is and decoded later with `JellyfinClient.decoder`, so a
+    /// downloaded title's detail page renders without the server.
+    func itemData(id: String) async throws -> Data {
+        let userId = try requireUserId()
+        return try await getData("Users/\(userId)/Items/\(id)")
+    }
+
     /// Resolves a Seerr/TMDB catalogue entry back into this user's Jellyfin
     /// library without guessing from title or year.
     func item(tmdbID: Int, mediaType: SeerrMediaType) async throws -> MediaItem? {
