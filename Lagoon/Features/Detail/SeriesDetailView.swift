@@ -153,6 +153,9 @@ struct SeriesDetailView: View {
                         playButton(for: episode)
                     }
                     actionRow
+                    if let episode = subject {
+                        DownloadControl(item: episode)
+                    }
                 }
 
                 seasonChips
@@ -165,6 +168,9 @@ struct SeriesDetailView: View {
             // the circles.
             HStack(spacing: Metrics.detailActionSpacing) {
                 actionRow
+                if let episode = subject {
+                    DownloadControl(item: episode)
+                }
                 seasonChips
                     .fixedSize()
                 if let episode = subject {
@@ -181,6 +187,9 @@ struct SeriesDetailView: View {
                 }
                 AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
                     actionRow
+                    if let episode = subject {
+                        DownloadControl(item: episode)
+                    }
                     seasonChips
                 }
             }
@@ -354,10 +363,20 @@ struct EpisodeCard: View {
         }
         .focused($isFocused)
         .cardButtonStyle()
-        .accessibilityLabel([episode.episodeLabel, episode.name].compactMap { $0 }.joined(separator: " · "))
+        .accessibilityLabel(episodeAccessibilityLabel)
         .onChange(of: isFocused) { _, focused in
             if focused { onFocus?() }
         }
+    }
+
+    private var episodeAccessibilityLabel: String {
+        let base = [episode.episodeLabel, episode.name].compactMap { $0 }.joined(separator: " · ")
+        #if os(iOS)
+        if DownloadStore.shared.isDownloaded(episode.id) {
+            return base + ", downloaded"
+        }
+        #endif
+        return base
     }
 
     private var artwork: some View {
@@ -396,5 +415,13 @@ struct EpisodeCard: View {
             }
             .frame(width: cardWidth, height: cardHeight)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            #if os(iOS)
+            .overlay(alignment: .topTrailing) {
+                if DownloadStore.shared.isDownloaded(episode.id) {
+                    DownloadedMark()
+                        .padding(Metrics.Space.xs)
+                }
+            }
+            #endif
     }
 }
