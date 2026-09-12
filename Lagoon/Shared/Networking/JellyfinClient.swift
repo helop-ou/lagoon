@@ -61,6 +61,25 @@ final class JellyfinClient {
     /// Resolved once per session: sign-in carries the policy, a restored
     /// token does not, so this is filled from whichever arrives first.
     private var subtitleManagementAllowed: Bool?
+    /// Resolved once per session, same as subtitle management, but for
+    /// "Allow media downloading" (HEL-166). Unlike subtitles, an unknown
+    /// answer must not let a download start, so this defaults to false
+    /// rather than true; see `canDownloadContent()`.
+    private var contentDownloadingAllowed: Bool?
+    /// Resolved once per session, same pattern as content downloading, but
+    /// for "Allow video transcoding": whether the server will build a
+    /// High/Standard transcoded download for this account (HEL-166). Same
+    /// opposite-of-subtitles default; see `canTranscodeForDownload()`.
+    private var videoTranscodingAllowed: Bool?
+
+    /// The value `contentDownloadingAllowed` holds right now, for view code
+    /// that must answer synchronously while building a menu body. `nil`
+    /// until something has resolved it this session; a `.task` should call
+    /// `canDownloadContent()` once to warm it.
+    var cachedContentDownloadingAllowed: Bool? { contentDownloadingAllowed }
+    /// The value `videoTranscodingAllowed` holds right now; see
+    /// `cachedContentDownloadingAllowed`.
+    var cachedVideoTranscodingAllowed: Bool? { videoTranscodingAllowed }
 
     private let session: URLSession
     private let downloads: BoundedDownload
@@ -109,6 +128,8 @@ final class JellyfinClient {
         accessToken = token
         self.userId = userId
         subtitleManagementAllowed = policy?.allowsSubtitleManagement
+        contentDownloadingAllowed = policy?.isAdministrator == true ? true : policy?.enableContentDownloading
+        videoTranscodingAllowed = policy?.isAdministrator == true ? true : policy?.enableVideoPlaybackTranscoding
     }
 
     func clearSession() {
@@ -116,6 +137,8 @@ final class JellyfinClient {
         accessToken = nil
         userId = nil
         subtitleManagementAllowed = nil
+        contentDownloadingAllowed = nil
+        videoTranscodingAllowed = nil
     }
 
     /// An independent client for work that may outlive a view/account change.
@@ -149,6 +172,61 @@ final class JellyfinClient {
         let allowed = user.policy?.allowsSubtitleManagement ?? true
         subtitleManagementAllowed = allowed
         return allowed
+    }
+
+    /// Whether the account may take a title off the server at all (HEL-166).
+    /// Opposite default from subtitles: since a network problem here must
+    /// not let a download start against a server that would refuse it, an
+    /// answer that was never learned and a refresh that fails both mean no,
+    /// not yes. Administrators pass regardless of the flag, same reasoning
+    /// as `allowsSubtitleManagement`.
+    func canDownloadContent() async -> Bool {
+        if let contentDownloadingAllowed { return contentDownloadingAllowed }
+        return await refreshContentDownloadingPermission() ?? false
+    }
+
+    /// Re-asks the server, for a permission an administrator could have
+    /// turned on after sign-in. Returns the last known value (nil the first
+    /// time) when the server can't be reached, rather than flipping to no.
+    @discardableResult
+    func refreshContentDownloadingPermission() async -> Bool? {
+        guard let user = try? await currentUser() else { return contentDownloadingAllowed }
+        if user.policy?.isAdministrator == true {
+            contentDownloadingAllowed = true
+            return true
+        }
+        let allowed = user.policy?.enableContentDownloading
+        if let allowed {
+            contentDownloadingAllowed = allowed
+        }
+        return allowed ?? contentDownloadingAllowed
+    }
+
+    /// Whether the account may have the server build a transcoded download
+    /// (High/Standard quality) for offline playback, rather than only the
+    /// original file (HEL-166). Same opposite-default reasoning as
+    /// `canDownloadContent()`: an unknown or unreachable answer means no.
+    /// Administrators pass regardless of the flag.
+    func canTranscodeForDownload() async -> Bool {
+        if let videoTranscodingAllowed { return videoTranscodingAllowed }
+        return await refreshVideoTranscodingPermission() ?? false
+    }
+
+    /// Re-asks the server, for a permission an administrator could have
+    /// turned on after sign-in. Returns the last known value (nil the first
+    /// time) when the server can't be reached, rather than flipping to no.
+    @discardableResult
+    func refreshVideoTranscodingPermission() async -> Bool? {
+        guard let user = try? await currentUser() else { return videoTranscodingAllowed }
+        if user.policy?.isAdministrator == true {
+            videoTranscodingAllowed = true
+            return true
+        }
+        let allowed = user.policy?.enableVideoPlaybackTranscoding
+        if let allowed {
+            videoTranscodingAllowed = allowed
+        }
+        return allowed ?? videoTranscodingAllowed
     }
 
     func currentUser() async throws -> UserDto {
