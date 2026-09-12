@@ -39,10 +39,13 @@ struct PosterCard: View {
                 }
                 .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+                #if os(iOS)
+                .overlay(alignment: .topTrailing) { downloadedBadge }
+                #endif
             }
             .cardButtonStyle()
             .artworkFocusHue(url: posterURL, cornerRadius: Metrics.cardArtRadius)
-            .accessibilityLabel(item.name ?? "Item")
+            .accessibilityLabel(posterAccessibilityLabel)
             .accessibilityIdentifier("media.poster.\(item.id)")
 
             caption
@@ -56,6 +59,25 @@ struct PosterCard: View {
             kind: .primary,
             maxWidth: layout.imageWidth
         )
+    }
+
+    #if os(iOS)
+    @ViewBuilder
+    private var downloadedBadge: some View {
+        if DownloadStore.shared.isDownloaded(item.id) {
+            DownloadedMark()
+                .padding(Metrics.Space.xs)
+        }
+    }
+    #endif
+
+    private var posterAccessibilityLabel: String {
+        let name = item.name ?? "Item"
+        #if os(iOS)
+        return DownloadStore.shared.isDownloaded(item.id) ? "\(name), downloaded" : name
+        #else
+        return name
+        #endif
     }
 
     /// Fixed height so a one-line title and a two-line one still leave every
@@ -121,7 +143,15 @@ struct LandscapeCard: View {
         }
         .cardButtonStyle()
         .artworkFocusHue(url: thumbURL, cornerRadius: Metrics.cardArtRadius)
-        .accessibilityLabel(item.railTitle)
+        .accessibilityLabel(landscapeAccessibilityLabel)
+    }
+
+    private var landscapeAccessibilityLabel: String {
+        #if os(iOS)
+        DownloadStore.shared.isDownloaded(item.id) ? "\(item.railTitle), downloaded" : item.railTitle
+        #else
+        item.railTitle
+        #endif
     }
 
     private var thumbURL: URL? {
@@ -173,6 +203,14 @@ struct LandscapeCard: View {
         }
         .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+        #if os(iOS)
+        .overlay(alignment: .topTrailing) {
+            if DownloadStore.shared.isDownloaded(item.id) {
+                DownloadedMark()
+                    .padding(Metrics.Space.xs)
+            }
+        }
+        #endif
     }
 }
 
@@ -274,6 +312,23 @@ struct ItemProgressBar: View {
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 }
+
+#if os(iOS)
+/// A small badge over artwork whose title has been taken offline (HEL-166):
+/// the same glyph `DownloadControl` shows once a download completes, white
+/// on a dark disc so it reads over any poster. Shared by every card that
+/// shows a downloadable item's artwork.
+struct DownloadedMark: View {
+    var body: some View {
+        Image(systemName: "arrow.down.circle.fill")
+            .font(.system(size: Metrics.downloadMarkSize * 0.6))
+            .foregroundStyle(.white)
+            .frame(width: Metrics.downloadMarkSize, height: Metrics.downloadMarkSize)
+            .background(Circle().fill(.black.opacity(0.6)))
+            .accessibilityHidden(true)
+    }
+}
+#endif
 
 extension MediaItem {
     /// Fractional watch progress, or nil when there's nothing worth drawing —
