@@ -43,6 +43,11 @@ final class AccountLocalData {
                        "home.sectionPreferences.", "search.recents."] {
             defaults.removeObject(forKey: prefix + accountID)
         }
+        // Downloads are iOS only; tvOS keeps this file compiling but has
+        // nothing to remove (HEL-166).
+        #if os(iOS)
+        DownloadStore.shared.removeAll(forAccountKey: DownloadStore.accountKey(for: accountID))
+        #endif
     }
 
     func finishRemoval(accountID: String) throws {
