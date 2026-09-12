@@ -17,6 +17,7 @@ rules for new code. The layout below describes the current implementation.
 | `Lagoon/Features/{Home,Library,Discovery,Detail,Search,Settings}/` | Feature screens, models and local helpers |
 | `Lagoon/Features/Playback/` | Controller, reporting, successor preparation, track preferences and system media |
 | `Lagoon/Features/Playback/{Views,Engine,Transport,Subtitles,Diagnostics}/` | Player presentation, decode/render pipeline, byte sources/cache, subtitles and sampling |
+| `Lagoon/Features/Downloads/` | Offline downloads: the store, its background session, and the Downloads screens (iOS only) |
 | `Lagoon/Shared/UI/` | Visual components, design tokens, artwork and presentation helpers shared across features |
 | `Lagoon/Shared/Networking/` | Jellyfin/Seerr clients, request authorization, bounded downloads and image cache |
 | `Lagoon/Shared/Models/` | Shared wire DTOs and values |
@@ -57,6 +58,12 @@ without copying credentials. Only a successful, current verification commits
 and activates it. Cancel leaves the active Jellyfin and Seerr sessions intact.
 Sign-out revokes and forgets the account and clears its owned local data.
 Seerr sessions remain scoped to the Jellyfin account and Seerr origin.
+
+`DownloadStore.shared` (iOS only) is the one owner of offline downloads:
+its per-account manifest, the background `URLSession` that carries every
+transfer, and the artwork saved beside each file. `SessionStore` activates it
+for whichever account is current, on restore, switch, and sign-out; removing
+an account removes its downloads too.
 
 ## Refresh and navigation
 
