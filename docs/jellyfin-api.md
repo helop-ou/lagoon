@@ -248,6 +248,32 @@ fills a landscape card instead of leaving it blank (HEL-157; jellyfin-web
 ends its card chain the same way). A landscape card with no artwork at all
 shows its title.
 
+## Downloads (HEL-166)
+
+| Purpose | Endpoint | Notes |
+|---|---|---|
+| Original file | `GET Items/{id}/Download` | gated by the per-user `EnableContentDownloading` policy; the download control is hidden without it rather than let the server refuse |
+| Progressive transcode | `GET Videos/{id}/stream.ts` | one MPEG-TS response the encode writes as it runs, playable while incomplete, so a background `URLSession` task can carry a whole transcode; needs a fresh `playSessionId` on every request, since the server keys the transcode job on it and reuses whatever an abandoned earlier job left behind otherwise |
+| Permission and policy fields | `GET Users/Me` | decodes `EnableContentDownloading` and `EnableVideoPlaybackTranscoding` on `UserPolicy`, same pattern as `EnableSubtitleManagement` |
+
+An administrator may always download, regardless of the policy flags. Unlike
+subtitle management, an unknown or unreachable answer for content downloading
+defaults to no rather than yes: starting a transfer the server would refuse
+is worse than not offering it.
+
+`JellyfinClient` caches both flags the same way: `canDownloadContent()` and
+`canTranscodeForDownload()` resolve them from sign-in's policy or a lazy
+`Users/Me` refresh, and `cachedContentDownloadingAllowed` /
+`cachedVideoTranscodingAllowed` expose whatever the cache currently holds so
+view code can answer synchronously while building a menu body. `EnableContentDownloading`
+gates whether the Download control or context-menu submenu appears at all;
+`EnableVideoPlaybackTranscoding` gates only which qualities it offers once
+downloading is allowed. Original is always offered, since it is the file the
+server already has; High and Standard are transcodes the server has to build
+for offline use, so they are hidden when the account may not ask the server
+to transcode. The context menu warms both caches with a `.task` the first
+time it needs an answer, since a rail card cannot afford to await one per tap.
+
 ## Remote subtitles (HEL-49)
 
 Lagoon uses Jellyfin's provider-agnostic remote-subtitle routes; no client
