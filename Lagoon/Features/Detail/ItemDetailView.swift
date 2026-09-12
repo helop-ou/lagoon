@@ -74,7 +74,15 @@ struct ItemDetailView: View {
         return try? await session.client.similarItems(itemId: item.id)
     }
 
+    /// Where Resume would start. A downloaded title's own recorded position
+    /// outranks the server's, which may be stale or unreachable (HEL-166);
+    /// the controller applies the same order.
     private var resumeTicks: Int64? {
+        #if os(iOS)
+        if let local = DownloadStore.shared.entry(for: displayed.id)?.localPositionTicks, local > 0 {
+            return local
+        }
+        #endif
         guard let ticks = displayed.userData?.playbackPositionTicks, ticks > 0 else { return nil }
         return ticks
     }
@@ -155,6 +163,7 @@ struct ItemDetailView: View {
                 playButton
                 fromBeginningButton
                 actionRow
+                DownloadControl(item: displayed)
             }
         } else if usesLandscapeRow {
             // A landscape phone (HEL-169): the circles then Play, on one
@@ -164,6 +173,7 @@ struct ItemDetailView: View {
             HStack(spacing: Metrics.detailActionSpacing) {
                 fromBeginningButton
                 actionRow
+                DownloadControl(item: displayed)
                 playButton
             }
         } else {
@@ -180,6 +190,7 @@ struct ItemDetailView: View {
                 HStack(spacing: Metrics.detailActionSpacing) {
                     fromBeginningButton
                     actionRow
+                    DownloadControl(item: displayed)
                 }
             }
         }
