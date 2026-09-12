@@ -21,6 +21,8 @@ screen-specific copies of its values.
 | `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
 | `detailPlayButtonMaxWidth` / `detailLandscapePlayButtonMaxWidth` | Not used | 360 / 260: the phone's Play pill cap in portrait and in the landscape row |
 | `gridColumns` | 5 | Not used; the count follows the width (three across on a portrait phone) |
+| `downloadRingLineWidth` | Not used | 2.5: the download control's progress ring stroke |
+| `downloadMarkSize` | Not used | 18: the download progress ring and the poster's "downloaded" badge glyph |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
 `Metrics.Space` provides `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
@@ -95,6 +97,15 @@ need an explicit appropriate control style. Test focused and unfocused states.
   own order. Series playback actions describe the episode that will play.
 - **Settings:** use native category navigation on each platform. iOS uses
   Forms, pickers, toggles, and Edit/reorder; tvOS keeps remote focus behavior.
+- **Downloads (iOS only, HEL-166):** `DownloadControl` is a glass circle
+  beside the detail page's other actions, in the same family as
+  `ItemActionRow`'s toggles; its glyph and a menu carry the entry's state
+  through symbol weight and opacity, never color. Its progress ring uses
+  `downloadRingLineWidth`; it and a poster's small "downloaded" badge on
+  `PosterCard`, `LandscapeCard`, and `EpisodeCard` share `downloadMarkSize`.
+  `DownloadsView` lists every downloaded title reachable with no server at
+  all; Library surfaces an entry point to it and an offline banner when the
+  server can't be reached.
 - **Loading and failures:** use the shared state views. Keep mounted content
   during reconciliation and use inline retry when there is usable content.
 
