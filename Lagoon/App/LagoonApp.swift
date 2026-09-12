@@ -45,9 +45,11 @@ struct LagoonApp: App {
         .backgroundTask(.urlSession(DownloadStore.sessionIdentifier)) {
             // Relaunched in the background to finish a transfer: the
             // store's init above already re-created the session and its
-            // delegate, which is all the system needs. Touching it here
-            // keeps that true if the init order ever changes.
-            _ = await MainActor.run { DownloadStore.shared }
+            // delegate, which is all the system needs. Waits for every
+            // background callback already queued for this launch to reach
+            // the manifest on disk before returning, so the OS does not
+            // suspend the app mid-write (HEL-166 review finding 1).
+            await DownloadStore.shared.finishBackgroundEvents()
         }
         #endif
     }
