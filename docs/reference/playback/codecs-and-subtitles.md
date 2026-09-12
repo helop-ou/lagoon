@@ -160,10 +160,29 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   frame at 720x576. Two deliberate details: the frame is made writable first,
   because what the decoder hands over may still be a reference frame later
   pictures are predicted from; and only MPEG-2's `IsInterlaced` guard came out
-  of the profile, since every codec that decodes in hardware has no stage to
-  hand a field pair to. That guard is also what makes a DVD image playable at
-  all — with it in place Jellyfin answers an interlaced disc with a transcode
-  and the image never reaches the client.
+  of the profile at the time, since every codec that decodes in hardware has
+  no stage to hand a field pair to. That guard is also what makes a DVD image
+  playable at all — with it in place Jellyfin answers an interlaced disc with
+  a transcode and the image never reaches the client.
+- **Interlaced H.264** (HEL-170): H.264's `IsInterlaced` guard is gone too.
+  A 1080i broadcast recording (H.264 High, AC-3, MKV) was transcoding on the
+  first negotiation for that condition alone, and Sentry showed the server's
+  real-time encode stalling on it. The profile cannot say "interlaced only",
+  so the split is the demuxer's: `FFmpegDemuxer.isInterlaced(fieldOrder:)`
+  reads the field order libavformat probed, and interlaced H.264 goes to
+  `SoftwareVideoDecoder` (whose `supports` accepts H.264 only on that route,
+  so a failed hardware description for progressive H.264 still fails rather
+  than decoding on the CPU) and through the deinterlacer above; progressive
+  H.264 stays compressed on VideoToolbox. Unknown field order counts as
+  progressive. HEVC keeps its guard: there is no software route for it and
+  interlaced HEVC is not something a library holds. Pinned by
+  `interlacedH264IsRoutedToTheSoftwareDecoderAndProgressiveIsNot`; the
+  opt-in `interlacedH264FixtureDecodesInSoftwareWithoutCombing` opens
+  `LAGOON_INTERLACED_H264_FIXTURE_URL` and checks every decoded frame for
+  row-alternation (a woven field pair on motion scores above 1.5 on that
+  metric, the deinterlaced output below 1), with
+  `LAGOON_PROGRESSIVE_H264_FIXTURE_URL` as the control that must stay on the
+  compressed path.
 - **10-bit AV1 and VP9** (HEL-103): progressive AV1 Main and VP9 profiles 0/2
   direct-play at up to 10-bit. AV1 routing is capability-aware: VideoToolbox
   receives compressed AV1 plus its `av1C` configuration on hardware reporting an
@@ -208,9 +227,10 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   so no VideoToolbox-decoded stream in that library carries a PAR extension and
   whether VideoToolbox propagates the attachment onto its output buffers is
   untested — it would only matter for a genuinely anamorphic HEVC source. The
-  device profile no longer excludes `IsAnamorphic` or interlaced MPEG-2
-  (HEL-127); interlaced content in every hardware-decoded codec still
-  transcodes, because the deinterlacing stage lives on the software path.
+  device profile no longer excludes `IsAnamorphic`, interlaced MPEG-2
+  (HEL-127) or interlaced H.264 (HEL-170, routed to the software path);
+  interlaced HEVC still transcodes, because the deinterlacing stage lives on
+  the software path and HEVC has no route there.
 
 ## Subtitles
 
