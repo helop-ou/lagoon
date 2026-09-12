@@ -17,6 +17,7 @@ screen-specific copies of its values.
 | `heroHeight` | 620 | 200 baseline on iPhone and compact-width iPad windows |
 | `expandedHeroHeight` | Not used | 360 on regular-width iPad windows |
 | `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad windows |
+| `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: the poster hero's ceiling as a share of the window height, and how far the metadata block rises over it |
 | `gridColumns` | 5 | Not used; the count follows the width (three across on a portrait phone) |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
@@ -30,7 +31,8 @@ slow 0.6, and crossfade 0.8 seconds.
 
 Use semantic type: `largeTitle` for screen titles, `title2` for the player's
 title, `title3` for section headings, `headline` for rails/cards, and
-`callout` for synopses, metadata, and control labels. Supporting labels use
+`callout` for synopses, metadata, and control labels; the touch detail page's
+full-width Play is the one hero action and sets its label in `title3`. Supporting labels use
 the existing footnote/caption roles. Display glyphs and logo-like type use
 named `Typography` values rather than raw `.system(size:)` in screens.
 
@@ -75,8 +77,13 @@ need an explicit appropriate control style. Test focused and unfocused states.
   `AmbientGlowView`.
 - **Details:** use `DetailPageScaffold`, `DetailMetadataHeader`,
   `AdaptiveActionStack`, and `MetadataFlowLayout`. Reuse title art and cast
-  components; the shared scaffolding serves Jellyfin and Seerr screens.
-  Series playback actions describe the episode that will play.
+  components; the shared scaffolding serves Jellyfin and Seerr screens. On a
+  phone or a compact-width iPad window the poster is the hero: it fills the
+  width at the top and fades into the page, with the title, facts, a
+  full-width Play button and the circular actions centred over its lower
+  part and the whole synopsis below them (HEL-169). Regular-width iPad
+  windows keep the landscape backdrop and the leading column. tvOS keeps its
+  own order. Series playback actions describe the episode that will play.
 - **Settings:** use native category navigation on each platform. iOS uses
   Forms, pickers, toggles, and Edit/reorder; tvOS keeps remote focus behavior.
 - **Loading and failures:** use the shared state views. Keep mounted content
@@ -86,7 +93,7 @@ need an explicit appropriate control style. Test focused and unfocused states.
 
 `PosterLayout` scales cards, caption space, and columns together. Adaptive
 actions measure intrinsic width and height before stacking. Segmented pickers
-become menu pickers at accessibility sizes. Expand phone synopses in place,
+become menu pickers at accessibility sizes. Show phone synopses in full,
 give title art a spoken title/header, and combine cast names and roles while
 treating their portraits as decorative.
 
