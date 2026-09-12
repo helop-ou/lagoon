@@ -86,7 +86,7 @@ Use the existing shared boundaries before adding another screen-specific copy:
 | Need | Existing implementation |
 | --- | --- |
 | Poster and landscape cards, horizontal browsing | `MediaCards.swift`, `MediaRail.swift` |
-| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailMetadataHeader`, `TitleArtView`, `CastStrip` in `DetailComponents.swift` |
+| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailMetadataHeader`, `TitleArtView`, `CastStrip` and `DetailLayout` in `DetailComponents.swift` |
 | Adaptive actions, metadata wrapping, poster sizing | `AdaptiveActionStack`, `MetadataFlowLayout`, `PosterLayout` |
 | Loading, retry, and failure presentation | `LoadingView`, `InlineRetryView`, `ErrorStateView` |
 | Artwork and palette loading | `CachedAsyncImage`, `ImageCache`, `ArtworkPalette` |
