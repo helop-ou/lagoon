@@ -145,7 +145,10 @@ hit rate, request count and latency; a `Playback Buffer Progress` signpost
 carries the same fraction and stall count for Instruments runs.
 
 Cache ownership is part of the player lifecycle, never an offline-download
-feature. There is one active scope and at most one staged successor. Dismissal,
+feature. Offline downloads are a separate owner, `DownloadStore` (HEL-166): a
+finished download lives under Application Support, not Caches, and its
+playback runs with no cache scope at all, activated or otherwise. There is
+one active scope and at most one staged successor. Dismissal,
 failure, or account/player replacement cancels requests and removes both;
 episode advance cancels/removes the old scope and promotes the staged one.
 Deletion waits for an in-flight demux read on a utility queue so the main actor
