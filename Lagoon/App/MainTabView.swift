@@ -19,6 +19,9 @@ struct MainTabView: View {
     /// The one iOS player host (HEL-162); every screen's `playerPresentation`
     /// requests through it. See `PlayerPresentationHub`.
     @State private var playerHub = PlayerPresentationHub()
+    /// Guards the offline-launch tab switch below so it happens at most
+    /// once per app session, not on every failed retry (HEL-166).
+    @State private var hasSwitchedToLibraryForOfflineDownloads = false
     #endif
     @State private var deepLinkError: String?
     @State private var deepLinkRetry = 0
@@ -93,6 +96,9 @@ struct MainTabView: View {
             await launchBenchItemIfRequested()
             #if DEBUG
             await openDetailIfRequested()
+            #if os(iOS)
+            await downloadItemIfRequested()
+            #endif
             #endif
         }
         // Presented from the TabView rather than a screen, so a Top Shelf
@@ -280,6 +286,7 @@ struct MainTabView: View {
             libraries = session.cachedLibraries()
         }
         var delay = Duration.seconds(2)
+        var isFirstAttempt = true
         while !Task.isCancelled {
             if let views = try? await session.client.userViews() {
                 guard !Task.isCancelled, accountID == session.activeAccount?.id else { return }
@@ -292,7 +299,24 @@ struct MainTabView: View {
                 libraries = tabs
                 librariesLoaded = true
                 session.cacheLibraries(tabs)
+                serverSync.serverUnreachable = false
+                #if os(iOS)
+                await DownloadStore.shared.flushPendingReports(client: session.client)
+                #endif
                 return
+            }
+            if isFirstAttempt {
+                isFirstAttempt = false
+                serverSync.serverUnreachable = true
+                // A server that can't be reached yet still has whatever was
+                // taken offline; land on Library rather than an empty Home,
+                // so those titles are the first thing seen (HEL-166).
+                #if os(iOS)
+                if !hasSwitchedToLibraryForOfflineDownloads, !DownloadStore.shared.entries.isEmpty {
+                    hasSwitchedToLibraryForOfflineDownloads = true
+                    selectedTab = .library
+                }
+                #endif
             }
             try? await Task.sleep(for: delay)
             delay = min(delay * 2, .seconds(30))
@@ -309,6 +333,42 @@ struct MainTabView: View {
               let item = try? await session.client.item(id: itemID) else { return }
         homeNavigationPath.append(ContentNavigationRoute.item(item))
     }
+
+    #if os(iOS)
+    /// Hands-off simulator runs: `-debug.downloadItemID <id>` starts a
+    /// download without walking the detail page, so the transfer pipeline
+    /// can be exercised headlessly (HEL-166). `-debug.downloadQuality`
+    /// picks `original`, `high` or `standard` (default `high`);
+    /// `-debug.downloadRestart YES` deletes a matching entry first so the
+    /// same launch arguments can be replayed.
+    private func downloadItemIfRequested() async {
+        guard let itemID = UserDefaults.standard.string(forKey: "debug.downloadItemID"), !itemID.isEmpty else { return }
+        let store = DownloadStore.shared
+        if let existing = store.entry(for: itemID) {
+            guard UserDefaults.standard.bool(forKey: "debug.downloadRestart") else {
+                print("Downloads: skipping \(itemID), entry already exists (state=\(existing.state.rawValue))")
+                return
+            }
+            store.delete(itemID)
+        }
+        let qualityRaw = UserDefaults.standard.string(forKey: "debug.downloadQuality") ?? "high"
+        let quality = DownloadQuality(rawValue: qualityRaw) ?? .high
+        guard let item = try? await session.client.item(id: itemID) else {
+            print("Downloads: couldn't fetch item \(itemID)")
+            return
+        }
+        guard let source = item.mediaSources?.first else {
+            print("Downloads: item \(itemID) has no media source")
+            return
+        }
+        do {
+            try await store.start(item: item, source: source, quality: quality, client: session.client)
+            print("Downloads: started \(itemID) quality=\(quality.rawValue)")
+        } catch {
+            print("Downloads: failed to start \(itemID): \(error)")
+        }
+    }
+    #endif
     #endif
 
     private func launchBenchItemIfRequested() async {
