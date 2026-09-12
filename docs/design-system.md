@@ -86,7 +86,10 @@ need an explicit appropriate control style. Test focused and unfocused states.
   the circular actions over its lower part, with the whole synopsis below.
   Landscape fills the screen with the poster's middle band and puts title
   art, the actions and a smaller Play on one row along its lower part, the
-  facts and synopsis following below the fold. Regular-width iPad windows
+  facts and synopsis following below the fold. On a phone every secondary
+  control in that row is a glass circle, From Beginning included, so the
+  row never folds into a column, and the "Resume from" caption sits under
+  the Resume pill rather than under the block. Regular-width iPad windows
   keep the landscape backdrop, with more of it above the title, and the
   leading column. tvOS keeps its
   own order. Series playback actions describe the episode that will play.
