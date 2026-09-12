@@ -1009,6 +1009,32 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     // MARK: - Seeking
 
+    /// Empties the renderers and every queue in front of them, and forgets
+    /// the anchors taken from what was there. Runs on the pump queue so it
+    /// serializes with enqueues; `seek(to:)` calls it when the seek is
+    /// asked for, and the demux loop calls it again when it performs the
+    /// seek. The second call exists because the demux thread can be blocked
+    /// in a read at the moment of the first: the packet that read returns
+    /// belongs to the old position, lands in an emptied queue, and is pumped
+    /// into an emptied renderer before the loop notices the seek. Its PTS is
+    /// then the first enqueued one, which `PlaybackClockAnchor` prefers over
+    /// the target whenever it lies beyond it, so a backward scrub restarted
+    /// the clock at the old position and the picture caught up to it
+    /// instead of landing (HEL-144 lane, 2026-09-12).
+    nonisolated private func flushRenderersAndQueues() {
+        videoRenderer?.flush()
+        audioRenderer?.flush()
+        videoIntake.removeAll()
+        videoQueue.reset()
+        audioQueue.reset()
+        shared.withLock {
+            $0.firstEnqueuedVideoPTS = nil
+            $0.lastEnqueuedAudioEndSeconds = nil
+            $0.endOfFilePendingIntake = false
+            $0.videoSamplesSinceFlush = 0
+        }
+    }
+
     func seek(to target: Double) {
         let clamped = max(0, duration > 0 ? min(target, duration - 1) : target)
         Diagnostics.record(.playbackSeek, ["position": .double(clamped.rounded(toPlaces: 1))])
@@ -1027,31 +1053,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Enqueue, flush, and queue reset share the pump queue. This makes
         // Apple's post-flush keyframe rule deterministic: an in-flight old
         // sample cannot race in after the flush.
-        let flushAndResetQueues: () -> Void = { [self] in
-            videoRenderer?.flush()
-            audioRenderer?.flush()
-            videoIntake.removeAll()
-            videoQueue.reset()
-            audioQueue.reset()
-            shared.withLock {
-                $0.firstEnqueuedVideoPTS = nil
-                $0.lastEnqueuedAudioEndSeconds = nil
-                $0.endOfFilePendingIntake = false
-                $0.videoSamplesSinceFlush = 0
-            }
-        }
+        //
         // HEL-148 soak diagnostic: this is the pumpQueue.sync every seek
         // (and every recovery path that re-seeks) blocks the caller on.
         // Report-only.
         if ProcessCPUTrace.enabled {
             let waitStart = ContinuousClock.now
-            pumpQueue.sync(execute: flushAndResetQueues)
+            pumpQueue.sync { self.flushRenderersAndQueues() }
             print(String(
                 format: "SoakWait name=pumpSync ms=%.1f",
                 Self.milliseconds(ContinuousClock.now - waitStart)
             ))
         } else {
-            pumpQueue.sync(execute: flushAndResetQueues)
+            pumpQueue.sync { self.flushRenderersAndQueues() }
         }
         // The pts chain restarts at the target; the first buffer after a
         // flush must not read as a discontinuity.
@@ -2263,10 +2277,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 // libavcodec belongs to the old position and must not land in
                 // a queue that has just been emptied.
                 softwareDecodeStage?.reset()
-                videoIntake.removeAll()
-                shared.withLock { $0.endOfFilePendingIntake = false }
-                videoQueue.reset()
-                audioQueue.reset()
+                // Again, on the pump queue: anything this thread enqueued
+                // between the request-time flush and now is pre-seek, and
+                // the renderer may already hold it (see the helper).
+                pumpQueue.sync { self.flushRenderersAndQueues() }
                 applyAudioSelection(ordinal: shared.withLock { $0.selectedAudioOrdinal })
                 hasPrimedPlayback = true
                 primeAndStart(at: target)
