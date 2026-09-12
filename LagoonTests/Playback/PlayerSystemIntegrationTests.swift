@@ -85,9 +85,9 @@ struct PlayerSystemIntegrationTests {
         #expect(SubtitleDownloadError.classify(URLError(.notConnectedToInternet)) == .offline)
         #expect(SubtitleDownloadError.classify(SubtitleDownloadError.unsupportedFile) == .unsupportedFile)
 
-        let permission = try? #require(SubtitleDownloadError.notPermitted.errorDescription)
+        let permission = SubtitleDownloadError.notPermitted.errorDescription ?? ""
         // HEL-146: the message names the dashboard switch the administrator flips.
-        #expect(permission?.contains("Allow subtitle management") == true)
+        #expect(permission.contains("Allow subtitle management"))
         // The quota wording must not appear on failures that are not quota.
         #expect(SubtitleDownloadError.notPermitted.errorDescription?.contains("download limit") == false)
         #expect(SubtitleDownloadError.timedOut.errorDescription?.contains("download limit") == false)
