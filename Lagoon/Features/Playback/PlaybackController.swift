@@ -306,16 +306,6 @@ final class PlaybackController {
                 source = resolvedSource
                 (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
             }
-            #if DEBUG && os(iOS)
-            // HEL-166 spike: a title the spike has on disk plays from there.
-            // The server's negotiation still ran above, so track metadata
-            // and reporting stay as for a stream; the bytes are local.
-            if let local = DownloadSpikeStore.shared.completedLocalURL(itemID: media.id) {
-                streamURL = local
-                method = .directPlay
-                DownloadSpikeStore.log.info("playing \(media.id, privacy: .public) from \(local.path(percentEncoded: false), privacy: .public)")
-            }
-            #endif
             mediaSourceId = source.id
             playMethod = method
             // A disc image Lagoon can read is played by reading it, not by
