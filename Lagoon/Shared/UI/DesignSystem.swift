@@ -81,6 +81,8 @@ enum Metrics {
     static let railTopPadding: CGFloat = Space.m
     static let railBottomPadding: CGFloat = Space.xxl
     static let accountTileSize: CGFloat = 110
+    /// The signed-in user's picture at the top of the Account page.
+    static let touchAvatarSize: CGFloat = 64
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
     static let detailHeroSpace: CGFloat = 100
     static let detailHeaderSpacing: CGFloat = 12

@@ -8,6 +8,7 @@ import SwiftUI
 /// account can be resumed, and whenever Settings asks for it.
 struct AccountPickerView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.displayScale) private var displayScale
     @State private var errorMessage: String?
     @State private var accountToForget: StoredAccount?
 
@@ -129,16 +130,27 @@ struct AccountPickerView: View {
         .accessibilityIdentifier("account.add")
     }
 
-    /// Initials rather than a photo: Jellyfin user images are optional and
-    /// usually absent, and an empty avatar frame reads worse than a letter.
+    /// The user's picture when Jellyfin has one (HEL-168); initials while it
+    /// loads and for the many users who have none, because an empty avatar
+    /// frame reads worse than a letter.
     private func avatar(for account: StoredAccount) -> some View {
-        ZStack {
+        let pixels = ArtworkSizing.pixels(for: Metrics.accountTileSize, displayScale: displayScale)
+        // The tile fill stays under the picture: Jellyfin serves whatever
+        // was uploaded, and a transparent PNG would otherwise float.
+        return ZStack {
             RoundedRectangle(cornerRadius: Metrics.cardArtRadius)
                 .fill(.white.opacity(0.12))
-            Text(initials(for: account.displayName))
-                .font(.largeTitle.weight(.semibold))
+            CachedAsyncImage(url: account.avatarURL(maxWidth: pixels), maxPixelSize: pixels) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Text(initials(for: account.displayName))
+                    .font(.largeTitle.weight(.semibold))
+            }
         }
         .frame(width: Metrics.accountTileSize, height: Metrics.accountTileSize)
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
     }
 
     private func initials(for name: String) -> String {

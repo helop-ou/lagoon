@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
+    @Environment(\.displayScale) private var displayScale
 
     // Deliberately visible in Release too: TestFlight is the only way to
     // exercise Atmos/HDR on real hardware, and that needs these switches.
@@ -192,12 +193,7 @@ struct SettingsView: View {
 
     private var identityPanel: some View {
         VStack(spacing: Metrics.Space.l) {
-            ZStack {
-                Circle().fill(.white.opacity(0.12))
-                Text(initials)
-                    .font(.largeTitle.weight(.semibold))
-            }
-            .frame(width: Metrics.settingsAvatarSize, height: Metrics.settingsAvatarSize)
+            identityAvatar(size: Metrics.settingsAvatarSize, font: .largeTitle)
 
             VStack(spacing: Metrics.Space.xs) {
                 Text(session.userName ?? "—")
@@ -353,14 +349,37 @@ struct SettingsView: View {
         .accessibilityIdentifier("settings.account.\(id)")
     }
 
-    /// Initials rather than a photo: Jellyfin user images are optional and
-    /// usually absent, and an empty avatar frame reads worse than a letter.
+    #endif
+
+    // MARK: - Identity avatar (both platforms)
+
+    /// The signed-in user's picture when Jellyfin has one (HEL-168);
+    /// initials while it loads and for users without one, because an empty
+    /// avatar frame reads worse than a letter.
+    private func identityAvatar(size: CGFloat, font: Font) -> some View {
+        let pixels = ArtworkSizing.pixels(for: size, displayScale: displayScale)
+        // The circle fill stays under the picture so a transparent upload
+        // still reads as an avatar.
+        return ZStack {
+            Circle().fill(.white.opacity(0.12))
+            CachedAsyncImage(url: session.activeAccount?.avatarURL(maxWidth: pixels), maxPixelSize: pixels) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Text(initials)
+                    .font(font.weight(.semibold))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
     private var initials: String {
         let parts = (session.userName ?? "").split(separator: " ").prefix(2)
         let letters = parts.compactMap(\.first)
         return letters.isEmpty ? "?" : String(letters).uppercased()
     }
-    #endif
 
     // MARK: - iOS: category list and native settings pages
 
@@ -448,6 +467,19 @@ struct SettingsView: View {
 
     private var touchAccountSettings: some View {
         TouchSettingsPage("Account") {
+            Section {
+                HStack(spacing: Metrics.Space.m) {
+                    identityAvatar(size: Metrics.touchAvatarSize, font: .title2)
+                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                        Text(session.userName ?? "—")
+                            .font(.headline)
+                        Text(session.serverName ?? "Jellyfin")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
             Section("Server") {
                 LabeledContent("Server", value: session.serverName ?? "Jellyfin")
                 LabeledContent("Address", value: session.client.serverURL?.absoluteString ?? "—")
