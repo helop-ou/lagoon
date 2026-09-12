@@ -7,6 +7,11 @@ nonisolated enum ContentNavigationRoute: Hashable {
     case item(MediaItem)
     case genre(name: String, includeTypes: [MediaItemType])
     case search(String)
+    #if os(iOS)
+    /// The offline downloads list (HEL-166). iOS only: tvOS has no
+    /// persistent storage guarantee and no downloads.
+    case downloads
+    #endif
 
     // A route carries whatever copy of the item a rail had, and the detail
     // page re-fetches the rest. Two routes to the same item are the same
@@ -20,6 +25,10 @@ nonisolated enum ContentNavigationRoute: Hashable {
             name == otherName && includeTypes == otherIncludeTypes
         case let (.search(query), .search(other)):
             query == other
+        #if os(iOS)
+        case (.downloads, .downloads):
+            true
+        #endif
         default:
             false
         }
@@ -37,6 +46,10 @@ nonisolated enum ContentNavigationRoute: Hashable {
         case .search(let query):
             hasher.combine(2)
             hasher.combine(query)
+        #if os(iOS)
+        case .downloads:
+            hasher.combine(3)
+        #endif
         }
     }
 }
@@ -53,6 +66,10 @@ private struct ContentNavigationDestination: View {
             GenreLibraryView(genre: name, includeTypes: includeTypes)
         case .search(let query):
             SearchResultsView(query: query, source: .library)
+        #if os(iOS)
+        case .downloads:
+            DownloadsView()
+        #endif
         }
     }
 }
