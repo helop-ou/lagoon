@@ -10,6 +10,7 @@ Use the [current guides](../README.md) for implementation guidance and
 
 | Record | Evidence or context |
 | --- | --- |
+| [September 12 validation](validation-2026-09-12.md) | The public-demo UI lane twice on clean state per platform (audit A18), and the dropped backward seek the tvOS lane caught, diagnosed from the failure recording and fixed |
 | [September 11 validation](validation-2026-09-11.md) | Unit suites, both UI lanes, the classified tvOS failures, and the HEL-157 visual acceptance |
 | [Download spike, HEL-166](hel-166-download-spike.md) | Background-session downloads of an original file and a progressive transcode across suspension and SIGKILL on the iPhone simulator, and playback from disk |
 | [Background fill, HEL-160](hel-160-background-fill-validation.md) | Cushion-paced fill scheduler, failure backoff, shared fetches, and the simulator A/B against the old ceiling |
