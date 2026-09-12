@@ -216,6 +216,10 @@ struct SeriesDetailView: View {
                 systemImage: "play.fill"
             )
             .font(.title3.weight(.semibold))
+            // One line always: a Label squeezed for width stacks its icon
+            // over its text, which folded the landscape row's pill into a
+            // column once four circles shared the line.
+            .fixedSize()
             .frame(maxWidth: playButtonMaxWidth)
             .padding(.vertical, Metrics.Space.xs)
             #endif
