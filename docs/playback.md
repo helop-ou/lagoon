@@ -97,6 +97,12 @@ See [negotiation and delivery](reference/playback/stream-resolution.md#stream-re
 - Preserve sample-exact audio timelines, seek generations, decoder callback
   ordering, and bounded stall recovery. Do not replace queue ownership with
   unstructured tasks as part of a file reorganization.
+- A seek into a container with no index (a plain MPEG-TS file, such as a
+  transcode download) must still start video on a keyframe: the demuxer
+  peeks the landing packet and re-seeks to the last keyframe before the
+  target, and drops non-start packets until one arrives (HEL-166).
+  `TransportStreamSeekTests` pins it against the fixture named by
+  `LAGOON_TS_SEEK_FIXTURE_URL`, injected into the xctestrun.
 
 The repo builds dav1d with arm64 assembly. After changing its artifact, run
 `scripts/build-dav1d.sh --verify-only Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework`.
