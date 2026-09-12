@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import os
+#endif
 
 /// Long-press menu on any card: mark watched/unwatched and favourite
 /// (HEL-40). The same two mutations `ItemActionRow` offers on the detail
@@ -63,6 +66,10 @@ private struct ItemUserDataMenu: ViewModifier {
                         )
                     }
                 }
+
+                #if os(iOS)
+                downloadMenuItems
+                #endif
             }
             // Rails recycle their card views as the list behind them changes,
             // so a stale local override would otherwise describe the previous
@@ -71,7 +78,75 @@ private struct ItemUserDataMenu: ViewModifier {
                 played = nil
                 favorite = nil
             }
+            #if os(iOS)
+            .task {
+                // Warms the client's permission caches once, so the first
+                // long-press already knows whether to offer Download at all
+                // (HEL-166). A cache that already has an answer skips the
+                // round trip.
+                if session.client.cachedContentDownloadingAllowed == nil {
+                    _ = await session.client.canDownloadContent()
+                }
+                if session.client.cachedVideoTranscodingAllowed == nil {
+                    _ = await session.client.canTranscodeForDownload()
+                }
+            }
+            #endif
     }
+
+    #if os(iOS)
+    /// Movies and episodes only: a series or season has no file of its own
+    /// to take offline, and a box set is a browsing convenience rather than
+    /// something to play. Downloaded and in-flight states get a one-tap
+    /// action; a title with nothing started yet gets the quality picker
+    /// `DownloadControl` uses on the detail page (HEL-166).
+    @ViewBuilder
+    private var downloadMenuItems: some View {
+        if item.type == .movie || item.type == .episode {
+            let store = DownloadStore.shared
+            if store.isDownloaded(item.id) {
+                Button(role: .destructive) {
+                    store.delete(item.id)
+                } label: {
+                    Label("Delete Download", systemImage: "arrow.down.circle.fill")
+                }
+            } else if store.entry(for: item.id) != nil {
+                Button(role: .destructive) {
+                    store.delete(item.id)
+                } label: {
+                    Label("Cancel Download", systemImage: "xmark.circle")
+                }
+            } else if session.client.cachedContentDownloadingAllowed == true {
+                Menu {
+                    ForEach(downloadQualities) { quality in
+                        Button(quality.title) {
+                            Task {
+                                if let failure = await DownloadActions.start(item: item, quality: quality, session: session) {
+                                    DownloadStore.log.error("Context menu download failed: \(failure, privacy: .public)")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                }
+            }
+        }
+    }
+
+    /// The default quality first, matching `DownloadControl`'s menu. High and
+    /// Standard only appear when the account may have the server transcode
+    /// for it; Original is always offered here since this menu only builds
+    /// once downloading itself is permitted (HEL-166).
+    private var downloadQualities: [DownloadQuality] {
+        let store = DownloadStore.shared
+        let allowed: [DownloadQuality] = session.client.cachedVideoTranscodingAllowed == true
+            ? DownloadQuality.allCases
+            : [.original]
+        guard allowed.contains(store.defaultQuality) else { return allowed }
+        return [store.defaultQuality] + allowed.filter { $0 != store.defaultQuality }
+    }
+    #endif
 
     private func mutate(
         target: Bool,
