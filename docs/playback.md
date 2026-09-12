@@ -51,9 +51,11 @@ play, remux, then video transcode; only the re-encode rung has the 1080p ceiling
 Do not confuse remux selection with `SupportsDirectStream`. Preserve the
 failure cause and resume position when moving down a rung.
 
-H.264 uses the compressed sample-buffer path; HEVC is decoded ahead through
-VideoToolbox. AV1 uses hardware where available and the repo-built dav1d
-otherwise. Other supported legacy/software codecs use bounded software decode.
+Progressive H.264 uses the compressed sample-buffer path; interlaced H.264 is
+software-decoded and deinterlaced, on the stream's probed field order, never
+the server's flag (HEL-170). HEVC is decoded ahead through VideoToolbox. AV1
+uses hardware where available and the repo-built dav1d otherwise. Other
+supported legacy/software codecs use bounded software decode.
 Codec limits and HDR routing belong in the existing profile and decode policy,
 not duplicated checks in views. iOS metered-path limits affect both static and
 streaming bitrate offers and can be overridden in Playback settings.
