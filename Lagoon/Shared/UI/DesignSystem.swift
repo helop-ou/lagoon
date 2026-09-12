@@ -85,6 +85,17 @@ enum Metrics {
     static let touchAvatarSize: CGFloat = 64
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
     static let detailHeroSpace: CGFloat = 100
+    /// A regular-width iPad window shows more of the landscape backdrop
+    /// above the title than a phone can afford (HEL-169).
+    static let expandedDetailHeroSpace: CGFloat = 240
+    /// The poster hero on a phone or compact iPad window (HEL-169): at most
+    /// this share of the window height inside the safe area, so the title
+    /// is never pushed off-screen. On a phone this cap is what binds, and
+    /// the hero is the poster's upper part rather than the whole image.
+    static let detailPosterHeroMaxShare: CGFloat = 0.72
+    /// How far the metadata block rises over the poster hero, as a share of
+    /// the poster's height. The fade beneath the block is drawn to match.
+    static let detailPosterContentOverlap: CGFloat = 0.36
     static let detailHeaderSpacing: CGFloat = 12
     static let detailSectionSpacing: CGFloat = 32
     /// The liquid tab bar floats over scroll content. The final rail needs
@@ -110,6 +121,15 @@ enum Metrics {
     static let lockupHeaderSymbolHeight: CGFloat = 34
     static let jellyfishAccentHeight: CGFloat = 38
     #endif
+
+    /// The touch detail page's poster hero, in pixels. The request width is
+    /// a phone-width poster at 3x; the decode budget is the longest edge of
+    /// that 2:3 image, because `maxPixelSize` caps the longest edge and a
+    /// width-sized budget would decode the poster soft and upscale it.
+    /// Declared for both platforms because the detail pages build the URL
+    /// unconditionally and the scaffold ignores it on tvOS.
+    static let detailPosterRequestWidth = 1200
+    static let detailPosterDecodeSize = 1800
 
     /// The spacing scale (HEL-51). Every gap and inset *inside* a screen
     /// picks a step from here; the structural values above (gutter, card
