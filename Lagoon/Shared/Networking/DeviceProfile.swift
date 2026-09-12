@@ -2,10 +2,12 @@ import Foundation
 
 // Capability profile sent with PlaybackInfo so the server can decide between
 // direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
-// what the Lagoon sample-buffer engine can play: h264 stays compressed,
-// hevc is hardware-decoded ahead, AV1 uses hardware when available, and
-// progressive AV1/VP9 (up to 10-bit) plus 8-bit VC-1, WMV3, MPEG-4 Part 2,
-// and MPEG-2 up to 1080p are software-decoded into Core Video buffers;
+// what the Lagoon sample-buffer engine can play: progressive h264 stays
+// compressed and interlaced h264 is software-decoded and deinterlaced
+// (HEL-170), hevc is hardware-decoded ahead, AV1 uses hardware when
+// available, and progressive AV1/VP9 (up to 10-bit) plus 8-bit VC-1, WMV3,
+// MPEG-4 Part 2, and MPEG-2 up to 1080p are software-decoded into Core
+// Video buffers;
 // aac/mp3/ac3/eac3 audio stays compressed plus
 // non-square pixels carried through as a PixelAspectRatio extension, so
 // anamorphic sources (PAL DVD rips at 720x576 with a 16:15 pixel aspect)
@@ -165,12 +167,14 @@ nonisolated enum DeviceProfile {
                         value: "52",
                         isRequired: false
                     ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsInterlaced",
-                        value: "true",
-                        isRequired: false
-                    ),
+                    // No interlace guard: interlaced H.264 (1080i broadcast
+                    // recordings) is routed to the software decoder, which
+                    // deinterlaces, while progressive H.264 stays on
+                    // VideoToolbox. The profile cannot say "interlaced only",
+                    // so that split is the demuxer's field-order check, not
+                    // the server's (HEL-170). HEVC keeps its guard: it has no
+                    // software route here and interlaced HEVC is not
+                    // something a library holds.
                 ]
             ),
             // AV1 remains direct play on every supported device: recent
