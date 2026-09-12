@@ -432,6 +432,9 @@ struct SettingsView: View {
                 touchSettingsDestination("Advanced", systemImage: ContentIcon.Settings.advanced, id: "diagnostics") {
                     diagnosticsSettings
                 }
+                touchSettingsDestination("Downloads", systemImage: ContentIcon.Settings.downloads, id: "downloads") {
+                    DownloadsSettingsView()
+                }
                 #if DEBUG
                 touchSettingsDestination("Developer", systemImage: ContentIcon.Settings.developer, id: "developer") {
                     DeveloperSettingsView(subtitleStyle: subtitlePreferences.renderStyle)
