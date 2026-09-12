@@ -306,13 +306,19 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         detailedTimings.reset()
     }
 
-    static func supports(codecID: AVCodecID) -> Bool {
+    /// H.264 is accepted only when the stream is interlaced (HEL-170). The
+    /// progressive case belongs to VideoToolbox, and keeping it out of here
+    /// means a hardware description that fails to build for progressive
+    /// H.264 still surfaces as the failure it is rather than quietly
+    /// decoding on the CPU.
+    static func supports(codecID: AVCodecID, interlaced: Bool = false) -> Bool {
         codecID == AV_CODEC_ID_VC1
             || codecID == AV_CODEC_ID_WMV3
             || codecID == AV_CODEC_ID_MPEG4
             || codecID == AV_CODEC_ID_MPEG2VIDEO
             || codecID == AV_CODEC_ID_AV1
             || codecID == AV_CODEC_ID_VP9
+            || (codecID == AV_CODEC_ID_H264 && interlaced)
     }
 
     /// Resolves the new four-way selector while preserving the old boolean
@@ -357,7 +363,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         let selectedCodec = codecID == AV_CODEC_ID_AV1
             ? avcodec_find_decoder_by_name("libdav1d")
             : avcodec_find_decoder(codecID)
-        guard Self.supports(codecID: codecID),
+        guard Self.supports(
+                  codecID: codecID,
+                  interlaced: FFmpegDemuxer.isInterlaced(fieldOrder: codecpar.pointee.field_order)
+              ),
               let codec = selectedCodec,
               let context = avcodec_alloc_context3(codec) else {
             throw DecoderError.codecSetup("decoder unavailable")
@@ -1363,9 +1372,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// Deinterlaces the decoded frame in place, before it is copied out.
     ///
     /// Only the software path has this. It is where MPEG-2 is decoded and so
-    /// where DVD lives; the hardware path has no deinterlacing stage, which is
-    /// why the device profile still asks the server to handle interlaced
-    /// content in every other codec (HEL-127).
+    /// where DVD lives, and since HEL-170 where interlaced H.264 is sent so
+    /// that 1080i broadcast recordings direct-play; the hardware path has no
+    /// deinterlacing stage, which is why the device profile still asks the
+    /// server to handle interlaced HEVC (HEL-127).
     ///
     /// The frame is made writable first. What the decoder handed over may
     /// still be a reference frame that later pictures are predicted from, and
