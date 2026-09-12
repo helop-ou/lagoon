@@ -6,6 +6,7 @@ struct LibraryView: View {
     let librariesLoaded: Bool
     let isActive: Bool
     @Environment(SessionStore.self) private var session
+    @Environment(ServerSyncState.self) private var serverSync
     @State private var selection: LibrarySelection
     @State private var viewModel = LibraryViewModel()
     @State private var decadeViewModel = LibraryDecadeViewModel()
@@ -32,6 +33,9 @@ struct LibraryView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                #if os(iOS)
+                downloadsEntry
+                #endif
                 controls
                 results
             }
@@ -43,6 +47,11 @@ struct LibraryView: View {
         .background(Color.black.ignoresSafeArea())
         #if os(iOS)
         .navigationTitle("Library")
+        .safeAreaInset(edge: .top) {
+            if serverSync.serverUnreachable {
+                offlineBanner
+            }
+        }
         #endif
         .task(id: selection) {
             await viewModel.load(selection: selection, fetch: session.client.libraryItems)
@@ -71,6 +80,68 @@ struct LibraryView: View {
         .accessibilityIdentifier("library.view")
         .accessibilityValue("\(viewModel.items.count) items")
     }
+
+    #if os(iOS)
+    /// A card above the filters that opens the offline Downloads list
+    /// (HEL-166). Shown once something has been taken offline, or once the
+    /// server itself can't be reached, so a viewer with no downloads never
+    /// sees an entry into an empty list.
+    @ViewBuilder
+    private var downloadsEntry: some View {
+        if !DownloadStore.shared.entries.isEmpty || serverSync.serverUnreachable {
+            NavigationLink(value: ContentNavigationRoute.downloads) {
+                HStack(spacing: Metrics.Space.m) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.title2)
+                    VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                        Text("Downloads")
+                            .font(.headline)
+                        Text(downloadsSubtitle)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: Metrics.Space.m)
+                    Image(systemName: "chevron.forward")
+                        .font(.caption.bold())
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(Metrics.Space.l)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.roundedRectangle(radius: Metrics.cardCornerRadius))
+            .accessibilityIdentifier("library.downloads")
+        }
+    }
+
+    private var downloadsSubtitle: String {
+        let store = DownloadStore.shared
+        // The card only shows with no entries at all when the server is
+        // unreachable (see `downloadsEntry`), so an empty manifest here
+        // always means that case.
+        guard !store.entries.isEmpty else {
+            return String(localized: "Available without the server")
+        }
+        let count = store.completedCount
+        guard count > 0 else {
+            return String(localized: "Downloading…")
+        }
+        let size = ByteCountFormatter.string(fromByteCount: store.storageUsed, countStyle: .file)
+        return count == 1
+            ? String(localized: "1 title · \(size)")
+            : String(localized: "\(count) titles · \(size)")
+    }
+
+    private var offlineBanner: some View {
+        Label("Server unreachable. Your downloads still play.", systemImage: "wifi.slash")
+            .font(.footnote)
+            .padding(.horizontal, Metrics.Space.l)
+            .padding(.vertical, Metrics.Space.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.thinMaterial)
+            .accessibilityIdentifier("library.offlineBanner")
+    }
+    #endif
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.xl) {
