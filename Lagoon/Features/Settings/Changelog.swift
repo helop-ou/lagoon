@@ -33,7 +33,7 @@ nonisolated enum Changelog {
             released: "September 2026",
             headline: "A new look for film and series pages on iPhone, and interlaced TV recordings play directly.",
             changes: [
-                "Film and series pages on iPhone and iPad are redesigned. The poster fills the top of the page, the Play button runs the full width, the watched and favorite buttons sit under it, and the whole synopsis is shown instead of a Read Synopsis button. On an iPad in a full-width window the page keeps its landscape artwork and side-by-side layout.",
+                "Film and series pages on iPhone and iPad are redesigned. The poster fills the top of the page in either orientation, a large Play button sits under the title with the watched and favorite buttons beneath it, and the whole synopsis is shown instead of a Read Synopsis button. On an iPad in a full-width window the page keeps its landscape artwork and side-by-side layout, with more of the artwork showing.",
                 "1080i and 576i H.264 recordings, the kind a TV tuner produces, now play straight from your server and are deinterlaced on the device. They used to be re-encoded by the server, which on a busy server meant a stuttering start and occasional pauses.",
             ]
         ),
