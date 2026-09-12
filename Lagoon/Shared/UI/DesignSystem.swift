@@ -131,6 +131,10 @@ enum Metrics {
     static let lockupSymbolHeight: CGFloat = 78
     static let lockupHeaderSymbolHeight: CGFloat = 34
     static let jellyfishAccentHeight: CGFloat = 38
+    /// The download control's progress ring stroke.
+    static let downloadRingLineWidth: CGFloat = 2.5
+    /// The download progress ring and the poster's "downloaded" badge glyph.
+    static let downloadMarkSize: CGFloat = 18
     #endif
 
     /// The touch detail page's poster hero, in pixels. The request width is
@@ -321,6 +325,7 @@ nonisolated enum ContentIcon {
         static let advanced = "wrench.and.screwdriver.fill"
         static let developer = "hammer.fill"
         static let about = "info.circle.fill"
+        static let downloads = "arrow.down.circle.fill"
     }
 
     /// Jellyfin's collection type for a library, as a glyph.
