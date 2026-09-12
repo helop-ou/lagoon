@@ -14,10 +14,10 @@ struct LagoonApp: App {
         // `NetworkPathObserver` answers "unrestricted", which is the
         // behaviour that existed before the cap.
         NetworkPathObserver.shared.start()
-        #if DEBUG && os(iOS)
-        // HEL-166 spike: the background session must exist before the
+        #if os(iOS)
+        // Downloads (HEL-166): the background session must exist before the
         // system delivers events for transfers that outlived the process.
-        _ = DownloadSpikeStore.shared
+        _ = DownloadStore.shared
         #endif
     }
 
@@ -41,13 +41,13 @@ struct LagoonApp: App {
                     #endif
                 }
         }
-        #if DEBUG && os(iOS)
-        .backgroundTask(.urlSession(DownloadSpikeStore.sessionIdentifier)) {
-            // Relaunched in the background to finish a spike transfer: the
+        #if os(iOS)
+        .backgroundTask(.urlSession(DownloadStore.sessionIdentifier)) {
+            // Relaunched in the background to finish a transfer: the
             // store's init above already re-created the session and its
             // delegate, which is all the system needs. Touching it here
             // keeps that true if the init order ever changes.
-            _ = await MainActor.run { DownloadSpikeStore.shared }
+            _ = await MainActor.run { DownloadStore.shared }
         }
         #endif
     }
