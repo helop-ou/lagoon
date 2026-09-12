@@ -67,6 +67,14 @@ final class PlaybackController {
     private var delivery: PlaybackDelivery = .negotiated
     private var deliveryItemId: String?
     private var resumeOverride: Double?
+    /// Whether the attempt currently starting (or last started) is playing a
+    /// downloaded file rather than a server stream (HEL-166). Always false
+    /// on tvOS, which carries no downloads.
+    private var isLocalPlayback = false
+    /// Set once a local-playback attempt fails and falls back, so the retry
+    /// negotiates with the server instead of finding the same broken file on
+    /// disk again and replaying it forever. A new item resets it.
+    private var skipsLocalPlayback = false
     /// One rung at a time. The renderer and the demux loop can both report
     /// the same collapse, and two fallbacks in flight would skip a rung —
     /// straight past the cheap remux to a transcode nobody needed.
@@ -237,6 +245,7 @@ final class PlaybackController {
             delivery = .negotiated
             deliveryFallbacks = []
             resumeOverride = nil
+            skipsLocalPlayback = false
             #if DEBUG
             // Regression hook: start on a chosen rung instead of negotiating,
             // so the HLS cases open a real playlist on a server whose content
@@ -260,20 +269,51 @@ final class PlaybackController {
             ? SubtitlePreferencesStore.systemCaptionLanguages
             : preferredSubtitleLanguages
         self.missingSubtitleMode = missingSubtitleMode
+        // A downloaded title plays from its own file with no server round
+        // trip at all: checked first, ahead of both negotiation and a
+        // prepared successor, since a prepared successor still describes a
+        // network stream (HEL-166). Only iOS carries downloads.
+        var localSource: MediaSource?
+        var localURL: URL?
+        var localIsTranscode = false
+        var localResumeTicks: Int64?
+        #if os(iOS)
+        if !skipsLocalPlayback, let local = DownloadStore.shared.localPlayback(for: media.id) {
+            localSource = local.source
+            localURL = local.url
+            localIsTranscode = local.quality != .original
+            localResumeTicks = local.resumeTicks
+        }
+        #endif
+        isLocalPlayback = localURL != nil
         // How far the attempt got, for the report if it fails: nothing
         // negotiated, or an engine that never became ready.
         var startStage: PlaybackFailureDetail.Stage = .negotiate
         do {
             // Chapters and trickplay ride alongside the negotiation rather
             // than after it — neither is in PlaybackInfo, and waiting for a
-            // second round trip would delay the first frame (HEL-39).
-            async let extras = client.playbackExtras(itemId: media.id)
-            async let segments = client.mediaSegments(itemId: media.id)
-            let info: PlaybackInfoResponse
+            // second round trip would delay the first frame (HEL-39). A
+            // downloaded title has no negotiation to ride alongside, and
+            // asking anyway would burn the client's full request timeout
+            // against an unreachable server before the engine ever starts;
+            // chapters, trickplay and skip segments are accepted losses
+            // offline for this MVP (HEL-166).
+            async let extras: JellyfinClient.PlaybackExtras = isLocalPlayback
+                ? .none
+                : await client.playbackExtras(itemId: media.id)
+            async let segments: [MediaSegment] = isLocalPlayback
+                ? []
+                : await client.mediaSegments(itemId: media.id)
+            let info: PlaybackInfoResponse?
             let source: MediaSource
             var streamURL: URL
             var method: PlayMethod
-            if let prepared, prepared.mediaID == media.id {
+            if let localURL, let localSource {
+                info = nil
+                source = localSource
+                streamURL = localURL
+                method = .directPlay
+            } else if let prepared, prepared.mediaID == media.id {
                 info = prepared.info
                 source = prepared.source
                 streamURL = prepared.streamURL
@@ -311,8 +351,11 @@ final class PlaybackController {
             // A disc image Lagoon can read is played by reading it, not by
             // asking the server to rebuild it — but only when the bytes on
             // offer are the image itself. A transcode of the same title is an
-            // ordinary stream and must stay one (HEL-133).
-            let discRequest: DiscPlaybackRequest? = method == .directPlay
+            // ordinary stream and must stay one (HEL-133). A downloaded file
+            // is never a raw disc image on disk, and disc reading depends on
+            // the cache session a local file deliberately has none of.
+            let discRequest: DiscPlaybackRequest? = !isLocalPlayback
+                && method == .directPlay
                 && PlaybackSourceLayout(
                     videoType: source.videoType,
                     isoType: source.isoType
@@ -339,15 +382,12 @@ final class PlaybackController {
             ) ? cacheSession : nil
             publishBufferMetrics(cacheSession?.metrics)
 
-            var resumeSeconds: Double = 0
-            if let resumeOverride {
-                // A fallback retry resumes exactly where the failure landed,
-                // which outranks both the server's position and an explicit
-                // "start from beginning" the viewer already got past.
-                resumeSeconds = resumeOverride
-            } else if !startFromBeginning, let ticks = media.userData?.playbackPositionTicks, ticks > 0 {
-                resumeSeconds = Ticks.seconds(ticks)
-            }
+            var resumeSeconds = Self.resumeStartSeconds(
+                fallbackOverrideSeconds: resumeOverride,
+                startFromBeginning: startFromBeginning,
+                localResumeTicks: localResumeTicks,
+                serverPositionTicks: media.userData?.playbackPositionTicks
+            )
             resumeOverride = nil
             incidents.beginAttempt(
                 delivery: delivery,
@@ -391,10 +431,21 @@ final class PlaybackController {
                 segments: resolvedSegments
             )
 
+            // A downloaded original is the stored file, so its source
+            // streams describe it and drive selection exactly as a
+            // negotiated stream would. A transcode download is a different
+            // file the server built for offline use (one audio track, no
+            // external subtitles, a container the source metadata never
+            // described), so its source streams do not describe what is
+            // actually on disk; empty metadata here is safe; the ordinal
+            // policies below and the engine's own track building already
+            // degrade to what the file demuxes to when given nothing
+            // (HEL-166).
+            let sourceStreams: [MediaStream] = localIsTranscode ? [] : (source.mediaStreams ?? [])
             // The server's default audio choice (user language preferences
             // applied server-side) maps to the demuxer's per-type 1-based
             // ordinal: embedded streams keep their demux order.
-            let embeddedAudio = (source.mediaStreams ?? []).filter { $0.type == "Audio" }
+            let embeddedAudio = sourceStreams.filter { $0.type == "Audio" }
             var initialAudioOrdinal: Int?
             if let index = source.defaultAudioStreamIndex,
                let position = embeddedAudio.firstIndex(where: { $0.index == index }) {
@@ -421,7 +472,7 @@ final class PlaybackController {
             // Subtitles share the ordinal convention, with external
             // (sidecar) streams appended after the embedded ones — the
             // engine lists them in the same order (HEL-48 M5).
-            let allSubtitles = (source.mediaStreams ?? []).filter { $0.type == "Subtitle" }
+            let allSubtitles = sourceStreams.filter { $0.type == "Subtitle" }
             let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
             // Kept paired with their streams: a sidecar whose URL won't
             // resolve is dropped from what the engine is given, so the
@@ -624,9 +675,10 @@ final class PlaybackController {
                 client: client,
                 itemID: itemId,
                 mediaSourceID: mediaSourceId,
-                playSessionID: info.playSessionId,
+                playSessionID: info?.playSessionId,
                 method: method,
-                signpostID: performanceSignpostID
+                signpostID: performanceSignpostID,
+                runtimeTicks: source.runTimeTicks ?? media.runTimeTicks
             )
             self.reporting = reporting
 
@@ -641,16 +693,29 @@ final class PlaybackController {
             }
             #endif
 
-            do {
-                try await reporting.reportStart(at: resumeSeconds)
-            } catch is CancellationError {
-                // A cover dismissed while this request is suspended must not
-                // resume below and recreate progress/HUD/next-up work after
-                // `onDisappear` has already torn the session down.
-                throw CancellationError()
-            } catch {
-                // Jellyfin reporting is advisory; a healthy local stream must
-                // continue when the server declines or times out this call.
+            if isLocalPlayback {
+                // A downloaded title plays regardless of whether the server
+                // ever hears about it, so nothing below should wait on this
+                // call: an unreachable server would otherwise hold up the
+                // progress loop, HUD and next-up warm-up for the client's
+                // full request timeout, entirely off the local file
+                // (HEL-166). The report still goes out when the server is
+                // reachable; a failure is silently dropped either way.
+                Task {
+                    try? await reporting.reportStart(at: resumeSeconds)
+                }
+            } else {
+                do {
+                    try await reporting.reportStart(at: resumeSeconds)
+                } catch is CancellationError {
+                    // A cover dismissed while this request is suspended must not
+                    // resume below and recreate progress/HUD/next-up work after
+                    // `onDisappear` has already torn the session down.
+                    throw CancellationError()
+                } catch {
+                    // Jellyfin reporting is advisory; a healthy local stream must
+                    // continue when the server declines or times out this call.
+                }
             }
             try Task.checkCancellation()
             guard self.engine === engine, self.reporting === reporting, reporting.isActive else {
@@ -702,6 +767,32 @@ final class PlaybackController {
         if error is CancellationError { return true }
         guard let urlError = error as? URLError, urlError.code == .cancelled else { return false }
         return taskCancelled || closed
+    }
+
+    /// Which resume position wins when a title starts. A fallback retry's
+    /// exact landing spot always outranks the rest: it is not a stored
+    /// position but the internal recovery of a rung the viewer never chose,
+    /// so it applies even when the viewer chose to start over. Short of
+    /// that, starting from beginning always starts at 0: a downloaded
+    /// title's own local position (HEL-166) only resumes it in place of the
+    /// server's last known position, since a fresh negotiation never runs
+    /// to ask the server anything for a local file.
+    nonisolated static func resumeStartSeconds(
+        fallbackOverrideSeconds: Double?,
+        startFromBeginning: Bool,
+        localResumeTicks: Int64?,
+        serverPositionTicks: Int64?
+    ) -> Double {
+        if let fallbackOverrideSeconds {
+            return fallbackOverrideSeconds
+        }
+        if !startFromBeginning, let localResumeTicks {
+            return Ticks.seconds(localResumeTicks)
+        }
+        if !startFromBeginning, let serverPositionTicks, serverPositionTicks > 0 {
+            return Ticks.seconds(serverPositionTicks)
+        }
+        return 0
     }
 
     private nonisolated static func trackMetadata(_ stream: MediaStream) -> PlayerTrackMetadata {
@@ -1279,6 +1370,19 @@ final class PlaybackController {
         incidents.engineFailed(failure, delivery: delivery, next: next, engine: engine)
         if let next {
             isFallingBack = true
+            #if os(iOS)
+            if isLocalPlayback {
+                // A download the engine could not play must not keep
+                // replaying itself: the next rung reaches the server instead
+                // of finding the same file on disk again (HEL-166). The entry
+                // is left alone; one failed attempt is not proof the file is
+                // bad, and the viewer can delete it from its page.
+                skipsLocalPlayback = true
+                DownloadStore.log.error(
+                    "Downloaded file failed to play, falling back to the server: \(self.itemId, privacy: .public)"
+                )
+            }
+            #endif
             // This engine has said its piece; anything it reports from here
             // belongs to a session that is already being torn down.
             engine.onError = nil
