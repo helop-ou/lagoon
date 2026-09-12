@@ -94,9 +94,6 @@ struct MainTabView: View {
             #if DEBUG
             await openDetailIfRequested()
             #endif
-            #if DEBUG && os(iOS)
-            await startDownloadSpikeIfRequested()
-            #endif
         }
         // Presented from the TabView rather than a screen, so a Top Shelf
         // selection resumes playback whichever tab happens to be showing.
@@ -311,31 +308,6 @@ struct MainTabView: View {
         guard let itemID = UserDefaults.standard.string(forKey: "debug.openDetailItemID"), !itemID.isEmpty,
               let item = try? await session.client.item(id: itemID) else { return }
         homeNavigationPath.append(ContentNavigationRoute.item(item))
-    }
-    #endif
-
-    #if DEBUG && os(iOS)
-    /// HEL-166 spike, hands-off: `-debug.downloadSpikeItemID <id>
-    /// -debug.downloadSpikeKind original|transcode` starts one download
-    /// once the session is up, so a simulator run needs no taps.
-    private func startDownloadSpikeIfRequested() async {
-        guard let itemID = UserDefaults.standard.string(forKey: "debug.downloadSpikeItemID"), !itemID.isEmpty,
-              let kind = DownloadSpikeEntry.Kind(
-                  rawValue: UserDefaults.standard.string(forKey: "debug.downloadSpikeKind") ?? "original"
-              ) else { return }
-        // A complete or in-flight entry is left alone; a failed or paused
-        // one is started over so a run can be repeated after a kill test.
-        if let existing = DownloadSpikeStore.shared.entries.first(where: { $0.itemID == itemID && $0.kind == kind }) {
-            let restart = UserDefaults.standard.bool(forKey: "debug.downloadSpikeRestart")
-            guard restart || existing.state == .failed || existing.state == .paused else { return }
-            if restart { DownloadSpikeStore.shared.delete(existing) }
-        }
-        guard let item = try? await session.client.item(id: itemID),
-              let source = item.mediaSources?.first else {
-            print("DownloadSpike: not started for \(itemID) (already present or item unreadable)")
-            return
-        }
-        DownloadSpikeStore.shared.start(item: item, source: source, kind: kind, client: session.client)
     }
     #endif
 
