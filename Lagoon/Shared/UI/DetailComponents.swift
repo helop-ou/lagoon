@@ -280,6 +280,21 @@ struct DetailPageScaffold<Content: View>: View {
     }
 }
 
+extension View {
+    /// A detail page on iPhone and iPad is the immersive one: artwork edge to
+    /// edge, one decision to make. The floating tab bar has no place over it
+    /// and is hidden for the page's lifetime, the way Photos hides it over a
+    /// photo (HEL-169). Back is the way out; the bar returns with the list
+    /// it belongs to. tvOS has no tab bar to hide inside a pushed page.
+    func detailPageChrome() -> some View {
+        #if os(iOS)
+        toolbarVisibility(.hidden, for: .tabBar)
+        #else
+        self
+        #endif
+    }
+}
+
 #if os(iOS)
 /// The one question every touch detail component asks: is this the wide
 /// composition (a regular-width iPad window, laid out like the TV) or the
