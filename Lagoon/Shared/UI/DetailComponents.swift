@@ -15,6 +15,11 @@ struct DetailBackdropView: View {
     /// The height the poster hero occupies, decided by the scaffold so the
     /// content inset and the fade agree on where the words begin.
     var posterHeight: CGFloat = 0
+    /// Which part of the poster the hero shows. Its top in a portrait
+    /// window, so the artwork's own composition survives and only the
+    /// bottom, where the fade sits anyway, is lost; its middle in a
+    /// landscape window, where the hero is a band across the poster.
+    var posterAnchor: Alignment = .top
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     #if os(iOS)
@@ -72,7 +77,7 @@ struct DetailBackdropView: View {
             Color.black
         }
         .frame(maxWidth: .infinity)
-        .frame(height: posterHeight)
+        .frame(height: posterHeight, alignment: posterAnchor)
         .clipped()
         .overlay(posterFade)
         .animation(.easeInOut(duration: Motion.crossfade), value: posterURL)
@@ -80,13 +85,18 @@ struct DetailBackdropView: View {
 
     /// Photographic at the top, a reading surface by the time the title
     /// arrives, black where the poster ends so the page continues seamlessly.
+    /// The reading surface begins where the scaffold puts the content: the
+    /// overlap point in portrait, the row's share in landscape.
     private var posterFade: some View {
         let heavy = contrast == .increased || reduceTransparency
+        let contentStart = posterAnchor == .top
+            ? 1 - Metrics.detailPosterContentOverlap
+            : Metrics.detailLandscapeRowShare
         return LinearGradient(
             stops: [
                 .init(color: .black.opacity(heavy ? 0.35 : 0), location: 0),
-                .init(color: .black.opacity(heavy ? 0.5 : 0.08), location: 0.42),
-                .init(color: .black.opacity(heavy ? 0.9 : 0.72), location: 1 - Metrics.detailPosterContentOverlap),
+                .init(color: .black.opacity(heavy ? 0.5 : 0.08), location: contentStart * 0.66),
+                .init(color: .black.opacity(heavy ? 0.9 : 0.72), location: contentStart),
                 .init(color: .black.opacity(heavy ? 1 : 0.94), location: 0.9),
                 .init(color: .black, location: 1),
             ],
@@ -143,10 +153,10 @@ struct DetailBackdropView: View {
                 )
             }
         } else {
-            // A phone's content spans the whole screen: a landscape phone,
-            // or a compact page without a poster hero. Keep the top
-            // recognisably photographic, then settle into a near-black
-            // reading surface before the rails begin.
+            // A compact page without a poster hero (Seerr, collections):
+            // the content spans the whole screen. Keep the top recognisably
+            // photographic, then settle into a near-black reading surface
+            // before the rails begin.
             ZStack {
                 Color.black.opacity(heavy ? 0.9 : 0.3)
                 LinearGradient(
@@ -194,9 +204,15 @@ struct DetailPageScaffold<Content: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let posterHeight = posterHeroHeight(in: proxy.size)
+            let isLandscape = proxy.size.width > proxy.size.height
+            let posterHeight = posterHeroHeight(in: proxy.size, safeArea: proxy.safeAreaInsets)
             ZStack {
-                DetailBackdropView(url: backdropURL, posterURL: posterURL, posterHeight: posterHeight)
+                DetailBackdropView(
+                    url: backdropURL,
+                    posterURL: posterURL,
+                    posterHeight: posterHeight,
+                    posterAnchor: isLandscape ? .center : .top
+                )
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Metrics.detailSectionSpacing) {
@@ -212,7 +228,11 @@ struct DetailPageScaffold<Content: View>: View {
                     // pinned to the screen it belongs to.
                     .frame(width: proxy.size.width, alignment: .leading)
                 }
-                .contentMargins(.top, heroSpace(posterHeight: posterHeight, safeTop: proxy.safeAreaInsets.top), for: .scrollContent)
+                .contentMargins(
+                    .top,
+                    heroSpace(posterHeight: posterHeight, isLandscape: isLandscape, safeTop: proxy.safeAreaInsets.top),
+                    for: .scrollContent
+                )
                 .scrollClipDisabled()
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -220,15 +240,22 @@ struct DetailPageScaffold<Content: View>: View {
     }
 
     /// A 2:3 poster at the window's width, capped at a share of the height
-    /// so the title is never pushed off-screen. Zero where the poster hero
-    /// is not in use: the wide iPad composition, and a landscape phone,
-    /// where a portrait poster would be reduced to a band across its middle
-    /// and the landscape backdrop is the artwork that fits.
-    private func posterHeroHeight(in size: CGSize) -> CGFloat {
+    /// so the title is never pushed off-screen. In a landscape phone window
+    /// the cap is all that applies and the hero is a band across the
+    /// poster's middle, one image for both orientations the way Infuse does
+    /// it. Zero for the wide iPad composition, which draws the backdrop.
+    /// Portrait: a 2:3 poster at the window's width, capped at a share of
+    /// the height so the title is never pushed off-screen. Landscape: the
+    /// whole window, edge to edge under the safe areas, showing the
+    /// poster's middle band, one image for both orientations the way
+    /// Infuse does it. Zero for the wide iPad composition, which draws the
+    /// backdrop.
+    private func posterHeroHeight(in size: CGSize, safeArea: EdgeInsets) -> CGFloat {
         #if os(iOS)
-        guard posterURL != nil,
-              !DetailLayout.usesLeadingColumn(horizontalSizeClass),
-              size.height > size.width else { return 0 }
+        guard posterURL != nil, !DetailLayout.usesLeadingColumn(horizontalSizeClass) else { return 0 }
+        if size.width > size.height {
+            return (size.height + safeArea.top + safeArea.bottom).rounded()
+        }
         return min((size.width * 3 / 2).rounded(), (size.height * Metrics.detailPosterHeroMaxShare).rounded())
         #else
         return 0
@@ -238,14 +265,15 @@ struct DetailPageScaffold<Content: View>: View {
     /// Where the content begins. Over a poster hero the block rises into
     /// the poster's fade; the poster ignores the safe area and the scroll
     /// view does not, so the inset is taken from the same origin.
-    private func heroSpace(posterHeight: CGFloat, safeTop: CGFloat) -> CGFloat {
+    private func heroSpace(posterHeight: CGFloat, isLandscape: Bool, safeTop: CGFloat) -> CGFloat {
         #if os(iOS)
         guard posterHeight > 0 else {
             return DetailLayout.usesLeadingColumn(horizontalSizeClass)
                 ? Metrics.expandedDetailHeroSpace
                 : Metrics.detailHeroSpace
         }
-        return max(0, (posterHeight * (1 - Metrics.detailPosterContentOverlap)).rounded() - safeTop)
+        let share = isLandscape ? Metrics.detailLandscapeRowShare : 1 - Metrics.detailPosterContentOverlap
+        return max(0, (posterHeight * share).rounded() - safeTop)
         #else
         return Metrics.detailHeroSpace
         #endif
@@ -260,6 +288,15 @@ enum DetailLayout {
     static func usesLeadingColumn(_ horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
         UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
     }
+
+    /// A landscape phone: the poster is the whole hero and the title,
+    /// actions and Play share one row along its lower part (HEL-169).
+    static func usesLandscapeRow(
+        _ horizontalSizeClass: UserInterfaceSizeClass?,
+        _ verticalSizeClass: UserInterfaceSizeClass?
+    ) -> Bool {
+        !usesLeadingColumn(horizontalSizeClass) && verticalSizeClass == .compact
+    }
 }
 #endif
 
@@ -273,6 +310,7 @@ struct DetailHeader<Buttons: View>: View {
     let item: MediaItem
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     /// On a series page, the episode a Play press would start. Its label and
     /// synopsis take over from the show's, because what you're deciding about
@@ -298,7 +336,10 @@ struct DetailHeader<Buttons: View>: View {
             #if os(iOS)
             TitleArtView(
                 item: item,
-                alignment: DetailLayout.usesLeadingColumn(horizontalSizeClass) ? .leading : .center
+                alignment: DetailLayout.usesLeadingColumn(horizontalSizeClass)
+                    || DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+                    ? .leading
+                    : .center
             )
             #else
             TitleArtView(item: item)
@@ -371,6 +412,13 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    /// A landscape phone: title art and the actions share one row over the
+    /// poster's lower part, and everything else follows below the fold.
+    private var usesLandscapeRow: Bool {
+        DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+    }
 
     /// A regular-width iPad window gets the TV's composition: a leading
     /// information column beside the artwork. A phone keeps one full-width
@@ -380,11 +428,11 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     }
 
     private var compactAlignment: Alignment {
-        usesLeadingColumn ? .leading : .center
+        usesLeadingColumn || usesLandscapeRow ? .leading : .center
     }
 
     private var flowAlignment: HorizontalAlignment {
-        usesLeadingColumn ? .leading : .center
+        usesLeadingColumn || usesLandscapeRow ? .leading : .center
     }
     #endif
 
@@ -414,15 +462,26 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
             // stack's own alignment centres the block on a phone, so an
             // absent row costs nothing and every client of this header,
             // Seerr and collections included, gets the same composition.
-            title
-                .frame(maxWidth: .infinity, alignment: compactAlignment)
-            subtitleView
-                .multilineTextAlignment(usesLeadingColumn ? .leading : .center)
-            facts
-            supportingFacts
-            buttons
-                .frame(maxWidth: .infinity, alignment: compactAlignment)
-                .padding(.top, Metrics.Space.s)
+            if usesLandscapeRow {
+                HStack(alignment: .center, spacing: Metrics.Space.xl) {
+                    title
+                    Spacer(minLength: Metrics.Space.l)
+                    buttons
+                }
+                subtitleView
+                facts
+                supportingFacts
+            } else {
+                title
+                    .frame(maxWidth: .infinity, alignment: compactAlignment)
+                subtitleView
+                    .multilineTextAlignment(usesLeadingColumn ? .leading : .center)
+                facts
+                supportingFacts
+                buttons
+                    .frame(maxWidth: .infinity, alignment: compactAlignment)
+                    .padding(.top, Metrics.Space.s)
+            }
             overviewView
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, Metrics.Space.s)
