@@ -280,18 +280,43 @@ nonisolated final class FFmpegDemuxer {
         self.capabilities = capabilities
     }
 
-    /// Whether packets remain compressed for an Apple decoder. AV1 only
-    /// enters that path when VideoToolbox reports hardware support; otherwise
-    /// libdav1d produces P010/NV12 image buffers. VP9 is always software here.
+    /// Whether a stream is handed to VideoToolbox as compressed samples or
+    /// decoded here first. AV1 is offered to VideoToolbox and settled per
+    /// stream at session creation; otherwise libdav1d produces P010/NV12
+    /// image buffers. VP9 is always software here.
+    ///
+    /// `interlaced` is the stream's own field order, as libavformat probed
+    /// it. Interlaced H.264 goes to the software decoder because that is
+    /// the only path with a deinterlacing stage (HEL-170): VideoToolbox on
+    /// tvOS would hand back woven field pairs and the picture would comb on
+    /// every motion. Progressive H.264 is untouched. HEVC has no software
+    /// route here, so it is compressed whatever the field order says, and
+    /// the device profile keeps asking the server for interlaced HEVC.
     static func usesCompressedVideoPath(
         codecID: AVCodecID,
-        capabilities: PlaybackCapabilities
+        capabilities: PlaybackCapabilities,
+        interlaced: Bool = false
     ) -> Bool {
         switch codecID {
-        case AV_CODEC_ID_H264, AV_CODEC_ID_HEVC:
+        case AV_CODEC_ID_H264:
+            !interlaced
+        case AV_CODEC_ID_HEVC:
             true
         case AV_CODEC_ID_AV1:
             capabilities.decodesAV1WithVideoToolbox
+        default:
+            false
+        }
+    }
+
+    /// Whether a probed field order describes interlaced pictures. Unknown
+    /// is progressive: it is what libavformat reports when nothing in the
+    /// stream said otherwise, and sending that to the software decoder
+    /// would take H.264 off the hardware for no reason.
+    static func isInterlaced(fieldOrder: AVFieldOrder) -> Bool {
+        switch fieldOrder {
+        case AV_FIELD_TT, AV_FIELD_BB, AV_FIELD_TB, AV_FIELD_BT:
+            true
         default:
             false
         }
@@ -462,9 +487,11 @@ nonisolated final class FFmpegDemuxer {
         if guessedRate.num > 0, guessedRate.den > 0 {
             videoFrameRate = Double(guessedRate.num) / Double(guessedRate.den)
         }
+        let videoIsInterlaced = Self.isInterlaced(fieldOrder: videoPar.pointee.field_order)
         let usesCompressedVideo = Self.usesCompressedVideoPath(
             codecID: videoPar.pointee.codec_id,
-            capabilities: capabilities
+            capabilities: capabilities,
+            interlaced: videoIsInterlaced
         ) && (videoPar.pointee.codec_id != AV_CODEC_ID_AV1 || routesAV1ToVideoToolbox)
         // A container that describes no parameter sets has to be caught
         // before the description is built, not after: the description is
@@ -543,7 +570,11 @@ nonisolated final class FFmpegDemuxer {
         } else {
             nil
         }
-        if videoDescription == nil, SoftwareVideoDecoder.supports(codecID: videoPar.pointee.codec_id) {
+        if videoDescription == nil,
+           SoftwareVideoDecoder.supports(
+               codecID: videoPar.pointee.codec_id,
+               interlaced: videoIsInterlaced
+           ) {
             let decoder = try SoftwareVideoDecoder(
                 codecpar: videoPar,
                 timeBase: videoTimeBase,
