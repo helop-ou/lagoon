@@ -48,6 +48,7 @@ private struct ContentNavigationDestination: View {
         switch route {
         case .item(let item):
             ItemDetailRouter(item: item)
+                .detailPageChrome()
         case .genre(let name, let includeTypes):
             GenreLibraryView(genre: name, includeTypes: includeTypes)
         case .search(let query):
