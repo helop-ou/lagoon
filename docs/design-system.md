@@ -18,7 +18,7 @@ screen-specific copies of its values.
 | `expandedHeroHeight` | Not used | 360 on regular-width iPad windows |
 | `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad windows |
 | `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: the portrait poster hero's ceiling as a share of the window height, and how far the metadata block rises over it |
-| `detailLandscapeRowShare` | Not used | 0.6: where the landscape row starts down the full-screen poster |
+| `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
 | `detailPlayButtonMaxWidth` / `detailLandscapePlayButtonMaxWidth` | Not used | 360 / 260: the phone's Play pill cap in portrait and in the landscape row |
 | `gridColumns` | 5 | Not used; the count follows the width (three across on a portrait phone) |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
