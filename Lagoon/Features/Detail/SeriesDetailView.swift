@@ -82,6 +82,7 @@ struct SeriesDetailView: View {
     @Environment(ServerSyncState.self) private var serverSync
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
@@ -156,10 +157,22 @@ struct SeriesDetailView: View {
 
                 seasonChips
             }
+        } else if usesLandscapeRow {
+            // A landscape phone (HEL-169): toggles, season picker, then Play
+            // on one line with the title art along the poster's lower part.
+            HStack(spacing: Metrics.detailActionSpacing) {
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    actionRow
+                    seasonChips
+                }
+                if let episode = subject {
+                    playButton(for: episode)
+                }
+            }
         } else {
-            // A phone (HEL-169): the same block as a film page. One
-            // full-width Play for the episode the page is about, then the
-            // toggles and the season picker as a row beneath it.
+            // A portrait phone (HEL-169): the same block as a film page. One
+            // wide Play for the episode the page is about, then the toggles
+            // and the season picker as a row beneath it.
             VStack(spacing: Metrics.Space.m) {
                 if let episode = subject {
                     playButton(for: episode)
@@ -176,6 +189,15 @@ struct SeriesDetailView: View {
     #if os(iOS)
     private var usesLeadingColumn: Bool {
         DetailLayout.usesLeadingColumn(horizontalSizeClass)
+    }
+
+    private var usesLandscapeRow: Bool {
+        DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+    }
+
+    private var playButtonMaxWidth: CGFloat? {
+        if usesLeadingColumn { return nil }
+        return usesLandscapeRow ? Metrics.detailLandscapePlayButtonMaxWidth : Metrics.detailPlayButtonMaxWidth
     }
     #endif
 
@@ -194,7 +216,7 @@ struct SeriesDetailView: View {
                 systemImage: "play.fill"
             )
             .font(.title3.weight(.semibold))
-            .frame(maxWidth: usesLeadingColumn ? nil : .infinity)
+            .frame(maxWidth: playButtonMaxWidth)
             .padding(.vertical, Metrics.Space.xs)
             #endif
         }
