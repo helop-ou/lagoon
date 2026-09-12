@@ -8,6 +8,7 @@ struct ItemDetailView: View {
     @Environment(ServerSyncState.self) private var serverSync
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @State private var detail: MediaItem?
     @State private var similar: [MediaItem] = []
@@ -98,10 +99,22 @@ struct ItemDetailView: View {
         DetailLayout.usesLeadingColumn(horizontalSizeClass)
     }
 
-    /// Centred under the poster hero on a phone; on the leading edge in a
-    /// regular-width iPad window, where the block is a column beside the art.
+    private var usesLandscapeRow: Bool {
+        DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+    }
+
+    /// Centred under the poster hero on a portrait phone; on the leading
+    /// edge in a regular-width iPad window, where the block is a column
+    /// beside the art, and in a landscape phone's row.
     private var compactAlignment: Alignment {
-        usesLeadingColumn ? .leading : .center
+        usesLeadingColumn || usesLandscapeRow ? .leading : .center
+    }
+
+    /// The Play pill's width: natural in the wide iPad row, capped on a
+    /// phone so it is big without becoming a bar.
+    private var playButtonMaxWidth: CGFloat? {
+        if usesLeadingColumn { return nil }
+        return usesLandscapeRow ? Metrics.detailLandscapePlayButtonMaxWidth : Metrics.detailPlayButtonMaxWidth
     }
     #endif
 
@@ -129,11 +142,24 @@ struct ItemDetailView: View {
                 downloadSpikeMenu
                 #endif
             }
+        } else if usesLandscapeRow {
+            // A landscape phone (HEL-169): the circles then Play, on one
+            // line with the title art along the poster's lower part.
+            HStack(spacing: Metrics.detailActionSpacing) {
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    fromBeginningButton
+                    actionRow
+                    #if DEBUG
+                    downloadSpikeMenu
+                    #endif
+                }
+                playButton
+            }
         } else {
-            // A phone (HEL-169): one full-width Play, the decision the page
-            // exists for, then the secondary controls as a row of glass
-            // circles under it. From Beginning joins that row only once
-            // there is a resume point to start from.
+            // A portrait phone (HEL-169): one wide Play, the decision the
+            // page exists for, then the secondary controls as a row of
+            // glass circles under it. From Beginning joins that row only
+            // once there is a resume point to start from.
             VStack(spacing: Metrics.Space.m) {
                 playButton
                 AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
@@ -194,7 +220,7 @@ struct ItemDetailView: View {
             #else
             Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
                 .font(.title3.weight(.semibold))
-                .frame(maxWidth: usesLeadingColumn ? nil : .infinity)
+                .frame(maxWidth: playButtonMaxWidth)
                 .padding(.vertical, Metrics.Space.xs)
             #endif
         }
