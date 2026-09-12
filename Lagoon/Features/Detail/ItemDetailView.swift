@@ -6,6 +6,9 @@ struct ItemDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @State private var detail: MediaItem?
     @State private var similar: [MediaItem] = []
     @State private var playerItem: PlayerItem?
@@ -14,7 +17,8 @@ struct ItemDetailView: View {
 
     var body: some View {
         DetailPageScaffold(
-            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920)
+            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920),
+            posterURL: session.client.imageURL(for: displayed, kind: .poster, maxWidth: Metrics.detailPosterRequestWidth)
         ) {
             DetailHeader(item: displayed) { playButtons }
             CastStrip(people: displayed.people ?? [])
@@ -82,9 +86,24 @@ struct ItemDetailView: View {
                 Text("Resume from \(Self.timestamp(resumeTicks))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    #if os(iOS)
+                    .frame(maxWidth: .infinity, alignment: compactAlignment)
+                    #endif
             }
         }
     }
+
+    #if os(iOS)
+    private var usesLeadingColumn: Bool {
+        DetailLayout.usesLeadingColumn(horizontalSizeClass)
+    }
+
+    /// Centred under the poster hero on a phone; on the leading edge in a
+    /// regular-width iPad window, where the block is a column beside the art.
+    private var compactAlignment: Alignment {
+        usesLeadingColumn ? .leading : .center
+    }
+    #endif
 
     @ViewBuilder
     private var actions: some View {
@@ -99,18 +118,32 @@ struct ItemDetailView: View {
                 .padding(.leading, Metrics.Space.l)
         }
         #else
-        // Lead with the primary action on touch too. Most items fit all
-        // controls on one line. Keep Resume and From Beginning together when
-        // they fit, moving the toggles below before stacking every button.
-        AdaptiveActionStack {
-            AdaptiveActionStack {
+        if usesLeadingColumn {
+            // A regular-width iPad window keeps the TV's one row, Play first,
+            // beside the artwork.
+            AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
                 playButton
                 fromBeginningButton
+                actionRow
+                #if DEBUG
+                downloadSpikeMenu
+                #endif
             }
-            actionRow
-            #if DEBUG
-            downloadSpikeMenu
-            #endif
+        } else {
+            // A phone (HEL-169): one full-width Play, the decision the page
+            // exists for, then the secondary controls as a row of glass
+            // circles under it. From Beginning joins that row only once
+            // there is a resume point to start from.
+            VStack(spacing: Metrics.Space.m) {
+                playButton
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    fromBeginningButton
+                    actionRow
+                    #if DEBUG
+                    downloadSpikeMenu
+                    #endif
+                }
+            }
         }
         #endif
     }
@@ -156,9 +189,20 @@ struct ItemDetailView: View {
         Button {
             playerItem = PlayerItem(media: displayed)
         } label: {
+            #if os(tvOS)
             Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
+            #else
+            Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
+                .font(.title3.weight(.semibold))
+                .frame(maxWidth: usesLeadingColumn ? nil : .infinity)
+                .padding(.vertical, Metrics.Space.xs)
+            #endif
         }
         .buttonStyle(.glass)
+        #if os(iOS)
+        .controlSize(.extraLarge)
+        .accessibilityIdentifier("detail.play")
+        #endif
     }
 
     @ViewBuilder
