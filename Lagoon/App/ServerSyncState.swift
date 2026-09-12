@@ -56,6 +56,11 @@ final class ServerSyncState {
     private(set) var manualRefreshGeneration = 0
     private(set) var manualRefreshTarget: ServerSyncTarget?
     private var refreshingTargets: Set<ServerSyncTarget> = []
+    /// Set by `MainTabView` (iOS only) once the libraries load fails to
+    /// reach the server, cleared on the next success. Library reads this to
+    /// show the offline banner and to know a downloaded title still plays
+    /// with nothing else reachable (HEL-166).
+    var serverUnreachable = false
 
     #if DEBUG
     private(set) var refreshCounts: [String: Int] = [:]
