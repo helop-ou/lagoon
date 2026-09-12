@@ -29,6 +29,15 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "100",
+            released: "September 2026",
+            headline: "Interlaced TV recordings play directly instead of being transcoded.",
+            changes: [
+                "1080i and 576i H.264 recordings, the kind a TV tuner produces, now play straight from your server and are deinterlaced on the device. They used to be re-encoded by the server, which on a busy server meant a stuttering start and occasional pauses.",
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "99",
             released: "September 2026",
             headline: "Your Jellyfin profile picture shows up in Lagoon.",
