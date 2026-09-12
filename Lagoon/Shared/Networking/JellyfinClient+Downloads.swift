@@ -20,9 +20,15 @@ extension JellyfinClient {
         source: MediaSource,
         videoBitrate: Int,
         maxWidth: Int,
-        maxHeight: Int
+        maxHeight: Int,
+        capabilities: PlaybackCapabilities = .current
     ) throws -> URL {
-        try url(path: "Videos/\(itemId)/stream.ts", query: [
+        // The file is decoded by this device alone, so the codec follows its
+        // hardware: HEVC keeps HDR where a decoder exists, and a device
+        // without one (the simulator, older iPads) asks for H.264 rather
+        // than downloading a file VideoToolbox then refuses (-12906).
+        let videoCodec = capabilities.hardwareHEVC ? "hevc,h264" : "h264"
+        return try url(path: "Videos/\(itemId)/stream.ts", query: [
             URLQueryItem(name: "static", value: "false"),
             URLQueryItem(name: "mediaSourceId", value: source.id),
             URLQueryItem(name: "deviceId", value: deviceId),
@@ -30,7 +36,7 @@ extension JellyfinClient {
             // on it, and without one a restart is handed whatever output an
             // abandoned earlier job left behind.
             URLQueryItem(name: "playSessionId", value: UUID().uuidString.lowercased()),
-            URLQueryItem(name: "videoCodec", value: "hevc,h264"),
+            URLQueryItem(name: "videoCodec", value: videoCodec),
             URLQueryItem(name: "audioCodec", value: "eac3,aac"),
             URLQueryItem(name: "videoBitRate", value: String(videoBitrate)),
             URLQueryItem(name: "audioBitRate", value: "256000"),
