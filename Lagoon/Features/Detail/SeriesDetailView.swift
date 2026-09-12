@@ -80,6 +80,9 @@ struct SeriesDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
     /// The episode the rail last put focus on. Deliberately *not* cleared
@@ -95,7 +98,8 @@ struct SeriesDetailView: View {
 
     var body: some View {
         DetailPageScaffold(
-            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920)
+            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920),
+            posterURL: session.client.imageURL(for: displayed, kind: .poster, maxWidth: Metrics.detailPosterRequestWidth)
         ) {
             DetailHeader(item: displayed, upNext: subject) { actions }
             episodesSection
@@ -128,37 +132,93 @@ struct SeriesDetailView: View {
     /// page orders it that way.
     @ViewBuilder
     private var actions: some View {
+        #if os(tvOS)
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
             AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
                 if let episode = subject {
-                    Button {
-                        playerItem = PlayerItem(media: episode)
-                    } label: {
-                        Label(
-                            episode.playbackProgress == nil ? "Play" : "Resume",
-                            systemImage: "play.fill"
-                        )
-                    }
-                    .buttonStyle(.glass)
+                    playButton(for: episode)
                 }
-
-                // The checkmark acts on that episode; the star favourites the
-                // show. Each control targets what it plausibly means next to
-                // a Play button that starts one specific episode.
-                ItemActionRow(item: displayed, playedItem: subject) {
-                    let refreshed = await viewModel.reloadUserData(client: session.client, seriesId: item.id)
-                    // A hand-picked episode lives in this view's state, which
-                    // no reload touches: re-match it from the refreshed rail
-                    // so its watched flag is the server's, not the pick's.
-                    if let picked = highlighted {
-                        guard let fresh = viewModel.episodes.first(where: { $0.id == picked.id }) else { return false }
-                        highlighted = fresh
-                    }
-                    return refreshed
-                }
+                actionRow
             }
 
             seasonChips
+        }
+        #else
+        if usesLeadingColumn {
+            // A regular-width iPad window keeps the TV's composition.
+            VStack(alignment: .leading, spacing: Metrics.Space.l) {
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    if let episode = subject {
+                        playButton(for: episode)
+                    }
+                    actionRow
+                }
+
+                seasonChips
+            }
+        } else {
+            // A phone (HEL-169): the same block as a film page. One
+            // full-width Play for the episode the page is about, then the
+            // toggles and the season picker as a row beneath it.
+            VStack(spacing: Metrics.Space.m) {
+                if let episode = subject {
+                    playButton(for: episode)
+                }
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    actionRow
+                    seasonChips
+                }
+            }
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    private var usesLeadingColumn: Bool {
+        DetailLayout.usesLeadingColumn(horizontalSizeClass)
+    }
+    #endif
+
+    private func playButton(for episode: MediaItem) -> some View {
+        Button {
+            playerItem = PlayerItem(media: episode)
+        } label: {
+            #if os(tvOS)
+            Label(
+                episode.playbackProgress == nil ? "Play" : "Resume",
+                systemImage: "play.fill"
+            )
+            #else
+            Label(
+                episode.playbackProgress == nil ? "Play" : "Resume",
+                systemImage: "play.fill"
+            )
+            .font(.title3.weight(.semibold))
+            .frame(maxWidth: usesLeadingColumn ? nil : .infinity)
+            .padding(.vertical, Metrics.Space.xs)
+            #endif
+        }
+        .buttonStyle(.glass)
+        #if os(iOS)
+        .controlSize(.extraLarge)
+        .accessibilityIdentifier("detail.play")
+        #endif
+    }
+
+    /// The checkmark acts on that episode; the star favourites the show.
+    /// Each control targets what it plausibly means next to a Play button
+    /// that starts one specific episode.
+    private var actionRow: some View {
+        ItemActionRow(item: displayed, playedItem: subject) {
+            let refreshed = await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+            // A hand-picked episode lives in this view's state, which no
+            // reload touches: re-match it from the refreshed rail so its
+            // watched flag is the server's, not the pick's.
+            if let picked = highlighted {
+                guard let fresh = viewModel.episodes.first(where: { $0.id == picked.id }) else { return false }
+                highlighted = fresh
+            }
+            return refreshed
         }
     }
 
