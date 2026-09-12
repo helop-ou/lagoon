@@ -160,11 +160,13 @@ struct SeriesDetailView: View {
         } else if usesLandscapeRow {
             // A landscape phone (HEL-169): toggles, season picker, then Play
             // on one line with the title art along the poster's lower part.
+            // A plain row, not the adaptive stack: when the line is tight
+            // the title art gives way, rather than the picker dropping under
+            // the circles.
             HStack(spacing: Metrics.detailActionSpacing) {
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
-                    actionRow
-                    seasonChips
-                }
+                actionRow
+                seasonChips
+                    .fixedSize()
                 if let episode = subject {
                     playButton(for: episode)
                 }
