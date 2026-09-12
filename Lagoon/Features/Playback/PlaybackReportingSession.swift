@@ -19,6 +19,9 @@ final class PlaybackReportingSession {
     private let method: PlayMethod
     private let signpostID: OSSignpostID
     private let ledgerSession: UUID
+    /// The title's runtime, for deciding whether a stopped position counts
+    /// as played through (HEL-166). Nil when the source never reported one.
+    private let runtimeTicks: Int64?
     private var progressTask: Task<Void, Never>?
     private(set) var isActive = true
 
@@ -28,7 +31,8 @@ final class PlaybackReportingSession {
         mediaSourceID: String,
         playSessionID: String?,
         method: PlayMethod,
-        signpostID: OSSignpostID
+        signpostID: OSSignpostID,
+        runtimeTicks: Int64? = nil
     ) {
         self.client = client
         self.itemID = itemID
@@ -36,6 +40,7 @@ final class PlaybackReportingSession {
         self.playSessionID = playSessionID
         self.method = method
         self.signpostID = signpostID
+        self.runtimeTicks = runtimeTicks
         ledgerSession = client.playbackReports.open()
     }
 
@@ -102,6 +107,15 @@ final class PlaybackReportingSession {
         progressTask = nil
     }
 
+    /// A position within the last 2% of a known runtime counts as played
+    /// through: a downloaded title's local resume point is cleared rather
+    /// than parked one frame from the end (HEL-166). Unknown runtime never
+    /// counts as played through.
+    nonisolated static func isPlayedThrough(positionTicks: Int64, runtimeTicks: Int64?) -> Bool {
+        guard let runtimeTicks, runtimeTicks > 0 else { return false }
+        return Double(positionTicks) >= Double(runtimeTicks) * 0.98
+    }
+
     /// Claims the stop report synchronously and returns independent network
     /// work. Call after local resource teardown; dismissal never awaits it.
     func stop(at seconds: Double) -> Task<Void, Never>? {
@@ -114,21 +128,46 @@ final class PlaybackReportingSession {
         let playSessionID = playSessionID
         let signpostID = signpostID
         let ledgerSession = ledgerSession
+        let runtimeTicks = runtimeTicks
+        let positionTicks = Ticks.ticks(seconds)
         return Task {
             os_signpost(
                 .begin, log: PlaybackPerformance.log,
                 name: "Playback Stopped Report", signpostID: signpostID
             )
+            #if os(iOS)
+            // The local resume point is this session's own record of where
+            // playback stopped; it is kept regardless of whether the stop
+            // report below reaches the server, and cleared once the title
+            // played through rather than left one frame from the end.
+            if DownloadStore.shared.entry(for: itemID) != nil {
+                let recorded = Self.isPlayedThrough(positionTicks: positionTicks, runtimeTicks: runtimeTicks)
+                    ? nil
+                    : positionTicks
+                DownloadStore.shared.recordPosition(itemID: itemID, ticks: recorded)
+            }
+            #endif
             do {
                 try await client.reportPlaybackStopped(.init(
                     itemId: itemID,
                     mediaSourceId: mediaSourceID,
                     playSessionId: playSessionID,
-                    positionTicks: Ticks.ticks(seconds)
+                    positionTicks: positionTicks
                 ))
                 reportLog.notice("stopped at \(seconds, format: .fixed(precision: 1)) s reported")
             } catch {
                 reportLog.error("stopped report failed: \(error.localizedDescription, privacy: .public)")
+                // The server never heard this stop; every item (downloaded
+                // or not) keeps its last position so a later reconnect can
+                // still tell the server where playback actually ended.
+                #if os(iOS)
+                DownloadStore.shared.enqueuePendingReport(PendingPlaybackReport(
+                    itemID: itemID,
+                    mediaSourceID: mediaSourceID,
+                    positionTicks: positionTicks,
+                    createdAt: Date()
+                ))
+                #endif
             }
             os_signpost(
                 .end, log: PlaybackPerformance.log,
