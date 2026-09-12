@@ -520,6 +520,25 @@ extension JellyfinClient {
         return try? url(path: "Items/\(itemId)/Images/\(type)", query: query)
     }
 
+    /// A user's profile picture, on the same conventions as item artwork
+    /// (HEL-168). nil without a tag: the route answers 404 for a user who
+    /// has no picture, and initials are the right thing to show then. Built
+    /// from a server URL rather than the configured client because the
+    /// account picker shows accounts on every remembered server.
+    static func userImageURL(serverURL: URL, userId: String, tag: String?, maxWidth: Int) -> URL? {
+        guard let tag,
+              var components = URLComponents(
+                url: serverURL.appending(path: "Users/\(userId)/Images/Primary"),
+                resolvingAgainstBaseURL: false
+              ) else { return nil }
+        components.queryItems = [
+            URLQueryItem(name: "maxWidth", value: String(maxWidth)),
+            URLQueryItem(name: "quality", value: "90"),
+            URLQueryItem(name: "tag", value: tag),
+        ]
+        return components.url
+    }
+
     /// Cast headshot. People are items too, so this is the same image route
     /// with the credit's own id (HEL-46).
     func personImageURL(for person: Person, maxWidth: Int) -> URL? {
