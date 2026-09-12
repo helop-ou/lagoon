@@ -21,12 +21,15 @@ private struct SeerrNavigationDestination: View {
             SeerrCatalogView(source: source)
         case .media(let id, let type):
             SeerrMediaDetailView(mediaID: id, mediaType: type)
+                .detailPageChrome()
         case .requests:
             SeerrRequestsView()
         case .request(let request):
             SeerrRequestDetailView(request: request)
+                .detailPageChrome()
         case .jellyfinItem(let item):
             ItemDetailRouter(item: item)
+                .detailPageChrome()
         case .search(let query):
             SearchResultsView(query: query, source: .seerr)
         }
