@@ -180,7 +180,36 @@ final class SessionStore {
         userName = account.userName
         defaults.set(account.id, forKey: DefaultsKey.activeAccountId)
         phase = .signedIn
+        refreshProfile(of: account)
         return true
+    }
+
+    /// Activation never waits on the server, so the picture or name a user
+    /// changed on the web since the last sign-in is caught up here, after
+    /// the account is already usable (HEL-168). An unreachable server
+    /// leaves the stored record as it was; a switch or sign-out while the
+    /// read is in flight discards the answer.
+    private func refreshProfile(of account: StoredAccount) {
+        let generation = connectionGeneration
+        Task { [weak self] in
+            guard let self, let user = try? await client.currentUser() else { return }
+            guard connectionGeneration == generation,
+                  phase == .signedIn,
+                  activeAccount?.id == account.id,
+                  user.id == account.userId else { return }
+            let name = user.name ?? account.userName
+            guard user.primaryImageTag != account.primaryImageTag || name != account.userName else { return }
+            let updated = StoredAccount(
+                serverURL: account.serverURL,
+                serverName: account.serverName,
+                userId: account.userId,
+                userName: name,
+                primaryImageTag: user.primaryImageTag
+            )
+            save(accounts: accounts.map { $0.id == updated.id ? updated : $0 })
+            activeAccount = updated
+            userName = updated.userName
+        }
     }
 
     /// Switches to another remembered account without re-entering
@@ -470,7 +499,8 @@ final class SessionStore {
                 serverURL: url,
                 serverName: serverName,
                 userId: result.user.id,
-                userName: result.user.name
+                userName: result.user.name,
+                primaryImageTag: result.user.primaryImageTag
             )
             client.activateSession(token: result.accessToken, userId: result.user.id)
             activeAccount = account
@@ -510,7 +540,8 @@ final class SessionStore {
             serverURL: url,
             serverName: serverName,
             userId: result.user.id,
-            userName: result.user.name
+            userName: result.user.name,
+            primaryImageTag: result.user.primaryImageTag
         )
         if isAccountDraft {
             pendingAuthentication = result
