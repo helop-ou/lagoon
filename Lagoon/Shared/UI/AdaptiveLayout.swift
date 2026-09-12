@@ -27,6 +27,10 @@ struct AdaptiveActionStack<Content: View>: View {
 /// translated strings and accessibility text sizes.
 struct MetadataFlowLayout: Layout {
     var spacing: CGFloat = Metrics.Space.m
+    /// Where each row sits in the width it did not use. Leading is the
+    /// column composition; centre is the phone's block under the poster
+    /// hero, where the title and actions are centred too (HEL-169).
+    var alignment: HorizontalAlignment = .leading
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         arrange(subviews, width: proposal.width).size
@@ -34,9 +38,21 @@ struct MetadataFlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let arrangement = arrange(subviews, width: bounds.width)
+        // A row is every frame sharing a minY; its slack is what the
+        // alignment distributes.
+        var rowWidths: [CGFloat: CGFloat] = [:]
+        for frame in arrangement.frames {
+            rowWidths[frame.minY] = max(rowWidths[frame.minY] ?? 0, frame.maxX)
+        }
         for (index, frame) in arrangement.frames.enumerated() {
+            let slack = max(0, bounds.width - (rowWidths[frame.minY] ?? 0))
+            let shift: CGFloat = switch alignment {
+            case .center: slack / 2
+            case .trailing: slack
+            default: 0
+            }
             subviews[index].place(
-                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                at: CGPoint(x: bounds.minX + frame.minX + shift, y: bounds.minY + frame.minY),
                 anchor: .topLeading,
                 proposal: ProposedViewSize(frame.size)
             )
