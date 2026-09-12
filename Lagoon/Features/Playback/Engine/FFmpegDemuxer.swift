@@ -39,6 +39,7 @@ nonisolated private let seekBackwardFlag: Int32 = 1 // AVSEEK_FLAG_BACKWARD
 nonisolated private let keyPacketFlag: Int32 = 1 // AV_PKT_FLAG_KEY
 nonisolated private let avErrorEOF: Int32 = -541_478_725 // AVERROR_EOF = -MKTAG('E','O','F',' ')
 nonisolated private let customIOFlag: Int32 = 0x0080 // AVFMT_FLAG_CUSTOM_IO
+nonisolated private let noFileFormatFlag: Int32 = 0x0001 // AVFMT_NOFILE
 
 nonisolated enum DemuxError: LocalizedError {
     /// `code` is the AVERROR where libavformat gave one, else 0.
@@ -865,22 +866,12 @@ nonisolated final class FFmpegDemuxer {
         // The legacy single-stream seek can leave split HLS audio/video
         // inputs at different playlist positions (observed as a full audio
         // queue and zero video after a backward scrub). The newer API seeks
-        // all active streams to a jointly presentable point. Constraining
-        // max_ts to the requested time still gives decoders the keyframe at
-        // or before the target. Keep the legacy call as a compatibility
-        // fallback for demuxers that do not implement avformat_seek_file.
-        var status = avformat_seek_file(
-            ctx,
-            videoStreamIndex,
-            Int64.min,
-            timestamp,
-            timestamp,
-            0
-        )
-        if status < 0 {
-            status = av_seek_frame(ctx, videoStreamIndex, timestamp, seekBackwardFlag)
-        }
-        try Self.validateSeekStatus(status)
+        // all active streams to a jointly presentable point, and constraining
+        // max_ts to the requested time asks for the keyframe at or before it.
+        try Self.validateSeekStatus(reposition(ctx, to: timestamp))
+        // A container with no index answers that request with whatever packet
+        // its binary search stops on, keyframe or not (HEL-166).
+        alignLandingToKeyframe(ctx, target: timestamp)
         // HEL-151: the packet the container seeks to is not necessarily one
         // a hardware decoder can be started on, and the packets right behind
         // it may be presented before it. Both are decided on the first video
@@ -906,6 +897,136 @@ nonisolated final class FFmpegDemuxer {
             ioPackets = 0
             ioStartedAt = nil
         }
+    }
+
+    /// Both seek calls in the order the engine needs them: the newer API
+    /// first, then the legacy single-stream one as a compatibility fallback
+    /// for demuxers that do not implement `avformat_seek_file`. The alignment
+    /// below repositions exactly the way the seek itself does.
+    private func reposition(_ ctx: UnsafeMutablePointer<AVFormatContext>, to timestamp: Int64) -> Int32 {
+        let status = avformat_seek_file(ctx, videoStreamIndex, Int64.min, timestamp, timestamp, 0)
+        return status < 0 ? av_seek_frame(ctx, videoStreamIndex, timestamp, seekBackwardFlag) : status
+    }
+
+    /// How far back a mid-GOP landing looks for the keyframe that opens its
+    /// GOP, in seconds, widened once for long-GOP encodes.
+    private static let landingSearchWindows: [Double] = [8, 24]
+    /// Packets one search pass may read: the guard against a stream whose
+    /// timestamps never reach the target. 24 s of 24 fps video is ~580 video
+    /// packets and a comparable number of audio ones.
+    private static let landingSearchPacketBudget = 4_000
+    /// The keyframe is repositioned to a little before its own decode stamp,
+    /// so a binary search that compares decode stamps cannot step past it
+    /// into the pictures that follow. The read path then drops forward onto
+    /// it, or onto a scene-cut keyframe just before it, which is equally
+    /// decodable and no later than the target either way.
+    private static let landingSeekMargin = 0.5
+    /// Video is interleaved close behind audio, so the first video packet of
+    /// a landing arrives well inside this.
+    private static let landingProbePacketBudget = 480
+
+    /// Walks a mid-GOP seek landing back to the last keyframe at or before
+    /// the target (HEL-166).
+    ///
+    /// A container's seek lands where its index says. MPEG-TS has no index:
+    /// libavformat binary-searches the PES timestamps (`mpegts_get_dts`,
+    /// whose own source carries a "FIXME keyframe?" on the index entries it
+    /// synthesises) and stops at whatever packet carries the nearest one,
+    /// which is mid-GOP as often as not. libavcodec decodes on from there
+    /// without complaining; `AVSampleBufferVideoRenderer` does not, and the
+    /// first sample after the flush came back as kVTVideoDecoderBadDataErr
+    /// (-8969), which the delivery ladder reads as `.undecodable`. A
+    /// downloaded progressive transcode that plays perfectly from the start
+    /// fell to a server transcode as soon as it was resumed.
+    ///
+    /// At or before the target is what the rest of the engine expects of a
+    /// seek: `PlaybackClockAnchor` keeps the clock on the requested time and
+    /// the audio admission floor drops the run-in, so an early landing costs
+    /// a short decode burst, while a late one would silently skip content.
+    ///
+    /// Only for containers the demuxer reads as one seekable byte stream: a
+    /// file by path, the direct-play cache, a disc image. An `AVFMT_NOFILE`
+    /// demuxer fetches its own media, and HLS in particular seeks to a
+    /// segment boundary, a keyframe by construction, so proving it would cost
+    /// a second fetch of the segment.
+    private func alignLandingToKeyframe(_ ctx: UnsafeMutablePointer<AVFormatContext>, target: Int64) {
+        guard videoRandomAccessCodec != nil, videoStreamIndex >= 0,
+              let format = ctx.pointee.iformat, format.pointee.flags & noFileFormatFlag == 0,
+              let byteStream = ctx.pointee.pb, byteStream.pointee.seekable != 0,
+              let probe = av_packet_alloc() else { return }
+        var owned: UnsafeMutablePointer<AVPacket>? = probe
+        defer { av_packet_free(&owned) }
+        // The ordinary landing is a keyframe and pays one repositioning for
+        // the packets this read.
+        guard landingIsMidGOP(ctx, probe: probe) else {
+            _ = reposition(ctx, to: target)
+            return
+        }
+        let ticksPerSecond = Double(videoTimeBase.den) / Double(max(videoTimeBase.num, 1))
+        // Container clock throughout: `target` still carries the stream's
+        // origin, and packets are read here before it is taken off them.
+        let origin = streamStartOffsets[videoStreamIndex] ?? 0
+        let margin = Int64(Self.landingSeekMargin * ticksPerSecond)
+        for window in Self.landingSearchWindows {
+            let from = max(target - Int64(window * ticksPerSecond), origin)
+            guard reposition(ctx, to: from) >= 0 else { break }
+            if let keyframe = lastKeyframe(ctx, probe: probe, notAfter: target),
+               reposition(ctx, to: max(keyframe - margin, origin)) >= 0 {
+                return
+            }
+            if from == origin { break }
+        }
+        // No keyframe within reach: the read path drops forward to the next
+        // one instead, which is late but decodable.
+        _ = reposition(ctx, to: target)
+    }
+
+    /// Whether the first video packet this landing produces is one no decoder
+    /// can be started on. Reading stops there; the caller repositions.
+    private func landingIsMidGOP(
+        _ ctx: UnsafeMutablePointer<AVFormatContext>,
+        probe: UnsafeMutablePointer<AVPacket>
+    ) -> Bool {
+        var packets = 0
+        while packets < Self.landingProbePacketBudget, !isInterrupted {
+            guard av_read_frame(ctx, probe) >= 0 else { return false }
+            packets += 1
+            let isVideo = probe.pointee.stream_index == videoStreamIndex
+            let isKeyframe = probe.pointee.flags & keyPacketFlag != 0
+            av_packet_unref(probe)
+            if isVideo { return !isKeyframe }
+        }
+        return false
+    }
+
+    /// The decode stamp of the last video keyframe presented at or before
+    /// `target`, reading forward from wherever the caller left the cursor.
+    ///
+    /// The container's key flag is the candidate; the post-seek filter still
+    /// classifies the packet the cursor ends up on, so an open GOP keeps its
+    /// leading-picture drop (HEL-151). Presentation decides whether a
+    /// keyframe is early enough, decode decides where to seek: the search a
+    /// container without an index runs compares decode stamps.
+    private func lastKeyframe(
+        _ ctx: UnsafeMutablePointer<AVFormatContext>,
+        probe: UnsafeMutablePointer<AVPacket>,
+        notAfter target: Int64
+    ) -> Int64? {
+        var packets = 0
+        var latest: Int64?
+        while packets < Self.landingSearchPacketBudget, !isInterrupted {
+            guard av_read_frame(ctx, probe) >= 0 else { break }
+            packets += 1
+            let isVideo = probe.pointee.stream_index == videoStreamIndex
+            let isKeyframe = probe.pointee.flags & keyPacketFlag != 0
+            let presentation = Self.presentationTimestamp(probe)
+            let decode = probe.pointee.dts != avNoPTS ? probe.pointee.dts : presentation
+            av_packet_unref(probe)
+            guard isVideo, let presentation else { continue }
+            if presentation > target { break }
+            if isKeyframe { latest = decode ?? presentation }
+        }
+        return latest
     }
 
     /// `av_read_frame` with the clock around it. This is the transport: on a
@@ -980,6 +1101,9 @@ nonisolated final class FFmpegDemuxer {
         /// Nothing has been read since the seek: the next video packet is
         /// wherever the decoder is about to be restarted.
         case awaitingAnchor
+        /// The container put the cursor inside a GOP (HEL-166) and video is
+        /// being dropped until a picture a decoder can start on.
+        case droppingToKeyframe(dropped: Int)
         /// The seek landed on an *open* GOP — a picture the container flags
         /// as a keyframe, that a decoder can start on, but that has pictures
         /// behind it in decode order presented *before* it. Those reference
@@ -1019,33 +1143,9 @@ nonisolated final class FFmpegDemuxer {
         case .idle:
             return .keep
         case .awaitingAnchor:
-            postSeekVideoFilter = .idle
-            guard let codec = videoRandomAccessCodec,
-                  let lengthSize = videoPayloadNALLengthSize,
-                  let anchor = Self.presentationTimestamp(packet) else { return .keep }
-            let isStartPoint: Bool? = if let payload {
-                payload.withUnsafeBytes {
-                    VideoRandomAccessPoint.isDecoderStartPoint(
-                        lengthPrefixed: $0, lengthSize: lengthSize, codec: codec
-                    )
-                }
-            } else if let data = packet.pointee.data {
-                VideoRandomAccessPoint.isDecoderStartPoint(
-                    lengthPrefixed: UnsafeRawBufferPointer(
-                        start: data, count: Int(packet.pointee.size)
-                    ),
-                    lengthSize: lengthSize,
-                    codec: codec
-                )
-            } else {
-                nil
-            }
-            // nil is "cannot tell", and a payload this cannot read must not
-            // be acted on. false is the open GOP.
-            if isStartPoint == false {
-                postSeekVideoFilter = .droppingLeadingPictures(anchor: anchor, dropped: 0)
-            }
-            return .keep
+            return anchorDecision(packet: packet, payload: payload, dropped: 0)
+        case .droppingToKeyframe(let dropped):
+            return anchorDecision(packet: packet, payload: payload, dropped: dropped)
         case .droppingLeadingPictures(let anchor, let dropped):
             guard let pts = Self.presentationTimestamp(packet), dropped < Self.leadingPictureDropLimit else {
                 postSeekVideoFilter = .idle
@@ -1066,6 +1166,68 @@ nonisolated final class FFmpegDemuxer {
             }
             postSeekVideoFilter = .droppingLeadingPictures(anchor: anchor, dropped: dropped + 1)
             return .drop
+        }
+    }
+
+    /// How many video packets the keyframe search may drop before it gives up
+    /// and lets the stream through. A GOP is a second or two of video and the
+    /// alignment has usually placed the cursor on the keyframe already; this
+    /// only exists so a stream whose keyframes are never flagged cannot lose
+    /// its video track.
+    private static let keyframeSearchDropLimit = 600
+
+    /// Classifies the first video packet a seek is willing to deliver, and
+    /// keeps dropping while the container is still inside a GOP.
+    private func anchorDecision(
+        packet: UnsafeMutablePointer<AVPacket>,
+        payload: Data?,
+        dropped: Int
+    ) -> PostSeekVideoDecision {
+        postSeekVideoFilter = .idle
+        guard let codec = videoRandomAccessCodec,
+              let lengthSize = videoPayloadNALLengthSize,
+              let anchor = Self.presentationTimestamp(packet) else { return .keep }
+        let isStartPoint: Bool? = if let payload {
+            payload.withUnsafeBytes {
+                VideoRandomAccessPoint.isDecoderStartPoint(
+                    lengthPrefixed: $0, lengthSize: lengthSize, codec: codec
+                )
+            }
+        } else if let data = packet.pointee.data {
+            VideoRandomAccessPoint.isDecoderStartPoint(
+                lengthPrefixed: UnsafeRawBufferPointer(
+                    start: data, count: Int(packet.pointee.size)
+                ),
+                lengthSize: lengthSize,
+                codec: codec
+            )
+        } else {
+            nil
+        }
+        switch isStartPoint {
+        case .some(false) where packet.pointee.flags & keyPacketFlag == 0:
+            // Not a start point and not even a picture the container calls a
+            // keyframe: the seek landed inside a GOP (HEL-166). Everything
+            // here references pictures the renderer's flush destroyed, so it
+            // is dropped until the GOP that can be started on.
+            guard dropped < Self.keyframeSearchDropLimit else { return .keep }
+            if ProcessCPUTrace.enabled, dropped == 0 {
+                print(String(
+                    format: "SeekMidGOPLanding at=%.3f",
+                    Double(anchor) * Double(videoTimeBase.num) / Double(max(videoTimeBase.den, 1))
+                ))
+            }
+            postSeekVideoFilter = .droppingToKeyframe(dropped: dropped + 1)
+            return .drop
+        case .some(false):
+            // A keyframe that is not a start point is the open GOP: keep it
+            // and drop the pictures presented before it (HEL-151).
+            postSeekVideoFilter = .droppingLeadingPictures(anchor: anchor, dropped: 0)
+            return .keep
+        default:
+            // true is an IDR/IRAP, the clean start. nil is "cannot tell", and
+            // a payload this cannot read must not be acted on.
+            return .keep
         }
     }
 
