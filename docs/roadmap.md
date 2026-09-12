@@ -49,14 +49,19 @@ not new feature requests or a live Jira status report:
 
 ## Next
 
-1. **1080i H.264 direct play (HEL-127 remainder).** Add a measured
+1. **Downloads completeness (HEL-166, later phases).** Season and series
+   batch downloads, subtitle sidecars, chapters and trickplay offline,
+   auto-delete after watching, then smart next-episode downloads under their
+   own storage budget. The MVP (single films and episodes, quality choice,
+   offline playback with resume) lands in build 100.
+2. **1080i H.264 direct play (HEL-127 remainder).** Add a measured
    pixel-buffer deinterlacing stage for the hardware path.
-2. **Live TV.** Guide and channels for servers that provide them; substantial
+3. **Live TV.** Guide and channels for servers that provide them; substantial
    product work, with no ticket recorded here yet.
-3. **Route-loss responsiveness (HEL-149 follow-up).** Investigate the recorded
+4. **Route-loss responsiveness (HEL-149 follow-up).** Investigate the recorded
    862 ms main-actor block when removing AirPods while paused. Keep it separate
    from the already-measured connection/re-prime behavior.
-4. **iPhone mini player.** Revisit after the PiP-on-exit behavior has been used
+5. **iPhone mini player.** Revisit after the PiP-on-exit behavior has been used
    on physical devices.
 
 Potential later work: a server plugin for fetch-only subtitle search without
@@ -70,7 +75,9 @@ test support. It should not be represented as a viewer-facing feature.
 
 ## Deliberate non-goals
 
-- Offline downloads: the playback cache is transient and discarded on exit.
+- Offline downloads on Apple TV: tvOS gives an app no persistent storage
+  guarantee. iPhone and iPad downloads (HEL-166) are a separate owner from
+  the playback cache, which stays transient and is discarded on exit.
 - A second playback engine: all playback stays behind `PlayerEngine`.
 - A direct subtitle-provider integration: search stays with the selected
   Jellyfin server and its administrator-configured providers.
