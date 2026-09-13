@@ -19,6 +19,9 @@ screen-specific copies of its values.
 | `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad windows |
 | `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: the portrait poster hero's ceiling as a share of the window height, and how far the metadata block rises over it |
 | `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
+| `detailBackdropHeroShare` | Not used | 0.6: the portrait hero's height as a share of the window for the landscape key art |
+| `detailBackdropRequestWidth` / `detailBackdropDecodeSize` | 1920 request | 1920 / 1920: the key art is decoded at the width it was requested at, so a landscape phone hero is never decoded smaller and upscaled soft |
+| `detailCircleActionSize` | Not used | 50: diameter of the phone's circular detail actions, the large control height |
 | `detailPosterAmbientBlur` | Not used | 36: blur of the poster copy filling the sides of a landscape hero |
 | `detailPosterAmbientDecodeSize` | 240 | Longest edge of that blurred copy's decode, shared |
 | `detailPlayButtonMaxWidth` / `detailLandscapePlayButtonMaxWidth` | Not used | 360 / 260: the phone's Play pill cap in portrait and in the landscape row |
@@ -84,18 +87,28 @@ need an explicit appropriate control style. Test focused and unfocused states.
 - **Details:** use `DetailPageScaffold`, `DetailMetadataHeader`,
   `AdaptiveActionStack`, and `MetadataFlowLayout`. Reuse title art and cast
   components; the shared scaffolding serves Jellyfin and Seerr screens. On a
-  phone or a compact-width iPad window the poster is the hero and fades into
-  the page (HEL-169). Portrait anchors it at its top edge and centres the
-  title, facts, a wide Play button (capped at `detailPlayButtonMaxWidth`) and
-  the circular actions over its lower part, with the whole synopsis below.
-  Landscape shows the whole poster at the window's height, centred over a
-  blurred and dimmed copy of itself that fills the sides
-  (`detailPosterAmbientBlur`, `detailPosterAmbientDecodeSize`), and puts
-  title art, the actions and a smaller Play on one row along its lower
-  part, the facts and synopsis following below the fold. On a phone every secondary
+  phone or a compact-width iPad window the landscape key art is the hero
+  for both orientations, as Infuse frames it (HEL-169): portrait fills
+  `detailBackdropHeroShare` of the height with the art's middle, cropped at
+  the sides, and centres the title, facts, a wide Play button (capped at
+  `detailPlayButtonMaxWidth`) and the circular actions over its lower part,
+  with the whole synopsis below; landscape fills the window with the art
+  edge to edge, centred, and since a phone's window is wider than 16:9 a
+  little of the top and bottom is trimmed rather than the sides padded, and
+  puts title art, the actions and a smaller Play on one row along its lower
+  part, the facts and synopsis following below the fold. A title with no
+  backdrop falls back to its poster: top-anchored in portrait, and in
+  landscape shown whole over a blurred and dimmed copy of itself
+  (`detailPosterAmbientBlur`, `detailPosterAmbientDecodeSize`). On a phone every secondary
   control in that row is a glass circle, From Beginning included, so the
   row never folds into a column, and the "Resume from" caption sits under
-  the Resume pill rather than under the block. Regular-width iPad windows
+  the Resume pill rather than under the block. Those circles are
+  `DetailCircleButton`, a plain button under `.glassEffect(.regular.interactive(), in: .circle)`
+  rather than `.buttonStyle(.glass)` with a circular border shape, because
+  that style's pressed highlight is a capsule sized to the label and showed
+  through the circle as a lozenge (iOS 26.0 and 26.5). `DownloadControl`'s
+  menus still use the border-shape form and have not been checked for the
+  same artefact. Regular-width iPad windows
   keep the landscape backdrop, with more of it above the title, and the
   leading column. tvOS keeps its
   own order. Series playback actions describe the episode that will play.
