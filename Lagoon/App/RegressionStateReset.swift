@@ -30,6 +30,7 @@ nonisolated enum RegressionStateReset {
         "library.selection.",
         "subtitles.preferences.",
         "playback.trackPreferences.",
+        ThemeStore.keyPrefix,
         "home.sectionPreferences.",
         "search.recents",
         "seerr.",
