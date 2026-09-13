@@ -1,13 +1,25 @@
 import SwiftUI
 
+/// A Seerr title's page: the same composition as a library title's
+/// (`DetailPageScaffold`, `DetailMetadataHeader`, `DetailActionLayout`,
+/// `CastStrip`), with Seerr's request state where a library title has Play
+/// (HEL-174). The artwork is TMDB's: posters and backdrops through Seerr,
+/// the title logo through `TMDBLogoProvider`, or the Jellyfin server's own
+/// logo once the title is in the library.
 struct SeerrMediaDetailView: View {
     let mediaID: Int
     let mediaType: SeerrMediaType
 
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
     @State private var details: SeerrMediaDetails?
     @State private var jellyfinItem: MediaItem?
+    @State private var recommendations: [SeerrDiscoverResult] = []
+    @State private var logoPath: String?
     @State private var isLoading = true
     @State private var isRequesting = false
     @State private var errorMessage: String?
@@ -23,24 +35,28 @@ struct SeerrMediaDetailView: View {
                 ErrorStateView(message: errorMessage) { reloadID += 1 }
             } else if let details {
                 DetailPageScaffold(
-                    backdropURL: SeerrClient.imageURL(path: details.backdropPath, width: 1280)
+                    backdropURL: SeerrClient.imageURL(path: details.backdropPath, width: Metrics.detailBackdropRequestWidth),
+                    posterURL: SeerrClient.imageURL(path: details.posterPath, width: Metrics.detailPosterRequestWidth)
                 ) {
                     DetailMetadataHeader(
                         subtitle: details.tagline,
                         factTokens: factTokens(details),
+                        officialRating: details.officialRating(),
                         genres: details.genres?.map(\.name) ?? [],
                         communityRating: displayRating(details.voteAverage),
                         overview: details.overview
                     ) {
-                        Text(details.displayTitle)
-                            .font(.largeTitle.bold())
-                            #if os(tvOS)
-                            .lineLimit(2)
-                            #endif
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityAddTraits(.isHeader)
+                        titleArt(details)
                     } buttons: {
-                        action(details)
+                        DetailActionLayout {
+                            primaryAction(details)
+                        } secondary: {
+                            secondaryActions(details)
+                        }
+                    }
+                    CastStrip(credits: castCredits(details))
+                    if !recommendations.isEmpty {
+                        SeerrMediaRail(title: String(localized: "More Like This"), items: recommendations)
                     }
                 }
             }
@@ -83,16 +99,65 @@ struct SeerrMediaDetailView: View {
         .accessibilityIdentifier("seerr.detail.\(mediaType.rawValue).\(mediaID)")
     }
 
+    /// The title as artwork where anyone has it: the Jellyfin server's logo
+    /// once the title is in the library, TMDB's otherwise, and the name in
+    /// type when neither has one — the same fallback a library title makes.
+    private func titleArt(_ details: SeerrMediaDetails) -> some View {
+        #if os(iOS)
+        let alignment = DetailLayout.titleAlignment(horizontalSizeClass, verticalSizeClass)
+        #else
+        let alignment: HorizontalAlignment = .leading
+        #endif
+        return TitleArtImage(
+            url: titleArtURL,
+            title: details.displayTitle,
+            alignment: alignment
+        )
+    }
+
+    private var titleArtURL: URL? {
+        if let jellyfinItem,
+           let url = session.client.imageURL(for: jellyfinItem, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)) {
+            return url
+        }
+        return SeerrClient.imageURL(path: logoPath, width: Int(Metrics.logoMaxWidth * 2))
+    }
+
+    /// Actors in billing order, then the crew TMDB lists; the strip itself
+    /// drops anyone without a picture.
+    private func castCredits(_ details: SeerrMediaDetails) -> [CastCredit] {
+        guard let credits = details.credits else { return [] }
+        let portraitWidth = Int(Metrics.castPortraitSize * 2)
+        let cast = credits.cast
+            .sorted { ($0.order ?? .max) < ($1.order ?? .max) }
+            .map { member in
+                CastCredit(
+                    id: member.creditId,
+                    name: member.name ?? "",
+                    credit: member.character.flatMap { $0.isEmpty ? nil : $0 },
+                    imageURL: SeerrClient.imageURL(path: member.profilePath, width: portraitWidth)
+                )
+            }
+        let crew = credits.crew.map { member in
+            CastCredit(
+                id: member.creditId,
+                name: member.name ?? "",
+                credit: member.job.flatMap { $0.isEmpty ? nil : $0 } ?? member.department,
+                imageURL: SeerrClient.imageURL(path: member.profilePath, width: portraitWidth)
+            )
+        }
+        return cast + crew
+    }
+
+    /// What the page is for: opening the title in the library when it is
+    /// there, asking for it when it is not, and otherwise saying where the
+    /// request has got to. Styled as the library page styles Play.
     @ViewBuilder
-    private func action(_ details: SeerrMediaDetails) -> some View {
+    private func primaryAction(_ details: SeerrMediaDetails) -> some View {
         switch availability {
         case .available:
             if let jellyfinItem {
-                NavigationLink(value: SeerrNavigationRoute.jellyfinItem(jellyfinItem)) {
-                    Label("Open in Lagoon", systemImage: "play.fill")
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("seerr.detail.open")
+                openInLagoonButton(jellyfinItem)
             } else {
                 statusButton(
                     title: "Available in Jellyfin",
@@ -124,26 +189,11 @@ struct SeerrMediaDetailView: View {
             }
         case .partiallyAvailable:
             if let jellyfinItem {
-                NavigationLink(value: SeerrNavigationRoute.jellyfinItem(jellyfinItem)) {
-                    Label("Open in Lagoon", systemImage: "play.fill")
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("seerr.detail.open")
-            }
-            if mediaType == .tv, seerr.user?.canRequest(.tv) == true {
-                Button {
-                    seasonRequestDetails = details
-                } label: {
-                    Label("Request More Seasons", systemImage: "plus")
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("seerr.detail.request")
+                openInLagoonButton(jellyfinItem)
+            } else if canRequestMoreSeasons {
+                requestMoreSeasonsButton(details, isPrimary: true)
             } else {
-                statusButton(
-                    title: availability.title,
-                    symbol: "circle.lefthalf.filled",
-                    message: "Some of this title is already available in your Jellyfin library."
-                )
+                partiallyAvailableStatusButton
             }
         case .blocklisted:
             // An administrator who can lift the block should be able to do it
@@ -162,9 +212,10 @@ struct SeerrMediaDetailView: View {
                         ProgressView()
                     } else {
                         Label("Unblock", systemImage: "hand.raised.slash")
+                            .detailPrimaryLabel()
                     }
                 }
-                .buttonStyle(.glass)
+                .detailPrimaryButton()
                 .disabled(isRequesting)
                 .accessibilityIdentifier("seerr.detail.unblock")
             } else {
@@ -184,9 +235,14 @@ struct SeerrMediaDetailView: View {
                             confirmsMovieRequest: true
                         )
                     } label: {
-                        if isRequesting { ProgressView() } else { Label("Request Movie", systemImage: "plus") }
+                        if isRequesting {
+                            ProgressView()
+                        } else {
+                            Label("Request Movie", systemImage: "plus")
+                                .detailPrimaryLabel()
+                        }
                     }
-                    .buttonStyle(.glass)
+                    .detailPrimaryButton()
                     .disabled(isRequesting)
                     .accessibilityIdentifier("seerr.detail.request")
                 } else {
@@ -194,8 +250,9 @@ struct SeerrMediaDetailView: View {
                         seasonRequestDetails = details
                     } label: {
                         Label("Choose Seasons", systemImage: "plus")
+                            .detailPrimaryLabel()
                     }
-                    .buttonStyle(.glass)
+                    .detailPrimaryButton()
                     .accessibilityIdentifier("seerr.detail.request")
                 }
             } else {
@@ -208,6 +265,62 @@ struct SeerrMediaDetailView: View {
         }
     }
 
+    /// Beside Open in Lagoon on a partly available show: the way to ask
+    /// for the rest of it, or the fact that only some of it is here.
+    @ViewBuilder
+    private func secondaryActions(_ details: SeerrMediaDetails) -> some View {
+        if availability == .partiallyAvailable, jellyfinItem != nil {
+            if canRequestMoreSeasons {
+                requestMoreSeasonsButton(details)
+            } else {
+                partiallyAvailableStatusButton
+            }
+        }
+    }
+
+    private func openInLagoonButton(_ item: MediaItem) -> some View {
+        NavigationLink(value: SeerrNavigationRoute.jellyfinItem(item)) {
+            Label("Open in Lagoon", systemImage: "play.fill")
+                .detailPrimaryLabel()
+        }
+        .detailPrimaryButton()
+        .accessibilityIdentifier("seerr.detail.open")
+    }
+
+    private var canRequestMoreSeasons: Bool {
+        mediaType == .tv && seerr.user?.canRequest(.tv) == true
+    }
+
+    /// The page's one big button when nothing is playable yet; a plain
+    /// glass pill beside Open in Lagoon otherwise.
+    @ViewBuilder
+    private func requestMoreSeasonsButton(_ details: SeerrMediaDetails, isPrimary: Bool = false) -> some View {
+        let button = Button {
+            seasonRequestDetails = details
+        } label: {
+            if isPrimary {
+                Label("Request More Seasons", systemImage: "plus")
+                    .detailPrimaryLabel()
+            } else {
+                Label("Request More Seasons", systemImage: "plus")
+            }
+        }
+        .accessibilityIdentifier("seerr.detail.request")
+        if isPrimary {
+            button.detailPrimaryButton()
+        } else {
+            button.buttonStyle(.glass)
+        }
+    }
+
+    private var partiallyAvailableStatusButton: some View {
+        statusButton(
+            title: availability.title,
+            symbol: "circle.lefthalf.filled",
+            message: "Some of this title is already available in your Jellyfin library."
+        )
+    }
+
     private func statusButton(
         title: String,
         symbol: String,
@@ -218,8 +331,9 @@ struct SeerrMediaDetailView: View {
             popup = Popup(title: title, message: message)
         } label: {
             SeerrStatusLabel(title: title, symbol: symbol, motion: motion)
+                .detailPrimaryLabel()
         }
-        .buttonStyle(.glass)
+        .detailPrimaryButton()
     }
 
     private var availability: SeerrAvailabilityStatus {
@@ -235,6 +349,15 @@ struct SeerrMediaDetailView: View {
             if !isRefresh { isLoading = false }
         }
         do {
+            // The recommendations and the logo describe the title, not its
+            // request state, so the first load fetches them alongside the
+            // details and the live refresh leaves them alone.
+            async let loadedRecommendations: [SeerrDiscoverResult]? = isRefresh
+                ? nil
+                : (try? await seerr.client.recommendations(id: mediaID, mediaType: mediaType))?.results
+            async let loadedLogoPath: String? = isRefresh
+                ? nil
+                : await TMDBLogoProvider.shared.logoPath(id: mediaID, mediaType: mediaType)
             let loaded = try await seerr.client.details(id: mediaID, mediaType: mediaType)
             let loadedJellyfinItem: MediaItem?
             if loaded.mediaInfo?.availability == .available || loaded.mediaInfo?.availability == .partiallyAvailable {
@@ -249,12 +372,17 @@ struct SeerrMediaDetailView: View {
             } else {
                 loadedJellyfinItem = nil
             }
+            let (newRecommendations, newLogoPath) = await (loadedRecommendations, loadedLogoPath)
             // Commit one coherent snapshot. If changing cadence cancels the
             // polling task, the page has already received every value from
             // this response rather than half of a terminal transition.
             guard !Task.isCancelled else { return }
             details = loaded
             jellyfinItem = loadedJellyfinItem
+            if !isRefresh {
+                recommendations = (newRecommendations ?? []).filter { $0.mediaType == .movie || $0.mediaType == .tv }
+                logoPath = newLogoPath
+            }
             errorMessage = nil
         } catch is CancellationError {
         } catch {
