@@ -20,7 +20,7 @@ struct RegressionStateResetTests {
             "session.expiredAccountIds", "server.url", "server.name",
             "libraries.acct", "library.selection.acct", "subtitles.preferences.acct",
             "playback.trackPreferences.acct", "home.sectionPreferences.acct",
-            "search.recents", "search.recents.acct",
+            "search.recents", "search.recents.acct", "appearance.theme.acct",
             "seerr.server.https://jellyfin.example", "seerr.pendingCookieRemoval",
         ]
         let appWide = ["playback.skipMode", "playback.autoplayMode", "subtitles.captionStyle", "debug.frameLossBench"]
