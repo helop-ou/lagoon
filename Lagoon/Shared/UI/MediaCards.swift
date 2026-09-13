@@ -321,14 +321,35 @@ struct ItemProgressBar: View {
 struct DownloadedMark: View {
     var body: some View {
         Image(systemName: "arrow.down.circle.fill")
-            .font(.system(size: Metrics.downloadMarkSize * 0.6))
-            .foregroundStyle(.white)
-            .frame(width: Metrics.downloadMarkSize, height: Metrics.downloadMarkSize)
+            .font(.system(size: Metrics.cardMarkSize * 0.6))
+            .cardMark()
+    }
+}
+#endif
+
+/// A small badge over an episode the viewer has watched (HEL-175): a
+/// checkmark on the same dark disc as `DownloadedMark`, so the two read as
+/// one family when an episode carries both. A disc and weight rather than a
+/// colour, like every other watched state in the app (HEL-50), and only
+/// once the server says played: the progress bar covers the time before.
+struct WatchedMark: View {
+    var body: some View {
+        Image(systemName: "checkmark")
+            .font(.system(size: Metrics.cardMarkSize * 0.5, weight: .bold))
+            .cardMark()
+    }
+}
+
+private extension View {
+    /// The badge's disc. The parent card's accessibility label carries the
+    /// meaning, so the glyph itself is silent.
+    func cardMark() -> some View {
+        foregroundStyle(.white)
+            .frame(width: Metrics.cardMarkSize, height: Metrics.cardMarkSize)
             .background(Circle().fill(.black.opacity(0.6)))
             .accessibilityHidden(true)
     }
 }
-#endif
 
 extension MediaItem {
     /// Fractional watch progress, or nil when there's nothing worth drawing —

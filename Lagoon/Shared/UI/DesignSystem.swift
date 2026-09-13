@@ -233,6 +233,17 @@ enum Metrics {
     /// iOS hero clipping; tvOS heroes use the native card shape.
     static let heroCornerRadius: CGFloat = 16
     static let progressBarHeight: CGFloat = 6
+    /// A card's small round badges: "downloaded" and "watched" (HEL-175).
+    /// Sized to read at each platform's viewing distance, and equal to the
+    /// download control's `downloadMarkSize` on iOS so the badge and the
+    /// ring stay one family.
+    #if os(tvOS)
+    static let cardMarkSize: CGFloat = 28
+    static let cardMarkInset: CGFloat = Space.s
+    #else
+    static let cardMarkSize: CGFloat = 18
+    static let cardMarkInset: CGFloat = Space.xs
+    #endif
     static let touchTarget: CGFloat = 44
 }
 
