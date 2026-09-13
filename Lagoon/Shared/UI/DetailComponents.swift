@@ -17,8 +17,10 @@ struct DetailBackdropView: View {
     var posterHeight: CGFloat = 0
     /// Which part of the poster the hero shows. Its top in a portrait
     /// window, so the artwork's own composition survives and only the
-    /// bottom, where the fade sits anyway, is lost; its middle in a
-    /// landscape window, where the hero is a band across the poster.
+    /// bottom, where the fade sits anyway, is lost. Centre means a
+    /// landscape window, where the whole poster is shown at the window's
+    /// height over a blurred copy of itself filling the sides, as Infuse
+    /// does, rather than a band cropped out of its middle.
     var posterAnchor: Alignment = .top
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -71,13 +73,41 @@ struct DetailBackdropView: View {
     }
 
     private var posterHero: some View {
-        CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
-            image.resizable().scaledToFill()
-        } placeholder: {
-            Color.black
+        GeometryReader { proxy in
+            ZStack {
+                if posterAnchor == .center {
+                    // Landscape: the sides take a soft, dimmed copy of the
+                    // poster, and the poster itself stands whole in the
+                    // middle. Both layers get the hero's own frame, so the
+                    // fill's overflow never becomes the fit's proposal.
+                    CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterAmbientDecodeSize) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Color.black
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .blur(radius: Metrics.detailPosterAmbientBlur)
+                    .overlay(Color.black.opacity(0.35))
+                    CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
+                        image.resizable().scaledToFit()
+                    } placeholder: {
+                        Color.clear
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                } else {
+                    CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Color.black
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: posterAnchor)
+                    .clipped()
+                }
+            }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: posterHeight, alignment: posterAnchor)
+        .frame(height: posterHeight)
         .clipped()
         .overlay(posterFade)
         .animation(.easeInOut(duration: Motion.crossfade), value: posterURL)
