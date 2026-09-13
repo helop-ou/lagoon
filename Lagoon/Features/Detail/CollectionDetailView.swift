@@ -118,7 +118,7 @@ struct CollectionDetailView: View {
             ? displayed
             : viewModel.items.first { $0.backdropImageTags?.isEmpty == false }
         return source.flatMap {
-            session.client.imageURL(for: $0, kind: .backdrop, maxWidth: 1920)
+            session.client.imageURL(for: $0, kind: .backdrop, maxWidth: Metrics.detailBackdropRequestWidth)
         }
     }
 

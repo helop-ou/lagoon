@@ -99,7 +99,7 @@ struct SeriesDetailView: View {
 
     var body: some View {
         DetailPageScaffold(
-            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: 1920),
+            backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: Metrics.detailBackdropRequestWidth),
             posterURL: session.client.imageURL(for: displayed, kind: .poster, maxWidth: Metrics.detailPosterRequestWidth)
         ) {
             DetailHeader(item: displayed, upNext: subject) { actions }

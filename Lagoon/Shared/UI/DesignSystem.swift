@@ -93,6 +93,10 @@ enum Metrics {
     /// is never pushed off-screen. On a phone this cap is what binds, and
     /// the hero is the poster's upper part rather than the whole image.
     static let detailPosterHeroMaxShare: CGFloat = 0.72
+    /// The landscape artwork as a portrait hero: this share of the window
+    /// height, filled and centred, so the middle of the key art shows and
+    /// the sides are cropped the way Infuse frames the same image.
+    static let detailBackdropHeroShare: CGFloat = 0.6
     /// How far the metadata block rises over the poster hero, as a share of
     /// the poster's height. The fade beneath the block is drawn to match.
     static let detailPosterContentOverlap: CGFloat = 0.36
@@ -147,6 +151,12 @@ enum Metrics {
     /// unconditionally and the scaffold ignores it on tvOS.
     static let detailPosterRequestWidth = 1200
     static let detailPosterDecodeSize = 1800
+    /// The landscape key art is requested at `detailBackdropRequestWidth`
+    /// and decoded to match, so a landscape phone hero, which shows the
+    /// whole width, is not decoded smaller than the server sent it and
+    /// then upscaled soft.
+    static let detailBackdropRequestWidth = 1920
+    static let detailBackdropDecodeSize = 1920
     /// The blurred ambient copy needs no detail; a small decode keeps the
     /// blur cheap.
     static let detailPosterAmbientDecodeSize = 240

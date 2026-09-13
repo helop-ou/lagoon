@@ -72,15 +72,22 @@ struct DetailBackdropView: View {
         posterURL != nil && posterHeight > 0
     }
 
+    /// One image for both orientations, as Infuse frames it: the landscape
+    /// key art, centred and cropped at the sides in portrait, shown whole
+    /// in landscape. The portrait poster only stands in for a title that
+    /// has no backdrop.
+    private var heroURL: URL? { url ?? posterURL }
+    private var heroIsPoster: Bool { url == nil }
+
     private var posterHero: some View {
         GeometryReader { proxy in
             ZStack {
-                if posterAnchor == .center {
-                    // Landscape: the sides take a soft, dimmed copy of the
-                    // poster, and the poster itself stands whole in the
+                if heroIsPoster && posterAnchor == .center {
+                    // A poster in a landscape window: the sides take a soft,
+                    // dimmed copy of it and the poster stands whole in the
                     // middle. Both layers get the hero's own frame, so the
                     // fill's overflow never becomes the fit's proposal.
-                    CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterAmbientDecodeSize) { image in
+                    CachedAsyncImage(url: heroURL, maxPixelSize: Metrics.detailPosterAmbientDecodeSize) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
                         Color.black
@@ -89,19 +96,29 @@ struct DetailBackdropView: View {
                     .clipped()
                     .blur(radius: Metrics.detailPosterAmbientBlur)
                     .overlay(Color.black.opacity(0.35))
-                    CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
+                    CachedAsyncImage(url: heroURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
                         image.resizable().scaledToFit()
                     } placeholder: {
                         Color.clear
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
                 } else {
-                    CachedAsyncImage(url: posterURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
+                    // The key art fills the hero edge to edge, centred: its
+                    // middle in portrait, cropped at the sides, and in
+                    // landscape the whole width with a little trimmed from the
+                    // top and bottom, since a phone's window is wider than
+                    // 16:9. A poster fallback keeps its top in portrait so its
+                    // composition survives. The decode budget follows the
+                    // image: the backdrop is requested wider than the poster.
+                    CachedAsyncImage(
+                        url: heroURL,
+                        maxPixelSize: heroIsPoster ? Metrics.detailPosterDecodeSize : Metrics.detailBackdropDecodeSize
+                    ) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
                         Color.black
                     }
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: posterAnchor)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: heroIsPoster ? posterAnchor : .center)
                     .clipped()
                 }
             }
@@ -110,7 +127,7 @@ struct DetailBackdropView: View {
         .frame(height: posterHeight)
         .clipped()
         .overlay(posterFade)
-        .animation(.easeInOut(duration: Motion.crossfade), value: posterURL)
+        .animation(.easeInOut(duration: Motion.crossfade), value: heroURL)
     }
 
     /// Photographic at the top, a reading surface by the time the title
@@ -285,6 +302,9 @@ struct DetailPageScaffold<Content: View>: View {
         guard posterURL != nil, !DetailLayout.usesLeadingColumn(horizontalSizeClass) else { return 0 }
         if size.width > size.height {
             return (size.height + safeArea.top + safeArea.bottom).rounded()
+        }
+        if backdropURL != nil {
+            return (size.height * Metrics.detailBackdropHeroShare).rounded()
         }
         return min((size.width * 3 / 2).rounded(), (size.height * Metrics.detailPosterHeroMaxShare).rounded())
         #else
