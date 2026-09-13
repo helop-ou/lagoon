@@ -4,6 +4,10 @@ struct SeerrSettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
 
+    /// TMDB's attribution, required by its API terms: Discover's artwork and
+    /// title logos are TMDB's, reached through Seerr and directly (HEL-174).
+    static let serverFooter: LocalizedStringKey = "Seerr and Jellyseerr instances using the standard /api/v1 API are supported. Artwork and title logos come from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB."
+
     @State private var serverAddress = ""
     @State private var username = ""
     @State private var password = ""
@@ -63,7 +67,7 @@ struct SeerrSettingsView: View {
     private var tvContent: some View {
         TVSettingsSection(
             "Server",
-            footer: "Seerr and Jellyseerr instances using the standard /api/v1 API are supported."
+            footer: Self.serverFooter
         ) {
             if let url = seerr.configuredURL {
                 ServerConnectionInfoView(url: url)
@@ -117,7 +121,7 @@ struct SeerrSettingsView: View {
     #if !os(tvOS)
     private var touchContent: some View {
         Form {
-            Section("Server") {
+            Section {
                 if let url = seerr.configuredURL {
                     ServerConnectionInfoView(url: url)
                     if let version = seerr.status?.version {
@@ -134,6 +138,10 @@ struct SeerrSettingsView: View {
                         .disabled(serverAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isWorking)
                         .accessibilityIdentifier("settings.seerr.connect")
                 }
+            } header: {
+                Text("Server")
+            } footer: {
+                Text(Self.serverFooter)
             }
 
             if let errorMessage = errorMessage ?? seerr.errorMessage {
