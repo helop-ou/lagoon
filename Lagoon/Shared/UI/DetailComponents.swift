@@ -331,6 +331,19 @@ struct DetailPageScaffold<Content: View>: View {
 }
 
 #if os(iOS)
+extension VerticalAlignment {
+    /// The landscape phone's action row aligns on this: the Resume pill's
+    /// centre, which its resume caption hangs under, so the circles beside
+    /// it sit level with the pill rather than with the pill-and-caption
+    /// block. Views that set no guide fall back to their own centre.
+    private enum DetailPillCenter: AlignmentID {
+        static func defaultValue(in context: ViewDimensions) -> CGFloat {
+            context[VerticalAlignment.center]
+        }
+    }
+    static let detailPillCenter = VerticalAlignment(DetailPillCenter.self)
+}
+
 /// A glass circle for the phone's row of secondary detail actions (HEL-169).
 /// Built on the interactive glass effect rather than `.buttonStyle(.glass)`
 /// with a circular border shape: that style draws its pressed highlight as

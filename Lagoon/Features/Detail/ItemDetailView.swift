@@ -89,18 +89,12 @@ struct ItemDetailView: View {
 
     /// The actions and, once there is a resume point, where Resume starts
     /// from. Wide compositions keep that caption under the row; on a phone
-    /// it belongs to the Resume pill (HEL-169): directly under it in
-    /// portrait, under the trailing end of the landscape row, where the
-    /// pill sits.
+    /// it belongs to the Resume pill (HEL-169) and sits centred under it in
+    /// both orientations.
     @ViewBuilder
     private var playButtons: some View {
         #if os(iOS)
-        if usesLandscapeRow {
-            VStack(alignment: .trailing, spacing: Metrics.Space.xs) {
-                actions
-                resumeCaption
-            }
-        } else if !usesLeadingColumn {
+        if !usesLeadingColumn {
             actions
         } else {
             captionedActions
@@ -170,11 +164,18 @@ struct ItemDetailView: View {
             // line with the title art along the poster's lower part. Every
             // secondary control is a circle here, so the line never has to
             // fold.
-            HStack(spacing: Metrics.detailActionSpacing) {
+            // The circles align with the pill's centre, not the centre of
+            // the pill plus its resume caption, so the caption hangs under
+            // the pill alone and the row itself stays level.
+            HStack(alignment: .detailPillCenter, spacing: Metrics.detailActionSpacing) {
                 fromBeginningButton
                 actionRow
                 DownloadControl(item: displayed)
-                playButton
+                VStack(spacing: Metrics.Space.xs) {
+                    playButton
+                        .alignmentGuide(.detailPillCenter) { $0[VerticalAlignment.center] }
+                    resumeCaption
+                }
             }
         } else {
             // A portrait phone (HEL-169): one wide Play, the decision the
