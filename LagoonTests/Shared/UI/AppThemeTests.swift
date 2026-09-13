@@ -82,5 +82,15 @@ struct AppThemeTests {
         #expect(AppTheme.lagoon.palette.controlTint == nil)
         #expect(AppTheme.babyPink.palette.controlTint != nil)
         #expect(AppTheme.lagoon.palette.glow == .fallback)
+        #expect(AppTheme.lagoon.palette.artworkTint == nil)
+        #expect(AppTheme.babyPink.palette.artworkTint != nil)
+    }
+
+    @Test func artworkGlowsAreLeftAloneByTheBrandAndBlushedByPink() {
+        let artwork = ArtworkPalette(colors: [.red, .green, .blue])
+        #expect(AppTheme.lagoon.palette.glow(for: artwork) == artwork)
+        let blushed = AppTheme.babyPink.palette.glow(for: artwork)
+        #expect(blushed != artwork)
+        #expect(blushed.colors.count == artwork.colors.count)
     }
 }
