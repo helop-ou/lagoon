@@ -79,6 +79,17 @@ need an explicit appropriate control style. Test focused and unfocused states.
 - **Browsing:** reuse `MediaRail` and the existing media cards. Titles belong
   beneath posters. Keep horizontal gutters inside scroll content and leave
   focus padding intact. tvOS Library has five columns; iOS uses `PosterLayout`.
+  A row of destination or filter chips (Discover's Movies, Shows and
+  Requests; the Requests page's filters) stays one row on every screen: on
+  a phone it scrolls horizontally with the gutter as a scroll content margin
+  and no glyphs, never folding into a column (HEL-174); the TV keeps a fixed
+  row for its focus geometry.
+- **Title art:** `TitleArtView` shows a library title's Jellyfin logo,
+  `TitleArtImage` any logo URL, and both set the name in type when there is
+  none. Seerr titles get their logo from TMDB through `TMDBLogoProvider`
+  (see [Jellyfin API](jellyfin-api.md#tmdb-title-logos-hel-174)), on the
+  Discover hero and the Seerr detail page, with the Jellyfin logo preferred
+  once the title is in the library.
 - **Heroes:** use the contained banner, artwork wash, and existing native
   paging behavior. Keep the focused/tappable control stable while artwork
   transitions. Home and Discover share the taller iPad layout, with the
@@ -86,8 +97,18 @@ need an explicit appropriate control style. Test focused and unfocused states.
   further for Dynamic Type. Ambient glow uses the shared palette and
   `AmbientGlowView`.
 - **Details:** use `DetailPageScaffold`, `DetailMetadataHeader`,
-  `AdaptiveActionStack`, and `MetadataFlowLayout`. Reuse title art and cast
-  components; the shared scaffolding serves Jellyfin and Seerr screens. On a
+  `DetailActionLayout`, and `MetadataFlowLayout`. Reuse title art and cast
+  components; the shared scaffolding serves Jellyfin and Seerr screens, and
+  the Seerr page is the same composition with its request state where a
+  library title has Play (HEL-174). The actions block is `DetailActionLayout`:
+  one primary pill (`.detailPrimaryLabel()` and `.detailPrimaryButton()`
+  give Play, Resume, Request and Open in Lagoon the same `title3`,
+  extra-large, width-capped pill on touch), the secondary controls, and an
+  optional accessory (the series page's season picker) that joins the
+  secondary row on a phone and sits under the row on the TV and a wide iPad.
+  It lays out the four compositions once, so no page carries its own copy.
+  `CastStrip` takes Jellyfin people or ready-made `CastCredit`s, which is
+  how Seerr's TMDB credits reach the same strip. On a
   phone or a compact-width iPad window the landscape key art is the hero
   for both orientations, as Infuse frames it (HEL-169): portrait fills
   `detailBackdropHeroShare` of the height with the art's middle, cropped at

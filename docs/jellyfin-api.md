@@ -345,6 +345,40 @@ PlaybackInfo poll as a compatibility fallback. Playback position, renderers,
 selected audio, and the Now Playing session are not rebuilt. Forced and
 hearing-impaired metadata is preserved.
 
+## Seerr title details, cast and recommendations (HEL-174)
+
+A Seerr title's page reads `movie/{id}` or `tv/{id}` and uses more of the
+response than the request state: `credits.cast`/`credits.crew` (TMDB's
+billing, with `profilePath` for the headshot), a movie's `releases` and a
+show's `contentRatings` for the age rating, where the viewer's own region's
+certification is shown and the US one is the fallback, as Jellyfin's
+providers do. Those two blocks are snake_case on the wire, unlike the rest
+of Seerr, so their DTOs carry their own keys. "More Like This" is
+`movie/{id}/recommendations` or `tv/{id}/recommendations`, TMDB's
+recommendations relayed by Seerr; TMDB's `similar` list is keyword-matched
+and much weaker, so it is not used. Recommendations and the logo are fetched
+with the first load only; the live refresh re-reads the details alone.
+
+## TMDB title logos (HEL-174)
+
+Seerr relays TMDB's posters and backdrops and none of its logos, so Lagoon
+asks TMDB directly for the one thing Seerr cannot give: the title art on the
+Discover hero and the Seerr detail page. `TMDBLogoProvider` calls
+`https://api.themoviedb.org/3/{movie|tv}/{id}/images` with
+`include_image_language=<viewer's language>,en,null` and picks the best
+PNG logo in that order of preference (`TMDBLogoSelection`, pinned by
+`TMDBLogoSelectionTests`); SVG logos are skipped because the image loader
+cannot decode them. The path is turned into an image URL by
+`SeerrClient.imageURL`, the same TMDB image host the posters use. One
+lookup per title per session, with "no logo" remembered and a failed
+request not, so the next page that asks tries again.
+
+TMDB issues one API key per application. `TMDBConfiguration.apiKey` is that
+key, compiled in like the Sentry DSN; while it is empty the provider makes
+no request and every title keeps its name in type. `-tmdb.apiKey <key>`
+overrides it for a run. TMDB's terms require the attribution line that the
+Seerr settings page's server footer carries.
+
 ## App Transport Security (HEL-42)
 
 `LagoonInfo.plist` declares **`NSAllowsLocalNetworking` only** — the blanket
