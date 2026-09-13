@@ -19,6 +19,8 @@ screen-specific copies of its values.
 | `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad windows |
 | `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: the portrait poster hero's ceiling as a share of the window height, and how far the metadata block rises over it |
 | `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
+| `detailPosterAmbientBlur` | Not used | 36: blur of the poster copy filling the sides of a landscape hero |
+| `detailPosterAmbientDecodeSize` | 240 | Longest edge of that blurred copy's decode, shared |
 | `detailPlayButtonMaxWidth` / `detailLandscapePlayButtonMaxWidth` | Not used | 360 / 260: the phone's Play pill cap in portrait and in the landscape row |
 | `gridColumns` | 5 | Not used; the count follows the width (three across on a portrait phone) |
 | `downloadRingLineWidth` | Not used | 2.5: the download control's progress ring stroke |
@@ -86,9 +88,11 @@ need an explicit appropriate control style. Test focused and unfocused states.
   the page (HEL-169). Portrait anchors it at its top edge and centres the
   title, facts, a wide Play button (capped at `detailPlayButtonMaxWidth`) and
   the circular actions over its lower part, with the whole synopsis below.
-  Landscape fills the screen with the poster's middle band and puts title
-  art, the actions and a smaller Play on one row along its lower part, the
-  facts and synopsis following below the fold. On a phone every secondary
+  Landscape shows the whole poster at the window's height, centred over a
+  blurred and dimmed copy of itself that fills the sides
+  (`detailPosterAmbientBlur`, `detailPosterAmbientDecodeSize`), and puts
+  title art, the actions and a smaller Play on one row along its lower
+  part, the facts and synopsis following below the fold. On a phone every secondary
   control in that row is a glass circle, From Beginning included, so the
   row never folds into a column, and the "Resume from" caption sits under
   the Resume pill rather than under the block. Regular-width iPad windows
