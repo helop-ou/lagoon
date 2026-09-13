@@ -188,7 +188,7 @@ struct SettingsView: View {
         // Matches `TVSettingsPage`, so the settings root and every page
         // pushed from it sit on the app's black rather than the system's
         // lifted grey.
-        .background(Color.black.ignoresSafeArea())
+        .background(Theme.background.ignoresSafeArea())
     }
 
     private var identityPanel: some View {
@@ -245,6 +245,12 @@ struct SettingsView: View {
                     detail: homeRowsDetail,
                     id: "home"
                 ) { HomeRowsSettingsView(preferences: homePreferences) }
+
+                settingsDestination(
+                    "Appearance",
+                    detail: Theme.current.title,
+                    id: "appearance"
+                ) { AppearanceSettingsView() }
 
                 settingsDestination(
                     "Seerr",
@@ -420,6 +426,9 @@ struct SettingsView: View {
                 touchSettingsDestination("Home Rows", systemImage: ContentIcon.home, id: "home") {
                     HomeRowsSettingsView(preferences: homePreferences)
                 }
+                touchSettingsDestination("Appearance", systemImage: ContentIcon.Settings.appearance, id: "appearance") {
+                    AppearanceSettingsView()
+                }
             }
 
             Section("Services") {
@@ -446,7 +455,7 @@ struct SettingsView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.black.ignoresSafeArea())
+        .background(Theme.background.ignoresSafeArea())
         .accessibilityIdentifier("settings.root")
     }
 
