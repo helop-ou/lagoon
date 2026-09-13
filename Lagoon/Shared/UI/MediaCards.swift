@@ -261,9 +261,10 @@ private struct ArtworkFocusHue: ViewModifier {
             RoundedRectangle(cornerRadius: cornerRadius + Metrics.Space.s)
                 .fill(
                     LinearGradient(
-                        // Artwork that could not be sampled halos in the
-                        // theme's glow, not the brand's (HEL-173).
-                        colors: palette == .fallback ? Theme.glow.colors : palette.colors,
+                        // The halo wears the theme: its blush over the
+                        // sampled colours, its own glow when sampling
+                        // failed (HEL-173).
+                        colors: Theme.glow(for: palette).colors,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
