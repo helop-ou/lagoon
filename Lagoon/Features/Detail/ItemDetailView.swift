@@ -27,6 +27,9 @@ struct ItemDetailView: View {
         }
         .task(id: item.id) {
             await loadFromServer()
+            #if os(iOS)
+            await DownloadStore.shared.refreshPermission(client: session.client)
+            #endif
         }
         .onChange(of: serverSync.generation) { _, _ in
             Task { await loadFromServer() }

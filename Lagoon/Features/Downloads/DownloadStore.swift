@@ -70,6 +70,13 @@ final class DownloadStore {
     private(set) var accountKey: String?
     /// The active account's downloads directory; nil while signed out.
     private(set) var accountDirectory: URL?
+    /// Whether the active account may download at all, as last learned from
+    /// the server; nil until asked. Observable state of the store rather
+    /// than `DownloadControl`'s own, because a control with nothing to show
+    /// renders no view and a task attached to no view never runs: left to
+    /// itself the control could never resolve the permission that would
+    /// make it appear. Refreshed on activation and each detail page load.
+    private(set) var permitted: Bool?
     /// Every account's downloads: `Application Support/Lagoon/Downloads`.
     let baseDirectory: URL
     /// The one background session that carries every transfer, for every
@@ -157,6 +164,7 @@ final class DownloadStore {
         guard accountID != self.accountID else { return }
         save()
         self.accountID = accountID
+        permitted = nil
         // Every cached snapshot belongs to the account that is leaving
         // (HEL-166 review finding 10).
         snapshotCache.removeAll()
@@ -263,6 +271,14 @@ final class DownloadStore {
     /// letting the server refuse.
     func canDownload(client: JellyfinClient) async -> Bool {
         await client.canDownloadContent()
+    }
+
+    /// Re-asks the server whether the account may download, for a
+    /// permission an administrator could have turned on after sign-in, and
+    /// publishes the answer for every `DownloadControl`. Unreachable and
+    /// never learned both mean no, as `canDownloadContent()` reasons.
+    func refreshPermission(client: JellyfinClient) async {
+        permitted = await client.refreshContentDownloadingPermission() ?? false
     }
 
     /// Bytes free for user content on the device volume.

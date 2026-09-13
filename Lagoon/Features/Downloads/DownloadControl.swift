@@ -16,7 +16,6 @@ struct DownloadControl: View {
     @Environment(SessionStore.self) private var session
     private var store: DownloadStore { .shared }
 
-    @State private var permitted: Bool?
     @State private var transcodingAllowed: Bool?
     @State private var fetchedItem: MediaItem?
     @State private var alertMessage: String?
@@ -43,19 +42,16 @@ struct DownloadControl: View {
         Group {
             if let entry {
                 existingControl(entry)
-            } else if permitted == true {
+            } else if store.permitted == true {
                 newDownloadMenu
             }
         }
         .task(id: item.id) {
-            // Always resolved, entry or not: an entry's Delete/Cancel button
-            // can bring this view back to the no-entry state without a new
-            // `item.id`, and that state needs `permitted` to already be an
-            // answer rather than a `nil` that leaves the control blank.
-            async let downloadAllowed = store.canDownload(client: session.client)
-            async let transcodeAllowed = session.client.canTranscodeForDownload()
-            permitted = await downloadAllowed
-            transcodingAllowed = await transcodeAllowed
+            // The download permission is the store's, resolved before this
+            // control has anything to render (a task on a view that renders
+            // nothing never runs). Only the quality menu's transcoding
+            // answer is needed here, once there is a control to hold it.
+            transcodingAllowed = await session.client.canTranscodeForDownload()
         }
         .task(id: item.id) {
             guard item.mediaSources == nil else { return }

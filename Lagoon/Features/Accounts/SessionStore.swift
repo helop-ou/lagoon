@@ -123,6 +123,9 @@ final class SessionStore {
         // Downloads follow the account the same way (HEL-166): restore,
         // sign-in, switch, sign-out and removal all land here.
         DownloadStore.shared.activate(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
+        if activeAccount != nil {
+            Task { await DownloadStore.shared.refreshPermission(client: client) }
+        }
         #endif
     }
 

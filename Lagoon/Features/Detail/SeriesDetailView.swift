@@ -108,6 +108,9 @@ struct SeriesDetailView: View {
         }
         .task(id: item.id) {
             await viewModel.load(client: session.client, seriesId: item.id)
+            #if os(iOS)
+            await DownloadStore.shared.refreshPermission(client: session.client)
+            #endif
         }
         .onChange(of: serverSync.generation) { _, _ in
             Task {
