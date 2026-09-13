@@ -3,8 +3,8 @@ import SwiftUI
 #if os(iOS)
 /// The download action beside Play on a movie or episode's detail page
 /// (HEL-166): a glass circle in the same family as `ItemActionRow`'s
-/// watched and favorite toggles, its glyph and menu following the entry's
-/// state. State reads through symbol weight and opacity, never color
+/// watched and favorite toggles (`DetailCircleMenu`), its glyph and menu
+/// following the entry's state. State reads through symbol weight and opacity, never color
 /// (HEL-50).
 ///
 /// Hidden entirely while the account can't download and there is nothing
@@ -96,7 +96,7 @@ struct DownloadControl: View {
     }
 
     private var newDownloadMenu: some View {
-        Menu {
+        DetailCircleMenu {
             ForEach(orderedQualities) { quality in
                 Button {
                     pick(quality)
@@ -108,8 +108,6 @@ struct DownloadControl: View {
         } label: {
             Image(systemName: "arrow.down.circle")
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
         .accessibilityLabel("Download")
         .accessibilityIdentifier("detail.download")
     }
@@ -178,7 +176,7 @@ struct DownloadControl: View {
     private func existingControl(_ entry: DownloadEntry) -> some View {
         switch entry.state {
         case .queued, .downloading:
-            Menu {
+            DetailCircleMenu {
                 Button("Pause") { store.pause(entry.itemID) }
                 Button("Cancel Download", role: .destructive) { store.delete(entry.itemID) }
             } label: {
@@ -188,31 +186,25 @@ struct DownloadControl: View {
                         .font(.system(size: Metrics.downloadMarkSize * 0.4))
                 }
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
             .accessibilityLabel(entry.state == .queued ? "Queued to download" : "Downloading")
             .accessibilityIdentifier("detail.download")
         case .paused:
-            Menu {
+            DetailCircleMenu {
                 Button("Resume") { store.resume(entry.itemID, client: session.client) }
                 Button("Delete", role: .destructive) { store.delete(entry.itemID) }
             } label: {
                 Image(systemName: "pause.circle")
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
             .accessibilityLabel("Download paused")
             .accessibilityIdentifier("detail.download")
         case .failed:
             VStack(spacing: Metrics.Space.xs) {
-                Menu {
+                DetailCircleMenu {
                     Button("Try Again") { store.resume(entry.itemID, client: session.client) }
                     Button("Delete", role: .destructive) { store.delete(entry.itemID) }
                 } label: {
                     Image(systemName: "exclamationmark.circle")
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
                 .accessibilityLabel("Download failed")
                 .accessibilityIdentifier("detail.download")
                 if let failure = entry.failure {
@@ -223,14 +215,12 @@ struct DownloadControl: View {
                 }
             }
         case .complete:
-            Menu {
+            DetailCircleMenu {
                 Button("Delete Download", role: .destructive) { confirmingDelete = true }
             } label: {
                 Image(systemName: "arrow.down.circle.fill")
                     .fontWeight(.bold)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
             .accessibilityLabel("Downloaded")
             .accessibilityIdentifier("detail.download")
             .confirmationDialog(

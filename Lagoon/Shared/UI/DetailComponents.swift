@@ -364,6 +364,26 @@ struct DetailCircleButton<Label: View>: View {
         .glassEffect(.regular.interactive(), in: .circle)
     }
 }
+
+/// The menu-shaped sibling of `DetailCircleButton`: the download control's
+/// circles open a menu rather than firing an action (HEL-166), and they
+/// press as circles for the same reason.
+struct DetailCircleMenu<Content: View, Label: View>: View {
+    @ViewBuilder let content: Content
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            label
+                .frame(width: Metrics.detailCircleActionSize, height: Metrics.detailCircleActionSize)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+    }
+}
 #endif
 
 extension View {

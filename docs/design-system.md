@@ -103,12 +103,11 @@ need an explicit appropriate control style. Test focused and unfocused states.
   control in that row is a glass circle, From Beginning included, so the
   row never folds into a column, and the "Resume from" caption sits under
   the Resume pill rather than under the block. Those circles are
-  `DetailCircleButton`, a plain button under `.glassEffect(.regular.interactive(), in: .circle)`
+  `DetailCircleButton` (and `DetailCircleMenu` for the download control's
+  menus), a plain button under `.glassEffect(.regular.interactive(), in: .circle)`
   rather than `.buttonStyle(.glass)` with a circular border shape, because
   that style's pressed highlight is a capsule sized to the label and showed
-  through the circle as a lozenge (iOS 26.0 and 26.5). `DownloadControl`'s
-  menus still use the border-shape form and have not been checked for the
-  same artefact. Regular-width iPad windows
+  through the circle as a lozenge (iOS 26.0 and 26.5). Regular-width iPad windows
   keep the landscape backdrop, with more of it above the title, and the
   leading column. tvOS keeps its
   own order. Series playback actions describe the episode that will play.
