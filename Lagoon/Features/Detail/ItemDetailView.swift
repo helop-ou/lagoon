@@ -8,7 +8,6 @@ struct ItemDetailView: View {
     @Environment(ServerSyncState.self) private var serverSync
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @State private var detail: MediaItem?
     @State private var similar: [MediaItem] = []
@@ -127,78 +126,42 @@ struct ItemDetailView: View {
     private var usesLeadingColumn: Bool {
         DetailLayout.usesLeadingColumn(horizontalSizeClass)
     }
-
-    private var usesLandscapeRow: Bool {
-        DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
-    }
-
-    /// The Play pill's width: natural in the wide iPad row, capped on a
-    /// phone so it is big without becoming a bar.
-    private var playButtonMaxWidth: CGFloat? {
-        if usesLeadingColumn { return nil }
-        return usesLandscapeRow ? Metrics.detailLandscapePlayButtonMaxWidth : Metrics.detailPlayButtonMaxWidth
-    }
     #endif
 
-    @ViewBuilder
+    /// Play first everywhere it shares a row, so it takes first focus:
+    /// stacked above the play buttons the toggles also took *first focus*,
+    /// so arriving and pressing Select marked the film watched instead of
+    /// playing it. On a phone the resume caption belongs to the pill
+    /// (HEL-169); the shared layout puts the pill where each composition
+    /// wants it.
     private var actions: some View {
-        #if os(tvOS)
-        // One row, Play first. Stacked above the play buttons the toggles
-        // also took *first focus*, so arriving and pressing Select marked the
-        // film watched instead of playing it.
-        HStack(spacing: Metrics.Space.l) {
-            playButton
-            fromBeginningButton
-            actionRow
-                .padding(.leading, Metrics.Space.l)
-        }
-        #else
-        if usesLeadingColumn {
-            // A regular-width iPad window keeps the TV's one row, Play first,
-            // beside the artwork.
-            AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+        DetailActionLayout {
+            #if os(iOS)
+            if usesLeadingColumn {
                 playButton
-                fromBeginningButton
-                actionRow
-                DownloadControl(item: displayed)
-            }
-        } else if usesLandscapeRow {
-            // A landscape phone (HEL-169): the circles then Play, on one
-            // line with the title art along the poster's lower part. Every
-            // secondary control is a circle here, so the line never has to
-            // fold.
-            // The circles align with the pill's centre, not the centre of
-            // the pill plus its resume caption, so the caption hangs under
-            // the pill alone and the row itself stays level.
-            HStack(alignment: .detailPillCenter, spacing: Metrics.detailActionSpacing) {
-                fromBeginningButton
-                actionRow
-                DownloadControl(item: displayed)
+            } else {
+                // The circles align with the pill's centre, not the centre
+                // of the pill plus its caption, so the caption hangs under
+                // the pill alone and the row itself stays level.
                 VStack(spacing: Metrics.Space.xs) {
                     playButton
                         .alignmentGuide(.detailPillCenter) { $0[VerticalAlignment.center] }
                     resumeCaption
                 }
             }
-        } else {
-            // A portrait phone (HEL-169): one wide Play, the decision the
-            // page exists for, with its resume caption tucked under it, then
-            // the secondary controls as a row of glass circles. From
-            // Beginning joins that row as a circle only once there is a
-            // resume point to start from.
-            VStack(spacing: Metrics.Space.m) {
-                VStack(spacing: Metrics.Space.xs) {
-                    playButton
-                    resumeCaption
-                }
-                HStack(spacing: Metrics.detailActionSpacing) {
-                    fromBeginningButton
-                    actionRow
-                    DownloadControl(item: displayed)
-                }
-            }
+            #else
+            playButton
+            #endif
+        } secondary: {
+            fromBeginningButton
+            actionRow
+                #if os(tvOS)
+                .padding(.leading, Metrics.Space.l)
+                #endif
+            #if os(iOS)
+            DownloadControl(item: displayed)
+            #endif
         }
-        #endif
     }
 
     private var actionRow: some View {
@@ -215,22 +178,11 @@ struct ItemDetailView: View {
         Button {
             playerItem = PlayerItem(media: displayed)
         } label: {
-            #if os(tvOS)
             Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
-            #else
-            Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
-            .font(.title3.weight(.semibold))
-                // One line always: a Label squeezed for width stacks its icon
-                // over its text, which folded the landscape row's pill into a
-                // column once four circles shared the line.
-                .fixedSize()
-                .frame(maxWidth: playButtonMaxWidth)
-                .padding(.vertical, Metrics.Space.xs)
-            #endif
+                .detailPrimaryLabel()
         }
-        .buttonStyle(.glass)
+        .detailPrimaryButton()
         #if os(iOS)
-        .controlSize(.extraLarge)
         .accessibilityIdentifier("detail.play")
         #endif
     }
