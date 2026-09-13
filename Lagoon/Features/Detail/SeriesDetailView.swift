@@ -110,10 +110,6 @@ struct SeriesDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    #endif
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
     /// The episode the rail last put focus on. Deliberately *not* cleared
@@ -186,114 +182,38 @@ struct SeriesDetailView: View {
 
     /// Play the episode that's up next, then the toggles, then the season
     /// picker. Play leads so it takes first focus — the same reason the movie
-    /// page orders it that way.
-    @ViewBuilder
+    /// page orders it that way. The season picker is the layout's accessory:
+    /// in the row with the circles on a phone, under the row where there is
+    /// width (HEL-169).
     private var actions: some View {
-        #if os(tvOS)
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
-                if let episode = subject {
-                    playButton(for: episode)
-                }
-                actionRow
+        DetailActionLayout {
+            if let episode = subject {
+                playButton(for: episode)
             }
-
+        } secondary: {
+            actionRow
+            #if os(iOS)
+            if let episode = subject {
+                DownloadControl(item: episode)
+            }
+            #endif
+        } accessory: {
             seasonChips
         }
-        #else
-        if usesLeadingColumn {
-            // A regular-width iPad window keeps the TV's composition.
-            VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
-                    if let episode = subject {
-                        playButton(for: episode)
-                    }
-                    actionRow
-                    if let episode = subject {
-                        DownloadControl(item: episode)
-                    }
-                }
-
-                seasonChips
-            }
-        } else if usesLandscapeRow {
-            // A landscape phone (HEL-169): toggles, season picker, then Play
-            // on one line with the title art along the poster's lower part.
-            // A plain row, not the adaptive stack: when the line is tight
-            // the title art gives way, rather than the picker dropping under
-            // the circles.
-            HStack(spacing: Metrics.detailActionSpacing) {
-                actionRow
-                if let episode = subject {
-                    DownloadControl(item: episode)
-                }
-                seasonChips
-                    .fixedSize()
-                if let episode = subject {
-                    playButton(for: episode)
-                }
-            }
-        } else {
-            // A portrait phone (HEL-169): the same block as a film page. One
-            // wide Play for the episode the page is about, then the toggles
-            // and the season picker as a row beneath it.
-            VStack(spacing: Metrics.Space.m) {
-                if let episode = subject {
-                    playButton(for: episode)
-                }
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
-                    actionRow
-                    if let episode = subject {
-                        DownloadControl(item: episode)
-                    }
-                    seasonChips
-                }
-            }
-        }
-        #endif
     }
-
-    #if os(iOS)
-    private var usesLeadingColumn: Bool {
-        DetailLayout.usesLeadingColumn(horizontalSizeClass)
-    }
-
-    private var usesLandscapeRow: Bool {
-        DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
-    }
-
-    private var playButtonMaxWidth: CGFloat? {
-        if usesLeadingColumn { return nil }
-        return usesLandscapeRow ? Metrics.detailLandscapePlayButtonMaxWidth : Metrics.detailPlayButtonMaxWidth
-    }
-    #endif
 
     private func playButton(for episode: MediaItem) -> some View {
         Button {
             playerItem = PlayerItem(media: episode)
         } label: {
-            #if os(tvOS)
             Label(
                 episode.playbackProgress == nil ? "Play" : "Resume",
                 systemImage: "play.fill"
             )
-            #else
-            Label(
-                episode.playbackProgress == nil ? "Play" : "Resume",
-                systemImage: "play.fill"
-            )
-            .font(.title3.weight(.semibold))
-            // One line always: a Label squeezed for width stacks its icon
-            // over its text, which folded the landscape row's pill into a
-            // column once four circles shared the line.
-            .fixedSize()
-            .frame(maxWidth: playButtonMaxWidth)
-            .padding(.vertical, Metrics.Space.xs)
-            #endif
+            .detailPrimaryLabel()
         }
-        .buttonStyle(.glass)
+        .detailPrimaryButton()
         #if os(iOS)
-        .controlSize(.extraLarge)
         .accessibilityIdentifier("detail.play")
         #endif
     }
