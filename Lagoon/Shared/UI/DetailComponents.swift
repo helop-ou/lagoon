@@ -30,7 +30,7 @@ struct DetailBackdropView: View {
 
     var body: some View {
         ZStack {
-            Color.black
+            Theme.background
             #if os(iOS)
             if usesPosterHero {
                 // Anchored to the top of a centred stack, so the backdrop
@@ -60,7 +60,7 @@ struct DetailBackdropView: View {
         CachedAsyncImage(url: url, maxPixelSize: 1920) { image in
             image.resizable().scaledToFill()
         } placeholder: {
-            Color.black
+            Theme.background
         }
         .animation(.easeInOut(duration: Motion.crossfade), value: url)
     }
@@ -90,12 +90,12 @@ struct DetailBackdropView: View {
                     CachedAsyncImage(url: heroURL, maxPixelSize: Metrics.detailPosterAmbientDecodeSize) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
-                        Color.black
+                        Theme.background
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .blur(radius: Metrics.detailPosterAmbientBlur)
-                    .overlay(Color.black.opacity(0.35))
+                    .overlay(Theme.background.opacity(0.35))
                     CachedAsyncImage(url: heroURL, maxPixelSize: Metrics.detailPosterDecodeSize) { image in
                         image.resizable().scaledToFit()
                     } placeholder: {
@@ -116,7 +116,7 @@ struct DetailBackdropView: View {
                     ) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
-                        Color.black
+                        Theme.background
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height, alignment: heroIsPoster ? posterAnchor : .center)
                     .clipped()
@@ -141,11 +141,11 @@ struct DetailBackdropView: View {
             : Metrics.detailLandscapeRowShare
         return LinearGradient(
             stops: [
-                .init(color: .black.opacity(heavy ? 0.35 : 0), location: 0),
-                .init(color: .black.opacity(heavy ? 0.5 : 0.08), location: contentStart * 0.66),
-                .init(color: .black.opacity(heavy ? 0.9 : 0.72), location: contentStart),
-                .init(color: .black.opacity(heavy ? 1 : 0.94), location: 0.9),
-                .init(color: .black, location: 1),
+                .init(color: Theme.background.opacity(heavy ? 0.35 : 0), location: 0),
+                .init(color: Theme.background.opacity(heavy ? 0.5 : 0.08), location: contentStart * 0.66),
+                .init(color: Theme.background.opacity(heavy ? 0.9 : 0.72), location: contentStart),
+                .init(color: Theme.background.opacity(heavy ? 1 : 0.94), location: 0.9),
+                .init(color: Theme.background, location: 1),
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -159,11 +159,11 @@ struct DetailBackdropView: View {
         // The 10-foot layout only occupies the leading half, so keep the
         // rest of the still vivid.
         ZStack {
-            Color.black.opacity(0.12)
+            Theme.background.opacity(0.12)
             LinearGradient(
                 stops: [
-                    .init(color: .black.opacity(0.9), location: 0),
-                    .init(color: .black.opacity(0.7), location: 0.3),
+                    .init(color: Theme.background.opacity(0.9), location: 0),
+                    .init(color: Theme.background.opacity(0.7), location: 0.3),
                     .init(color: .clear, location: 0.68),
                 ],
                 startPoint: .leading,
@@ -178,11 +178,11 @@ struct DetailBackdropView: View {
             // TV's leading fade and the trailing half stays vivid, with a
             // bottom fade for the rails that scroll up over it (HEL-169).
             ZStack {
-                Color.black.opacity(heavy ? 0.85 : 0.18)
+                Theme.background.opacity(heavy ? 0.85 : 0.18)
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.85), location: 0),
-                        .init(color: .black.opacity(0.55), location: 0.4),
+                        .init(color: Theme.background.opacity(0.85), location: 0),
+                        .init(color: Theme.background.opacity(0.55), location: 0.4),
                         .init(color: .clear, location: 0.75),
                     ],
                     startPoint: .leading,
@@ -192,8 +192,8 @@ struct DetailBackdropView: View {
                     stops: [
                         .init(color: .clear, location: 0),
                         .init(color: .clear, location: 0.45),
-                        .init(color: .black.opacity(0.85), location: 0.78),
-                        .init(color: .black, location: 1),
+                        .init(color: Theme.background.opacity(0.85), location: 0.78),
+                        .init(color: Theme.background, location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -205,14 +205,14 @@ struct DetailBackdropView: View {
             // photographic, then settle into a near-black reading surface
             // before the rails begin.
             ZStack {
-                Color.black.opacity(heavy ? 0.9 : 0.3)
+                Theme.background.opacity(heavy ? 0.9 : 0.3)
                 LinearGradient(
                     stops: [
                         .init(color: .clear, location: 0),
-                        .init(color: .black.opacity(0.35), location: 0.3),
-                        .init(color: .black.opacity(0.8), location: 0.55),
-                        .init(color: .black.opacity(0.95), location: 0.76),
-                        .init(color: .black, location: 1),
+                        .init(color: Theme.background.opacity(0.35), location: 0.3),
+                        .init(color: Theme.background.opacity(0.8), location: 0.55),
+                        .init(color: Theme.background.opacity(0.95), location: 0.76),
+                        .init(color: Theme.background, location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
