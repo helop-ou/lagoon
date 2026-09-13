@@ -17,7 +17,7 @@ struct TouchSettingsPage<Content: View>: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .scrollContentBackground(.hidden)
-            .background(Color.black.ignoresSafeArea())
+            .background(Theme.background.ignoresSafeArea())
     }
 }
 #endif
