@@ -117,7 +117,12 @@ need an explicit appropriate control style. Test focused and unfocused states.
 - **Downloads (iOS only, HEL-166):** `DownloadControl` is a glass circle
   beside the detail page's other actions, in the same family as
   `ItemActionRow`'s toggles; its glyph and a menu carry the entry's state
-  through symbol weight and opacity, never color. Its progress ring uses
+  through symbol weight and opacity, never color. Whether the account may
+  download is `DownloadStore.permitted`, refreshed on account activation and
+  on each detail page load, never resolved by the control itself: the
+  control renders nothing until it is allowed, and a task on a view that
+  renders nothing never runs, so it could not have learned the answer that
+  would make it appear. Its progress ring uses
   `downloadRingLineWidth`; it and a poster's small "downloaded" badge on
   `PosterCard`, `LandscapeCard`, and `EpisodeCard` share `downloadMarkSize`.
   `DownloadsView` lists every downloaded title reachable with no server at
