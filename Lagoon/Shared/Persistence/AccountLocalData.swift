@@ -39,7 +39,7 @@ final class AccountLocalData {
 
     func beginRemoval(accountID: String) {
         pendingAccountIDs.insert(accountID)
-        for prefix in ["libraries.", "subtitles.preferences.", "playback.trackPreferences.",
+        for prefix in ["libraries.", "subtitles.preferences.", "playback.trackPreferences.", ThemeStore.keyPrefix,
                        "home.sectionPreferences.", "search.recents."] {
             defaults.removeObject(forKey: prefix + accountID)
         }
