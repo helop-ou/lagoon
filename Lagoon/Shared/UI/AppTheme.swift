@@ -61,6 +61,10 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     /// behind a hero and under a lifted card and not only in its own chrome.
     /// Nil leaves artwork colours as sampled, which is the brand's choice.
     let artworkTint: Color?
+    /// A wash behind iOS's tab bar and navigation bar glass, so the chrome
+    /// belongs to the theme and not to the system's grey. Nil keeps the
+    /// system glass. tvOS is never washed: its bar is a focusable control.
+    let chrome: Color?
 
     /// The ambient glow when no artwork has been sampled yet.
     var glow: ArtworkPalette {
@@ -86,7 +90,8 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         background: .black,
         glowDepth: Color(red: 0.16, green: 0.1, blue: 0.35),
         controlTint: nil,
-        artworkTint: nil
+        artworkTint: nil,
+        chrome: nil
     )
 
     /// Baby pink over rose. The accent is pale enough to read as baby pink
@@ -100,7 +105,8 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         background: Color(red: 0x1F / 255, green: 0x10 / 255, blue: 0x19 / 255),
         glowDepth: Color(red: 0x8C / 255, green: 0x4A / 255, blue: 0x72 / 255),
         controlTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255)
+        artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
+        chrome: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255).opacity(0.7)
     )
 }
 
@@ -183,6 +189,24 @@ enum Theme {
 }
 
 extension View {
+    /// iOS's tab bar and navigation bar glass take the theme's chrome wash.
+    /// Applied to each tab's root screen, where the bars belong. The brand
+    /// theme sets none. tvOS is left alone: `toolbarBackground` does not
+    /// reach its bar, and tinting its labels is the failure the design
+    /// guide warns about.
+    @ViewBuilder
+    func themedChrome() -> some View {
+        #if os(iOS)
+        if let chrome = Theme.palette.chrome {
+            toolbarBackground(chrome, for: .tabBar, .navigationBar)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
     /// iOS's native controls take the theme's tint: toggles, pickers, links
     /// and the selected tab. The brand theme sets none, keeping the white
     /// `AccentColor`. tvOS is left alone: its focused glass lozenge is
