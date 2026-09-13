@@ -97,6 +97,7 @@ Use the existing shared boundaries before adding another screen-specific copy:
 | Adaptive actions, metadata wrapping, poster sizing | `AdaptiveActionStack`, `MetadataFlowLayout`, `PosterLayout` |
 | Loading, retry, and failure presentation | `LoadingView`, `InlineRetryView`, `ErrorStateView` |
 | Artwork and palette loading | `CachedAsyncImage`, `ImageCache`, `ArtworkPalette` |
+| Theme colours and the profile's theme choice | `Theme`, `ThemePalette`, `ThemeStore`, `ThemeBloomOverlay` in `AppTheme.swift` and `ThemeBloomView.swift` |
 | Foreground/manual refresh | `ServerSyncState`, `ServerRefreshModifier` |
 | Shared playback with platform presentation | `PlayerEngine`, `playerPresentation`, player overlay views |
 
