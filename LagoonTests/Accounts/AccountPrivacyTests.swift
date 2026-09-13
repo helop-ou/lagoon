@@ -219,7 +219,7 @@ struct AccountPrivacyTests {
         let b = StoredAccount(serverURL: URL(string: "https://b.privacy.test")!, serverName: "B", userId: "same-user", userName: "Viewer B")
         var cookieA: String { AccountLocalData.seerrCookieKey(a, serverURL: URL(string: "https://seerr-a.privacy.test")!) }
         var cookieB: String { AccountLocalData.seerrCookieKey(b, serverURL: URL(string: "https://seerr-b.privacy.test")!) }
-        static let preferencePrefixes = ["libraries.", "subtitles.preferences.", "playback.trackPreferences.", "home.sectionPreferences.", "search.recents."]
+        static let preferencePrefixes = ["libraries.", "subtitles.preferences.", "playback.trackPreferences.", "home.sectionPreferences.", "search.recents.", ThemeStore.keyPrefix]
         init() throws {
             PrivacyProtocol.reset()
             defaults = UserDefaults(suiteName: suite)!
