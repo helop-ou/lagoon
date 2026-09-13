@@ -23,6 +23,13 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: Motion.standard), value: session.phase)
+        // The theme follows the profile (HEL-173); `SessionStore` points the
+        // store at the account with the other per-account stores. iOS
+        // controls take its tint from here, and the bloom sits over
+        // everything so a choice made deep in Settings is announced across
+        // the whole screen.
+        .themedControls()
+        .overlay { ThemeBloomOverlay() }
         .environment(session)
         .environment(seerr)
         .environment(serverSync)
