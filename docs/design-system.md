@@ -58,14 +58,16 @@ fills, and materials for ordinary UI.
 
 ## Themes
 
-A theme is a `ThemePalette` of five roles (HEL-173): `accent` for progress
+A theme is a `ThemePalette` of six roles (HEL-173): `accent` for progress
 fills, selection marks, the jellyfish and the focus halo's fallback;
 `ground` for card washes and the ambient glow; `background` for the surface
-behind content; `glowDepth` for the third glow colour; and `controlTint`,
-the tint iOS's native controls take. Text never takes a theme colour. Two themes exist,
-`AppTheme.lagoon` (the Twin Shores palette over true black, no control tint)
-and `AppTheme.babyPink` (`#FFB7CF` accents over a `#2B1020` ground and a
-`#120810` plum background, with the accent as the iOS control tint). Keep
+behind content; `glowDepth` for the third glow colour; `controlTint`, the
+tint iOS's native controls take; and `artworkTint`, blushed into every
+artwork glow and focus halo through `Theme.glow(for:)` so a hero never hides
+the theme. Text never takes a theme colour. Two themes exist,
+`AppTheme.lagoon` (the Twin Shores palette over true black, no control or
+artwork tint) and `AppTheme.babyPink` (`#FFB7CF` accents over a `#5E2848`
+rose ground and a `#1F1019` background, with the accent as both tints). Keep
 the list short: a theme is a considered set checked over every screen, not
 a hue slider.
 
