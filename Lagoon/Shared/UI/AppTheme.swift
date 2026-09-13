@@ -57,10 +57,24 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     /// selected tab). Nil keeps the system's white, which is the brand's
     /// choice: `AccentColor` is white, not a brand colour.
     let controlTint: Color?
+    /// Blushed into every artwork glow and focus halo, so the theme is felt
+    /// behind a hero and under a lifted card and not only in its own chrome.
+    /// Nil leaves artwork colours as sampled, which is the brand's choice.
+    let artworkTint: Color?
 
     /// The ambient glow when no artwork has been sampled yet.
     var glow: ArtworkPalette {
         ArtworkPalette(colors: [accent, ground, glowDepth])
+    }
+
+    /// How far an artwork colour moves toward `artworkTint`.
+    static let artworkTintAmount = 0.45
+
+    /// The glow for a piece of artwork under this theme: the sampled
+    /// colours, blushed toward the theme's tint when it has one.
+    func glow(for artwork: ArtworkPalette) -> ArtworkPalette {
+        guard let artworkTint else { return artwork }
+        return ArtworkPalette(colors: artwork.colors.map { $0.mix(with: artworkTint, by: Self.artworkTintAmount) })
     }
 
     /// Twin Shores. The values match `Color.lagoonAqua` and `.lagoonNavy`,
@@ -71,19 +85,22 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         ground: .lagoonNavy,
         background: .black,
         glowDepth: Color(red: 0.16, green: 0.1, blue: 0.35),
-        controlTint: nil
+        controlTint: nil,
+        artworkTint: nil
     )
 
-    /// Baby pink over plum. The accent is pale enough to read as baby pink
+    /// Baby pink over rose. The accent is pale enough to read as baby pink
     /// and bright enough to carry a progress bar on a dark ground; the
-    /// ground and background are plum rather than pink, so the theme is
-    /// felt everywhere without shouting anywhere.
+    /// ground and background are deep rose rather than pink, so every page
+    /// carries the hue without any of them shouting, and artwork glows are
+    /// blushed with the accent so a hero never hides the theme.
     static let babyPink = ThemePalette(
         accent: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        ground: Color(red: 0x2B / 255, green: 0x10 / 255, blue: 0x20 / 255),
-        background: Color(red: 0x12 / 255, green: 0x08 / 255, blue: 0x10 / 255),
-        glowDepth: Color(red: 0x4A / 255, green: 0x1E / 255, blue: 0x4F / 255),
-        controlTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255)
+        ground: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255),
+        background: Color(red: 0x1F / 255, green: 0x10 / 255, blue: 0x19 / 255),
+        glowDepth: Color(red: 0x8C / 255, green: 0x4A / 255, blue: 0x72 / 255),
+        controlTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
+        artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255)
     )
 }
 
@@ -155,6 +172,14 @@ enum Theme {
     static var ground: Color { palette.ground }
     static var background: Color { palette.background }
     static var glow: ArtworkPalette { palette.glow }
+
+    /// The glow behind artwork: the theme's own while nothing is sampled
+    /// (or sampling failed), otherwise the artwork's colours under the
+    /// theme's blush.
+    static func glow(for artwork: ArtworkPalette?) -> ArtworkPalette {
+        guard let artwork, artwork != .fallback else { return palette.glow }
+        return palette.glow(for: artwork)
+    }
 }
 
 extension View {
