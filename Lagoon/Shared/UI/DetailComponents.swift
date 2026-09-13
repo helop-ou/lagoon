@@ -330,6 +330,29 @@ struct DetailPageScaffold<Content: View>: View {
     }
 }
 
+#if os(iOS)
+/// A glass circle for the phone's row of secondary detail actions (HEL-169).
+/// Built on the interactive glass effect rather than `.buttonStyle(.glass)`
+/// with a circular border shape: that style draws its pressed highlight as
+/// a capsule sized to the label, not to the circle, so a press showed a
+/// lozenge through the circle on iOS 26.0 and 26.5. The interactive effect
+/// brightens and lifts the circle itself.
+struct DetailCircleButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        Button(action: action) {
+            label
+                .frame(width: Metrics.detailCircleActionSize, height: Metrics.detailCircleActionSize)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+    }
+}
+#endif
+
 extension View {
     /// A detail page on iPhone and iPad is the immersive one: artwork edge to
     /// edge, one decision to make. The floating tab bar has no place over it

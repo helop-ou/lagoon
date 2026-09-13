@@ -237,23 +237,29 @@ struct ItemDetailView: View {
     @ViewBuilder
     private var fromBeginningButton: some View {
         if resumeTicks != nil {
+            #if os(iOS)
+            if usesLeadingColumn {
+                Button {
+                    playerItem = PlayerItem(media: displayed, startFromBeginning: true)
+                } label: {
+                    Label("From Beginning", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.glass)
+            } else {
+                DetailCircleButton {
+                    playerItem = PlayerItem(media: displayed, startFromBeginning: true)
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .accessibilityLabel("From Beginning")
+            }
+            #else
             Button {
                 playerItem = PlayerItem(media: displayed, startFromBeginning: true)
             } label: {
-                #if os(iOS)
-                if usesLeadingColumn {
-                    Label("From Beginning", systemImage: "arrow.counterclockwise")
-                } else {
-                    Image(systemName: "arrow.counterclockwise")
-                }
-                #else
                 Label("From Beginning", systemImage: "arrow.counterclockwise")
-                #endif
             }
             .buttonStyle(.glass)
-            #if os(iOS)
-            .buttonBorderShape(usesLeadingColumn ? .automatic : .circle)
-            .accessibilityLabel("From Beginning")
             #endif
         }
     }

@@ -157,6 +157,9 @@ enum Metrics {
     /// then upscaled soft.
     static let detailBackdropRequestWidth = 1920
     static let detailBackdropDecodeSize = 1920
+    /// Diameter of the phone's circular detail actions: the large control
+    /// height, so the circles sit level with the Play pill beside them.
+    static let detailCircleActionSize: CGFloat = 50
     /// The blurred ambient copy needs no detail; a small decode keeps the
     /// blur cheap.
     static let detailPosterAmbientDecodeSize = 240

@@ -127,23 +127,37 @@ struct ItemActionRow: View {
         }
     }
 
+    @ViewBuilder
     private func toggle(
         on: Bool,
         symbol: String,
         label: LocalizedStringKey,
         action: @escaping () async -> Void
     ) -> some View {
+        #if os(iOS)
+        DetailCircleButton {
+            Task { await action() }
+        } label: {
+            toggleGlyph(on: on, symbol: symbol)
+        }
+        .accessibilityLabel(label)
+        #else
         Button {
             Task { await action() }
         } label: {
-            Image(systemName: symbol)
-                // Set state reads through weight, not colour: a tinted label
-                // would vanish inside the focused lozenge (HEL-50).
-                .fontWeight(on ? .bold : .regular)
-                .opacity(on ? 1 : 0.55)
+            toggleGlyph(on: on, symbol: symbol)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .accessibilityLabel(label)
+        #endif
+    }
+
+    private func toggleGlyph(on: Bool, symbol: String) -> some View {
+        Image(systemName: symbol)
+            // Set state reads through weight, not colour: a tinted label
+            // would vanish inside the focused lozenge (HEL-50).
+            .fontWeight(on ? .bold : .regular)
+            .opacity(on ? 1 : 0.55)
     }
 }
