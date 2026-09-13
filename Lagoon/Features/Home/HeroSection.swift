@@ -61,7 +61,7 @@ struct HeroSection<Route: Hashable>: View {
     }
 
     @State private var selection = HeroCarouselSelection()
-    @State private var palette: ArtworkPalette = .fallback
+    @State private var palette: ArtworkPalette?
     @State private var isVisible = false
     @State private var isScrolling = false
     @FocusState private var fallbackFocus: Bool
@@ -126,8 +126,11 @@ struct HeroSection<Route: Hashable>: View {
     }
 
     private func heroBody(for current: HeroItem<Route>, width: CGFloat) -> some View {
-        ZStack {
-            AmbientGlowView(palette: palette)
+        // Resolved here, in the body, so a theme change re-renders the glow
+        // while no artwork palette is sampled.
+        let glowPalette = palette ?? Theme.glow
+        return ZStack {
+            AmbientGlowView(palette: glowPalette)
                 // Negative gutter: the glow is meant to bleed past the
                 // hero panel rather than sit inside it.
                 .padding(-Metrics.screenGutter)
@@ -265,15 +268,15 @@ struct HeroSection<Route: Hashable>: View {
     private static var washStops: [Gradient.Stop] {
         #if os(tvOS)
         [
-            .init(color: .black.opacity(0.85), location: 0),
-            .init(color: .black.opacity(0.55), location: 0.35),
+            .init(color: Theme.background.opacity(0.85), location: 0),
+            .init(color: Theme.background.opacity(0.55), location: 0.35),
             .init(color: .clear, location: 0.72),
         ]
         #else
         [
-            .init(color: .black.opacity(0.8), location: 0),
-            .init(color: .black.opacity(0.7), location: 0.5),
-            .init(color: .black.opacity(0.6), location: 1),
+            .init(color: Theme.background.opacity(0.8), location: 0),
+            .init(color: Theme.background.opacity(0.7), location: 0.5),
+            .init(color: Theme.background.opacity(0.6), location: 1),
         ]
         #endif
     }
@@ -349,7 +352,7 @@ struct HeroSection<Route: Hashable>: View {
 
     private func updatePalette() async {
         guard let url = current?.backdropURL else {
-            palette = .fallback
+            palette = nil
             return
         }
         let nextPalette = await ArtworkPaletteCache.shared.palette(for: url)
