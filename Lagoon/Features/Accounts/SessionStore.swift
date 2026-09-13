@@ -117,6 +117,7 @@ final class SessionStore {
     private func synchronizeAccountContext() {
         guard !isAccountDraft else { return }
         recentSearches.configure(accountID: activeAccount?.id)
+        ThemeStore.shared.configure(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
         TopShelfStore.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
         #if os(iOS)
