@@ -58,16 +58,18 @@ fills, and materials for ordinary UI.
 
 ## Themes
 
-A theme is a `ThemePalette` of six roles (HEL-173): `accent` for progress
+A theme is a `ThemePalette` of seven roles (HEL-173): `accent` for progress
 fills, selection marks, the jellyfish and the focus halo's fallback;
 `ground` for card washes and the ambient glow; `background` for the surface
 behind content; `glowDepth` for the third glow colour; `controlTint`, the
-tint iOS's native controls take; and `artworkTint`, blushed into every
-artwork glow and focus halo through `Theme.glow(for:)` so a hero never hides
-the theme. Text never takes a theme colour. Two themes exist,
-`AppTheme.lagoon` (the Twin Shores palette over true black, no control or
-artwork tint) and `AppTheme.babyPink` (`#FFB7CF` accents over a `#5E2848`
-rose ground and a `#1F1019` background, with the accent as both tints). Keep
+tint iOS's native controls take; `artworkTint`, blushed into every artwork
+glow and focus halo through `Theme.glow(for:)` so a hero never hides the
+theme; and `chrome`, the wash behind iOS's tab and navigation bar glass,
+applied by `themedChrome()` on each tab's root screen. Text never takes a
+theme colour. Two themes exist, `AppTheme.lagoon` (the Twin Shores palette
+over true black, no control, artwork or chrome tint) and `AppTheme.babyPink`
+(`#FFB7CF` accents over a `#5E2848` rose ground and a `#1F1019` background,
+with the accent as both tints and the ground as the chrome wash). Keep
 the list short: a theme is a considered set checked over every screen, not
 a hue slider.
 
@@ -78,7 +80,8 @@ plumbing. Page backgrounds and the fades that carry artwork into the page
 use `Theme.background`; a scrim over artwork inside a card stays black. The
 player surface, its overlays, subtitles and the Top Shelf stay pure black
 and outside the theme. tvOS controls are never tinted (the focused lozenge
-rule above); `themedControls()` applies `controlTint` on iOS only.
+rule above) and its tab bar keeps the system glass; `themedControls()` and
+`themedChrome()` apply `controlTint` and `chrome` on iOS only.
 
 The choice belongs to the Jellyfin profile: `SessionStore` points
 `ThemeStore.shared` at the active account with the other per-account stores,
