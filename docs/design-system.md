@@ -27,7 +27,8 @@ screen-specific copies of its values.
 | `detailPlayButtonMaxWidth` / `detailLandscapePlayButtonMaxWidth` | Not used | 360 / 260: the phone's Play pill cap in portrait and in the landscape row |
 | `gridColumns` | 5 | Not used; the count follows the width (three across on a portrait phone) |
 | `downloadRingLineWidth` | Not used | 2.5: the download control's progress ring stroke |
-| `downloadMarkSize` | Not used | 18: the download progress ring and the poster's "downloaded" badge glyph |
+| `downloadMarkSize` | Not used | 18: the download progress ring |
+| `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's round "downloaded" and "watched" badges and their inset from the corner |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
 `Metrics.Space` provides `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
@@ -110,7 +111,24 @@ need an explicit appropriate control style. Test focused and unfocused states.
   through the circle as a lozenge (iOS 26.0 and 26.5). Regular-width iPad windows
   keep the landscape backdrop, with more of it above the title, and the
   leading column. tvOS keeps its
-  own order. Series playback actions describe the episode that will play.
+  own order. Series playback actions describe the episode that will play:
+  the focused card, else the server's up-next episode, else the first
+  episode of the visible season, so a finished show still offers Play
+  (HEL-175); the watched toggle stops one step earlier, at the show itself,
+  because on a finished show it clears the whole show rather than episode
+  one. The page opens on the up-next episode's season (a finished
+  show on its first regular season, not Specials) and the episode rail's
+  position is a `scrollPosition(id:)` binding the page sets only when the
+  rail changes hands (load, a season pick, after playback); browsing never
+  sets it, or the rail would jump under a moving focus. The rail's gutter
+  is a scroll content margin so a scrolled-to episode lands at the gutter
+  and a focused card's lift still clears the edge. After playback the page
+  follows the server's up-next answer, seasons away if need be, and drops
+  any card picked before the session. On tvOS the series synopsis reserves
+  three lines (`lineLimit(3, reservesSpace: true)`), an episode without one
+  included, because it sits above the rail and follows the focused episode. Watched episodes carry
+  `WatchedMark`, a checkmark on the same dark disc as the download badge,
+  both sized by `cardMarkSize` and inset by `cardMarkInset`.
 - **Settings:** use native category navigation on each platform. iOS uses
   Forms, pickers, toggles, and Edit/reorder; tvOS keeps remote focus behavior.
 - **Downloads (iOS only, HEL-166):** `DownloadControl` is a glass circle
@@ -122,8 +140,9 @@ need an explicit appropriate control style. Test focused and unfocused states.
   control renders nothing until it is allowed, and a task on a view that
   renders nothing never runs, so it could not have learned the answer that
   would make it appear. Its progress ring uses
-  `downloadRingLineWidth`; it and a poster's small "downloaded" badge on
-  `PosterCard`, `LandscapeCard`, and `EpisodeCard` share `downloadMarkSize`.
+  `downloadRingLineWidth` and `downloadMarkSize`; a poster's small
+  "downloaded" badge on `PosterCard`, `LandscapeCard`, and `EpisodeCard` is
+  `DownloadedMark`, sized by the shared `cardMarkSize` (equal on iOS).
   `DownloadsView` lists every downloaded title reachable with no server at
   all; Library surfaces an entry point to it and an offline banner when the
   server can't be reached. Settings > Downloads shows the count and its
