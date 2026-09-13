@@ -261,7 +261,9 @@ private struct ArtworkFocusHue: ViewModifier {
             RoundedRectangle(cornerRadius: cornerRadius + Metrics.Space.s)
                 .fill(
                     LinearGradient(
-                        colors: palette.colors,
+                        // Artwork that could not be sampled halos in the
+                        // theme's glow, not the brand's (HEL-173).
+                        colors: palette == .fallback ? Theme.glow.colors : palette.colors,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -301,7 +303,7 @@ struct ItemProgressBar: View {
             ZStack(alignment: .leading) {
                 Rectangle().fill(Color.black.opacity(0.6))
                 Rectangle()
-                    .fill(Color.lagoonAqua)
+                    .fill(Theme.accent)
                     .frame(width: proxy.size.width * progress)
             }
         }
