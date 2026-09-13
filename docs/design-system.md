@@ -127,7 +127,11 @@ need an explicit appropriate control style. Test focused and unfocused states.
   `PosterCard`, `LandscapeCard`, and `EpisodeCard` share `downloadMarkSize`.
   `DownloadsView` lists every downloaded title reachable with no server at
   all; Library surfaces an entry point to it and an offline banner when the
-  server can't be reached.
+  server can't be reached. Settings > Downloads shows the count and its
+  Show Downloads button lands on that same Library list through the
+  `showDownloadsList` environment action, because the Settings stack is
+  destination-owned and the list's rows are route values; the two must not
+  share a stack (see `ContentNavigationRoute`).
 - **Loading and failures:** use the shared state views. Keep mounted content
   during reconciliation and use inline retry when there is usable content.
 

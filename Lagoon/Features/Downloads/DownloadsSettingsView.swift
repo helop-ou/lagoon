@@ -3,10 +3,12 @@ import SwiftUI
 #if os(iOS)
 /// Downloads preferences (HEL-166): the quality newly started downloads
 /// default to, whether transfers wait for Wi-Fi, how much space they use on
-/// this device, and a way to clear all of them at once.
+/// this device, how many titles are on it with a way to the list, and a way
+/// to clear all of them at once.
 struct DownloadsSettingsView: View {
     private var store: DownloadStore { .shared }
 
+    @Environment(\.showDownloadsList) private var showDownloadsList
     @State private var confirmingDeleteAll = false
 
     var body: some View {
@@ -31,6 +33,12 @@ struct DownloadsSettingsView: View {
 
             Section {
                 LabeledContent("Storage", value: storageText)
+                LabeledContent("Downloaded Titles", value: store.entries.count, format: .number)
+                Button("Show Downloads") {
+                    showDownloadsList?()
+                }
+                .disabled(store.entries.isEmpty)
+                .accessibilityIdentifier("settings.downloads.show")
                 Button("Delete All Downloads", role: .destructive) {
                     confirmingDeleteAll = true
                 }

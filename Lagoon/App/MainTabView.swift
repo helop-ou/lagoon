@@ -272,9 +272,26 @@ struct MainTabView: View {
                 NavigationStack {
                     SettingsView()
                 }
+                #if os(iOS)
+                .environment(\.showDownloadsList, showDownloadsList)
+                #endif
             }
         }
     }
+
+    #if os(iOS)
+    /// Settings > Downloads > Show Downloads lands on the Library tab's
+    /// downloads list rather than pushing a copy into the Settings stack
+    /// (see `EnvironmentValues.showDownloadsList`). The list replaces
+    /// whatever Library had open: the viewer asked for the list, not for
+    /// it on top of a film page they left behind.
+    private func showDownloadsList() {
+        selectedTab = .library
+        if libraryNavigationPath != [.downloads] {
+            libraryNavigationPath = [.downloads]
+        }
+    }
+    #endif
 
     /// Keep source choices available through transient failures (HEL-61).
     /// Library itself is now a stable tab, independent of this request.

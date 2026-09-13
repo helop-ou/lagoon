@@ -84,3 +84,14 @@ extension View {
         }
     }
 }
+
+#if os(iOS)
+extension EnvironmentValues {
+    /// Shows the downloads list where it lives, on the Library tab (HEL-166).
+    /// Settings > Downloads offers it too, but cannot push it: the Settings
+    /// stack is built from destination-owned links and the list's rows are
+    /// value-owned routes, and mixing the two in one stack lost pushes and
+    /// popped past the list on the phone. `MainTabView` provides the action.
+    @Entry var showDownloadsList: (@MainActor () -> Void)?
+}
+#endif
