@@ -233,6 +233,8 @@ enum Metrics {
     /// iOS hero clipping; tvOS heroes use the native card shape.
     static let heroCornerRadius: CGFloat = 16
     static let progressBarHeight: CGFloat = 6
+    /// The theme swatch beside a theme's name in Appearance settings.
+    static let themeSwatchSize: CGFloat = 28
     /// A card's small round badges: "downloaded" and "watched" (HEL-175).
     /// Sized to read at each platform's viewing distance, and equal to the
     /// download control's `downloadMarkSize` on iOS so the badge and the
@@ -355,6 +357,7 @@ nonisolated enum ContentIcon {
         static let developer = "hammer.fill"
         static let about = "info.circle.fill"
         static let downloads = "arrow.down.circle.fill"
+        static let appearance = "paintpalette.fill"
     }
 
     /// Jellyfin's collection type for a library, as a glyph.
@@ -493,7 +496,7 @@ struct LagoonJellyfishAccent: View {
             .renderable(template: true)
             .scaledToFit()
             .frame(height: height)
-            .foregroundStyle(Color.lagoonAqua.opacity(0.35))
+            .foregroundStyle(Theme.accent.opacity(0.35))
             .accessibilityHidden(true)
     }
 }
