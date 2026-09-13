@@ -438,6 +438,8 @@ struct DetailHeader<Buttons: View>: View {
     /// is the next episode, not the premise of the series (Infuse does the
     /// same). The title art stays the show's — that's the page's identity.
     var upNext: MediaItem?
+    /// Keep the synopsis's height fixed while `upNext` changes (HEL-175).
+    var reservesOverviewLines = false
     @ViewBuilder let buttons: Buttons
 
     var body: some View {
@@ -452,7 +454,8 @@ struct DetailHeader<Buttons: View>: View {
             officialRating: item.officialRating,
             genres: item.genres ?? [],
             communityRating: item.communityRating,
-            overview: upNext?.overview ?? item.overview
+            overview: upNext?.overview ?? item.overview,
+            overviewReservesLines: reservesOverviewLines
         ) {
             #if os(iOS)
             TitleArtView(
@@ -506,6 +509,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     let genres: [String]
     let communityRating: Double?
     let overview: String?
+    let overviewReservesLines: Bool
     @ViewBuilder let title: Title
     @ViewBuilder let buttons: Buttons
 
@@ -517,6 +521,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         genres: [String] = [],
         communityRating: Double? = nil,
         overview: String?,
+        overviewReservesLines: Bool = false,
         @ViewBuilder title: () -> Title,
         @ViewBuilder buttons: () -> Buttons
     ) {
@@ -527,6 +532,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         self.genres = genres
         self.communityRating = communityRating
         self.overview = overview
+        self.overviewReservesLines = overviewReservesLines
         self.title = title()
         self.buttons = buttons()
     }
@@ -637,7 +643,13 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     @ViewBuilder
     private var overviewView: some View {
         if let overview, !overview.isEmpty {
-            DetailOverview(text: overview)
+            DetailOverview(text: overview, reservesLines: overviewReservesLines)
+        } else if overviewReservesLines {
+            #if os(tvOS)
+            // An episode with no synopsis keeps the block's height, or the
+            // page would jump on that one card (HEL-175).
+            DetailOverview(text: "", reservesLines: true)
+            #endif
         }
     }
 
@@ -763,15 +775,23 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
 /// rest of the block has to fit beside the artwork; the whole text on touch,
 /// where the page scrolls and an expand button only stood between the viewer
 /// and the paragraph they had already started reading (HEL-169).
+///
+/// On a series page the text follows the focused episode, and the synopsis
+/// sits between the facts and the Play row, so its height moved everything
+/// beneath it, the episode rail being browsed included, by up to two lines
+/// per step (HEL-175). `reservesLines` keeps all three lines' worth of
+/// height whatever the current text needs. Touch shows the whole synopsis
+/// and changes it only after playback, so it takes no reservation.
 private struct DetailOverview: View {
     let text: String
+    var reservesLines = false
 
     var body: some View {
         Text(text)
             .font(.callout)
             #if os(tvOS)
             .foregroundStyle(.secondary)
-            .lineLimit(3)
+            .lineLimit(3, reservesSpace: reservesLines)
             #else
             .foregroundStyle(.primary)
             #endif

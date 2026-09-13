@@ -12,6 +12,13 @@ final class SeriesDetailViewModel {
     /// unwatched. Nil once the show is finished.
     var upNext: MediaItem?
 
+    /// The episode Play starts when nothing is up next: the first of the
+    /// visible season. A finished show has no next episode, and a page with
+    /// no Play button read as broken rather than as "you've seen it all"
+    /// (HEL-175). Starting the season over is the one obvious thing to
+    /// offer, and it moves with the season picker.
+    var firstEpisode: MediaItem? { episodes.first }
+
     func load(client: JellyfinClient, seriesId: String) async {
         async let detailTask = client.item(id: seriesId)
         async let seasonsTask = client.seasons(seriesId: seriesId)
@@ -20,9 +27,32 @@ final class SeriesDetailViewModel {
         seasons = (try? await seasonsTask) ?? []
         upNext = try? await upNextTask
         if selectedSeasonId == nil {
-            selectedSeasonId = seasons.first?.id
+            selectedSeasonId = openingSeasonId
         }
         await loadEpisodes(client: client, seriesId: seriesId)
+    }
+
+    /// Where the page opens: the season holding the episode that's up next,
+    /// so the rail shows what surrounds it rather than season one every
+    /// time. A finished show opens on its first regular season; the server
+    /// sorts Specials first, and they are the wrong place to start a rewatch.
+    private var openingSeasonId: String? {
+        if let seasonId = upNextSeasonId { return seasonId }
+        return (seasons.first { ($0.indexNumber ?? 0) > 0 } ?? seasons.first)?.id
+    }
+
+    /// The up-next episode's season, when it's one the page can show.
+    private var upNextSeasonId: String? {
+        guard let seasonId = upNext?.seasonId, seasons.contains(where: { $0.id == seasonId }) else { return nil }
+        return seasonId
+    }
+
+    /// After playback: a session can end seasons away from where it started,
+    /// so the rail follows the episode that is now up next (HEL-175). Nothing
+    /// changes when it is already in view, or the show is finished.
+    func followUpNext(client: JellyfinClient, seriesId: String) async {
+        guard let seasonId = upNextSeasonId else { return }
+        await selectSeason(seasonId, client: client, seriesId: seriesId)
     }
 
     func selectSeason(_ seasonId: String, client: JellyfinClient, seriesId: String) async {
@@ -90,24 +120,32 @@ struct SeriesDetailView: View {
     /// when focus leaves the rail: having browsed to E5, moving up to Play
     /// should start E5, not snap back to whatever was up next.
     @State private var highlighted: MediaItem?
+    /// The episode at the rail's leading edge. The page sets it when the
+    /// rail's content changes hands (a load, a season pick, a finished
+    /// playback session) so the episode Play names is in view; browsing the
+    /// rail leaves it to the scroll view, which would otherwise yank the row
+    /// under a moving focus (HEL-175).
+    @State private var railPosition: String?
 
     private var displayed: MediaItem { viewModel.detail ?? item }
 
     /// What the header describes and the buttons act on: the episode you're
-    /// looking at, or the one that would play if you haven't looked yet.
-    private var subject: MediaItem? { highlighted ?? viewModel.upNext }
+    /// looking at, the one that would play if you haven't looked yet, or the
+    /// first of the visible season once the show is finished.
+    private var subject: MediaItem? { highlighted ?? viewModel.upNext ?? viewModel.firstEpisode }
 
     var body: some View {
         DetailPageScaffold(
             backdropURL: session.client.imageURL(for: displayed, kind: .backdrop, maxWidth: Metrics.detailBackdropRequestWidth),
             posterURL: session.client.imageURL(for: displayed, kind: .poster, maxWidth: Metrics.detailPosterRequestWidth)
         ) {
-            DetailHeader(item: displayed, upNext: subject) { actions }
+            DetailHeader(item: displayed, upNext: subject, reservesOverviewLines: true) { actions }
             episodesSection
             CastStrip(people: displayed.people ?? [])
         }
         .task(id: item.id) {
             await viewModel.load(client: session.client, seriesId: item.id)
+            railPosition = subject?.id
             #if os(iOS)
             await DownloadStore.shared.refreshPermission(client: session.client)
             #endif
@@ -127,8 +165,23 @@ struct SeriesDetailView: View {
             Task {
                 await session.client.playbackReports.settle()
                 await viewModel.reloadUserData(client: session.client, seriesId: item.id)
+                // The page is about wherever the session ended, not the
+                // card picked before it: a binge from S1 E1 can stop in
+                // S3, and the server's answer for what's up next is the
+                // only one that knows (HEL-175).
+                highlighted = nil
+                await viewModel.followUpNext(client: session.client, seriesId: item.id)
+                railPosition = subject?.id
             }
         })
+    }
+
+    /// A season the viewer picked: its rail starts at the beginning. Picking
+    /// the season already showing leaves the rail where it is.
+    private func showSeason(_ seasonId: String) async {
+        guard seasonId != viewModel.selectedSeasonId else { return }
+        await viewModel.selectSeason(seasonId, client: session.client, seriesId: item.id)
+        railPosition = viewModel.firstEpisode?.id
     }
 
     /// Play the episode that's up next, then the toggles, then the season
@@ -245,11 +298,12 @@ struct SeriesDetailView: View {
         #endif
     }
 
-    /// The checkmark acts on that episode; the star favourites the show.
-    /// Each control targets what it plausibly means next to a Play button
-    /// that starts one specific episode.
+    /// The checkmark acts on the episode you're looking at or the one up
+    /// next, and on the show itself once every episode is watched, where
+    /// Play offers a rewatch from episode one but the check should clear
+    /// the whole show, not just that episode. The star favourites the show.
     private var actionRow: some View {
-        ItemActionRow(item: displayed, playedItem: subject) {
+        ItemActionRow(item: displayed, playedItem: highlighted ?? viewModel.upNext) {
             let refreshed = await viewModel.reloadUserData(client: session.client, seriesId: item.id)
             // A hand-picked episode lives in this view's state, which no
             // reload touches: re-match it from the refreshed rail so its
@@ -271,7 +325,7 @@ struct SeriesDetailView: View {
                     get: { viewModel.selectedSeasonId },
                     set: { id in
                         guard let id else { return }
-                        Task { await viewModel.selectSeason(id, client: session.client, seriesId: item.id) }
+                        Task { await showSeason(id) }
                     }
                 )) {
                     ForEach(viewModel.seasons) { season in
@@ -286,7 +340,7 @@ struct SeriesDetailView: View {
                     HStack(spacing: Metrics.Space.m) {
                         ForEach(viewModel.seasons) { season in
                             Button(season.name ?? "Season") {
-                                Task { await viewModel.selectSeason(season.id, client: session.client, seriesId: item.id) }
+                                Task { await showSeason(season.id) }
                             }
                             .buttonStyle(.glass)
                             // Weight alone marks the selected season: a colored
@@ -332,10 +386,16 @@ struct SeriesDetailView: View {
                         }
                     }
                 }
-                .padding(.horizontal, Metrics.screenGutter)
+                .scrollTargetLayout()
                 .padding(.top, Metrics.railTopPadding)
                 .padding(.bottom, Metrics.railBottomPadding)
             }
+            // The gutter is a content margin rather than padding so that
+            // scrolling to an episode lands it at the gutter, not flush with
+            // the screen edge; the viewport still spans the whole width, so
+            // a focused card's lift is not clipped at the edge.
+            .contentMargins(.horizontal, Metrics.screenGutter, for: .scrollContent)
+            .scrollPosition(id: $railPosition, anchor: .leading)
             .opacity(viewModel.isLoadingEpisodes ? 0.4 : 1)
             .animation(.easeInOut(duration: Motion.fast), value: viewModel.isLoadingEpisodes)
         }
@@ -372,14 +432,19 @@ struct EpisodeCard: View {
         }
     }
 
+    private var isWatched: Bool { episode.userData?.played == true }
+
     private var episodeAccessibilityLabel: String {
-        let base = [episode.episodeLabel, episode.name].compactMap { $0 }.joined(separator: " · ")
+        var parts = [[episode.episodeLabel, episode.name].compactMap { $0 }.joined(separator: " · ")]
+        if isWatched {
+            parts.append(String(localized: "watched"))
+        }
         #if os(iOS)
         if DownloadStore.shared.isDownloaded(episode.id) {
-            return base + ", downloaded"
+            parts.append(String(localized: "downloaded"))
         }
         #endif
-        return base
+        return parts.joined(separator: ", ")
     }
 
     private var artwork: some View {
@@ -418,13 +483,18 @@ struct EpisodeCard: View {
             }
             .frame(width: cardWidth, height: cardHeight)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-            #if os(iOS)
             .overlay(alignment: .topTrailing) {
-                if DownloadStore.shared.isDownloaded(episode.id) {
-                    DownloadedMark()
-                        .padding(Metrics.Space.xs)
+                HStack(spacing: Metrics.Space.xs) {
+                    if isWatched {
+                        WatchedMark()
+                    }
+                    #if os(iOS)
+                    if DownloadStore.shared.isDownloaded(episode.id) {
+                        DownloadedMark()
+                    }
+                    #endif
                 }
+                .padding(Metrics.cardMarkInset)
             }
-            #endif
     }
 }
