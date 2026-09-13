@@ -29,6 +29,7 @@ screen-specific copies of its values.
 | `downloadRingLineWidth` | Not used | 2.5: the download control's progress ring stroke |
 | `downloadMarkSize` | Not used | 18: the download progress ring |
 | `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's round "downloaded" and "watched" badges and their inset from the corner |
+| `themeSwatchSize` | Not used | 28: the theme swatch beside each theme's name in Settings › Appearance |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
 `Metrics.Space` provides `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
@@ -49,10 +50,44 @@ named `Typography` values rather than raw `.system(size:)` in screens.
 ## Brand and materials
 
 Brand tokens are `.lagoonAqua` (`#2ED4C7`), `.lagoonShore` (`#0D4A57`), and
-`.lagoonNavy` (`#0B1D28`). Reserve them for branding and the established
-progress/selection accents. `AccentColor` stays white; it is not a brand
-color. Use `.primary`, `.secondary`, `.tertiary`, fills, and materials for
-ordinary UI.
+`.lagoonNavy` (`#0B1D28`). Reserve them for the lockup and anything that
+must never follow a theme. Everywhere else the brand's moments read the
+current theme through `Theme` (see Themes below). `AccentColor` stays
+white; it is not a brand color. Use `.primary`, `.secondary`, `.tertiary`,
+fills, and materials for ordinary UI.
+
+## Themes
+
+A theme is a `ThemePalette` of five roles (HEL-173): `accent` for progress
+fills, selection marks, the jellyfish and the focus halo's fallback;
+`ground` for card washes and the ambient glow; `background` for the surface
+behind content; `glowDepth` for the third glow colour; and `controlTint`,
+the tint iOS's native controls take. Text never takes a theme colour. Two themes exist,
+`AppTheme.lagoon` (the Twin Shores palette over true black, no control tint)
+and `AppTheme.babyPink` (`#FFB7CF` accents over a `#2B1020` ground and a
+`#120810` plum background, with the accent as the iOS control tint). Keep
+the list short: a theme is a considered set checked over every screen, not
+a hue slider.
+
+Screens read colours from `Theme.accent`, `Theme.ground`, `Theme.background`
+and `Theme.glow` inside `body`, never from the brand tokens or `Color.black`
+directly, so a change re-renders through Observation without environment
+plumbing. Page backgrounds and the fades that carry artwork into the page
+use `Theme.background`; a scrim over artwork inside a card stays black. The
+player surface, its overlays, subtitles and the Top Shelf stay pure black
+and outside the theme. tvOS controls are never tinted (the focused lozenge
+rule above); `themedControls()` applies `controlTint` on iOS only.
+
+The choice belongs to the Jellyfin profile: `SessionStore` points
+`ThemeStore.shared` at the active account with the other per-account stores,
+passing itself as the owner, and a nil account only counts from the owner
+that activated the current one (the `DownloadStore` rule: SwiftUI constructs
+the root's session store more than once and the extras announce no account).
+The choice persists under `appearance.theme.<accountID>`, which
+`AccountLocalData` removes with the account and the regression reset clears. Settings › Appearance offers the themes on both platforms; choosing
+one plays `ThemeBloomOverlay` from the root, a bloom of the new accent with
+drifting petals for under two seconds, reduced to a plain fade under Reduce
+Motion. The bloom plays for a viewer's choice, never for loading a saved one.
 
 Use native `.glass` actions and the existing circular control shape where
 appropriate. The iOS player's center transport uses `.glass(.clear)` to keep
