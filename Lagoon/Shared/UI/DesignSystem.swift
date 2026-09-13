@@ -101,6 +101,8 @@ enum Metrics {
     /// at this share of the window height, low enough that the facts and
     /// synopsis sit below the fold the way Infuse places them (HEL-169).
     static let detailLandscapeRowShare: CGFloat = 0.88
+    /// Blur of the poster copy that fills the sides of a landscape hero.
+    static let detailPosterAmbientBlur: CGFloat = 36
     /// The phone's Play pill: wide enough to be the page's one big target,
     /// capped so it never becomes a bar across the screen (HEL-169, after
     /// Infuse's proportions). The landscape row shares its width with the
@@ -145,6 +147,9 @@ enum Metrics {
     /// unconditionally and the scaffold ignores it on tvOS.
     static let detailPosterRequestWidth = 1200
     static let detailPosterDecodeSize = 1800
+    /// The blurred ambient copy needs no detail; a small decode keeps the
+    /// blur cheap.
+    static let detailPosterAmbientDecodeSize = 240
 
     /// The spacing scale (HEL-51). Every gap and inset *inside* a screen
     /// picks a step from here; the structural values above (gutter, card
