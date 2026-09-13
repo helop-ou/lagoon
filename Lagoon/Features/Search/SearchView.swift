@@ -204,7 +204,7 @@ struct SearchView: View {
             .padding(.bottom, Metrics.Space.section)
         }
         .scrollClipDisabled()
-        .background(Color.black.ignoresSafeArea())
+        .background(Theme.background.ignoresSafeArea())
         // Scoped to the content, not the NavigationStack — otherwise the
         // search field stays overlaid on pushed detail pages.
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
