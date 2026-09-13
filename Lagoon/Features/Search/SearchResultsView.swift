@@ -110,7 +110,7 @@ struct SearchResultsView: View {
             .padding(.vertical, Metrics.Space.xl)
         }
         .scrollClipDisabled()
-        .background(Color.black.ignoresSafeArea())
+        .background(Theme.background.ignoresSafeArea())
         .navigationTitle(source.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
