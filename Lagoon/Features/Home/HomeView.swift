@@ -9,7 +9,7 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Theme.background.ignoresSafeArea()
 
             if viewModel.isLoading {
                 LoadingView()
