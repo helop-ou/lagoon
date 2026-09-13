@@ -418,8 +418,148 @@ enum DetailLayout {
     ) -> Bool {
         !usesLeadingColumn(horizontalSizeClass) && verticalSizeClass == .compact
     }
+
+    /// Where the title art sits: centred under the portrait phone's hero,
+    /// leading in the landscape row and the iPad's column (HEL-169).
+    static func titleAlignment(
+        _ horizontalSizeClass: UserInterfaceSizeClass?,
+        _ verticalSizeClass: UserInterfaceSizeClass?
+    ) -> HorizontalAlignment {
+        usesLeadingColumn(horizontalSizeClass) || usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+            ? .leading
+            : .center
+    }
 }
 #endif
+
+/// The actions block of a detail page, laid out once for every page that
+/// has one primary pill and some secondary controls (HEL-174). Film, series
+/// and Seerr pages each used to carry their own copy of the four
+/// compositions below, and the Seerr page's copy fell behind when the touch
+/// pages were redesigned (HEL-169).
+///
+/// - tvOS and a regular-width iPad window: one row, the primary first so it
+///   takes first focus, with the accessory beneath the row.
+/// - A landscape phone: the secondary controls, the accessory, then the
+///   primary on one line along the hero's lower part. The row aligns on the
+///   primary's `detailPillCenter`, so a caption hung under the pill does not
+///   pull the circles off level.
+/// - A portrait phone: the primary alone, wide, then the secondary controls
+///   and the accessory as one row beneath it.
+///
+/// The accessory is the series page's season picker: a control that belongs
+/// with the circles on a phone but under the row where there is width.
+struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View {
+    @ViewBuilder let primary: Primary
+    @ViewBuilder let secondary: Secondary
+    @ViewBuilder let accessory: Accessory
+
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
+
+    init(
+        @ViewBuilder primary: () -> Primary,
+        @ViewBuilder secondary: () -> Secondary,
+        @ViewBuilder accessory: () -> Accessory = { EmptyView() }
+    ) {
+        self.primary = primary()
+        self.secondary = secondary()
+        self.accessory = accessory()
+    }
+
+    var body: some View {
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            HStack(spacing: Metrics.detailActionSpacing) {
+                primary
+                secondary
+            }
+            accessory
+        }
+        #else
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
+            VStack(alignment: .leading, spacing: Metrics.Space.l) {
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    primary
+                    secondary
+                }
+                accessory
+            }
+        } else if DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass) {
+            // A plain row, not the adaptive stack: when the line is tight
+            // the title art beside it gives way, rather than the accessory
+            // dropping under the circles.
+            HStack(alignment: .detailPillCenter, spacing: Metrics.detailActionSpacing) {
+                secondary
+                accessory
+                    .fixedSize()
+                primary
+            }
+        } else {
+            VStack(spacing: Metrics.Space.m) {
+                primary
+                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                    secondary
+                    accessory
+                }
+            }
+        }
+        #endif
+    }
+}
+
+extension View {
+    /// The label of a detail page's one hero action (Play, Resume, Request,
+    /// Open in Lagoon): `title3` on touch, always on one line, and capped in
+    /// width on a phone so it is big without becoming a bar (HEL-169). The
+    /// TV's glass pill sizes itself.
+    func detailPrimaryLabel() -> some View {
+        modifier(DetailPrimaryLabelModifier())
+    }
+
+    /// The button around that label: glass, and extra large on touch.
+    func detailPrimaryButton() -> some View {
+        #if os(iOS)
+        buttonStyle(.glass)
+            .controlSize(.extraLarge)
+        #else
+        buttonStyle(.glass)
+        #endif
+    }
+}
+
+private struct DetailPrimaryLabelModifier: ViewModifier {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    /// Natural in the wide iPad row; capped on a phone, tighter still in
+    /// the landscape row it shares with the title art and the circles.
+    private var maxWidth: CGFloat? {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass) { return nil }
+        return DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+            ? Metrics.detailLandscapePlayButtonMaxWidth
+            : Metrics.detailPlayButtonMaxWidth
+    }
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .font(.title3.weight(.semibold))
+            // One line always: a Label squeezed for width stacks its icon
+            // over its text, which folded the landscape row's pill into a
+            // column once four circles shared the line.
+            .fixedSize()
+            .frame(maxWidth: maxWidth)
+            .padding(.vertical, Metrics.Space.xs)
+        #else
+        content
+        #endif
+    }
+}
 
 /// Title, metadata, capability badges, actions and synopsis — the block that
 /// sits at the bottom of a detail page's first screen.
@@ -460,10 +600,7 @@ struct DetailHeader<Buttons: View>: View {
             #if os(iOS)
             TitleArtView(
                 item: item,
-                alignment: DetailLayout.usesLeadingColumn(horizontalSizeClass)
-                    || DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
-                    ? .leading
-                    : .center
+                alignment: DetailLayout.titleAlignment(horizontalSizeClass, verticalSizeClass)
             )
             #else
             TitleArtView(item: item)
@@ -872,20 +1009,58 @@ struct TitleArtImage: View {
     }
 }
 
+/// One person in the cast strip, from whichever service supplied them: a
+/// Jellyfin `Person` on a library title, TMDB's credits on a Seerr title
+/// (HEL-174).
+struct CastCredit: Identifiable, Hashable {
+    let id: String
+    let name: String
+    /// The character for actors; the job itself for crew, so a director
+    /// doesn't sit there with a blank line under them.
+    let credit: String?
+    let imageURL: URL?
+}
+
 /// Cast strip. Deliberately **not** focusable and not scrolling: there's no
 /// person screen to navigate to, and a rail you can focus but not act on is
 /// worse than a short honest one. It sits between the buttons and the
 /// related rail, so moving focus down scrolls it into view.
 struct CastStrip: View {
-    let people: [Person]
+    private let people: [Person]
+    private let credits: [CastCredit]?
 
     @Environment(SessionStore.self) private var session
+
+    /// A library title's cast, with headshots from the Jellyfin server.
+    init(people: [Person]) {
+        self.people = people
+        self.credits = nil
+    }
+
+    /// A cast already resolved to names and pictures, for titles that are
+    /// not in the library.
+    init(credits: [CastCredit]) {
+        self.people = []
+        self.credits = credits
+    }
 
     /// Actors first, then crew — the server returns them roughly in that
     /// order already, so this only drops the ones with no headshot, which
     /// would otherwise be a row of grey circles.
-    private var cast: [Person] {
-        people.filter { $0.primaryImageTag != nil }
+    private var cast: [CastCredit] {
+        if let credits {
+            return credits.filter { $0.imageURL != nil }
+        }
+        return people
+            .filter { $0.primaryImageTag != nil }
+            .map { person in
+                CastCredit(
+                    id: person.id,
+                    name: person.name ?? "",
+                    credit: credit(for: person),
+                    imageURL: session.client.personImageURL(for: person, maxWidth: Int(Metrics.castPortraitSize * 2))
+                )
+            }
     }
 
     var body: some View {
@@ -899,8 +1074,8 @@ struct CastStrip: View {
                 // Fixed row: eight fit across a 16:9 screen, and a rail you
                 // can focus but not act on is worse than a short honest one.
                 HStack(alignment: .top, spacing: Metrics.cardSpacing) {
-                    ForEach(cast.prefix(Metrics.castCount)) { person in
-                        castMember(person)
+                    ForEach(cast.prefix(Metrics.castCount)) { member in
+                        castMember(member)
                     }
                     Spacer(minLength: 0)
                 }
@@ -912,8 +1087,8 @@ struct CastStrip: View {
                 // four at this width would overflow the screen anyway.
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Metrics.cardSpacing) {
-                        ForEach(cast) { person in
-                            castMember(person)
+                        ForEach(cast) { member in
+                            castMember(member)
                         }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
@@ -929,10 +1104,10 @@ struct CastStrip: View {
         return person.type
     }
 
-    private func castMember(_ person: Person) -> some View {
+    private func castMember(_ member: CastCredit) -> some View {
         VStack(spacing: Metrics.Space.s) {
             CachedAsyncImage(
-                url: session.client.personImageURL(for: person, maxWidth: Int(Metrics.castPortraitSize * 2)),
+                url: member.imageURL,
                 maxPixelSize: Int(Metrics.castPortraitSize * 2)
             ) { image in
                 image.resizable().scaledToFill()
@@ -951,13 +1126,11 @@ struct CastStrip: View {
             VStack(spacing: Metrics.Space.hair) {
                 // Two lines for the name: at eight across there is width to
                 // spare, and "Elijah Isaiah…" reads worse than a wrap.
-                Text(person.name ?? "")
+                Text(member.name)
                     .font(.caption.weight(.semibold))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                // Character for actors; the credit itself for crew, so a
-                // director doesn't sit there with a blank line under them.
-                if let credit = credit(for: person) {
+                if let credit = member.credit {
                     Text(credit)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
