@@ -133,11 +133,15 @@ struct JellyfishSwimLayer: View {
                 }
             }
         } else {
+            // Read here, in the body, so the theme is registered with
+            // Observation; the Canvas closure below only ever sees the
+            // already-resolved color, never `Theme` itself (HEL-173).
+            let ink = Theme.accent
             TimelineView(.animation) { timeline in
                 Canvas { context, size in
                     let seconds = timeline.date.timeIntervalSinceReferenceDate
                     for swimmer in school.swimmers {
-                        swimmer.draw(in: &context, size: size, seconds: seconds)
+                        swimmer.draw(in: &context, size: size, seconds: seconds, ink: ink)
                     }
                 }
                 .allowsHitTesting(false)
@@ -176,7 +180,7 @@ struct Swimmer {
     /// How far the body may lean out of upright, either way.
     private var maximumTilt: Double { 0.22 }
 
-    func draw(in context: inout GraphicsContext, size: CGSize, seconds: Double) {
+    func draw(in context: inout GraphicsContext, size: CGSize, seconds: Double, ink accentColor: Color) {
         let beats = seconds / period + phase
         let beat = beats.truncatingRemainder(dividingBy: 1)
         let contraction = Self.contraction(of: beat, squeeze: squeeze)
@@ -212,7 +216,7 @@ struct Swimmer {
         body.scaleBy(x: drawn / 256, y: drawn / 256)
         body.translateBy(x: -128, y: -140)
 
-        let ink = GraphicsContext.Shading.color(Color.lagoonAqua.opacity(opacity))
+        let ink = GraphicsContext.Shading.color(accentColor.opacity(opacity))
         body.stroke(
             JellyfishGeometry.bell(contraction: contraction),
             with: ink,
