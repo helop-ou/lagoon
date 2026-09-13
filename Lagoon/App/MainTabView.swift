@@ -222,6 +222,7 @@ struct MainTabView: View {
                         heroFocus: $homeHeroFocused
                     )
                         .contentNavigationDestinations()
+                        .themedChrome()
                 }
             }
 
@@ -232,6 +233,7 @@ struct MainTabView: View {
                     )
                         .seerrNavigationDestinations()
                         .contentNavigationDestinations()
+                        .themedChrome()
                 }
             }
 
@@ -245,6 +247,7 @@ struct MainTabView: View {
                     )
                         .id(session.activeAccount?.id)
                         .contentNavigationDestinations()
+                        .themedChrome()
                 }
             }
 
@@ -261,6 +264,7 @@ struct MainTabView: View {
                     SearchView()
                         .seerrNavigationDestinations()
                         .contentNavigationDestinations()
+                        .themedChrome()
                 }
             }
 
@@ -271,6 +275,7 @@ struct MainTabView: View {
             ) {
                 NavigationStack {
                     SettingsView()
+                        .themedChrome()
                 }
                 #if os(iOS)
                 .environment(\.showDownloadsList, showDownloadsList)
