@@ -127,8 +127,8 @@ struct HeroSection<Route: Hashable>: View {
 
     private func heroBody(for current: HeroItem<Route>, width: CGFloat) -> some View {
         // Resolved here, in the body, so a theme change re-renders the glow
-        // while no artwork palette is sampled.
-        let glowPalette = palette ?? Theme.glow
+        // whether or not an artwork palette is sampled.
+        let glowPalette = Theme.glow(for: palette)
         return ZStack {
             AmbientGlowView(palette: glowPalette)
                 // Negative gutter: the glow is meant to bleed past the
