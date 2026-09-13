@@ -194,6 +194,25 @@ final class SeerrClient {
         }
     }
 
+    /// TMDB's recommendations for a title, which is what Jellyfin's own
+    /// "More Like This" draws on for a library item (HEL-174). TMDB's
+    /// `similar` list is keyword-matched and much weaker, so it is not
+    /// offered.
+    func recommendations(id: Int, mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
+        switch mediaType {
+        case .movie:
+            return try await get("movie/\(id)/recommendations", query: [
+                URLQueryItem(name: "page", value: String(page)),
+            ])
+        case .tv:
+            return try await get("tv/\(id)/recommendations", query: [
+                URLQueryItem(name: "page", value: String(page)),
+            ])
+        case .person:
+            throw SeerrError.server(400, "People do not have recommendations.")
+        }
+    }
+
     // MARK: - Requests
 
     func requests(
