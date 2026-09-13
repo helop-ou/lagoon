@@ -414,10 +414,173 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
     let genres: [SeerrGenre]?
     let seasons: [SeerrSeason]?
     let mediaInfo: SeerrMediaInfo?
+    /// TMDB's cast and crew, relayed by Seerr on both movie and TV details.
+    let credits: SeerrCredits?
+    /// A movie's certifications, one set per release country.
+    let releases: SeerrReleases?
+    /// A show's certifications, one per country.
+    let contentRatings: SeerrContentRatings?
 
     var displayTitle: String { title ?? name ?? originalTitle ?? originalName ?? "Untitled" }
     var date: String? { releaseDate ?? firstAirDate }
     var year: String? { date.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 } }
+
+    /// The age rating a viewer here would recognise: their own region's
+    /// certification when TMDB has one, the US one otherwise, as Jellyfin's
+    /// own metadata providers fall back (HEL-174). Nil rather than a foreign
+    /// board's label nobody can place.
+    func officialRating(region: String? = Locale.current.region?.identifier) -> String? {
+        let byCountry: [(country: String, rating: String)]
+        if let releases {
+            byCountry = releases.results.flatMap { release in
+                release.releaseDates
+                    .compactMap(\.certification)
+                    .filter { !$0.isEmpty }
+                    .map { (release.iso3166_1, $0) }
+            }
+        } else if let contentRatings {
+            byCountry = contentRatings.results
+                .filter { !$0.rating.isEmpty }
+                .map { ($0.iso3166_1, $0.rating) }
+        } else {
+            return nil
+        }
+        for country in [region, "US"].compactMap({ $0 }) {
+            if let match = byCountry.first(where: { $0.country.caseInsensitiveCompare(country) == .orderedSame }) {
+                return match.rating
+            }
+        }
+        return nil
+    }
+}
+
+nonisolated struct SeerrCredits: Decodable, Hashable {
+    let cast: [SeerrCastMember]
+    let crew: [SeerrCrewMember]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        cast = try container.decodeIfPresent([SeerrCastMember].self, forKey: .cast) ?? []
+        crew = try container.decodeIfPresent([SeerrCrewMember].self, forKey: .crew) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case cast, crew
+    }
+}
+
+nonisolated struct SeerrCastMember: Decodable, Hashable, Identifiable {
+    /// TMDB's credit id, unique per role; the person id repeats when one
+    /// actor plays two parts. Falls back to the person id so a row without
+    /// one still has an identity rather than failing the whole page.
+    let creditId: String
+    let id: Int
+    let name: String?
+    let character: String?
+    let profilePath: String?
+    let order: Int?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
+        creditId = try container.decodeIfPresent(String.self, forKey: .creditId) ?? "person-\(id)"
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        character = try container.decodeIfPresent(String.self, forKey: .character)
+        profilePath = try container.decodeIfPresent(String.self, forKey: .profilePath)
+        order = try container.decodeIfPresent(Int.self, forKey: .order)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case creditId, id, name, character, profilePath, order
+    }
+}
+
+nonisolated struct SeerrCrewMember: Decodable, Hashable, Identifiable {
+    let creditId: String
+    let id: Int
+    let name: String?
+    let job: String?
+    let department: String?
+    let profilePath: String?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id) ?? 0
+        creditId = try container.decodeIfPresent(String.self, forKey: .creditId) ?? "crew-\(id)"
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        job = try container.decodeIfPresent(String.self, forKey: .job)
+        department = try container.decodeIfPresent(String.self, forKey: .department)
+        profilePath = try container.decodeIfPresent(String.self, forKey: .profilePath)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case creditId, id, name, job, department, profilePath
+    }
+}
+
+/// TMDB's `release_dates` block as Seerr relays it. The wire keys are
+/// snake_case here, unlike the rest of Seerr's camelCase responses, so
+/// these two carry their own keys.
+nonisolated struct SeerrReleases: Decodable, Hashable {
+    let results: [SeerrCountryReleases]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        results = try container.decodeIfPresent([SeerrCountryReleases].self, forKey: .results) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case results
+    }
+}
+
+nonisolated struct SeerrCountryReleases: Decodable, Hashable {
+    let iso3166_1: String
+    let releaseDates: [SeerrReleaseDate]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        iso3166_1 = try container.decodeIfPresent(String.self, forKey: .iso3166_1) ?? ""
+        releaseDates = try container.decodeIfPresent([SeerrReleaseDate].self, forKey: .releaseDates) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case iso3166_1 = "iso_3166_1"
+        case releaseDates = "release_dates"
+    }
+}
+
+nonisolated struct SeerrReleaseDate: Decodable, Hashable {
+    let certification: String?
+}
+
+nonisolated struct SeerrContentRatings: Decodable, Hashable {
+    let results: [SeerrContentRating]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        results = try container.decodeIfPresent([SeerrContentRating].self, forKey: .results) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case results
+    }
+}
+
+nonisolated struct SeerrContentRating: Decodable, Hashable {
+    let iso3166_1: String
+    let rating: String
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        iso3166_1 = try container.decodeIfPresent(String.self, forKey: .iso3166_1) ?? ""
+        rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case iso3166_1 = "iso_3166_1"
+        case rating
+    }
 }
 
 nonisolated struct SeerrGenre: Decodable, Hashable, Identifiable {
