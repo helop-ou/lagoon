@@ -45,6 +45,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     var onPlayerClosed: (() -> Void)?
     /// Group state for the playback HUD, supplied by the store.
     var hudLines: (() -> [String])?
+    var onRequestFailure: (() -> Void)?
 
     private let client: JellyfinClient
     private let clock: ServerClock
@@ -57,7 +58,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     /// Outgoing requests, one at a time and in order. A seek followed by
     /// an unpause must reach the server in that order or the group starts
     /// at the position the viewer just left.
-    private var requests: Task<Void, Never>?
+    private let requests = SyncPlayRequestQueue()
     private var driftLoop: Task<Void, Never>?
     private var correctionHold: Task<Void, Never>?
     private var isCorrecting = false
@@ -121,6 +122,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     }
 
     private func cancelTransport() {
+        requests.cancel()
         scheduledCommand?.cancel()
         scheduledCommand = nil
         driftLoop?.cancel()
@@ -138,7 +140,6 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     /// back through `SyncPlayStore.rejoinPlayback()`.
     private func playerClosed() {
         detach()
-        enqueue { try await $0.syncPlaySetIgnoreWait(true) }
         onPlayerClosed?()
     }
 
@@ -162,7 +163,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         case .seek:
             seek(to: command.positionSeconds)
         case .stop:
-            stop()
+            closePlayer()
         case .unknown:
             break
         }
@@ -239,7 +240,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
 
     /// Stop closes the player and keeps the membership: the group is still
     /// a group, it simply has nothing playing.
-    private func stop() {
+    func closePlayer() {
         controller?.close()
     }
 
@@ -260,13 +261,18 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         guard let playlistItemId = currentPlaylistItemId?(), !playlistItemId.isEmpty else { return }
         if reportedReady == ready { return }
         reportedReady = ready
-        let report = SyncPlayReadinessReport(
-            when: JellyfinTimestamp.string(clock.serverSeconds()),
-            positionTicks: Ticks.ticks(position ?? controller?.clockPosition ?? 0),
-            isPlaying: controller?.isClockRunning ?? false,
-            playlistItemId: playlistItemId
-        )
-        enqueue { client in
+        enqueue(retryDelay: .seconds(1)) { [weak self] client in
+            guard let self,
+                  self.currentPlaylistItemId?() == playlistItemId,
+                  self.reportedReady == ready else { return }
+            // Refresh the timestamp and clock position on the retry. A
+            // newer queue/readiness state supersedes the failed report.
+            let report = SyncPlayReadinessReport(
+                when: JellyfinTimestamp.string(self.clock.serverSeconds()),
+                positionTicks: Ticks.ticks(position ?? self.controller?.clockPosition ?? 0),
+                isPlaying: self.controller?.isClockRunning ?? false,
+                playlistItemId: playlistItemId
+            )
             if ready {
                 try await client.syncPlayReportReady(report)
             } else {
@@ -383,6 +389,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
             // chain: the tvOS commit grammar is "land here *and* play on",
             // and an unpause that overtook the seek would start the group
             // where the viewer no longer is.
+            try Task.checkCancellation()
             if resume { try await client.syncPlayUnpause() }
         }
     }
@@ -397,12 +404,14 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     /// Serializes everything this driver sends. Ordering is the whole
     /// point; a failure is not, since the group's own state is the truth
     /// and the next command re-states it.
-    private func enqueue(_ work: @escaping (JellyfinClient) async throws -> Void) {
-        let previous = requests
+    private func enqueue(
+        retryDelay: Duration? = nil,
+        _ work: @escaping (JellyfinClient) async throws -> Void
+    ) {
         let client = client
-        requests = Task {
-            await previous?.value
-            try? await work(client)
-        }
+        requests.enqueue({ try await work(client) }, retryDelay: retryDelay, onFailure: { [weak self] in
+            self?.reportedReady = nil
+            self?.onRequestFailure?()
+        })
     }
 }
