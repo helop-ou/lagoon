@@ -227,6 +227,25 @@ struct SyncPlaySessionTests {
         #expect(session.accepts(later))
     }
 
+    /// The server answers a `Ready` that names a position more than half a
+    /// second from the group's with a `Seek` built out of the group's own
+    /// state — the same `When`, the same `PositionTicks`, only `EmittedAt`
+    /// moved on. Taking that for a re-send is what left a member sitting
+    /// where it was, with nothing more to report, and the group waiting on
+    /// it past thirty seconds (HEL-172).
+    @Test func aResentSeekIsACorrectionAndIsTakenAgain() throws {
+        var session = try Self.joinedWithQueue()
+        let seek = try Self.command(kind: "Seek", positionTicks: 1_200_000_000)
+        #expect(session.accepts(seek))
+        session.record(seek)
+        let correcting = try Self.command(
+            kind: "Seek",
+            positionTicks: 1_200_000_000,
+            emittedAt: "2026-09-14T11:47:00.0000000Z"
+        )
+        #expect(session.accepts(correcting))
+    }
+
     @Test func nothingIsAcceptedWithoutAGroup() throws {
         let session = SyncPlayGroupSession()
         #expect(!session.accepts(try Self.command(kind: "Unpause", positionTicks: 0)))
@@ -235,6 +254,45 @@ struct SyncPlaySessionTests {
     @Test func aCommandTheServerInventedIsIgnored() throws {
         let session = try Self.joinedWithQueue()
         #expect(!session.accepts(try Self.command(kind: "Rewind", positionTicks: 0)))
+    }
+
+    // MARK: - Where the group is
+
+    /// What a member coming back to the player has to open at: the group
+    /// has been watching all the while, and opening where the last command
+    /// left it makes the server drag this member forward — with everyone
+    /// else held up until it arrives (HEL-172).
+    @Test func aRunningGroupHasMovedOnSinceItsLastCommand() throws {
+        var session = try Self.joinedWithQueue()
+        let started = "2026-09-14T11:46:30.0000000Z"
+        session.record(try Self.command(kind: "Unpause", positionTicks: 1_000_000_000, when: started))
+        let when = try #require(JellyfinTimestamp.seconds(started))
+        #expect(session.positionSeconds(atServerSeconds: when + 90) == 190)
+        // Before the instant it names, an unpause is a position, not a
+        // clock that has been running.
+        #expect(session.positionSeconds(atServerSeconds: when - 1) == 100)
+    }
+
+    @Test func aStoppedGroupIsWhereItsLastCommandLeftIt() throws {
+        var session = try Self.joinedWithQueue()
+        let when = try #require(JellyfinTimestamp.seconds("2026-09-14T11:46:30.0000000Z"))
+        session.record(try Self.command(kind: "Pause", positionTicks: 1_000_000_000))
+        #expect(session.positionSeconds(atServerSeconds: when + 90) == 100)
+        session.record(try Self.command(kind: "Seek", positionTicks: 3_000_000_000))
+        #expect(session.positionSeconds(atServerSeconds: when + 90) == 300)
+    }
+
+    /// Nothing has been commanded yet: the queue's own start is the only
+    /// answer there is.
+    @Test func aGroupThatHasNotBeenToldAnythingIsAtItsQueueStart() throws {
+        var session = SyncPlayGroupSession()
+        _ = session.apply(try Self.groupJoined())
+        _ = session.apply(try Self.playQueue(
+            reason: "NewPlaylist",
+            lastUpdate: "2026-09-14T11:45:00.0000000Z",
+            startPositionTicks: 600_000_000
+        ))
+        #expect(session.positionSeconds(atServerSeconds: 1_000_000) == 60)
     }
 
     // MARK: - Fixtures
