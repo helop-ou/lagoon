@@ -61,10 +61,20 @@ final class SyncPlayStore {
     /// milliseconds; positive means behind. Nil when nothing is being
     /// measured. The playback HUD shows it.
     private(set) var driftMilliseconds: Int?
+    /// Whether this member has taken itself out of the group's readiness
+    /// accounting. Set when the player closes and cleared on the way back
+    /// in; the player panel's Together tab offers it as a switch.
+    private(set) var ignoresWait = false
+    /// A player is attached to this group. Home offers a way back only
+    /// while there is nothing on screen to come back to.
+    private(set) var isPlayerOpen = false
     /// The group moved to an item and there is no player showing it.
     var pendingPlayRequest: SyncPlayPlayRequest?
 
     var isJoined: Bool { session.isJoined }
+    /// The group is holding because some member is not ready — this one
+    /// included. The player labels its spinner with it.
+    var isWaitingForGroup: Bool { session.isJoined && session.state == .waiting }
 
     @ObservationIgnored private var client: JellyfinClient?
     @ObservationIgnored private var accountID: String?
@@ -136,6 +146,39 @@ final class SyncPlayStore {
         announceCapabilities()
     }
 
+    /// Creates a group and puts one item in its queue: the whole of what a
+    /// viewer standing on a detail page with nobody else's group to join
+    /// is asking for.
+    ///
+    /// The two steps cannot be collapsed. `SyncPlay/New` answers 204 and
+    /// the group's id arrives separately, over the socket, so there is
+    /// nothing to set a queue on until that `GroupJoined` update lands.
+    /// The queue update the server sends back is then what opens the
+    /// player — here through `pendingPlayRequest`, and on every other
+    /// member the same way.
+    func startGroup(named name: String, playing item: MediaItem, startPositionTicks: Int64) async {
+        guard let client else { return }
+        await createGroup(named: name)
+        guard await joinedGroupArrived() else { return }
+        try? await client.syncPlaySetQueue(
+            itemIds: [item.id],
+            playingIndex: 0,
+            startPositionTicks: startPositionTicks
+        )
+    }
+
+    /// Puts an item in front of the whole group — "play this here". The
+    /// same call `startGroup` finishes with, for a member that is already
+    /// in a room.
+    func play(_ item: MediaItem, startPositionTicks: Int64) async {
+        guard let client, session.isJoined else { return }
+        try? await client.syncPlaySetQueue(
+            itemIds: [item.id],
+            playingIndex: 0,
+            startPositionTicks: startPositionTicks
+        )
+    }
+
     func join(_ group: SyncPlayGroup) async {
         await join(groupId: group.groupId)
     }
@@ -162,6 +205,8 @@ final class SyncPlayStore {
         driver?.detach()
         session.reset()
         driftMilliseconds = nil
+        ignoresWait = false
+        isPlayerOpen = false
         pendingPlayRequest = nil
         disconnect()
         if wasJoined {
@@ -175,6 +220,7 @@ final class SyncPlayStore {
     /// out of on the way out.
     func rejoinPlayback() async {
         guard let client, session.isJoined, let item = session.queue?.playingItem else { return }
+        ignoresWait = false
         try? await client.syncPlaySetIgnoreWait(false)
         guard let media = try? await client.item(id: item.itemId) else { return }
         guard session.currentPlaylistItemId == item.playlistItemId else { return }
@@ -196,6 +242,16 @@ final class SyncPlayStore {
     func attach(_ controller: PlaybackController) {
         guard session.isJoined, let driver else { return }
         driver.attach(controller)
+        isPlayerOpen = true
+    }
+
+    /// Opts this member out of holding the group up, or back in. The
+    /// player's Together tab is bound to it; the driver sets the same flag
+    /// on its own when the player closes.
+    func setIgnoreWait(_ ignore: Bool) async {
+        guard let client, session.isJoined else { return }
+        ignoresWait = ignore
+        try? await client.syncPlaySetIgnoreWait(ignore)
     }
 
     /// The HUD's `Sync:` line (`-debug.playbackHUD`), assembled here
@@ -230,7 +286,14 @@ final class SyncPlayStore {
         driver.onDrift = { [weak self] milliseconds in self?.driftMilliseconds = milliseconds }
         driver.currentPlaylistItemId = { [weak self] in self?.session.currentPlaylistItemId }
         driver.hudLines = { [weak self] in self?.hudLines ?? [] }
-        driver.onPlayerClosed = { [weak self] in self?.pendingPlayRequest = nil }
+        driver.onPlayerClosed = { [weak self] in
+            guard let self else { return }
+            pendingPlayRequest = nil
+            isPlayerOpen = false
+            // The driver posts `SetIgnoreWait(true)` as it lets go, so the
+            // switch in the Together tab says what the server was told.
+            ignoresWait = true
+        }
         self.driver = driver
 
         let socket = ServerSocket(client: client)
@@ -275,6 +338,18 @@ final class SyncPlayStore {
         }
     }
 
+    /// Waits for the `GroupJoined` update that carries the id of the group
+    /// just created. The same five-second budget `socketReady()` allows,
+    /// and for the same reason: past it, whatever went wrong is not going
+    /// to be fixed by waiting longer.
+    private func joinedGroupArrived() async -> Bool {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !session.isJoined, ContinuousClock.now < deadline {
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
+        }
+        return session.isJoined
+    }
+
     private func disconnect() {
         messages?.cancel()
         messages = nil
@@ -294,6 +369,8 @@ final class SyncPlayStore {
         disconnect()
         session.reset()
         driftMilliseconds = nil
+        ignoresWait = false
+        isPlayerOpen = false
         pendingPlayRequest = nil
     }
 
@@ -326,6 +403,8 @@ final class SyncPlayStore {
             case .left:
                 driver?.detach()
                 driftMilliseconds = nil
+                ignoresWait = false
+                isPlayerOpen = false
                 pendingPlayRequest = nil
                 disconnect()
             case .notice(let notice):
