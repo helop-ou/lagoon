@@ -35,4 +35,7 @@ nonisolated enum SkipMode: String, CaseIterable, Identifiable {
 
     /// How long the fill takes before `autoDelay` commits.
     static let autoDelaySeconds: Double = 5
+
+    /// Where Settings keeps the choice; the player reads it there too.
+    static let defaultsKey = "playback.skipMode"
 }
