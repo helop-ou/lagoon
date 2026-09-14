@@ -17,6 +17,11 @@ struct SessionExpiryTests {
             _ = try await store.client.getData(path)
             Issue.record("A revoked token must fail")
         } catch JellyfinError.sessionExpired {
+        } catch is CancellationError {
+            // A concurrent permission/profile refresh may receive the same
+            // 401 first and expire this session. The later request is then
+            // cancelled by identity; the account assertions below must still
+            // prove the exact expiry and credential cleanup behavior.
         }
         #expect(store.phase == .needsSignIn)
         #expect(store.reauthenticationAccount == fixture.first)
@@ -161,6 +166,31 @@ struct SessionExpiryTests {
         }
         Issue.record("The test request never reached the transport")
         throw CancellationError()
+    }
+
+    @Test(arguments: [false, true])
+    func lateDownloadPermissionCannotReturnTheNextAccountsPolicy(transcoding: Bool) async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SessionExpiryProtocol.self]
+        let client = JellyfinClient(deviceId: "permission-test", sessionConfiguration: config)
+        client.configure(serverURL: try #require(URL(string: "https://permission.invalid")))
+        client.activateSession(token: "first-token", userId: "first")
+        SessionExpiryProtocol.reset()
+        SessionExpiryProtocol.setReply(.hold)
+        defer { SessionExpiryProtocol.releaseHeld(status: 500) }
+        let pending = Task {
+            if transcoding { return await client.refreshVideoTranscodingPermission() }
+            return await client.refreshContentDownloadingPermission()
+        }
+        try await waitForHeldRequest()
+        let administrator = try JellyfinClient.decoder.decode(
+            UserPolicy.self, from: Data(#"{"IsAdministrator":true}"#.utf8)
+        )
+        client.activateSession(token: "second-token", userId: "second", policy: administrator)
+        SessionExpiryProtocol.releaseHeld(status: 500)
+        #expect(await pending.value == nil)
+        #expect(client.cachedContentDownloadingAllowed == true)
+        #expect(client.cachedVideoTranscodingAllowed == true)
     }
 
     private final class Fixture {
