@@ -17,6 +17,7 @@ struct SeerrRequestsView: View {
                 signedOutContent
             }
         }
+        .background(Theme.background.ignoresSafeArea())
         // Keep the fetch on the stable screen root. Putting it on the
         // ScrollView/LoadingView branches made each isLoading transition
         // remove and cancel the task, producing an endless spinner.
