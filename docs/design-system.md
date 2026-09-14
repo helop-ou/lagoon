@@ -58,26 +58,35 @@ fills, and materials for ordinary UI.
 
 ## Themes
 
-A theme is a `ThemePalette` of seven roles (HEL-173): `accent` for progress
+A theme is a `ThemePalette` of eight roles (HEL-173): `accent` for progress
 fills, selection marks, the jellyfish and the focus halo's fallback;
 `ground` for card washes and the ambient glow; `background` for the surface
-behind content; `glowDepth` for the third glow colour; `controlTint`, the
+behind content; `surface` for the rows of a grouped form, one step above
+the background (nil keeps the system's row grey, which belongs on black and
+clashes on rose); `glowDepth` for the third glow colour; `controlTint`, the
 tint iOS's native controls take; `artworkTint`, blushed into every artwork
 glow and focus halo through `Theme.glow(for:)` so a hero never hides the
 theme; and `chrome`, the wash behind iOS's tab and navigation bar glass,
-applied by `themedChrome()` on each tab's root screen. Text never takes a
-theme colour. Two themes exist, `AppTheme.lagoon` (the Twin Shores palette
-over true black, no control, artwork or chrome tint) and `AppTheme.babyPink`
-(`#FFB7CF` accents over a `#5E2848` rose ground and a `#1F1019` background,
-with the accent as both tints and the ground as the chrome wash). Keep
-the list short: a theme is a considered set checked over every screen, not
-a hue slider.
+applied by `themedChrome()` on each tab's root screen and every themed
+form. Keep the wash faint: at 0.7 it turned the Liquid Glass into a flat
+pane with content smearing through it, so Baby Pink uses 0.25 of the
+ground. Text never takes a theme colour. Two themes exist, `AppTheme.lagoon`
+(the Twin Shores palette over true black, no surface, control, artwork or
+chrome tint) and `AppTheme.babyPink` (`#FFB7CF` accents over a `#5E2848`
+rose ground, a `#1F1019` background and `#33182A` rows, with the accent as
+both tints and a faint wash of the ground as the chrome). Keep the list
+short: a theme is a considered set checked over every screen, not a hue
+slider.
 
 Screens read colours from `Theme.accent`, `Theme.ground`, `Theme.background`
 and `Theme.glow` inside `body`, never from the brand tokens or `Color.black`
 directly, so a change re-renders through Observation without environment
 plumbing. Page backgrounds and the fades that carry artwork into the page
-use `Theme.background`; a scrim over artwork inside a card stays black. The
+use `Theme.background`; a scrim over artwork inside a card stays black. A
+grouped form on iOS is a `ThemedForm`, never a bare `Form` or `List`: it
+puts the page on the background, every row on the surface and the bars in
+the chrome, so a new settings page is themed by using it and nothing else.
+`TouchSettingsPage` wraps it for the settings categories. The
 player surface, its overlays, subtitles and the Top Shelf stay pure black
 and outside the theme. tvOS controls are never tinted (the focused lozenge
 rule above) and its tab bar keeps the system glass; `themedControls()` and
