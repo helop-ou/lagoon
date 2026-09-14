@@ -103,12 +103,15 @@ protocol PlayerEngine: AnyObject, Observable {
     /// without rebuilding the renderers or restarting playback (HEL-49).
     func addExternalSubtitle(_ track: ExternalSubtitleTrack)
     func setAudioDelay(_ seconds: Double)
+    /// Audio-only playback while the app is in the background (HEL-176).
+    func setVideoOutputSuspended(_ suspended: Bool)
 }
 
 extension PlayerEngine {
     var subtitleLoadState: SubtitleLoadState { .idle }
     var subtitleSelectionRevision: Int { 0 }
     func retrySubtitleLoad() {}
+    func setVideoOutputSuspended(_ suspended: Bool) {}
     var audioOutputPathDiagnostic: String { "unknown" }
     var videoOutputPathDiagnostic: String { "unknown" }
     var idleRequestCallbacks: Int { 0 }
