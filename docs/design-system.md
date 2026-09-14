@@ -75,8 +75,8 @@ pane with content smearing through it, so Baby Pink uses 0.25 of the
 ground. Text never takes a theme colour. Two themes exist, `AppTheme.lagoon`
 (the Twin Shores palette over true black, controls in a pale aqua that is
 the accent lifted 40% toward white, no surface, artwork or chrome tint) and
-`AppTheme.babyPink` (`#FFB6CC` accents over a `#68263A`
-warm red-pink ground, a `#241016` background and `#3A1721` rows, with the accent as
+`AppTheme.babyPink` (`#FFB7CF` accents over a `#5E2848`
+rose ground, a `#1F1019` background and `#33182A` rows, with the accent as
 both tints and a faint wash of the ground as the chrome). Keep the list
 short: a theme is a considered set checked over every screen, not a hue
 slider.
