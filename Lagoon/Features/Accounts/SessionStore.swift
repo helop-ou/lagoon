@@ -28,6 +28,10 @@ final class SessionStore {
     var isAddingAccount = false
     let client: JellyfinClient
     let seerr: SeerrSessionStore
+    /// Watch Together (HEL-172). Owned here beside `seerr` and pointed at
+    /// the active account below, because a SyncPlay group belongs to the
+    /// account that joined it; `RootView` injects it into the environment.
+    let syncPlay = SyncPlayStore()
     let recentSearches: RecentSearchStore
     var cleanupErrorMessage: String?
 
@@ -122,6 +126,9 @@ final class SessionStore {
         ThemeStore.shared.configure(accountID: (activeAccount ?? reauthenticationAccount)?.id, owner: ObjectIdentifier(self))
         TopShelfStore.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
+        // Leaves whatever group the previous account was in and forgets
+        // the socket and clock opened for it (HEL-172).
+        syncPlay.configure(client: client, accountID: activeAccount?.id)
         #if os(iOS)
         // Downloads follow the account the same way (HEL-166): restore,
         // sign-in, switch, sign-out and removal all land here.
