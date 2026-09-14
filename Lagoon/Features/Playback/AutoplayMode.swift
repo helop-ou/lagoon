@@ -39,4 +39,7 @@ nonisolated enum AutoplayMode: String, CaseIterable, Identifiable {
     /// two countdowns in the same player running at different speeds would
     /// read as a bug rather than as two settings.
     static let countdownSeconds: Double = 5
+
+    /// Where Settings keeps the choice; the player reads it there too.
+    static let defaultsKey = "playback.autoplayMode"
 }
