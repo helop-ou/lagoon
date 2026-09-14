@@ -25,13 +25,6 @@ struct VideoPlayerView: View {
     #endif
     @State private var openPanelRequest = 0
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
-    /// Back was pressed on the Up Next card. Outlives the card itself,
-    /// because the episode still has its credits to run and the end of the
-    /// file must not undo the answer that was already given.
-    @State private var autoplayCancelled = false
-
-    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
 
     /// What the Up Next card draws, or nil when there is nothing queued.
     private var nextUpEpisode: NextUpEpisode? {
@@ -64,12 +57,11 @@ struct VideoPlayerView: View {
                     bufferedRanges: controller.bufferedRanges,
                     playheadPrefetchCount: controller.playheadPrefetchCount,
                     info: fallbackInfo,
+                    automation: controller.automation,
                     onDismiss: { closePlayer() },
                     onPanelToggle: { panelOpen = $0 },
                     openPanelRequest: openPanelRequest,
                     nextUp: nextUpEpisode,
-                    onPlayNext: { advance() },
-                    onCancelNextUp: { autoplayCancelled = true },
                     isPictureInPicturePossible: pictureInPicture.isPossible,
                     isPictureInPictureActive: pictureInPicture.isActive,
                     onTogglePictureInPicture: { pictureInPicture.toggle() },
@@ -153,6 +145,11 @@ struct VideoPlayerView: View {
             pictureInPicture.onStopped = {
                 if leftForPictureInPicture { closePlayer() }
             }
+            #if os(iOS)
+            controller.isPictureInPictureShowing = { [pictureInPicture] in
+                pictureInPicture.isActive || pictureInPicture.isTransitioning
+            }
+            #endif
             pictureInPicture.onRestore = { completion in
                 if let onPictureInPictureRestore {
                     onPictureInPictureRestore { restored in
@@ -176,20 +173,15 @@ struct VideoPlayerView: View {
         }
         .onChange(of: controller.didFinish) { _, finished in
             guard finished else { return }
-            // A countdown still running when the file ran out finishes the
-            // job here — without an `Outro` segment to anchor it the two
-            // land within a frame of each other, and whichever arrives
-            // first should win. `playNextEpisode` is guarded against being
-            // taken up on it twice.
-            if autoplayMode == .autoDelay, !autoplayCancelled, controller.nextUp != nil {
-                advance()
-            } else if !controller.isAdvancing {
-                // `.card` means never acting alone, so an offer that went
-                // unanswered closes the player exactly as `.off` does.
-                // An *accepted* offer is a different thing: the file can run
-                // out while the successor is still being prepared, and
-                // dismissing there tears down a handoff the viewer asked for
-                // and drops them back on the browse screen (HEL-144).
+            // The controller decides whether the end of the file rolls
+            // into the next episode (HEL-176). `.card` means never acting
+            // alone, so an offer that went unanswered closes the player
+            // exactly as `.off` does. An *accepted* offer is a different
+            // thing: the file can run out while the successor is still
+            // being prepared, and dismissing there tears down a handoff the
+            // viewer asked for and drops them back on the browse screen
+            // (HEL-144).
+            if !controller.isAdvancing, !controller.isAutoplayPending {
                 closePlayer()
             }
         }
@@ -220,6 +212,10 @@ struct VideoPlayerView: View {
         // Backgrounding mid-playback must hand the display back — the
         // home screen has no business running at the content's mode — and
         // returning re-requests it (HEL-64).
+        // tvOS only in effect: on iOS the player is presented from UIKit
+        // and this environment value never changes there, so the
+        // controller listens to the application's own notifications
+        // instead and keeps playing in the background (HEL-176).
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
@@ -338,13 +334,6 @@ struct VideoPlayerView: View {
         #if os(tvOS)
         DisplayModeMatcher.apply(request)
         #endif
-    }
-
-    /// The next episode starts with a clean slate: a "no" belongs to the
-    /// episode it was said during, not to the rest of the binge.
-    private func advance() {
-        autoplayCancelled = false
-        Task { await controller.playNextEpisode() }
     }
 
     private var fallbackInfo: PlayerItemInfo {
