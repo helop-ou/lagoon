@@ -53,7 +53,7 @@ struct AppThemeTests {
         #expect(store.theme == .lagoon)
     }
 
-    @Test func aStrayStoreCannotUndoTheOwnersTheme() {
+    @Test func aStrayStoreCannotDetachTheOwnersProfile() {
         let defaults = defaults()
         defaults.set("babyPink", forKey: ThemeStore.key("a"))
         let store = ThemeStore(defaults: defaults)
@@ -62,9 +62,28 @@ struct AppThemeTests {
         store.configure(accountID: "a", owner: owner)
         #expect(store.theme == .babyPink)
         store.configure(accountID: nil, owner: stray)
-        #expect(store.theme == .babyPink)
+        #expect(store.accountID == "a")
+        store.select(.lagoon)
+        #expect(defaults.string(forKey: ThemeStore.key("a")) == "lagoon")
         store.configure(accountID: nil, owner: owner)
+        #expect(store.accountID == nil)
+    }
+
+    @Test func nobodyActiveKeepsTheLastProfilesThemeUntilAnotherSignsIn() {
+        let defaults = defaults()
+        let store = ThemeStore(defaults: defaults)
+        store.configure(accountID: "partner")
+        store.select(.babyPink)
+        store.configure(accountID: nil)
+        #expect(store.theme == .babyPink)
+        // A choice made with nobody active is not anybody's.
+        store.select(.lagoon)
+        #expect(defaults.string(forKey: ThemeStore.key("partner")) == "babyPink")
+        store.configure(accountID: "me")
         #expect(store.theme == .lagoon)
+        store.configure(accountID: nil)
+        store.configure(accountID: "partner")
+        #expect(store.theme == .babyPink)
     }
 
     @Test func anUnknownSavedThemeFallsBackToTheBrand() {
