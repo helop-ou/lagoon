@@ -11,6 +11,12 @@ import Observation
 @MainActor
 protocol PlayerEngine: AnyObject, Observable {
     var timePosition: Double { get }
+    /// The media clock as the synchronizer actually reports it. Unlike
+    /// `timePosition`, which `seek(to:)` moves optimistically the instant a
+    /// scrub commits, this only advances once the clock is anchored — so a
+    /// group transport reports where playback *is* rather than where the
+    /// viewer just asked it to go (HEL-172).
+    var clockPosition: Double { get }
     var duration: Double { get }
     var isPaused: Bool { get }
     var isBuffering: Bool { get }
@@ -105,9 +111,24 @@ protocol PlayerEngine: AnyObject, Observable {
     func setAudioDelay(_ seconds: Double)
     /// Audio-only playback while the app is in the background (HEL-176).
     func setVideoOutputSuspended(_ suspended: Bool)
+    /// Start — or, when already primed and paused, resume — so that the
+    /// current media position is presented exactly at `hostTime` on
+    /// `CMClockGetHostTimeClock()`. A host time already in the past starts
+    /// now. A SyncPlay group start is one host-clock instant every member
+    /// agreed on after time sync, so "play, roughly now" is not enough
+    /// (HEL-172).
+    func play(atHostTime hostTime: CMTime)
+    /// A sync-correction multiplier applied on top of the viewer's chosen
+    /// `rate`. Nudging a member that has drifted from its group must not
+    /// change what the speed row and Now Playing say the viewer picked, so
+    /// `rate` itself is untouched (HEL-172).
+    func setCorrectionRate(_ multiplier: Double)
 }
 
 extension PlayerEngine {
+    var clockPosition: Double { timePosition }
+    func play(atHostTime hostTime: CMTime) { play() }
+    func setCorrectionRate(_ multiplier: Double) {}
     var subtitleLoadState: SubtitleLoadState { .idle }
     var subtitleSelectionRevision: Int { 0 }
     func retrySubtitleLoad() {}
@@ -148,6 +169,18 @@ nonisolated enum PlaybackRatePolicy {
     static func clamped(_ rate: Double) -> Double {
         guard rate.isFinite else { return 1 }
         return min(max(rate, minimum), maximum)
+    }
+
+    /// What the media clock actually runs at: the viewer's rate with a sync
+    /// correction on top of it (HEL-172). The correction is a nudge for a
+    /// group member that has drifted, not a second speed control, so the
+    /// product stays inside the one envelope the rest of the engine scales
+    /// its cushions and watermarks by. A correction of 1 — the only value
+    /// outside a group — returns the viewer's rate unchanged.
+    static func effectiveRate(userRate: Double, correction: Double) -> Double {
+        let user = clamped(userRate)
+        guard correction.isFinite, correction > 0 else { return user }
+        return clamped(user * correction)
     }
 
     /// How a rate is written for the viewer: no trailing zeros, always a
