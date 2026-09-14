@@ -168,7 +168,8 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
     /// The server broadcasts to everyone and repeats itself, so four
     /// separate things are refused here: a command for another group, one
     /// emitted before this client joined, one about an item that is not the
-    /// one playing, and one this session has already taken.
+    /// one playing, and one this session has already taken — a `Seek`
+    /// excepted, for the reason given below.
     func accepts(_ command: SyncPlayCommand) -> Bool {
         guard let group, command.command != .unknown else { return false }
         guard command.groupId.isEmpty
@@ -187,7 +188,17 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
             guard let current = currentPlaylistItemId,
                   SyncPlayGroupIdentifier.matches(command.playlistItemId, current) else { return false }
         }
-        if let lastCommand, Self.isRepeat(of: lastCommand, command) { return false }
+        // A re-sent `Seek` is the one command that is never a re-statement.
+        // The server sends it to a single member whose `Ready` named a
+        // position more than half a second from the group's — "got lost in
+        // time, correcting" — and builds it out of the group's own state,
+        // so it arrives byte-identical to the `Seek` this member has
+        // already taken bar `EmittedAt`. Refusing it leaves the member
+        // sitting where it is with nothing left to report, and the group
+        // waits on it for ever (HEL-172).
+        if command.command != .seek, let lastCommand, Self.isRepeat(of: lastCommand, command) {
+            return false
+        }
         return true
     }
 
