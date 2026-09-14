@@ -19,7 +19,7 @@ import Testing
 /// stripped, so both spellings are read.
 @Suite("Transport-stream seek landing", .serialized)
 struct TransportStreamSeekTests {
-    static let fixture: URL? = {
+    nonisolated static let fixture: URL? = {
         let environment = ProcessInfo.processInfo.environment
         let raw = environment["LAGOON_TS_SEEK_FIXTURE_URL"]
             ?? environment["TEST_RUNNER_LAGOON_TS_SEEK_FIXTURE_URL"]
