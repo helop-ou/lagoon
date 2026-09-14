@@ -90,6 +90,11 @@ struct AppThemeTests {
         #expect(AppTheme.babyPink.palette.chrome != nil)
     }
 
+    @Test func theBrandBloomsJellyfishAndPinkBloomsFlowers() {
+        #expect(AppTheme.lagoon.bloomMotif == .jellyfish)
+        #expect(AppTheme.babyPink.bloomMotif == .flowers)
+    }
+
     @Test func artworkGlowsAreLeftAloneByTheBrandAndBlushedByPink() {
         let artwork = ArtworkPalette(colors: [.red, .green, .blue])
         #expect(AppTheme.lagoon.palette.glow(for: artwork) == artwork)
