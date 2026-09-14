@@ -64,7 +64,7 @@ nonisolated enum Changelog {
                     "A series page always has an episode ready to play: the one you are partway through, the next unwatched one, or the first of the season once you have seen the whole show. The page opens on that episode's season with the episode in view, and after watching it follows you to wherever you stopped, even seasons later. Watched episodes carry a check mark, and on Apple TV the synopsis keeps its height so the page no longer jumps as you browse episodes.",
                     "Discover's Movies, Shows and Requests buttons sit on one row on iPhone instead of stacking. A Seerr title's page now looks like a film or series page: the key art fills the top on iPhone and iPad, the Request, Open in Lagoon or status button is the page's one big button, the age rating, cast and crew are shown, and a More Like This row follows.",
                     "The changelog groups each build's notes into New features, Improvements and Bug fixes so changes are easier to find.",
-                    "Home can now show Top 10 Movies and Top 10 Shows by matching Seerr's popular and trending lists to titles in your Jellyfin library; existing Home Screen Sections Manager rows remain supported.",
+                    "Home can now show Top 10 Movies and Top 10 Shows by matching Seerr's popular and trending lists to titles in your Jellyfin library, with each ranked title's number shown beside its artwork; existing Home Screen Sections Manager rows remain supported.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
                     "Quick season changes keep the newest episode list instead of letting an earlier selection replace it after loading.",
