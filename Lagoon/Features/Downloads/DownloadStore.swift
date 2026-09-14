@@ -70,6 +70,10 @@ final class DownloadStore {
     private(set) var accountKey: String?
     /// The active account's downloads directory; nil while signed out.
     private(set) var accountDirectory: URL?
+    @ObservationIgnored private(set) var accountGeneration = 0
+    /// The commands extension owns preparation until URLSession takes over.
+    /// A newer start or delete invalidates an older start across its awaits.
+    @ObservationIgnored var preparationTokens: [String: UUID] = [:]
     /// Whether the active account may download at all, as last learned from
     /// the server; nil until asked. Observable state of the store rather
     /// than `DownloadControl`'s own, because a control with nothing to show
@@ -111,7 +115,7 @@ final class DownloadStore {
         Self.excludeFromBackup(downloads)
         baseDirectory = downloads
 
-        let delegate = SessionDelegate(baseDirectory: downloads)
+        let delegate = SessionDelegate()
         self.delegate = delegate
 
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
@@ -121,7 +125,11 @@ final class DownloadStore {
         // encode; the resource timeout must outlast a film.
         configuration.timeoutIntervalForResource = 12 * 60 * 60
         configuration.timeoutIntervalForRequest = 10 * 60
-        session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        // Keep delegate callbacks on the main executor. DownloadStore is MainActor-owned,
+        // and completion must validate the attempt and move its file as one
+        // serialized operation with delete/start commands.
+        let delegateQueue = OperationQueue.main
+        session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegateQueue)
     }
 
     // MARK: - Settings
@@ -162,6 +170,8 @@ final class DownloadStore {
         if accountID == nil, let activeOwner, owner != activeOwner { return }
         if accountID != nil { activeOwner = owner }
         guard accountID != self.accountID else { return }
+        accountGeneration &+= 1
+        preparationTokens.removeAll()
         save()
         self.accountID = accountID
         permitted = nil
@@ -203,6 +213,10 @@ final class DownloadStore {
     /// writing into a directory that is about to disappear (HEL-166 review
     /// finding 2).
     func removeAll(forAccountKey key: String) {
+        if accountKey == key {
+            accountGeneration &+= 1
+            preparationTokens.removeAll()
+        }
         Task { @MainActor in
             let tasks = await self.session.allTasks
             for task in tasks where DownloadTaskDescription.parse(task.taskDescription)?.accountKey == key {
@@ -278,7 +292,14 @@ final class DownloadStore {
     /// publishes the answer for every `DownloadControl`. Unreachable and
     /// never learned both mean no, as `canDownloadContent()` reasons.
     func refreshPermission(client: JellyfinClient) async {
-        permitted = await client.refreshContentDownloadingPermission() ?? false
+        let generation = accountGeneration
+        let account = accountKey
+        let value = await client.refreshContentDownloadingPermission() ?? false
+        // A permission response belongs to the account that requested it;
+        // never publish it after a switch or sign-out, even if that switch
+        // briefly returned to the same account key.
+        guard generation == accountGeneration, account == accountKey else { return }
+        permitted = value
     }
 
     /// Bytes free for user content on the device volume.
@@ -302,6 +323,7 @@ final class DownloadStore {
 
     enum StartError: Error {
         case notSignedIn
+        case accountChanged
         case notPermitted
         case noSpace
         case unsupportedItem
