@@ -141,6 +141,32 @@ introducing a second player to get it:
   controller and fed by the engine's `onTimeAdvanced` callback, so both
   countdowns and the end-of-file hand-off run with the screen locked or
   the player minimised into PiP. The overlays only draw its state.
+- **A server as the transport authority** (HEL-172). SyncPlay is the third
+  outside party to drive this transport, after Remote Command Center and
+  PiP, and the first to care *when* something happens rather than only
+  what. So the engine gained three hooks rather than a group feature.
+  `play(atHostTime:)` reuses the anchor `beginPlayback` already had — Apple's
+  recommended custom-playback start binds media time to a near-future host
+  time — and simply substitutes the instant the group agreed on for the
+  default `now + 0.1 s`. That substitution has to survive priming: a start
+  request arriving while a seek or the initial open is in flight is
+  remembered and applied by `beginPlayback` when it runs, but only while the
+  instant is still ahead of us, because a late member needs the default
+  anchor to get playing at all rather than a rate change scheduled in the
+  past. `pause()` and `seek(to:)` drop a remembered instant; both make it
+  wrong. `setCorrectionRate` is separate from `setRate` for the same reason
+  Now Playing publishes `rate`: a drift nudge is not a speed the viewer
+  chose. `PlaybackRatePolicy.effectiveRate` clamps the product into the one
+  envelope everything else scales by, and the demux watermarks, the
+  starvation margins and the stall-recovery cushion all read the effective
+  rate, because a corrected clock really does drain media faster — at a
+  correction of 1 they compute exactly what they did before. Audio pitch
+  needed nothing: every renderer already uses `.timeDomain`, including
+  replacements (HEL-105), so a corrected rate does not change pitch.
+  `clockPosition` exists because `timePosition` is deliberately optimistic
+  and reporting it would tell the server a position nothing has presented;
+  while the clock is stopped it answers with the target instead, since a
+  Buffering report is about where the member is going.
 - Caption rendering reads Apple's Media Accessibility font, foreground,
   opacity, size, background and edge preferences live; Lagoon's per-account
   override adds size, edge, background and vertical-position controls. System
