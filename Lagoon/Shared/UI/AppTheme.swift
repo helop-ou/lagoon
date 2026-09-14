@@ -69,8 +69,9 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     /// A third glow colour, for the ambient field behind heroes.
     let glowDepth: Color
     /// The tint for iOS's native controls (toggles, pickers, links, the
-    /// selected tab). Nil keeps the system's white, which is the brand's
-    /// choice: `AccentColor` is white, not a brand colour.
+    /// selected tab). Nil keeps the system's white `AccentColor`. Keep it
+    /// pale: the tint fills whole toggle tracks, not only the selected tab,
+    /// and a saturated colour there shouts.
     let controlTint: Color?
     /// Blushed into every artwork glow and focus halo, so the theme is felt
     /// behind a hero and under a lifted card and not only in its own chrome.
@@ -91,6 +92,9 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     /// How far an artwork colour moves toward `artworkTint`.
     static let artworkTintAmount = 0.45
 
+    /// The brand accent lifted toward white, pale enough to fill a toggle.
+    static let paleAqua = Color.lagoonAqua.mix(with: .white, by: 0.4)
+
     /// The glow for a piece of artwork under this theme: the sampled
     /// colours, blushed toward the theme's tint when it has one.
     func glow(for artwork: ArtworkPalette) -> ArtworkPalette {
@@ -100,14 +104,16 @@ nonisolated struct ThemePalette: Equatable, Sendable {
 
     /// Twin Shores. The values match `Color.lagoonAqua` and `.lagoonNavy`,
     /// which stay as the brand's named colours for the lockup and anything
-    /// that must never follow a theme.
+    /// that must never follow a theme. Controls take a pale aqua, the accent
+    /// lifted toward white: the selected tab reads as Lagoon instead of
+    /// plain white, while a toggle track stays as soft as Baby Pink's.
     static let lagoon = ThemePalette(
         accent: .lagoonAqua,
         ground: .lagoonNavy,
         background: .black,
         surface: nil,
         glowDepth: Color(red: 0.16, green: 0.1, blue: 0.35),
-        controlTint: nil,
+        controlTint: paleAqua,
         artworkTint: nil,
         chrome: nil
     )
@@ -259,7 +265,7 @@ extension View {
     }
 
     /// iOS's native controls take the theme's tint: toggles, pickers, links
-    /// and the selected tab. The brand theme sets none, keeping the white
+    /// and the selected tab. A theme with none keeps the white
     /// `AccentColor`. tvOS is left alone: its focused glass lozenge is
     /// white, and a tinted label inside it is the failure the design guide
     /// warns about.
