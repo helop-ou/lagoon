@@ -272,9 +272,12 @@ the tab. Notices are a toast at the top of the screen — `SyncPlayNoticeToast`,
 an overlay leaf in `PlayerSkipOverlay`'s shape, so the player root never
 subscribes to one; two seconds, Reduce Motion respected, never hit-tested.
 A state the picture already reports ("Playing", "Nothing playing") gets no
-toast. **Waiting is not buffering**: a member primed and paused at the
+toast, and neither does "Waiting", which the transport says for as long as it
+is true. **Waiting is not buffering**: a member primed and paused at the
 group's position is not stalled, so the existing spinner carries *Waiting for
-the group* underneath it while `SyncPlayStore.isWaitingForGroup`.
+the group* underneath it while `SyncPlayStore.isWaitingForGroup` — dropped
+clear of the touch grammar's centre play button, which waiting keeps on
+screen, because the two share the middle of the frame.
 Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*, and
 Home carries a banner above its rails — group name, *Rejoin*, *Leave* —
 while a group has this device as a member and nothing of its is on screen.
