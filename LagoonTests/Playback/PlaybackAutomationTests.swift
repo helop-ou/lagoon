@@ -124,6 +124,24 @@ struct PlaybackAutomationTests {
         #expect(landed == 70)
     }
 
+    @Test func nothingArmsBeforeTheFirstTick() async throws {
+        // A recap that covers zero must not arm from the phantom position
+        // a new item starts at, or a slow open lets it fire before the
+        // clock has ever ticked.
+        let recap = MediaSegment(id: "recap", kind: .recap, start: 0, end: 40)
+        let automation = automation(segments: [recap])
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+        #expect(automation.activeSegment == nil)
+        try await Task.sleep(for: Self.settled)
+        #expect(landed == nil)
+
+        automation.tick(position: 630, duration: 1_320)
+        #expect(automation.activeSegment == nil)
+        automation.tick(position: 5, duration: 1_320)
+        #expect(automation.activeSegment?.id == "recap")
+    }
+
     @Test func thePanelSuppressesThePill() {
         let automation = automation()
         automation.isSuppressed = true
