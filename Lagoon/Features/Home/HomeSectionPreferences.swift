@@ -449,11 +449,11 @@ struct HomeRowsSettingsView: View {
                                     Text(choice.title)
                                     Text("\(choice.source.rawValue) · \(choice.isEnabled ? "Shown" : "Hidden")")
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .opacity(0.7)
                                 }
                                 Spacer(minLength: Metrics.Space.xl)
                                 Text(choice.isEnabled ? "Shown" : "Hidden")
-                                    .foregroundStyle(.secondary)
+                                    .opacity(0.7)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -555,11 +555,11 @@ private struct HomeNativeRow: View {
                     Text(choice.title)
                     Text("\(choice.source.rawValue) · \(choice.isEnabled ? "Shown" : "Hidden")")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .opacity(0.7)
                 }
                 Spacer(minLength: Metrics.Space.xl)
                 Image(systemName: choice.isEnabled ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(choice.isEnabled ? .primary : .secondary)
+                    .opacity(choice.isEnabled ? 1 : 0.55)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
