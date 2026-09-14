@@ -12,12 +12,10 @@ struct TouchSettingsPage<Content: View>: View {
     }
 
     var body: some View {
-        Form { content }
+        ThemedForm { content }
             .pickerStyle(.navigationLink)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .scrollContentBackground(.hidden)
-            .background(Theme.background.ignoresSafeArea())
     }
 }
 #endif
