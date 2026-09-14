@@ -199,6 +199,16 @@ and past the threshold minimizes it into the phone's popup player, which is
 Picture in Picture (where PiP is not possible it closes instead). The
 timeline's own drag and every button win over the swipe (HEL-162 feedback).
 
+On iPhone and iPad, locking the phone or leaving the app keeps playback
+going (HEL-176): audio continues under the `audio` background mode, the
+picture is dropped until the scene is back (unless PiP or AirPlay is still
+showing it), and the lock screen's controls drive the engine. Skip and Up
+Next are decided by `PlaybackAutomation` off the engine's clock, never in a
+view body, so intros are still skipped and the next episode still starts
+with the screen off; the overlays only draw its state. tvOS pauses on
+background as before. See
+[system integration](reference/playback/system-integration.md).
+
 The player follows the device on iPhone and iPad and never forces a rotation:
 a title opened in portrait plays letterboxed in portrait until the viewer turns
 the phone (HEL-162 feedback, superseding the HEL-153 landscape lock). Audio
