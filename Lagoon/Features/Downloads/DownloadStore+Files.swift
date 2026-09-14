@@ -35,18 +35,6 @@ extension DownloadStore {
         save()
     }
 
-    /// Reloads the active account's manifest from disk and refreshes the
-    /// artwork index, for a background delegate callback that just wrote
-    /// the authoritative copy itself (HEL-166 review finding 1): the
-    /// delegate runs off the main actor and cannot touch `manifest`
-    /// directly, so it persists through `withStoredManifest` and this pulls
-    /// that change back into the in-memory copy the UI observes.
-    func reloadActiveManifest() {
-        guard let accountDirectory else { return }
-        manifest = Self.loadManifest(at: accountDirectory.appending(path: "manifest.json"))
-        rebuildArtworkIndex()
-    }
-
     func rebuildArtworkIndex() {
         guard let accountDirectory else {
             DownloadArtworkIndex.shared.clear()
@@ -73,26 +61,30 @@ extension DownloadStore {
 
     // MARK: - Manifest persistence
 
-    nonisolated static let manifestEncoder: JSONEncoder = {
+    static let manifestEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
 
-    nonisolated static let manifestDecoder: JSONDecoder = {
+    static let manifestDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
 
-    nonisolated static func loadManifest(at url: URL) -> DownloadManifest {
+    static func loadManifest(at url: URL) -> DownloadManifest {
         guard let data = try? Data(contentsOf: url) else { return DownloadManifest() }
         return (try? manifestDecoder.decode(DownloadManifest.self, from: data)) ?? DownloadManifest()
     }
 
-    nonisolated static func saveManifest(_ manifest: DownloadManifest, at url: URL) {
-        guard let data = try? manifestEncoder.encode(manifest) else { return }
-        try? data.write(to: url, options: .atomic)
+    static func saveManifest(_ manifest: DownloadManifest, at url: URL) {
+        do {
+            let data = try manifestEncoder.encode(manifest)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            log.error("persist download manifest: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Loads another account's manifest, lets the caller mutate it, and
@@ -104,7 +96,7 @@ extension DownloadStore {
     /// (HEL-166 review finding 2). A missing directory still loads an
     /// empty manifest, so `mutate` can check for that itself when it
     /// matters.
-    nonisolated static func withStoredManifest(
+    static func withStoredManifest(
         atAccountKey key: String,
         _ mutate: (inout DownloadManifest, URL) -> Void
     ) {
@@ -119,11 +111,16 @@ extension DownloadStore {
     /// Writes resume data beside the other account files, returning the
     /// file name to record on the entry (nil clears any existing one).
     @discardableResult
-    nonisolated static func storeResumeData(_ data: Data?, itemID: String, directory: URL?) -> String? {
+    static func storeResumeData(_ data: Data?, itemID: String, directory: URL?) -> String? {
         guard let data, let directory else { return nil }
         let fileName = "\(itemID).resume"
-        try? data.write(to: directory.appending(path: fileName), options: .atomic)
-        return fileName
+        do {
+            try data.write(to: directory.appending(path: fileName), options: .atomic)
+            return fileName
+        } catch {
+            log.error("persist download resume data: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     // MARK: - Artwork
@@ -132,7 +129,10 @@ extension DownloadStore {
     /// transfer starts, so a downloaded title has offline artwork the
     /// moment it appears in the Downloads list. Failures are logged, not
     /// fatal: a title with no saved artwork still downloads and plays.
-    func saveArtwork(for item: MediaItem, client: JellyfinClient, authorization: MediaRequestAuthorization, directory: URL) async -> [String: String] {
+    func saveArtwork(
+        for item: MediaItem, client: JellyfinClient, authorization: MediaRequestAuthorization,
+        directory: URL, checkPreparation: () throws -> Void
+    ) async throws -> [String: String] {
         var files: [String: String] = [:]
         // Matches the widths the detail page requests live (HEL-166 review
         // finding 11), so a downloaded title's offline artwork is never a
@@ -143,14 +143,13 @@ extension DownloadStore {
                   let key = DownloadArtworkKey.parse(url) else { continue }
             let request = authorization.request(for: url)
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                    throw JellyfinError.server(status: (response as? HTTPURLResponse)?.statusCode ?? 0)
-                }
+                let data = try await BoundedDownload.shared.data(for: request, limit: DownloadLimit.artwork, content: .image)
+                try checkPreparation()
                 let fileName = "art-\(key.imageItemID)-\(key.type.replacingOccurrences(of: "/", with: "-")).jpg"
                 try data.write(to: directory.appending(path: fileName), options: .atomic)
                 files[DownloadArtworkKey.indexKey(imageItemID: key.imageItemID, type: key.type)] = fileName
             } catch {
+                try checkPreparation()
                 Self.log.error("artwork for \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
