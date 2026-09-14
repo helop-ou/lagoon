@@ -47,6 +47,12 @@ final class PlaybackAutomation {
     private var hasNextUp = false
     private var duration: Double = 0
     private var position: Double = 0
+    /// Nothing is decided before the engine has said where it is. A new
+    /// item starts at a phantom zero, and a recap that covers zero would
+    /// otherwise arm — and, on an open slower than its countdown, fire —
+    /// before the clock has ever ticked (found while rejoining a SyncPlay
+    /// group at 10:30 and being dragged to the recap's end, HEL-172).
+    private var hasPosition = false
     /// Segments already acted on or waved away, so a committed skip (or a
     /// "no thanks") does not re-arm the moment the playhead lands.
     private var handledSegmentIDs: Set<String> = []
@@ -98,6 +104,7 @@ final class PlaybackAutomation {
         nextUpDismissed = false
         position = 0
         duration = 0
+        hasPosition = false
         cancelSkipCountdown()
         cancelNextUpCountdown()
         activeSegment = nil
@@ -117,6 +124,7 @@ final class PlaybackAutomation {
     func tick(position: Double, duration: Double) {
         self.position = position
         self.duration = duration
+        hasPosition = true
         evaluate()
     }
 
@@ -172,7 +180,7 @@ final class PlaybackAutomation {
     }
 
     private func evaluateSkip() {
-        let segment: MediaSegment? = isSuppressed
+        let segment: MediaSegment? = isSuppressed || !hasPosition
             ? nil
             : SkipSegmentPolicy.activeSegment(in: segments, at: position, handled: handledSegmentIDs)
         guard segment?.id != activeSegment?.id else { return }
@@ -209,7 +217,7 @@ final class PlaybackAutomation {
         )
         nextUpCardStart = cardStart
         let shows: Bool
-        if let cardStart, !isSuppressed, !nextUpDismissed {
+        if let cardStart, hasPosition, !isSuppressed, !nextUpDismissed {
             shows = position >= cardStart
         } else {
             shows = false
