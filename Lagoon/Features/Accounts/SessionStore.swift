@@ -117,7 +117,9 @@ final class SessionStore {
     private func synchronizeAccountContext() {
         guard !isAccountDraft else { return }
         recentSearches.configure(accountID: activeAccount?.id)
-        ThemeStore.shared.configure(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
+        // The theme also follows an account that is only waiting to sign in
+        // again, so an expired session's sign-in screen keeps its look.
+        ThemeStore.shared.configure(accountID: (activeAccount ?? reauthenticationAccount)?.id, owner: ObjectIdentifier(self))
         TopShelfStore.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
         #if os(iOS)
