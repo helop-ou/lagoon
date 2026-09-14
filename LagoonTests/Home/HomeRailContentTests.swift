@@ -178,6 +178,46 @@ struct HomeRailContentTests {
         }
     }
 
+    @Test func slowTopTenScanDoesNotDelayNativeCuratedShelves() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(discoveryItems: #"""
+        [
+            {"Id":"a","Type":"Movie","ProviderIds":{"Tmdb":"1"}},
+            {"Id":"b","Type":"Movie","ProviderIds":{"Tmdb":"2"}},
+            {"Id":"c","Type":"Movie","ProviderIds":{"Tmdb":"3"}},
+            {"Id":"d","Type":"Movie","ProviderIds":{"Tmdb":"4"}}
+        ]
+        """#)
+        HomeRailURLProtocol.hold("topTen")
+        defer { HomeRailURLProtocol.release() }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HomeRailURLProtocol.self]
+        let seerr = SeerrClient(session: URLSession(configuration: configuration))
+        seerr.configure(serverURL: try #require(URL(string: "https://home-rails.test")))
+        seerr.setSessionCookie("fixture")
+
+        await model.load(client: client, accountID: "account", seerr: seerr)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while (!HomeRailURLProtocol.hasPending
+                || model.curatedRails[HomeCuratedRows.ID.highlyRated] == nil),
+              ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(HomeRailURLProtocol.hasPending)
+        #expect(!model.isLoading)
+        #expect(model.curatedRails[HomeCuratedRows.ID.highlyRated]?.items.count == 4)
+        #expect(model.curatedRails[HomeCuratedRows.ID.topMovies] == nil)
+
+        HomeRailURLProtocol.release()
+        // Refresh owns and joins the replacement discovery tasks, so no
+        // optional work leaks into another URLProtocol fixture.
+        await model.refreshServerContent(client: client, homeSectionPreferences: .init(), seerr: seerr)
+        #expect(model.curatedRails[HomeCuratedRows.ID.topMovies]?.items.map(\.id) == ["d", "c", "b", "a"])
+        #expect(model.curatedRails[HomeCuratedRows.ID.topShows] == nil)
+    }
+
     private func makeClient() -> JellyfinClient {
         HomeRailURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -201,6 +241,7 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var nextUp = #"{"Items":[]}"#
         var resume = #"{"Items":[]}"#
         var parentStatus = 200
+        var discoveryItems = "[]"
         var heldStage: String?
         var pending: [HomeRailURLProtocol] = []
     }
@@ -214,13 +255,14 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
     static func reset() { lock.withLock { state = State() } }
 
     static func set(latest: String? = nil, parents: String? = nil, nextUp: String? = nil,
-                    resume: String? = nil, parentStatus: Int? = nil) {
+                    resume: String? = nil, parentStatus: Int? = nil, discoveryItems: String? = nil) {
         lock.withLock {
             if let latest { state.latest = latest }
             if let parents { state.parents = parents }
             if let nextUp { state.nextUp = nextUp }
             if let resume { state.resume = resume }
             if let parentStatus { state.parentStatus = parentStatus }
+            if let discoveryItems { state.discoveryItems = discoveryItems }
         }
     }
 
@@ -243,7 +285,9 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         guard let url = request.url else { return }
         let held = Self.lock.withLock {
             Self.state.urls.append(url)
-            let stage = url.path.hasSuffix("/Latest") ? "latest" : "parents"
+            let isTopTen = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .contains { $0.name == "Fields" && $0.value?.hasPrefix("ProviderIds,") == true } == true
+            let stage = isTopTen ? "topTen" : (url.path.hasSuffix("/Latest") ? "latest" : "parents")
             if stage == Self.state.heldStage {
                 Self.state.pending.append(self)
                 return true
@@ -266,7 +310,9 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
                 if URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "Ids" }) == true {
                     return (Self.state.parents, Self.state.parentStatus)
                 }
-                fallthrough
+                return (#"{"Items":\#(Self.state.discoveryItems)}"#, 200)
+            case "/api/v1/discover/trending", "/api/v1/discover/movies", "/api/v1/discover/tv":
+                return (#"{"page":1,"totalPages":1,"totalResults":4,"results":[{"id":4,"mediaType":"movie"},{"id":3,"mediaType":"movie"},{"id":2,"mediaType":"movie"},{"id":1,"mediaType":"movie"}]}"#, 200)
             default: return (#"{"Items":[]}"#, 200)
             }
         }
