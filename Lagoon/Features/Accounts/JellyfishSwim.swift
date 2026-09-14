@@ -216,16 +216,11 @@ struct Swimmer {
         body.scaleBy(x: drawn / 256, y: drawn / 256)
         body.translateBy(x: -128, y: -140)
 
-        let ink = GraphicsContext.Shading.color(accentColor.opacity(opacity))
-        body.stroke(
-            JellyfishGeometry.bell(contraction: contraction),
-            with: ink,
-            style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round)
-        )
-        body.stroke(
-            JellyfishGeometry.tentacles(contraction: contraction, trail: trail),
-            with: ink,
-            style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+        JellyfishGeometry.stroke(
+            in: &body,
+            contraction: contraction,
+            trail: trail,
+            with: .color(accentColor.opacity(opacity))
         )
     }
 
@@ -256,6 +251,31 @@ struct Swimmer {
 /// control points, so a still frame at rest is the supplied artwork rather than
 /// a lookalike.
 enum JellyfishGeometry {
+    /// The artwork's own canvas: what a context must be scaled to before
+    /// `stroke` draws into it.
+    static let canvas = CGSize(width: 256, height: 280)
+
+    /// Strokes the whole animal, bell and tentacles, into a context already
+    /// placed and scaled to `canvas`. The swim layer and the theme bloom
+    /// both draw it this way, so the mark has one line weight everywhere.
+    static func stroke(
+        in context: inout GraphicsContext,
+        contraction: Double,
+        trail: Double,
+        with ink: GraphicsContext.Shading
+    ) {
+        context.stroke(
+            bell(contraction: contraction),
+            with: ink,
+            style: StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round)
+        )
+        context.stroke(
+            tentacles(contraction: contraction, trail: trail),
+            with: ink,
+            style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+        )
+    }
+
     /// Apex, rim, and the widest point of the bell at rest.
     private static let apex: CGFloat = 42
     private static let rim: CGFloat = 188
