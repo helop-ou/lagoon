@@ -1162,6 +1162,172 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertFalse(olderNote.exists, "pressing again should close it")
     }
 
+    /// Native theme selection followed by remote navigation through browse
+    /// and settings surfaces. Attachments are taken after the decorative
+    /// bloom ends, so their colours represent the settled palette.
+    func testBabyPinkThemeFocusBrowseAndDeepChangelogNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
+            "-debug.settingsRegression", "YES",
+        ]
+        app.launch()
+
+        func capture(_ name: String) {
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        let homeTab = app.tabBars.buttons["Home"]
+        let settingsTab = app.tabBars.buttons["Settings"]
+        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
+        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let appearance = app.descendants(matching: .any)["settings.category.appearance"]
+        XCTAssertTrue(appearance.waitForExistence(timeout: 8))
+        moveFocus(to: appearance, maxPresses: 10) { remote.press(.down) }
+        remote.press(.select)
+        let theme = app.descendants(matching: .any)["settings.appearance.theme"]
+        // SwiftUI exposes the Menu's semantic value on an Other wrapper;
+        // the native control inside that wrapper actually owns TV focus.
+        func themeHasFocus() -> Bool {
+            theme.hasFocus || theme.descendants(matching: .any).allElementsBoundByIndex.contains(where: \.hasFocus)
+        }
+        func focusThemeControl() {
+            for _ in 0..<3 where !themeHasFocus() {
+                remote.press(.right)
+                Thread.sleep(forTimeInterval: 0.2)
+            }
+            XCTAssertTrue(themeHasFocus(), "Could not focus Appearance's native theme control")
+        }
+        XCTAssertTrue(theme.waitForExistence(timeout: 5))
+        focusThemeControl()
+        XCTAssertEqual(theme.valueDescription, "Lagoon")
+        remote.press(.select)
+        selectNativeMenuOption("Baby Pink", in: app, menuIndex: 1)
+        let pinkSelected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Baby Pink"), object: theme
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [pinkSelected], timeout: 5), .completed)
+        // ThemeBloomOverlay is intentionally accessibility-hidden. Its
+        // documented 1.7 s bloom plus 0.2 s fade must finish before capture.
+        Thread.sleep(forTimeInterval: 2.2)
+        XCTAssertTrue(themeHasFocus(), "Theme selection should preserve native control focus")
+        capture("Baby Pink tvOS — settled Appearance and focused theme control")
+
+        remote.press(.menu)
+        XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+        moveFocus(to: settingsTab, maxPresses: 12) { remote.press(.up) }
+        moveFocus(to: homeTab, maxPresses: 10) { remote.press(.left) }
+        remote.press(.select)
+        capture("Baby Pink tvOS — Home and system tab chrome")
+
+        let genreButtons = app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "home.genre.")
+        )
+        var selectedGenre: XCUIElement?
+        for _ in 0..<24 {
+            selectedGenre = genreButtons.allElementsBoundByIndex.first(where: \.hasFocus)
+            if selectedGenre != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        guard let selectedGenre else {
+            XCTFail("Could not focus a genre after scrolling Home in Baby Pink")
+            return
+        }
+        capture("Baby Pink tvOS — deep Home genre shelf with native card focus")
+        remote.press(.select)
+        let genreLibrary = app.descendants(matching: .any)["genre.library"]
+        XCTAssertTrue(genreLibrary.waitForExistence(timeout: 8))
+        let populated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value != '0 items'"), object: genreLibrary
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [populated], timeout: 20), .completed)
+        let posters = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "media.poster."))
+        var selectedPoster: XCUIElement?
+        for _ in 0..<8 {
+            selectedPoster = posters.allElementsBoundByIndex.first(where: \.hasFocus)
+            if selectedPoster != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard let selectedPoster else {
+            XCTFail("Could not focus a poster in the Baby Pink genre library")
+            return
+        }
+        capture("Baby Pink tvOS — genre library and focused poster")
+        let itemID = selectedPoster.identifier.replacingOccurrences(of: "media.poster.", with: "")
+        remote.press(.select)
+        let detail = app.descendants(matching: .any)["detail.item.\(itemID)"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 8))
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertTrue(detail.exists, "Detail should remain above the genre route")
+        capture("Baby Pink tvOS — item detail")
+        remote.press(.menu)
+        XCTAssertTrue(genreLibrary.waitForExistence(timeout: 5))
+        remote.press(.menu)
+        XCTAssertTrue(waitForFocus(selectedGenre), "Back should restore the selected Home genre")
+
+        moveFocus(to: homeTab, maxPresses: 30) { remote.press(.up) }
+        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+        let about = app.descendants(matching: .any)["settings.category.about"]
+        XCTAssertTrue(about.waitForExistence(timeout: 8))
+        moveFocus(to: about, maxPresses: 14) { remote.press(.down) }
+        remote.press(.select)
+        let changelog = app.descendants(matching: .any)["settings.about.changelog"]
+        XCTAssertTrue(changelog.waitForExistence(timeout: 5))
+        remote.press(.right)
+        if !waitForFocus(changelog, timeout: 1) {
+            moveFocus(to: changelog, maxPresses: 8) { remote.press(.down) }
+        }
+        capture("Baby Pink tvOS — About with focused Changelog action")
+        remote.press(.select)
+        XCTAssertTrue(app.descendants(matching: .any)["settings.changelog"].waitForExistence(timeout: 8))
+        let build100 = app.descendants(matching: .any)["settings.changelog.100"]
+        XCTAssertTrue(build100.waitForExistence(timeout: 5))
+        capture("Baby Pink tvOS — Build 100 categorized release notes")
+
+        let build53 = app.descendants(matching: .any)["settings.changelog.53"]
+        moveFocus(to: build53, maxPresses: 80) { remote.press(.down) }
+        remote.press(.select)
+        let olderNote = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "exhausted provider allowance")
+        ).firstMatch
+        XCTAssertTrue(olderNote.waitForExistence(timeout: 5))
+        capture("Baby Pink tvOS — deeply scrolled and expanded historical release notes")
+        remote.press(.select)
+        moveFocus(to: build100, maxPresses: 80) { remote.press(.up) }
+        XCTAssertTrue(build100.frame.intersects(app.frame), "Returning up should reveal Build 100 again")
+        remote.press(.menu)
+        XCTAssertTrue(changelog.waitForExistence(timeout: 5))
+        remote.press(.menu)
+        XCTAssertTrue(about.waitForExistence(timeout: 5))
+
+        moveFocus(to: appearance, maxPresses: 12) { remote.press(.up) }
+        remote.press(.select)
+        XCTAssertTrue(theme.waitForExistence(timeout: 5))
+        focusThemeControl()
+        remote.press(.select)
+        selectNativeMenuOption("Lagoon", in: app, menuIndex: 0)
+        let lagoonSelected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Lagoon"), object: theme
+        )
+        XCTAssertEqual(XCTWaiter().wait(for: [lagoonSelected], timeout: 5), .completed)
+        Thread.sleep(forTimeInterval: 2.2)
+        capture("Lagoon tvOS — default theme restored after navigation sweep")
+    }
+
     func testTvOSSettingsHierarchyPickersAndHomeRowsNavigation() {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -1360,10 +1526,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         add(developerScreenshot)
 
         remote.press(.select)
-        let nextEpisodeCard = app.descendants(matching: .any)["Next Episode — Card"]
-        XCTAssertTrue(nextEpisodeCard.waitForExistence(timeout: 5))
-        for _ in 0..<4 { remote.press(.down) }
-        remote.press(.select)
+        selectNativeMenuOption("Next Episode — Card", in: app, menuIndex: 4)
         let nextEpisodeSelection = NSPredicate(format: "value == %@", "Next Episode — Card")
         expectation(for: nextEpisodeSelection, evaluatedWith: componentPicker)
         waitForExpectations(timeout: 5)
@@ -1376,12 +1539,12 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         // flattened visual sample. Select it and prove remote focus can move
         // from its tabs into the same audio rows used during playback.
         remote.press(.select)
-        let playerPanelOption = app.descendants(matching: .any)["Player Panel"]
-        XCTAssertTrue(playerPanelOption.waitForExistence(timeout: 5))
-        // The native menu reopens at its first row, not at the currently
-        // selected row, so Player Panel is eight moves from the top.
-        for _ in 0..<8 { remote.press(.down) }
-        remote.press(.select)
+        // Follow actual native menu focus: adding a component must not
+        // silently change which preview this journey selects.
+        selectNativeMenuOption("Player Panel", in: app, menuIndex: 10)
+        let playerPanelSelection = NSPredicate(format: "value == %@", "Player Panel")
+        expectation(for: playerPanelSelection, evaluatedWith: componentPicker)
+        waitForExpectations(timeout: 5)
         let openPlayerPanel = app.buttons["settings.developer.playerPanel.open"]
         XCTAssertTrue(openPlayerPanel.waitForExistence(timeout: 5))
         moveFocus(to: openPlayerPanel, maxPresses: 3) { remote.press(.down) }
@@ -2489,6 +2652,31 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(element.hasFocus, "Could not focus \(element)")
+    }
+
+    /// Select an option from a native tvOS pull-down by its stable menu order.
+    /// Rows below the fold are lazy and may not appear in the accessibility
+    /// tree until focus scrolls them into view, so waiting for a target node
+    /// before moving focus makes this test miss valid options. Reset to the
+    /// first row, then move the known index; the picker value is asserted by
+    /// each caller after the menu closes.
+    private func selectNativeMenuOption(_ title: String, in app: XCUIApplication, menuIndex: Int) {
+        guard menuIndex >= 0 else {
+            XCTFail("Invalid native menu index for \(title)")
+            return
+        }
+        // Native menus reopen at their current/initial position. Repeated Up
+        // presses are harmless at the first row and make this independent of
+        // which row the previous selection left visible.
+        for _ in 0..<24 {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        for _ in 0..<menuIndex {
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        remote.press(.select)
     }
 
     private func launchNavigationRegressionApp() -> XCUIApplication {
