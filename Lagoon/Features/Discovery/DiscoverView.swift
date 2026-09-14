@@ -9,14 +9,6 @@ import Observation
 private final class DiscoverViewModel {
     var rows: [SeerrDiscoverRow] = []
     var hero: [SeerrDiscoverResult] = []
-    /// TMDB logo paths for the hero's titles, keyed by media type and TMDB
-    /// id, since TMDB numbers movies and shows separately (HEL-174). Filled
-    /// after the hero is on screen, so a slow TMDB never holds the page.
-    var heroLogoPaths: [String: String] = [:]
-
-    static func heroLogoKey(id: Int, type: SeerrMediaType) -> String {
-        "\(type.rawValue):\(id)"
-    }
     var isLoading = false
     var errorMessage: String?
 
@@ -25,9 +17,6 @@ private final class DiscoverViewModel {
         isLoading = true
         await loadPage(client: client)
         isLoading = false
-        // After the page is up and the loading flag is down: a reload while
-        // TMDB is slow must not be dropped on its account.
-        await loadHeroLogos()
     }
 
     private func loadPage(client: SeerrClient) async {
@@ -62,24 +51,6 @@ private final class DiscoverViewModel {
         }
     }
 
-    /// The hero's title art, looked up together once the slides are known
-    /// and shown as each answer arrives. Type stands in until a logo
-    /// arrives; a title with none keeps it.
-    private func loadHeroLogos() async {
-        let provider = TMDBLogoProvider.shared
-        guard provider.isEnabled else { return }
-        let titles = hero.compactMap { item in item.mediaType.map { (item.id, $0) } }
-        await withTaskGroup(of: (String, String?).self) { group in
-            for (id, type) in titles {
-                let key = Self.heroLogoKey(id: id, type: type)
-                group.addTask { (key, await provider.logoPath(id: id, mediaType: type)) }
-            }
-            for await (key, path) in group {
-                guard !Task.isCancelled, let path else { continue }
-                heroLogoPaths[key] = path
-            }
-        }
-    }
 }
 
 struct DiscoverView: View {
@@ -161,9 +132,7 @@ struct DiscoverView: View {
         .accessibilityIdentifier("seerr.discover")
     }
 
-    /// Seerr's half of the shared hero. Seerr's API has no logo artwork, so
-    /// the title art comes from TMDB where a key is configured (HEL-174);
-    /// without one `logoURL` is nil and the panel sets the title in type.
+    /// Seerr's API has no logo artwork, so the panel sets each title in type.
     private var heroItems: [HeroItem<SeerrNavigationRoute>] {
         viewModel.hero.compactMap { item in
             guard let type = item.mediaType else { return nil }
@@ -172,10 +141,7 @@ struct DiscoverView: View {
                 title: item.displayTitle,
                 overview: item.overview,
                 backdropURL: SeerrClient.imageURL(path: item.backdropPath, width: 1920),
-                logoURL: SeerrClient.imageURL(
-                    path: viewModel.heroLogoPaths[DiscoverViewModel.heroLogoKey(id: item.id, type: type)],
-                    width: Int(Metrics.logoMaxWidth * 2)
-                ),
+                logoURL: nil,
                 route: .media(id: item.id, type: type)
             )
         }
