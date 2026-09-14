@@ -224,9 +224,13 @@ final class SyncPlayStore {
         try? await client.syncPlaySetIgnoreWait(false)
         guard let media = try? await client.item(id: item.itemId) else { return }
         guard session.currentPlaylistItemId == item.playlistItemId else { return }
-        // Where the group is now, not where the queue started: the others
-        // have been watching.
-        let position = session.lastCommand?.positionSeconds ?? session.startSeconds
+        // Where the group is now, not where the queue or the last command
+        // started: the others have been watching, and opening behind them
+        // makes the server correct this member — which holds the whole
+        // group up while it does.
+        let position = session.positionSeconds(
+            atServerSeconds: clock?.serverSeconds() ?? Date().timeIntervalSince1970
+        )
         pendingPlayRequest = SyncPlayPlayRequest(
             media: media,
             startSeconds: position,
