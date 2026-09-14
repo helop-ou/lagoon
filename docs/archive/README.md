@@ -10,6 +10,7 @@ Use the [current guides](../README.md) for implementation guidance and
 
 | Record | Evidence or context |
 | --- | --- |
+| [Build 100 recheck, September 14](build-100-recheck-2026-09-14.md) | Full Build 99→100 scope, account/lifecycle fixes, compiler checks, simulator evidence, and remaining device/release acceptance |
 | [September 12 validation](validation-2026-09-12.md) | The public-demo UI lane twice on clean state per platform (audit A18), and the dropped backward seek the tvOS lane caught, diagnosed from the failure recording and fixed |
 | [September 11 validation](validation-2026-09-11.md) | Unit suites, both UI lanes, the classified tvOS failures, and the HEL-157 visual acceptance |
 | [Download spike, HEL-166](hel-166-download-spike.md) | Background-session downloads of an original file and a progressive transcode across suspension and SIGKILL on the iPhone simulator, and playback from disk |
