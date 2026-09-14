@@ -563,6 +563,22 @@ requests, My List, Discover or custom collection sections.
 Cost is low enough to fetch eagerly: all 28 sections resolve in ~1.8 s
 concurrently, empties answering in ~0.1 s each.
 
+### Top 10 rows (HEL-121)
+
+The practical workaround uses Seerr's authenticated
+`discover/movies` and `discover/tv` catalogues, with trending results merged
+ahead of popular results. A bounded, paginated library scan then intersects
+each list with the current user's Jellyfin items by exact `ProviderIds.Tmdb`
+matches within the same movie or TV catalogue. Duplicate editions and repeated
+discovery IDs occupy one slot; fewer than four matches omits that row. Top 10
+loads independently so a slow external catalogue never delays the native
+curated shelves. The resulting Top 10 Movies and Top 10 Shows rows contain
+playable library items only; no title or year
+guessing is used, and an unconfigured Seerr connection simply omits the rows.
+The Home Screen Sections Manager remains supported for its existing legacy
+sections; its newer ranked-section API is not required for these rows. This is
+an approximation of popularity, not a personal `PlayCount` substitute.
+
 ## Testing without a home server
 
 The public demos use user `demo` with an empty password. `stable` at
