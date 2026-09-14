@@ -257,11 +257,22 @@ struct PlayerControlPanel: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("player.together.group")
 
-                cardHeader("In the Group")
-                ForEach(together.participants, id: \.self) { participant in
-                    Label(participant, systemImage: "person.fill")
+                // Never this viewer: Jellyfin's `GroupJoined` hands the
+                // member that created the group an empty list and sends no
+                // `UserJoined` for its own session, so the list is "the
+                // others" and reads as one (fixture 12.0.0, 2026-09-14).
+                cardHeader("Others in the Group")
+                if together.participants.isEmpty {
+                    Text("Nobody else has joined yet.")
                         .font(.callout)
+                        .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    ForEach(together.participants, id: \.self) { participant in
+                        Label(participant, systemImage: "person.fill")
+                            .font(.callout)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
 
                 togetherOptions(together)
