@@ -5,7 +5,8 @@ import SwiftUI
 /// Full-screen custom player styled after the Infuse reference shots on
 /// HEL-35: a "Swipe down for Info" hint, a bottom-left title block over a
 /// thin scrubber, and a swipe-down panel of centered pill tabs
-/// (Info · Video · Audio · Subtitles) above one floating material card.
+/// (Info · Video · Audio · Subtitles, plus Together inside a Watch
+/// Together group) above one floating material card.
 /// Talks only to `PlayerEngine` so the HEL-48 engine swap never touches it.
 ///
 /// tvOS focus invariants: the surface is focusable at all times (Menu
@@ -120,6 +121,15 @@ struct CustomPlayerView<Surface: View>: View {
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
+    /// The Watch Together group owning this session, or nil outside one
+    /// (HEL-172). A value, supplied by the host: the player root must not
+    /// read a store, and this is what decides whether a fifth tab exists.
+    var together: PlayerTogetherState? = nil
+    var onLeaveGroup: (() -> Void)? = nil
+    var onSetIgnoreWait: ((Bool) -> Void)? = nil
+    /// The group is holding for a member that is not ready, so the
+    /// spinner earns a line saying why nothing is moving.
+    var isWaitingForGroup = false
     var subtitleStyle: SubtitleRenderStyle = .fallback
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     @ViewBuilder let surface: () -> Surface
@@ -271,13 +281,27 @@ struct CustomPlayerView<Surface: View>: View {
                 // boundary, and neither do transitions — see the panel below and
                 // the write-up in docs/playback.md.
                 Group {
-                    if showsBuffering {
-                        ProgressView()
-                            .tint(.white)
-                            .transition(.opacity)
+                    if showsBuffering || isWaitingForGroup {
+                        // The same spinner, with the group's reason under
+                        // it: a member primed and paused at the group's
+                        // position is not buffering, and without the line
+                        // a still picture and a live spinner look like a
+                        // stall (HEL-172).
+                        VStack(spacing: Metrics.Space.m) {
+                            ProgressView()
+                                .tint(.white)
+                            if isWaitingForGroup {
+                                Text("Waiting for the group")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityIdentifier("player.together.waiting")
+                            }
+                        }
+                        .transition(.opacity)
                     }
                 }
                 .animation(.easeInOut(duration: Motion.fast), value: showsBuffering)
+                .animation(.easeInOut(duration: Motion.fast), value: isWaitingForGroup)
 
                 Group {
                     if let feedback = seekFeedback {
@@ -392,6 +416,12 @@ struct CustomPlayerView<Surface: View>: View {
             }
         }
         #endif
+        // Leaving the group takes its tab with it, and a selection left
+        // pointing at a tab that is no longer drawn leaves the panel
+        // showing nothing (HEL-172).
+        .onChange(of: together == nil) { _, hasNoGroup in
+            if hasNoGroup, selectedTab == .together { selectedTab = .info }
+        }
         .onChange(of: playerFocus) { _, focus in
             if case .tab(let tab) = focus {
                 // The native focus lozenge already animates. Animating the
@@ -574,11 +604,12 @@ struct CustomPlayerView<Surface: View>: View {
                     // sliding tabs fully enter its focus region. Do not eat
                     // that first command: move the selection and focus to
                     // the tab the command was trying to reach.
+                    let tabs = PlayerPanelTab.offered(inGroup: together != nil)
                     if direction == .left || direction == .right,
-                       let index = PlayerPanelTab.allCases.firstIndex(of: selectedTab) {
+                       let index = tabs.firstIndex(of: selectedTab) {
                         let delta = direction == .right ? 1 : -1
-                        let targetIndex = min(max(index + delta, 0), PlayerPanelTab.allCases.count - 1)
-                        let target = PlayerPanelTab.allCases[targetIndex]
+                        let targetIndex = min(max(index + delta, 0), tabs.count - 1)
+                        let target = tabs[targetIndex]
                         selectedTab = target
                         playerFocus = .tab(target)
                     } else {
@@ -924,6 +955,9 @@ struct CustomPlayerView<Surface: View>: View {
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
             onTogglePictureInPicture: onTogglePictureInPicture,
+            together: together,
+            onLeaveGroup: onLeaveGroup,
+            onSetIgnoreWait: onSetIgnoreWait,
             onDismiss: closePanel
         )
         .equatable()
