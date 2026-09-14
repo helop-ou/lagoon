@@ -257,13 +257,14 @@ struct PlayerControlPanel: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("player.together.group")
 
-                // Never this viewer: Jellyfin's `GroupJoined` hands the
-                // member that created the group an empty list and sends no
-                // `UserJoined` for its own session, so the list is "the
-                // others" and reads as one (fixture 12.0.0, 2026-09-14).
-                cardHeader("Others in the Group")
+                // Whoever the server names, this viewer included. A
+                // `GroupJoined` usually lists the member that just joined,
+                // but a group's creator is sometimes handed an empty list
+                // and no `UserJoined` of its own, so an empty list still
+                // means a room with you in it (fixture 12.0.0, 2026-09-14).
+                cardHeader("In the Group")
                 if together.participants.isEmpty {
-                    Text("Nobody else has joined yet.")
+                    Text("Just you so far.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
