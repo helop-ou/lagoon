@@ -151,12 +151,12 @@ struct TVSettingsNavigationLabel: View {
             Spacer(minLength: Metrics.Space.xl)
             if let detail {
                 Text(detail)
-                    .foregroundStyle(.secondary)
+                    .opacity(0.7)
                     .lineLimit(1)
             }
             Image(systemName: "chevron.forward")
                 .font(.caption.bold())
-                .foregroundStyle(.tertiary)
+                .opacity(0.55)
         }
         .frame(maxWidth: .infinity)
     }
@@ -171,11 +171,11 @@ struct TVSettingsValueLabel: View {
             Text(title)
             Spacer(minLength: Metrics.Space.xl)
             Text(value)
-                .foregroundStyle(.secondary)
+                .opacity(0.7)
                 .lineLimit(1)
             Image(systemName: "chevron.up.chevron.down")
                 .font(.caption.bold())
-                .foregroundStyle(.tertiary)
+                .opacity(0.55)
         }
         .frame(maxWidth: .infinity)
     }
@@ -238,7 +238,7 @@ struct TVSettingsActionLabel: View {
             Spacer(minLength: Metrics.Space.xl)
             if let value {
                 Text(value)
-                    .foregroundStyle(.secondary)
+                    .opacity(0.7)
                     .lineLimit(1)
             }
         }
@@ -257,10 +257,20 @@ struct TVSettingsToggle: View {
     }
 
     var body: some View {
-        Toggle(isOn: $isOn) {
-            Text(title)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack(spacing: Metrics.Space.xl) {
+                Text(title)
+                Spacer(minLength: Metrics.Space.xl)
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .opacity(isOn ? 1 : 0.55)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.glass)
+        .accessibilityValue(isOn ? "On" : "Off")
         .padding(.horizontal, Metrics.Space.l)
         .frame(minHeight: 66)
     }
