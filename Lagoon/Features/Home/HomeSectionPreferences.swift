@@ -483,7 +483,7 @@ struct HomeRowsSettingsView: View {
             }
         }
         #else
-        List {
+        ThemedForm {
             Section("Lagoon Native") {
                 ForEach(preferences.nativeChoices) { choice in
                     Toggle(choice.title, isOn: Binding(
