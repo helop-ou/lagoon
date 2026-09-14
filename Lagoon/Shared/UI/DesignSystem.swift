@@ -18,6 +18,10 @@ enum Metrics {
     /// poster's because the names that need it are collections, and
     /// "Spider-Man (MCU) Collection" does not fit on one line (HEL-122).
     static let landscapeCaptionHeight: CGFloat = 96
+    /// Width reserved for the oversized rank beside a Top 10 card.
+    static let topTenRankWidth: CGFloat = 150
+    /// Pulls the card over the rank so the number reads as part of the card.
+    static let topTenRankOverlap: CGFloat = 28
     static let railTopPadding: CGFloat = 48    // headroom for the system focus lift and the focus halo
     static let railBottomPadding: CGFloat = 96
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
@@ -76,6 +80,10 @@ enum Metrics {
     static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
     static let landscapeCaptionHeight: CGFloat = 60
+    /// Width reserved for the oversized rank beside a Top 10 card.
+    static let topTenRankWidth: CGFloat = 88
+    /// Pulls the card over the rank so the number reads as part of the card.
+    static let topTenRankOverlap: CGFloat = 16
     /// Keep a heading close to its own cards, with a larger break before
     /// the next shelf. Browse pages stack rails without extra spacing.
     static let railTopPadding: CGFloat = Space.m
@@ -265,6 +273,12 @@ enum Typography {
     /// Quick Connect's code: monospaced so the digits don't jitter as it
     /// polls, and large enough to read across a room.
     static let quickConnectCode: Font = .system(size: 42, weight: .bold, design: .monospaced)
+    /// Oversized display number used by the ranked Home shelves.
+    #if os(tvOS)
+    static let topTenRank: Font = .system(size: 190, weight: .black, design: .rounded)
+    #else
+    static let topTenRank: Font = .system(size: 112, weight: .black, design: .rounded)
+    #endif
 }
 
 enum Motion {
