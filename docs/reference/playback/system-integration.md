@@ -109,10 +109,38 @@ introducing a second player to get it:
   `AVSampleBufferDisplayLayer` with an
   `AVPictureInPictureSampleBufferPlaybackDelegate` whose play/pause/skip
   callbacks drive the same `SampleBufferPlayerEngine` — there is no hidden
-  AVPlayer. iOS exposes the system `AVRoutePickerView` for AirPlay, and
-  backgrounding pauses unless PiP is active/transitioning or AirPlay owns the
-  route. `AVInitialRouteSharingPolicy=LongFormVideo` and the audio background
-  mode are declared in the plist.
+  AVPlayer. iOS exposes the system `AVRoutePickerView` for AirPlay.
+  `AVInitialRouteSharingPolicy=LongFormVideo` and the audio background mode
+  are declared in the plist.
+- Backgrounding on iOS keeps playing (HEL-176). `PlaybackController`
+  observes `UIApplication.didEnterBackgroundNotification` and
+  `willEnterForegroundNotification` itself — the player is presented from
+  UIKit, where SwiftUI's `scenePhase` never changes, which is how the old
+  pause-on-background silently never ran on iOS. Entering the background
+  stops proactive cache fill and, unless PiP is active/transitioning (the
+  view answers through `isPictureInPictureShowing`) or AirPlay owns the
+  route, puts the engine into audio-only mode:
+  `setVideoOutputSuspended(true)` flushes the video renderer, intake and
+  queue on the pump queue, and the demux loop then discards the video
+  stream inside libavformat (`FFmpegDemuxer.setVideoDiscarded`) and resets
+  the software decode stage, so nothing decodes and no GPU work is
+  submitted while the app is in the background. Audio, the synchronizer
+  clock, the periodic time observer, subtitles and the finish boundary
+  carry on. Priming, starvation detection and stall recovery all treat a
+  suspended picture as a finished video queue, so a network stall in the
+  background recovers on audio alone. Returning to the foreground resumes
+  with a seek to the current position, which restarts video on a keyframe and,
+  through the seek's decoder reset, on a fresh VideoToolbox session — the
+  one a hardware decoder invalidated by the background needs. A successor
+  engine started by autoplay while backgrounded inherits the suspension.
+  tvOS keeps pausing on background through the view's `scenePhase`; it
+  has no lock screen to play under. `-debug.regressionNoAutomaticPiP YES`
+  turns automatic PiP off so the simulator, which cannot lock into the
+  background, reaches the audio-only path through the Home button.
+- Skip and Up Next timing lives in `PlaybackAutomation`, owned by the
+  controller and fed by the engine's `onTimeAdvanced` callback, so both
+  countdowns and the end-of-file hand-off run with the screen locked or
+  the player minimised into PiP. The overlays only draw its state.
 - Caption rendering reads Apple's Media Accessibility font, foreground,
   opacity, size, background and edge preferences live; Lagoon's per-account
   override adds size, edge, background and vertical-position controls. System
