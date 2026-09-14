@@ -28,6 +28,7 @@ struct SettingsView: View {
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
     @AppStorage(SkipMode.defaultsKey) private var skipModeRaw = SkipMode.autoDelay.rawValue
     @AppStorage(AutoplayMode.defaultsKey) private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
+    @AppStorage(GroupPlaybackDriver.correctionDefaultsKey) private var correctsSyncDrift = true
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var homePreferences = HomeSectionPreferencesStore()
@@ -103,7 +104,8 @@ struct SettingsView: View {
         PlaybackSettingsView(
             skipModeRaw: $skipModeRaw,
             autoplayModeRaw: $autoplayModeRaw,
-            allowFullQualityOnMetered: $allowFullQualityOnMetered
+            allowFullQualityOnMetered: $allowFullQualityOnMetered,
+            correctsSyncDrift: $correctsSyncDrift
         )
     }
 
