@@ -70,9 +70,7 @@ app manifest declares diagnostic and performance data collection for the
 automatic failure reports (HEL-159); App Store Connect's privacy answers and
 the Settings footer must match the [diagnostics reference](reference/playback/diagnostics.md#tester-controls-and-disclosure).
 Before a TestFlight round, confirm the Sentry project's quota and the
-*Prevent Storing of IP Addresses* setting there, and that
-`TMDBConfiguration.apiKey` carries Lagoon's TMDB key, or Seerr titles ship
-with their names in type instead of their logos (HEL-174).
+*Prevent Storing of IP Addresses* setting there.
 
 New native dependencies need an acknowledgement entry, bundled license text,
 and matching provenance. `AcknowledgementsTests` checks the notice resources.
