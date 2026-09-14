@@ -731,6 +731,15 @@ nonisolated final class FFmpegDemuxer {
         }
     }
 
+    /// Whether the video stream is read at all. Discarded inside
+    /// libavformat while the app plays audio in the background (HEL-176),
+    /// so a locked phone neither decodes nor holds pictures nobody sees.
+    func setVideoDiscarded(_ discarded: Bool) {
+        guard let ctx = formatContext, let videoStream else { return }
+        ctx.pointee.streams[Int(videoStream.streamIndex)]?.pointee.discard =
+            discarded ? AVDISCARD_ALL : AVDISCARD_DEFAULT
+    }
+
     /// Same discard dance for the chosen embedded subtitle stream (nil =
     /// subtitles off / an external track is active).
     func selectSubtitle(streamIndex: Int32?) {
