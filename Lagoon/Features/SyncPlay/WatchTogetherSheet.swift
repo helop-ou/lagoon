@@ -102,11 +102,12 @@ struct WatchTogetherSheet: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("watchTogether.currentGroup")
 
-            // "Others", because Jellyfin never names this session: the
-            // member that created a group is handed an empty participant
-            // list and no `UserJoined` of its own.
+            // Whoever the server names, this viewer included. A group's
+            // creator is sometimes handed an empty participant list and no
+            // `UserJoined` of its own, so an empty list is still a room
+            // with you in it.
             if syncPlay.session.participants.isEmpty {
-                Text("Nobody else has joined yet.")
+                Text("Just you so far.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
