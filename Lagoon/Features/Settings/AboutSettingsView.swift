@@ -82,7 +82,7 @@ struct AboutSettingsView: View {
 
     #if !os(tvOS)
     private var phoneBody: some View {
-        Form {
+        ThemedForm {
             Section("Application") {
                 ForEach(applicationRows, id: \.title) { row in
                     LabeledContent(row.title, value: row.value)
