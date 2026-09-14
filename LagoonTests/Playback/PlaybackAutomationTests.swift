@@ -46,8 +46,8 @@ struct PlaybackAutomationTests {
         return automation
     }
 
-    private static let intro = MediaSegment(id: "intro", kind: .intro, start: 10, end: 70)
-    private static let outro = MediaSegment(id: "outro", kind: .outro, start: 1_200, end: 1_320)
+    nonisolated private static let intro = MediaSegment(id: "intro", kind: .intro, start: 10, end: 70)
+    nonisolated private static let outro = MediaSegment(id: "outro", kind: .outro, start: 1_200, end: 1_320)
 
     // MARK: - Skip
 
