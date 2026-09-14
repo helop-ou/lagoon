@@ -102,9 +102,19 @@ struct WatchTogetherSheet: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("watchTogether.currentGroup")
 
-            ForEach(syncPlay.session.participants, id: \.self) { participant in
-                Label(participant, systemImage: "person.fill")
+            // "Others", because Jellyfin never names this session: the
+            // member that created a group is handed an empty participant
+            // list and no `UserJoined` of its own.
+            if syncPlay.session.participants.isEmpty {
+                Text("Nobody else has joined yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ForEach(syncPlay.session.participants, id: \.self) { participant in
+                    Label(participant, systemImage: "person.fill")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
 
@@ -191,11 +201,7 @@ struct WatchTogetherSheet: View {
     // MARK: - Copy
 
     private var stateTitle: String {
-        let people = syncPlay.session.participants.count
-        let members = people == 1
-            ? String(localized: "1 person")
-            : String(localized: "\(people) people")
-        return "\(SyncPlayStateCopy.title(for: syncPlay.session.state)) · \(members)"
+        SyncPlayStateCopy.title(for: syncPlay.session.state)
     }
 
     private func summary(of group: SyncPlayGroup) -> String {
