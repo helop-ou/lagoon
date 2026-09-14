@@ -18,68 +18,34 @@ nonisolated enum SkipSegmentPolicy {
 }
 
 /// The Skip Intro / Skip Recap shelf (HEL-63), lifted out of
-/// `CustomPlayerView` (HEL-150) so `engine.timePosition` is read in this body
-/// instead of the player's.
-///
-/// The auto-skip fill and the task that arms it came with it: the fill is
-/// this view's own state, and the parent only hears about a committed skip,
-/// through `onSkip`. Bottom-trailing, clear of the transport — the shelf the
+/// `CustomPlayerView` (HEL-150). It draws `PlaybackAutomation`'s answer and
+/// nothing else: which segment is active, and how far the auto-skip fill
+/// has run, are decided off the engine's clock so a locked phone still
+/// skips (HEL-176). The parent only hears about a committed skip through
+/// the automation. Bottom-trailing, clear of the transport — the shelf the
 /// reference players use. Not focusable; on tvOS Select drives it from the
 /// video surface, because taking focus would move `onMoveCommand` off the
 /// surface and kill scrubbing while it is up.
 struct PlayerSkipOverlay: View {
-    @PlayerEngineRef var engine: any PlayerEngine
-    /// Changing it re-arms the task, which is what clears a fill left running
-    /// by the item that just ended.
-    let playbackIdentity: String
-    let segments: [MediaSegment]
-    /// Segments already acted on or waved away, so a committed skip (or a
-    /// "no thanks") doesn't re-arm the moment the playhead lands.
-    let handledSegmentIDs: Set<String>
-    /// The panel and an open scrub both own the screen and the remote, and a
-    /// button that quietly rewrites what Select does underneath them would be
-    /// a trap.
-    let isSuppressed: Bool
-    let skipMode: SkipMode
+    let automation: PlaybackAutomation
     let reduceMotion: Bool
+    /// A tap on the pill; the player commits it through the automation and
+    /// reveals its controls, the same as Select does on tvOS.
     let onSkip: (MediaSegment) -> Void
-
-    /// 0…1, drives the auto-skip fill. Value-driven, because `withAnimation`
-    /// does not survive the MenuPressGate hosting boundary.
-    @State private var autoSkipFill: Double = 0
-
-    /// Re-arms the countdown once per segment — and once per item, so
-    /// autoplay cannot inherit the outgoing episode's fill.
-    private struct Arming: Equatable {
-        let identity: String
-        let segmentID: String?
-    }
-
-    private var activeSegment: MediaSegment? {
-        // Reading `engine.timePosition` is what subscribes this view to the
-        // position tick, so an item the server marked no skippable segment on
-        // — every movie without an intro — never takes the subscription at
-        // all. The answer is nil either way.
-        guard !isSuppressed, segments.contains(where: \.kind.isSkippable) else { return nil }
-        return SkipSegmentPolicy.activeSegment(
-            in: segments,
-            at: engine.timePosition,
-            handled: handledSegmentIDs
-        )
-    }
 
     private var transientScaleTransition: AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9))
     }
 
     var body: some View {
-        let segment = activeSegment
+        let segment = automation.activeSegment
+        let skipMode = automation.skipMode
         Group {
             if let segment, skipMode != .instant {
                 PlayerSkipPrompt(
                     title: segment.kind.skipTitle,
                     showsCountdown: skipMode == .autoDelay,
-                    fill: autoSkipFill
+                    fill: automation.skipFill
                 )
                 .transition(transientScaleTransition)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -98,28 +64,6 @@ struct PlayerSkipOverlay: View {
         }
         .accessibilityAddTraits(.isButton)
         #endif
-        // Arms whenever the playhead crosses into a skippable segment. Keyed
-        // on the segment id, so it fires once per segment rather than on
-        // every position tick.
-        .task(id: Arming(identity: playbackIdentity, segmentID: segment?.id)) {
-            guard let segment else {
-                autoSkipFill = 0
-                return
-            }
-            switch skipMode {
-            case .instant:
-                onSkip(segment)
-            case .autoDelay:
-                autoSkipFill = 1
-                try? await Task.sleep(for: .seconds(SkipMode.autoDelaySeconds))
-                // Menu may have waved it away, or a scrub may have carried
-                // the playhead out, while the fill was running.
-                guard !Task.isCancelled, activeSegment?.id == segment.id else { return }
-                onSkip(segment)
-            case .button:
-                break
-            }
-        }
     }
 }
 
