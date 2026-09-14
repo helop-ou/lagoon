@@ -209,9 +209,10 @@ final class TouchPlayerUITests: PlayerUITestCase {
     /// player; every screen now requests playback from the tab root's host.
     func testPlayerStartedFromDetailPageStaysOpen() throws {
         let app = launchSignedIn()
-        let home = app.tabBars.buttons["Home"]
+        // iPad's adaptive tab controls are buttons outside a TabBar node.
+        let home = app.buttons.matching(NSPredicate(format: "label == %@", "Home")).firstMatch
         XCTAssertTrue(home.waitForExistence(timeout: 30))
-        let library = app.tabBars.buttons["Library"]
+        let library = app.buttons.matching(NSPredicate(format: "label == %@", "Library")).firstMatch
         XCTAssertTrue(library.waitForExistence(timeout: 10))
         library.tap()
         XCTAssertTrue(app.descendants(matching: .any)["library.view"].waitForExistence(timeout: 15))
