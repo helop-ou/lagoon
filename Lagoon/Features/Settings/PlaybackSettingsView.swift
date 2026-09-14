@@ -4,6 +4,13 @@ struct PlaybackSettingsView: View {
     @Binding var skipModeRaw: String
     @Binding var autoplayModeRaw: String
     @Binding var allowFullQualityOnMetered: Bool
+    @Binding var correctsSyncDrift: Bool
+
+    /// Why a Watch Together member's picture might nudge, said once for
+    /// both platforms.
+    private static let syncDriftFooter = LocalizedStringKey(
+        "In a Watch Together group, Lagoon nudges the speed by a fraction to bring this device back in step, and jumps when it is a long way out. Turn it off if you would rather it left the picture alone."
+    )
 
     var body: some View {
         #if os(tvOS)
@@ -43,6 +50,11 @@ struct PlaybackSettingsView: View {
                     }
                 )
             }
+
+            TVSettingsSection("Watch Together", footer: Self.syncDriftFooter) {
+                TVSettingsToggle("Correct Sync Drift", isOn: $correctsSyncDrift)
+                    .accessibilityIdentifier("settings.playback.syncDrift")
+            }
         }
     }
     #else
@@ -62,6 +74,15 @@ struct PlaybackSettingsView: View {
                     }
                 }
                 .accessibilityIdentifier("settings.playback.autoplayMode")
+            }
+
+            Section {
+                Toggle("Correct Sync Drift", isOn: $correctsSyncDrift)
+                    .accessibilityIdentifier("settings.playback.syncDrift")
+            } header: {
+                Text("Watch Together")
+            } footer: {
+                Text(Self.syncDriftFooter)
             }
 
             Section {
