@@ -207,6 +207,16 @@ server answer with a `SetCurrentItem` queue update. Readiness is a *state*:
 the driver reports only on a change, so the pair a seek produces collapses to
 one Buffering and one Ready.
 
+**A report says where the engine is, not where it was.** `clockPosition`
+answers from the synchronizer, and the synchronizer sits at the anchor being
+left behind until `beginPlayback` sets the new one — zero on a first open.
+So `beginPlayback` anchors the clock *before* it announces the end of
+buffering, and leaves `bufferingTargetSeconds` in place until it does, so the
+whole window has one answer. A Ready that is more than half a second from the
+group's position is not ignored: the server flags that member as buffering
+again and sends it a corrective `Seek` ("got lost in time, correcting"), so a
+report that lies stalls the room it was meant to release.
+
 **Commands.** `Unpause` seeks first only if the member is more than 0.5 s from
 the named position, then calls `playGroup(atHostTime:)` straight away — the
 engine remembers the instant through priming, and a seek issued *after* the
@@ -218,7 +228,10 @@ membership. `SyncPlayGroupSession` decides what is worth acting on at all:
 another group's command, one emitted before this member joined, one naming an
 item that is not the current one (Stop excepted), the all-zero `Stop` a new
 group is greeted with, and a re-send of the command already taken are all
-refused.
+refused — a `Seek` excepted there too. The server builds its corrective seek
+out of the group's own state, so it arrives identical to the seek already
+taken bar `EmittedAt`; refusing it leaves the member with nothing left to
+report and the group waiting on it for ever.
 
 **Drift.** While the last command is an `Unpause`, 1.5 s past its instant and
 not buffering, the driver compares `clockPosition` against where the group
@@ -241,7 +254,10 @@ local — they are this viewer's, not the group's.
 **Leaving the player is not leaving the group.** `onClosed` detaches the
 driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by a
 member that is not watching; `rejoinPlayback()` clears it and reopens from the
-stored queue. `leave()` posts `SyncPlay/Leave` and closes the socket and
+stored queue, at where the group has got to — `positionSeconds(atServerSeconds:)`
+carries the last `Unpause` forward by the server time since its instant, since
+opening at the position that command named would be minutes behind a group
+that has been watching, and the server would hold everyone up correcting it. `leave()` posts `SyncPlay/Leave` and closes the socket and
 clock, and an account switch does the same silently. Foreground forces a clock
 re-sample.
 
