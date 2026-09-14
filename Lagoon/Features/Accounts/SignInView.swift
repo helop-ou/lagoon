@@ -21,7 +21,7 @@ struct SignInView: View {
 
     var body: some View {
         ZStack {
-            BrandBackground()
+            GroundBackground()
             JellyfishSwimLayer()
 
             #if os(iOS)
