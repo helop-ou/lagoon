@@ -122,6 +122,36 @@ final class SettingsUITests: XCTestCase {
         }
     }
 
+    func testBabyPinkThemeAndCategorizedChangelog() {
+        let app = launchSettings()
+        defer { app.terminate() }
+        openCategory("appearance", title: "Appearance", in: app)
+        let pink = app.staticTexts["Baby Pink"].firstMatch
+        XCTAssertTrue(pink.waitForExistence(timeout: 5))
+        pink.tap()
+        attach("baby-pink-appearance")
+        goBack(to: "Settings", in: app)
+        attach("baby-pink-settings")
+
+        openCategory("about", title: "About", in: app)
+        app.buttons["Changelog"].tap()
+        XCTAssertTrue(app.navigationBars["Changelog"].waitForExistence(timeout: 5))
+        let current = control("settings.changelog.100", in: app)
+        XCTAssertTrue(current.exists)
+        XCTAssertTrue(app.staticTexts["New features"].firstMatch.waitForExistence(timeout: 5))
+        attach("baby-pink-changelog")
+        app.swipeUp()
+        attach("baby-pink-changelog-scroll")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["About"].waitForExistence(timeout: 5))
+        goBack(to: "Settings", in: app)
+        openCategory("appearance", title: "Appearance", in: app)
+        // Keep the selected theme visible for screenshot review after a
+        // full navigation round trip, then restore the default for peers.
+        attach("baby-pink-appearance-return")
+        app.staticTexts["Lagoon"].firstMatch.tap()
+    }
+
     private func launchSettings(contentSize: String = "UICTContentSizeCategoryL") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
