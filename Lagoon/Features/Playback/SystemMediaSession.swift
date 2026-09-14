@@ -221,6 +221,13 @@ final class PlaybackAudioSession {
 @MainActor
 final class NowPlayingCoordinator {
     private weak var engine: (any PlayerEngine)?
+    /// Where a transport command goes. The controller supplies it so the
+    /// lock screen, Control Center and a headset button reach the same
+    /// interception point the player chrome does — inside a SyncPlay group
+    /// they become requests to the server and nothing moves locally
+    /// (HEL-172). Track selection, rate and the published timeline are not
+    /// routed: those are this viewer's, not the group's.
+    private var transport: PlayerTransportActions?
     private var commandTargets: [(MPRemoteCommand, Any)] = []
     private var nowPlayingInfo: [String: Any] = [:]
     private var languageActions: [String: (PlayerTrack.Kind, Int)] = [:]
@@ -230,10 +237,12 @@ final class NowPlayingCoordinator {
         info: PlayerItemInfo,
         itemID: String,
         engine: any PlayerEngine,
+        transport: PlayerTransportActions? = nil,
         replacingActiveSession: Bool = false
     ) {
         reset(publishStopped: !replacingActiveSession)
         self.engine = engine
+        self.transport = transport
         nowPlayingInfo = [
             MPMediaItemPropertyTitle: info.title,
             MPMediaItemPropertyMediaType: MPMediaType.anyVideo.rawValue,
@@ -296,6 +305,7 @@ final class NowPlayingCoordinator {
         commandTargets.removeAll()
         languageActions.removeAll()
         engine = nil
+        transport = nil
         nowPlayingInfo.removeAll()
         if publishStopped {
             let center = MPNowPlayingInfoCenter.default()
@@ -307,31 +317,36 @@ final class NowPlayingCoordinator {
     private func registerCommands() {
         let center = MPRemoteCommandCenter.shared()
         add(center.playCommand) { [weak self] _ in
-            self?.engine?.play()
-            self?.updateTimeline()
+            guard let self else { return }
+            if let transport = self.transport { transport.play() } else { self.engine?.play() }
+            self.updateTimeline()
         }
         add(center.pauseCommand) { [weak self] _ in
-            self?.engine?.pause()
-            self?.updateTimeline()
+            guard let self else { return }
+            if let transport = self.transport { transport.pause() } else { self.engine?.pause() }
+            self.updateTimeline()
         }
         add(center.togglePlayPauseCommand) { [weak self] _ in
-            self?.engine?.togglePause()
-            self?.updateTimeline()
+            guard let self else { return }
+            if let transport = self.transport { transport.togglePause() } else { self.engine?.togglePause() }
+            self.updateTimeline()
         }
         center.skipForwardCommand.preferredIntervals = [10]
         add(center.skipForwardCommand) { [weak self] _ in
-            self?.engine?.seek(by: 10)
-            self?.updateTimeline()
+            self?.seek(by: 10)
         }
         center.skipBackwardCommand.preferredIntervals = [10]
         add(center.skipBackwardCommand) { [weak self] _ in
-            self?.engine?.seek(by: -10)
-            self?.updateTimeline()
+            self?.seek(by: -10)
         }
         add(center.changePlaybackPositionCommand) { [weak self] event in
-            guard let position = event as? MPChangePlaybackPositionCommandEvent else { return }
-            self?.engine?.seek(to: position.positionTime)
-            self?.updateTimeline()
+            guard let self, let position = event as? MPChangePlaybackPositionCommandEvent else { return }
+            if let transport = self.transport {
+                transport.seek(position.positionTime, false)
+            } else {
+                self.engine?.seek(to: position.positionTime)
+            }
+            self.updateTimeline()
         }
         center.changePlaybackRateCommand.supportedPlaybackRates = PlaybackRatePolicy.supported.map {
             NSNumber(value: $0)
@@ -354,6 +369,11 @@ final class NowPlayingCoordinator {
                 self?.updateLanguageOptions()
             }
         }
+    }
+
+    private func seek(by seconds: Double) {
+        if let transport { transport.seekBy(seconds) } else { engine?.seek(by: seconds) }
+        updateTimeline()
     }
 
     private func add(_ command: MPRemoteCommand, handler: @escaping @MainActor (MPRemoteCommandEvent) -> Void) {
