@@ -1251,8 +1251,6 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             firstVideoPTS: firstVideoPTS
         )
         timePosition = time.seconds
-        setBuffering(false)
-        bufferingTargetSeconds = nil
         let scheduledStart = scheduledStartHostTime
         scheduledStartHostTime = nil
         if isPaused {
@@ -1279,6 +1277,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
             synchronizer.setRate(Float(effectiveRate), time: time, atHostTime: hostTime)
         }
+        // Announced only now, with the clock already anchored. The end of
+        // buffering is what a SyncPlay group turns into its `Ready`, and
+        // that report carries `clockPosition` — which reads the
+        // synchronizer, and the synchronizer sits wherever it was last
+        // anchored until the lines above run: zero on a first open, the
+        // position left behind after a seek. Reporting Ready from there
+        // tells the server this member is somewhere it is not, and the
+        // server answers by dragging the whole group to that position
+        // (HEL-172). Until the flag clears, the same reader answers with
+        // `bufferingTargetSeconds`, so the window has one answer
+        // throughout: the position being anchored.
+        setBuffering(false)
+        bufferingTargetSeconds = nil
         kickPumps()
         rearmBench(at: time.seconds)
         if !didNotifyPlaybackStarted {
