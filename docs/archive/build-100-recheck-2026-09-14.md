@@ -180,7 +180,8 @@ These failing runs are retained rather than relabeled as passes.
 - Public demo lacks download permission and several specialized playback
   fixtures. Unit/mock checks do not establish a live Seerr Top 10 population
   against the intended household library.
-- `TMDBConfiguration.apiKey` is empty, so discovery logos fall back to text.
+- Discovery titles without a matching Jellyfin logo fall back to text; direct
+  TMDB logo loading is deferred to a future server-side implementation.
   Published legal/support destinations, licensing/privacy/encryption decisions,
   signed archives and Apple's distribution validation remain the concrete
   gates in [Release](../release.md#public-release).
