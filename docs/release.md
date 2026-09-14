@@ -23,7 +23,10 @@ Write one line per noticeable improvement, with the most useful first. Describe
 a fixed symptom and any setup needed. Omit ticket keys, filenames, internal
 refactors, tests, docs, and fixes to work that never shipped. Do not use em
 dashes; `ChangelogTests` enforces this. Release notes are written for a release,
-not generated per commit. The installed build is badged in About.
+not generated per commit. Each build's notes are grouped in the About screen as
+**New features**, **Improvements**, or **Bug fixes**. Keep related notes together
+under the category that best describes what a viewer will notice. The installed
+build is badged in About.
 
 ## Internal TestFlight
 
