@@ -17,13 +17,14 @@ extension SyncPlayNotice {
             String(localized: "\(name) left")
         case .state(let state, _):
             // "Playing" arrives at the same moment the picture starts
-            // moving, and "Nothing playing" at the moment it stops. Only
-            // the two states that explain a *stationary* picture earn a
-            // toast.
+            // moving, and "Nothing playing" at the moment it stops, so
+            // neither is worth saying. Neither is "Waiting": the transport
+            // already carries that line under its spinner, and it stays up
+            // for as long as it is true instead of for two seconds.
+            // "Paused" is the one state nothing else explains.
             switch state {
-            case .waiting: String(localized: "Waiting for the group")
             case .paused: String(localized: "Paused by the group")
-            case .playing, .idle, .unknown: nil
+            case .waiting, .playing, .idle, .unknown: nil
             }
         case .left(let reason):
             switch reason {
