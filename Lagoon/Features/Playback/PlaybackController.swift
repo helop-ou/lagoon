@@ -16,6 +16,40 @@ nonisolated enum PlaybackStartError: LocalizedError {
     }
 }
 
+/// What the viewer's transport means when a server owns it (HEL-172).
+///
+/// Implemented by the SyncPlay driver and held weakly by the controller,
+/// which is the one place every play, pause, seek and "next" passes
+/// through. A request does nothing locally: the group answers everyone
+/// with a command, and that command is what moves this player.
+@MainActor
+protocol GroupTransportRequests: AnyObject {
+    func requestPlay()
+    func requestPause()
+    /// `resume` carries the tvOS commit grammar — land here *and* play on —
+    /// so the implementation can order the two requests itself.
+    func requestSeek(to seconds: Double, resume: Bool)
+    func requestNextItem()
+}
+
+/// The transport intentions the player chrome states, and the owner acts
+/// on (HEL-172).
+///
+/// Actions rather than an object, for the reason `CustomPlayerView` takes
+/// `automation` and a handful of values rather than the controller: the
+/// chrome says what the viewer asked for and stays out of who answers.
+/// Closures, not a reference, also keeps HEL-152 intact — nothing SwiftUI
+/// retains captures an engine.
+struct PlayerTransportActions {
+    /// Idempotent, because the system integrations that use these describe
+    /// the state they want rather than asking the app to invert its own.
+    let play: () -> Void
+    let pause: () -> Void
+    let togglePause: () -> Void
+    let seek: (_ seconds: Double, _ resume: Bool) -> Void
+    let seekBy: (_ seconds: Double) -> Void
+}
+
 /// HEL-148 soak diagnostic: milliseconds for a `Duration`, shared by the
 /// DecodeTrace loop's `mainLateMs`/`pumpMs`/`Soak*` lines.
 private func ms(_ duration: Duration) -> Double {
@@ -69,6 +103,20 @@ final class PlaybackController {
     /// rather than going on reporting from a controller with no engine
     /// (HEL-172).
     @ObservationIgnored var onClosed: (() -> Void)?
+    /// The engine started or stopped buffering — a stall, a seek, the
+    /// initial prime. A SyncPlay group's Buffering and Ready reports are
+    /// this signal, since the slowest member sets the group's pace
+    /// (HEL-172). Rewired onto each successor engine like `onEngineReady`.
+    @ObservationIgnored var onBufferingChanged: ((Bool) -> Void)?
+    /// Set while a SyncPlay group owns the transport (HEL-172). Weak: the
+    /// store owns the driver, the driver holds this controller weakly, and
+    /// neither end may keep the other alive. Nil is the ordinary case and
+    /// the ordinary behaviour — every `user…` method below acts locally.
+    @ObservationIgnored weak var groupTransport: (any GroupTransportRequests)?
+    /// Extra playback-HUD lines from whatever else is driving this session.
+    /// Supplied by the SyncPlay driver so the `Sync:` line is assembled by
+    /// the object that knows the group (HEL-172).
+    @ObservationIgnored var groupHUDLines: (() -> [String])?
     #if os(iOS)
     @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
     /// Whether Picture in Picture is showing the picture, or about to. The
@@ -696,6 +744,10 @@ final class PlaybackController {
                 guard let self, let engine, self.engine === engine else { return }
                 self.onEngineReady?()
             }
+            engine.onBufferingChanged = { [weak self, weak engine] buffering in
+                guard let self, let engine, self.engine === engine else { return }
+                self.onBufferingChanged?(buffering)
+            }
             engine.setVideoOutputSuspended(videoOutputSuspended)
             engine.onPlaybackStarted = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
@@ -737,9 +789,19 @@ final class PlaybackController {
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
             automation.beginItem(identity: media.id, segments: playerInfo.segments)
-            automation.onSkip = { [weak engine] segment in engine?.seek(to: segment.end) }
+            // Through the controller rather than straight to the engine, so
+            // a skip inside a group becomes the group's seek and everyone
+            // skips the intro together (HEL-172).
+            automation.onSkip = { [weak self] segment in self?.userSeek(to: segment.end) }
             automation.onPlayNext = { [weak self] in
                 guard let self, !self.isClosed, !self.isAdvancing else { return }
+                // In a group the queue decides what comes next, and the
+                // server tells every member — including this one, which is
+                // why nothing local starts here.
+                if let groupTransport = self.groupTransport {
+                    groupTransport.requestNextItem()
+                    return
+                }
                 self.isAutoplayPending = true
                 Task { await self.playNextEpisode() }
             }
@@ -747,6 +809,7 @@ final class PlaybackController {
                 info: playerInfo,
                 itemID: itemId,
                 engine: engine,
+                transport: transportActions,
                 replacingActiveSession: handoffStartedAt != nil
             )
             let preferredSet = Set(self.preferredSubtitleLanguages.compactMap(
@@ -836,6 +899,7 @@ final class PlaybackController {
                         cache: self.playbackCache.current?.metrics,
                         handoffMilliseconds: self.lastHandoffMilliseconds,
                         fallbackLines: self.deliveryFallbackHUDLines
+                            + (self.groupHUDLines?() ?? [])
                     )
                 },
                 publish: { [weak self] in self?.hudLines = $0 }
@@ -1349,6 +1413,14 @@ final class PlaybackController {
     /// into the next episode too (HEL-176).
     private func playbackDidFinish() {
         didFinish = true
+        // A group's queue is the group's business: the end of the file asks
+        // the server for the next entry whether or not this item has a
+        // series successor, and whether or not this viewer's autoplay
+        // preference would have rolled on alone (HEL-172).
+        if let groupTransport {
+            groupTransport.requestNextItem()
+            return
+        }
         guard automation.autoplaysOnFinish, nextUp != nil, !isAdvancing else { return }
         automation.playNext()
     }
@@ -1378,11 +1450,11 @@ final class PlaybackController {
     // MARK: - Group playback (HEL-172)
     //
     // The transport a SyncPlay driver drives, deliberately separate from the
-    // viewer-facing controls the player UI calls. The driver will later
-    // intercept those and turn them into group requests, and needs a way back
-    // down that does not recurse into itself. It also means the driver never
-    // holds the engine: the controller stays the boundary, and a successor
-    // engine is picked up for free.
+    // viewer-facing controls below. The driver intercepts those and turns
+    // them into group requests, and needs a way back down that does not
+    // recurse into itself. It also means the driver never holds the engine:
+    // the controller stays the boundary, and a successor engine is picked up
+    // for free.
 
     /// Start so the current position is on screen exactly at `hostTime`.
     func playGroup(atHostTime hostTime: CMTime) {
@@ -1414,6 +1486,116 @@ final class PlaybackController {
     var isPrimedAndPaused: Bool {
         guard let engine else { return false }
         return engine.isPaused && !engine.isBuffering
+    }
+
+    /// The media clock is actually advancing, which is what a group
+    /// readiness report means by `IsPlaying`. Not the inverse of
+    /// `isPrimedAndPaused`: a buffering engine is neither.
+    var isClockRunning: Bool {
+        guard let engine else { return false }
+        return !engine.isPaused && !engine.isBuffering
+    }
+
+    /// Swaps the item inside one player session, for a group that moved to
+    /// another queue entry while the player is open (HEL-172). The same
+    /// stop-then-start `playNextEpisode` does — so the SwiftUI branch and
+    /// its UIKit video surface survive — minus the successor warm-up, since
+    /// the group, not the series order, decided what comes next.
+    func startGroupItem(_ media: MediaItem, startPosition: Double) async {
+        guard !isAdvancing, !isClosed, let client else { return }
+        isAdvancing = true
+        defer { isAdvancing = false }
+        let retired = await stop(preservingPreparedNext: false, preservingPlayerSurface: true)
+        guard retired, !isClosed else { return }
+        nextUp = nil
+        didFinish = false
+        errorMessage = nil
+        await start(
+            media: media,
+            startFromBeginning: false,
+            client: client,
+            trackPreferences: TrackPreferenceValues(
+                audioMode: audioDefaultMode,
+                subtitleMode: subtitleDefaultMode
+            ),
+            preferredAudioLanguages: preferredAudioLanguages,
+            preferredSubtitleLanguages: preferredSubtitleLanguages,
+            missingSubtitleMode: missingSubtitleMode,
+            startPosition: startPosition,
+            startPaused: true
+        )
+    }
+
+    // MARK: - The viewer's transport
+    //
+    // Every control the viewer touches comes through here rather than
+    // reaching the engine itself, so that one `groupTransport` check turns
+    // the whole transport over to the server when a SyncPlay group owns it
+    // (HEL-172). Outside a group each of these is the engine call the caller
+    // used to make. Audio and subtitle tracks, audio delay and playback
+    // speed stay local and are not routed: they are this viewer's, not the
+    // group's.
+
+    func userPlay() {
+        guard let groupTransport else {
+            engine?.play()
+            return
+        }
+        groupTransport.requestPlay()
+    }
+
+    func userPause() {
+        guard let groupTransport else {
+            engine?.pause()
+            return
+        }
+        groupTransport.requestPause()
+    }
+
+    func userTogglePause() {
+        guard let groupTransport else {
+            engine?.togglePause()
+            return
+        }
+        if engine?.isPaused ?? true {
+            groupTransport.requestPlay()
+        } else {
+            groupTransport.requestPause()
+        }
+    }
+
+    /// `resume` is the tvOS scrub-commit grammar: land here *and* play on.
+    func userSeek(to seconds: Double, resume: Bool = false) {
+        guard let groupTransport else {
+            // Resume before seeking: the engine re-anchors the synchronizer
+            // when the seek primes, so unpausing afterwards fights that
+            // hand-off. The group path is the other way round and says why.
+            if resume, engine?.isPaused == true { engine?.play() }
+            engine?.seek(to: seconds)
+            return
+        }
+        groupTransport.requestSeek(to: seconds, resume: resume)
+    }
+
+    func userSeek(by seconds: Double) {
+        guard let groupTransport else {
+            engine?.seek(by: seconds)
+            return
+        }
+        guard let engine else { return }
+        groupTransport.requestSeek(to: max(engine.timePosition + seconds, 0), resume: false)
+    }
+
+    /// Handed to the player chrome so it can state an intention without
+    /// knowing who acts on it.
+    var transportActions: PlayerTransportActions {
+        PlayerTransportActions(
+            play: { [weak self] in self?.userPlay() },
+            pause: { [weak self] in self?.userPause() },
+            togglePause: { [weak self] in self?.userTogglePause() },
+            seek: { [weak self] seconds, resume in self?.userSeek(to: seconds, resume: resume) },
+            seekBy: { [weak self] seconds in self?.userSeek(by: seconds) }
+        )
     }
 
     func resumeBufferFill() {
@@ -1479,6 +1661,7 @@ final class PlaybackController {
             engine.onTrackSelectionChanged = nil
             engine.onPlaybackStarted = nil
             engine.onSeekReady = nil
+            engine.onBufferingChanged = nil
             engine.onPlaybackCacheFallback = nil
             engine.shutdown()
             if !preservingPlayerSurface {
