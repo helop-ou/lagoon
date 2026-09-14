@@ -139,7 +139,7 @@ struct AcknowledgementsView: View {
 
     #if !os(tvOS)
     private var phoneBody: some View {
-        List {
+        ThemedForm {
             ForEach(Acknowledgements.components) { component in
                 Section {
                     DisclosureGroup(isExpanded: expansion(of: component)) {
@@ -200,6 +200,7 @@ struct AcknowledgementsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Metrics.screenGutter)
         }
+        .background(Theme.background.ignoresSafeArea())
         .navigationTitle(component.name)
         .navigationBarTitleDisplayMode(.inline)
     }
