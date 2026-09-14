@@ -67,6 +67,13 @@ struct DownloadCompletionTests {
         #expect(outcome == .complete(bytes: 100))
     }
 
+    @Test func emptySuccessfulResponseIsNeverAPlayableDownload() {
+        for quality in DownloadQuality.allCases {
+            #expect(DownloadCompletion.outcome(status: 200, bytesOnDisk: 0, expectedBytes: nil, quality: quality)
+                == .failed(reason: "Incomplete file"))
+        }
+    }
+
     @Test func transcodeCompletesAtAnySizeOnceStatusIsGood() {
         // A progressive transcode's expected size is only ever an estimate;
         // it must never fail a finished download over a mismatch.
