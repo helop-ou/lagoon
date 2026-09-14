@@ -87,7 +87,7 @@ struct HomeView: View {
                         // Discover does and what keeps a run of movies from
                         // being split by a row of television.
                         recentlyAddedRails(collectionType: "movies")
-                        curatedRail(HomeCuratedRows.ID.topMovies)
+                        topTenRail(HomeCuratedRows.ID.topMovies)
                         curatedRail(HomeCuratedRows.ID.highlyRated)
                         curatedRail(HomeCuratedRows.ID.inFourK)
                         curatedRail(HomeCuratedRows.ID.genreSpotlight)
@@ -103,7 +103,7 @@ struct HomeView: View {
 
                         // Shows, uninterrupted, closing the same way.
                         recentlyAddedRails(collectionType: "tvshows")
-                        curatedRail(HomeCuratedRows.ID.topShows)
+                        topTenRail(HomeCuratedRows.ID.topShows)
                         curatedRail(HomeCuratedRows.ID.unstartedSeries)
                         curatedRail(HomeCuratedRows.ID.readyToBinge)
                         if isNativeRowEnabled("lagoon.showGenres") {
@@ -276,6 +276,17 @@ struct HomeView: View {
                 title: rail.title,
                 items: rail.items,
                 style: .landscape,
+                onUserDataChange: refreshUserData
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func topTenRail(_ id: String) -> some View {
+        if isNativeRowEnabled(id), let rail = viewModel.curatedRails[id] {
+            TopTenRail(
+                title: rail.title,
+                items: rail.items,
                 onUserDataChange: refreshUserData
             )
         }
