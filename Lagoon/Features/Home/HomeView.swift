@@ -19,7 +19,8 @@ struct HomeView: View {
                         await viewModel.retry(
                             client: session.client,
                             accountID: session.activeAccount?.id,
-                            homeSectionPreferences: savedHomePreferences
+                            homeSectionPreferences: savedHomePreferences,
+                            seerr: session.seerr.client
                         )
                     }
                 }
@@ -86,6 +87,7 @@ struct HomeView: View {
                         // Discover does and what keeps a run of movies from
                         // being split by a row of television.
                         recentlyAddedRails(collectionType: "movies")
+                        curatedRail(HomeCuratedRows.ID.topMovies)
                         curatedRail(HomeCuratedRows.ID.highlyRated)
                         curatedRail(HomeCuratedRows.ID.inFourK)
                         curatedRail(HomeCuratedRows.ID.genreSpotlight)
@@ -101,6 +103,7 @@ struct HomeView: View {
 
                         // Shows, uninterrupted, closing the same way.
                         recentlyAddedRails(collectionType: "tvshows")
+                        curatedRail(HomeCuratedRows.ID.topShows)
                         curatedRail(HomeCuratedRows.ID.unstartedSeries)
                         curatedRail(HomeCuratedRows.ID.readyToBinge)
                         if isNativeRowEnabled("lagoon.showGenres") {
@@ -155,7 +158,8 @@ struct HomeView: View {
             await viewModel.load(
                 client: session.client,
                 accountID: session.activeAccount?.id,
-                homeSectionPreferences: savedHomePreferences
+                homeSectionPreferences: savedHomePreferences,
+                seerr: session.seerr.client
             )
         }
         .onAppear {
@@ -170,7 +174,8 @@ struct HomeView: View {
         .serverRefreshable(.home, isActive: isActive, isPaused: playerItem != nil) {
             await viewModel.refreshServerContent(
                 client: session.client,
-                homeSectionPreferences: savedHomePreferences
+                homeSectionPreferences: savedHomePreferences,
+                seerr: session.seerr.client
             )
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
