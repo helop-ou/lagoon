@@ -110,6 +110,7 @@ struct SeriesDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
+    @Environment(SyncPlayStore.self) private var syncPlay
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
     /// The episode the rail last put focus on. Deliberately *not* cleared
@@ -145,6 +146,10 @@ struct SeriesDetailView: View {
             #if os(iOS)
             await DownloadStore.shared.refreshPermission(client: session.client)
             #endif
+            // The Watch Together control renders nothing until the server
+            // has answered, and a task on a view that renders nothing never
+            // runs, so the page asks (HEL-172).
+            await syncPlay.refreshAvailability()
         }
         .onChange(of: serverSync.generation) { _, _ in
             Task {
@@ -197,6 +202,15 @@ struct SeriesDetailView: View {
                 DownloadControl(item: episode)
             }
             #endif
+            // A group started from a show is a group watching the episode
+            // Play would start, from where that episode was left — the same
+            // subject every other control on this row acts on (HEL-172).
+            if let episode = subject {
+                WatchTogetherControl(
+                    item: episode,
+                    startPositionTicks: episode.userData?.playbackPositionTicks ?? 0
+                )
+            }
         } accessory: {
             seasonChips
         }
