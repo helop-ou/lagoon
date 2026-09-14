@@ -471,53 +471,12 @@ struct SeerrSeasonRequestView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        List {
-            Section {
-                Button {
-                    selectAllOrClear()
-                } label: {
-                    Text(allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                #if os(tvOS)
-                .buttonStyle(.glass)
-                #else
-                .buttonStyle(.borderless)
-                #endif
-                .disabled(selectableSeasons.isEmpty || isRequesting)
-            }
-
-            Section(details.displayTitle) {
-                ForEach(visibleSeasons) { season in
-                    let selectable = isSelectable(season)
-                    Button {
-                        toggle(season)
-                    } label: {
-                        HStack(spacing: Metrics.Space.l) {
-                            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                                Text(season.displayName)
-                                    .font(.headline)
-                                if let count = season.episodeCount {
-                                    Text(count == 1 ? "1 episode" : "\(count) episodes")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            Spacer()
-                            selectionAccessory(for: season, selectable: selectable)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    #if os(tvOS)
-                    .buttonStyle(.glass)
-                    #else
-                    .buttonStyle(.borderless)
-                    #endif
-                    .disabled(!selectable || isRequesting)
-                    .accessibilityValue(selectionValue(for: season, selectable: selectable))
-                    .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
-                }
-            }
+        Group {
+            #if os(tvOS)
+            List { seasonSections }
+            #else
+            ThemedForm { seasonSections }
+            #endif
         }
         .navigationTitle("Choose Seasons")
         .toolbar {
@@ -558,6 +517,56 @@ struct SeerrSeasonRequestView: View {
             Text(errorMessage ?? "The request couldn't be sent.")
         }
         .accessibilityIdentifier("seerr.seasons")
+    }
+
+    @ViewBuilder
+    private var seasonSections: some View {
+        Section {
+            Button {
+                selectAllOrClear()
+            } label: {
+                Text(allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            #if os(tvOS)
+            .buttonStyle(.glass)
+            #else
+            .buttonStyle(.borderless)
+            #endif
+            .disabled(selectableSeasons.isEmpty || isRequesting)
+        }
+
+        Section(details.displayTitle) {
+            ForEach(visibleSeasons) { season in
+                let selectable = isSelectable(season)
+                Button {
+                    toggle(season)
+                } label: {
+                    HStack(spacing: Metrics.Space.l) {
+                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                            Text(season.displayName)
+                                .font(.headline)
+                            if let count = season.episodeCount {
+                                Text(count == 1 ? "1 episode" : "\(count) episodes")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        selectionAccessory(for: season, selectable: selectable)
+                    }
+                    .contentShape(Rectangle())
+                }
+                #if os(tvOS)
+                .buttonStyle(.glass)
+                #else
+                .buttonStyle(.borderless)
+                #endif
+                .disabled(!selectable || isRequesting)
+                .accessibilityValue(selectionValue(for: season, selectable: selectable))
+                .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
+            }
+        }
     }
 
     private var visibleSeasons: [SeerrSeason] {
