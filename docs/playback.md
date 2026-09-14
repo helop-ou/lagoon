@@ -186,6 +186,78 @@ back down to the engine that does not recurse into itself. Because the wiring
 lives in `start`, an episode handoff or a delivery fallback carries it onto
 the successor engine for free.
 
+### Watch Together (SyncPlay, HEL-172)
+
+A group makes the server the transport authority. `SyncPlayStore`
+(`Lagoon/Features/SyncPlay/`) owns membership — the socket, the clock, the
+group and its queue — and `GroupPlaybackDriver` owns everything that touches
+playback. The driver holds the controller weakly and the engine not at all;
+it drives the group transport above and reads `clockPosition`.
+
+**Opening.** A `PlayQueue` update whose playing item changed resolves to a
+`MediaItem` and reaches `MainTabView` as `pendingPlayRequest`, which presents
+the player with `startPosition` and `startPaused: true`. The member therefore
+primes at the group's position and waits there. `SyncPlay/Buffering` goes out
+the moment the queue update lands — before the item is even fetched, so the
+group waits from then rather than from whenever this device finishes
+negotiating a stream — and `SyncPlay/Ready` when `onEngineReady` fires. Both
+carry `When` from `ServerClock`, `PositionTicks` from `clockPosition`, and the
+queue entry's `PlaylistItemId`; a Ready naming the wrong entry makes the
+server answer with a `SetCurrentItem` queue update. Readiness is a *state*:
+the driver reports only on a change, so the pair a seek produces collapses to
+one Buffering and one Ready.
+
+**Commands.** `Unpause` seeks first only if the member is more than 0.5 s from
+the named position, then calls `playGroup(atHostTime:)` straight away — the
+engine remembers the instant through priming, and a seek issued *after* the
+start call would drop it, so that order is load-bearing. `Pause` waits until
+the named instant arrives on the local clock, then pauses, and re-seeks only
+if more than 0.1 s out, because a seek re-primes the pipeline. `Seek` seeks
+and reports Buffering, then Ready. `Stop` closes the player and keeps the
+membership. `SyncPlayGroupSession` decides what is worth acting on at all:
+another group's command, one emitted before this member joined, one naming an
+item that is not the current one (Stop excepted), the all-zero `Stop` a new
+group is greeted with, and a re-send of the command already taken are all
+refused.
+
+**Drift.** While the last command is an `Unpause`, 1.5 s past its instant and
+not buffering, the driver compares `clockPosition` against where the group
+should be and applies `SyncCorrectionPolicy`: under 60 ms nothing, up to 1.5 s
+a rate nudge of `1 + diff / 1.5` clamped to 0.75…1.5 held for 1.5 s, beyond
+that a seek. The nudge rides `setCorrectionRate`, never the viewer's `rate`.
+`syncplay.correction` (default on) turns correction off while still measuring;
+`driftMilliseconds` feeds the HUD's `Sync:` line.
+
+**The viewer's transport is a request.** Play, pause, seek, the double-tap
+skips, the scrub commit, the intro skip, "play next" and the lock screen all
+go through `PlaybackController`'s `user…` methods, which hand them to
+`groupTransport` instead of the engine when a group owns the session. Nothing
+moves locally; the server's echo moves every member together. The player
+chrome states the intention through `PlayerTransportActions` and `NowPlaying`
+through the same struct, so there is one interception point rather than one
+per control. Audio track, subtitles, audio delay and playback speed stay
+local — they are this viewer's, not the group's.
+
+**Leaving the player is not leaving the group.** `onClosed` detaches the
+driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by a
+member that is not watching; `rejoinPlayback()` clears it and reopens from the
+stored queue. `leave()` posts `SyncPlay/Leave` and closes the socket and
+clock, and an account switch does the same silently. Foreground forces a clock
+re-sample.
+
+**The socket must be open before the join.** The server announces a join over
+the socket at the instant it happens; joining while the handshake was still in
+flight lost both the `GroupJoined` and the `PlayQueue` update on fixture 12.0.0,
+and the member then sat in a group it never heard another word from. The store
+waits for the socket to carry its first message — the server's own
+`ForceKeepAlive` — before asking to join.
+
+**Verifying it** takes two members: `-debug.syncPlayJoinGroup <name>` joins the
+named group after the regression bootstrap signs in (polling for up to 30 s so
+the other member can create it), and the group's queue then drives playback in
+place of the bench fixture. Pair it with `-debug.playbackHUD YES` and read the
+`Sync:` line — group state, member count, last command, drift.
+
 ### The player's Observation scope (HEL-150)
 
 The player root must not read `timePosition`, current subtitle values, or
