@@ -1,30 +1,37 @@
 import Foundation
+import os
 import Testing
 @testable import Lagoon
 
 /// Intercepts the transport's URLSession so the queue, the opt-out and
 /// the rate-limit handling can be observed without a network.
 final class SentryMockURLProtocol: URLProtocol {
-    nonisolated(unsafe) static var responder: @Sendable (URLRequest) -> (status: Int, headers: [String: String]) = { _ in (200, [:]) }
-    private static let lock = NSLock()
-    nonisolated(unsafe) private static var recorded: [URLRequest] = []
+    private nonisolated struct State: Sendable {
+        var responder: @Sendable (URLRequest) -> (status: Int, headers: [String: String]) = { _ in (200, [:]) }
+        var recorded: [URLRequest] = []
+    }
+    private static let state = OSAllocatedUnfairLock(initialState: State())
 
-    static var requests: [URLRequest] {
-        lock.lock(); defer { lock.unlock() }
-        return recorded
+    static var responder: @Sendable (URLRequest) -> (status: Int, headers: [String: String]) {
+        get { state.withLock { $0.responder } }
+        set { state.withLock { $0.responder = newValue } }
     }
 
+    static var requests: [URLRequest] { state.withLock { $0.recorded } }
+
     static func reset() {
-        lock.lock(); recorded = []; lock.unlock()
-        responder = { _ in (200, [:]) }
+        state.withLock { $0 = State() }
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        Self.lock.lock(); Self.recorded.append(request); Self.lock.unlock()
-        let answer = Self.responder(request)
+        let responder = Self.state.withLock { state in
+            state.recorded.append(request)
+            return state.responder
+        }
+        let answer = responder(request)
         let response = HTTPURLResponse(url: request.url!, statusCode: answer.status, httpVersion: "HTTP/1.1", headerFields: answer.headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data("{}".utf8))
@@ -87,8 +94,8 @@ struct SentryTransportTests {
     }
 
     @Test func turningReportingOffStopsUploadsAndDiscardsTheQueue() async throws {
-        nonisolated(unsafe) var enabled = true
-        let (transport, directory) = try Self.makeTransport(enabled: { enabled })
+        let enabled = OSAllocatedUnfairLock(initialState: true)
+        let (transport, directory) = try Self.makeTransport(enabled: { enabled.withLock { $0 } })
         // Park one envelope by answering with a server error.
         SentryMockURLProtocol.responder = { _ in (503, [:]) }
         transport.submit(Self.incident())
@@ -96,7 +103,7 @@ struct SentryTransportTests {
         #expect(Self.pendingCount(directory) == 1)
         // Opt out: a foreground flush must neither send nor keep it, and a
         // new incident must not be queued either.
-        enabled = false
+        enabled.withLock { $0 = false }
         SentryMockURLProtocol.responder = { _ in (200, [:]) }
         transport.flush()
         await Self.wait { Self.pendingCount(directory) == 0 }
