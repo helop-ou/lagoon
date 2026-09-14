@@ -118,6 +118,33 @@ struct SeriesDetailViewModelTests {
         #expect(viewModel.firstEpisode?.id == "s2e1")
     }
 
+    @Test func returningToASeasonRejectsItsEarlierOutstandingResponse() async throws {
+        let client = makeClient()
+        SeriesDetailURLProtocol.set(nextUp: Self.upNextInS1, episodes: ["s1": Self.s1Episodes, "s2": Self.s2Episodes])
+        let model = SeriesDetailViewModel()
+        await model.load(client: client, seriesId: "show")
+        SeriesDetailURLProtocol.holdNextEpisodes()
+        let earlier = Task { await model.refreshEpisodes(client: client, seriesId: "show") }
+        defer { SeriesDetailURLProtocol.release() }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !SeriesDetailURLProtocol.hasPending, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(SeriesDetailURLProtocol.hasPending)
+
+        await model.selectSeason("s2", client: client, seriesId: "show")
+        SeriesDetailURLProtocol.set(episodes: [
+            "s1": #"{"Items":[{"Id":"new-s1e1","Type":"Episode","SeasonId":"s1"}]}"#
+        ])
+        await model.selectSeason("s1", client: client, seriesId: "show")
+        #expect(model.episodes.map(\.id) == ["new-s1e1"])
+
+        SeriesDetailURLProtocol.release()
+        await earlier.value
+        #expect(model.episodes.map(\.id) == ["new-s1e1"])
+        #expect(!model.isLoadingEpisodes)
+    }
+
     private func makeClient() -> JellyfinClient {
         SeriesDetailURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -146,12 +173,26 @@ private nonisolated final class SeriesDetailURLProtocol: URLProtocol, @unchecked
         """#
         var nextUp = #"{"Items":[]}"#
         var episodesBySeasonId: [String: String] = [:]
+        var holdNextEpisodes = false
+        var pending: (SeriesDetailURLProtocol, String)?
     }
 
     private static let lock = NSLock()
     private nonisolated(unsafe) static var state = State()
 
     static var urls: [URL] { lock.withLock { state.urls } }
+    static var hasPending: Bool { lock.withLock { state.pending != nil } }
+
+    static func holdNextEpisodes() { lock.withLock { state.holdNextEpisodes = true } }
+
+    static func release() {
+        let pending = lock.withLock {
+            let pending = state.pending
+            state.pending = nil
+            return pending
+        }
+        if let (request, body) = pending { request.finish(body: body) }
+    }
 
     static func reset() { lock.withLock { state = State() } }
 
@@ -187,6 +228,19 @@ private nonisolated final class SeriesDetailURLProtocol: URLProtocol, @unchecked
             default: return #"{"Items":[]}"#
             }
         }
+        let held = Self.lock.withLock {
+            if url.path == "/Shows/show/Episodes", Self.state.holdNextEpisodes {
+                Self.state.holdNextEpisodes = false
+                Self.state.pending = (self, body)
+                return true
+            }
+            return false
+        }
+        if !held { finish(body: body) }
+    }
+
+    private func finish(body: String) {
+        guard let url = request.url else { return }
         let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
                                        headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
