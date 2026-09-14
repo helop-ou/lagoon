@@ -11,6 +11,8 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
     case subtitle
     case seekForward
     case buffering
+    case watchTogetherToast
+    case watchTogetherSheet
     case playerPanel
     case playerTransport
 
@@ -26,6 +28,8 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
         case .subtitle: "Text Subtitle"
         case .seekForward: "Seek Forward"
         case .buffering: "Buffering"
+        case .watchTogetherToast: "Watch Together — Toast"
+        case .watchTogetherSheet: "Watch Together — Sheet"
         case .playerPanel: "Player Panel"
         case .playerTransport: "Player Transport"
         }
@@ -46,6 +50,7 @@ struct DeveloperSettingsView: View {
     @State private var countdownFill = 0.62
     @State private var showsPlayerPanelPreview = false
     @State private var showsPlayerTransportPreview = false
+    @State private var showsWatchTogetherPreview = false
 
     var body: some View {
         #if os(tvOS)
@@ -84,6 +89,9 @@ struct DeveloperSettingsView: View {
         .fullScreenCover(isPresented: $showsPlayerTransportPreview) {
             PlayerTransportComponentPreviewScreen()
         }
+        .sheet(isPresented: $showsWatchTogetherPreview) {
+            WatchTogetherSheet(item: Self.previewMediaItem, startPositionTicks: 0)
+        }
         #else
         Form {
             Section("Player Component") {
@@ -108,6 +116,9 @@ struct DeveloperSettingsView: View {
         .fullScreenCover(isPresented: $showsPlayerTransportPreview) {
             PlayerTransportComponentPreviewScreen()
         }
+        .sheet(isPresented: $showsWatchTogetherPreview) {
+            WatchTogetherSheet(item: Self.previewMediaItem, startPositionTicks: 0)
+        }
         #endif
     }
 
@@ -120,7 +131,9 @@ struct DeveloperSettingsView: View {
                 withTransaction(transaction) { countdownFill = 0.62 }
             }
 
-        if selectedPreview == .playerPanel || selectedPreview == .playerTransport {
+        if selectedPreview == .playerPanel
+            || selectedPreview == .playerTransport
+            || selectedPreview == .watchTogetherSheet {
             // Do not turn this branch into a synthetic accessibility
             // element: its production tabs and rows must remain focusable.
             canvas
@@ -214,6 +227,29 @@ struct DeveloperSettingsView: View {
             ProgressView()
                 .tint(.white)
                 .accessibilityIdentifier("settings.developer.preview.buffering")
+        case .watchTogetherToast:
+            SyncPlayToastLabel(
+                text: String(localized: "Jaagop joined"),
+                accessibilityIdentifier: "settings.developer.preview.watchTogetherToast"
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        case .watchTogetherSheet:
+            VStack(spacing: Metrics.Space.l) {
+                Image(systemName: "person.2.fill")
+                    .font(Typography.glyph)
+                Text("The real Watch Together screen, over this server's own groups. Starting one from here would name a title the server does not have, so it is for judging the page rather than the flow.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button {
+                    showsWatchTogetherPreview = true
+                } label: {
+                    Label("Open Watch Together", systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("settings.developer.watchTogether.open")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .playerPanel:
             VStack(spacing: Metrics.Space.l) {
                 Image(systemName: "rectangle.inset.filled.and.person.filled")
@@ -250,6 +286,14 @@ struct DeveloperSettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
+
+    /// `MediaItem` is decode-only by design, so the gallery builds one
+    /// the way the server would. It exists to give the sheet an argument;
+    /// nothing the sheet draws reads it.
+    static let previewMediaItem: MediaItem = {
+        let json = Data(#"{"Id":"developer-preview","Name":"Rick and Morty","Type":"Episode"}"#.utf8)
+        return (try? JellyfinClient.decoder.decode(MediaItem.self, from: json))!
+    }()
 
     private var previewEpisode: NextUpEpisode {
         NextUpEpisode(
@@ -395,6 +439,7 @@ private struct PlayerPanelComponentPreview: View {
     @State private var selectedTab = PlayerPanelTab.info
     @State private var engine = PlayerPanelPreviewEngine()
     @State private var isPictureInPictureActive = false
+    @State private var ignoresWait = false
     // Opens on the results browser so the Subtitles tab shows the state that
     // needs approving; Done in the panel reveals the track list behind it.
     @State private var subtitleSearch = SubtitleSearchCoordinator
@@ -413,6 +458,11 @@ private struct PlayerPanelComponentPreview: View {
             onTogglePictureInPicture: {
                 isPictureInPictureActive.toggle()
             },
+            // A group, so the fifth tab is there to walk to and approve
+            // without having to join one first.
+            together: previewTogether,
+            onLeaveGroup: {},
+            onSetIgnoreWait: { ignoresWait = $0 },
             onDismiss: onDismiss
         )
         .equatable()
@@ -441,6 +491,15 @@ private struct PlayerPanelComponentPreview: View {
             guard !Task.isCancelled else { return }
             panelFocus = .tab(.info)
         }
+    }
+
+    private var previewTogether: PlayerTogetherState {
+        PlayerTogetherState(
+            groupName: "Jaagop's room",
+            participants: ["Jaagop", "Development", "Sam"],
+            state: .playing,
+            ignoresWait: ignoresWait
+        )
     }
 
     private var previewInfo: PlayerItemInfo {
