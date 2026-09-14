@@ -37,6 +37,15 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .babyPink: .babyPink
         }
     }
+
+    /// What drifts up through the bloom when this theme is chosen: the
+    /// brand's own jellyfish for Lagoon, flowers for Baby Pink.
+    var bloomMotif: BloomMotif {
+        switch self {
+        case .lagoon: .jellyfish
+        case .babyPink: .flowers
+        }
+    }
 }
 
 /// The roles a theme fills. Everything else on screen stays the system's
