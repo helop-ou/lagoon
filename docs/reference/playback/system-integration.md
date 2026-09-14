@@ -211,11 +211,46 @@ and the updates go to a socket nobody is reading.
 join produced, in order: `UserJoined`; a `Pause` for everyone at the group's
 live position; the joiner's own `PlayQueue` (`NewPlaylist`) naming the item and
 that position; the app's `Buffering` (the group shows `Waiting · Buffer`); the
-app's `Ready` five seconds later; then — unprompted — a `Seek` to where the
-group had got to in the meantime, another `Pause`, and, once everyone was
-ready again, the `Unpause` the other member asked for. So a newcomer is caught
-up by the server rather than by guessing, which is exactly why `onEngineReady`
-has to fire on every seek and not only on the first open.
+app's `Ready` five seconds later; then — seemingly unprompted — a `Seek` to
+where the group had got to in the meantime, another `Pause`, and, once
+everyone was ready again, the `Unpause` the other member asked for. So a
+newcomer is caught up by the server rather than by guessing, which is exactly
+why `onEngineReady` has to fire on every seek and not only on the first open.
+
+That seek was not the server being helpful. `WaitingGroupState` answers a
+`Ready` whose position is more than `MaxPlaybackOffset` (500 ms) from the
+group's by flagging that member as buffering again and sending it, and it
+alone, a corrective `Seek` — "session got lost in time, correcting". The app
+was earning one every time, because the readiness report carried
+`clockPosition` and the synchronizer had not been anchored yet (see below).
+With that fixed the sequence is one `Buffering`, one `Ready` and the group's
+`Unpause`: measured 2026-09-14, a rejoin reported Ready at 116.603 s against a
+group at 116.658 s and the room resumed at once, where the same rejoin had
+reported 0.000 s against a group at 127 s the run before.
+
+**How a rejoin could wait for ever.** Closing the player and pressing
+*Rejoin* left the group in `Waiting` indefinitely, the HUD reading
+`waiting · 1 member · seek`, the queue full and the clock anchored, and only
+*Ignore Waiting* let the others watch on. Three things compounded:
+`rejoinPlayback()` opened at the last command's position rather than where the
+group had got to; `beginPlayback` announced the end of buffering — which the
+driver turns into `Ready` — before anchoring the clock, so the report carried
+the position being left behind (zero on a first open, the pre-seek anchor
+after a seek); and the corrective `Seek` that earned, built from the group's
+own state, arrived identical to the seek already taken bar `EmittedAt`, so
+`SyncPlayGroupSession.isRepeat` refused it. The member then had nothing left
+to seek to and nothing left to report, and the server went on waiting for it.
+A readiness report that is even slightly dishonest is therefore not a cosmetic
+matter: it is one refused command away from a room that never starts.
+
+**What the automation can do to a group.** A recap segment that covers
+position 0 arms `PlaybackAutomation` from the phantom position `beginItem`
+starts at, and an open slower than the five-second skip countdown — a 4K
+transcode is — lets it fire before the first real tick corrects it. In a group
+that skip is a group `Seek`, so a member rejoining a room at 10:30 dragged
+everyone back to the recap's end at 0:35. Reproduced 2026-09-14 on fixture;
+not a SyncPlay bug and not fixed here, but it is how the hang above was first
+provoked.
 
 **A `When` can already be in the past.** One `Pause` arrived with
 `EmittedAt` four seconds *after* its own `When` — the server re-issuing the
