@@ -33,6 +33,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var isPaused = false
     private(set) var isBuffering = true
     private(set) var rate: Double = 1
+    /// Sync correction on top of `rate` (HEL-172). 1 outside a SyncPlay
+    /// group, which is every session today. `rate` stays the viewer's
+    /// choice; `effectiveRate` is what the synchronizer is ever given.
+    @ObservationIgnored private(set) var correctionRate: Double = 1
     private(set) var videoSize: CGSize?
     private(set) var audioTracks: [PlayerTrack] = []
     private(set) var subtitleTracks: [PlayerTrack] = []
@@ -87,6 +91,26 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// "grid 24000/1001" when video pts are snapped to the exact frame
     /// grid, nil when container stamps pass through (HEL-64 gate check).
     private(set) var videoTimingDiagnostic: String?
+
+    /// The media clock as the synchronizer reports it (HEL-172).
+    /// `timePosition` is optimistic — `seek(to:)` moves it before anything
+    /// has been demuxed — and the synchronizer is the opposite: while the
+    /// clock is stopped for a load or a seek it still sits at the anchor
+    /// being left behind. A group Buffering report has to carry the
+    /// position being headed for, so that window answers with the target.
+    var clockPosition: Double {
+        if isBuffering { return bufferingTargetSeconds ?? timePosition }
+        let seconds = synchronizer.currentTime().seconds
+        return seconds.isFinite ? seconds : timePosition
+    }
+
+    /// What the synchronizer is actually run at: the viewer's rate with any
+    /// sync correction folded in. Everything that scales a media-time
+    /// cushion by rate uses this, because this is the speed the clock
+    /// really drains at.
+    private var effectiveRate: Double {
+        PlaybackRatePolicy.effectiveRate(userRate: rate, correction: correctionRate)
+    }
 
     var queueDepths: (video: Int, audio: Int) {
         (videoQueue.count, audioQueue.count)
@@ -284,6 +308,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// clock is anchored. Episode handoff metrics use this rather than stream
     /// discovery so they measure user-visible readiness, not merely an open.
     @ObservationIgnored var onPlaybackStarted: (() -> Void)?
+    /// The first frame after a load *or a seek* is anchored — unlike
+    /// `onPlaybackStarted`, which is one-shot per engine, this runs every
+    /// time the clock is re-anchored. SyncPlay reports Ready on it: the
+    /// server asks each member to confirm it has arrived at the position
+    /// before the group is started again (HEL-172).
+    @ObservationIgnored var onSeekReady: (() -> Void)?
     /// A direct-file cache is an optimization. If its range transport cannot
     /// open this server resource, the engine retries immediately through
     /// libavformat's native HTTP path and asks the controller to retire the
@@ -367,6 +397,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var finishObserver: Any?
     @ObservationIgnored private var didFinish = false
     @ObservationIgnored private var didNotifyPlaybackStarted = false
+    /// Where the clock is heading while it is stopped for a load or a seek,
+    /// which is what `clockPosition` answers with in that window (HEL-172).
+    /// Nil while running, and while a stall holds the clock in place — the
+    /// position is then the live `timePosition`.
+    @ObservationIgnored private var bufferingTargetSeconds: Double?
+    /// A group start instant that arrived while the engine was still
+    /// buffering (HEL-172). `beginPlayback` anchors on it instead of its own
+    /// near-future host time, provided it has not already passed.
+    @ObservationIgnored private var scheduledStartHostTime: CMTime?
     @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
     @ObservationIgnored private var stallConfirmationTask: Task<Void, Never>?
     @ObservationIgnored private var stallConfirmationID: UUID?
@@ -497,6 +536,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
         }
 
+        bufferingTargetSeconds = max(pendingStartSeconds, 0)
         shared.withLock {
             let start = max(pendingStartSeconds, 0)
             $0.pendingSeekSeconds = start
@@ -562,14 +602,64 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // A buffering engine resumes when its queue gate is satisfied;
         // forcing the clock here would run its timebase ahead of the samples.
         if !isBuffering {
-            synchronizer.rate = Float(rate)
+            synchronizer.rate = Float(effectiveRate)
         }
         rearmBench(at: timePosition)
+    }
+
+    /// Group start (HEL-172): reach `hostTime` on the host clock with the
+    /// current media position on screen, rather than starting whenever the
+    /// call happens to land. Anything already in the past, or a clock not
+    /// yet primed enough to be scheduled, falls through to `play()`.
+    func play(atHostTime hostTime: CMTime) {
+        guard hostTime.isValid, hostTime.isNumeric else {
+            play()
+            return
+        }
+        if isBuffering {
+            // A seek or the initial open owns the anchor. Hand the instant
+            // to `beginPlayback` and let the normal resume happen now.
+            scheduledStartHostTime = hostTime
+            play()
+            return
+        }
+        let now = CMClockGetTime(CMClockGetHostTimeClock())
+        guard CMTimeCompare(hostTime, now) > 0 else {
+            play()
+            return
+        }
+        guard isPaused || synchronizer.rate == 0 else { return }
+        isPaused = false
+        Diagnostics.record(.playbackPlay, ["position": .double(timePosition.rounded(toPlaces: 1))])
+        synchronizer.setRate(
+            Float(effectiveRate),
+            time: synchronizer.currentTime(),
+            atHostTime: hostTime
+        )
+        rearmBench(at: timePosition)
+    }
+
+    /// Speed up or slow down a group member that has drifted, without
+    /// touching the rate the viewer chose — which is what the speed row and
+    /// Now Playing publish (HEL-172). 1 restores the viewer's rate exactly.
+    func setCorrectionRate(_ multiplier: Double) {
+        let resolved = multiplier.isFinite && multiplier > 0 ? multiplier : 1
+        guard resolved != correctionRate else { return }
+        correctionRate = resolved
+        let effective = effectiveRate
+        // Demux watermarks hold a wall-clock cushion, so they scale by the
+        // speed the clock actually drains at, correction included.
+        shared.withLock { $0.playbackRate = effective }
+        if !isPaused, !isBuffering {
+            synchronizer.rate = Float(effective)
+        }
     }
 
     func pause() {
         guard !isPaused || synchronizer.rate > 0 else { return }
         clearPendingStallConfirmation()
+        // A group pause overrides a group start that has not arrived yet.
+        scheduledStartHostTime = nil
         Diagnostics.record(.playbackPause, ["position": .double(timePosition.rounded(toPlaces: 1))])
         // HEL-148 soak diagnostic: this is the one call in the pause path
         // that reaches AVFoundation's own state; a pause that starts taking
@@ -603,9 +693,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let requestedRate = PlaybackRatePolicy.clamped(requestedRate)
         guard rate != requestedRate else { return }
         rate = requestedRate
-        shared.withLock { $0.playbackRate = requestedRate }
+        let effective = effectiveRate
+        shared.withLock { $0.playbackRate = effective }
         if !isPaused, !isBuffering {
-            synchronizer.rate = Float(requestedRate)
+            synchronizer.rate = Float(effective)
         }
         rearmBench(at: timePosition)
     }
@@ -1052,6 +1143,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         didFinish = false
         removeFinishObserver()
         isBuffering = true
+        bufferingTargetSeconds = clamped
+        // The instant a group agreed to start from is about to be wrong;
+        // the driver schedules a new one after this seek reports Ready.
+        scheduledStartHostTime = nil
         synchronizer.rate = 0
         shared.withLock {
             $0.pendingSeekSeconds = clamped
@@ -1142,17 +1237,32 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         )
         timePosition = time.seconds
         isBuffering = false
+        bufferingTargetSeconds = nil
+        let scheduledStart = scheduledStartHostTime
+        scheduledStartHostTime = nil
         if isPaused {
             synchronizer.setRate(0, time: time)
         } else {
+            let now = CMClockGetTime(CMClockGetHostTimeClock())
             // Apple's recommended custom-playback start: bind media time to
             // a near-future host time so queued renderers reach the first
             // presentation deadline together instead of starting late.
-            let hostTime = CMTimeAdd(
-                CMClockGetTime(CMClockGetHostTimeClock()),
+            let defaultHostTime = CMTimeAdd(
+                now,
                 CMTime(seconds: 0.1, preferredTimescale: 1_000_000_000)
             )
-            synchronizer.setRate(Float(rate), time: time, atHostTime: hostTime)
+            // A group start names the one instant every member presents this
+            // position at (HEL-172). Priming took as long as it took, so
+            // honour it only while it is still ahead of us; a missed instant
+            // is the server's to reissue, and the default anchor is what a
+            // late member needs to get playing at all.
+            let hostTime: CMTime
+            if let scheduledStart, CMTimeCompare(scheduledStart, now) > 0 {
+                hostTime = scheduledStart
+            } else {
+                hostTime = defaultHostTime
+            }
+            synchronizer.setRate(Float(effectiveRate), time: time, atHostTime: hostTime)
         }
         kickPumps()
         rearmBench(at: time.seconds)
@@ -1160,6 +1270,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             didNotifyPlaybackStarted = true
             onPlaybackStarted?()
         }
+        // Every open and every seek: the position asked for is now anchored
+        // and the renderers are holding its first frame (HEL-172).
+        onSeekReady?()
         os_signpost(
             .event,
             log: PlaybackPerformance.log,
@@ -1852,7 +1965,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     videoQueueCount: self.videoQueue.count,
                     videoQueueFinished: self.videoQueue.isFinished
                         || self.shared.withLock { $0.videoOutputSuspended },
-                    playbackRate: self.rate,
+                    playbackRate: self.effectiveRate,
                     audioRequired: self.buffersOnAudioStarvation
                         && self.hasAudioTrack
                         && !self.audioQueue.isFinished,
@@ -1879,7 +1992,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         )
                     }
                     if !self.isPaused {
-                        self.synchronizer.rate = Float(self.rate)
+                        self.synchronizer.rate = Float(self.effectiveRate)
                     }
                     return
                 case .reprime:
@@ -1982,7 +2095,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             didFinish: didFinish,
             position: seconds,
             duration: duration,
-            rate: rate,
+            rate: effectiveRate,
             videoQueueCount: videoQueue.count,
             videoQueueFinished: videoQueue.isFinished || shared.withLock { $0.videoOutputSuspended },
             videoBufferedTo: shared.withLock { $0.videoBufferedTo },
