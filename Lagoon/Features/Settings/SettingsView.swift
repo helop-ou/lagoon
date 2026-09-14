@@ -393,7 +393,7 @@ struct SettingsView: View {
     /// Keep the same categories as tvOS, but let native navigation and
     /// grouped Forms do the work on a touch-sized screen.
     private var touchForm: some View {
-        Form {
+        ThemedForm {
             Section {
                 NavigationLink {
                     touchAccountSettings
@@ -454,8 +454,6 @@ struct SettingsView: View {
                 }
             }
         }
-        .scrollContentBackground(.hidden)
-        .background(Theme.background.ignoresSafeArea())
         .accessibilityIdentifier("settings.root")
     }
 
