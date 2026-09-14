@@ -101,6 +101,12 @@ struct CustomPlayerView<Surface: View>: View {
     /// Skip and Up Next, decided off the engine's clock by the controller
     /// (HEL-176); the overlays draw it and Select/Menu act on it.
     let automation: PlaybackAutomation
+    /// Where the viewer's play, pause and seek go. Supplied by the player
+    /// host so a SyncPlay group can turn them into requests to the server
+    /// instead of local moves (HEL-172). Nil means straight to the engine,
+    /// which is what the developer-settings preview wants and what every
+    /// call below falls back to.
+    var transport: PlayerTransportActions? = nil
     let onDismiss: () -> Void
     /// Lets the host react to the panel opening (the debug HUD hides so
     /// it can't sit on top of the track card).
@@ -338,12 +344,12 @@ struct CustomPlayerView<Surface: View>: View {
                 PlayerTouchTransportCluster(
                     engine: engine,
                     onSkip: { forward in
-                        engine.seek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
+                        requestSeek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
                         showSeekFeedback(forward: forward)
                         pokeControls()
                     },
                     onTogglePlayPause: {
-                        engine.togglePause()
+                        requestTogglePause()
                         pokeControls()
                     }
                 )
@@ -381,7 +387,7 @@ struct CustomPlayerView<Surface: View>: View {
             if let target = scrubTarget {
                 commitScrub(to: target, resume: true)
             } else {
-                engine.togglePause()
+                requestTogglePause()
                 pokeControls()
             }
         }
@@ -505,7 +511,7 @@ struct CustomPlayerView<Surface: View>: View {
     private func handleTouchSeek(at point: CGPoint) {
         guard !panelOpen, !isScrubbing else { return }
         let forward = point.x >= surfaceWidth / 2
-        engine.seek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
+        requestSeek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
         // A further double-tap on the same side inside the glyph's dismiss
         // window (the `.task(id: seekFeedback?.token)` below) adds another
         // step rather than resetting it, so three quick double-taps forward read
@@ -592,10 +598,10 @@ struct CustomPlayerView<Surface: View>: View {
                 // No duration to walk along (live streams): blind ±10 s,
                 // with the glyph as the only feedback available.
                 case .left:
-                    engine.seek(by: -10)
+                    requestSeek(by: -10)
                     showSeekFeedback(forward: false)
                 case .right:
-                    engine.seek(by: 10)
+                    requestSeek(by: 10)
                     showSeekFeedback(forward: true)
                 // Mid-scrub, up/down hop chapters (HEL-39 slice 3). Down
                 // keeps the panel everywhere else — opening it mid-scrub
@@ -640,7 +646,7 @@ struct CustomPlayerView<Surface: View>: View {
                     // Not focusable either, and for the same reason.
                     automation.playNext()
                 } else {
-                    engine.togglePause()
+                    requestTogglePause()
                     pokeControls()
                 }
                 #else
@@ -738,14 +744,45 @@ struct CustomPlayerView<Surface: View>: View {
     private func commitScrub(to target: Double, resume: Bool) {
         lastCommittedScrubTarget = target
         endScrub()
-        // Resume before seeking: the engine re-anchors the synchronizer
-        // when the seek primes, so unpausing afterwards fights that
-        // hand-off.
-        if resume, engine.isPaused {
-            engine.togglePause()
-        }
-        engine.seek(to: target)
+        requestSeek(to: target, resume: resume)
         pokeControls()
+    }
+
+    // MARK: - Transport intentions (HEL-172)
+    //
+    // The viewer asked for something; who acts on it is not this view's
+    // business. With a `transport` the player host answers — a SyncPlay
+    // group turns each of these into a request to the server and moves
+    // nothing locally. Without one they are the engine calls that used to
+    // be written here. The engine is read through `@PlayerEngineRef` at
+    // the moment of the press and never captured (HEL-152).
+
+    private func requestTogglePause() {
+        guard let transport else {
+            engine.togglePause()
+            return
+        }
+        transport.togglePause()
+    }
+
+    private func requestSeek(by seconds: Double) {
+        guard let transport else {
+            engine.seek(by: seconds)
+            return
+        }
+        transport.seekBy(seconds)
+    }
+
+    private func requestSeek(to seconds: Double, resume: Bool = false) {
+        guard let transport else {
+            // Resume before seeking: the engine re-anchors the synchronizer
+            // when the seek primes, so unpausing afterwards fights that
+            // hand-off.
+            if resume, engine.isPaused { engine.togglePause() }
+            engine.seek(to: seconds)
+            return
+        }
+        transport.seek(seconds, resume)
     }
 
     private func cancelScrub() {
