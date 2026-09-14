@@ -237,6 +237,15 @@ need an explicit appropriate control style. Test focused and unfocused states.
   `showDownloadsList` environment action, because the Settings stack is
   destination-owned and the list's rows are route values; the two must not
   share a stack (see `ContentNavigationRoute`).
+- **Watch Together (HEL-172):** `WatchTogetherControl` is the detail page's
+  entry point, in the same family as the download control — a glass circle
+  on a phone, the labelled pill where there is width — and it renders
+  nothing until the store says the account may join a group.
+  `SyncPlayToastLabel` is the player's transient line about the group: a
+  material capsule at the top of the screen, SDR over whatever the video
+  is, never hit-tested, and shared with the DEBUG gallery.
+  `SyncPlayStateCopy` is the one place a group's state is put into words,
+  so the sheet, the Together tab and the banner never disagree.
 - **Loading and failures:** use the shared state views. Keep mounted content
   during reconciliation and use inline retry when there is usable content.
 
