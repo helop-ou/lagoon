@@ -120,7 +120,7 @@ struct SeerrSettingsView: View {
 
     #if !os(tvOS)
     private var touchContent: some View {
-        Form {
+        ThemedForm {
             Section {
                 if let url = seerr.configuredURL {
                     ServerConnectionInfoView(url: url)
