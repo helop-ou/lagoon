@@ -533,7 +533,7 @@ extension JellyfinClient {
     /// has no picture, and initials are the right thing to show then. Built
     /// from a server URL rather than the configured client because the
     /// account picker shows accounts on every remembered server.
-    static func userImageURL(serverURL: URL, userId: String, tag: String?, maxWidth: Int) -> URL? {
+    nonisolated static func userImageURL(serverURL: URL, userId: String, tag: String?, maxWidth: Int) -> URL? {
         guard let tag,
               var components = URLComponents(
                 url: serverURL.appending(path: "Users/\(userId)/Images/Primary"),
