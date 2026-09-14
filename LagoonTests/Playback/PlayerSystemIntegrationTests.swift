@@ -374,6 +374,43 @@ struct PlayerSystemIntegrationTests {
         #expect(PlaybackRatePolicy.identifier(0.75) == "0_75")
     }
 
+    @Test func aSyncCorrectionRidesOnTheViewersRateWithoutLeavingTheEnvelope() {
+        // A group nudge multiplies the viewer's speed rather than replacing
+        // it (HEL-172), and no correction leaves it exactly alone — which is
+        // every session outside a SyncPlay group.
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 1, correction: 1) == 1)
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.5, correction: 1) == 1.5)
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 1, correction: 1.05) == 1.05)
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 2, correction: 0.5) == 1)
+
+        // The product stays inside the envelope the engine scales every
+        // media-time cushion and demux watermark by, at both ends.
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 2, correction: 4) == PlaybackRatePolicy.maximum)
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 0.5, correction: 0.1) == PlaybackRatePolicy.minimum)
+        // A rate outside the envelope is clamped before the correction, so
+        // Remote Command Center's 99 cannot be rescued by a small multiplier.
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 99, correction: 0.5) == 1)
+
+        // A nonsense multiplier is no multiplier: a stopped clock is `pause`,
+        // never a correction of zero.
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.25, correction: 0) == 1.25)
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.25, correction: -1) == 1.25)
+        #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.25, correction: .nan) == 1.25)
+    }
+
+    @Test @MainActor func aCorrectionRateLeavesTheViewersChosenRateAlone() {
+        // The panel's speed row and Now Playing both publish `rate`; a group
+        // nudge that moved it would tell the viewer they had changed speed.
+        let engine = SampleBufferPlayerEngine()
+        engine.setRate(1.25)
+        engine.setCorrectionRate(1.05)
+        #expect(engine.rate == 1.25)
+        #expect(engine.correctionRate == 1.05)
+        engine.setCorrectionRate(1)
+        #expect(engine.rate == 1.25)
+        #expect(engine.correctionRate == 1)
+    }
+
     @Test func stallRecoveryKeepsItsWallClockCushionAtFasterRates() {
         #expect(StallRecoveryPolicy.decision(
             elapsed: .seconds(1),
