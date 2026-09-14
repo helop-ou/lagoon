@@ -116,6 +116,12 @@ nonisolated enum HomeSectionPreferenceResolver {
                 source: .lagoon
             ),
             HomeSectionChoice(
+                id: HomeCuratedRows.ID.topMovies,
+                title: "Top 10 Movies",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
                 id: HomeCuratedRows.ID.inFourK,
                 title: "In 4K",
                 isEnabled: true,
@@ -136,6 +142,12 @@ nonisolated enum HomeSectionPreferenceResolver {
             HomeSectionChoice(
                 id: HomeCuratedRows.ID.unstartedSeries,
                 title: "Series You Haven't Started",
+                isEnabled: true,
+                source: .lagoon
+            ),
+            HomeSectionChoice(
+                id: HomeCuratedRows.ID.topShows,
+                title: "Top 10 Shows",
                 isEnabled: true,
                 source: .lagoon
             ),
