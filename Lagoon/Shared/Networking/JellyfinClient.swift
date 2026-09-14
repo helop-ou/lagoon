@@ -190,7 +190,12 @@ final class JellyfinClient {
     /// time) when the server can't be reached, rather than flipping to no.
     @discardableResult
     func refreshContentDownloadingPermission() async -> Bool? {
-        guard let user = try? await currentUser() else { return contentDownloadingAllowed }
+        let identity = sessionIdentity
+        let user = try? await currentUser()
+        // A failed request can be an old session's cancelled response. Its
+        // caller must not receive the newly selected account's cached policy.
+        guard identity == sessionIdentity, !Task.isCancelled else { return nil }
+        guard let user else { return contentDownloadingAllowed }
         if user.policy?.isAdministrator == true {
             contentDownloadingAllowed = true
             return true
@@ -217,7 +222,10 @@ final class JellyfinClient {
     /// time) when the server can't be reached, rather than flipping to no.
     @discardableResult
     func refreshVideoTranscodingPermission() async -> Bool? {
-        guard let user = try? await currentUser() else { return videoTranscodingAllowed }
+        let identity = sessionIdentity
+        let user = try? await currentUser()
+        guard identity == sessionIdentity, !Task.isCancelled else { return nil }
+        guard let user else { return videoTranscodingAllowed }
         if user.policy?.isAdministrator == true {
             videoTranscodingAllowed = true
             return true
