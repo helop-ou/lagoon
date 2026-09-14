@@ -48,11 +48,13 @@ struct ChangelogTests {
         // cannot identify an entry.
         let first = ChangelogEntry(
             version: "1.0", build: "1", released: "January 2027",
-            headline: "First.", changes: ["Something."]
+            headline: "First.",
+            sections: [ChangelogSection(category: .newFeatures, changes: ["Something."])]
         )
         let second = ChangelogEntry(
             version: "1.0", build: "2", released: "January 2027",
-            headline: "Second.", changes: ["Something else."]
+            headline: "Second.",
+            sections: [ChangelogSection(category: .improvements, changes: ["Something else."])]
         )
         #expect(first.id != second.id)
         #expect(first.displayVersion == "1.0 (1)")
@@ -73,20 +75,36 @@ struct ChangelogTests {
             // build was documented when it was not.
             #expect(!entry.changes.isEmpty, "\(entry.id) has no notes")
             #expect(entry.changes.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+            #expect(!entry.sections.isEmpty, "\(entry.id) has no sections")
+            #expect(Set(entry.sections.map(\.category)).count == entry.sections.count,
+                    "\(entry.id) repeats a changelog category")
         }
     }
 
-    @Test func aBuildWithNoEntryIsReportedRatherThanHidden() {
+    @Test func everyBuildUsesNonemptySectionsInTheSameOrder() {
+        for entry in Changelog.entries {
+            let categories = entry.sections.map(\.category)
+            let expectedOrder = ChangelogCategory.allCases.filter { categories.contains($0) }
+            #expect(categories == expectedOrder, "\(entry.id) puts categories out of order")
+            for section in entry.sections {
+                #expect(!section.changes.isEmpty,
+                        "\(entry.id) has an empty \(section.category.rawValue) section")
+            }
+        }
+    }
+
+    @Test func aBuildWithNoEntryIsReportedRatherThanHidden() throws {
         // The panel and the About row both surface this state, because a list
         // that silently omits the build someone is running is worse than one
         // that admits the gap.
-        let known = try? #require(Changelog.entries.first)
-        #expect(Changelog.isListed(version: known?.version ?? "", build: known?.build ?? ""))
+        let firstEntry: ChangelogEntry? = Changelog.entries.first
+        let known = try #require(firstEntry)
+        #expect(Changelog.isListed(version: known.version, build: known.build))
 
         // A build number nobody has written notes for — the normal state
         // between uploading a build and documenting it.
-        #expect(!Changelog.isListed(version: known?.version ?? "0.1", build: "999999"))
+        #expect(!Changelog.isListed(version: known.version, build: "999999"))
         // And a marketing version alone is not enough to count as listed.
-        #expect(!Changelog.isListed(version: "99.0", build: known?.build ?? "1"))
+        #expect(!Changelog.isListed(version: "99.0", build: known.build))
     }
 }
