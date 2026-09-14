@@ -148,6 +148,8 @@ struct DownloadControl: View {
         Task {
             do {
                 try await store.start(item: sourceItem, source: source, quality: quality, client: session.client)
+            } catch is CancellationError {
+                // A newer start or deletion already expressed the viewer's intent.
             } catch {
                 alertMessage = Self.message(for: error)
             }
@@ -161,6 +163,8 @@ struct DownloadControl: View {
         switch startError {
         case .notPermitted:
             return String(localized: "This account isn't allowed to download from this server.")
+        case .accountChanged:
+            return String(localized: "The account changed before the download could start. Try again.")
         case .unsupportedItem:
             return String(localized: "This title can't be downloaded.")
         case .notSignedIn:
