@@ -8,6 +8,10 @@ final class SeriesDetailViewModel {
     var selectedSeasonId: String?
     var episodes: [MediaItem] = []
     var isLoadingEpisodes = false
+    private var loadGeneration = 0
+    private var episodeGeneration = 0
+    private var loadedSeriesID: String?
+    private var loadedIdentity: JellyfinClient.SessionIdentity?
     /// The episode Play starts: in progress if there is one, else the next
     /// unwatched. Nil once the show is finished.
     var upNext: MediaItem?
@@ -20,12 +24,31 @@ final class SeriesDetailViewModel {
     var firstEpisode: MediaItem? { episodes.first }
 
     func load(client: JellyfinClient, seriesId: String) async {
+        guard !Task.isCancelled else { return }
+        loadGeneration &+= 1
+        episodeGeneration &+= 1
+        isLoadingEpisodes = false
+        let generation = loadGeneration
+        let identity = client.sessionIdentity
+        if loadedSeriesID != seriesId || loadedIdentity != identity {
+            detail = nil
+            seasons = []
+            episodes = []
+            upNext = nil
+            selectedSeasonId = nil
+        }
+        loadedSeriesID = seriesId
+        loadedIdentity = identity
         async let detailTask = client.item(id: seriesId)
         async let seasonsTask = client.seasons(seriesId: seriesId)
         async let upNextTask = client.nextUpEpisode(seriesId: seriesId)
-        detail = try? await detailTask
-        seasons = (try? await seasonsTask) ?? []
-        upNext = try? await upNextTask
+        let resolvedDetail = try? await detailTask
+        let resolvedSeasons = (try? await seasonsTask) ?? []
+        let resolvedUpNext = try? await upNextTask
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        detail = resolvedDetail
+        seasons = resolvedSeasons
+        upNext = resolvedUpNext
         if selectedSeasonId == nil {
             selectedSeasonId = openingSeasonId
         }
@@ -72,6 +95,9 @@ final class SeriesDetailViewModel {
     /// show's own flags, the up-next episode, and the episode rail.
     @discardableResult
     func reloadUserData(client: JellyfinClient, seriesId: String) async -> Bool {
+        let generation = loadGeneration
+        let identity = client.sessionIdentity
+        guard loadedSeriesID == seriesId, loadedIdentity == identity, !Task.isCancelled else { return false }
         async let detailTask = client.item(id: seriesId)
         async let upNextTask = client.nextUpEpisode(seriesId: seriesId)
         let refreshedDetail = try? await detailTask
@@ -81,6 +107,7 @@ final class SeriesDetailViewModel {
         } catch {
             refreshedUpNext = .failure(error)
         }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return false }
         if let refreshedDetail { detail = refreshedDetail }
         if case .success(let item) = refreshedUpNext { upNext = item }
         let episodesRefreshed = await loadEpisodes(client: client, seriesId: seriesId)
@@ -91,16 +118,24 @@ final class SeriesDetailViewModel {
     /// Returns whether the visible season's rail was replaced by a fresh read.
     @discardableResult
     private func loadEpisodes(client: JellyfinClient, seriesId: String) async -> Bool {
+        guard loadedSeriesID == seriesId, loadedIdentity == client.sessionIdentity,
+              !Task.isCancelled else { return false }
         guard let selectedSeasonId else { return true }
+        let identity = client.sessionIdentity
+        episodeGeneration &+= 1
+        let generation = episodeGeneration
         isLoadingEpisodes = true
+        defer {
+            if generation == episodeGeneration { isLoadingEpisodes = false }
+        }
         let loaded = try? await client.episodes(seriesId: seriesId, seasonId: selectedSeasonId)
-        // Stale-response guard: a slow season fetch must not clobber a newer pick.
-        guard self.selectedSeasonId == selectedSeasonId else { return false }
+        // An A → B → A selection must reject the first A response too.
+        guard generation == episodeGeneration, identity == client.sessionIdentity,
+              self.selectedSeasonId == selectedSeasonId, !Task.isCancelled else { return false }
         // A foreground sync is opportunistic. Preserve the visible rail
         // when the server is asleep rather than turning a full season
         // into an empty one (HEL-135).
         if let loaded { episodes = loaded }
-        isLoadingEpisodes = false
         return loaded != nil
     }
 }
