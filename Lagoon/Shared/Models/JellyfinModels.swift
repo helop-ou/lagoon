@@ -31,6 +31,10 @@ nonisolated struct UserPolicy: Codable {
     /// "Allow video remuxing/transcoding": without it every progressive
     /// transcode the download picker could otherwise ask for answers 403.
     let enableVideoPlaybackTranscoding: Bool?
+    /// Whether this account may create SyncPlay groups, only join them, or
+    /// neither (HEL-172). Absent on a server too old to have the setting,
+    /// which reads as `unknown` rather than as a denial.
+    let syncPlayAccess: SyncPlayAccess?
 
     /// Whether to let a subtitle search start.
     ///
