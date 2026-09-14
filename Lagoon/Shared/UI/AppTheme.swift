@@ -27,7 +27,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .lagoon:
             String(localized: "The Twin Shores palette: aqua accents over deep navy and black.")
         case .babyPink:
-            String(localized: "Soft pink accents over a deep plum ground. Still Lagoon, only prettier.")
+            String(localized: "Soft pink accents over a deep rose ground. Still Lagoon, only prettier.")
         }
     }
 
