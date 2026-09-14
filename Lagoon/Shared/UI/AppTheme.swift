@@ -6,9 +6,9 @@ import SwiftUI
 /// screen never has to know which theme is on: it asks `Theme` for the
 /// accent, the ground or the background and gets the current answer.
 ///
-/// Deliberately a short list. A theme is a considered set of five colours
-/// that has been checked over every screen, not a hue slider, and the guide
-/// says not to go overboard with them.
+/// Deliberately a short list. A theme is a considered set of colours that
+/// has been checked over every screen, not a hue slider, and the guide says
+/// not to go overboard with them.
 nonisolated enum AppTheme: String, CaseIterable, Identifiable {
     case lagoon
     case babyPink
@@ -39,18 +39,24 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
     }
 }
 
-/// The five roles a theme fills. Everything else on screen stays the
-/// system's semantic styles, so a theme colours the brand's own moments
-/// (progress, selection, the jellyfish, the ambient glow, the ground the
-/// content sits on) and never the text.
+/// The roles a theme fills. Everything else on screen stays the system's
+/// semantic styles, so a theme colours the brand's own moments (progress,
+/// selection, the jellyfish, the ambient glow, the ground the content sits
+/// on) and never the text. Every optional role means "the system's own"
+/// when nil, which is the brand's answer for all of them.
 nonisolated struct ThemePalette: Equatable, Sendable {
     /// The one bright colour: progress fills, selection marks, the jellyfish.
     let accent: Color
     /// The brand's ground, used as a wash over the background.
     let ground: Color
     /// The surface behind all content. True black for the brand; the pink
-    /// theme lifts it to a plum so the whole app reads as its own.
+    /// theme lifts it to a rose so the whole app reads as its own.
     let background: Color
+    /// The rows of a grouped form, one step lighter than `background`. Nil
+    /// keeps the system's row grey, which sits well on black and not on a
+    /// rose page: grey cards floating on pink was the first thing the
+    /// screenshot showed.
+    let surface: Color?
     /// A third glow colour, for the ambient field behind heroes.
     let glowDepth: Color
     /// The tint for iOS's native controls (toggles, pickers, links, the
@@ -62,8 +68,10 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     /// Nil leaves artwork colours as sampled, which is the brand's choice.
     let artworkTint: Color?
     /// A wash behind iOS's tab bar and navigation bar glass, so the chrome
-    /// belongs to the theme and not to the system's grey. Nil keeps the
-    /// system glass. tvOS is never washed: its bar is a focusable control.
+    /// belongs to the theme and not to the system's grey. Keep it faint: a
+    /// heavy wash turns the glass into a flat pane and the content refracting
+    /// through it into smeared text. Nil keeps the system glass. tvOS is
+    /// never washed: its bar is a focusable control.
     let chrome: Color?
 
     /// The ambient glow when no artwork has been sampled yet.
@@ -88,6 +96,7 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         accent: .lagoonAqua,
         ground: .lagoonNavy,
         background: .black,
+        surface: nil,
         glowDepth: Color(red: 0.16, green: 0.1, blue: 0.35),
         controlTint: nil,
         artworkTint: nil,
@@ -98,15 +107,18 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     /// and bright enough to carry a progress bar on a dark ground; the
     /// ground and background are deep rose rather than pink, so every page
     /// carries the hue without any of them shouting, and artwork glows are
-    /// blushed with the accent so a hero never hides the theme.
+    /// blushed with the accent so a hero never hides the theme. Form rows
+    /// take a rose a step above the background, and the bar glass only a
+    /// faint wash of the ground, so it stays glass.
     static let babyPink = ThemePalette(
         accent: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
         ground: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255),
         background: Color(red: 0x1F / 255, green: 0x10 / 255, blue: 0x19 / 255),
+        surface: Color(red: 0x33 / 255, green: 0x18 / 255, blue: 0x2A / 255),
         glowDepth: Color(red: 0x8C / 255, green: 0x4A / 255, blue: 0x72 / 255),
         controlTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
         artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        chrome: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255).opacity(0.7)
+        chrome: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255).opacity(0.25)
     )
 }
 
@@ -177,6 +189,7 @@ enum Theme {
     static var accent: Color { palette.accent }
     static var ground: Color { palette.ground }
     static var background: Color { palette.background }
+    static var surface: Color? { palette.surface }
     static var glow: ArtworkPalette { palette.glow }
 
     /// The glow behind artwork: the theme's own while nothing is sampled
@@ -187,6 +200,27 @@ enum Theme {
         return palette.glow(for: artwork)
     }
 }
+
+/// A grouped form in the theme: the page on `Theme.background`, every row
+/// on `Theme.surface` and the bars in the theme's chrome. The one container
+/// for a settings-style form on iOS, so a new page is themed by using it
+/// and a new theme is checked over every form by changing two colours.
+#if !os(tvOS)
+struct ThemedForm<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content.listRowBackground(Theme.surface) }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background.ignoresSafeArea())
+            .themedChrome()
+    }
+}
+#endif
 
 extension View {
     /// iOS's tab bar and navigation bar glass take the theme's chrome wash.
