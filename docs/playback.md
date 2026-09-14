@@ -303,7 +303,18 @@ the socket at the instant it happens; joining while the handshake was still in
 flight lost both the `GroupJoined` and the `PlayQueue` update on fixture 12.0.0,
 and the member then sat in a group it never heard another word from. The store
 waits for the socket to carry its first message — the server's own
-`ForceKeepAlive` — before asking to join.
+`ForceKeepAlive` — before asking to join. A handshake timeout or failed
+membership request keeps the sheet open with an error and a retry path.
+The store snapshots its account's client, so queued requests and the final
+Leave never adopt a replacement account's credentials. Leaving cancels
+queued commands and item loads, and late results must match the active
+membership before they can present or restart playback. A delivery fallback
+in a group primes paused and reports Ready before the server starts it again.
+Readiness reports retry once after a second, with the current timestamp and
+position, and cancellation or newer readiness supersedes that retry. Viewer
+transport commands are never retried automatically. Ignore Waiting changes
+publish after server acknowledgement; an unavailable queued title attempts
+to opt out of waiting and offers Rejoin or Leave instead of failing silently.
 
 **Verifying it** takes two members: `-debug.syncPlayJoinGroup <name>` joins the
 named group after the regression bootstrap signs in (polling for up to 30 s so
