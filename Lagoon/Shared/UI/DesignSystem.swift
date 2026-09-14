@@ -378,18 +378,18 @@ extension View {
     }
 }
 
-/// The brand surface the onboarding screens sit on.
+/// The ground the onboarding screens sit on: the theme's `ground`, which is
+/// the brand's Deep Navy under Lagoon and the rose under Baby Pink.
 ///
 /// The guidelines call Deep Navy "the default full-bleed field", and onboarding
 /// takes them at their word: it is the app's front door and the stretch that is
 /// purely identity, so the mark gets a field behind it rather than a void. Past
-/// it, black is the ground Lagoon plays content against, and `MainTabView`
-/// onwards is unchanged.
-///
-/// Deep Navy is RGB(11, 29, 40), so this is not far from black to begin with.
-struct BrandBackground: View {
+/// it, the theme's background is the ground Lagoon plays content against.
+/// Which theme shows here is `ThemeStore`'s call: the last profile's until
+/// another signs in (HEL-173).
+struct GroundBackground: View {
     var body: some View {
-        Color.lagoonNavy.ignoresSafeArea()
+        Theme.ground.ignoresSafeArea()
     }
 }
 
