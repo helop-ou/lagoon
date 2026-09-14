@@ -79,6 +79,12 @@ nonisolated enum DiagnosticSchema {
     static let httpMethodChoices: Set<String> = ["GET", "POST", "DELETE", "PUT"]
     static let clientChoices: Set<String> = ["jellyfin", "seerr", "media", "image", "subtitle"]
     static let networkChoices: Set<String> = ["unrestricted", "constrained", "expensive", "unknown"]
+    /// SyncPlay's four transport commands, and how a drift was corrected
+    /// (HEL-172). The correction has its own key rather than reusing
+    /// `method`, which is Jellyfin's delivery method and a different
+    /// closed set.
+    static let syncPlayCommandChoices: Set<String> = ["unpause", "pause", "seek", "stop"]
+    static let syncPlayCorrectionChoices: Set<String> = ["none", "rate", "seek"]
     static let degradationChoices: Set<String> = [
         "droppedFrames", "stalls", "reprimes", "audioStarvation", "frozen", "rendererRecovery",
     ]
@@ -161,6 +167,13 @@ nonisolated enum DiagnosticSchema {
         "routeReason": .token,
         "samplesSinceFlush": .int,
         "retry": .bool,
+        // Watch Together (HEL-172). Numbers and closed choices only: a
+        // group has a name, an id, participants and an item, and none of
+        // them belongs in a report.
+        "command": .choice(syncPlayCommandChoices),
+        "leadMs": .int,
+        "driftMs": .int,
+        "correction": .choice(syncPlayCorrectionChoices),
     ]
 
     /// Keeps the fields the schema admits, in the form it admits them.
