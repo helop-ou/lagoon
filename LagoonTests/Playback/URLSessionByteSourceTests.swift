@@ -307,7 +307,7 @@ struct URLSessionByteSourceTests {
 /// Parses the leading offset out of an open-ended `Range: bytes=<offset>-`
 /// header. Shared by the stub (to answer with the right slice) and the
 /// tests (to assert what a retry actually requested).
-private func parseRangeStart(_ header: String?) -> Int? {
+nonisolated private func parseRangeStart(_ header: String?) -> Int? {
     guard let header, header.hasPrefix("bytes=") else { return nil }
     let spec = header.dropFirst("bytes=".count)
     guard let dash = spec.firstIndex(of: "-") else { return nil }
