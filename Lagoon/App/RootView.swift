@@ -5,6 +5,7 @@ import SwiftUI
 struct RootView: View {
     @State private var session = SessionStore()
     private var seerr: SeerrSessionStore { session.seerr }
+    private var syncPlay: SyncPlayStore { session.syncPlay }
     @State private var serverSync = ServerSyncState()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -32,6 +33,7 @@ struct RootView: View {
         .overlay { ThemeBloomOverlay() }
         .environment(session)
         .environment(seerr)
+        .environment(syncPlay)
         .environment(serverSync)
         .fullScreenCover(isPresented: Binding(
             get: { session.isAddingAccount },
