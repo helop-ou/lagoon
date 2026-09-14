@@ -74,6 +74,29 @@ struct DownloadManifestTests {
         #expect(manifest.entry(for: "item1")?.state == .paused)
     }
 
+    @Test func latePauseAndFailureCannotUndoCompletion() {
+        var manifest = DownloadManifest()
+        manifest.insert(Self.makeEntry())
+        manifest.markStarted("item1", taskIdentifier: 1, attemptToken: "token1")
+        manifest.markComplete("item1", bytes: 500, at: Date())
+        manifest.markPaused("item1", resumeDataFile: "stale.resume")
+        manifest.markFailed("item1", reason: "Connection lost", resumeDataFile: nil)
+        #expect(manifest.entry(for: "item1")?.state == .complete)
+        #expect(manifest.entry(for: "item1")?.failure == nil)
+        #expect(manifest.entry(for: "item1")?.resumeDataFile == nil)
+        #expect(manifest.entry(for: "item1")?.receivedBytes == 500)
+    }
+
+    @Test func lateProgressCannotRestartAFailedTransfer() {
+        var manifest = DownloadManifest()
+        manifest.insert(Self.makeEntry())
+        manifest.markStarted("item1", taskIdentifier: 1, attemptToken: "token1")
+        manifest.markFailed("item1", reason: "Connection lost", resumeDataFile: nil)
+        manifest.recordProgress("item1", received: 500, expected: 1_000)
+        #expect(manifest.entry(for: "item1")?.state == .failed)
+        #expect(manifest.entry(for: "item1")?.receivedBytes == 0)
+    }
+
     @Test func recordProgressIsANoOpOncePausedOrComplete() {
         // A progress callback queued before a pause (or a delete-and-restart
         // that finishes fast) can still land after the state moved on; it
@@ -112,6 +135,18 @@ struct DownloadManifestTests {
         #expect(manifest.entry(for: "lostWithResume")?.state == .paused)
         #expect(manifest.entry(for: "lostWithResume")?.taskIdentifier == nil)
         #expect(manifest.entry(for: "lostNoResume")?.state == .failed)
+    }
+
+    @Test func reconcileDoesNotDemoteAttemptsStartedDuringTaskLookup() {
+        var manifest = DownloadManifest()
+        manifest.insert(Self.makeEntry(id: "restarted"))
+        manifest.markStarted("restarted", taskIdentifier: 10, attemptToken: "new")
+        manifest.insert(Self.makeEntry(id: "newItem"))
+        manifest.markStarted("newItem", taskIdentifier: 11, attemptToken: "first")
+        let lost = manifest.reconcile(liveTasks: [:], queriedAttempts: ["restarted": "old"])
+        #expect(lost.isEmpty)
+        #expect(manifest.entry(for: "restarted")?.taskIdentifier == 10)
+        #expect(manifest.entry(for: "newItem")?.state == .downloading)
     }
 
     @Test func reconcilePromotesAFinishedFileToComplete() {
