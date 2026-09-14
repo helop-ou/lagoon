@@ -41,7 +41,11 @@ final class SampleBufferPictureInPicture: NSObject {
         let controller = AVPictureInPictureController(contentSource: source)
         controller.delegate = self
         #if os(iOS)
-        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        // Launch-only regression hook: with automatic PiP off, leaving the
+        // app is the same as locking it, which the simulator cannot do, so
+        // the background audio-only path (HEL-176) can be exercised there.
+        controller.canStartPictureInPictureAutomaticallyFromInline =
+            !UserDefaults.standard.bool(forKey: "debug.regressionNoAutomaticPiP")
         #endif
         self.controller = controller
         possibilityObservation = controller.observe(\.isPictureInPicturePossible, options: [.initial, .new]) {
