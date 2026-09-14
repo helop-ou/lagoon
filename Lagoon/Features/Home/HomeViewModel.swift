@@ -56,12 +56,18 @@ final class HomeViewModel {
     private var loadedAccountID: String?
     private var loadGeneration = 0
     private var isRefreshing = false
+    /// Discovery rails are intentionally loaded after the primary Home
+    /// content, but they still belong to this model so an account switch can
+    /// cancel their work instead of leaving requests running in the background.
+    private var discoveryTasks: [Task<Void, Never>] = []
 
     func load(
         client: JellyfinClient,
         accountID: String? = nil,
-        homeSectionPreferences: HomeSectionPreferenceValues = HomeSectionPreferenceValues()
+        homeSectionPreferences: HomeSectionPreferenceValues = HomeSectionPreferenceValues(),
+        seerr: SeerrClient? = nil
     ) async {
+        guard !Task.isCancelled else { return }
         if loadedAccountID != accountID {
             clearForAccountChange()
             loadedAccountID = accountID
@@ -72,6 +78,12 @@ final class HomeViewModel {
         let identity = client.sessionIdentity
         isLoading = true
         errorMessage = nil
+        defer {
+            if generation == loadGeneration {
+                isLoading = false
+                if Task.isCancelled { hasLoaded = false }
+            }
+        }
         do {
             let libraries = try await client.userViews()
                 .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
@@ -111,7 +123,7 @@ final class HomeViewModel {
                 client: client,
                 preferences: homeSectionPreferences
             )
-            guard generation == loadGeneration, identity == client.sessionIdentity else { return }
+            guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
             if let resolvedResume { resume = resolvedResume }
             nextUp = resolvedNextUp
             favorites = resolvedFavorites
@@ -139,7 +151,7 @@ final class HomeViewModel {
                     sortBy: "Random",
                     limit: 24
                 ))?.items ?? []
-                guard generation == loadGeneration, identity == client.sessionIdentity else { return }
+                guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
                 librarySample = sample
                 heroItems = HeroSelection.select(tiers: heroTiers)
             }
@@ -148,28 +160,47 @@ final class HomeViewModel {
             // `isLoading` — and so the entire screen, hero included — behind
             // eight queries for rows that are below the fold anyway. They
             // appear as they resolve.
-            Task { await loadCuratedRails(client: client, generation: generation) }
-            Task { await loadCollections(client: client, generation: generation) }
+            cancelDiscoveryTasks()
+            discoveryTasks = [
+                Task { [weak self] in
+                    guard let self else { return }
+                    await self.loadCuratedRails(
+                        client: client,
+                        generation: generation
+                    )
+                },
+                Task { [weak self] in
+                    guard let self else { return }
+                    await self.loadTopTenRails(
+                        client: client, seerr: seerr,
+                        preferences: homeSectionPreferences, generation: generation
+                    )
+                },
+                Task { [weak self] in
+                    guard let self else { return }
+                    await self.loadCollections(client: client, generation: generation)
+                },
+            ]
         } catch {
-            guard generation == loadGeneration else { return }
+            guard generation == loadGeneration, identity == client.sessionIdentity else { return }
             hasLoaded = false
+            guard !Task.isCancelled else { return }
             errorMessage = "Couldn't load your library."
-        }
-        if generation == loadGeneration {
-            isLoading = false
         }
     }
 
     func retry(
         client: JellyfinClient,
         accountID: String? = nil,
-        homeSectionPreferences: HomeSectionPreferenceValues = HomeSectionPreferenceValues()
+        homeSectionPreferences: HomeSectionPreferenceValues = HomeSectionPreferenceValues(),
+        seerr: SeerrClient? = nil
     ) async {
         hasLoaded = false
         await load(
             client: client,
             accountID: accountID,
-            homeSectionPreferences: homeSectionPreferences
+            homeSectionPreferences: homeSectionPreferences,
+            seerr: seerr
         )
     }
 
@@ -186,7 +217,7 @@ final class HomeViewModel {
         async let favoriteItems = try? client.favorites()
         let refreshed = await (resume: resumeItems, nextUp: nextUpItems)
         let refreshedFavorites = await favoriteItems
-        guard generation == loadGeneration, identity == client.sessionIdentity else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
         if let refreshedResume = refreshed.resume {
             resume = refreshedResume
             TopShelfStore.publish(refreshedResume, client: client, identity: identity)
@@ -207,13 +238,15 @@ final class HomeViewModel {
     /// a full Home screen into an error page (HEL-135).
     func refreshServerContent(
         client: JellyfinClient,
-        homeSectionPreferences: HomeSectionPreferenceValues
+        homeSectionPreferences: HomeSectionPreferenceValues,
+        seerr: SeerrClient? = nil
     ) async {
         guard hasLoaded, !isLoading, !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
         // Any optional discovery work launched by the initial load now owns
         // an older generation and cannot land over this newer snapshot.
+        cancelDiscoveryTasks()
         loadGeneration &+= 1
         let generation = loadGeneration
 
@@ -223,12 +256,19 @@ final class HomeViewModel {
             client: client,
             preferences: homeSectionPreferences
         )
-        async let curated: Void = loadCuratedRails(client: client, generation: generation)
+        async let curated: Void = loadCuratedRails(
+            client: client,
+            generation: generation
+        )
+        async let topTen: Void = loadTopTenRails(
+            client: client, seerr: seerr,
+            preferences: homeSectionPreferences, generation: generation
+        )
         async let refreshedCollections: Void = loadCollections(
             client: client,
             generation: generation
         )
-        _ = await (progress, latest, plugin, curated, refreshedCollections)
+        _ = await (progress, latest, plugin, curated, topTen, refreshedCollections)
     }
 
     func refreshPluginRails(
@@ -237,8 +277,9 @@ final class HomeViewModel {
     ) async {
         guard hasLoaded, !isLoading else { return }
         let generation = loadGeneration
+        let identity = client.sessionIdentity
         let rails = await loadPluginRails(client: client, preferences: preferences)
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
         pluginRails = rails
         if heroItems.isEmpty {
             heroItems = HeroSelection.select(tiers: heroTiers)
@@ -248,10 +289,12 @@ final class HomeViewModel {
     private func refreshLatestRails(client: JellyfinClient) async {
         guard hasLoaded, !isLoading else { return }
         let generation = loadGeneration
+        let identity = client.sessionIdentity
         guard let libraries = try? await client.userViews()
             .filter({ ["movies", "tvshows"].contains($0.collectionType ?? "") }) else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
         let refreshed = await loadLatestRails(libraries: libraries, client: client)
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
 
         // A single failed library request keeps that rail's last good value;
         // a successful empty response is still authoritative and clears it.
@@ -315,15 +358,6 @@ final class HomeViewModel {
         }
     }
 
-    /// Fetches whatever the Home Screen Sections plugin adds beyond Lagoon's
-    /// own rails (HEL-47). Costs nothing on a server without the plugin: the
-    /// catalogue call 404s and this returns immediately.
-    ///
-    /// Empty sections are dropped rather than rendered, because the
-    /// catalogue lists every type the plugin knows — a movies-and-TV server
-    /// still advertises Books, Music and Jellyseerr rows. Measured against a
-    /// real server, all 28 sections resolve in under two seconds
-    /// concurrently, and the empty ones answer in ~0.1 s each.
     /// The curated rows (HEL-120), fetched together and published together.
     ///
     /// Every one of these is discovery: nice to have, never the reason
@@ -331,7 +365,11 @@ final class HomeViewModel {
     /// one assignment after the rails that matter are already on screen, and
     /// any that fails simply does not appear — an unreachable row must cost a
     /// row, not the screen.
-    private func loadCuratedRails(client: JellyfinClient, generation: Int) async {
+    private func loadCuratedRails(
+        client: JellyfinClient,
+        generation: Int
+    ) async {
+        let identity = client.sessionIdentity
         // What they actually watch, which decides the genre spotlight.
         let played = (try? await client.items(
             includeTypes: [.movie, .series],
@@ -340,7 +378,7 @@ final class HomeViewModel {
             limit: 60,
             filters: ["IsPlayed"]
         ))?.items ?? []
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
 
         let today = Date.now
         let genre = HomeRotation.genre(
@@ -411,17 +449,42 @@ final class HomeViewModel {
             binge,
             surprise,
         ].compactMap(\.self)
-
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        // Top 10 has an independent owner so its external scan never delays
+        // these shelves. Preserve its last snapshot when replacing our rows.
+        let topTen = curatedRails.filter {
+            $0.key == HomeCuratedRows.ID.topMovies || $0.key == HomeCuratedRows.ID.topShows
+        }
         curatedRails = Dictionary(
             resolved.map { ($0.id, $0) },
             uniquingKeysWith: { current, _ in current }
-        )
+        ).merging(topTen, uniquingKeysWith: { current, _ in current })
         // A hero that found nothing above this tier at load time can still
         // be filled by the curated rows arriving now (HEL-147).
         if heroItems.isEmpty {
             heroItems = HeroSelection.select(tiers: heroTiers)
         }
+
+    }
+
+    /// HEL-121's optional external popularity scan publishes independently
+    /// of the native shelves, while sharing their cancellation generation.
+    private func loadTopTenRails(
+        client: JellyfinClient, seerr: SeerrClient?,
+        preferences: HomeSectionPreferenceValues, generation: Int
+    ) async {
+        let identity = client.sessionIdentity
+        let origin = seerr?.serverURL
+        let cookie = seerr?.sessionCookie
+        let enabled = preferences.isNativeEnabled(HomeCuratedRows.ID.topMovies)
+            || preferences.isNativeEnabled(HomeCuratedRows.ID.topShows)
+        let rails = await topTenRails(client: client, seerr: seerr?.sessionSnapshot(), enabled: enabled)
+        guard generation == loadGeneration, identity == client.sessionIdentity,
+              origin == seerr?.serverURL, cookie == seerr?.sessionCookie, !Task.isCancelled else { return }
+        curatedRails.removeValue(forKey: HomeCuratedRows.ID.topMovies)
+        curatedRails.removeValue(forKey: HomeCuratedRows.ID.topShows)
+        for rail in rails { curatedRails[rail.id] = rail }
+        if heroItems.isEmpty { heroItems = HeroSelection.select(tiers: heroTiers) }
     }
 
     /// The Collections row (HEL-122).
@@ -436,11 +499,15 @@ final class HomeViewModel {
     /// concurrent requests, and on a library whose collections are all
     /// illustrated it is none at all.
     private func loadCollections(client: JellyfinClient, generation: Int) async {
+        let identity = client.sessionIdentity
         guard let all = try? await client.collections() else { return }
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
 
         let ranked = CollectionShelf.ranked(all)
-        guard !ranked.isEmpty else { return }
+        guard !ranked.isEmpty else {
+            collections = []
+            return
+        }
 
         let needsArtwork = ranked.filter { !CollectionShelf.hasLandscapeArtwork($0) }
         var borrowed: [String: MediaItem] = [:]
@@ -459,7 +526,7 @@ final class HomeViewModel {
             }
         }
 
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
         collections = CollectionShelf.shelf(ranked, borrowedArtwork: borrowed)
     }
 
@@ -502,14 +569,17 @@ final class HomeViewModel {
     /// short to have been a viewing, and the first that returns a full rail
     /// wins. See `minimumSeedRuntime` for what that filter is really for.
     private func similarRail(seeds: [MediaItem], client: JellyfinClient) async -> LibraryRail? {
+        let identity = client.sessionIdentity
         let candidates = seeds
             .filter { HomeCuratedRows.isSubstantialSeed($0) }
             .prefix(HomeCuratedRows.seedAttempts)
 
         for seed in candidates {
+            guard identity == client.sessionIdentity, !Task.isCancelled else { return nil }
             guard let items = try? await client.similarItems(itemId: seed.id, limit: 16),
                   items.count >= HomeCuratedRows.minimumItems
             else { continue }
+            guard identity == client.sessionIdentity, !Task.isCancelled else { return nil }
             return LibraryRail(
                 id: HomeCuratedRows.ID.becauseYouWatched,
                 title: "Because You Watched \(seed.railTitle)",
@@ -550,6 +620,86 @@ final class HomeViewModel {
         return LibraryRail(id: id, title: title, items: page.items)
     }
 
+    /// Builds the HEL-121 fallback from Seerr's public discovery catalogue.
+    /// TMDB ids are only used as a bridge; every displayed card is resolved
+    /// back to an item the current Jellyfin user can actually play.
+    private func topTenRails(
+        client: JellyfinClient,
+        seerr: SeerrClient?,
+        enabled: Bool
+    ) async -> [LibraryRail] {
+        guard enabled, !Task.isCancelled,
+              let seerr, seerr.serverURL != nil, seerr.sessionCookie != nil else { return [] }
+        async let library = topTenLibraryItems(client: client)
+        async let movies = discoveryResults(seerr: seerr, mediaType: .movie)
+        async let shows = discoveryResults(seerr: seerr, mediaType: .tv)
+        let (libraryResult, movieResults, showResults) = await (library, movies, shows)
+        guard let libraryItems = libraryResult, !Task.isCancelled else { return [] }
+        let movieItems = TopTenResolver.resolve(
+            discoveries: movieResults, library: libraryItems, type: .movie
+        )
+        let showItems = TopTenResolver.resolve(
+            discoveries: showResults, library: libraryItems, type: .series
+        )
+        return [
+            LibraryRail(id: HomeCuratedRows.ID.topMovies, title: "Top 10 Movies", items: movieItems),
+            LibraryRail(id: HomeCuratedRows.ID.topShows, title: "Top 10 Shows", items: showItems),
+        ].filter { $0.items.count >= HomeCuratedRows.minimumItems }
+    }
+
+    /// Reads a bounded portion of the library for the provider-ID
+    /// intersection. Jellyfin installations commonly cap a single `Limit`
+    /// lower than requested, so this advances by the number actually returned
+    /// and uses `TotalRecordCount` when the server supplies it. The bound keeps
+    /// an optional discovery shelf from turning into an unbounded scan; very
+    /// large libraries may therefore omit a matching title outside the bound.
+    private func topTenLibraryItems(client: JellyfinClient) async -> [MediaItem]? {
+        let identity = client.sessionIdentity
+        let pageSize = 500
+        let maximumItems = 20_000
+        var items: [MediaItem] = []
+        var startIndex = 0
+        var pageCount = 0
+
+        while items.count < maximumItems, pageCount < maximumItems / pageSize {
+            guard identity == client.sessionIdentity, !Task.isCancelled else { return nil }
+            pageCount += 1
+            guard let page = try? await client.items(
+                includeTypes: [.movie, .series],
+                startIndex: startIndex,
+                limit: pageSize,
+                fields: "ProviderIds,Overview,Genres,PrimaryImageAspectRatio"
+            ) else { return nil }
+
+            guard identity == client.sessionIdentity, !Task.isCancelled else { return nil }
+            let fetched = page.items.count
+            guard fetched > 0 else { break }
+            items.append(contentsOf: page.items.prefix(maximumItems - items.count))
+            startIndex += fetched
+
+            if let total = page.totalRecordCount, startIndex >= total { break }
+            if page.totalRecordCount == nil, fetched < pageSize { break }
+        }
+        return items
+    }
+
+    private func discoveryResults(seerr: SeerrClient, mediaType: SeerrMediaType) async -> [SeerrDiscoverResult] {
+        var candidates: [SeerrDiscoverResult] = []
+        for page in 1...3 {
+            guard !Task.isCancelled else { return [] }
+            guard let result = try? await seerr.trending(page: page, mediaType: mediaType) else { break }
+            candidates.append(contentsOf: result.results)
+            if result.results.isEmpty || page >= result.totalPages { break }
+        }
+        for page in 1...3 {
+            guard !Task.isCancelled else { return [] }
+            guard let result = try? await seerr.discover(mediaType, page: page) else { break }
+            candidates.append(contentsOf: result.results)
+            if result.results.isEmpty || page >= result.totalPages { break }
+        }
+        return candidates
+    }
+
     private func loadPluginRails(
         client: JellyfinClient,
         preferences: HomeSectionPreferenceValues
@@ -585,6 +735,7 @@ final class HomeViewModel {
     }
 
     private func clearForAccountChange() {
+        cancelDiscoveryTasks()
         loadGeneration &+= 1
         hasLoaded = false
         resume = []
@@ -601,5 +752,10 @@ final class HomeViewModel {
         curatedRails = [:]
         collections = []
         errorMessage = nil
+    }
+
+    private func cancelDiscoveryTasks() {
+        discoveryTasks.forEach { $0.cancel() }
+        discoveryTasks.removeAll()
     }
 }
