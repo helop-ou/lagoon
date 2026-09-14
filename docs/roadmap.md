@@ -40,6 +40,11 @@ not new feature requests or a live Jira status report:
 - Account/privacy cleanup, local-network permission recovery, and native
   transport device checks (HEL-141/142/143); evidence is in the
   [archive index](archive/README.md).
+- Watch Together (HEL-172) on hardware. Simulator-verified end to end against
+  fixture 12.0.0 with a scripted second member; what is owed is two real
+  devices in one group — an Apple TV and an iPhone — for the start instant,
+  drift correction over a full film, a phone that locks mid-group, and the
+  look of the Together tab and its toast on a television.
 - Jellyfin 12 deployment acceptance (HEL-138) when the private server upgrades
   from 10.11.11. The public demo's stable channel is already 12.0.0, and on
   2026-09-11 browsing, direct play and HLS on the remux rung passed there
