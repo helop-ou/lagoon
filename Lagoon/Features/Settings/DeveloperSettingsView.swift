@@ -90,7 +90,7 @@ struct DeveloperSettingsView: View {
             PlayerTransportComponentPreviewScreen()
         }
         .sheet(isPresented: $showsWatchTogetherPreview) {
-            WatchTogetherSheet(item: Self.previewMediaItem, startPositionTicks: 0)
+            watchTogetherPreview
         }
         #else
         Form {
@@ -117,7 +117,7 @@ struct DeveloperSettingsView: View {
             PlayerTransportComponentPreviewScreen()
         }
         .sheet(isPresented: $showsWatchTogetherPreview) {
-            WatchTogetherSheet(item: Self.previewMediaItem, startPositionTicks: 0)
+            watchTogetherPreview
         }
         #endif
     }
@@ -290,10 +290,19 @@ struct DeveloperSettingsView: View {
     /// `MediaItem` is decode-only by design, so the gallery builds one
     /// the way the server would. It exists to give the sheet an argument;
     /// nothing the sheet draws reads it.
-    static let previewMediaItem: MediaItem = {
+    static let previewMediaItem: MediaItem? = {
         let json = Data(#"{"Id":"developer-preview","Name":"Rick and Morty","Type":"Episode"}"#.utf8)
-        return (try? JellyfinClient.decoder.decode(MediaItem.self, from: json))!
+        return try? JellyfinClient.decoder.decode(MediaItem.self, from: json)
     }()
+
+    @ViewBuilder
+    private var watchTogetherPreview: some View {
+        if let item = Self.previewMediaItem {
+            WatchTogetherSheet(item: item, startPositionTicks: 0)
+        } else {
+            ErrorStateView(message: "The preview item could not be decoded.") {}
+        }
+    }
 
     private var previewEpisode: NextUpEpisode {
         NextUpEpisode(
