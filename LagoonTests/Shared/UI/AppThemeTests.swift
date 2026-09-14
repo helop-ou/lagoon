@@ -79,6 +79,8 @@ struct AppThemeTests {
         #expect(AppTheme.lagoon.palette.accent == .lagoonAqua)
         #expect(AppTheme.lagoon.palette.ground == .lagoonNavy)
         #expect(AppTheme.lagoon.palette.background == .black)
+        #expect(AppTheme.lagoon.palette.surface == nil)
+        #expect(AppTheme.babyPink.palette.surface != nil)
         #expect(AppTheme.lagoon.palette.controlTint == nil)
         #expect(AppTheme.babyPink.palette.controlTint != nil)
         #expect(AppTheme.lagoon.palette.glow == .fallback)
