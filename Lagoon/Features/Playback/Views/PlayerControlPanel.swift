@@ -283,16 +283,31 @@ struct PlayerControlPanel: View {
 
     @ViewBuilder
     private func togetherOptions(_ together: PlayerTogetherState) -> some View {
+        #if os(tvOS)
+        Button {
+            onSetIgnoreWait?(!together.ignoresWait)
+        } label: {
+            HStack(spacing: Metrics.Space.xl) {
+                Text("Ignore Waiting")
+                Spacer(minLength: Metrics.Space.xl)
+                Image(systemName: together.ignoresWait ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .opacity(together.ignoresWait ? 1 : 0.55)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.glass)
+        .focused(focus, equals: .track(Self.togetherIgnoreWaitID))
+        .accessibilityValue(together.ignoresWait ? "On" : "Off")
+        .accessibilityIdentifier("player.together.ignoreWait")
+        #else
         let ignoresWait = Binding(
             get: { together.ignoresWait },
             set: { onSetIgnoreWait?($0) }
         )
-
         Toggle("Ignore Waiting", isOn: ignoresWait)
-            #if os(tvOS)
-            .focused(focus, equals: .track(Self.togetherIgnoreWaitID))
-            #endif
             .accessibilityIdentifier("player.together.ignoreWait")
+        #endif
 
         Text("On, this device is started with the others and no longer holds them up when it falls behind.")
             .font(.caption)
