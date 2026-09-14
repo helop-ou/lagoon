@@ -154,6 +154,38 @@ not an item is downloaded, a stop report the server refuses or cannot reach
 is queued as a `PendingPlaybackReport` and flushed on reconnect, so a
 session's true stopping point is never silently lost to a bad connection.
 
+### Group transport hooks (HEL-172)
+
+Jellyfin SyncPlay makes the server the transport authority, and three engine
+hooks exist for it. `clockPosition` is the media clock as the synchronizer
+reports it, never the optimistic `timePosition` a seek moves before anything
+is demuxed; while the clock is stopped for a load or a seek it answers with
+the position being headed for, which is what a Buffering report carries.
+`play(atHostTime:)` starts so that the current position is presented at one
+named instant on `CMClockGetHostTimeClock()` — a group start is an instant
+every member agreed on after time sync, not "now, roughly" — and a request
+that arrives while the engine is still buffering is handed to `beginPlayback`
+in place of its own near-future anchor. `setCorrectionRate(_:)` nudges a
+member that has drifted without touching `rate`, which is the viewer's own
+choice and what the speed row and Now Playing publish;
+`PlaybackRatePolicy.effectiveRate` folds the two together and is what every
+media-time cushion, watermark and synchronizer rate is computed from.
+`onSeekReady` fires from `beginPlayback` on every open *and* every seek — the
+signal Ready is reported on, unlike the one-shot `onPlaybackStarted`.
+
+The controller is the boundary: a group driver never holds the engine. It
+starts playback through `start(startPosition:startPaused:)` (the server's
+position outranks every resume rule, and a member can sit primed and paused
+until the group starts), drives `playGroup(atHostTime:)`, `pauseGroup()`,
+`seekGroup(to:)` and `setCorrectionRate(_:)`, reads `clockPosition` and
+`isPrimedAndPaused`, and hears about readiness and dismissal through
+`onEngineReady` and `onClosed`. Keeping the group transport separate from the
+viewer-facing controls is deliberate: the driver will later intercept the
+viewer's Play and Pause and turn them into group requests, and needs a way
+back down to the engine that does not recurse into itself. Because the wiring
+lives in `start`, an episode handoff or a delivery fallback carries it onto
+the successor engine for free.
+
 ### The player's Observation scope (HEL-150)
 
 The player root must not read `timePosition`, current subtitle values, or
