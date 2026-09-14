@@ -297,6 +297,12 @@ struct CustomPlayerView<Surface: View>: View {
                                     .accessibilityIdentifier("player.together.waiting")
                             }
                         }
+                        // Waiting keeps the engine paused, which keeps the
+                        // touch grammar's 88pt play button up for as long
+                        // as the line is on screen — and it sits in this
+                        // exact spot. Drop the pair into the empty band
+                        // below it rather than behind it (HEL-172).
+                        .offset(y: waitingDrop)
                         .transition(.opacity)
                     }
                 }
@@ -735,6 +741,18 @@ struct CustomPlayerView<Surface: View>: View {
     // MARK: - Scrub mode (HEL-39 slice 2)
 
     private var isScrubbing: Bool { scrubTarget != nil }
+
+    /// How far the buffering spinner steps down to clear the centre
+    /// transport cluster while it carries the group's waiting line. Only
+    /// touch has a cluster in the middle of the screen; the TV's transport
+    /// is a bottom bar, so nothing moves there (HEL-172).
+    private var waitingDrop: CGFloat {
+        #if os(iOS)
+        isWaitingForGroup ? Metrics.Space.section * 2 : 0
+        #else
+        0
+        #endif
+    }
 
     private var transportVisible: Bool {
         (controlsVisible || voiceOverEnabled || engine.isPaused || isScrubbing) && !panelOpen
