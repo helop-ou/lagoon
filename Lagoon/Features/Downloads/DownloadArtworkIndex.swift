@@ -7,7 +7,7 @@ import os
 /// the active manifest changes; `ImageCache` reads it off the main actor,
 /// before ever touching the network, so a downloaded title's poster and
 /// backdrop still show up with the account offline.
-final class DownloadArtworkIndex: @unchecked Sendable {
+nonisolated final class DownloadArtworkIndex: Sendable {
     static let shared = DownloadArtworkIndex()
 
     private let lock = OSAllocatedUnfairLock<[String: URL]>(initialState: [:])
@@ -15,8 +15,8 @@ final class DownloadArtworkIndex: @unchecked Sendable {
     private init() {}
 
     /// Replaces the whole index with the active account's artwork. Called
-    /// after every manifest save, so a rebuild is always cheap: at most a
-    /// couple of files per entry.
+    /// when account membership or entry artwork changes; progress-only
+    /// saves leave the index alone.
     func rebuild(entries: [DownloadEntry], directory: URL) {
         var map: [String: URL] = [:]
         for entry in entries {
@@ -24,7 +24,10 @@ final class DownloadArtworkIndex: @unchecked Sendable {
                 map[key.lowercased()] = directory.appending(path: fileName)
             }
         }
-        lock.withLock { $0 = map }
+        // Publish a value snapshot; the only shared mutable state is held
+        // inside OSAllocatedUnfairLock, which provides its Sendable contract.
+        let snapshot = map
+        lock.withLock { $0 = snapshot }
     }
 
     /// Signed out, or switching accounts before the new manifest loads.
