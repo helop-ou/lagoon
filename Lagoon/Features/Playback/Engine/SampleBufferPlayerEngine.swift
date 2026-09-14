@@ -314,6 +314,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// server asks each member to confirm it has arrived at the position
     /// before the group is started again (HEL-172).
     @ObservationIgnored var onSeekReady: (() -> Void)?
+    /// Buffering began or ended: a stall, a seek, the first prime. The one
+    /// signal a SyncPlay group's Buffering and Ready reports are made of —
+    /// the group waits for its slowest member, so it has to hear about a
+    /// stall this engine recovers from on its own (HEL-172). Fired only on
+    /// a change, from `setBuffering`.
+    @ObservationIgnored var onBufferingChanged: ((Bool) -> Void)?
     /// A direct-file cache is an optimization. If its range transport cannot
     /// open this server resource, the engine retries immediately through
     /// libavformat's native HTTP path and asks the controller to retire the
@@ -637,6 +643,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             atHostTime: hostTime
         )
         rearmBench(at: timePosition)
+    }
+
+    /// The one writer of `isBuffering`, so the transition can be announced
+    /// (HEL-172). Every caller already only sets it when it means it; the
+    /// guard is for the observer, not for the flag.
+    private func setBuffering(_ buffering: Bool) {
+        guard isBuffering != buffering else { return }
+        isBuffering = buffering
+        onBufferingChanged?(buffering)
     }
 
     /// Speed up or slow down a group member that has drifted, without
@@ -1142,7 +1157,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         onTimeAdvanced?(clamped, duration)
         didFinish = false
         removeFinishObserver()
-        isBuffering = true
+        setBuffering(true)
         bufferingTargetSeconds = clamped
         // The instant a group agreed to start from is about to be wrong;
         // the driver schedules a new one after this seek reports Ready.
@@ -1236,7 +1251,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             firstVideoPTS: firstVideoPTS
         )
         timePosition = time.seconds
-        isBuffering = false
+        setBuffering(false)
         bufferingTargetSeconds = nil
         let scheduledStart = scheduledStartHostTime
         scheduledStartHostTime = nil
@@ -1473,7 +1488,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         if replacement.staysPaused {
             pause()
         }
-        isBuffering = true
+        setBuffering(true)
         let recoveryPosition = timePosition
         let replacementID = UUID()
         audioRendererReplacementID = replacementID
@@ -1925,7 +1940,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// rate 0, so recovery needs its own loop.)
     private func beginStallRecovery(cause: PlaybackStarvation) {
         clearPendingStallConfirmation()
-        isBuffering = true
+        setBuffering(true)
         synchronizer.rate = 0
         stallCount += 1
         if cause == .audio {
@@ -1978,7 +1993,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 case .wait:
                     continue
                 case .resume:
-                    self.isBuffering = false
+                    self.setBuffering(false)
                     self.recordStallEnd(outcome: "recovered", since: recoveryStarted, cause: cause)
                     if self.stallSignpostActive {
                         self.stallSignpostActive = false
