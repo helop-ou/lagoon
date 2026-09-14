@@ -269,6 +269,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     @ObservationIgnored var onFinished: (() -> Void)?
+    /// The clock moved: `timePosition` and `duration`, on the main actor at
+    /// the same 0.1 s cadence as the published position. The controller's
+    /// timed decisions hang off it rather than off a view body, so they
+    /// run with the screen locked (HEL-176).
+    @ObservationIgnored var onTimeAdvanced: ((Double, Double) -> Void)?
     /// Playback could not continue. The failure carries whether a different
     /// delivery of the same media might work, so the controller can drop to
     /// the next rung of the fallback ladder instead of stranding the viewer
@@ -1039,8 +1044,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let clamped = max(0, duration > 0 ? min(target, duration - 1) : target)
         Diagnostics.record(.playbackSeek, ["position": .double(clamped.rounded(toPlaces: 1))])
         // Optimistic: the playhead moves the instant the seek is asked
-        // for (HEL-39) — the engine will resume from exactly here.
+        // for (HEL-39) — the engine will resume from exactly here. The
+        // timed decisions hear about it too, so a paused scrub into an
+        // intro shows the pill (HEL-176).
         timePosition = clamped
+        onTimeAdvanced?(clamped, duration)
         didFinish = false
         removeFinishObserver()
         isBuffering = true
@@ -1082,6 +1090,44 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         currentSubtitleText = nil
         currentSubtitleCues = []
         currentSubtitleImages = []
+    }
+
+    /// Audio-only playback for a phone in the background (HEL-176). While
+    /// suspended the demuxer discards video, nothing is decoded, and the
+    /// renderer holds no pictures; audio, the clock, subtitles and the
+    /// finish boundary carry on. Resuming seeks to the current position so
+    /// the picture restarts on a keyframe with a fresh decoder session,
+    /// which is what a hardware decoder invalidated by the background
+    /// needs anyway.
+    func setVideoOutputSuspended(_ suspended: Bool) {
+        let changed = shared.withLock { state -> Bool in
+            guard state.videoOutputSuspended != suspended else { return false }
+            state.videoOutputSuspended = suspended
+            return true
+        }
+        guard changed, !shutdownRequested else { return }
+        if suspended {
+            pumpQueue.sync { self.flushVideoPath() }
+        } else if !didFinish, duration <= 0 || timePosition < duration - 1 {
+            // Inside the last second `seek` would clamp backwards; the
+            // finish boundary is about to fire anyway.
+            seek(to: timePosition)
+        }
+    }
+
+    /// The video half of `flushRenderersAndQueues`: drop what is queued and
+    /// in the renderer, leave audio untouched. A queue the demuxer already
+    /// closed stays closed, or the loop would read the end of file twice.
+    nonisolated private func flushVideoPath() {
+        let wasFinished = videoQueue.isFinished
+        videoRenderer?.flush()
+        videoIntake.removeAll()
+        videoQueue.reset()
+        if wasFinished { videoQueue.markFinished() }
+        shared.withLock {
+            $0.firstEnqueuedVideoPTS = nil
+            $0.videoSamplesSinceFlush = 0
+        }
     }
 
     /// Demux primed after open/seek — start (or reposition, if paused) at
@@ -1464,10 +1510,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     #endif
 
     private func recoverVideoRendererIfRequired(_ renderer: AVSampleBufferVideoRenderer) {
+        // A suspended picture is flushed on resume anyway (HEL-176).
         guard !shutdownRequested,
               renderer === videoRenderer,
               renderer.requiresFlushToResumeDecoding,
-              !rendererRecoveryInProgress else { return }
+              !rendererRecoveryInProgress,
+              !shared.withLock({ $0.videoOutputSuspended }) else { return }
         rendererRecoveryInProgress = true
         let recoveryPosition = timePosition
         os_signpost(
@@ -1493,7 +1541,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         _ renderer: AVSampleBufferVideoRenderer,
         notification: Notification
     ) {
-        guard !shutdownRequested, renderer === videoRenderer else { return }
+        guard !shutdownRequested, renderer === videoRenderer,
+              !shared.withLock({ $0.videoOutputSuspended }) else { return }
         if renderer.requiresFlushToResumeDecoding {
             recoverVideoRendererIfRequired(renderer)
             return
@@ -1588,6 +1637,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // glide toward (HEL-39).
         if abs(seconds - timePosition) >= 0.1 {
             timePosition = seconds
+            onTimeAdvanced?(seconds, duration)
         }
         refreshSubtitles(at: seconds)
         // M6 stall detection: the clock has caught up to everything the
@@ -1800,7 +1850,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 let decision = StallRecoveryPolicy.decision(
                     elapsed: ContinuousClock.now - recoveryStarted,
                     videoQueueCount: self.videoQueue.count,
-                    videoQueueFinished: self.videoQueue.isFinished,
+                    videoQueueFinished: self.videoQueue.isFinished
+                        || self.shared.withLock { $0.videoOutputSuspended },
                     playbackRate: self.rate,
                     audioRequired: self.buffersOnAudioStarvation
                         && self.hasAudioTrack
@@ -1933,7 +1984,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             duration: duration,
             rate: rate,
             videoQueueCount: videoQueue.count,
-            videoQueueFinished: videoQueue.isFinished,
+            videoQueueFinished: videoQueue.isFinished || shared.withLock { $0.videoOutputSuspended },
             videoBufferedTo: shared.withLock { $0.videoBufferedTo },
             hasAudio: hasAudioTrack,
             audioQueueFinished: audioQueue.isFinished,
@@ -2226,6 +2277,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // against the shared desired stream each pass so main-actor
         // subtitle switches land without a queue hop.
         var appliedSubtitleStreamIndex: Int32 = -1
+        // Same for the background's audio-only mode (HEL-176): the video
+        // stream is discarded at the demuxer and whatever the decoders
+        // still hold is dropped; the seek that resumes it restores both.
+        var appliedVideoOutputSuspended = false
         // Opening at zero is already positioned correctly. Every later
         // request—including a seek back to exactly zero—must reposition so
         // the first compressed sample after Apple's renderer flush is a
@@ -2237,6 +2292,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             if desiredSubtitle != appliedSubtitleStreamIndex {
                 demuxer.selectSubtitle(streamIndex: desiredSubtitle >= 0 ? desiredSubtitle : nil)
                 appliedSubtitleStreamIndex = desiredSubtitle
+            }
+            let desiredVideoSuspended = shared.withLock { $0.videoOutputSuspended }
+            if desiredVideoSuspended != appliedVideoOutputSuspended {
+                demuxer.setVideoDiscarded(desiredVideoSuspended)
+                if desiredVideoSuspended {
+                    // The software stage gives its pictures back now; a
+                    // VideoToolbox session is left alone, because making a
+                    // new one in the background can be refused, and the
+                    // resume seek's reset makes one anyway.
+                    softwareDecodeStage?.reset()
+                    pumpQueue.sync { self.flushVideoPath() }
+                }
+                appliedVideoOutputSuspended = desiredVideoSuspended
             }
             if let target = shared.withLock({ state -> Double? in
                 defer {
@@ -2697,8 +2765,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             }
             return delivered + self.audioQueue.bufferedDuration(after: target)
         }
-        while (videoQueue.count < minimumVideoReserve || (hasAudio && audioAhead() < minimumAudioReserve)),
-              !videoQueue.isFinished,
+        // With video suspended the picture is not waited for, and the end
+        // of input is the audio queue's to declare (HEL-176).
+        let videoSuspended = shared.withLock { $0.videoOutputSuspended }
+        let inputOpen = { videoSuspended ? !self.audioQueue.isFinished : !self.videoQueue.isFinished }
+        while ((!videoSuspended && videoQueue.count < minimumVideoReserve)
+                || (hasAudio && audioAhead() < minimumAudioReserve)),
+              inputOpen(),
               !shared.withLock({ $0.cancelled }) {
             if shared.withLock({ $0.pendingSeekSeconds != nil }) { return }
             let pendingDecode = softwareDecodeStage?.pendingCount ?? 0
@@ -3297,6 +3370,10 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var externalSubtitles: [ExternalSubtitleTrack] = []
         /// Highest video pts the demuxer has delivered (M6 stall detection).
         var videoBufferedTo: Double = 0
+        /// Audio-only playback while the app is in the background
+        /// (HEL-176). The demux loop discards video at the demuxer, and
+        /// every decision that would wait for video treats it as finished.
+        var videoOutputSuspended = false
         /// Whether the stream got a playback cache. Read on the main actor
         /// so the HUD can show which demux cushion is in force (HEL-130).
         var deliveryIsCached = true
