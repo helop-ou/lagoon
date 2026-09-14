@@ -286,6 +286,7 @@ struct DeveloperSettingsView: View {
 private struct PlayerTransportComponentPreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var engine = PlayerPanelPreviewEngine()
+    @State private var automation = PlaybackAutomation()
 
     var body: some View {
         CustomPlayerView(
@@ -297,6 +298,7 @@ private struct PlayerTransportComponentPreviewScreen: View {
                 PlaybackBufferedRange(lowerFraction: 0.29, upperFraction: 0.62),
             ],
             info: previewInfo,
+            automation: automation,
             onDismiss: { dismiss() }
         ) {
             previewSurface
