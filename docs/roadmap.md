@@ -18,6 +18,9 @@ overview in the [repository README](../README.md).
    lock screen, AirPlay, and PiP captions. Watch a full captioned film on Apple
    TV from the intended TestFlight build. Simulator coverage does not replace
    those checks.
+   Include Increase Contrast and Dim Flashing Lights acceptance for the
+   custom sample-buffer player; app-level flashing-light integration and
+   system mitigation are not yet established by the current evidence.
 3. **Prepare the public candidate (HEL-143).** The single list of privacy,
    native licensing, encryption, website, review metadata, and signed-archive
    requirements is in [Release](release.md#public-release).
@@ -70,8 +73,10 @@ not new feature requests or a live Jira status report:
    on physical devices.
 
 Potential later work: a server plugin for fetch-only subtitle search without
-granting library writes. A server-wide Top 10 (HEL-121) remains dependent on an
-upstream Streamystats endpoint. A personal most-watched row was declined.
+granting library writes. HEL-121 now has an optional approximation: when Seerr
+is connected, Home intersects its trending and popular movie/show catalogues
+with the signed-in Jellyfin library to produce Top 10 rows. A server-wide
+watch-count ranking still requires an upstream statistics endpoint.
 
 Code organization work (HEL-155) has its own bounded sequence in
 [Architecture](architecture.md#refactoring-priorities): controller ownership,
