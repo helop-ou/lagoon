@@ -12,7 +12,28 @@ extension DownloadStore {
               let accountKey, let accountDirectory else {
             throw StartError.notSignedIn
         }
-        guard await canDownload(client: client) else { throw StartError.notPermitted }
+        let generation = accountGeneration
+        let preparation = UUID()
+        preparationTokens[item.id] = preparation
+        defer {
+            if preparationTokens[item.id] == preparation { preparationTokens.removeValue(forKey: item.id) }
+        }
+        // Keep credentials stable through snapshot/artwork requests even if
+        // SessionStore reconfigures its shared client during an await.
+        let client = client.sessionSnapshot()
+        func stillActive() -> Bool {
+            generation == accountGeneration
+                && self.accountKey == accountKey
+                && self.accountDirectory == accountDirectory
+        }
+        func checkPreparation() throws {
+            try Task.checkCancellation()
+            guard stillActive() else { throw StartError.accountChanged }
+            guard preparationTokens[item.id] == preparation else { throw CancellationError() }
+        }
+        let permitted = await canDownload(client: client)
+        try checkPreparation()
+        guard permitted else { throw StartError.notPermitted }
 
         let supportedVideoType = source.videoType == nil || source.videoType == "VideoFile"
         guard supportedVideoType, item.type == .movie || item.type == .episode else {
@@ -21,6 +42,11 @@ extension DownloadStore {
 
         let runTimeTicks = source.runTimeTicks ?? item.runTimeTicks
         let effectiveQuality = quality.effective(sourceSize: source.size, runTimeTicks: runTimeTicks)
+        if effectiveQuality != .original {
+            let transcodingAllowed = await client.canTranscodeForDownload()
+            try checkPreparation()
+            guard transcodingAllowed else { throw StartError.notPermitted }
+        }
         let estimatedBytes = effectiveQuality.estimatedBytes(sourceSize: source.size, runTimeTicks: runTimeTicks)
         if let estimatedBytes, let free = freeSpace(), estimatedBytes >= free {
             throw StartError.noSpace
@@ -30,26 +56,37 @@ extension DownloadStore {
             throw StartError.unsupportedItem
         }
 
-        // Cancel any task still running for this item before starting a
-        // fresh one: without this, a delete-then-restart could leave two
-        // tasks in flight for the same item, and the old one's callbacks
-        // would race the new one's (HEL-166 review finding 4). The
-        // awaitable `session.allTasks` makes this deterministic in a way
-        // the callback-based `getAllTasks` cannot: the cancel is known to
-        // have happened before the new task is created.
-        await cancelLiveTask(itemID: item.id)
-        delete(item.id)
+        // A snapshot is required for local playback. Refuse a download
+        // whose metadata cannot be fetched/decoded rather than reporting a
+        // finished file that still needs the server to become playable.
+        let snapshotData = try await client.itemData(id: item.id)
+        try checkPreparation()
+        let snapshot = try JellyfinClient.decoder.decode(MediaItem.self, from: snapshotData)
+        guard snapshot.id == item.id,
+              snapshot.mediaSources?.contains(where: { $0.id == source.id }) == true else {
+            throw StartError.unsupportedItem
+        }
+
+        let tasks = await session.allTasks
+        try checkPreparation()
+        for task in tasks {
+            guard let info = DownloadTaskDescription.parse(task.taskDescription),
+                  info.accountKey == accountKey, info.itemID == item.id else { continue }
+            task.cancel()
+        }
+        removeEntry(item.id)
 
         let ext = effectiveQuality == .original
             ? (source.container?.split(separator: ",").first.map(String.init) ?? "bin")
             : "ts"
         let fileName = "\(item.id).\(ext)"
-
-        if let data = try? await client.itemData(id: item.id) {
-            try? data.write(to: accountDirectory.appending(path: "\(item.id).item.json"), options: .atomic)
-        }
+        try snapshotData.write(to: accountDirectory.appending(path: "\(item.id).item.json"), options: .atomic)
         snapshotCache.removeValue(forKey: item.id)
-        let artworkFiles = await saveArtwork(for: item, client: client, authorization: authorization, directory: accountDirectory)
+        let artworkFiles = try await saveArtwork(
+            for: item, client: client, authorization: authorization, directory: accountDirectory,
+            checkPreparation: checkPreparation
+        )
+        try checkPreparation()
 
         let entry = DownloadEntry(
             itemID: item.id, type: item.type, title: item.name ?? item.id,
@@ -92,15 +129,6 @@ extension DownloadStore {
         )
     }
 
-    /// Cancels any task the session still has for an item, awaiting the
-    /// cancel so a caller can be sure it happened before starting a new one
-    /// (HEL-166 review finding 4).
-    private func cancelLiveTask(itemID: String) async {
-        let tasks = await session.allTasks
-        guard let task = tasks.first(where: { DownloadTaskDescription.parse($0.taskDescription)?.itemID == itemID }) else { return }
-        task.cancel()
-    }
-
     /// Cancels the transfer. An original download's server response
     /// supports byte-range requests, so the system's resume data lets
     /// `resume` pick up where it left off; a transcode is a progressive
@@ -109,32 +137,48 @@ extension DownloadStore {
     /// replayed into the same file, and `resume` always restarts a
     /// transcode from the beginning (HEL-166 review finding 3).
     func pause(_ itemID: String) {
-        guard let entry = manifest.entry(for: itemID), let taskIdentifier = entry.taskIdentifier else { return }
+        guard let entry = manifest.entry(for: itemID), let taskIdentifier = entry.taskIdentifier,
+              let accountKey, let attemptToken = entry.attemptToken else { return }
         let resumable = entry.quality == .original
+        // Persist the intent before waiting for URLSession's cancellation
+        // data. A background suspension must never lose the pause itself.
+        manifest.markPaused(itemID, resumeDataFile: entry.resumeDataFile)
+        save()
         session.getAllTasks { tasks in
             guard let task = tasks.first(where: { $0.taskIdentifier == taskIdentifier }) as? URLSessionDownloadTask else { return }
             if resumable {
                 task.cancel { data in
                     Task { @MainActor in
-                        DownloadStore.shared.applyPause(itemID: itemID, resumeData: data)
+                        DownloadStore.shared.applyPause(itemID: itemID, accountKey: accountKey, attemptToken: attemptToken, resumeData: data)
                     }
                 }
             } else {
                 task.cancel()
                 Task { @MainActor in
-                    DownloadStore.shared.applyPause(itemID: itemID, resumeData: nil)
+                    DownloadStore.shared.applyPause(itemID: itemID, accountKey: accountKey, attemptToken: attemptToken, resumeData: nil)
                 }
             }
         }
     }
 
-    private func applyPause(itemID: String, resumeData: Data?) {
-        if resumeData == nil, let existing = manifest.entry(for: itemID)?.resumeDataFile {
-            try? FileManager.default.removeItem(at: (accountDirectory ?? baseDirectory).appending(path: existing))
+    private func applyPause(itemID: String, accountKey: String, attemptToken: String, resumeData: Data?) {
+        func apply(to manifest: inout DownloadManifest, directory: URL?) {
+            guard let entry = manifest.entry(for: itemID),
+                  entry.attemptToken == attemptToken, !entry.isComplete else { return }
+            if resumeData == nil, let existing = entry.resumeDataFile, let directory {
+                try? FileManager.default.removeItem(at: directory.appending(path: existing))
+            }
+            let resumeFile = Self.storeResumeData(resumeData, itemID: itemID, directory: directory)
+            manifest.markPaused(itemID, resumeDataFile: resumeFile)
         }
-        let resumeFile = Self.storeResumeData(resumeData, itemID: itemID, directory: accountDirectory)
-        manifest.markPaused(itemID, resumeDataFile: resumeFile)
-        save()
+        if self.accountKey == accountKey {
+            apply(to: &manifest, directory: accountDirectory)
+            save()
+        } else {
+            Self.withStoredManifest(atAccountKey: accountKey) { manifest, directory in
+                apply(to: &manifest, directory: directory)
+            }
+        }
     }
 
     /// Restarts a paused or failed download: from resume data when there is
@@ -144,7 +188,9 @@ extension DownloadStore {
     /// attempt is dropped rather than applied to this one (HEL-166 review
     /// finding 4).
     func resume(_ itemID: String, client: JellyfinClient) {
-        guard let entry = manifest.entry(for: itemID), let accountKey else { return }
+        guard let entry = manifest.entry(for: itemID), let accountKey,
+              entry.state == .paused || entry.state == .failed,
+              preparationTokens[itemID] == nil else { return }
         guard let authorization = client.mediaRequestAuthorization() else {
             manifest.markFailed(itemID, reason: "Sign in again to resume this download", resumeDataFile: entry.resumeDataFile)
             save()
@@ -185,6 +231,11 @@ extension DownloadStore {
     /// Artwork is shared by name (two episodes of one series save the same
     /// series poster), so a file another entry still lists stays.
     func delete(_ itemID: String) {
+        preparationTokens.removeValue(forKey: itemID)
+        removeEntry(itemID)
+    }
+
+    private func removeEntry(_ itemID: String) {
         guard let entry = manifest.entry(for: itemID) else { return }
         if let taskIdentifier = entry.taskIdentifier {
             session.getAllTasks { tasks in
@@ -212,6 +263,7 @@ extension DownloadStore {
     }
 
     func deleteAll() {
+        preparationTokens.removeAll()
         for entry in manifest.entries {
             delete(entry.itemID)
         }
