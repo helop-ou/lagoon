@@ -10,6 +10,7 @@ private enum MainTabSelection: Hashable {
 
 struct MainTabView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(SyncPlayStore.self) private var syncPlay
     @Environment(DeepLinkRouter.self) private var deepLinks
     @Environment(ServerSyncState.self) private var serverSync
     @State private var libraries: [LibraryTab] = []
@@ -96,10 +97,26 @@ struct MainTabView: View {
             await launchBenchItemIfRequested()
             #if DEBUG
             await openDetailIfRequested()
+            await joinSyncPlayGroupIfRequested()
             #if os(iOS)
             await downloadItemIfRequested()
             #endif
             #endif
+        }
+        // A SyncPlay group decides what plays for everyone in it, and it
+        // can decide while nothing is on screen. Presented from here for
+        // the same reason a Top Shelf selection is: the player belongs to
+        // the tab root, not to whichever screen happens to be showing
+        // (HEL-172).
+        .onChange(of: syncPlay.pendingPlayRequest?.id) { _, request in
+            guard request != nil, let play = syncPlay.pendingPlayRequest else { return }
+            syncPlay.pendingPlayRequest = nil
+            playerItem = PlayerItem(
+                media: play.media,
+                startPosition: play.startSeconds,
+                startPaused: true,
+                groupPlaylistItemId: play.playlistItemId
+            )
         }
         // Presented from the TabView rather than a screen, so a Top Shelf
         // selection resumes playback whichever tab happens to be showing.
@@ -354,6 +371,29 @@ struct MainTabView: View {
         guard let itemID = UserDefaults.standard.string(forKey: "debug.openDetailItemID"), !itemID.isEmpty,
               let item = try? await session.client.item(id: itemID) else { return }
         homeNavigationPath.append(ContentNavigationRoute.item(item))
+    }
+
+    /// Hands-off SyncPlay runs: `-debug.syncPlayJoinGroup <name>` joins the
+    /// group with that name once the regression bootstrap has signed in,
+    /// and lets the group's queue drive playback from there (HEL-172). The
+    /// group is usually created by the other member a moment later, so the
+    /// list is polled rather than read once.
+    private func joinSyncPlayGroupIfRequested() async {
+        guard let name = UserDefaults.standard.string(forKey: "debug.syncPlayJoinGroup")?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return }
+        let deadline = ContinuousClock.now + .seconds(30)
+        while ContinuousClock.now < deadline {
+            let groups = await syncPlay.refreshGroups()
+            if let group = groups.first(where: {
+                $0.groupName.compare(name, options: [.caseInsensitive]) == .orderedSame
+            }) {
+                print("SyncPlayJoin joining \"\(name)\"")
+                await syncPlay.join(group)
+                return
+            }
+            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+        }
+        print("SyncPlayJoin no group named \"\(name)\" appeared")
     }
 
     #if os(iOS)
