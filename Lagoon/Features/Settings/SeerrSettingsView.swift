@@ -4,9 +4,9 @@ struct SeerrSettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
 
-    /// TMDB's attribution, required by its API terms: Discover's artwork and
-    /// title logos are TMDB's, reached through Seerr and directly (HEL-174).
-    static let serverFooter: LocalizedStringKey = "Seerr and Jellyseerr instances using the standard /api/v1 API are supported. Artwork and title logos come from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB."
+    /// TMDB's attribution, required by its API terms: Discover's artwork is
+    /// relayed by Seerr.
+    static let serverFooter: LocalizedStringKey = "Seerr and Jellyseerr instances using the standard /api/v1 API are supported. Artwork comes from TMDB through Seerr. This product uses the TMDB API but is not endorsed or certified by TMDB."
 
     @State private var serverAddress = ""
     @State private var username = ""
