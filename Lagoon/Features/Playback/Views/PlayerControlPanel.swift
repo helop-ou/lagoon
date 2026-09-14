@@ -8,6 +8,7 @@ enum PlayerPanelTab: CaseIterable, Hashable {
     case video
     case audio
     case subtitles
+    case together
 
     var title: String {
         switch self {
@@ -15,8 +16,34 @@ enum PlayerPanelTab: CaseIterable, Hashable {
         case .video: String(localized: "Video")
         case .audio: String(localized: "Audio")
         case .subtitles: String(localized: "Subtitles")
+        case .together: String(localized: "Together")
         }
     }
+
+    /// The tabs actually on offer. Together exists only while a group
+    /// does, and every place that walks the tabs — the strip, the tvOS
+    /// left/right grammar — must walk *this* rather than `allCases`, or
+    /// arrowing right lands on a tab that is not drawn (HEL-172).
+    static func offered(inGroup: Bool) -> [PlayerPanelTab] {
+        inGroup ? allCases : allCases.filter { $0 != .together }
+    }
+}
+
+/// What the Together tab draws (HEL-172).
+///
+/// A value rather than the store: the panel host is `Equatable` so the
+/// playback clock cannot walk its tabs and track rows, and that boundary
+/// only works if everything it shows can be compared.
+nonisolated struct PlayerTogetherState: Equatable, Sendable {
+    let groupName: String
+    let participants: [String]
+    let state: SyncPlayGroupState
+    /// This member has taken itself out of the group's readiness
+    /// accounting: it is started with everyone else and no longer holds
+    /// them up when it is behind.
+    let ignoresWait: Bool
+
+    var stateTitle: String { SyncPlayStateCopy.title(for: state) }
 }
 
 /// The panel keeps using the live player's focus namespace so opening and
@@ -27,7 +54,8 @@ enum PlayerControlFocus: Hashable {
     case track(String)
 }
 
-/// The real Info · Video · Audio · Subtitles panel used during playback.
+/// The real Info · Video · Audio · Subtitles panel used during playback,
+/// with a fifth Together tab while a Watch Together group owns the session.
 /// Values and actions are injected so Debug settings can exercise the same
 /// focusable controls with representative data and harmless local state.
 struct PlayerControlPanel: View {
@@ -45,12 +73,18 @@ struct PlayerControlPanel: View {
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
+    /// Nil outside a group, which is also what hides the Together tab.
+    var together: PlayerTogetherState? = nil
+    var onLeaveGroup: (() -> Void)? = nil
+    var onSetIgnoreWait: ((Bool) -> Void)? = nil
     let onSelectAudioTrack: (Int?) -> Void
     let onSelectSubtitleTrack: (Int?) -> Void
     let onSetAudioDelay: (Double) -> Void
     let onSetPlaybackRate: (Double) -> Void
     var onDismiss: (() -> Void)? = nil
 
+    private static var togetherIgnoreWaitID: String { "together-ignore-wait" }
+    private static var togetherLeaveID: String { "together-leave" }
     private static var subtitleOffID: String { "subtitle-off" }
     private static var subtitleSearchID: String { "subtitle-search" }
     private static var subtitleSearchCloseID: String { "subtitle-search-close" }
@@ -163,7 +197,7 @@ struct PlayerControlPanel: View {
         }
         #else
         HStack(spacing: Metrics.Space.m) {
-            ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
+            ForEach(tabs, id: \.self) { tab in
                 Button {
                     selectedTab = tab
                 } label: {
@@ -181,9 +215,11 @@ struct PlayerControlPanel: View {
         #endif
     }
 
+    private var tabs: [PlayerPanelTab] { PlayerPanelTab.offered(inGroup: together != nil) }
+
     private var tabPicker: some View {
         Picker("Options", selection: $selectedTab) {
-            ForEach(PlayerPanelTab.allCases, id: \.self) { tab in
+            ForEach(tabs, id: \.self) { tab in
                 Text(tab.title).tag(tab)
                     .accessibilityIdentifier("player.tab.\(String(describing: tab))")
             }
@@ -198,7 +234,73 @@ struct PlayerControlPanel: View {
         case .video: videoCard
         case .audio: audioCard
         case .subtitles: subtitleCard
+        case .together: togetherCard
         }
+    }
+
+    /// Who is in the room, what the room is doing, and the two decisions
+    /// that belong to this member alone: whether to hold everyone up, and
+    /// whether to stay (HEL-172). Everything about *playback* is the
+    /// group's and is not offered here.
+    @ViewBuilder
+    private var togetherCard: some View {
+        if let together {
+            VStack(alignment: .leading, spacing: Metrics.Space.l) {
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                    Text(together.groupName)
+                        .font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(together.stateTitle)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("player.together.group")
+
+                cardHeader("In the Group")
+                ForEach(together.participants, id: \.self) { participant in
+                    Label(participant, systemImage: "person.fill")
+                        .font(.callout)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                togetherOptions(together)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func togetherOptions(_ together: PlayerTogetherState) -> some View {
+        let ignoresWait = Binding(
+            get: { together.ignoresWait },
+            set: { onSetIgnoreWait?($0) }
+        )
+
+        Toggle("Ignore Waiting", isOn: ignoresWait)
+            #if os(tvOS)
+            .focused(focus, equals: .track(Self.togetherIgnoreWaitID))
+            #endif
+            .accessibilityIdentifier("player.together.ignoreWait")
+
+        Text("On, this device is started with the others and no longer holds them up when it falls behind.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        Button {
+            onLeaveGroup?()
+        } label: {
+            Label("Leave Group", systemImage: "rectangle.portrait.and.arrow.right")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #if os(tvOS)
+        .focused(focus, equals: .track(Self.togetherLeaveID))
+        #else
+        // Several controls share this Form row; an automatic button would
+        // also fire its neighbour.
+        .buttonStyle(.borderless)
+        #endif
+        .accessibilityIdentifier("player.together.leave")
     }
 
     private var tabCard: some View {
@@ -903,6 +1005,9 @@ struct PlayerControlPanelHost: View, Equatable {
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
+    var together: PlayerTogetherState? = nil
+    var onLeaveGroup: (() -> Void)? = nil
+    var onSetIgnoreWait: ((Bool) -> Void)? = nil
     var onDismiss: (() -> Void)? = nil
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -911,6 +1016,10 @@ struct PlayerControlPanelHost: View, Equatable {
             && lhs.subtitleSearch === rhs.subtitleSearch
             && lhs.isPictureInPicturePossible == rhs.isPictureInPicturePossible
             && lhs.isPictureInPictureActive == rhs.isPictureInPictureActive
+            // Somebody joining or leaving has to reach the Together tab,
+            // so the group's state is part of this boundary rather than
+            // something it filters out.
+            && lhs.together == rhs.together
     }
 
     var body: some View {
@@ -928,6 +1037,9 @@ struct PlayerControlPanelHost: View, Equatable {
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
             onTogglePictureInPicture: onTogglePictureInPicture,
+            together: together,
+            onLeaveGroup: onLeaveGroup,
+            onSetIgnoreWait: onSetIgnoreWait,
             onSelectAudioTrack: engine.selectAudioTrack,
             onSelectSubtitleTrack: { id in
                 subtitleSearch?.cancelDownload()
