@@ -98,6 +98,9 @@ struct CustomPlayerView<Surface: View>: View {
     var bufferedRanges: [PlaybackBufferedRange] = []
     var playheadPrefetchCount = 0
     let info: PlayerItemInfo
+    /// Skip and Up Next, decided off the engine's clock by the controller
+    /// (HEL-176); the overlays draw it and Select/Menu act on it.
+    let automation: PlaybackAutomation
     let onDismiss: () -> Void
     /// Lets the host react to the panel opening (the debug HUD hides so
     /// it can't sit on top of the track card).
@@ -108,11 +111,6 @@ struct CustomPlayerView<Surface: View>: View {
     /// The episode queued behind this one (HEL-66). Nil for movies, at the
     /// end of a series, and until the lookup lands.
     var nextUp: NextUpEpisode? = nil
-    var onPlayNext: (() -> Void)? = nil
-    /// Back during the countdown. The host has to hear about it too: the
-    /// file still has its last seconds to run, and whoever handles the end
-    /// of it must not autoplay over a "no".
-    var onCancelNextUp: (() -> Void)? = nil
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
@@ -153,14 +151,6 @@ struct CustomPlayerView<Surface: View>: View {
     /// Whether the last scrub input was a chapter hop rather than a step —
     /// they get different self-commit windows (see the task below).
     @State private var scrubHopped = false
-    /// Segments already acted on or waved away, so a committed skip (or a
-    /// "no thanks") doesn't re-arm the moment the playhead lands.
-    @State private var handledSegmentIDs: Set<String> = []
-    @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
-    /// The Up Next card, waved away with Back — stays down for the rest of
-    /// the episode rather than re-arming on the next position tick.
-    @State private var nextUpDismissed = false
-    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     /// Only exists when the server generated trickplay tiles (slice 3).
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
@@ -290,28 +280,13 @@ struct CustomPlayerView<Surface: View>: View {
                 }
                 .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: seekFeedback)
 
-                PlayerSkipOverlay(
-                    engine: engine,
-                    playbackIdentity: playbackIdentity,
-                    segments: info.segments,
-                    handledSegmentIDs: handledSegmentIDs,
-                    isSuppressed: panelOpen || isScrubbing,
-                    skipMode: skipMode,
-                    reduceMotion: reduceMotion,
-                    onSkip: skip
-                )
+                PlayerSkipOverlay(automation: automation, reduceMotion: reduceMotion, onSkip: skip)
 
                 PlayerNextUpOverlay(
-                    engine: engine,
-                    playbackIdentity: playbackIdentity,
+                    automation: automation,
                     episode: nextUp,
-                    cardStart: nextUpStart,
-                    countdownStart: nextUpCountdownStart,
-                    isSuppressed: panelOpen || isScrubbing || nextUpDismissed,
-                    autoplayMode: autoplayMode,
                     reduceMotion: reduceMotion,
-                    hint: hint,
-                    onPlayNext: { onPlayNext?() }
+                    hint: hint
                 )
 
                 PlayerTransportOverlay(
@@ -480,17 +455,14 @@ struct CustomPlayerView<Surface: View>: View {
     private func handleMenu() {
         if isScrubbing {
             cancelScrub()
-        } else if let segment = activeSegment, skipMode == .autoDelay {
+        } else if automation.dismissSkip() {
             // Back during the countdown means "no" — the one mode with a
             // pending action to call off. In `button` mode there is nothing
             // to cancel, so Menu keeps meaning "leave".
-            handledSegmentIDs.insert(segment.id)
-        } else if showsNextUp, autoplayMode == .autoDelay {
+        } else if automation.dismissNextUp() {
             // Same rule as the skip pill: Back only cancels where something
             // is pending. In `card` mode the offer sits there unanswered and
             // Menu still means "leave".
-            nextUpDismissed = true
-            onCancelNextUp?()
         } else if panelOpen,
                   selectedTab == .subtitles,
                   let subtitleSearch,
@@ -573,8 +545,8 @@ struct CustomPlayerView<Surface: View>: View {
                     bufferedRanges: bufferedRanges,
                     playheadPrefetchCount: playheadPrefetchCount,
                     handoffMilliseconds: handoffMilliseconds,
-                    nextUpCardStart: nextUpStart,
-                    isNextUpSuppressed: panelOpen || isScrubbing || nextUpDismissed,
+                    nextUpCardStart: automation.nextUpCardStart,
+                    isNextUpSuppressed: panelOpen || isScrubbing || automation.nextUpDismissed,
                     isScrubbing: isScrubbing,
                     isTransportVisible: transportVisible,
                     lastCommittedScrubTarget: lastCommittedScrubTarget,
@@ -584,6 +556,11 @@ struct CustomPlayerView<Surface: View>: View {
                     trickplay: trickplay
                 )
             )
+            // The panel and an open scrub own the screen and the remote, so
+            // neither prompt may act underneath them (HEL-63).
+            .onChange(of: panelOpen || isScrubbing, initial: true) { _, suppressed in
+                automation.isSuppressed = suppressed
+            }
         #if os(tvOS)
             .onMoveCommand { direction in
                 if panelOpen {
@@ -653,15 +630,15 @@ struct CustomPlayerView<Surface: View>: View {
                 // native tvOS grammar; otherwise it's play/pause.
                 if let target = scrubTarget {
                     commitScrub(to: target, resume: true)
-                } else if let segment = activeSegment, skipMode != .instant {
+                } else if let segment = automation.activeSegment, automation.skipMode != .instant {
                     // The button is deliberately not focusable: taking focus
                     // would move `onMoveCommand` off the surface and kill
                     // scrubbing while it is up (HEL-63). Select acts on it
                     // instead, which is also the grammar Jaagop described.
                     skip(segment)
-                } else if showsNextUp {
+                } else if automation.showsNextUp {
                     // Not focusable either, and for the same reason.
-                    onPlayNext?()
+                    automation.playNext()
                 } else {
                     engine.togglePause()
                     pokeControls()
@@ -698,10 +675,8 @@ struct CustomPlayerView<Surface: View>: View {
         scrubRunLength = 0
         scrubStepToken += 1
         scrubHopped = false
-        handledSegmentIDs.removeAll()
-        nextUpDismissed = false
-        // The skip and Up Next fills belong to their overlays now and are
-        // keyed on `playbackIdentity`, so they clear themselves here.
+        // Skip and Up Next state belongs to the controller's automation,
+        // which starts each item clean (HEL-176).
         trickplay = info.trickplay.map(TrickplayLoader.init(source:))
         reportDisplayedCaption(nil)
         #if os(tvOS)
@@ -804,78 +779,19 @@ struct CustomPlayerView<Surface: View>: View {
         scrubStepToken += 1
     }
 
-    // MARK: - Skip intro / recap (HEL-63)
+    // MARK: - Skip intro / recap (HEL-63) and Up Next (HEL-66)
 
-    private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
-
-    /// The skippable segment the playhead is inside, if any. Reached only
-    /// from remote handlers — `PlayerSkipOverlay` computes the same answer in
-    /// its own body, from the same policy, so the pill and Select cannot
-    /// disagree (HEL-150).
-    ///
-    /// Suppressed while the panel is open or a scrub is up: both own the
-    /// screen and the remote, and a button that quietly rewrites what Select
-    /// does underneath them would be a trap.
-    private var activeSegment: MediaSegment? {
-        guard !panelOpen, !isScrubbing else { return nil }
-        return SkipSegmentPolicy.activeSegment(
-            in: info.segments,
-            at: engine.timePosition,
-            handled: handledSegmentIDs
-        )
-    }
-
+    /// Select or a tap on the pill. The automation decides *whether* a
+    /// segment is active, from the same clock the pill draws, so Select and
+    /// the pill cannot disagree (HEL-150, HEL-176); this only adds the reveal.
     private func skip(_ segment: MediaSegment) {
-        // Marked before seeking: landing near the end would otherwise put
-        // the playhead back inside the segment and re-arm the whole thing.
-        // The overlay's fill clears itself when the segment goes inactive.
-        handledSegmentIDs.insert(segment.id)
-        engine.seek(to: segment.end)
+        automation.skip(segment)
         pokeControls()
-    }
-
-    // MARK: - Up Next (HEL-66)
-
-    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
-
-    /// The credits, when the server marked them. `MediaSegment.Kind.outro`
-    /// is deliberately not skippable (HEL-63) — this is what it is for.
-    private var outro: MediaSegment? {
-        info.segments.first { $0.kind == .outro }
-    }
-
-    /// Where the card is due and where its fill starts. Both are handed to
-    /// `PlayerNextUpOverlay`, which is what compares them against the moving
-    /// position; `engine.duration` is safe to read here because it changes
-    /// once per item, not once per tick (HEL-150).
-    private var nextUpStart: Double? {
-        NextUpPolicy.cardStart(
-            hasEpisode: nextUp != nil,
-            autoplayMode: autoplayMode,
-            duration: engine.duration,
-            outroStart: outro?.start
-        )
-    }
-
-    private var nextUpCountdownStart: Double? {
-        NextUpPolicy.countdownStart(
-            cardStart: nextUpStart,
-            outroStart: outro?.start,
-            duration: engine.duration
-        )
-    }
-
-    /// Reached only from remote handlers, for the same reason `activeSegment`
-    /// is. Suppressed while the panel is open or a scrub is up, exactly as
-    /// the skip pill is: both own the screen and the remote.
-    private var showsNextUp: Bool {
-        guard let nextUpStart, !nextUpDismissed, !panelOpen, !isScrubbing else { return false }
-        return engine.timePosition >= nextUpStart
     }
 
     private var hint: LocalizedStringKey {
         #if os(tvOS)
-        autoplayMode == .autoDelay ? "Select to play now · Back to stay" : "Select to play now"
+        automation.autoplayMode == .autoDelay ? "Select to play now · Back to stay" : "Select to play now"
         #else
         "Tap to play now"
         #endif
