@@ -53,8 +53,9 @@ Brand tokens are `.lagoonAqua` (`#2ED4C7`), `.lagoonShore` (`#0D4A57`), and
 `.lagoonNavy` (`#0B1D28`). Reserve them for the lockup and anything that
 must never follow a theme. Everywhere else the brand's moments read the
 current theme through `Theme` (see Themes below). `AccentColor` stays
-white; it is not a brand color. Use `.primary`, `.secondary`, `.tertiary`,
-fills, and materials for ordinary UI.
+white; a theme's `controlTint` is what colours iOS controls, never the
+asset. Use `.primary`, `.secondary`, `.tertiary`, fills, and materials for
+ordinary UI.
 
 ## Themes
 
@@ -64,15 +65,17 @@ fills, selection marks, the jellyfish and the focus halo's fallback;
 behind content; `surface` for the rows of a grouped form, one step above
 the background (nil keeps the system's row grey, which belongs on black and
 clashes on rose); `glowDepth` for the third glow colour; `controlTint`, the
-tint iOS's native controls take; `artworkTint`, blushed into every artwork
+tint iOS's native controls take, kept pale because it fills whole toggle
+tracks and not only the selected tab; `artworkTint`, blushed into every artwork
 glow and focus halo through `Theme.glow(for:)` so a hero never hides the
 theme; and `chrome`, the wash behind iOS's tab and navigation bar glass,
 applied by `themedChrome()` on each tab's root screen and every themed
 form. Keep the wash faint: at 0.7 it turned the Liquid Glass into a flat
 pane with content smearing through it, so Baby Pink uses 0.25 of the
 ground. Text never takes a theme colour. Two themes exist, `AppTheme.lagoon`
-(the Twin Shores palette over true black, no surface, control, artwork or
-chrome tint) and `AppTheme.babyPink` (`#FFB7CF` accents over a `#5E2848`
+(the Twin Shores palette over true black, controls in a pale aqua that is
+the accent lifted 40% toward white, no surface, artwork or chrome tint) and
+`AppTheme.babyPink` (`#FFB7CF` accents over a `#5E2848`
 rose ground, a `#1F1019` background and `#33182A` rows, with the accent as
 both tints and a faint wash of the ground as the chrome). Keep the list
 short: a theme is a considered set checked over every screen, not a hue
