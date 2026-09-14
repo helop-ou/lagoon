@@ -21,7 +21,7 @@ struct AccountPickerView: View {
 
     var body: some View {
         ZStack {
-            BrandBackground()
+            GroundBackground()
             JellyfishSwimLayer(school: .besideTheRail)
 
             VStack(spacing: Metrics.Space.section) {
