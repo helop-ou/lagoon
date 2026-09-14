@@ -34,6 +34,12 @@ struct HomeView: View {
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
+                        // A group whose player has been closed, above the
+                        // rails and below the hero: the one thing on Home
+                        // that is about right now rather than about the
+                        // library (HEL-172). It draws nothing otherwise.
+                        WatchTogetherHomeCard()
+
                         if isNativeRowEnabled("lagoon.continueWatching") {
                             MediaRail(
                                 title: "Continue Watching",
