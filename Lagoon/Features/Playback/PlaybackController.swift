@@ -46,7 +46,25 @@ final class PlaybackController {
     /// The episode queued behind this one, resolved once at start so the Up
     /// Next card can appear the instant the credits do (HEL-66). Nil for
     /// movies and at the end of a series.
-    private(set) var nextUp: MediaItem?
+    private(set) var nextUp: MediaItem? {
+        didSet { automation.setNextUpAvailable(nextUp != nil) }
+    }
+    /// Skip and Up Next timing, off the engine's clock (HEL-176).
+    let automation = PlaybackAutomation()
+    /// The end of the file is rolling into the next episode: set before the
+    /// hand-off task runs, so the view's own end-of-file handling does not
+    /// close the player underneath it.
+    private(set) var isAutoplayPending = false
+    /// The app is in the background on iOS and the picture is off: every
+    /// engine, including a successor started by autoplay, plays audio only
+    /// until the app is back (HEL-176).
+    private var videoOutputSuspended = false
+    #if os(iOS)
+    @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
+    /// Whether Picture in Picture is showing the picture, or about to. The
+    /// player view answers, because the PiP coordinator is its state.
+    @ObservationIgnored var isPictureInPictureShowing: () -> Bool = { false }
+    #endif
 
     private(set) var hudLines: [String] = []
     /// The byte-zero prefix remains available for compatibility diagnostics,
@@ -163,10 +181,38 @@ final class PlaybackController {
 
     init() {
         PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
+        #if os(iOS)
+        // Application notifications rather than SwiftUI's `scenePhase`: the
+        // player is presented from UIKit (`PlayerPresentationHub`), where
+        // the environment's phase never changes, which is how the old
+        // pause-on-background silently never ran on iOS (HEL-176).
+        let center = NotificationCenter.default
+        lifecycleObservers = [
+            center.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.applicationDidEnterBackground() }
+            },
+            center.addObserver(
+                forName: UIApplication.willEnterForegroundNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.applicationWillEnterForeground() }
+            },
+        ]
+        #endif
     }
 
     deinit {
         PlaybackLifecycleDiagnostics.controllerDestroyed(lifecycleID)
+        #if os(iOS)
+        for observer in lifecycleObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        #endif
     }
 
     /// A track choice described by what it *is* rather than where it sat.
@@ -602,7 +648,11 @@ final class PlaybackController {
                 externalSubtitles: externalTracks,
                 authorization: client.mediaRequestAuthorization()
             )
-            engine.onFinished = { [weak self] in self?.didFinish = true }
+            engine.onFinished = { [weak self] in self?.playbackDidFinish() }
+            engine.onTimeAdvanced = { [weak self] position, duration in
+                self?.automation.tick(position: position, duration: duration)
+            }
+            engine.setVideoOutputSuspended(videoOutputSuspended)
             engine.onPlaybackStarted = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
                 self.finishEpisodeHandoff(outcome: "ready")
@@ -642,6 +692,13 @@ final class PlaybackController {
             playbackIdentity = media.id
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
+            automation.beginItem(identity: media.id, segments: playerInfo.segments)
+            automation.onSkip = { [weak engine] segment in engine?.seek(to: segment.end) }
+            automation.onPlayNext = { [weak self] in
+                guard let self, !self.isClosed, !self.isAdvancing else { return }
+                self.isAutoplayPending = true
+                Task { await self.playNextEpisode() }
+            }
             nowPlaying.activate(
                 info: playerInfo,
                 itemID: itemId,
@@ -1012,6 +1069,7 @@ final class PlaybackController {
     /// off that report, and starting a second session for the same device
     /// first leaves the one just finished unresolved.
     func playNextEpisode() async {
+        defer { isAutoplayPending = false }
         guard !isAdvancing, let next = nextUp, let client else { return }
         isAdvancing = true
         defer { isAdvancing = false }
@@ -1236,6 +1294,40 @@ final class PlaybackController {
         bufferFillTask = nil
     }
 
+    /// The file ran out. A countdown still running when it did finishes
+    /// the job here — without an `Outro` segment to anchor it the two land
+    /// within a frame of each other, and whichever arrives first should
+    /// win; `playNextEpisode` is guarded against being taken up on it
+    /// twice. Decided here rather than in the view so a locked phone rolls
+    /// into the next episode too (HEL-176).
+    private func playbackDidFinish() {
+        didFinish = true
+        guard automation.autoplaysOnFinish, nextUp != nil, !isAdvancing else { return }
+        automation.playNext()
+    }
+
+    #if os(iOS)
+    /// The app left the screen: the phone was locked or the viewer went
+    /// home. Audio carries on under the `audio` background mode; the
+    /// picture is dropped unless something is still showing it — PiP, or
+    /// an AirPlay route — and proactive cache fill stops (HEL-176).
+    private func applicationDidEnterBackground() {
+        guard !isClosed, engine != nil else { return }
+        suspendBufferFill()
+        guard !isPictureInPictureShowing(), !isExternalPlaybackRouteActive else { return }
+        videoOutputSuspended = true
+        engine?.setVideoOutputSuspended(true)
+    }
+
+    /// Back on screen: the picture restarts from the playhead.
+    private func applicationWillEnterForeground() {
+        guard !isClosed else { return }
+        videoOutputSuspended = false
+        engine?.setVideoOutputSuspended(false)
+        resumeBufferFill()
+    }
+    #endif
+
     func resumeBufferFill() {
         guard bufferFillTask == nil,
               !successorPreparation.isPreparing,
@@ -1272,6 +1364,9 @@ final class PlaybackController {
         bufferFillTask = nil
         nextUpTask?.cancel()
         nextUpTask = nil
+        // A countdown still sleeping must not wake up on an engine that is
+        // gone; `start` wires the successor's own (HEL-176).
+        automation.invalidate()
         if !preservingPreparedNext {
             successorPreparation.cancel()
         }
@@ -1291,6 +1386,7 @@ final class PlaybackController {
         )
         if let engine {
             engine.onFinished = nil
+            engine.onTimeAdvanced = nil
             engine.onError = nil
             engine.onTrackSelectionChanged = nil
             engine.onPlaybackStarted = nil
