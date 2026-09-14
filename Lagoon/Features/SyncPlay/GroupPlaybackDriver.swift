@@ -30,9 +30,10 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     /// starting and has no anchor to absorb the difference. A tenth of a
     /// second is two to three frames.
     static let pauseThreshold = 0.1
-    /// Settings will own this; until then it is the escape hatch for a
-    /// session where the correction itself is suspected.
-    static let correctionDefaultsKey = "syncplay.correction"
+    /// Settings › Playback owns this as "Correct sync drift", on by
+    /// default. Off, the drift is still measured and still reaches the
+    /// HUD; nothing acts on it.
+    nonisolated static let correctionDefaultsKey = "syncplay.correction"
 
     /// The drift measured at the last evaluation, in milliseconds, or nil
     /// when there is nothing to measure against.
