@@ -76,6 +76,15 @@ transfer, and the artwork saved beside each file. `SessionStore` activates it
 for whichever account is current, on restore, switch, and sign-out; removing
 an account removes its downloads too.
 
+Its URLSession delegate uses `OperationQueue.main`. Commands and delegate
+callbacks therefore share MainActor ownership: completing a download checks
+the attempt, preserves the temporary file, and persists the manifest before
+the callback returns. The active account uses its observed manifest; inactive
+accounts use their stored manifest. Generation and attempt checks protect
+operations that suspend, including permission queries and pause/restart.
+`DownloadArtworkIndex` is the separate, lock-protected value snapshot read by
+background image loaders.
+
 ## Refresh and navigation
 
 `RootView` alone observes foreground transitions and advances the shared
