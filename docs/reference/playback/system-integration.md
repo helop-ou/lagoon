@@ -187,6 +187,53 @@ audio switching/re-prime. The audio test discovers a server-declared
 direct-play H.264 item with multiple tracks so HLS cannot silently collapse the
 fixture to one rendition.
 
+## Watch Together: the group as a transport authority (HEL-172)
+
+Measured against fixture (Jellyfin 12.0.0) on 2026-09-14 with a scripted
+second member. The [playback guide](../../playback.md#watch-together-syncplay-hel-172)
+states the rules; this is what the server actually did and why the code is
+shaped around it.
+
+**The socket has to be carrying messages before the join.** A join announced
+over a WebSocket whose handshake is still in flight is simply lost: the app
+posted `SyncPlay/Join` ~50 ms after opening the socket, the server moved the
+group to Waiting (so the join landed), and the app received neither the
+`GroupJoined` nor the `PlayQueue` update that follows it — then sat in a group
+it never heard from again. There is no HTTP route that returns a group's
+queue, so the socket is the only path to it and there is nothing to recover
+with. `SyncPlayStore` now waits for the socket's first message, the server's
+own `ForceKeepAlive`, which is also the moment the session's connection is
+registered. The same trap catches a scripted member: a token shared across two
+device ids binds every socket to whichever session the server resolves first,
+and the updates go to a socket nobody is reading.
+
+**What a join costs the group.** With the group already Playing, the app's
+join produced, in order: `UserJoined`; a `Pause` for everyone at the group's
+live position; the joiner's own `PlayQueue` (`NewPlaylist`) naming the item and
+that position; the app's `Buffering` (the group shows `Waiting · Buffer`); the
+app's `Ready` five seconds later; then — unprompted — a `Seek` to where the
+group had got to in the meantime, another `Pause`, and, once everyone was
+ready again, the `Unpause` the other member asked for. So a newcomer is caught
+up by the server rather than by guessing, which is exactly why `onEngineReady`
+has to fire on every seek and not only on the first open.
+
+**A `When` can already be in the past.** One `Pause` arrived with
+`EmittedAt` four seconds *after* its own `When` — the server re-issuing the
+instant the group had agreed on. `SyncPlayCommandSchedule` clamps the wait to
+zero and the member acts at once, which is what keeps a late arrival aligned
+instead of scheduling into the past.
+
+**Drift, in practice.** iPhone 17 Pro simulator against fixture over the
+internet, HLS transcode, one scripted member: drift settled at −37 ms after
+the group start, −43 ms after a seek to 120 s and a resume, −41 ms a minute
+later, and 0 ms immediately after an anchor. All inside the 60 ms deadband, so
+no correction ran — which is the intended resting state; the rate nudge exists
+for the member that falls behind, not for the steady case.
+
+**Participants are sessions, but the list is names.** Two sessions of the same
+user show as one participant, so the HUD's member count is a count of names,
+not of devices.
+
 ## Display mode matching (tvOS, HEL-64)
 
 The custom player must do by hand what AVPlayerViewController does
