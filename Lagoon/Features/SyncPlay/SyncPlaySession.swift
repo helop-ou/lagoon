@@ -41,6 +41,7 @@ nonisolated enum SyncPlayNotice: Equatable, Sendable {
     case state(SyncPlayGroupState, reason: String)
     case left(SyncPlayLeaveReason)
     case accessDenied
+    case requestFailed
 }
 
 /// The group as this client knows it, advanced only by what the server
