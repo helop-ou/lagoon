@@ -51,7 +51,9 @@ extension JellyfinClient {
         let page: HomeSectionsPage? = try? await get("HomeScreen/Sections", query: [
             URLQueryItem(name: "userId", value: userId),
         ], probe: true)
-        return page?.items ?? []
+        let legacy = page?.items ?? []
+        var seen = Set<String>()
+        return legacy.filter { seen.insert($0.section).inserted }
     }
 
     /// A section's contents. Empty on any failure — one bad section must not
