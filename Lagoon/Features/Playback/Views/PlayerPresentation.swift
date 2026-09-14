@@ -89,6 +89,9 @@ private struct PlayerPresentationRequest: ViewModifier {
 private struct PlayerPresentationBridge: UIViewControllerRepresentable {
     let hub: PlayerPresentationHub
     @Environment(SessionStore.self) private var session
+    /// The hosted player is outside SwiftUI's environment, so everything
+    /// it reads is re-injected below — Watch Together included (HEL-172).
+    @Environment(SyncPlayStore.self) private var syncPlay
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIViewController(context: Context) -> UIViewController { UIViewController() }
@@ -109,7 +112,7 @@ private struct PlayerPresentationBridge: UIViewControllerRepresentable {
             onPictureInPictureRestore: { [weak coordinator] completion in
                 coordinator?.restore(completion: completion)
             }
-        ).environment(session).preferredColorScheme(.dark)
+        ).environment(session).environment(syncPlay).preferredColorScheme(.dark)
         let host = UIHostingController(rootView: AnyView(player))
         // `.overFullScreen`, never `.fullScreen`: a full-screen presentation
         // removes the presenting hierarchy from the window once its
