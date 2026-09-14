@@ -20,6 +20,7 @@ struct DownloadsView: View {
                 list
             }
         }
+        .background(Theme.background.ignoresSafeArea())
         .navigationTitle("Downloads")
         .accessibilityIdentifier("downloads.view")
         .toolbar {
@@ -42,7 +43,7 @@ struct DownloadsView: View {
     }
 
     private var list: some View {
-        List {
+        ThemedForm {
             if !films.isEmpty {
                 Section("Films") {
                     ForEach(films) { row(for: $0) }
