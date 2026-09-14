@@ -48,6 +48,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "101",
+            released: "September 2026",
+            headline: "Apple TV buttons keep their labels readable when focused.",
+            sections: [
+                ChangelogSection(category: .bugFixes, changes: [
+                    "Buttons and settings choices on Apple TV now keep their text readable when the native focused glass highlight appears.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "100",
             released: "September 2026",
             headline: "Downloads on iPhone and iPad, a new look for film and series pages, and interlaced TV recordings play directly.",
