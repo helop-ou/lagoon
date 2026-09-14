@@ -10,6 +10,10 @@ struct VideoPlayerView: View {
     @State private var leftForPictureInPicture = false
 
     @Environment(SessionStore.self) private var session
+    /// Watch Together (HEL-172). Always present — `RootView` injects it,
+    /// and so does the iOS UIKit player host, which rebuilds the
+    /// environment from scratch. Outside a group `attach` does nothing.
+    @Environment(SyncPlayStore.self) private var syncPlay
     @Environment(\.dismiss) private var dismiss
     @State private var controller = PlaybackController()
     @State private var pictureInPicture = SampleBufferPictureInPicture()
@@ -58,6 +62,7 @@ struct VideoPlayerView: View {
                     playheadPrefetchCount: controller.playheadPrefetchCount,
                     info: fallbackInfo,
                     automation: controller.automation,
+                    transport: controller.transportActions,
                     onDismiss: { closePlayer() },
                     onPanelToggle: { panelOpen = $0 },
                     openPanelRequest: openPanelRequest,
@@ -161,6 +166,10 @@ struct VideoPlayerView: View {
             guard controller.engine == nil else { return }
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
             trackPreferences.configure(accountID: session.activeAccount?.id)
+            // Before the start, so the group's driver has its readiness and
+            // buffering hooks on the controller by the time the first
+            // engine is built (HEL-172).
+            syncPlay.attach(controller)
             await controller.start(
                 media: playerItem.media,
                 startFromBeginning: playerItem.startFromBeginning,
@@ -168,7 +177,9 @@ struct VideoPlayerView: View {
                 trackPreferences: trackPreferences.values,
                 preferredAudioLanguages: trackPreferences.preferredAudioLanguages,
                 preferredSubtitleLanguages: subtitlePreferences.preferredLanguages,
-                missingSubtitleMode: subtitlePreferences.values.missingMode
+                missingSubtitleMode: subtitlePreferences.values.missingMode,
+                startPosition: playerItem.startPosition,
+                startPaused: playerItem.startPaused
             )
         }
         .onChange(of: controller.didFinish) { _, finished in
