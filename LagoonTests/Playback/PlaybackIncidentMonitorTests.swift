@@ -55,12 +55,18 @@ struct PlaybackIncidentMonitorTests {
         }
     }
 
-    static func waitUntil(_ condition: @MainActor () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+    static func waitUntil(
+        sourceLocation: SourceLocation = #_sourceLocation,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        // This waits for executor scheduling, not the monitor's interval:
+        // SamplingClock controls that explicitly. Parallel decoder suites
+        // can occupy the simulator for longer than two wall-clock seconds.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while !condition(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(1))
         }
-        try #require(condition())
+        try #require(condition(), sourceLocation: sourceLocation)
     }
 
     static func source() throws -> MediaSource {
