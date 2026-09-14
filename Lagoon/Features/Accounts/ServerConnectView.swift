@@ -11,7 +11,7 @@ struct ServerConnectView: View {
 
     var body: some View {
         ZStack {
-            BrandBackground()
+            GroundBackground()
 
             // Onboarding shares one surface and one school of jellyfish, so
             // the three screens read as one place rather than three that
