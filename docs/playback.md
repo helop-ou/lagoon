@@ -245,6 +245,40 @@ stored queue. `leave()` posts `SyncPlay/Leave` and closes the socket and
 clock, and an account switch does the same silently. Foreground forces a clock
 re-sample.
 
+**What the viewer sees.** The way in is a *Watch Together* control in a film
+or episode page's secondary row — `person.2.fill`, never SharePlay's glyph,
+because SharePlay is GroupActivities and this is not it. It is drawn only
+once `SyncPlayStore.availability` says the account may join a group, and the
+detail page is what asks for that answer: the control renders nothing until
+it arrives, and a task on a view that renders nothing never runs, the same
+trap `DownloadControl` documents. It opens `WatchTogetherSheet` — a sheet on
+iOS, a `TVSettingsPage` in a sheet on tvOS — which lists the server's groups
+(polled every 5 s, since the socket only carries the group this client is
+in), offers *Start a Group* where the policy is `CreateAndJoinGroups`, and
+once joined shows the room, its people, *Play This Here* and *Leave*. Group
+names are visible to every account on the server and the copy says so.
+`startGroup` is two calls, not one: `SyncPlay/New` answers 204 and the id
+arrives over the socket, so the queue can only be set after `GroupJoined`.
+
+While a group owns the session the player's panel grows a fifth **Together**
+tab: the room, its state, the people in it, an *Ignore Waiting* switch and
+*Leave*. Everywhere the tabs are walked — the strip and the tvOS left/right
+grammar — reads `PlayerPanelTab.offered(inGroup:)` rather than `allCases`, or
+an arrow press lands on a tab that is not drawn; a group that ends moves the
+selection back to Info. The group reaches `CustomPlayerView` as a
+`PlayerTogetherState` value, never as the store, and joins
+`PlayerControlPanelHost`'s `Equatable` boundary so an arrival still reaches
+the tab. Notices are a toast at the top of the screen — `SyncPlayNoticeToast`,
+an overlay leaf in `PlayerSkipOverlay`'s shape, so the player root never
+subscribes to one; two seconds, Reduce Motion respected, never hit-tested.
+A state the picture already reports ("Playing", "Nothing playing") gets no
+toast. **Waiting is not buffering**: a member primed and paused at the
+group's position is not stalled, so the existing spinner carries *Waiting for
+the group* underneath it while `SyncPlayStore.isWaitingForGroup`.
+Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*, and
+Home carries a banner above its rails — group name, *Rejoin*, *Leave* —
+while a group has this device as a member and nothing of its is on screen.
+
 **The socket must be open before the join.** The server announces a join over
 the socket at the instant it happens; joining while the handshake was still in
 flight lost both the `GroupJoined` and the `PlayQueue` update on fixture 12.0.0,
