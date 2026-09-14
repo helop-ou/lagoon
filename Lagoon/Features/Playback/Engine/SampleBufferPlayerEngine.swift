@@ -1154,11 +1154,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // timed decisions hear about it too, so a paused scrub into an
         // intro shows the pill (HEL-176).
         timePosition = clamped
-        onTimeAdvanced?(clamped, duration)
         didFinish = false
         removeFinishObserver()
-        setBuffering(true)
         bufferingTargetSeconds = clamped
+        setBuffering(true)
         // The instant a group agreed to start from is about to be wrong;
         // the driver schedules a new one after this seek reports Ready.
         scheduledStartHostTime = nil
@@ -1200,6 +1199,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         currentSubtitleText = nil
         currentSubtitleCues = []
         currentSubtitleImages = []
+        // Automation may synchronously skip from this position. Publish
+        // only after committing this seek, so a nested seek remains newest.
+        onTimeAdvanced?(clamped, duration)
     }
 
     /// Audio-only playback for a phone in the background (HEL-176). While
