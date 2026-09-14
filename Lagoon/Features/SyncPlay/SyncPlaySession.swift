@@ -85,6 +85,28 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
     /// opens the player later has to begin.
     var startSeconds: Double { Ticks.seconds(queue?.startPositionTicks ?? 0) }
 
+    /// Where the group is *now*, as well as this session can tell: the
+    /// last command's position, carried forward by the server time since
+    /// its instant.
+    ///
+    /// Only an `Unpause` is carried forward — after a `Pause` or a `Seek`
+    /// the group is sitting still at the position it named. A member
+    /// coming back to a group that has been running for ten minutes would
+    /// otherwise open where that command left it, and the server would
+    /// have to drag it forward, holding everyone else up while it did
+    /// (HEL-172).
+    func positionSeconds(atServerSeconds now: Double) -> Double {
+        guard let lastCommand else { return startSeconds }
+        guard lastCommand.command == .unpause,
+              let when = lastCommand.whenSeconds,
+              now > when else { return lastCommand.positionSeconds }
+        return SyncCorrectionPolicy.expectedPosition(
+            commandPosition: lastCommand.positionSeconds,
+            commandWhenServerSeconds: when,
+            serverSeconds: now
+        )
+    }
+
     // MARK: - Updates
 
     mutating func apply(_ update: SyncPlayGroupUpdate) -> [SyncPlaySessionEffect] {
