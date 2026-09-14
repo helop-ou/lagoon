@@ -180,8 +180,22 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     private func unpause(_ command: SyncPlayCommand, at when: Double) {
         guard let controller else { return }
         restoreRate()
-        if abs(controller.clockPosition - command.positionSeconds) > Self.resyncThreshold {
-            controller.seekGroup(to: command.positionSeconds)
+        // An instant already behind us is a group that is running, not
+        // one about to start: the server re-states its last Unpause to a
+        // member that reported Ready mid-play, with the position the group
+        // started *from*. Comparing against that would seek this member
+        // back to the start; the group is wherever that position has
+        // advanced to since.
+        let now = clock.serverSeconds()
+        let target = when > now
+            ? command.positionSeconds
+            : SyncCorrectionPolicy.expectedPosition(
+                commandPosition: command.positionSeconds,
+                commandWhenServerSeconds: when,
+                serverSeconds: now
+            )
+        if abs(controller.clockPosition - target) > Self.resyncThreshold {
+            controller.seekGroup(to: target)
         }
         controller.playGroup(atHostTime: clock.hostTime(forServer: when))
         beginDriftLoop()
