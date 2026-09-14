@@ -49,7 +49,7 @@ struct WatchTogetherHomeCard: View {
         VStack(alignment: .leading, spacing: Metrics.Space.xs) {
             Label(syncPlay.session.groupName ?? String(localized: "Watch Together"), systemImage: "person.2.fill")
                 .font(.headline)
-            Text(detail)
+            Text(syncPlay.errorMessage ?? detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
