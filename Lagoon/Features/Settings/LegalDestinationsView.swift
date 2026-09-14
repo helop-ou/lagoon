@@ -206,7 +206,7 @@ struct AboutLagoonSheet: View {
     #if !os(tvOS)
     private var phoneBody: some View {
         NavigationStack {
-            Form {
+            ThemedForm {
                 Section("Application") {
                     ForEach(Self.applicationRows, id: \.title) { row in
                         LabeledContent(row.title, value: row.value)
