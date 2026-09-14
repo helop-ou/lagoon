@@ -86,7 +86,11 @@ use `Theme.background`; a scrim over artwork inside a card stays black. A
 grouped form on iOS is a `ThemedForm`, never a bare `Form` or `List`: it
 puts the page on the background, every row on the surface and the bars in
 the chrome, so a new settings page is themed by using it and nothing else.
-`TouchSettingsPage` wraps it for the settings categories. The
+`TouchSettingsPage` wraps it for the settings categories; Acknowledgements,
+Downloads, Home Rows and the Seerr season picker use it directly, and a
+plain scrolling page (the changelog, a licence, Seerr requests) sits on
+`Theme.background` like every browse screen. Only the player's own panel
+and the DEBUG Developer page keep the system's form. The
 player surface, its overlays, subtitles and the Top Shelf stay pure black
 and outside the theme. tvOS controls are never tinted (the focused lozenge
 rule above) and its tab bar keeps the system glass; `themedControls()` and
