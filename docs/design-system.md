@@ -152,10 +152,8 @@ need an explicit appropriate control style. Test focused and unfocused states.
   row for its focus geometry.
 - **Title art:** `TitleArtView` shows a library title's Jellyfin logo,
   `TitleArtImage` any logo URL, and both set the name in type when there is
-  none. Seerr titles get their logo from TMDB through `TMDBLogoProvider`
-  (see [Jellyfin API](jellyfin-api.md#tmdb-title-logos-hel-174)), on the
-  Discover hero and the Seerr detail page, with the Jellyfin logo preferred
-  once the title is in the library.
+  none. Seerr titles use the Jellyfin logo once the title is in the library;
+  discovery titles without a Jellyfin item use their name in type.
 - **Heroes:** use the contained banner, artwork wash, and existing native
   paging behavior. Keep the focused/tappable control stable while artwork
   transitions. Home and Discover share the taller iPad layout, with the
