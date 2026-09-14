@@ -6,6 +6,7 @@ struct ItemDetailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
+    @Environment(SyncPlayStore.self) private var syncPlay
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -29,6 +30,10 @@ struct ItemDetailView: View {
             #if os(iOS)
             await DownloadStore.shared.refreshPermission(client: session.client)
             #endif
+            // Asked here for the reason the download permission is: the
+            // control renders nothing until the answer is in, and a task
+            // on a view that renders nothing never runs (HEL-172).
+            await syncPlay.refreshAvailability()
         }
         .onChange(of: serverSync.generation) { _, _ in
             Task { await loadFromServer() }
@@ -161,6 +166,7 @@ struct ItemDetailView: View {
             #if os(iOS)
             DownloadControl(item: displayed)
             #endif
+            WatchTogetherControl(item: displayed, startPositionTicks: resumeTicks ?? 0)
         }
     }
 
