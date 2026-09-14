@@ -29,6 +29,21 @@ struct VideoPlayerView: View {
     #endif
     @State private var openPanelRequest = 0
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// What the panel's Together tab draws, or nil outside a group. Read
+    /// here rather than in the panel so `CustomPlayerView` stays a view
+    /// over values, and so the store's membership has exactly one reader
+    /// in the player (HEL-172).
+    private var togetherState: PlayerTogetherState? {
+        guard syncPlay.isJoined else { return nil }
+        return PlayerTogetherState(
+            groupName: syncPlay.session.groupName ?? String(localized: "Watch Together"),
+            participants: syncPlay.session.participants,
+            state: syncPlay.session.state,
+            ignoresWait: syncPlay.ignoresWait
+        )
+    }
 
     /// What the Up Next card draws, or nil when there is nothing queued.
     private var nextUpEpisode: NextUpEpisode? {
@@ -70,6 +85,10 @@ struct VideoPlayerView: View {
                     isPictureInPicturePossible: pictureInPicture.isPossible,
                     isPictureInPictureActive: pictureInPicture.isActive,
                     onTogglePictureInPicture: { pictureInPicture.toggle() },
+                    together: togetherState,
+                    onLeaveGroup: { Task { await syncPlay.leave() } },
+                    onSetIgnoreWait: { ignore in Task { await syncPlay.setIgnoreWait(ignore) } },
+                    isWaitingForGroup: syncPlay.isWaitingForGroup,
                     subtitleStyle: subtitlePreferences.renderStyle,
                     subtitleSearch: controller.subtitleSearch
                 ) { [weak engine] in
@@ -98,6 +117,11 @@ struct VideoPlayerView: View {
             if !controller.hudLines.isEmpty, !panelOpen {
                 playbackHUD
             }
+
+            // A leaf that reads the notices itself, so this body never
+            // subscribes to them and a toast costs the player nothing
+            // but its own render (HEL-172).
+            SyncPlayNoticeToast(store: syncPlay, reduceMotion: reduceMotion)
 
             // Keep CustomPlayerView and, critically, its UIKit-backed
             // AVSampleBufferDisplayLayer mounted while the old renderer set
