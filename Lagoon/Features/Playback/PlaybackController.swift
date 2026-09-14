@@ -361,7 +361,9 @@ final class PlaybackController {
         }
         self.client = client
         currentMedia = media
-        if let startPosition { startPositionOverride = startPosition }
+        // A failed or cancelled group start must not leak its position into
+        // the next ordinary playback attempt.
+        startPositionOverride = startPosition
         startsPaused = startPaused
         if deliveryItemId != media.id {
             // A different item negotiates from scratch: the previous one's
@@ -400,9 +402,9 @@ final class PlaybackController {
         // network stream (HEL-166). Only iOS carries downloads.
         var localSource: MediaSource?
         var localURL: URL?
-        var localIsTranscode = false
         var localResumeTicks: Int64?
         #if os(iOS)
+        var localIsTranscode = false
         if !skipsLocalPlayback, let local = DownloadStore.shared.localPlayback(for: media.id) {
             localSource = local.source
             localURL = local.url
@@ -567,7 +569,11 @@ final class PlaybackController {
             // policies below and the engine's own track building already
             // degrade to what the file demuxes to when given nothing
             // (HEL-166).
+            #if os(iOS)
             let sourceStreams: [MediaStream] = localIsTranscode ? [] : (source.mediaStreams ?? [])
+            #else
+            let sourceStreams = source.mediaStreams ?? []
+            #endif
             // The server's default audio choice (user language preferences
             // applied server-side) maps to the demuxer's per-type 1-based
             // ordinal: embedded streams keep their demux order.
@@ -1506,7 +1512,7 @@ final class PlaybackController {
         isAdvancing = true
         defer { isAdvancing = false }
         let retired = await stop(preservingPreparedNext: false, preservingPlayerSurface: true)
-        guard retired, !isClosed else { return }
+        guard retired, !isClosed, !Task.isCancelled, groupTransport != nil else { return }
         nextUp = nil
         didFinish = false
         errorMessage = nil
@@ -1829,6 +1835,10 @@ final class PlaybackController {
         defer { isFallingBack = false }
         guard !isClosed, let client, let media = currentMedia else { return }
         let resumeAt = engine?.timePosition ?? lastKnownPosition
+        // A replacement starts buffering before its callbacks are wired.
+        // Tell the group now so its later Ready is a new state, even when
+        // the outgoing engine had already reported Ready.
+        onBufferingChanged?(true)
         let cause = failure.cause == .undecodable ? "undecodable" : "delivery"
         os_signpost(
             .event,
@@ -1875,7 +1885,10 @@ final class PlaybackController {
             preferredAudioLanguages: preferredAudioLanguages,
             preferredSubtitleLanguages: preferredSubtitleLanguages,
             missingSubtitleMode: missingSubtitleMode,
-            prepared: nil
+            prepared: nil,
+            // A delivery retry must prime and report Ready before the
+            // server starts the group; autoplay would bypass its authority.
+            startPaused: groupTransport != nil
         )
     }
 
