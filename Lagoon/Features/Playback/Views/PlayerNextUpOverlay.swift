@@ -36,63 +36,35 @@ nonisolated enum NextUpPolicy {
     }
 }
 
-/// The Up Next card (HEL-66), lifted out of `CustomPlayerView` (HEL-150) so
-/// `engine.timePosition` is read in this body instead of the player's.
-///
-/// The countdown fill and the task that arms it came with it; the parent only
-/// hears about a committed hand-off, through `onPlayNext`. Bottom-trailing,
-/// on the same shelf as the skip pill. The two can never be up together —
-/// intro and recap live at the front of an episode, the credits at the back —
-/// so they share the corner rather than competing for it.
+/// The Up Next card (HEL-66), lifted out of `CustomPlayerView` (HEL-150).
+/// It draws `PlaybackAutomation`'s answer: whether the card is due and how
+/// far the countdown has run are decided off the engine's clock, so a
+/// locked phone still rolls into the next episode (HEL-176). The parent
+/// only hears about a committed hand-off through the automation.
+/// Bottom-trailing, on the same shelf as the skip pill. The two can never
+/// be up together — intro and recap live at the front of an episode, the
+/// credits at the back — so they share the corner rather than competing
+/// for it.
 struct PlayerNextUpOverlay: View {
-    @PlayerEngineRef var engine: any PlayerEngine
-    /// Changing it re-arms the task, which is what clears a fill left running
-    /// by the item that just ended.
-    let playbackIdentity: String
+    let automation: PlaybackAutomation
     /// The episode queued behind this one. Nil for movies, at the end of a
     /// series, and until the lookup lands.
     let episode: NextUpEpisode?
-    /// Both resolved by the player from `engine.duration`; only the
-    /// comparison against the moving position belongs in here.
-    let cardStart: Double?
-    let countdownStart: Double?
-    /// The panel, an open scrub, and a card already waved away with Back.
-    let isSuppressed: Bool
-    let autoplayMode: AutoplayMode
     let reduceMotion: Bool
     let hint: LocalizedStringKey
-    let onPlayNext: () -> Void
-
-    /// 0…1, value-driven for the same reason the skip pill's fill is.
-    @State private var nextUpFill: Double = 0
-
-    private struct Arming: Equatable {
-        let identity: String
-        let isCountingDown: Bool
-    }
-
-    private var showsCard: Bool {
-        guard let cardStart, !isSuppressed else { return false }
-        return engine.timePosition >= cardStart
-    }
-
-    private var isCountingDown: Bool {
-        guard showsCard, autoplayMode == .autoDelay, let countdownStart else { return false }
-        return engine.timePosition >= countdownStart
-    }
 
     private var transientScaleTransition: AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9))
     }
 
     var body: some View {
-        let isCardVisible = showsCard
+        let isCardVisible = automation.showsNextUp
         Group {
             if isCardVisible, let episode {
                 PlayerNextUpCard(
                     episode: episode,
-                    showsCountdown: autoplayMode == .autoDelay,
-                    fill: nextUpFill,
+                    showsCountdown: automation.autoplayMode == .autoDelay,
+                    fill: automation.nextUpFill,
                     hint: hint
                 )
                 .transition(transientScaleTransition)
@@ -102,7 +74,7 @@ struct PlayerNextUpOverlay: View {
                 #if !os(tvOS)
                 // Touch has no Select to route, so the card takes the tap
                 // itself — see the hit-testing note below.
-                .onTapGesture { onPlayNext() }
+                .onTapGesture { automation.playNext() }
                 #endif
             }
         }
@@ -113,21 +85,6 @@ struct PlayerNextUpOverlay: View {
         #if os(tvOS)
         .allowsHitTesting(false)
         #endif
-        // Arms as the playhead crosses into the countdown window. Keyed on
-        // the flag rather than the position so it fires once, not ten times
-        // a second.
-        .task(id: Arming(identity: playbackIdentity, isCountingDown: isCountingDown)) {
-            guard isCountingDown else {
-                nextUpFill = 0
-                return
-            }
-            nextUpFill = 1
-            try? await Task.sleep(for: .seconds(AutoplayMode.countdownSeconds))
-            // Back may have waved it away, or a scrub carried the playhead
-            // back out of the credits, while the fill was running.
-            guard !Task.isCancelled, isCountingDown else { return }
-            onPlayNext()
-        }
     }
 }
 
