@@ -215,7 +215,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     /// not un-pause the entry or resurrect a byte count for a title that
     /// no longer exists (HEL-166 review finding 6).
     mutating func recordProgress(_ itemID: String, received: Int64, expected: Int64?) {
-        guard let entry = entry(for: itemID), entry.state != .paused, entry.state != .complete else { return }
+        guard let entry = entry(for: itemID), entry.isActive else { return }
         update(itemID) {
             $0.receivedBytes = received
             if let expected, expected > 0 { $0.expectedBytes = expected }
@@ -224,6 +224,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     }
 
     mutating func markPaused(_ itemID: String, resumeDataFile: String?) {
+        guard let entry = entry(for: itemID), !entry.isComplete else { return }
         update(itemID) {
             $0.taskIdentifier = nil
             $0.resumeDataFile = resumeDataFile
@@ -236,10 +237,12 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     }
 
     mutating func markFailed(_ itemID: String, reason: String, resumeDataFile: String?) {
+        guard let entry = entry(for: itemID), !entry.isComplete else { return }
         update(itemID) {
             $0.taskIdentifier = nil
             if let resumeDataFile { $0.resumeDataFile = resumeDataFile }
-            // A pause that races its own failure callback stays a pause.
+            // A failed resume can report its error while leaving the
+            // transfer paused; delegate errors are filtered by the store.
             if $0.state != .paused { $0.state = .failed }
             $0.failure = reason
         }
@@ -272,9 +275,15 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     /// data, otherwise failed. Returns the ids that were actually lost,
     /// not the ones recovered as complete.
     @discardableResult
-    mutating func reconcile(liveTasks: [String: Int], completedFiles: [String: Int64] = [:]) -> [String] {
+    mutating func reconcile(
+        liveTasks: [String: Int], completedFiles: [String: Int64] = [:],
+        queriedAttempts: [String: String]? = nil
+    ) -> [String] {
         var lost: [String] = []
         for entry in entries where entry.isActive {
+            // The URLSession task snapshot predates starts/resumes that ran
+            // while it was awaited. Those attempts need no reconciliation.
+            if let queriedAttempts, queriedAttempts[entry.itemID] != (entry.attemptToken ?? "") { continue }
             if let taskIdentifier = liveTasks[entry.itemID] {
                 update(entry.itemID) { $0.taskIdentifier = taskIdentifier }
             } else if let bytes = completedFiles[entry.itemID] {
@@ -376,6 +385,7 @@ nonisolated enum DownloadCompletion {
         guard (200...299).contains(status) else {
             return .failed(reason: status == 403 ? "Not permitted by the server" : "HTTP \(status)")
         }
+        guard bytesOnDisk > 0 else { return .failed(reason: "Incomplete file") }
         if quality == .original, let expectedBytes, expectedBytes > 0, expectedBytes != bytesOnDisk {
             return .failed(reason: "Incomplete file")
         }
