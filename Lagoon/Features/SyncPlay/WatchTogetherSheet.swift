@@ -42,6 +42,14 @@ struct WatchTogetherSheet: View {
                 guard !syncPlay.isJoined else { return }
                 name = defaultName
             }
+            .alert("Watch Together", isPresented: Binding(
+                get: { syncPlay.errorMessage != nil },
+                set: { if !$0 { syncPlay.clearError() } }
+            )) {
+                Button("OK", role: .cancel) { syncPlay.clearError() }
+            } message: {
+                Text(syncPlay.errorMessage ?? "")
+            }
             .accessibilityIdentifier("watchTogether.sheet")
     }
 
@@ -121,8 +129,7 @@ struct WatchTogetherSheet: View {
 
         section("This Title", footer: "Everyone in the group moves to it, wherever they were.") {
             actionButton("Play This Here", systemImage: "play.fill", identifier: "watchTogether.playHere") {
-                await syncPlay.play(item, startPositionTicks: startPositionTicks)
-                dismiss()
+                if await syncPlay.play(item, startPositionTicks: startPositionTicks) { dismiss() }
             }
 
             actionButton("Leave Group", systemImage: "rectangle.portrait.and.arrow.right", identifier: "watchTogether.leave") {
@@ -163,12 +170,11 @@ struct WatchTogetherSheet: View {
                     .accessibilityIdentifier("watchTogether.name")
 
                 actionButton("Start Group", systemImage: "person.2.fill", identifier: "watchTogether.start") {
-                    await syncPlay.startGroup(
+                    if await syncPlay.startGroup(
                         named: trimmedName,
                         playing: item,
                         startPositionTicks: startPositionTicks
-                    )
-                    dismiss()
+                    ) { dismiss() }
                 }
                 .disabled(trimmedName.isEmpty || isWorking)
             }
@@ -178,8 +184,7 @@ struct WatchTogetherSheet: View {
     @ViewBuilder
     private func groupRow(_ group: SyncPlayGroup) -> some View {
         rowButton(identifier: "watchTogether.group.\(group.groupId)") {
-            await syncPlay.join(group)
-            dismiss()
+            if await syncPlay.join(group) { dismiss() }
         } label: {
             HStack(spacing: Metrics.Space.l) {
                 VStack(alignment: .leading, spacing: Metrics.Space.xs) {
