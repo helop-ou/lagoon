@@ -132,41 +132,45 @@ struct IncidentSuppressorTests {
 
 @Suite("Diagnostics hub")
 struct DiagnosticsHubTests {
-    final class CapturingSink: DiagnosticSink, @unchecked Sendable {
-        let lock = NSLock()
-        var incidents: [DiagnosticIncident] = []
-        var flushes = 0
-        func submit(_ incident: DiagnosticIncident) {
-            lock.lock(); incidents.append(incident); lock.unlock()
+    nonisolated final class CapturingSink: DiagnosticSink, Sendable {
+        private struct State {
+            var incidents: [DiagnosticIncident] = []
+            var flushes = 0
         }
-        func flush() { lock.lock(); flushes += 1; lock.unlock() }
+        private let state = OSAllocatedUnfairLock(initialState: State())
+        var incidents: [DiagnosticIncident] { state.withLock { $0.incidents } }
+        var flushes: Int { state.withLock { $0.flushes } }
+        func submit(_ incident: DiagnosticIncident) {
+            state.withLock { $0.incidents.append(incident) }
+        }
+        func flush() { state.withLock { $0.flushes += 1 } }
     }
 
-    @Test func reportsCarryTheHistoryAndRespectTheSwitch() {
+    @Test func reportsCarryTheHistoryAndRespectTheSwitch() throws {
         let sink = CapturingSink()
-        nonisolated(unsafe) var uptime: TimeInterval = 100
-        nonisolated(unsafe) var enabled = true
+        let uptime = OSAllocatedUnfairLock<TimeInterval>(initialState: 100)
+        let enabled = OSAllocatedUnfairLock(initialState: true)
         let hub = DiagnosticsHub(
             history: DiagnosticHistory(capacity: 10, window: 30),
             sink: sink,
-            uptime: { uptime },
+            uptime: { uptime.withLock { $0 } },
             now: { Date(timeIntervalSince1970: 1_000) },
-            reportingEnabled: { enabled }
+            reportingEnabled: { enabled.withLock { $0 } }
         )
         hub.record(.playbackStart, ["delivery": .string("negotiated")])
-        uptime = 110
+        uptime.withLock { $0 = 110 }
         hub.record(.playbackSeek, ["position": .double(42)])
-        uptime = 111
+        uptime.withLock { $0 = 111 }
         #expect(hub.millisecondsSince(.playbackSeek) == 1_000)
         #expect(hub.report(.playbackFailed, level: .error, variant: ["delivery", "open"], fields: ["stage": .string("open")]))
-        let incident = try! #require(sink.incidents.first)
+        let incident = try #require(sink.incidents.first)
         #expect(incident.fingerprint == ["playback.failed", "delivery", "open"])
         #expect(incident.history.map(\.code) == [.playbackStart, .playbackSeek])
         #expect(incident.fields["stage"] == .string("open"))
         #expect(incident.fields["occurrences"] == .int(1))
         #expect(incident.uptime == 111)
 
-        enabled = false
+        enabled.withLock { $0 = false }
         #expect(!hub.report(.playbackFailed, level: .error))
         #expect(sink.incidents.count == 1)
         hub.flush()
