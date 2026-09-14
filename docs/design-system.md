@@ -101,6 +101,12 @@ The choice belongs to the Jellyfin profile: `SessionStore` points
 passing itself as the owner, and a nil account only counts from the owner
 that activated the current one (the `DownloadStore` rule: SwiftUI constructs
 the root's session store more than once and the extras announce no account).
+Nobody active keeps the last profile's theme showing and only stops saving,
+so the account picker, the sign-in screen and the add-account flow wear the
+look of whoever was just there; an account waiting to sign in again after
+its session expired wears its own; a launch with nobody remembered shows the
+brand. Those screens sit on `GroundBackground`, the theme's `ground`, with
+the jellyfish in the theme's accent.
 The choice persists under `appearance.theme.<accountID>`, which
 `AccountLocalData` removes with the account and the regression reset clears. Settings › Appearance offers the themes on both platforms; choosing
 one plays `ThemeBloomOverlay` from the root, a bloom of the new accent with
