@@ -21,7 +21,9 @@ of those routes are documented in neither version's OpenAPI surface; see
   encode) so model types stay camelCase with no per-field CodingKeys.
 - No `Date` fields are decoded anywhere. Jellyfin emits .NET 7-digit
   fractional-second timestamps that `ISO8601DateFormatter` rejects; the UI
-  only needs `ProductionYear`, so dates are simply not modeled.
+  only needs `ProductionYear`, so dates are simply not modeled. SyncPlay is
+  the one documented exception, and it is still not a `Date`: see
+  *SyncPlay* below.
 - Positions and durations are .NET **ticks** (100 ns; 1 s = 10 000 000).
   Convert only through the `Ticks` helpers.
 - Decoding is defensive: `decodeIfPresent` + defaults, unknown item types
@@ -344,6 +346,67 @@ read-only. Provider formats Lagoon cannot parse use the native endpoint and a
 PlaybackInfo poll as a compatibility fallback. Playback position, renderers,
 selected audio, and the Now Playing session are not rebuilt. Forced and
 hearing-impaired metadata is preserved.
+
+## SyncPlay (HEL-172)
+
+Group playback. The server owns a group's state and tells every member
+*when*, on its own clock, to unpause, pause, seek or stop; a client that
+acts on a command immediately is already wrong. Probed against fixture
+12.0.0 on 2026-09-14.
+
+| Purpose | Endpoint | Notes |
+|---|---|---|
+| Groups | `GET SyncPlay/List` | `[]` with no groups; also the availability probe, since a server without SyncPlay fails the route |
+| Membership | `POST SyncPlay/New {GroupName}`, `Join {GroupId}`, `Leave` | 204 each. The new group's id is **not** read from the response: it arrives over the socket as a `GroupJoined` update, the same path a join takes |
+| Queue | `POST SyncPlay/SetNewQueue {PlayingQueue, PlayingItemPosition, StartPositionTicks}`, `SetPlaylistItem`, `NextItem`, `PreviousItem` | item ids go up, the `PlaylistItemId`s the group assigns come back as a `PlayQueue` update |
+| Transport | `POST SyncPlay/Unpause`, `Pause`, `Stop`, `Seek {PositionTicks}` | nothing happens locally; the server answers every member with a command |
+| Readiness | `POST SyncPlay/Buffering`, `Ready` `{When, PositionTicks, IsPlaying, PlaylistItemId}` | the slowest member sets the pace. `SetIgnoreWait {IgnoreWait}` opts this client out of holding the group up |
+| Latency | `POST SyncPlay/Ping {Ping}` | milliseconds, from the clock estimate below |
+| Capabilities | `POST Sessions/Capabilities/Full` | **not** required for command delivery: a session that never posted it still received every group command. Sent anyway so the session appears controllable; `SupportedCommands` is empty until the player handles `GeneralCommand` |
+
+**The socket.** `wss://<server>/socket?api_key=<token>&deviceId=<id>`, built
+from `serverRelativeURL("socket")` with the scheme swapped, so a
+reverse-proxy base path survives. This is the one first-party URL that still
+carries the token in its query — the handshake is not a request Lagoon's
+`Authorization` header was verified to reach. The envelope is
+`{"MessageType", "MessageId"?, "Data"}`, `MessageId` absent on every SyncPlay
+message seen, and `Data` is anything: an object for `SyncPlayGroupUpdate`, a
+bare integer for `ForceKeepAlive`, a bare string for `GroupLeft`. So
+`ServerSocket` splits the envelope with `JSONSerialization` and re-serialises
+the `Data` subtree for the caller to decode; an unknown `MessageType` is
+ignored, never a decoding failure. `ForceKeepAlive` carries a timeout in
+seconds (60 observed) and wants `{"MessageType":"KeepAlive"}` at once and
+then every half-timeout; the server echoes that reply back, and neither is
+forwarded. Reconnection backs off 1, 2, 4, 8, 16, 30 s with ±20 % jitter,
+reset once a connection carries a message.
+
+**Group ids have two spellings.** `GroupId` fields use undashed lowercase
+hex, while the `GroupLeft` update's payload is the dashed form of the same
+value. Compare through `SyncPlayGroupIdentifier`, never with `==`. The same
+helper recognises the all-zero `PlaylistItemId` on the `Stop` a newly created
+group is greeted with.
+
+**The clock, and the timestamp exception.** `GET GetUtcTime` returns
+`{RequestReceptionTime, ResponseTransmissionTime}`, which with the local
+instants either side of the request gives NTP's four-timestamp measurement:
+`ServerClock` keeps the last eight samples and uses the one with the *lowest*
+round trip, never an average — a slow sample is asymmetric, not noisy, and
+averaging folds that error in. Three samples a second apart, then one a
+minute.
+
+Those timestamps, and SyncPlay's `When`/`EmittedAt`/`LastUpdate`, are
+wall-clock instants the protocol cannot do without, so they are the
+documented exception to "no `Date` is decoded". They stay `String` on the
+DTOs and are converted only through `JellyfinTimestamp`, which parses
+`yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z` by hand — the fraction has a *variable*
+number of digits (6 and 7 in the same response) and `ISO8601DateFormatter`
+rejects 7 — and writes the seven-digit form back. A non-UTC offset is
+refused rather than guessed at.
+
+**Permission.** `Users/Me` → `Policy.SyncPlayAccess` is
+`CreateAndJoinGroups`, `JoinGroups` or `None`, decoded onto `UserPolicy`
+with an `unknown` fallback that also covers an answer that never arrived.
+Unknown is not a denial: say the permission could not be checked.
 
 ## Seerr title details, cast and recommendations (HEL-174)
 
