@@ -104,8 +104,12 @@ the root's session store more than once and the extras announce no account).
 The choice persists under `appearance.theme.<accountID>`, which
 `AccountLocalData` removes with the account and the regression reset clears. Settings › Appearance offers the themes on both platforms; choosing
 one plays `ThemeBloomOverlay` from the root, a bloom of the new accent with
-drifting petals for under two seconds, reduced to a plain fade under Reduce
-Motion. The bloom plays for a viewer's choice, never for loading a saved one.
+the theme's `bloomMotif` drifting up through it for under two seconds:
+flowers for Baby Pink, the brand's jellyfish (the same `JellyfishGeometry`
+the sign-in screens swim, beating as it rises) for Lagoon. A new theme names
+its motif in `AppTheme.bloomMotif`. Reduce Motion reduces the bloom to a
+plain fade. The bloom plays for a viewer's choice, never for loading a saved
+one.
 
 Use native `.glass` actions and the existing circular control shape where
 appropriate. The iOS player's center transport uses `.glass(.clear)` to keep
