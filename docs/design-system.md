@@ -154,6 +154,10 @@ need an explicit appropriate control style. Test focused and unfocused states.
   `TitleArtImage` any logo URL, and both set the name in type when there is
   none. Seerr titles use the Jellyfin logo once the title is in the library;
   discovery titles without a Jellyfin item use their name in type.
+- **Top 10 shelves:** Home's Top 10 Movies and Top 10 Shows use landscape
+  cards with an oversized ranked number beside each card. Keep the rank
+  outside the focusable card so tvOS focus lift and accessibility remain owned
+  by the native card control.
 - **Heroes:** use the contained banner, artwork wash, and existing native
   paging behavior. Keep the focused/tappable control stable while artwork
   transitions. Home and Discover share the taller iPad layout, with the
