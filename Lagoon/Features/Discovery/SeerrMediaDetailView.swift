@@ -4,8 +4,7 @@ import SwiftUI
 /// (`DetailPageScaffold`, `DetailMetadataHeader`, `DetailActionLayout`,
 /// `CastStrip`), with Seerr's request state where a library title has Play
 /// (HEL-174). The artwork is TMDB's: posters and backdrops through Seerr,
-/// the title logo through `TMDBLogoProvider`, or the Jellyfin server's own
-/// logo once the title is in the library.
+/// the Jellyfin server's own logo once the title is in the library.
 struct SeerrMediaDetailView: View {
     let mediaID: Int
     let mediaType: SeerrMediaType
@@ -19,7 +18,6 @@ struct SeerrMediaDetailView: View {
     @State private var details: SeerrMediaDetails?
     @State private var jellyfinItem: MediaItem?
     @State private var recommendations: [SeerrDiscoverResult] = []
-    @State private var logoPath: String?
     @State private var isLoading = true
     @State private var isRequesting = false
     @State private var errorMessage: String?
@@ -99,9 +97,8 @@ struct SeerrMediaDetailView: View {
         .accessibilityIdentifier("seerr.detail.\(mediaType.rawValue).\(mediaID)")
     }
 
-    /// The title as artwork where anyone has it: the Jellyfin server's logo
-    /// once the title is in the library, TMDB's otherwise, and the name in
-    /// type when neither has one — the same fallback a library title makes.
+    /// The title as artwork when Jellyfin has a stored logo, and in type
+    /// otherwise — the same fallback a library title makes.
     private func titleArt(_ details: SeerrMediaDetails) -> some View {
         #if os(iOS)
         let alignment = DetailLayout.titleAlignment(horizontalSizeClass, verticalSizeClass)
@@ -120,7 +117,7 @@ struct SeerrMediaDetailView: View {
            let url = session.client.imageURL(for: jellyfinItem, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)) {
             return url
         }
-        return SeerrClient.imageURL(path: logoPath, width: Int(Metrics.logoMaxWidth * 2))
+        return nil
     }
 
     /// Actors in billing order, then the crew TMDB lists; the strip itself
@@ -349,15 +346,12 @@ struct SeerrMediaDetailView: View {
             if !isRefresh { isLoading = false }
         }
         do {
-            // The recommendations and the logo describe the title, not its
-            // request state, so the first load fetches them alongside the
-            // details and the live refresh leaves them alone.
+            // Recommendations describe the title, not its request state, so
+            // the first load fetches them alongside the details and the live
+            // refresh leaves them alone.
             async let loadedRecommendations: [SeerrDiscoverResult]? = isRefresh
                 ? nil
                 : (try? await seerr.client.recommendations(id: mediaID, mediaType: mediaType))?.results
-            async let loadedLogoPath: String? = isRefresh
-                ? nil
-                : await TMDBLogoProvider.shared.logoPath(id: mediaID, mediaType: mediaType)
             let loaded = try await seerr.client.details(id: mediaID, mediaType: mediaType)
             let loadedJellyfinItem: MediaItem?
             if loaded.mediaInfo?.availability == .available || loaded.mediaInfo?.availability == .partiallyAvailable {
@@ -372,7 +366,7 @@ struct SeerrMediaDetailView: View {
             } else {
                 loadedJellyfinItem = nil
             }
-            let (newRecommendations, newLogoPath) = await (loadedRecommendations, loadedLogoPath)
+            let newRecommendations = await loadedRecommendations
             // Commit one coherent snapshot. If changing cadence cancels the
             // polling task, the page has already received every value from
             // this response rather than half of a terminal transition.
@@ -381,7 +375,6 @@ struct SeerrMediaDetailView: View {
             jellyfinItem = loadedJellyfinItem
             if !isRefresh {
                 recommendations = (newRecommendations ?? []).filter { $0.mediaType == .movie || $0.mediaType == .tv }
-                logoPath = newLogoPath
             }
             errorMessage = nil
         } catch is CancellationError {
