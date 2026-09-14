@@ -118,22 +118,22 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         chrome: nil
     )
 
-    /// Baby pink over rose. The accent is pale enough to read as baby pink
+    /// Baby pink over warm rose. The accent is pale enough to read as baby pink
     /// and bright enough to carry a progress bar on a dark ground; the
-    /// ground and background are deep rose rather than pink, so every page
+    /// ground and background are warm red-rose rather than blue-magenta, so every page
     /// carries the hue without any of them shouting, and artwork glows are
     /// blushed with the accent so a hero never hides the theme. Form rows
     /// take a rose a step above the background, and the bar glass only a
     /// faint wash of the ground, so it stays glass.
     static let babyPink = ThemePalette(
-        accent: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        ground: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255),
-        background: Color(red: 0x1F / 255, green: 0x10 / 255, blue: 0x19 / 255),
-        surface: Color(red: 0x33 / 255, green: 0x18 / 255, blue: 0x2A / 255),
-        glowDepth: Color(red: 0x8C / 255, green: 0x4A / 255, blue: 0x72 / 255),
-        controlTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        chrome: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255).opacity(0.25)
+        accent: Color(red: 0xFF / 255, green: 0xB6 / 255, blue: 0xCC / 255),
+        ground: Color(red: 0x68 / 255, green: 0x26 / 255, blue: 0x3A / 255),
+        background: Color(red: 0x24 / 255, green: 0x10 / 255, blue: 0x16 / 255),
+        surface: Color(red: 0x3A / 255, green: 0x17 / 255, blue: 0x21 / 255),
+        glowDepth: Color(red: 0xA6 / 255, green: 0x50 / 255, blue: 0x69 / 255),
+        controlTint: Color(red: 0xFF / 255, green: 0xB6 / 255, blue: 0xCC / 255),
+        artworkTint: Color(red: 0xFF / 255, green: 0xB6 / 255, blue: 0xCC / 255),
+        chrome: Color(red: 0x68 / 255, green: 0x26 / 255, blue: 0x3A / 255).opacity(0.25)
     )
 }
 
@@ -196,7 +196,7 @@ final class ThemeStore {
         return AppTheme(rawValue: raw) ?? .lagoon
     }
 
-    static let keyPrefix = "appearance.theme."
+    nonisolated static let keyPrefix = "appearance.theme."
 
     static func key(_ accountID: String) -> String {
         keyPrefix + accountID
