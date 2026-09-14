@@ -16,10 +16,12 @@ nonisolated enum HomeCuratedRows {
     enum ID {
         static let becauseYouWatched = "lagoon.becauseYouWatched"
         static let highlyRated = "lagoon.highlyRated"
+        static let topMovies = "lagoon.topMovies"
         static let inFourK = "lagoon.inFourK"
         static let genreSpotlight = "lagoon.genreSpotlight"
         static let decadeSpotlight = "lagoon.decadeSpotlight"
         static let unstartedSeries = "lagoon.unstartedSeries"
+        static let topShows = "lagoon.topShows"
         static let readyToBinge = "lagoon.readyToBinge"
         static let surpriseMe = "lagoon.surpriseMe"
     }
@@ -57,6 +59,46 @@ nonisolated enum HomeCuratedRows {
     static func isSubstantialSeed(_ item: MediaItem) -> Bool {
         guard let ticks = item.runTimeTicks else { return true }
         return Ticks.seconds(ticks) >= minimumSeedRuntime
+    }
+}
+
+/// Resolves Seerr's ranked catalogue back to playable Jellyfin records.
+/// Keeping this bridge pure makes the provider-ID contract explicit and
+/// testable without a network client (HEL-121).
+nonisolated enum TopTenResolver {
+    static func resolve(
+        discoveries: [SeerrDiscoverResult],
+        library: [MediaItem],
+        type: MediaItemType
+    ) -> [MediaItem] {
+        let mediaType: SeerrMediaType
+        switch type {
+        case .movie: mediaType = .movie
+        case .series: mediaType = .tv
+        default: return []
+        }
+        let byTMDB = Dictionary(
+            library
+                .filter { $0.type == type }
+                .compactMap { item -> (String, MediaItem)? in
+                    guard let provider = item.providerIds?.first(where: {
+                        $0.key.caseInsensitiveCompare("Tmdb") == .orderedSame
+                    }), !provider.value.isEmpty else { return nil }
+                    return (provider.value, item)
+                },
+            uniquingKeysWith: { current, _ in current }
+        )
+
+        var seen = Set<Int>()
+        let matches: [MediaItem] = discoveries.compactMap { result in
+            // Typed discover endpoints may omit mediaType; trending includes
+            // it. An explicit conflicting type must never borrow an ID from
+            // the other TMDB catalogue.
+            guard result.mediaType == nil || result.mediaType == mediaType,
+                  seen.insert(result.id).inserted else { return nil }
+            return byTMDB[String(result.id)]
+        }.prefix(10).map { $0 }
+        return matches.count >= HomeCuratedRows.minimumItems ? matches : []
     }
 }
 
