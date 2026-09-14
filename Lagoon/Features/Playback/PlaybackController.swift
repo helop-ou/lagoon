@@ -1,3 +1,4 @@
+import CoreMedia
 import MediaAccessibility
 import Observation
 import OSLog
@@ -59,6 +60,15 @@ final class PlaybackController {
     /// engine, including a successor started by autoplay, plays audio only
     /// until the app is back (HEL-176).
     private var videoOutputSuspended = false
+    /// The engine anchored its first frame after a load or a seek — every
+    /// time, not once per engine. A SyncPlay driver reports Ready on it
+    /// (HEL-172); the controller rewires it onto each successor engine, so
+    /// the driver never has to hold one.
+    @ObservationIgnored var onEngineReady: (() -> Void)?
+    /// The player session is over for good. A driver leaves its group here
+    /// rather than going on reporting from a controller with no engine
+    /// (HEL-172).
+    @ObservationIgnored var onClosed: (() -> Void)?
     #if os(iOS)
     @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
     /// Whether Picture in Picture is showing the picture, or about to. The
@@ -85,6 +95,16 @@ final class PlaybackController {
     private var delivery: PlaybackDelivery = .negotiated
     private var deliveryItemId: String?
     private var resumeOverride: Double?
+    /// A position handed to `start` by its caller, outranking every resume
+    /// rule for that one start (HEL-172): joining a SyncPlay group means the
+    /// server, not the viewer's own watch history, says where to begin.
+    /// Deliberately not `resumeOverride`, which the new-item reset clears —
+    /// and a group join is exactly when the item is new.
+    private var startPositionOverride: Double?
+    /// Whether the engine about to be built should sit at its start position
+    /// instead of rolling (HEL-172). A group member loads, waits there,
+    /// reports Ready, and is started later by `playGroup(atHostTime:)`.
+    private var startsPaused = false
     /// Whether the attempt currently starting (or last started) is playing a
     /// downloaded file rather than a server stream (HEL-166). Always false
     /// on tvOS, which carries no downloads.
@@ -234,6 +254,9 @@ final class PlaybackController {
 
     @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
+    /// `startPosition` and `startPaused` are the group-playback entry
+    /// (HEL-172): the server names the position and whether the member
+    /// waits there for a start instant. Both apply to this start only.
     func start(
         media: MediaItem,
         startFromBeginning: Bool,
@@ -241,7 +264,9 @@ final class PlaybackController {
         trackPreferences: TrackPreferenceValues = TrackPreferenceValues(),
         preferredAudioLanguages: [String] = [],
         preferredSubtitleLanguages: [String] = [],
-        missingSubtitleMode: MissingSubtitleMode = .ask
+        missingSubtitleMode: MissingSubtitleMode = .ask,
+        startPosition: Double? = nil,
+        startPaused: Bool = false
     ) async {
         await start(
             media: media,
@@ -251,7 +276,9 @@ final class PlaybackController {
             preferredAudioLanguages: preferredAudioLanguages,
             preferredSubtitleLanguages: preferredSubtitleLanguages,
             missingSubtitleMode: missingSubtitleMode,
-            prepared: nil
+            prepared: nil,
+            startPosition: startPosition,
+            startPaused: startPaused
         )
     }
 
@@ -263,7 +290,9 @@ final class PlaybackController {
         preferredAudioLanguages: [String],
         preferredSubtitleLanguages: [String],
         missingSubtitleMode: MissingSubtitleMode,
-        prepared: PlaybackSuccessorPreparation.PreparedPlayback?
+        prepared: PlaybackSuccessorPreparation.PreparedPlayback?,
+        startPosition: Double? = nil,
+        startPaused: Bool = false
     ) async {
         guard !isClosed else { return }
         os_signpost(
@@ -284,6 +313,8 @@ final class PlaybackController {
         }
         self.client = client
         currentMedia = media
+        if let startPosition { startPositionOverride = startPosition }
+        startsPaused = startPaused
         if deliveryItemId != media.id {
             // A different item negotiates from scratch: the previous one's
             // failures say nothing about this file.
@@ -429,12 +460,13 @@ final class PlaybackController {
             publishBufferMetrics(cacheSession?.metrics)
 
             var resumeSeconds = Self.resumeStartSeconds(
-                fallbackOverrideSeconds: resumeOverride,
+                fallbackOverrideSeconds: startPositionOverride ?? resumeOverride,
                 startFromBeginning: startFromBeginning,
                 localResumeTicks: localResumeTicks,
                 serverPositionTicks: media.userData?.playbackPositionTicks
             )
             resumeOverride = nil
+            startPositionOverride = nil
             incidents.beginAttempt(
                 delivery: delivery,
                 method: method,
@@ -636,6 +668,14 @@ final class PlaybackController {
             // the viewer remains in one player session. Carry their chosen
             // speed across that internal swap.
             engine.setRate(self.engine?.rate ?? 1)
+            if startsPaused {
+                // Before the view attaches and priming begins, so
+                // `beginPlayback` anchors the clock at rate 0 and the member
+                // sits on its first frame until the group is started
+                // (HEL-172).
+                engine.pause()
+            }
+            startsPaused = false
             engine.prepare(
                 url: playbackURL,
                 cacheSession: transportCache,
@@ -651,6 +691,10 @@ final class PlaybackController {
             engine.onFinished = { [weak self] in self?.playbackDidFinish() }
             engine.onTimeAdvanced = { [weak self] position, duration in
                 self?.automation.tick(position: position, duration: duration)
+            }
+            engine.onSeekReady = { [weak self, weak engine] in
+                guard let self, let engine, self.engine === engine else { return }
+                self.onEngineReady?()
             }
             engine.setVideoOutputSuspended(videoOutputSuspended)
             engine.onPlaybackStarted = { [weak self, weak engine] in
@@ -826,10 +870,13 @@ final class PlaybackController {
         return taskCancelled || closed
     }
 
-    /// Which resume position wins when a title starts. A fallback retry's
-    /// exact landing spot always outranks the rest: it is not a stored
-    /// position but the internal recovery of a rung the viewer never chose,
-    /// so it applies even when the viewer chose to start over. Short of
+    /// Which resume position wins when a title starts. An override always
+    /// outranks the rest — a fallback retry's exact landing spot, or the
+    /// position a SyncPlay group is at (HEL-172). Neither is a stored
+    /// position the viewer could be overruling: one is the internal
+    /// recovery of a rung the viewer never chose, the other is where
+    /// everyone else already is. So both apply even when the viewer chose
+    /// to start over. Short of
     /// that, starting from beginning always starts at 0: a downloaded
     /// title's own local position (HEL-166) only resumes it in place of the
     /// server's last known position, since a fresh negotiation never runs
@@ -1328,6 +1375,47 @@ final class PlaybackController {
     }
     #endif
 
+    // MARK: - Group playback (HEL-172)
+    //
+    // The transport a SyncPlay driver drives, deliberately separate from the
+    // viewer-facing controls the player UI calls. The driver will later
+    // intercept those and turn them into group requests, and needs a way back
+    // down that does not recurse into itself. It also means the driver never
+    // holds the engine: the controller stays the boundary, and a successor
+    // engine is picked up for free.
+
+    /// Start so the current position is on screen exactly at `hostTime`.
+    func playGroup(atHostTime hostTime: CMTime) {
+        engine?.play(atHostTime: hostTime)
+    }
+
+    func pauseGroup() {
+        engine?.pause()
+    }
+
+    func seekGroup(to seconds: Double) {
+        engine?.seek(to: seconds)
+    }
+
+    /// A drift nudge on top of the viewer's chosen speed, which it leaves
+    /// alone. 1 is no correction.
+    func setCorrectionRate(_ multiplier: Double) {
+        engine?.setCorrectionRate(multiplier)
+    }
+
+    /// The media clock as the synchronizer reports it, and the position a
+    /// group report carries. 0 with no engine. For the driver, not for a
+    /// view: this reads tick-rate engine state, which the player root must
+    /// stay out of (HEL-150).
+    var clockPosition: Double { engine?.clockPosition ?? 0 }
+
+    /// Loaded and anchored without rolling: a member that has reported Ready
+    /// and is waiting for the group to start — or simply a paused player.
+    var isPrimedAndPaused: Bool {
+        guard let engine else { return false }
+        return engine.isPaused && !engine.isBuffering
+    }
+
     func resumeBufferFill() {
         guard bufferFillTask == nil,
               !successorPreparation.isPreparing,
@@ -1390,6 +1478,7 @@ final class PlaybackController {
             engine.onError = nil
             engine.onTrackSelectionChanged = nil
             engine.onPlaybackStarted = nil
+            engine.onSeekReady = nil
             engine.onPlaybackCacheFallback = nil
             engine.shutdown()
             if !preservingPlayerSurface {
@@ -1426,6 +1515,9 @@ final class PlaybackController {
     @discardableResult
     func close() -> Task<Void, Never>? {
         isClosed = true
+        // After the teardown either way, so a group driver leaves on a
+        // controller that has already let go of its engine (HEL-172).
+        defer { onClosed?() }
         guard let soakExitRequestedAt else { return beginStop() }
         // HEL-148 soak diagnostic: `soakExitRequestedAt` is only ever set by
         // the (decodeTrace-gated) soak-exit hook, so this print needs no
