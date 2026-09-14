@@ -245,9 +245,8 @@ struct ChangelogView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 if !Changelog.runningBuildIsListed() {
-                    // TestFlight assigns build numbers at upload, so the
-                    // running build often has no entry. Say so rather than
-                    // showing a list that silently omits it.
+                    // A development build may not have its notes yet.
+                    // Say so rather than silently omitting it.
                     Text("You're running \(Changelog.version()) (\(Changelog.build())), which has no changelog entry yet.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -267,27 +266,32 @@ struct ChangelogView: View {
                         .accessibilityIdentifier("settings.changelog.\(entry.build)")
 
                         if expanded.contains(entry.id) {
-                            VStack(alignment: .leading, spacing: Metrics.Space.s) {
-                                ForEach(entry.changes, id: \.self) { change in
-                                    HStack(alignment: .top, spacing: Metrics.Space.s) {
-                                        Text("•")
-                                        Text(change)
-                                            .fixedSize(horizontal: false, vertical: true)
+                            VStack(alignment: .leading, spacing: Metrics.Space.l) {
+                                ForEach(entry.sections) { section in
+                                    VStack(alignment: .leading, spacing: Metrics.Space.s) {
+                                        Text(LocalizedStringKey(section.category.rawValue))
+                                            .accessibilityAddTraits(.isHeader)
+                                            .font(.callout.weight(.semibold))
+                                            .foregroundStyle(.primary)
+
+                                        ForEach(section.changes, id: \.self) { change in
+                                            HStack(alignment: .top, spacing: Metrics.Space.s) {
+                                                Text("•")
+                                                    .accessibilityHidden(true)
+                                                Text(change)
+                                                    .fixedSize(horizontal: false, vertical: true)
+                                            }
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            #if os(tvOS)
+                                            // tvOS scrolls by moving focus, so a panel
+                                            // of plain text cannot be scrolled at all;
+                                            // each note remains its own focus target.
+                                            .focusable()
+                                            #endif
+                                        }
                                     }
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    #if os(tvOS)
-                                    // tvOS scrolls by moving focus, so a panel
-                                    // of plain text cannot be scrolled at all;
-                                    // everything below the fold was
-                                    // unreachable. Each note is its own focus
-                                    // target and the scroll view follows focus
-                                    // down the list. Still needed with the
-                                    // builds collapsed: one expanded entry can
-                                    // be taller than the sheet on its own.
-                                    .focusable()
-                                    #endif
                                 }
                             }
                         }
