@@ -26,8 +26,8 @@ struct SettingsView: View {
     @AppStorage("debug.bufferOnAudioStarvation") private var bufferOnAudioStarvation = false
     #endif
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
-    @AppStorage("playback.skipMode") private var skipModeRaw = SkipMode.autoDelay.rawValue
-    @AppStorage("playback.autoplayMode") private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
+    @AppStorage(SkipMode.defaultsKey) private var skipModeRaw = SkipMode.autoDelay.rawValue
+    @AppStorage(AutoplayMode.defaultsKey) private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var homePreferences = HomeSectionPreferencesStore()
