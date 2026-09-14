@@ -133,8 +133,12 @@ nonisolated struct ThemePalette: Equatable, Sendable {
 
 /// Which theme is on, and for whom. The choice belongs to the Jellyfin
 /// profile, not the device: a partner's pink follows their account and
-/// nobody else's (HEL-173). `RootView` points the store at the active
-/// account; before sign-in the brand theme shows.
+/// nobody else's (HEL-173). `SessionStore` points the store at the active
+/// account. While nobody is active (signing out, switching, adding an
+/// account) the last profile's theme stays up, so the picker and sign-in
+/// screens wear the look of whoever was just there; an account waiting to
+/// sign in again wears its own; only a launch with nobody remembered shows
+/// the brand.
 @Observable
 final class ThemeStore {
     static let shared = ThemeStore()
@@ -152,18 +156,22 @@ final class ThemeStore {
         self.defaults = defaults
     }
 
-    /// Points the store at a profile, or at none. `owner` identifies the
-    /// session store making the call: SwiftUI can construct a root view's
-    /// state object more than once and keep only the first, and every
-    /// extra `SessionStore` restores nothing and announces a nil account.
-    /// Such a call must not undo the theme the real store loaded, so a nil
-    /// configure only counts from the owner that activated the current
-    /// account (the same rule `DownloadStore` follows).
+    /// Points the store at a profile, or at none. A profile loads its saved
+    /// theme; none keeps the theme already showing and only stops saving,
+    /// so the screens between two profiles keep the last one's look.
+    ///
+    /// `owner` identifies the session store making the call: SwiftUI can
+    /// construct a root view's state object more than once and keep only
+    /// the first, and every extra `SessionStore` restores nothing and
+    /// announces a nil account. Such a call must not detach the real
+    /// store's profile, so a nil configure only counts from the owner that
+    /// activated the current account (the same rule `DownloadStore` follows).
     func configure(accountID: String?, owner: ObjectIdentifier? = nil) {
         if accountID == nil, let activeOwner, owner != activeOwner { return }
         if accountID != nil { activeOwner = owner }
         guard self.accountID != accountID else { return }
         self.accountID = accountID
+        guard let accountID else { return }
         theme = Self.storedTheme(for: accountID, in: defaults)
     }
 
