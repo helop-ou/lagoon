@@ -34,6 +34,8 @@ extension SyncPlayNotice {
             }
         case .accessDenied:
             String(localized: "This account can't see what the group is playing")
+        case .requestFailed:
+            String(localized: "Couldn't update the group. Try again.")
         }
     }
 }
