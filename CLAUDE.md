@@ -96,6 +96,9 @@ list exists so you know to read it before touching the area.
   (HEL-137). A light Siri Remote touch-surface tap and a Select press are
   different inputs and never share a path (HEL-134). Software-decoded 10-bit
   video reaches the renderer through the asynchronous `MetalFrameConverter`.
+  The delivery ladder descends only on a verdict about the samples: a lost
+  VideoToolbox session is rebuilt, not transcoded, and while video output is
+  suspended it is ignored outright (HEL-181).
 - **Vendored FFmpeg** ([Playback](docs/playback.md)): libavformat is
   repo-built without its network stack and every HTTP open goes through
   `FFmpegNetworkTransport` over URLSession (HEL-142); keep the build script
