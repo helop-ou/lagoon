@@ -2309,7 +2309,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     }
                 )
             } catch {
-                failVideoDecode(error)
+                // No loop yet to run a rebuild's seek — this runs before the
+                // demux loop and returns instead of entering it — so the
+                // ladder has to hear about it (HEL-181). A decoder the system
+                // will not hand out at open is what the transcode rung is
+                // for; the rungs below do not need one.
+                failVideoDecode(error, allowSessionRecovery: false)
                 demuxer.close()
                 return
             }
@@ -2476,12 +2481,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                         break
                     }
                 }
-                do {
-                    try videoDecoder?.reset()
-                } catch {
-                    failVideoDecode(error)
-                    break
-                }
+                guard prepareVideoDecoderForSeek() else { break }
                 // Before the queues, and synchronously: a frame still inside
                 // libavcodec belongs to the old position and must not land in
                 // a queue that has just been emptied.
@@ -2626,8 +2626,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // the queue may call itself finished.
             try softwareDecodeStage?.finish()
         } catch {
-            failVideoDecode(error)
-            return
+            // At the end of the film a dead session costs the last frames it
+            // was still holding and nothing else: there is no more input to
+            // decode, and the boundary below still fires. Descending the
+            // ladder to re-fetch a film that just finished, or seeking to
+            // rebuild for it, would both be worse than those frames
+            // (HEL-181). Anything else is a real decode failure.
+            if let status = (error as? VideoToolboxDecoder.DecoderError)?.status,
+               VideoToolboxDecoder.isSessionFault(status) {
+                recordVideoSessionFault(status, recovery: "decodeSessionIgnored")
+            } else {
+                failVideoDecode(error, allowSessionRecovery: false)
+                return
+            }
         }
         videoQueue.markFinished()
         audioQueue.markFinished()
@@ -2638,6 +2649,54 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         ) {
             Task { @MainActor in
                 self.armFinishBoundary(at: end, generation: generation)
+            }
+        }
+    }
+
+    /// Recreates the decode session this seek is about to feed.
+    ///
+    /// A session VideoToolbox declines is not a statement about the samples
+    /// (HEL-181), so it gets one more attempt before the ladder hears about
+    /// it: the first attempt has already torn the old session down, which is
+    /// often the whole reason the second one succeeds. This is where
+    /// `LAGOON-A` failed — a seek 178 ms in, on a stream that had been
+    /// playing, reported as `sessionCreation -12903`.
+    ///
+    /// The rebuild is in place rather than through `absorbVideoSessionFault`
+    /// because a false return stops the demux loop, and the seek a rebuild
+    /// would ask for needs a loop still running to apply it.
+    ///
+    /// While video output is suspended a failure here is not one at all:
+    /// nothing is being decoded, and the seek that resumes the picture runs
+    /// this again with the app in the foreground (HEL-176).
+    ///
+    /// Returns false when the demux loop must stop; the ladder has been told.
+    nonisolated private func prepareVideoDecoderForSeek() -> Bool {
+        guard let videoDecoder else { return true }
+        do {
+            try videoDecoder.reset()
+            return true
+        } catch {
+            guard let status = (error as? VideoToolboxDecoder.DecoderError)?.status,
+                  VideoToolboxDecoder.isSessionFault(status) else {
+                failVideoDecode(error, allowSessionRecovery: false)
+                return false
+            }
+            if shared.withLock({ $0.videoOutputSuspended }) {
+                // No session, and nothing that needs one until the resume
+                // seek makes another.
+                recordVideoSessionFault(status, recovery: "decodeSessionIgnored")
+                return true
+            }
+            do {
+                try videoDecoder.reset()
+                recordVideoSessionFault(status, recovery: "decodeSessionRebuilt")
+                return true
+            } catch {
+                // Two dead sessions at the same point: the decoder really
+                // cannot be rebuilt here, and the ladder is the right answer.
+                failVideoDecode(error, allowSessionRecovery: false)
+                return false
             }
         }
     }
@@ -2823,7 +2882,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         return end.isFinite ? end : nil
     }
 
-    nonisolated private func failVideoDecode(_ error: Error) {
+    /// - Parameter allowSessionRecovery: false where the caller is about to
+    ///   stop the demux loop regardless. A rebuild is a seek, and a seek needs
+    ///   a loop still running to apply it, so absorbing the fault there would
+    ///   trade a reported failure for a silent hang.
+    nonisolated private func failVideoDecode(_ error: Error, allowSessionRecovery: Bool = true) {
+        // A lost or refused VideoToolbox session is not a verdict on the
+        // bitstream, and the rung below is one-way (HEL-181).
+        if allowSessionRecovery, absorbVideoSessionFault(error) { return }
         let wasAlreadyCancelled = shared.withLock { state -> Bool in
             let previous = state.cancelled
             state.cancelled = true
@@ -2840,9 +2906,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             let output = softwareDecodeStage?.outputModeName ?? "unknown"
             print("SoftwareVideoDecodeFailure output=\"\(output)\" detail=\"\(detail)\"")
         }
-        // Every caller is a decoder: VideoToolbox refusing a session or a
-        // frame, or libavcodec refusing the stream. Redelivering the same
-        // bitstream cannot change that.
+        // What is left after the session faults have been taken out above is
+        // a decoder's verdict on the samples: VideoToolbox refusing a frame,
+        // or libavcodec refusing the stream. Redelivering the same bitstream
+        // cannot change that.
         let failure = PlaybackEngineFailure(
             cause: .undecodable,
             message: "Playback failed in the Lagoon engine (\(detail)).",
@@ -2851,6 +2918,121 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         Task { @MainActor in
             self.onError?(failure)
         }
+    }
+
+    /// A VideoToolbox session that is gone, rather than samples that cannot
+    /// be decoded (HEL-181). True when the fault has been dealt with here and
+    /// must not reach the delivery ladder.
+    ///
+    /// The renderer path has had both of these since HEL-176 and HEL-151; the
+    /// decoder path had neither, so a session the system reclaimed read as
+    /// "this device cannot decode this file" and went straight to transcode.
+    nonisolated private func absorbVideoSessionFault(_ error: Error) -> Bool {
+        guard let status = (error as? VideoToolboxDecoder.DecoderError)?.status,
+              VideoToolboxDecoder.isSessionFault(status) else { return false }
+        let resolution = shared.withLock { state -> PlaybackDecodeSessionPolicy.Resolution in
+            let resolution = PlaybackDecodeSessionPolicy.resolve(
+                cancelled: state.cancelled,
+                videoOutputSuspended: state.videoOutputSuspended,
+                recoveryInFlight: state.videoSessionRecoveryInFlight,
+                playbackGeneration: state.playbackGeneration,
+                rebuiltGeneration: state.videoSessionRebuiltGeneration
+            )
+            // Claimed under the same lock that read it, or the rest of the
+            // decoder's samples each start a rebuild of their own.
+            if resolution == .rebuild { state.videoSessionRecoveryInFlight = true }
+            return resolution
+        }
+        switch resolution {
+        case .descend:
+            return false
+        case .tooLate:
+            // `failVideoDecode` would return at its own cancelled check
+            // anyway; saying so here keeps the reason in one place.
+            return true
+        case .alreadyRecovering:
+            // Deliberately not recorded. A decoder can hold dozens of samples
+            // and every one of them reports the same dead session on the way
+            // out; a breadcrumb apiece would evict the history that explains
+            // the incident. The rebuild they are all waiting on is recorded.
+            return true
+        case .ignore:
+            recordVideoSessionFault(status, recovery: "decodeSessionIgnored")
+            return true
+        case .rebuild:
+            // Recorded on the main actor, where which of the two it turned
+            // out to be is actually known.
+            Task { @MainActor in self.rebuildVideoDecodeSession(after: status) }
+            return true
+        }
+    }
+
+    /// The rebuild: a seek to where the playhead already is, which is how
+    /// HEL-151 recovers a renderer and how HEL-176 restores the picture on
+    /// resume. The demux loop's seek branch resets the decoder, so the new
+    /// session starts on a keyframe with a clean dependency chain.
+    private func rebuildVideoDecodeSession(after status: OSStatus) {
+        // Inside the last second `seek` clamps backwards, and the finish
+        // boundary is about to fire anyway (the same guard HEL-176 uses to
+        // decide whether resuming is worth a seek). The frames the dead
+        // session was holding are the end of the film; losing them costs
+        // less than replaying the last second would.
+        guard !shutdownRequested, !didFinish,
+              duration <= 0 || timePosition < duration - 1 else {
+            recordVideoSessionFault(status, recovery: "decodeSessionIgnored")
+            shared.withLock {
+                // Spent even though nothing was rebuilt. Otherwise every
+                // remaining sample in the dead decoder resolves to `.rebuild`
+                // again and asks for another of these, once per sample, all
+                // the way to the end of the film.
+                $0.videoSessionRebuiltGeneration = $0.playbackGeneration
+                $0.videoSessionRecoveryInFlight = false
+            }
+            return
+        }
+        recordVideoSessionFault(status, recovery: "decodeSessionRebuilt")
+        let position = timePosition
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Renderer Recovery",
+            signpostID: performanceSignpostID,
+            "position=%{public}.3f reason=decodeSession",
+            position
+        )
+        seek(to: position)
+        // Recorded *after* the seek, as in HEL-151: `seek` bumps the
+        // generation, so the rebuild is spent against the attempt it starts.
+        // A second dead session at the same position descends the ladder,
+        // while a later seek by the viewer earns a rebuild of its own.
+        shared.withLock {
+            $0.videoSessionRebuiltGeneration = $0.playbackGeneration
+            $0.videoSessionRecoveryInFlight = false
+        }
+    }
+
+    /// A session fault that did not become a playback failure, on the same
+    /// channel as the renderer recoveries it mirrors. Recorded always, so it
+    /// lands in the history attached to any later incident; reported only
+    /// when it actually cost a reload, because the ignored ones are expected
+    /// and would be pure noise on the dashboard.
+    nonisolated private func recordVideoSessionFault(_ status: OSStatus, recovery: String) {
+        let detail = PlaybackFailureDetail(
+            stage: .decode,
+            domain: "VideoToolbox.session",
+            code: Int(status)
+        )
+        let fields = detail.fields.merging([
+            "recovery": .string(recovery),
+        ]) { _, new in new }
+        Diagnostics.record(.playbackRendererRecovery, fields)
+        guard recovery == "decodeSessionRebuilt" else { return }
+        Diagnostics.report(
+            .playbackRendererRecovery,
+            level: .warning,
+            variant: [recovery] + detail.fingerprint.dropFirst(),
+            fields: fields
+        )
     }
 
     /// VideoToolbox failures carry an OSStatus worth keeping; every other
@@ -3532,6 +3714,13 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// restart-point failure rather than a verdict on the stream, and
         /// earns one in-place retry before the ladder descends (HEL-151).
         var videoSamplesSinceFlush = 0
+        /// One rebuild of the VideoToolbox session per playback generation
+        /// (HEL-181): which generation has spent its rebuild, and whether one
+        /// is in flight right now. Both are needed — every sample already
+        /// inside a decoder reports the same dead session on the way out, and
+        /// they are one fault, not a dozen.
+        var videoSessionRebuiltGeneration: Int?
+        var videoSessionRecoveryInFlight = false
         /// Furthest audio presentation end actually handed to AVFoundation.
         /// Compared with the synchronizer clock for HEL-123; unlike the app
         /// queue it includes samples AVFoundation already owns.
