@@ -48,13 +48,24 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "103",
+            released: "September 2026",
+            headline: "Jellyseerr search stops coming up empty.",
+            sections: [
+                ChangelogSection(category: .bugFixes, changes: [
+                    "Searching Jellyseerr no longer comes up empty when a search matches a film collection. One result of a kind Lagoon did not recognise used to discard every other result on the page.",
+                    "A film no longer restarts on a lower-quality stream when the system takes the video decoder away, which it does when you leave the app playing in the background. Lagoon now asks for a new decoder and carries on, keeping the original quality and the subtitle tracks that came with the file.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "102",
             released: "September 2026",
             headline: "Skip Intro and Next Episode show how long is left.",
             sections: [
                 ChangelogSection(category: .bugFixes, changes: [
                     "The Skip Intro and Next Episode buttons now fill up as their countdown runs, so you can see how long is left before they act. They used to appear full straight away, which left no way to tell.",
-                    "Searching Jellyseerr no longer comes up empty when a search matches a film collection. One result of a kind Lagoon did not recognise used to discard every other result on the page.",
                 ]),
             ]
         ),
