@@ -16,14 +16,14 @@ final class PlaybackAutomation {
     /// The skippable segment the playhead is inside. Nil when there is
     /// none, when it was already handled, and while suppressed.
     private(set) var activeSegment: MediaSegment?
-    /// 0…1, drives the pill's fill; 1 while the countdown runs.
-    private(set) var skipFill: Double = 0
+    /// Timing shared by the pending skip and the pill's visible progress.
+    private(set) var skipTiming: PlaybackCountdown?
     /// The Up Next card is due and not waved away.
     private(set) var showsNextUp = false
     /// The card's countdown is running.
     private(set) var isCountingDown = false
-    /// 0…1, drives the card's fill; 1 while the countdown runs.
-    private(set) var nextUpFill: Double = 0
+    /// Timing shared by the pending handoff and the card's visible progress.
+    private(set) var nextUpTiming: PlaybackCountdown?
     /// Where the card is due, for the regression probe.
     private(set) var nextUpCardStart: Double?
     /// The panel and an open scrub own the screen and the remote, and a
@@ -153,7 +153,13 @@ final class PlaybackAutomation {
 
     /// Starts the next episode now, by the countdown, a tap, or Select.
     func playNext() {
-        cancelNextUpCountdown()
+        // The pending task is called off, but the timing stays. An accepted
+        // hand-off outlives this call: the card is still on screen while the
+        // successor is prepared (HEL-144), and a bar that emptied underneath
+        // it would read as the offer being withdrawn. Progress clamps at 1,
+        // so the bar fills out its run and holds until the next item begins.
+        nextUpCountdown?.cancel()
+        nextUpCountdown = nil
         onPlayNext?()
     }
 
@@ -192,9 +198,10 @@ final class PlaybackAutomation {
         case .instant:
             skip(segment)
         case .autoDelay:
-            skipFill = 1
-            skipCountdown = Task { [weak self, countdown] in
-                try? await Task.sleep(for: countdown)
+            let timing = PlaybackCountdown(duration: countdown)
+            skipTiming = timing
+            skipCountdown = Task { [weak self] in
+                try? await Task.sleep(until: timing.deadline, clock: .continuous)
                 guard let self, !Task.isCancelled, self.activeSegment?.id == segment.id else { return }
                 self.skip(segment)
             }
@@ -230,9 +237,10 @@ final class PlaybackAutomation {
         cancelNextUpCountdown()
         guard counting else { return }
         // Arms as the playhead crosses into the countdown window, once.
-        nextUpFill = 1
-        nextUpCountdown = Task { [weak self, countdown] in
-            try? await Task.sleep(for: countdown)
+        let timing = PlaybackCountdown(duration: countdown)
+        nextUpTiming = timing
+        nextUpCountdown = Task { [weak self] in
+            try? await Task.sleep(until: timing.deadline, clock: .continuous)
             guard let self, !Task.isCancelled, self.isCountingDown else { return }
             self.playNext()
         }
@@ -241,12 +249,12 @@ final class PlaybackAutomation {
     private func cancelSkipCountdown() {
         skipCountdown?.cancel()
         skipCountdown = nil
-        skipFill = 0
+        skipTiming = nil
     }
 
     private func cancelNextUpCountdown() {
         nextUpCountdown?.cancel()
         nextUpCountdown = nil
-        nextUpFill = 0
+        nextUpTiming = nil
     }
 }
