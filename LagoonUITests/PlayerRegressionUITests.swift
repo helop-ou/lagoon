@@ -3009,10 +3009,17 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertTrue(componentPicker.waitForExistence(timeout: 5))
         remote.press(.right)
         remote.press(.select)
-        let playerPanelOption = app.descendants(matching: .any)["Player Panel"]
-        XCTAssertTrue(playerPanelOption.waitForExistence(timeout: 5))
-        for _ in 0..<8 { remote.press(.down) }
-        remote.press(.select)
+        // By stable menu order, the same way the settings journey picks it.
+        // Player Panel sits below the fold, and a lazy row is absent from the
+        // accessibility tree until focus scrolls it in, so waiting for it
+        // before moving missed it; the count that replaced the wait was two
+        // rows short and quietly selected Watch Together — Toast instead.
+        // Asserting the picker's value says "the index rotted" rather than
+        // leaving the missing button below to report it.
+        selectNativeMenuOption("Player Panel", in: app, menuIndex: 10)
+        let playerPanelSelection = NSPredicate(format: "value == %@", "Player Panel")
+        expectation(for: playerPanelSelection, evaluatedWith: componentPicker)
+        waitForExpectations(timeout: 5)
 
         let openPlayerPanel = app.buttons["settings.developer.playerPanel.open"]
         XCTAssertTrue(openPlayerPanel.waitForExistence(timeout: 5))
