@@ -386,4 +386,97 @@ struct MeteredPathTests {
             )
         )
     }
+
+    /// A decoder the system took away is rebuilt rather than transcoded
+    /// (HEL-181). `LAGOON-A` and `LAGOON-G` both spent the one-way rung on a
+    /// `-12903` that only ever meant "make another session".
+    @Test func aLostDecodeSessionIsRebuiltRatherThanDescended() {
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: false,
+                videoOutputSuspended: false,
+                recoveryInFlight: false,
+                playbackGeneration: 7,
+                rebuiltGeneration: nil
+            ) == .rebuild
+        )
+        // A generation that already spent its rebuild descends, so a session
+        // that genuinely cannot be made still reaches the ladder.
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: false,
+                videoOutputSuspended: false,
+                recoveryInFlight: false,
+                playbackGeneration: 7,
+                rebuiltGeneration: 7
+            ) == .descend
+        )
+        // A later seek earns a rebuild of its own: the generation moved on.
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: false,
+                videoOutputSuspended: false,
+                recoveryInFlight: false,
+                playbackGeneration: 8,
+                rebuiltGeneration: 7
+            ) == .rebuild
+        )
+    }
+
+    @Test func everySampleInADeadDecoderIsTheSameOneFault() {
+        // Each buffer inside the decoder reports the lost session on its way
+        // out. Without this they would queue a rebuild seek apiece.
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: false,
+                videoOutputSuspended: false,
+                recoveryInFlight: true,
+                playbackGeneration: 7,
+                rebuiltGeneration: nil
+            ) == .alreadyRecovering
+        )
+    }
+
+    @Test func suspendedVideoHasNoSessionWorthSaving() {
+        // Backgrounding leaves the old session alive on purpose and the
+        // resume seek builds a fresh one (HEL-176), so a sample that reached
+        // a torn-down session says nothing — and must not end the film. This
+        // is `LAGOON-G`: a fallback to transcode with the app in the
+        // background, which could not have completed anyway.
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: false,
+                videoOutputSuspended: true,
+                recoveryInFlight: false,
+                playbackGeneration: 7,
+                rebuiltGeneration: 7
+            ) == .ignore
+        )
+    }
+
+    /// A rebuild is a seek, and a seek needs a demux loop still running to
+    /// apply it. Once playback has been cancelled there is none, so asking
+    /// for one would replace a reported failure with a spinner.
+    @Test func aFaultAfterPlaybackEndedAsksForNothing() {
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: true,
+                videoOutputSuspended: false,
+                recoveryInFlight: false,
+                playbackGeneration: 7,
+                rebuiltGeneration: nil
+            ) == .tooLate
+        )
+        // Cancellation outranks the rest: the samples draining out of a
+        // decoder being torn down report the session going with it.
+        #expect(
+            PlaybackDecodeSessionPolicy.resolve(
+                cancelled: true,
+                videoOutputSuspended: true,
+                recoveryInFlight: true,
+                playbackGeneration: 7,
+                rebuiltGeneration: 7
+            ) == .tooLate
+        )
+    }
 }
