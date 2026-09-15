@@ -29,6 +29,19 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
                 "VideoToolbox could not wrap a decoded video frame (\(status))."
             }
         }
+
+        /// The status VideoToolbox reported, whichever stage produced it.
+        /// Every case carries one, and what it says is often the difference
+        /// between a dead session and a dead stream (HEL-181).
+        var status: OSStatus {
+            switch self {
+            case .sessionCreation(let status),
+                 .decode(let status),
+                 .outputFormat(let status),
+                 .outputSample(let status):
+                status
+            }
+        }
     }
 
     typealias OutputHandler = @Sendable (CMSampleBuffer) -> Void
@@ -91,6 +104,25 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
 
     static func isRecoverableFrameError(_ status: OSStatus) -> Bool {
         status == kVTVideoDecoderReferenceMissingErr
+    }
+
+    /// Whether a status is about the decode *session* rather than the samples
+    /// it was handed (HEL-181).
+    ///
+    /// `kVTInvalidSessionErr` is the session having gone away underneath us:
+    /// the system reclaims decoders, and a sample in flight when it does
+    /// reports this. The other two are the decoder declining to work rather
+    /// than declining this bitstream — a malfunction, and a decoder the
+    /// system will not hand out at this moment. Apple's answer to all three
+    /// is a new session, and not one of them is a statement about the
+    /// samples, so none is grounds for the ladder's one-way transcode rung.
+    ///
+    /// Distinct from `isRecoverableFrameError` above, which is about a single
+    /// access unit inside a session that is still perfectly alive.
+    static func isSessionFault(_ status: OSStatus) -> Bool {
+        status == kVTInvalidSessionErr
+            || status == kVTVideoDecoderMalfunctionErr
+            || status == kVTVideoDecoderNotAvailableNowErr
     }
 
     init(
