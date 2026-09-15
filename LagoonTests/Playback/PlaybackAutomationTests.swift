@@ -60,12 +60,12 @@ struct PlaybackAutomationTests {
         #expect(automation.activeSegment == nil)
         automation.tick(position: 12, duration: 1_320)
         #expect(automation.activeSegment?.id == "intro")
-        #expect(automation.skipFill == 1)
+        #expect(automation.skipTiming != nil)
 
         await eventually { landed == 70 }
         #expect(landed == 70)
         #expect(automation.activeSegment == nil)
-        #expect(automation.skipFill == 0)
+        #expect(automation.skipTiming == nil)
 
         // Landing at the end must not re-arm the segment it just skipped.
         automation.tick(position: 69.9, duration: 1_320)
@@ -80,7 +80,7 @@ struct PlaybackAutomationTests {
         automation.tick(position: 12, duration: 1_320)
         #expect(automation.dismissSkip())
         #expect(automation.activeSegment == nil)
-        #expect(automation.skipFill == 0)
+        #expect(automation.skipTiming == nil)
 
         try await Task.sleep(for: Self.settled)
         #expect(!skipped)
@@ -115,7 +115,7 @@ struct PlaybackAutomationTests {
         automation.onSkip = { landed = $0.end }
         automation.tick(position: 12, duration: 1_320)
         #expect(automation.activeSegment?.id == "intro")
-        #expect(automation.skipFill == 0)
+        #expect(automation.skipTiming == nil)
         #expect(!automation.dismissSkip())
         try await Task.sleep(for: Self.settled)
         #expect(landed == nil)
@@ -164,7 +164,7 @@ struct PlaybackAutomationTests {
         automation.tick(position: 1_201, duration: 1_320)
         #expect(automation.showsNextUp)
         #expect(automation.isCountingDown)
-        #expect(automation.nextUpFill == 1)
+        #expect(automation.nextUpTiming != nil)
 
         await eventually { played }
         #expect(played)
