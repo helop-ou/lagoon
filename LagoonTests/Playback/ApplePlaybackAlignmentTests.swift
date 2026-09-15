@@ -68,6 +68,29 @@ struct ApplePlaybackAlignmentTests {
         #expect(!VideoToolboxDecoder.isRecoverableFrameError(kVTInvalidSessionErr))
     }
 
+    /// A lost session is not a verdict on the bitstream, so it must not be
+    /// read as one — `LAGOON-A`/`LAGOON-G` descended to transcode on
+    /// `-12903`, which only ever meant the session needed remaking (HEL-181).
+    @Test func lostSessionsAreFaultsInTheSessionNotTheStream() {
+        #expect(VideoToolboxDecoder.isSessionFault(kVTInvalidSessionErr))
+        #expect(VideoToolboxDecoder.isSessionFault(kVTVideoDecoderMalfunctionErr))
+        #expect(VideoToolboxDecoder.isSessionFault(kVTVideoDecoderNotAvailableNowErr))
+        // A frame the decoder refused inside a session that is still alive is
+        // the other thing entirely, and so is a real verdict on the samples.
+        #expect(!VideoToolboxDecoder.isSessionFault(kVTVideoDecoderReferenceMissingErr))
+        #expect(!VideoToolboxDecoder.isSessionFault(kVTVideoDecoderBadDataErr))
+        #expect(!VideoToolboxDecoder.isSessionFault(kVTVideoDecoderUnsupportedDataFormatErr))
+    }
+
+    /// Every case carries the status, because the classification above is
+    /// worthless if the funnel cannot get at it.
+    @Test func decoderErrorsCarryTheirStatus() {
+        #expect(VideoToolboxDecoder.DecoderError.decode(-12903).status == -12903)
+        #expect(VideoToolboxDecoder.DecoderError.sessionCreation(-12903).status == -12903)
+        #expect(VideoToolboxDecoder.DecoderError.outputFormat(-12911).status == -12911)
+        #expect(VideoToolboxDecoder.DecoderError.outputSample(-12913).status == -12913)
+    }
+
     @Test func directPlayAudioCadenceUsesCodecConfiguration() {
         #expect(SampleBufferFactory.audioFramesPerPacket(
             codecID: AV_CODEC_ID_MP3,
