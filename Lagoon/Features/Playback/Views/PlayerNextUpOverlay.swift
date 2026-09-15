@@ -64,7 +64,7 @@ struct PlayerNextUpOverlay: View {
                 PlayerNextUpCard(
                     episode: episode,
                     showsCountdown: automation.autoplayMode == .autoDelay,
-                    fill: automation.nextUpFill,
+                    countdown: automation.nextUpTiming,
                     hint: hint
                 )
                 .transition(transientScaleTransition)
@@ -91,7 +91,8 @@ struct PlayerNextUpOverlay: View {
 struct PlayerNextUpCard: View {
     let episode: NextUpEpisode
     let showsCountdown: Bool
-    let fill: Double
+    var fill: Double = 0
+    var countdown: PlaybackCountdown?
     let hint: LocalizedStringKey
     var accessibilityIdentifier = "player.nextUp"
 
@@ -134,15 +135,7 @@ struct PlayerNextUpCard: View {
                     .fill(.white.opacity(0.25))
                     .frame(height: NextUpMetrics.barHeight)
                     .overlay(alignment: .leading) {
-                        GeometryReader { proxy in
-                            Capsule()
-                                .fill(.white)
-                                .frame(width: proxy.size.width * min(max(fill, 0), 1))
-                                .animation(
-                                    .linear(duration: AutoplayMode.countdownSeconds),
-                                    value: fill
-                                )
-                        }
+                        PlayerCountdownFill(countdown: countdown, fill: fill)
                     }
                     .frame(height: NextUpMetrics.barHeight)
             }
