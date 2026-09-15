@@ -48,6 +48,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "102",
+            released: "September 2026",
+            headline: "Skip Intro and Next Episode show how long is left.",
+            sections: [
+                ChangelogSection(category: .bugFixes, changes: [
+                    "The Skip Intro and Next Episode buttons now fill up as their countdown runs, so you can see how long is left before they act. They used to appear full straight away, which left no way to tell.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "101",
             released: "September 2026",
             headline: "Apple TV buttons keep their labels readable when focused.",
