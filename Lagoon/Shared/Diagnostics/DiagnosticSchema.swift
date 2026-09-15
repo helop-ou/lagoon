@@ -65,6 +65,10 @@ nonisolated enum DiagnosticSchema {
     static let recoveryChoices: Set<String> = [
         "rendererFailed", "mediaServicesReset", "requiresFlush", "restartPoint",
         "stallReprime", "stallResume", "cacheFallback",
+        // A VideoToolbox session that was rebuilt instead of being read as an
+        // undecodable stream, and one that needed no rebuild because nothing
+        // was waiting on it (HEL-181).
+        "decodeSessionRebuilt", "decodeSessionIgnored",
     ]
     static let outcomeChoices: Set<String> = [
         "recovered", "reprimed", "failed", "exhausted", "cancelled", "ready",
