@@ -250,14 +250,19 @@ nonisolated enum DiagnosticSchema {
     static func isRoute(_ text: String) -> Bool {
         guard !text.isEmpty, text.utf8.count <= 120 else { return false }
         return text.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { segment in
-            segment == "{id}" || (!segment.isEmpty && segment.utf8.allSatisfy { byte in
+            // The version exception must match `DiagnosticRouteTemplate`'s, or
+            // a route it emits would be rejected here and the field dropped.
+            if segment == "{id}" || DiagnosticRouteTemplate.isVersionSegment(segment) {
+                return true
+            }
+            return !segment.isEmpty && segment.utf8.allSatisfy { byte in
                 switch byte {
                 case UInt8(ascii: "a")...UInt8(ascii: "z"), UInt8(ascii: "A")...UInt8(ascii: "Z"):
                     true
                 default:
                     false
                 }
-            })
+            }
         }
     }
 
