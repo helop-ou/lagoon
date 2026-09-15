@@ -54,6 +54,20 @@ play, remux, then video transcode; only the re-encode rung has the 1080p ceiling
 Do not confuse remux selection with `SupportsDirectStream`. Preserve the
 failure cause and resume position when moving down a rung.
 
+Descend only on a verdict about the samples. `.undecodable` skips the remux
+rung and is one-way — it costs a reload, the embedded subtitle tracks, and
+server CPU per viewer — so a failure that says nothing about the bitstream
+must never reach it. A lost VideoToolbox session is the case that keeps being
+mistaken for one: `kVTInvalidSessionErr` and its siblings
+(`VideoToolboxDecoder.isSessionFault`) mean the decoder was taken away, not
+that the stream is undecodable, and the answer is a new session
+(`PlaybackDecodeSessionPolicy`), bounded at one rebuild per playback
+generation as HEL-151 bounds the renderer's. While video output is suspended
+there is nothing to rebuild for and the fault is ignored outright, because
+backgrounding leaves the old session alive on purpose and the resume seek
+makes a fresh one (HEL-176). Both guards belong on the decoder path *and* the
+renderer path; HEL-181 was the decoder path having neither.
+
 Progressive H.264 uses the compressed sample-buffer path; interlaced H.264 is
 software-decoded and deinterlaced, on the stream's probed field order, never
 the server's flag (HEL-170). HEVC is decoded ahead through VideoToolbox. AV1
