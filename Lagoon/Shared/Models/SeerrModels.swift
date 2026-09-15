@@ -78,6 +78,14 @@ nonisolated enum SeerrPermission: Int, Hashable {
     case viewBlocklist = 1_073_741_824
 }
 
+/// The three types Lagoon acts on. Jellyseerr's `search` is a TMDB
+/// multi-search and answers with more than these — `collection` today, and
+/// whatever a later release adds — so every DTO that carries one decodes it
+/// with `try?` into an optional: an unrecognised type must leave that one
+/// result typeless, never fail the page it arrived in (HEL-180). The cases
+/// stay exactly the three the app can request and route, so the outbound
+/// `SeerrCreateRequest` and the `details`/`recommendations` switches keep
+/// meaning what they say.
 nonisolated enum SeerrMediaType: String, Codable, Hashable, CaseIterable, Identifiable {
     case movie
     case tv
@@ -391,6 +399,31 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
     let voteAverage: Double?
     let mediaInfo: SeerrMediaInfo?
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // `id` stays strict: it is the TMDB identity this result is navigated
+        // and deduplicated by, and a defaulted one would collide with every
+        // other defaulted result on the page.
+        id = try container.decode(Int.self, forKey: .id)
+        mediaType = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .mediaType)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        originalTitle = try container.decodeIfPresent(String.self, forKey: .originalTitle)
+        originalName = try container.decodeIfPresent(String.self, forKey: .originalName)
+        overview = try container.decodeIfPresent(String.self, forKey: .overview)
+        posterPath = try container.decodeIfPresent(String.self, forKey: .posterPath)
+        backdropPath = try container.decodeIfPresent(String.self, forKey: .backdropPath)
+        releaseDate = try container.decodeIfPresent(String.self, forKey: .releaseDate)
+        firstAirDate = try container.decodeIfPresent(String.self, forKey: .firstAirDate)
+        voteAverage = try container.decodeIfPresent(Double.self, forKey: .voteAverage)
+        mediaInfo = try container.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, mediaType, title, name, originalTitle, originalName, overview
+        case posterPath, backdropPath, releaseDate, firstAirDate, voteAverage, mediaInfo
+    }
+
     var displayTitle: String { title ?? name ?? originalTitle ?? originalName ?? "Untitled" }
     var date: String? { releaseDate ?? firstAirDate }
     var year: String? { date.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 } }
@@ -630,6 +663,30 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
     let downloadStatus: [SeerrDownloadItem]?
     let downloadStatus4k: [SeerrDownloadItem]?
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id)
+        tmdbId = try container.decodeIfPresent(Int.self, forKey: .tmdbId)
+        tvdbId = try container.decodeIfPresent(Int.self, forKey: .tvdbId)
+        mediaType = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .mediaType)
+        status = try container.decodeIfPresent(Int.self, forKey: .status)
+        status4k = try container.decodeIfPresent(Int.self, forKey: .status4k)
+        externalServiceId = try container.decodeIfPresent(Int.self, forKey: .externalServiceId)
+        externalServiceId4k = try container.decodeIfPresent(Int.self, forKey: .externalServiceId4k)
+        jellyfinMediaId = try container.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
+        jellyfinMediaId4k = try container.decodeIfPresent(String.self, forKey: .jellyfinMediaId4k)
+        requests = try container.decodeIfPresent([SeerrRequestReference].self, forKey: .requests)
+        seasons = try container.decodeIfPresent([SeerrMediaSeasonStatus].self, forKey: .seasons)
+        downloadStatus = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus)
+        downloadStatus4k = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus4k)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, tmdbId, tvdbId, mediaType, status, status4k
+        case externalServiceId, externalServiceId4k, jellyfinMediaId, jellyfinMediaId4k
+        case requests, seasons, downloadStatus, downloadStatus4k
+    }
+
     var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
 
     func downloadProgress(is4k: Bool = false) -> SeerrDownloadProgress? {
@@ -690,6 +747,26 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let profileId: Int?
     let serverId: Int?
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        status = try container.decode(Int.self, forKey: .status)
+        type = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .type)
+        media = try container.decodeIfPresent(SeerrRequestMedia.self, forKey: .media)
+        requestedBy = try container.decodeIfPresent(SeerrUser.self, forKey: .requestedBy)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+        is4k = try container.decodeIfPresent(Bool.self, forKey: .is4k)
+        seasons = try container.decodeIfPresent([SeerrRequestedSeason].self, forKey: .seasons)
+        profileId = try container.decodeIfPresent(Int.self, forKey: .profileId)
+        serverId = try container.decodeIfPresent(Int.self, forKey: .serverId)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, status, type, media, requestedBy, createdAt, updatedAt
+        case is4k, seasons, profileId, serverId
+    }
+
     var requestStatus: SeerrRequestStatus { .init(apiValue: status) }
 
     /// What to show for this request: its approval state until it is granted,
@@ -723,6 +800,24 @@ nonisolated struct SeerrRequestMedia: Decodable, Hashable {
     let externalServiceId: Int?
     let downloadStatus: [SeerrDownloadItem]?
     let downloadStatus4k: [SeerrDownloadItem]?
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(Int.self, forKey: .id)
+        tmdbId = try container.decodeIfPresent(Int.self, forKey: .tmdbId)
+        tvdbId = try container.decodeIfPresent(Int.self, forKey: .tvdbId)
+        mediaType = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .mediaType)
+        status = try container.decodeIfPresent(Int.self, forKey: .status)
+        status4k = try container.decodeIfPresent(Int.self, forKey: .status4k)
+        externalServiceId = try container.decodeIfPresent(Int.self, forKey: .externalServiceId)
+        downloadStatus = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus)
+        downloadStatus4k = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus4k)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, tmdbId, tvdbId, mediaType, status, status4k
+        case externalServiceId, downloadStatus, downloadStatus4k
+    }
 
     var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
 
