@@ -283,6 +283,97 @@ too: the A15 played the same seek clean before the fix and only the simulator
 refused the leading pictures, so the drop is what keeps the simulator lane
 honest on open-GOP encodes.
 
+#### A decode session the system took back (HEL-181)
+
+Three TestFlight reports on builds 99–100, on both an Apple TV and an iPhone,
+descended to transcode on a VideoToolbox status that was never about the
+bitstream. `-12903` is `kVTInvalidSessionErr`: the decode *session* is gone and
+needs remaking. `failVideoDecode` flattened every decoder error to
+`.undecodable`, on the reasonable-sounding assumption that redelivering the
+same bitstream cannot help — true of a frame the decoder refused, false of a
+session that no longer exists.
+
+The renderer path had been hardened for exactly this twice, and the decoder
+path neither time. `recoverVideoRendererIfRequired` and
+`handleVideoRendererFailure` both bail while `videoOutputSuspended`;
+`failVideoDecode` had no such check. HEL-151's in-place retry above had exactly
+one caller, the renderer failure path, so direct-play HEVC and AV1 — which run
+through `VideoToolboxDecoder` and never reach a renderer failure — had no retry
+at all and were terminal on the first fault. `VideoToolboxDecoder.reset()`
+already recreated a session and was called only from the seek branch, never
+from an error path.
+
+The two reported shapes need different halves of the fix:
+
+- `LAGOON-G`, an iPhone, `appState: background`, DoVi direct play, 39 s in.
+  HEL-176 deliberately leaves the VT session alive when backgrounding, because
+  making a new one in the background can be refused. But
+  `setVideoOutputSuspended(true)` only sets a flag on the main actor: the demux
+  loop applies the discard at the top of its *next* iteration, and
+  `deliverVideo`/`admitVideo`/`drainVideoIntake` gate only on `cancelled`, so a
+  sample in flight can still reach a session iOS has already torn down. The
+  fallback then tried to reload a film into the foreground of an app that was
+  not in the foreground — `outcome: cancelled`, as it had to be. **This race is
+  reasoned from the code, not reproduced.** The misclassification it exposes is
+  plain from the funnel regardless of how the session was lost.
+- `LAGOON-A`, an Apple TV, `appState: **active**`, `sinceSeekMs: 178`,
+  reported as `sessionCreation`. Not the background race at all: the seek
+  branch's own `videoDecoder?.reset()` failed to build a session, on a stream
+  that had been playing.
+
+So `VideoToolboxDecoder.isSessionFault` names the three statuses that mean the
+decoder was taken away rather than the samples refused — `kVTInvalidSessionErr`,
+`kVTVideoDecoderMalfunctionErr`, `kVTVideoDecoderNotAvailableNowErr` — and
+`PlaybackDecodeSessionPolicy` decides what to do, bounded exactly as
+`PlaybackRestartPointPolicy` is and for the same reason: one rebuild per
+playback generation, recorded against the generation the re-seek starts, so a
+session that genuinely cannot be made descends the ladder one seek later and
+cannot loop. Suspended video ignores the fault outright — there is nothing to
+rebuild for, and the resume seek makes a fresh session anyway.
+
+**A rebuild is a seek, and a seek needs a demux loop still running to apply
+it.** That is the whole trap in this fix, and it is worth stating before the
+call sites, because absorbing a fault on a path that is about to stop the loop
+does not save the playback — it replaces a reported failure with a spinner that
+never resolves and never errors, which is strictly worse than the transcode the
+bug caused. So absorption is opt-out, `allowSessionRecovery: false`, wherever
+the caller is about to stop the loop or has never started one:
+
+- **Decoder construction at open** (before the loop is entered, and it
+  `return`s instead of entering it). A decoder the system will not hand out at
+  open is what the transcode rung is for.
+- **The seek branch**, where returning false `break`s the loop. It retries
+  `reset()` in place instead and only descends if the second attempt fails too.
+- **Cancelled playback**, via the policy's `tooLate`: the samples draining out
+  of a decoder being torn down all report the session going with it.
+
+`finishVideoInput` is the one absorbing path that keeps going: at EOF a dead
+session costs the last frames it was holding, and both descending the ladder
+and seeking to rebuild would be worse than losing them, so it records and falls
+through to the finish boundary.
+
+`alreadyRecovering` is deliberately not recorded. A decoder can hold dozens of
+samples and each reports the same dead session on its way out; a breadcrumb
+apiece would evict the history that explains the incident. The rebuild they are
+all waiting on is recorded, on the main actor, once it is known which of the
+two outcomes it was — and the near-the-end branch that declines to seek spends
+the generation's rebuild anyway, or every remaining sample would ask for
+another one.
+
+Both outcomes report on the renderer-recovery channel they mirror, as
+`recovery: decodeSessionRebuilt` and `decodeSessionIgnored`; only the rebuild
+is reported as an incident, because the ignored ones are expected and would be
+noise. The `rendererRecoveries` counter is built from engine counters, not from
+these events, so the degradation thresholds are unaffected.
+
+Still owed: a hardware run. Nothing here has been seen to recover on a device —
+the classification is verified by unit tests and the builds are green, but
+"a rebuilt session actually resumes playback on an Apple TV" is a device check,
+and the background race above wants a reproduction before anyone trusts the
+account of it. `LAGOON-B` (`-12909`, bad data, one access unit mid-film) is a
+different mechanism — per-frame tolerance with a budget — and is deliberately
+left alone here.
+
 ### Disc images (HEL-133)
 
 A disc image is a filesystem, not a stream, and Jellyfin describes one
