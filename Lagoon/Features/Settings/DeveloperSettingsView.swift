@@ -47,7 +47,7 @@ struct DeveloperSettingsView: View {
     let subtitleStyle: SubtitleRenderStyle
 
     @State private var selectedPreview = PlayerComponentPreview.skipIntroCountdown
-    @State private var countdownFill = 0.62
+    @State private var countdown: PlaybackCountdown?
     @State private var showsPlayerPanelPreview = false
     @State private var showsPlayerTransportPreview = false
     @State private var showsWatchTogetherPreview = false
@@ -126,9 +126,7 @@ struct DeveloperSettingsView: View {
     private var previewCanvas: some View {
         let canvas = previewCanvasContent
             .onChange(of: selectedPreview) { _, _ in
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { countdownFill = 0.62 }
+                countdown = nil
             }
 
         if selectedPreview == .playerPanel
@@ -170,7 +168,8 @@ struct DeveloperSettingsView: View {
             PlayerSkipPrompt(
                 title: String(localized: "Skip Intro"),
                 showsCountdown: true,
-                fill: countdownFill,
+                fill: 0.62,
+                countdown: countdown,
                 accessibilityIdentifier: "settings.developer.preview.skipIntroCountdown"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -194,7 +193,8 @@ struct DeveloperSettingsView: View {
             PlayerNextUpCard(
                 episode: previewEpisode,
                 showsCountdown: true,
-                fill: countdownFill,
+                fill: 0.62,
+                countdown: countdown,
                 hint: previewNextUpHint,
                 accessibilityIdentifier: "settings.developer.preview.nextEpisodeCountdown"
             )
@@ -323,13 +323,7 @@ struct DeveloperSettingsView: View {
     }
 
     private func replayCountdown() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { countdownFill = 0 }
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(80))
-            countdownFill = 1
-        }
+        countdown = PlaybackCountdown(duration: .seconds(SkipMode.autoDelaySeconds))
     }
 }
 
