@@ -105,6 +105,63 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.first?.query?.contains("mediaType=movie") == true)
     }
 
+    /// Jellyseerr's `search` is a TMDB multi-search: alongside movie, tv and
+    /// person it answers with `collection`, and a later release may add more.
+    /// A type this build has never heard of must cost that one result its
+    /// type, not the whole page — decoding the page used to throw
+    /// `dataCorrupted` on `mediaType` and empty the search screen (HEL-180).
+    @Test func searchSurvivesMediaTypesThisBuildDoesNotKnow() throws {
+        let payload = #"""
+        {"page":1,"totalPages":1,"totalResults":4,"results":[
+          {"id":1,"mediaType":"movie","title":"Arrival"},
+          {"id":2,"mediaType":"collection","title":"Harry Potter Collection"},
+          {"id":3,"mediaType":"holotape","title":"From A Later Jellyseerr"},
+          {"id":4,"mediaType":"tv","name":"Severance"}
+        ]}
+        """#
+        let page = try JSONDecoder().decode(SeerrDiscoverPage.self, from: Data(payload.utf8))
+
+        #expect(page.results.count == 4)
+        #expect(page.results.map(\.displayTitle) == [
+            "Arrival", "Harry Potter Collection", "From A Later Jellyseerr", "Severance",
+        ])
+        // The unknown types land typeless rather than guessed at, which is
+        // what the movie/show filters on the search screen already drop.
+        #expect(page.results.map(\.mediaType) == [.movie, nil, nil, .tv])
+        #expect(page.results.filter { $0.mediaType == .movie || $0.mediaType == .tv }.count == 2)
+    }
+
+    /// The same leniency one level down: a result's `mediaInfo` carries its
+    /// own `mediaType`, and an unknown one there must not fail the result.
+    @Test func nestedMediaInfoToleratesAnUnknownMediaType() throws {
+        let payload = #"""
+        {"id":5,"mediaType":"movie","title":"Arrival",
+         "mediaInfo":{"id":8,"tmdbId":329865,"mediaType":"collection","status":5}}
+        """#
+        let result = try JSONDecoder().decode(SeerrDiscoverResult.self, from: Data(payload.utf8))
+
+        #expect(result.mediaType == .movie)
+        #expect(result.mediaInfo?.mediaType == nil)
+        #expect(result.mediaInfo?.availability == .available)
+        #expect(result.mediaInfo?.tmdbId == 329865)
+    }
+
+    /// A request whose type is unknown still resolves to something routable:
+    /// `resolvedMediaType` falls back through the media's own type and then
+    /// the tvdb id, so the requests list keeps rendering it.
+    @Test func requestWithUnknownTypeStillResolvesAndDecodes() throws {
+        let payload = #"""
+        {"id":41,"status":2,"type":"holotape",
+         "media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"holotape","status":3}}
+        """#
+        let request = try JSONDecoder().decode(SeerrMediaRequest.self, from: Data(payload.utf8))
+
+        #expect(request.type == nil)
+        #expect(request.media?.mediaType == nil)
+        #expect(request.resolvedMediaType == .tv)
+        #expect(request.tmdbID == 60625)
+    }
+
     @Test func televisionRequestAndModerationUseDocumentedContracts() async throws {
         let client = makeClient()
         client.configure(serverURL: URL(string: "https://seerr.test")!)
