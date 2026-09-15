@@ -373,7 +373,15 @@ picture is dropped until the scene is back (unless PiP or AirPlay is still
 showing it), and the lock screen's controls drive the engine. Skip and Up
 Next are decided by `PlaybackAutomation` off the engine's clock, never in a
 view body, so intros are still skipped and the next episode still starts
-with the screen off; the overlays only draw its state. tvOS pauses on
+with the screen off; the overlays only draw its state. Each countdown's action
+and visible fill share a monotonic deadline. Only the fill redraws as time
+passes, so a newly mounted overlay shows elapsed progress immediately instead
+of relying on an animation from a previous view value — an overlay is created
+at the moment its countdown arms, so there is no earlier value to animate from,
+which is why both fills used to read as full for their whole run. An accepted
+hand-off keeps its timing: the card outlives `playNext` while the successor is
+prepared (HEL-144), and a bar that emptied underneath it would read as the
+offer being withdrawn. tvOS pauses on
 background as before. See
 [system integration](reference/playback/system-integration.md).
 
