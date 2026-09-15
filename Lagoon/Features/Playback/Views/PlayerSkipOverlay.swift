@@ -45,7 +45,7 @@ struct PlayerSkipOverlay: View {
                 PlayerSkipPrompt(
                     title: segment.kind.skipTitle,
                     showsCountdown: skipMode == .autoDelay,
-                    fill: automation.skipFill
+                    countdown: automation.skipTiming
                 )
                 .transition(transientScaleTransition)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -73,7 +73,8 @@ struct PlayerSkipOverlay: View {
 struct PlayerSkipPrompt: View {
     let title: String
     let showsCountdown: Bool
-    let fill: Double
+    var fill: Double = 0
+    var countdown: PlaybackCountdown?
     var accessibilityIdentifier = "player.skip"
 
     var body: some View {
@@ -90,13 +91,7 @@ struct PlayerSkipPrompt: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.55))
                 if showsCountdown {
-                    Capsule()
-                        .fill(.white)
-                        .frame(width: SkipMetrics.width * min(max(fill, 0), 1))
-                        .animation(
-                            .linear(duration: SkipMode.autoDelaySeconds),
-                            value: fill
-                        )
+                    PlayerCountdownFill(countdown: countdown, fill: fill)
                 }
             }
         }
