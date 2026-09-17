@@ -119,8 +119,8 @@ discarded because their owner cannot be determined. Local forgetting happens
 revocation so a late completion cannot reach the next account. A Keychain
 deletion or enumeration failure leaves a persistent removal marker that blocks
 credential restoration and raises a root-level cleanup alert; re-adding the same
-account must finish that cleanup before a replacement token is saved. See
-[HEL-141 validation](../archive/hel-141-account-privacy-validation.md).
+account must finish that cleanup before a replacement token is saved. HEL-141
+records the validation behind this.
 
 ### Seerr sessions
 
