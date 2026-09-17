@@ -4,10 +4,12 @@ Lagoon is one multiplatform SwiftUI app target for tvOS 26 and iOS 26, plus a
 Top Shelf extension, test targets, and a single local Swift package that pins
 the native media libraries.
 
-The repository has no licence file yet. That decision is still open, so ask
-before redistributing the source or a build. Bugs go through the issue form;
-anything with security or privacy impact follows [SECURITY.md](SECURITY.md)
-instead of an issue.
+The licence is **MPL-2.0** for Lagoon's own code, with the Lagoon name and
+brand assets carved out of the grant. That is decided but not yet applied: the
+repository carries no licence file, so ask before redistributing the source or
+a build until one lands. Bugs go through the issue form; anything with
+security or privacy impact follows [SECURITY.md](SECURITY.md) instead of an
+issue.
 
 ## Prerequisites
 
@@ -124,11 +126,11 @@ Regenerate `docs/reference/native-dependency-inventory.json` with
 ## Signing and assets
 
 Simulator builds need no signing setup. `project.pbxproj` hardcodes the
-owner's development team `9GLTW5844P` with automatic signing, bundle
-identifiers `ee.helop.lagoon`, `.topshelf`, `.tests` and `.uitests`, and the
-app group `group.ee.helop.lagoon`. To build on a device, change the team, the
-bundle identifiers and the app group to your own, and keep those local changes
-out of what you submit.
+maintainer's development team with automatic signing, bundle identifiers
+`ee.helop.lagoon`, `.topshelf`, `.tests` and `.uitests`, and the app group
+`group.ee.helop.lagoon`. To build on a device, change the team, the bundle
+identifiers and the app group to your own, and keep those local changes out of
+what you submit.
 
 The brand asset sources in `art/` are gitignored and not published. The PNG
 and PDF assets tracked in the repository are Lagoon's branding, not covered by
