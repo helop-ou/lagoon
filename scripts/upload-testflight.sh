@@ -23,6 +23,14 @@
 #
 # Keep the .p8 out of the repository. It is a credential for the whole account.
 #
+# The Sentry DSN is injected the same way rather than tracked in source
+# (HEL-187), so an upload also needs:
+#
+#   LAGOON_SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project>
+#
+# It is required, not optional: a build archived without it reports nothing,
+# and a silent diagnostics channel is exactly the failure nobody notices.
+#
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -69,6 +77,7 @@ if [ "$dry_run" != "--dry-run" ]; then
     : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}"
     : "${ASC_KEY_PATH:?set ASC_KEY_PATH}"
     [ -f "${ASC_KEY_PATH/#\~/$HOME}" ] || { echo "error: no key at $ASC_KEY_PATH" >&2; exit 1; }
+    : "${LAGOON_SENTRY_DSN:?set LAGOON_SENTRY_DSN (see the header of this script)}"
 fi
 
 run() {
@@ -88,7 +97,8 @@ for platform in $targets; do
         -scheme Lagoon \
         -destination "generic/platform=${platform}" \
         -archivePath "$archive" \
-        -allowProvisioningUpdates
+        -allowProvisioningUpdates \
+        LAGOON_SENTRY_DSN="${LAGOON_SENTRY_DSN:-SENTRY_DSN}"
 
     # With destination=upload in the plist this uploads rather than writing an
     # .ipa, so there is nothing to hand off afterwards.
