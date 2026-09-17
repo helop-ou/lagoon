@@ -2,7 +2,7 @@
 """Validate Lagoon's required-reason privacy resources in an app or archive.
 
 This is a packaging check, not Apple's Organizer privacy report or an App
-Privacy/legal approval. See docs/archive/hel-143-release-preparation.md for the inventory.
+Privacy/legal approval. HEL-143 records the inventory.
 """
 import argparse
 import json
