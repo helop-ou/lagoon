@@ -220,6 +220,18 @@ need an explicit appropriate control style. Test focused and unfocused states.
   both sized by `cardMarkSize` and inset by `cardMarkInset`.
 - **Settings:** use native category navigation on each platform. iOS uses
   Forms, pickers, toggles, and Edit/reorder; tvOS keeps remote focus behavior.
+- **Modals (tvOS):** a sheet with custom content ignores `presentationSizing`,
+  so a panel states its own size — `Metrics.modalPanelSize` — or it fills the
+  screen. The shape is the changelog's and the acknowledgements': a title, the
+  scrolling content, and Done, laid out in sequence rather than as
+  `safeAreaInset` overlays, which draw over the content and need their own
+  material to hide it. `onExitCommand` dismisses, so Menu and Done agree.
+  Prefer a fixed size to a fitted one whenever the content can change while
+  the panel is open, or it resizes under the viewer's focus. Never put
+  `TVSettingsPage` in a sheet: it is the full-screen Settings *destination* —
+  a 460pt identity column, a page-sized title, a Back button and its own
+  opaque background — and inside a sheet it reads as a page someone squeezed
+  into a card (HEL-183).
 - **Downloads (iOS only, HEL-166):** `DownloadControl` is a glass circle
   beside the detail page's other actions, in the same family as
   `ItemActionRow`'s toggles; its glyph and a menu carry the entry's state
@@ -243,6 +255,10 @@ need an explicit appropriate control style. Test focused and unfocused states.
   entry point, in the same family as the download control — a glass circle
   on a phone, the labelled pill where there is width — and it renders
   nothing until the store says the account may join a group.
+  `WatchTogetherSheet` is the modal panel above on tvOS, and a `ThemedForm`
+  in a `NavigationStack` with medium and large detents on touch; the
+  explainer under its title goes once the viewer is in a group, where the
+  room's own state is what the space is better spent on.
   `SyncPlayToastLabel` is the player's transient line about the group: a
   material capsule at the top of the screen, SDR over whatever the video
   is, never hit-tested, and shared with the DEBUG gallery.
