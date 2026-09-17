@@ -48,6 +48,21 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "106",
+            released: "September 2026",
+            headline: "Home is yours to arrange.",
+            sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "Home's rows are now yours to put in any order you like. Settings, Home Rows lists every row in one list you can rearrange and switch on or off, Lagoon's own rows and any your server's Home Screen Sections plugin adds together, so a plugin row can sit anywhere among them. On Apple TV each row has arrows to move it; on iPhone and iPad, tap Edit and drag.",
+                ]),
+                ChangelogSection(category: .improvements, changes: [
+                    "Home now opens with what you were watching and what each library just gained: Continue Watching, Next Up, Recently Added Movies, Top 10 Movies, then Recently Added Shows and Top 10 Shows, with the rest following in a run of films and a run of television.",
+                    "Recently Added is now three rows rather than one switch covering all of them, so the movies one and the shows one can be moved and hidden separately.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "105",
             released: "September 2026",
             headline: "The audio track you pick is the one that keeps playing.",
