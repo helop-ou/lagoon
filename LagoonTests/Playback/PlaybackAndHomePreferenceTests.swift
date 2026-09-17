@@ -169,6 +169,135 @@ struct HomeRowPreferenceTests {
         return try JellyfinClient.decoder.decode(Page.self, from: data).items
     }
 
+    private func decoded(_ json: String) throws -> HomeSectionPreferenceValues {
+        try JSONDecoder().decode(HomeSectionPreferenceValues.self, from: Data(json.utf8))
+    }
+
+    private func order(
+        _ values: HomeSectionPreferenceValues,
+        plugins: [String] = []
+    ) -> [String] {
+        HomeSectionPreferenceResolver.renderOrder(preferences: values, pluginSections: plugins)
+    }
+
+    // MARK: The default order
+
+    /// The six rows HEL-191 named, in the order it named them.
+    @Test func theDefaultOrderOpensWithWatchingThenWhatEachLibraryGained() {
+        let opening = Array(order(HomeSectionPreferenceValues()).prefix(6))
+
+        #expect(opening == [
+            HomeRowID.continueWatching,
+            HomeRowID.nextUp,
+            HomeRowID.recentlyAddedMovies,
+            HomeCuratedRows.ID.topMovies,
+            HomeRowID.recentlyAddedShows,
+            HomeCuratedRows.ID.topShows,
+        ])
+    }
+
+    @Test func anAccountThatHasArrangedNothingShowsEveryNativeRow() {
+        #expect(Set(order(HomeSectionPreferenceValues())) == HomeSectionPreferenceResolver.nativeIDs)
+        #expect(!HomeSectionPreferenceValues().isCustomized)
+    }
+
+    @Test func pluginRowsFollowTheNativeBlockUntilOneIsMoved() {
+        let ids = order(HomeSectionPreferenceValues(), plugins: ["MyList", "Recommendations"])
+
+        #expect(Array(ids.suffix(2)) == ["MyList", "Recommendations"])
+    }
+
+    /// The point of the unified list: a plugin row can sit anywhere.
+    @Test func anArrangementCanPutAPluginRowBetweenTwoNativeRows() {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.insert(HomeSectionPreferenceRow(id: "MyList", isEnabled: true), at: 1)
+
+        let ids = order(HomeSectionPreferenceValues(layout: layout), plugins: ["MyList"])
+
+        #expect(ids[0] == HomeRowID.continueWatching)
+        #expect(ids[1] == "MyList")
+        #expect(ids[2] == HomeRowID.nextUp)
+    }
+
+    @Test func aHiddenRowIsLeftOutOfTheOrderButKeptInTheArrangement() {
+        let layout = HomeSectionPreferenceResolver.defaultLayout.map {
+            HomeSectionPreferenceRow(id: $0.id, isEnabled: $0.id != HomeRowID.favorites)
+        }
+        let values = HomeSectionPreferenceValues(layout: layout)
+
+        #expect(!order(values).contains(HomeRowID.favorites))
+        #expect(values.layout.contains { $0.id == HomeRowID.favorites })
+        #expect(values.isCustomized)
+    }
+
+    // MARK: Reconciling an arrangement with the rows that exist now
+
+    /// A row a later Lagoon build adds has a designed place in the order, and
+    /// an existing arrangement should receive it there rather than at the
+    /// bottom under the server's plugin rows.
+    @Test func aNewNativeRowIsInsertedWhereItWasDesignedToGo() {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.removeAll { $0.id == HomeCuratedRows.ID.topMovies }
+
+        let reconciled = HomeSectionPreferenceResolver.reconciled(layout, sections: [])
+
+        #expect(reconciled.map(\.id) == HomeSectionPreferenceResolver.defaultLayout.map(\.id))
+        #expect(reconciled.first { $0.id == HomeCuratedRows.ID.topMovies }?.isEnabled == true)
+    }
+
+    @Test func aFirstNativeRowWithNoPredecessorStillLandsAtTheTop() {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.removeAll { $0.id == HomeRowID.continueWatching }
+
+        let reconciled = HomeSectionPreferenceResolver.reconciled(layout, sections: [])
+
+        #expect(reconciled.first?.id == HomeRowID.continueWatching)
+    }
+
+    @Test func aSectionGainedAfterPluginRowsWereArrangedArrivesHidden() {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.insert(HomeSectionPreferenceRow(id: "MyList", isEnabled: true), at: 0)
+
+        let reconciled = HomeSectionPreferenceResolver.reconciled(
+            layout,
+            sections: ["MyList", "Recommendations"]
+        )
+
+        #expect(reconciled.first { $0.id == "Recommendations" }?.isEnabled == false)
+        #expect(reconciled.first { $0.id == "MyList" }?.isEnabled == true)
+    }
+
+    /// An account that had only hidden a native row before HEL-191 never
+    /// arranged a plugin row, so the catalogue still arrives shown.
+    @Test func theCatalogueArrivesShownWhenNoPluginRowWasEverArranged() {
+        let reconciled = HomeSectionPreferenceResolver.reconciled(
+            HomeSectionPreferenceResolver.defaultLayout,
+            sections: ["MyList"]
+        )
+
+        #expect(reconciled.first { $0.id == "MyList" }?.isEnabled == true)
+    }
+
+    /// `homeSections()` answers a failed request with an empty catalogue. A
+    /// reconcile that pruned unknown rows would take the viewer's arrangement
+    /// with it the first time the server was slow.
+    @Test func anEmptyCatalogueNeverDropsARememberedPluginRow() {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.append(HomeSectionPreferenceRow(id: "MyList", isEnabled: true))
+
+        let reconciled = HomeSectionPreferenceResolver.reconciled(layout, sections: [])
+
+        #expect(reconciled.map(\.id).contains("MyList"))
+    }
+
+    @Test func reconcilingLeavesAnUnarrangedAccountAlone() {
+        let reconciled = HomeSectionPreferenceResolver.reconciled([], sections: ["MyList"])
+
+        #expect(reconciled.isEmpty)
+    }
+
+    // MARK: Which plugin sections are fetched
+
     @Test func untouchedLayoutPreservesTheExistingAdditiveDefault() throws {
         let selected = HomeSectionPreferenceResolver.sections(
             from: try catalog(),
@@ -179,22 +308,33 @@ struct HomeRowPreferenceTests {
         #expect(selected.map(\.section) == ["MyList", "Recommendations"])
     }
 
-    @Test func configuredLayoutWinsIncludingNativeSectionsAndOrder() throws {
-        let preferences = HomeSectionPreferenceValues(
-            isConfigured: true,
-            rows: [
-                HomeSectionPreferenceRow(id: "Recommendations", isEnabled: true),
-                HomeSectionPreferenceRow(id: "ContinueWatching", isEnabled: true),
-                HomeSectionPreferenceRow(id: "MyList", isEnabled: false),
-            ]
-        )
+    @Test func anArrangementDecidesWhichPluginSectionsAppearAndInWhatOrder() throws {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.insert(HomeSectionPreferenceRow(id: "Recommendations", isEnabled: true), at: 0)
+        layout.append(HomeSectionPreferenceRow(id: "MyList", isEnabled: false))
+
         let selected = HomeSectionPreferenceResolver.sections(
             from: try catalog(),
-            preferences: preferences,
+            preferences: HomeSectionPreferenceValues(layout: layout),
             nativelyCovered: ["ContinueWatching"]
         )
 
-        #expect(selected.map(\.section) == ["Recommendations", "ContinueWatching"])
+        #expect(selected.map(\.section) == ["Recommendations"])
+    }
+
+    /// A section Lagoon draws itself is never offered, so an arrangement that
+    /// still names one cannot resurrect a duplicate of a native row.
+    @Test func aNativelyCoveredSectionStaysOutEvenWhenTheArrangementNamesIt() throws {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.insert(HomeSectionPreferenceRow(id: "ContinueWatching", isEnabled: true), at: 0)
+
+        let selected = HomeSectionPreferenceResolver.sections(
+            from: try catalog(),
+            preferences: HomeSectionPreferenceValues(layout: layout),
+            nativelyCovered: ["ContinueWatching"]
+        )
+
+        #expect(!selected.map(\.section).contains("ContinueWatching"))
     }
 
     @Test func duplicateServerSectionsAreCollapsedWithoutChangingTheirOrder() throws {
@@ -208,32 +348,130 @@ struct HomeRowPreferenceTests {
         #expect(selected.first?.displayText == "My List")
     }
 
+    // MARK: Layouts saved before HEL-191
+
+    @Test func anUntouchedLegacyLayoutAdoptsTheNewDefaultOrder() throws {
+        let values = try decoded(#"{"isConfigured":false,"rows":[],"nativeRows":[]}"#)
+
+        #expect(values.layout.isEmpty)
+        #expect(!values.isCustomized)
+        #expect(order(values).first == HomeRowID.continueWatching)
+    }
+
+    /// Hiding a row was never a choice about order, so the new default order
+    /// applies with that row still hidden.
+    @Test func aLegacyHiddenRowSurvivesIntoTheNewDefaultOrder() throws {
+        let values = try decoded(
+            #"{"isConfigured":false,"rows":[],"nativeRows":[{"id":"lagoon.movieGenres","isEnabled":false}]}"#
+        )
+
+        #expect(!values.isEnabled(HomeRowID.movieGenres))
+        #expect(values.isEnabled(HomeRowID.continueWatching))
+        #expect(values.layout.map(\.id) == HomeSectionPreferenceResolver.defaultLayout.map(\.id))
+    }
+
+    /// One toggle governed all three Recently Added rows before they became
+    /// individually placeable, so all three inherit its answer.
+    @Test func theSingleLegacyRecentlyAddedToggleHidesAllThreeRowsItBecame() throws {
+        let values = try decoded(
+            #"{"nativeRows":[{"id":"lagoon.recentlyAdded","isEnabled":false}]}"#
+        )
+
+        #expect(!values.isEnabled(HomeRowID.recentlyAddedMovies))
+        #expect(!values.isEnabled(HomeRowID.recentlyAddedShows))
+        #expect(!values.isEnabled(HomeRowID.recentlyAddedOther))
+    }
+
+    @Test func aLegacyPluginOrderIsKeptAfterTheNativeBlock() throws {
+        let values = try decoded(
+            #"{"isConfigured":true,"rows":[{"id":"Recommendations","isEnabled":true},{"id":"MyList","isEnabled":false}]}"#
+        )
+        let nativeCount = HomeSectionPreferenceResolver.defaultLayout.count
+
+        #expect(values.layout.map(\.id).suffix(2) == ["Recommendations", "MyList"])
+        #expect(values.layout.count == nativeCount + 2)
+        #expect(!values.isEnabled("MyList"))
+    }
+
+    @Test func savedLayoutsFromBeforeNativeTogglesKeepEveryNativeRowVisible() throws {
+        let values = try decoded(#"{"isConfigured":true,"rows":[]}"#)
+
+        #expect(values.isEnabled(HomeRowID.continueWatching))
+        #expect(values.isEnabled(HomeRowID.movieGenres))
+        #expect(values.isCustomized)
+    }
+
+    @Test func theNewShapeWinsOverAnythingLeftFromTheOldOne() throws {
+        let values = try decoded(
+            #"{"layout":[{"id":"lagoon.nextUp","isEnabled":false}],"isConfigured":true,"rows":[{"id":"MyList","isEnabled":true}]}"#
+        )
+
+        #expect(values.layout.map(\.id) == [HomeRowID.nextUp])
+    }
+
+    @Test func anArrangementRoundTripsThroughItsOwnStoredShape() throws {
+        let values = HomeSectionPreferenceValues(
+            layout: [HomeSectionPreferenceRow(id: HomeRowID.nextUp, isEnabled: false)]
+        )
+
+        let encoded = try JSONEncoder().encode(values)
+        #expect(String(decoding: encoded, as: UTF8.self).contains("\"layout\""))
+        #expect(try JSONDecoder().decode(HomeSectionPreferenceValues.self, from: encoded) == values)
+    }
+
+    // MARK: The rows Settings offers
+
     @Test func nativeRowsIdentifyMovieAndShowGenresSeparately() {
         let choices = HomeSectionPreferenceResolver.nativeChoices
 
         #expect(choices.allSatisfy { $0.source == .lagoon })
-        #expect(choices.map(\.id).contains("lagoon.movieGenres"))
-        #expect(choices.map(\.id).contains("lagoon.showGenres"))
+        #expect(choices.map(\.id).contains(HomeRowID.movieGenres))
+        #expect(choices.map(\.id).contains(HomeRowID.showGenres))
         #expect(choices.map(\.title).contains("Movie Genres"))
         #expect(choices.map(\.title).contains("Show Genres"))
     }
 
+    /// Recently Added is three placeable rows rather than one toggle over all
+    /// of them, which is what lets the movie one sit third and the show one
+    /// fifth (HEL-191).
+    @Test func recentlyAddedIsOfferedOncePerKindOfLibrary() {
+        let titles = Dictionary(
+            HomeSectionPreferenceResolver.nativeChoices.map { ($0.id, $0.title) },
+            uniquingKeysWith: { current, _ in current }
+        )
+
+        #expect(titles[HomeRowID.recentlyAddedMovies] == "Recently Added Movies")
+        #expect(titles[HomeRowID.recentlyAddedShows] == "Recently Added Shows")
+        #expect(titles[HomeRowID.recentlyAddedOther] == "Recently Added in Other Libraries")
+        #expect(titles[HomeRowID.legacyRecentlyAdded] == nil)
+    }
+
     /// The one that catches the next row someone adds.
     ///
-    /// A Home row that never reaches this list is a row nobody can turn off,
-    /// and the mistake is invisible: the row renders, Settings simply never
-    /// mentions it. Asserting against the identifier constants rather than a
-    /// hand-copied list means a new row fails here the moment it has an id
-    /// and before it has a screen (HEL-122).
+    /// A Home row that never reaches this list is a row nobody can turn off or
+    /// move, and the mistake is invisible: the row renders, Settings simply
+    /// never mentions it. Asserting against the identifier constants rather
+    /// than a hand-copied list means a new row fails here the moment it has an
+    /// id and before it has a screen (HEL-122).
     @Test func everyRowWithAnIdentifierIsOfferedInSettings() {
         let offered = Set(HomeSectionPreferenceResolver.nativeChoices.map(\.id))
         let owned = [
+            HomeRowID.continueWatching,
+            HomeRowID.nextUp,
+            HomeRowID.favorites,
+            HomeRowID.recentlyAddedMovies,
+            HomeRowID.recentlyAddedShows,
+            HomeRowID.recentlyAddedOther,
+            HomeRowID.movieGenres,
+            HomeRowID.showGenres,
             HomeCuratedRows.ID.becauseYouWatched,
             HomeCuratedRows.ID.highlyRated,
+            HomeCuratedRows.ID.topMovies,
             HomeCuratedRows.ID.inFourK,
             HomeCuratedRows.ID.genreSpotlight,
             HomeCuratedRows.ID.decadeSpotlight,
             HomeCuratedRows.ID.unstartedSeries,
+            HomeCuratedRows.ID.topShows,
             HomeCuratedRows.ID.readyToBinge,
             HomeCuratedRows.ID.surpriseMe,
             CollectionShelf.rowID,
@@ -242,10 +480,47 @@ struct HomeRowPreferenceTests {
         for id in owned {
             #expect(offered.contains(id), "\(id) draws a row but Settings never lists it")
         }
+        #expect(offered.count == owned.count)
+    }
+
+    /// And the mirror of it. Home resolves a row by its identifier now, so an
+    /// id offered in Settings that no branch draws is a row someone can move
+    /// around an order it never appears in.
+    @Test func everyRowSettingsOffersIsOneHomeCanDraw() {
+        let drawnByName: Set<String> = [
+            HomeRowID.continueWatching,
+            HomeRowID.nextUp,
+            HomeRowID.favorites,
+            HomeRowID.recentlyAddedMovies,
+            HomeRowID.recentlyAddedShows,
+            HomeRowID.recentlyAddedOther,
+            HomeRowID.movieGenres,
+            HomeRowID.showGenres,
+            CollectionShelf.rowID,
+        ]
+        let drawnFromCuratedRails: Set<String> = [
+            HomeCuratedRows.ID.becauseYouWatched,
+            HomeCuratedRows.ID.highlyRated,
+            HomeCuratedRows.ID.topMovies,
+            HomeCuratedRows.ID.inFourK,
+            HomeCuratedRows.ID.genreSpotlight,
+            HomeCuratedRows.ID.decadeSpotlight,
+            HomeCuratedRows.ID.unstartedSeries,
+            HomeCuratedRows.ID.topShows,
+            HomeCuratedRows.ID.readyToBinge,
+            HomeCuratedRows.ID.surpriseMe,
+        ]
+
+        for choice in HomeSectionPreferenceResolver.nativeChoices {
+            #expect(
+                drawnByName.contains(choice.id) || drawnFromCuratedRails.contains(choice.id),
+                "\(choice.id) is offered in Settings but Home draws nothing for it"
+            )
+        }
     }
 
     @Test func noTwoRowsShareAnIdentifier() {
-        // Two rows on one id is one toggle governing both, and the row list
+        // Two rows on one id is one control governing both, and the row list
         // is identified in SwiftUI — a duplicate is a runtime problem there
         // as well as a preferences one.
         let ids = HomeSectionPreferenceResolver.nativeChoices.map(\.id)
@@ -259,37 +534,97 @@ struct HomeRowPreferenceTests {
 
         #expect(collections?.title == "Collections")
         #expect(collections?.source == .lagoon)
-        #expect(HomeSectionPreferenceValues().isNativeEnabled(CollectionShelf.rowID))
+        #expect(HomeSectionPreferenceValues().isEnabled(CollectionShelf.rowID))
     }
 
-    @Test func savedLayoutsFromBeforeNativeTogglesKeepEveryNativeRowVisible() throws {
-        let legacy = Data(#"{"isConfigured":true,"rows":[]}"#.utf8)
-        let values = try JSONDecoder().decode(HomeSectionPreferenceValues.self, from: legacy)
+    // MARK: The store
 
-        #expect(values.nativeRows.isEmpty)
-        #expect(values.isNativeEnabled("lagoon.continueWatching"))
-        #expect(values.isNativeEnabled("lagoon.movieGenres"))
-        #expect(values.isCustomized) // The legacy plugin layout remains custom.
-    }
-
-    @Test @MainActor func nativeVisibilityTogglePersistsAndRestoresTheDefault() {
+    @Test @MainActor func hidingARowPersistsAndResetRestoresTheDefault() {
         let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = HomeSectionPreferencesStore(defaults: defaults)
         store.configure(accountID: "server:user")
-        store.toggleNative("lagoon.movieGenres")
-        #expect(!store.values.isNativeEnabled("lagoon.movieGenres"))
+        #expect(!store.values.isCustomized)
+
+        store.toggle(HomeRowID.movieGenres)
+        #expect(!store.values.isEnabled(HomeRowID.movieGenres))
         #expect(store.values.isCustomized)
 
         let restored = HomeSectionPreferencesStore(defaults: defaults)
         restored.configure(accountID: "server:user")
-        #expect(!restored.values.isNativeEnabled("lagoon.movieGenres"))
+        #expect(!restored.values.isEnabled(HomeRowID.movieGenres))
 
-        restored.toggleNative("lagoon.movieGenres")
-        #expect(restored.values.isNativeEnabled("lagoon.movieGenres"))
+        restored.reset()
+        #expect(restored.values.isEnabled(HomeRowID.movieGenres))
         #expect(!restored.values.isCustomized)
+    }
+
+    @Test @MainActor func movingARowPersistsItsNewPlace() {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:user")
+        let moved = HomeRowID.continueWatching
+        #expect(store.choices.first?.id == moved)
+
+        store.move(moved, by: 1)
+        #expect(store.choices[1].id == moved)
+
+        let restored = HomeSectionPreferencesStore(defaults: defaults)
+        restored.configure(accountID: "server:user")
+        #expect(restored.choices[1].id == moved)
+
+        restored.move(moved, by: -1)
+        #expect(restored.choices.first?.id == moved)
+    }
+
+    @Test @MainActor func aRowCannotBeMovedPastEitherEndOfTheList() {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:user")
+        let before = store.choices.map(\.id)
+
+        store.move(before.first!, by: -1)
+        store.move(before.last!, by: 1)
+
+        #expect(store.choices.map(\.id) == before)
+    }
+
+    /// Settings lists hidden rows too: it is the only place one is brought
+    /// back, so filtering the list to what Home draws would strand it.
+    @Test @MainActor func settingsKeepsListingARowAfterItIsHidden() {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:user")
+        store.toggle(HomeRowID.favorites)
+
+        let hidden = store.choices.first { $0.id == HomeRowID.favorites }
+        #expect(hidden?.isEnabled == false)
+        #expect(store.choices.count == HomeSectionPreferenceResolver.nativeChoices.count)
+    }
+
+    @Test @MainActor func arrangementsDoNotLeakBetweenAccounts() {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:first")
+        store.toggle(HomeRowID.favorites)
+
+        store.configure(accountID: "server:second")
+        #expect(store.values.isEnabled(HomeRowID.favorites))
+        #expect(!store.values.isCustomized)
     }
 }
 

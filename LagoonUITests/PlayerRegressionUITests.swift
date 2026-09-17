@@ -1435,11 +1435,11 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let myList = app.descendants(matching: .any)["settings.home.row.MyList"]
         XCTAssertTrue(myList.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            app.descendants(matching: .any)["settings.home.native.lagoon.movieGenres"]
+            app.descendants(matching: .any)["settings.home.row.lagoon.movieGenres"]
                 .waitForExistence(timeout: 5)
         )
         XCTAssertTrue(
-            app.descendants(matching: .any)["settings.home.native.lagoon.showGenres"]
+            app.descendants(matching: .any)["settings.home.row.lagoon.showGenres"]
                 .waitForExistence(timeout: 5)
         )
         XCTAssertEqual(
@@ -1449,7 +1449,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             1
         )
         let nativeContinueWatching = app.descendants(matching: .any)[
-            "settings.home.native.lagoon.continueWatching"
+            "settings.home.row.lagoon.continueWatching"
         ]
         remote.press(.right)
         moveFocus(to: nativeContinueWatching, maxPresses: 3) { remote.press(.up) }
@@ -1474,11 +1474,12 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             previousNativeVisibility,
             "The native row toggle was left flipped for the next test"
         )
-        // Reaching the plugin section means crossing every native row, so a
-        // fixed budget rots the moment one is added: the eight curated rows
-        // (HEL-120) and Collections (HEL-122) both landed after this was
-        // written, and 12 presses had quietly stopped being enough. Size it
-        // from what is actually on the screen so the next row costs nothing.
+        // Plugin rows sit after Lagoon's own by default, so reaching one means
+        // crossing every native row, and a fixed budget rots the moment one is
+        // added: the eight curated rows (HEL-120) and Collections (HEL-122)
+        // both landed after this was written, and 12 presses had quietly
+        // stopped being enough. Size it from what is actually on the screen so
+        // the next row costs nothing.
         let homeRowCount = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "settings.home.")
         ).count

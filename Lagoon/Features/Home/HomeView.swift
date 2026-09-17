@@ -41,111 +41,13 @@ struct HomeView: View {
                         // library (HEL-172). It draws nothing otherwise.
                         WatchTogetherHomeCard()
 
-                        if isNativeRowEnabled("lagoon.continueWatching") {
-                            MediaRail(
-                                title: "Continue Watching",
-                                items: viewModel.resume,
-                                style: .landscape,
-                                showsLandscapeMetadata: true,
-                                playAction: { playerItem = PlayerItem(media: $0) },
-                                onUserDataChange: refreshUserData
-                            )
-                        }
-                        if isNativeRowEnabled("lagoon.nextUp") {
-                            MediaRail(
-                                title: "Next Up",
-                                items: viewModel.nextUp,
-                                style: .landscape,
-                                showsLandscapeMetadata: true,
-                                playAction: { playerItem = PlayerItem(media: $0) },
-                                onUserDataChange: refreshUserData
-                            )
-                        }
-                        // Names the title it is drawn from, so the row says
-                        // why it exists rather than being one more shelf.
-                        curatedRail(HomeCuratedRows.ID.becauseYouWatched)
-                        // Things you deliberately starred outrank things the
-                        // server happened to ingest, and the rail hides
-                        // itself when empty.
-                        if isNativeRowEnabled("lagoon.favorites") {
-                            MediaRail(
-                                title: "Favorites",
-                                items: viewModel.favorites,
-                                style: .landscape,
-                                onUserDataChange: refreshUserData
-                            )
-                        }
-
-                        // Movies, uninterrupted, ending with the genre shelf
-                        // as the browse exit for anyone none of the rows
-                        // reached — a native discovery path that works on
-                        // every Jellyfin server, independent of optional
-                        // plugins (HEL-84).
-                        //
-                        // Recently Added sits inside its own block rather
-                        // than in a "new" block of its own, which is what
-                        // Discover does and what keeps a run of movies from
-                        // being split by a row of television.
-                        recentlyAddedRails(collectionType: "movies")
-                        topTenRail(HomeCuratedRows.ID.topMovies)
-                        curatedRail(HomeCuratedRows.ID.highlyRated)
-                        curatedRail(HomeCuratedRows.ID.inFourK)
-                        curatedRail(HomeCuratedRows.ID.genreSpotlight)
-                        curatedRail(HomeCuratedRows.ID.decadeSpotlight)
-                        if isNativeRowEnabled("lagoon.movieGenres") {
-                            GenreRail(
-                                title: "Movie Genres",
-                                genres: viewModel.movieGenreShelf,
-                                includeTypes: [.movie],
-                                identifier: "movies"
-                            )
-                        }
-
-                        // Shows, uninterrupted, closing the same way.
-                        recentlyAddedRails(collectionType: "tvshows")
-                        topTenRail(HomeCuratedRows.ID.topShows)
-                        curatedRail(HomeCuratedRows.ID.unstartedSeries)
-                        curatedRail(HomeCuratedRows.ID.readyToBinge)
-                        if isNativeRowEnabled("lagoon.showGenres") {
-                            GenreRail(
-                                title: "Show Genres",
-                                genres: viewModel.showGenreShelf,
-                                includeTypes: [.series],
-                                identifier: "shows"
-                            )
-                        }
-
-                        // Any library that is neither, so a server with a
-                        // third kind of collection does not lose its rail.
-                        recentlyAddedRails(collectionType: nil)
-
-                        // The last browse shelf, and the only one that spans
-                        // both blocks: a collection is a franchise, which is
-                        // usually films but is not promised to be (HEL-122).
-                        // It sits with the genre shelves in spirit — a way
-                        // out into the library rather than something picked
-                        // for you — so it closes the browse exits before the
-                        // final content row.
-                        if isNativeRowEnabled(CollectionShelf.rowID) {
-                            CollectionRail(
-                                title: "Collections",
-                                collections: viewModel.collections
-                            )
-                        }
-
-                        // Anything at all, last: the row that knows least
-                        // about you sits furthest from where you started.
-                        curatedRail(HomeCuratedRows.ID.surpriseMe)
-
-                        // Whatever the server's Home Screen Sections plugin
-                        // adds on top (HEL-47) — nothing at all without it.
-                        ForEach(viewModel.pluginRails) { rail in
-                            MediaRail(
-                                title: rail.title,
-                                items: rail.items,
-                                style: .landscape,
-                                onUserDataChange: refreshUserData
-                            )
+                        // The order is the viewer's, or Lagoon's default when
+                        // they have not arranged one (HEL-191). Neither lives
+                        // here: see `HomeSectionPreferenceResolver`, which
+                        // owns the default order, the arrangement that
+                        // replaces it, and which rows either one hides.
+                        ForEach(rowOrder, id: \.self) { id in
+                            row(id)
                         }
 
                         Color.clear.frame(height: 60)
@@ -225,12 +127,87 @@ struct HomeView: View {
         HomeSectionPreferencesStore.savedValues(accountID: session.activeAccount?.id)
     }
 
-    private func isNativeRowEnabled(_ id: String) -> Bool {
-        savedHomePreferences.isNativeEnabled(id)
+    /// The rows to draw, in order, already stripped of the ones this account
+    /// hides. Plugin rails are placed by the section they came from, so an
+    /// arrangement can put one between two of Lagoon's own rows (HEL-191).
+    private var rowOrder: [String] {
+        HomeSectionPreferenceResolver.renderOrder(
+            preferences: savedHomePreferences,
+            pluginSections: viewModel.pluginRails.map {
+                HomeRowID.section(forPluginRailID: $0.id)
+            }
+        )
+    }
+
+    /// One row of Home, whichever kind it turns out to be.
+    ///
+    /// Every branch may still draw nothing: a rail with no items hides itself,
+    /// which is what lets one arrangement serve a library that has everything
+    /// and one that has almost nothing.
+    @ViewBuilder
+    private func row(_ id: String) -> some View {
+        switch id {
+        case HomeRowID.continueWatching:
+            MediaRail(
+                title: "Continue Watching",
+                items: viewModel.resume,
+                style: .landscape,
+                showsLandscapeMetadata: true,
+                playAction: { playerItem = PlayerItem(media: $0) },
+                onUserDataChange: refreshUserData
+            )
+        case HomeRowID.nextUp:
+            MediaRail(
+                title: "Next Up",
+                items: viewModel.nextUp,
+                style: .landscape,
+                showsLandscapeMetadata: true,
+                playAction: { playerItem = PlayerItem(media: $0) },
+                onUserDataChange: refreshUserData
+            )
+        case HomeRowID.favorites:
+            MediaRail(
+                title: "Favorites",
+                items: viewModel.favorites,
+                style: .landscape,
+                onUserDataChange: refreshUserData
+            )
+        case HomeRowID.recentlyAddedMovies:
+            recentlyAddedRails(collectionType: "movies")
+        case HomeRowID.recentlyAddedShows:
+            recentlyAddedRails(collectionType: "tvshows")
+        case HomeRowID.recentlyAddedOther:
+            recentlyAddedRails(collectionType: nil)
+        case HomeRowID.movieGenres:
+            GenreRail(
+                title: "Movie Genres",
+                genres: viewModel.movieGenreShelf,
+                includeTypes: [.movie],
+                identifier: "movies"
+            )
+        case HomeRowID.showGenres:
+            GenreRail(
+                title: "Show Genres",
+                genres: viewModel.showGenreShelf,
+                includeTypes: [.series],
+                identifier: "shows"
+            )
+        case CollectionShelf.rowID:
+            CollectionRail(title: "Collections", collections: viewModel.collections)
+        case HomeCuratedRows.ID.topMovies, HomeCuratedRows.ID.topShows:
+            topTenRail(id)
+        default:
+            if HomeRowID.isNative(id) {
+                curatedRail(id)
+            } else {
+                pluginRail(id)
+            }
+        }
     }
 
     /// The Recently Added rails belonging to one kind of library, so each one
-    /// lands inside its own block rather than in a run of its own.
+    /// lands where the arrangement puts that kind rather than in a run of its
+    /// own.
     ///
     /// A nil `collectionType` collects whatever is neither movies nor shows.
     /// `load` only keeps those two today, so it draws nothing — but a rail
@@ -238,20 +215,35 @@ struct HomeView: View {
     /// appearing in an odd place.
     @ViewBuilder
     private func recentlyAddedRails(collectionType: String?) -> some View {
-        if isNativeRowEnabled("lagoon.recentlyAdded") {
-            let rails = viewModel.latestRails.filter {
-                collectionType == nil
-                    ? !["movies", "tvshows"].contains($0.collectionType ?? "")
-                    : $0.collectionType == collectionType
-            }
-            ForEach(rails) { rail in
-                MediaRail(
-                    title: rail.title,
-                    items: rail.items,
-                    style: .landscape,
-                    onUserDataChange: refreshUserData
-                )
-            }
+        let rails = viewModel.latestRails.filter {
+            collectionType == nil
+                ? !["movies", "tvshows"].contains($0.collectionType ?? "")
+                : $0.collectionType == collectionType
+        }
+        ForEach(rails) { rail in
+            MediaRail(
+                title: rail.title,
+                items: rail.items,
+                style: .landscape,
+                onUserDataChange: refreshUserData
+            )
+        }
+    }
+
+    /// A row the server's Home Screen Sections plugin contributed (HEL-47).
+    /// Nothing at all without the plugin, and nothing for a section whose
+    /// items came back empty.
+    @ViewBuilder
+    private func pluginRail(_ section: String) -> some View {
+        if let rail = viewModel.pluginRails.first(
+            where: { $0.id == HomeRowID.pluginRailID(forSection: section) }
+        ) {
+            MediaRail(
+                title: rail.title,
+                items: rail.items,
+                style: .landscape,
+                onUserDataChange: refreshUserData
+            )
         }
     }
 
@@ -271,7 +263,7 @@ struct HomeView: View {
     /// PlaybackInfo on a folder.
     @ViewBuilder
     private func curatedRail(_ id: String) -> some View {
-        if isNativeRowEnabled(id), let rail = viewModel.curatedRails[id] {
+        if let rail = viewModel.curatedRails[id] {
             MediaRail(
                 title: rail.title,
                 items: rail.items,
@@ -283,7 +275,7 @@ struct HomeView: View {
 
     @ViewBuilder
     private func topTenRail(_ id: String) -> some View {
-        if isNativeRowEnabled(id), let rail = viewModel.curatedRails[id] {
+        if let rail = viewModel.curatedRails[id] {
             TopTenRail(
                 title: rail.title,
                 items: rail.items,

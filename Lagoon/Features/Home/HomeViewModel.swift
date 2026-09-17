@@ -476,8 +476,8 @@ final class HomeViewModel {
         let identity = client.sessionIdentity
         let origin = seerr?.serverURL
         let cookie = seerr?.sessionCookie
-        let enabled = preferences.isNativeEnabled(HomeCuratedRows.ID.topMovies)
-            || preferences.isNativeEnabled(HomeCuratedRows.ID.topShows)
+        let enabled = preferences.isEnabled(HomeCuratedRows.ID.topMovies)
+            || preferences.isEnabled(HomeCuratedRows.ID.topShows)
         let rails = await topTenRails(client: client, seerr: seerr?.sessionSnapshot(), enabled: enabled)
         guard generation == loadGeneration, identity == client.sessionIdentity,
               origin == seerr?.serverURL, cookie == seerr?.sessionCookie, !Task.isCancelled else { return }
