@@ -1,9 +1,9 @@
 # Architecture engineering notes
 
-Rationale and investigations from the September 10, 2026 documentation
-cleanup; start with the [current architecture guide](../architecture.md).
-What follows records the revision at the time, not a release checklist or
-proof of current hardware acceptance.
+Engineering notes from the September 10, 2026 documentation cleanup.
+Start with the [current architecture guide](../architecture.md). This
+records the reasoning at the time, not a release checklist or proof of
+current hardware acceptance.
 
 ## Session lifecycle
 
@@ -12,28 +12,28 @@ proof of current hardware acceptance.
 UserDefaults holds the `accounts` list, the active account id, and the
 server being connected to *right now* — the sign-in screen's subject, not
 yet an account, since a server becomes one only once credentials work.
-The Keychain (`KeychainStore`) holds one access token **per account**,
-keyed `token:{serverURL}|{userId}`, plus the per-install device id, which
-survives reinstalls so the server's device list stays sane.
+`KeychainStore` holds one access token **per account**, keyed
+`token:{serverURL}|{userId}`, plus a per-install device id that survives
+reinstalls so the server's device list stays sane.
 
 `restore()` resumes the last active account, so a single profile never
 sees the picker: `choosingAccount` appears only when no account can be
-resumed, or when Settings asks for it. A missing token drops to
+resumed, or Settings asks for it. A missing token drops to
 `needsSignIn`; no accounts at all drops to `needsServer`.
 
 ### Server reconciliation
 
 SwiftUI keeps the tab and navigation trees mounted when Lagoon
 backgrounds, so returning does not re-run a screen's `task` or `onAppear`
-work — whatever Jellyfin changed meanwhile used to stay invisible until a
+work. Whatever Jellyfin changed meanwhile used to stay invisible until a
 cold launch. `RootView` is the single scene-lifecycle observer: each
 transition to `ScenePhase.active` advances `ServerSyncState.generation`,
 and server-backed screens reconcile only the state they own.
 
 Every reconciling surface follows the same discipline: keep current
 content and focus while requests are in flight, discard superseded
-responses, retain the last good snapshot on failure — stated once here,
-not per screen. Three reconciliations add rules beyond it:
+responses, and retain the last good snapshot on failure — stated once
+here, not per screen. Three reconciliations add rules beyond it:
 
 - Home's hero always has a source. `HeroSelection` walks the view model's
   tiers in priority order: Recently Added, then Continue Watching and
@@ -53,30 +53,30 @@ not per screen. Three reconciliations add rules beyond it:
 - An open library re-reads however many items it already loaded, keeping
   focus and scroll identity instead of collapsing to page one.
 
-`ServerRefreshModifier` adds the five-minute cadence and manual refresh
+`ServerRefreshModifier` adds a five-minute cadence and manual refresh
 control to top-level browse destinations. `MainTabView` passes the
-selected tab and empty root navigation path explicitly: SwiftUI's
-mounted hidden tabs would otherwise poll, and a pushed detail would
-refresh content behind it.
+selected tab and an empty root navigation path explicitly, since
+SwiftUI's mounted hidden tabs would otherwise poll and a pushed detail
+would refresh content behind it.
 
 On tvOS that control is a compact circular Refresh button at the top
-leading edge, beside but outside the tab group: sitting next to Home
-gives it a natural Left/Right path from the tab bar, avoiding both an
+leading edge, beside but outside the tab group. Sitting next to Home
+gives it a natural Left/Right path from the tab bar and avoids both an
 empty toolbar row and a Refresh entry in the tab navigation. It joins
 the focus graph only while the top chrome is focused, so Up from content
-still returns to the selected tab, and Down is intercepted through
-SwiftUI focus state — the default fallback is the tab bar, not Home's
-hero. Its UIKit measuring control stays mounted but inert while a detail
-is pushed, and `MainTabView` retains the last chrome offset at root
-scope — a control recreated on return reports the screen origin first
-and flashes Refresh over a deeply scrolled root. While refreshing, the
-arrow rotates rather than swapping for a progress glyph, and Reduce
-Motion keeps it still. The button targets `ServerSyncState.activeTarget`,
-so it refreshes only the visible destination.
+still returns to the selected tab, and Down falls through SwiftUI focus
+state to the tab bar rather than Home's hero. Its UIKit measuring
+control stays mounted but inert while a detail is pushed, and
+`MainTabView` retains the last chrome offset at root scope — otherwise a
+control recreated on return reports the screen origin first and flashes
+Refresh over a deeply scrolled root. While refreshing, the arrow rotates
+instead of swapping for a progress glyph, and Reduce Motion keeps it
+still. The button targets `ServerSyncState.activeTarget`, so it
+refreshes only the visible destination.
 
-Playback dismissal is deliberately separate: the scene stays active
-while a full-screen player is open, and the targeted refresh waits for
-the stop report before re-reading watch progress.
+Playback dismissal is separate: the scene stays active while a
+full-screen player is open, and the targeted refresh waits for the stop
+report before re-reading watch progress.
 
 ### Multiple accounts
 
@@ -130,17 +130,17 @@ finish that cleanup before a replacement token is saved.
 
 ### Seerr sessions
 
-Seerr is an optional second service boundary, not part of
+Seerr is an optional second service boundary, separate from
 `JellyfinClient`. `SeerrSessionStore` shares the configured address
 between accounts on the same Jellyfin server but keeps a separate opaque
 `connect.sid` cookie in the Keychain per Lagoon account. Quick Connect is
-the primary sign-in path; a Jellyfin password is accepted only as a
-one-time fallback and never persisted. Changing accounts clears
-in-flight Seerr UI state and restores only the matching cookie, and
-activation invalidates pending restores and sign-ins before they can
-write into the next session. Automatic URLSession cookie handling is
-disabled so only the explicitly selected cookie is ever sent, and a
-failed cookie deletion is quarantined rather than left restorable.
+the primary sign-in path; a Jellyfin password works only as a one-time
+fallback and is never persisted. Changing accounts clears in-flight
+Seerr UI state and restores only the matching cookie, and activation
+invalidates pending restores and sign-ins before they can write into the
+next session. Automatic URLSession cookie handling is disabled, so only
+the explicitly selected cookie is ever sent, and a failed cookie
+deletion is quarantined rather than left restorable.
 
 ## Navigation
 
@@ -154,15 +154,15 @@ screen requests it and the tab root's single host presents it
 Library combines movies and series in one paged grid. Every filter —
 media type, sort order, source library, genre, decade, unwatched,
 favorites, 4K movies — goes to Jellyfin on each page and refresh, not to
-loaded posters, which is why filtering holds across pagination.
-Resolution filtering applies only to Movies, since series folders have
-no file resolution. `LibrarySelection` persists per server/account;
-source choices come from cached `LibraryTab` values until `userViews()`
+loaded posters, so filtering holds across pagination. Resolution
+filtering applies only to Movies, since series folders have no file
+resolution. `LibrarySelection` persists per server/account; source
+choices come from cached `LibraryTab` values until `userViews()`
 succeeds, so a deleted or incompatible saved source clears only against
 an authoritative list. The Library filter appears only when multiple
-libraries share a media type; a redundant saved library filter becomes
-its equivalent media type, so hiding the menu cannot leave an invisible
-constraint.
+libraries share a media type, and a redundant saved library filter
+becomes its equivalent media type, so hiding the menu cannot leave an
+invisible constraint.
 
 Media type is a native segmented Picker on iOS and a menu Picker on
 tvOS, and **the tvOS menu commits on Select, not focus**: passing
@@ -172,11 +172,12 @@ silently clear the movie-only 4K filter. Only watch-state, favorites and
 
 The Decade filter derives non-overlapping ranges from Jellyfin's
 `Items/Filters` year catalogue for the current media type and source
-library, not from the loaded page or a fixed calendar range — so gaps
-and undated titles create no choices, and it constrains queries through
-the `Years` parameter. A saved decade stays clearable while loading or
-offline and drops only once a successful catalogue confirms it is
-absent; a saved genre survives a catalogue that no longer lists it.
+library, not from the loaded page or a fixed calendar range. Gaps and
+undated titles create no choices, and the filter constrains queries
+through the `Years` parameter. A saved decade stays clearable while
+loading or offline and drops only once a successful catalogue confirms
+it is absent; a saved genre survives a catalogue that no longer lists
+it.
 
 `LibraryViewModel` resets paging on filter changes, counts raw server
 rows for offsets, and deduplicates visible item IDs. Its refresh target
@@ -186,15 +187,15 @@ leave the navigation stack alone.
 `SearchView` is the app's single search location, drawing Jellyfin
 library and Seerr catalogue matches as separate rails, with recent terms
 (`RecentSearchStore`) below the keyboard when the field is empty. It is
-a **tab of its own**, not a fixture on Discover, because tvOS
-`.searchable` draws a resident field and full A-Z keyboard and expects
-to own the screen — what the HIG means by "a search screen is a
-specialized keyboard screen." An earlier version folded search into
-Discover while unifying the two result sets, which pushed its content
-below the fold. Two rules keep it working: `.searchable` goes on the
-content, **not** the `NavigationStack`, or the field draws over pushed
-detail pages; and the stack is a heterogeneous `NavigationPath`, since
-results carry both route identities.
+a **tab of its own**, not a fixture on Discover: tvOS `.searchable`
+draws a resident field and full A-Z keyboard and expects to own the
+screen, what the HIG calls "a search screen is a specialized keyboard
+screen." An earlier version folded search into Discover and unified the
+two result sets, which pushed content below the fold. Two rules keep it
+working: `.searchable` goes on the content, **not** the
+`NavigationStack`, or the field draws over pushed detail pages, and the
+stack is a heterogeneous `NavigationPath`, since results carry both
+route identities.
 
 Search rails are previews, not the whole result set; See All opens
 `ContentNavigationRoute.search(query)` or
@@ -207,20 +208,20 @@ includes media type as well as TMDB ID.
 An **empty section offers no See All**. The preview runs the same query
 the page runs, so the page behind that link only repeats the message,
 and a tvOS page of nothing but text has no focus to hold — Menu quits
-the app instead of going back. `SearchResultsView` therefore keeps a
-focusable element in both empty states: `LoadingView` for the first
-page, and a retry beside an empty result, which rewinds the cursor
-rather than requesting a page past the end. The status block itself
-stays unfocusable on purpose, so Down from the search field can carry on
-to the Seerr section.
+the app instead of going back. `SearchResultsView` keeps a focusable
+element in both empty states: `LoadingView` for the first page, and a
+retry beside an empty result, which rewinds the cursor rather than
+requesting a page past the end. The status block itself stays
+unfocusable, so Down from the search field can carry on to the Seerr
+section.
 
-Settings → About carries a Legal section (audit A06), whose
+Settings → About carries a Legal section (audit A06). Its
 Acknowledgements sheet follows the changelog sheet's tvOS pattern: no
 `NavigationStack`, its own header/footer at a fixed
 `Metrics.modalPanelSize` instead of a pushed page's title and
 background, and licence text broken into focusable paragraphs rather
 than one long unfocusable block. Privacy Policy and Support rows appear
-only once `LegalDestinations` carries a URL; iOS opens the link, tvOS
+only once `LegalDestinations` carries a URL: iOS opens the link, tvOS
 shows the address to type on another device. The sign-in screen's
 "About Lagoon" action reaches the same section pre-login.
 
@@ -241,9 +242,9 @@ shared App Group container as JPEGs at 3840x2160 and 1920x1080; the
 extension addresses them by file name resolved against **its own**
 container URL, never an absolute path handed over by another process.
 That keeps the extension credential-free and network-free by rule. It
-also fixes the old sizing, which asked Jellyfin for 800px and used that
-one URL for both `.screenScale1x` and `.screenScale2x` — under half the
-width a 16:9 item needs at @2x.
+also fixes old sizing, which asked Jellyfin for 800px and used one URL
+for both `.screenScale1x` and `.screenScale2x` — under half the width a
+16:9 item needs at @2x.
 
 `TopShelfPublisher` owns one cancelable task and serializes the commit
 on the main actor. Each operation captures its server/user and source
@@ -259,14 +260,13 @@ successful empty resume clears the shelf, a network failure preserves
 the last valid snapshot, and an unrelated Next Up failure cannot block
 that clearing.
 
-The carousel's two buttons must do two different things, so the
-`lagoon://` contract has two hosts: `play/{id}` resumes and `item/{id}`
-opens the detail page. Both require
-`owner=<account-hash>&generation=<UUID>`; the app checks the active
-account and committed manifest before and after fetching the item, so
-legacy unowned links and links from cleared or replaced snapshots are
-ignored. `DeepLinkRouterTests` and `TopShelfPublisherTests` cover
-parsing and ownership.
+The carousel's two buttons do two different things, so the `lagoon://`
+contract has two hosts: `play/{id}` resumes and `item/{id}` opens the
+detail page. Both require `owner=<account-hash>&generation=<UUID>`; the
+app checks the active account and committed manifest before and after
+fetching the item, so legacy unowned links and links from cleared or
+replaced snapshots are ignored. `DeepLinkRouterTests` and
+`TopShelfPublisherTests` cover parsing and ownership.
 
 ### Eight items, and why artwork is only composed once
 
@@ -326,9 +326,9 @@ any simulator or on hardware.
 own spec (`tvOSShared.xcspec`) gives it `LD_ENTRY_POINT =
 _TVExtensionMain`, so the appex booted through TVServices' TVML entry
 point instead of `_NSExtensionMain` and never stood up the NSExtension
-XPC service `com.apple.tv-top-shelf` requires. The system then reported
-the plugin with pid 0, failed to acquire a process assertion, killed it,
-and fell back to the static brand image — which looks exactly like "the
+XPC service `com.apple.tv-top-shelf` requires. The system reported the
+plugin with pid 0, failed to acquire a process assertion, killed it, and
+fell back to the static brand image, which looks exactly like "the
 shelf is empty".
 
 The tell is in the binary — one command:
@@ -341,9 +341,9 @@ nm -m Lagoon.app/PlugIns/LagoonTopShelf.appex/LagoonTopShelf | grep -i extension
 Check the entry point *first*: entitlements, app group,
 `NSExtensionPointIdentifier`, principal class, `CFBundlePackageType`,
 signing, embedding and architecture were all already correct and cost
-three sessions to re-verify; the `ENABLE_DEBUG_DYLIB = NO` difference
-against a working extension elsewhere that looked significant was only
-a side effect of the same wrong product type, not a second problem.
+three sessions to re-verify. An `ENABLE_DEBUG_DYLIB = NO` difference
+against a working extension elsewhere looked significant but was only a
+side effect of the same wrong product type, not a second problem.
 `tv-app-extension` also supplied `-framework TVServices` for free, so
 the target now carries `OTHER_LDFLAGS = "-framework TVServices"`
 explicitly. Nothing else about Top Shelf is configured in App Store
@@ -377,8 +377,8 @@ button. Lagoon can lift a block but does not add one.
 `mediaInfo.downloadStatus` carries Radarr/Sonarr's queue, turning a bare
 "Processing" into "62%" or "Importing." **Deduplicate by `downloadId`
 before aggregating**: a season pack is one download that Sonarr reports
-once per episode, each row carrying the pack's full size, so summing
-the rows claims ten times the bytes and a meaningless percentage. Each
+once per episode, each row carrying the pack's full size, so summing the
+rows claims ten times the bytes and a meaningless percentage. Each
 successful detail refresh commits status, progress, ETA and any newly
 resolved Jellyfin item as one snapshot.
 
@@ -394,13 +394,13 @@ someone reads a badge that is quietly lying.
 
 ## Discover's layout comes from the server
 
-Discover opens on the same `HeroSection` Home uses, then draws its
-rails in the order the **server owner** arranged them.
-`settings/discover` returns Jellyseerr's own slider list — bare type
-numbers, an order, and `title: null`, since the client is expected to
-name them — so `SeerrDiscoverLayout` maps those numbers onto rows, and
-Lagoon agrees with the Jellyseerr web page instead of inventing a
-second layout. Re-ordering sliders there re-orders Discover here.
+Discover opens on the same `HeroSection` Home uses, then draws its rails
+in the order the **server owner** arranged them. `settings/discover`
+returns Jellyseerr's own slider list — bare type numbers, an order, and
+`title: null`, since the client is expected to name them — so
+`SeerrDiscoverLayout` maps those numbers onto rows, and Lagoon agrees
+with the Jellyseerr web page instead of inventing a second layout.
+Re-ordering sliders there re-orders Discover here.
 
 Four of the twelve built-in types are deliberately skipped:
 `recentlyAdded` and `recentRequests` duplicate Home's rails and the
@@ -416,9 +416,9 @@ one dead endpoint costs one rail, not the screen, and a rail below the
 fold costs nothing until scrolled near. Two consequences:
 
 - A rail must never render to zero height while loading. A zero-height
-  row inside a `LazyVStack` is never realised, so its `.task` never
-  runs and it stays empty forever — the placeholder is what gets the
-  row built.
+  row inside a `LazyVStack` is never realised, so its `.task` never runs
+  and it stays empty forever — the placeholder is what gets the row
+  built.
 - A rail that loaded and came back *empty* draws nothing at all. An
   empty watchlist is the ordinary case, not a fault.
 
@@ -430,8 +430,8 @@ drawn from.
 Jellyfin items and Discover feeds it Seerr results without either
 losing route identity. Seerr serves **no logo artwork anywhere** — not
 in discover results, not in details — so Discover's hero always falls
-back to the title in type, the same fallback `TitleArtImage` makes for
-a Jellyfin item without a logo.
+back to the title in type, the same fallback `TitleArtImage` makes for a
+Jellyfin item without a logo.
 
 `HeroCarouselSelection` stores the selected item ID, not its array
 index, since a refresh may reorder slides without changing the title
@@ -443,11 +443,11 @@ Up/Down to the focus engine.
 Hero rotation is a cancellable seven-second view task, separate from
 server refresh. Its identity includes the item IDs, the selected ID and
 whether cycling is allowed, so manual selection restarts the interval,
-and it runs only while the hero is visible, its root destination
-active and the scene foregrounded; touch scrolling, tvOS hero focus,
-Reduce Motion, VoiceOver and Home's presented playback pause it.
-Artwork and palette work checks cancellation before publishing, so a
-superseded slide's palette cannot land late.
+and it runs only while the hero is visible, its root destination active
+and the scene foregrounded; touch scrolling, tvOS hero focus, Reduce
+Motion, VoiceOver and Home's presented playback pause it. Artwork and
+palette work checks cancellation before publishing, so a superseded
+slide's palette cannot land late.
 
 TMDB serves a fixed set of image widths and answers 400 for anything
 else, so `SeerrClient.imageURL` snaps a requested width up to a real
@@ -458,4 +458,3 @@ TMDB ids stay in the Seerr model layer: an available title opens in
 Lagoon only after an exact `AnyProviderIdEquals=tmdb.{id}` lookup
 returns a Jellyfin item, avoiding title/year guessing and keeping a
 Seerr detail from entering a Jellyfin stack under the wrong identity.
-</content>
