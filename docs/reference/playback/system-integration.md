@@ -189,10 +189,11 @@ fixture to one rendition.
 
 ## Watch Together: the group as a transport authority (HEL-172)
 
-Measured against fixture (Jellyfin 12.0.0) on 2026-09-14 with a scripted
-second member. The [playback guide](../../playback.md#watch-together-syncplay-hel-172)
-states the rules; this is what the server actually did and why the code is
-shaped around it.
+Measured against the fixture server (Jellyfin 12.0.0) on 2026-09-14 with a
+scripted second member. The
+[playback guide](../../playback.md#watch-together-syncplay-hel-172) states the
+rules; this is what the server actually did and why the code is shaped around
+it.
 
 **The socket has to be carrying messages before the join.** A join announced
 over a WebSocket whose handshake is still in flight is simply lost: the app
@@ -248,9 +249,9 @@ position 0 arms `PlaybackAutomation` from the phantom position `beginItem`
 starts at, and an open slower than the five-second skip countdown — a 4K
 transcode is — lets it fire before the first real tick corrects it. In a group
 that skip is a group `Seek`, so a member rejoining a room at 10:30 dragged
-everyone back to the recap's end at 0:35. Reproduced 2026-09-14 on fixture;
-not a SyncPlay bug and not fixed here, but it is how the hang above was first
-provoked.
+everyone back to the recap's end at 0:35. Reproduced 2026-09-14 on the fixture
+server; not a SyncPlay bug and not fixed here, but it is how the hang above
+was first provoked.
 
 **A `When` can already be in the past.** One `Pause` arrived with
 `EmittedAt` four seconds *after* its own `When` — the server re-issuing the
@@ -258,8 +259,8 @@ instant the group had agreed on. `SyncPlayCommandSchedule` clamps the wait to
 zero and the member acts at once, which is what keeps a late arrival aligned
 instead of scheduling into the past.
 
-**Drift, in practice.** iPhone 17 Pro simulator against fixture over the
-internet, HLS transcode, one scripted member: drift settled at −37 ms after
+**Drift, in practice.** iPhone 17 Pro simulator against the fixture server over
+the internet, HLS transcode, one scripted member: drift settled at −37 ms after
 the group start, −43 ms after a seek to 120 s and a resume, −41 ms a minute
 later, and 0 ms immediately after an anchor. All inside the 60 ms deadband, so
 no correction ran — which is the intended resting state; the rate nudge exists
