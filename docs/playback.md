@@ -274,127 +274,141 @@ Buffering and one Ready.
 
 **A report says where the engine is, not where it was.** `clockPosition`
 answers from the synchronizer, and the synchronizer sits at the anchor being
-left behind until `beginPlayback` sets the new one — zero on a first open.
-So `beginPlayback` anchors the clock *before* it announces the end of
-buffering, and leaves `bufferingTargetSeconds` in place until it does, so the
-whole window has one answer. A Ready that is more than half a second from the
-group's position is not ignored: the server flags that member as buffering
-again and sends it a corrective `Seek` ("got lost in time, correcting"), so a
-report that lies stalls the room it was meant to release.
+left behind until `beginPlayback` sets the new one. That anchor is zero on a
+first open. `beginPlayback` anchors the clock *before* it announces the end
+of buffering, and leaves `bufferingTargetSeconds` in place until it does, so
+the whole window has one answer. A Ready that is more than half a second
+from the group's position is not ignored: the server flags that member as
+buffering again and sends it a corrective `Seek` ("got lost in time,
+correcting"). A report that lies stalls the room it was meant to release.
 
-**Commands.** `Unpause` seeks first only if the member is more than 0.5 s from
-the named position, then calls `playGroup(atHostTime:)` straight away — the
-engine remembers the instant through priming, and a seek issued *after* the
-start call would drop it, so that order is load-bearing. `Pause` waits until
-the named instant arrives on the local clock, then pauses, and re-seeks only
-if more than 0.1 s out, because a seek re-primes the pipeline. `Seek` seeks
-and reports Buffering, then Ready. `Stop` closes the player and keeps the
-membership. `SyncPlayGroupSession` decides what is worth acting on at all:
-another group's command, one emitted before this member joined, one naming an
-item that is not the current one (Stop excepted), the all-zero `Stop` a new
-group is greeted with, and a re-send of the command already taken are all
-refused — a `Seek` excepted there too. The server builds its corrective seek
-out of the group's own state, so it arrives identical to the seek already
-taken bar `EmittedAt`; refusing it leaves the member with nothing left to
-report and the group waiting on it for ever.
+**Commands.** `Unpause` seeks first, only if the member is more than 0.5 s
+from the named position, then calls `playGroup(atHostTime:)` straight away.
+The engine remembers the instant through priming, and a seek issued *after*
+the start call would drop it, so that order is load-bearing. `Pause` waits
+until the named instant arrives on the local clock, then pauses, and
+re-seeks only if more than 0.1 s out, because a seek re-primes the pipeline.
+`Seek` seeks and reports Buffering, then Ready. `Stop` closes the player and
+keeps the membership.
 
-**Drift.** While the last command is an `Unpause`, 1.5 s past its instant and
-not buffering, the driver compares `clockPosition` against where the group
-should be and applies `SyncCorrectionPolicy`: under 60 ms nothing, up to 1.5 s
-a rate nudge of `1 + diff / 1.5` clamped to 0.75…1.5 held for 1.5 s, beyond
-that a seek. The nudge rides `setCorrectionRate`, never the viewer's `rate`.
-`syncplay.correction` (default on) turns correction off while still measuring;
-`driftMilliseconds` feeds the HUD's `Sync:` line.
+`SyncPlayGroupSession` decides what is worth acting on at all. It refuses
+another group's command, one emitted before this member joined, one naming
+an item that is not the current one (`Stop` excepted), the all-zero `Stop` a
+new group is greeted with, and a re-send of the command already taken. A
+`Seek` is excepted from that last refusal too: the server builds its
+corrective seek out of the group's own state, so it arrives identical to the
+seek already taken, apart from `EmittedAt`. Refusing it would leave the
+member with nothing left to report and the group waiting on it forever.
+
+**Drift.** While the last command is an `Unpause`, 1.5 s past its instant
+and not buffering, the driver compares `clockPosition` against where the
+group should be and applies `SyncCorrectionPolicy`: under 60 ms nothing, up
+to 1.5 s a rate nudge of `1 + diff / 1.5` clamped to 0.75…1.5 held for
+1.5 s, beyond that a seek. The nudge rides `setCorrectionRate`, never the
+viewer's `rate`. `syncplay.correction` (default on) turns correction off
+while still measuring. `driftMilliseconds` feeds the HUD's `Sync:` line.
 
 **The viewer's transport is a request.** Play, pause, seek, the double-tap
 skips, the scrub commit, the intro skip, "play next" and the lock screen all
 go through `PlaybackController`'s `user…` methods, which hand them to
-`groupTransport` instead of the engine when a group owns the session. Nothing
-moves locally; the server's echo moves every member together. The player
-chrome states the intention through `PlayerTransportActions` and `NowPlaying`
-through the same struct, so there is one interception point rather than one
-per control. Audio track, subtitles, audio delay and playback speed stay
-local — they are this viewer's, not the group's.
+`groupTransport` instead of the engine when a group owns the session.
+Nothing moves locally. The server's echo moves every member together. The
+player chrome states the intention through `PlayerTransportActions`, and
+`NowPlaying` states it through the same struct, so there is one interception
+point rather than one per control. Audio track, subtitles, audio delay and
+playback speed stay local: they are this viewer's, not the group's.
 
 **Leaving the player is not leaving the group.** `onClosed` detaches the
-driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by a
-member that is not watching; `rejoinPlayback()` clears it and reopens from the
-stored queue, at where the group has got to — `positionSeconds(atServerSeconds:)`
-carries the last `Unpause` forward by the server time since its instant, since
-opening at the position that command named would be minutes behind a group
-that has been watching, and the server would hold everyone up correcting it. `leave()` posts `SyncPlay/Leave` and closes the socket and
-clock, and an account switch does the same silently. Foreground forces a clock
-re-sample.
+driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by
+a member that is not watching. `rejoinPlayback()` clears that flag and
+reopens from the stored queue, at wherever the group has got to.
+`positionSeconds(atServerSeconds:)` carries the last `Unpause` forward by
+the server time elapsed since its instant. Opening at the position that
+command named would be minutes behind a group that has been watching, and
+the server would hold everyone up correcting it. `leave()` posts
+`SyncPlay/Leave` and closes the socket and clock. An account switch does the
+same silently. Foreground forces a clock re-sample.
 
 **What the viewer sees.** The way in is a *Watch Together* control in a film
-or episode page's secondary row — `person.2.fill`, never SharePlay's glyph,
-because SharePlay is GroupActivities and this is not it. It is drawn only
-once `SyncPlayStore.availability` says the account may join a group, and the
-detail page is what asks for that answer: the control renders nothing until
-it arrives, and a task on a view that renders nothing never runs, the same
-trap `DownloadControl` documents. It opens `WatchTogetherSheet` — a sheet on
-iOS, a `TVSettingsPage` in a sheet on tvOS — which lists the server's groups
-(polled every 5 s, since the socket only carries the group this client is
-in), offers *Start a Group* where the policy is `CreateAndJoinGroups`, and
-once joined shows the room, its people, *Play This Here* and *Leave*. Group
-names are visible to every account on the server and the copy says so.
-`startGroup` is two calls, not one: `SyncPlay/New` answers 204 and the id
-arrives over the socket, so the queue can only be set after `GroupJoined`.
+or episode page's secondary row. Its icon is `person.2.fill`, never
+SharePlay's glyph, because SharePlay is GroupActivities and this is not it.
+It is drawn only once `SyncPlayStore.availability` says the account may
+join a group, and the detail page is what asks for that answer. The control
+renders nothing until the answer arrives, and a task on a view that renders
+nothing never runs — the same trap `DownloadControl` documents. It opens
+`WatchTogetherSheet`: a sheet on iOS, a `TVSettingsPage` in a sheet on
+tvOS. That sheet lists the server's groups, polled every 5 s since the
+socket only carries the group this client is in. It offers *Start a
+Group*, where the policy is `CreateAndJoinGroups`, and once joined shows
+the room, its people, *Play This Here* and *Leave*. Group names are
+visible to every account on the server, and the copy says so. `startGroup`
+is two calls, not one: `SyncPlay/New` answers 204, and the id arrives over
+the socket, so the queue can only be set after `GroupJoined`.
 
-While a group owns the session the player's panel grows a fifth **Together**
-tab: the room, its state, the people in it, an *Ignore Waiting* switch and
-*Leave*. Everywhere the tabs are walked — the strip and the tvOS left/right
-grammar — reads `PlayerPanelTab.offered(inGroup:)` rather than `allCases`, or
-an arrow press lands on a tab that is not drawn; a group that ends moves the
-selection back to Info. The group reaches `CustomPlayerView` as a
-`PlayerTogetherState` value, never as the store, and joins
-`PlayerControlPanelHost`'s `Equatable` boundary so an arrival still reaches
-the tab. Notices are a toast at the top of the screen — `SyncPlayNoticeToast`,
+While a group owns the session, the player's panel grows a fifth
+**Together** tab: the room, its state, the people in it, an *Ignore
+Waiting* switch and *Leave*. Everywhere the tabs are walked, the strip and
+the tvOS left/right grammar, reads `PlayerPanelTab.offered(inGroup:)`
+rather than `allCases`. Otherwise an arrow press lands on a tab that is not
+drawn. A group that ends moves the selection back to Info. The group
+reaches `CustomPlayerView` as a `PlayerTogetherState` value, never as the
+store, and joins `PlayerControlPanelHost`'s `Equatable` boundary so an
+arrival still reaches the tab.
+
+Notices are a toast at the top of the screen: `SyncPlayNoticeToast`. It is
 an overlay leaf in `PlayerSkipOverlay`'s shape, so the player root never
-subscribes to one; two seconds, Reduce Motion respected, never hit-tested.
-A state the picture already reports ("Playing", "Nothing playing") gets no
-toast, and neither does "Waiting", which the transport says for as long as it
-is true. **Waiting is not buffering**: a member primed and paused at the
-group's position is not stalled, so the existing spinner carries *Waiting for
-the group* underneath it while `SyncPlayStore.isWaitingForGroup` — dropped
-clear of the touch grammar's centre play button, which waiting keeps on
-screen, because the two share the middle of the frame.
-Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*, and
-Home carries a banner above its rails — group name, *Rejoin*, *Leave* —
-while a group has this device as a member and nothing of its is on screen.
+subscribes to one. It shows for two seconds, respects Reduce Motion, and is
+never hit-tested. A state the picture already reports ("Playing", "Nothing
+playing") gets no toast, and neither does "Waiting," which the transport
+says for as long as it is true.
 
-**The socket must be open before the join.** The server announces a join over
-the socket at the instant it happens; joining while the handshake was still in
-flight lost both the `GroupJoined` and the `PlayQueue` update on the fixture
-server running Jellyfin 12.0.0,
-and the member then sat in a group it never heard another word from. The store
-waits for the socket to carry its first message — the server's own
-`ForceKeepAlive` — before asking to join. A handshake timeout or failed
+**Waiting is not buffering.** A member primed and paused at the group's
+position is not stalled. The existing spinner carries the label *Waiting
+for the group* underneath it. `SyncPlayStore.isWaitingForGroup` drives that
+label, positioned clear of the touch grammar's centre play button. Waiting
+keeps that button on screen, and the two elements would otherwise share the
+middle of the frame.
+
+Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*.
+Home carries a banner above its rails, with the group name, *Rejoin* and
+*Leave*, while a group has this device as a member and nothing of its is
+on screen.
+
+**The socket must be open before the join.** The server announces a join
+over the socket at the instant it happens. **Caution.** Joining while the
+handshake is still in flight loses both the `GroupJoined` and the
+`PlayQueue` update on the fixture server running Jellyfin 12.0.0, and the
+member then sits in a group it never hears another word from. The store
+waits for the socket to carry its first message, the server's own
+`ForceKeepAlive`, before asking to join. A handshake timeout or failed
 membership request keeps the sheet open with an error and a retry path.
+
 The store snapshots its account's client, so queued requests and the final
 Leave never adopt a replacement account's credentials. Leaving cancels
 queued commands and item loads, and late results must match the active
 membership before they can present or restart playback. A delivery fallback
-in a group primes paused and reports Ready before the server starts it again.
-Readiness reports retry once after a second, with the current timestamp and
-position, and cancellation or newer readiness supersedes that retry. Viewer
-transport commands are never retried automatically. Ignore Waiting changes
-publish after server acknowledgement; an unavailable queued title attempts
-to opt out of waiting and offers Rejoin or Leave instead of failing silently.
+in a group primes paused and reports Ready before the server starts it
+again. Readiness reports retry once after a second, with the current
+timestamp and position, and cancellation or newer readiness supersedes that
+retry. Viewer transport commands are never retried automatically. Ignore
+Waiting changes publish after server acknowledgement. An unavailable queued
+title attempts to opt out of waiting and offers Rejoin or Leave instead of
+failing silently.
 
-**Verifying it** takes two members: `-debug.syncPlayJoinGroup <name>` joins the
-named group after the regression bootstrap signs in (polling for up to 30 s so
-the other member can create it), and the group's queue then drives playback in
-place of the bench fixture. Pair it with `-debug.playbackHUD YES` and read the
-`Sync:` line — group state, member count, last command, drift.
+**Verifying it** takes two members. `-debug.syncPlayJoinGroup <name>` joins
+the named group after the regression bootstrap signs in, polling for up to
+30 s so the other member can create it. The group's queue then drives
+playback in place of the bench fixture. Pair it with
+`-debug.playbackHUD YES` and read the `Sync:` line: group state, member
+count, last command, drift.
 
-### The player's Observation scope (HEL-150)
+### The player's Observation scope
 
 The player root must not read `timePosition`, current subtitle values, or
 other tick-rate state in its body, modifier IDs, or animation values. Those
-reads belong in small overlay leaves. Return before reading the playhead when
-there is no applicable segment/successor, and avoid position reads in the
-hidden timeline. Observation subscribes to reads that actually execute.
+reads belong in small overlay leaves. Return before reading the playhead
+when there is no applicable segment or successor. Avoid position reads in
+the hidden timeline. Observation subscribes to reads that actually execute.
 
 The panel host's `Equatable` boundary separately protects its interior from
 unnecessary renders. Preserve both boundaries. See the
@@ -431,10 +445,10 @@ Close closes the player outright. A swipe up over free video opens the options
 panel; a swipe down carries the whole player with the finger, YouTube-style,
 and past the threshold minimizes it into the phone's popup player, which is
 Picture in Picture (where PiP is not possible it closes instead). The
-timeline's own drag and every button win over the swipe (HEL-162 feedback).
+timeline's own drag and every button win over the swipe.
 
 On iPhone and iPad, locking the phone or leaving the app keeps playback
-going (HEL-176): audio continues under the `audio` background mode, the
+going: audio continues under the `audio` background mode, the
 picture is dropped until the scene is back (unless PiP or AirPlay is still
 showing it), and the lock screen's controls drive the engine. Skip and Up
 Next are decided by `PlaybackAutomation` off the engine's clock, never in a
@@ -446,14 +460,14 @@ of relying on an animation from a previous view value — an overlay is created
 at the moment its countdown arms, so there is no earlier value to animate from,
 which is why both fills used to read as full for their whole run. An accepted
 hand-off keeps its timing: the card outlives `playNext` while the successor is
-prepared (HEL-144), and a bar that emptied underneath it would read as the
+prepared, and a bar that emptied underneath it would read as the
 offer being withdrawn. tvOS pauses on
 background as before. See
 [system integration](reference/playback/system-integration.md).
 
 The player follows the device on iPhone and iPad and never forces a rotation:
 a title opened in portrait plays letterboxed in portrait until the viewer turns
-the phone (HEL-162 feedback, superseding the HEL-153 landscape lock). Audio
+the phone, superseding the earlier landscape lock. Audio
 uses normal movie-playback behavior: volume keys control output, and Silent
 Mode does not silence the movie.
 
@@ -467,7 +481,7 @@ PiP/background/caption acceptance remains open. Never present from inside a
 `NavigationStack` destination again: a presenter hosted in a pushed detail page
 made the stack briefly show its root, a view update in that window dropped the
 destination, and its teardown closed the player about a second after it opened
-from any detail page (HEL-162). Only Home and Continue Watching, which are not
+from any detail page. Only Home and Continue Watching, which are not
 pushed, survived, which is why it looked title-dependent. The host is presented
 `.overFullScreen`: `.fullScreen` removes the presenting hierarchy and re-runs
 the `.task`s underneath, the regression bootstrap included.
@@ -482,7 +496,7 @@ See [remote reveal](reference/playback/controls-and-reporting.md#siri-remote-tra
 ## Diagnostic reporting
 
 Unexpected playback and request failures are reported automatically
-(HEL-159) through `Diagnostics.shared`: a vendor-neutral hub with a rolling
+through `Diagnostics.shared`: a vendor-neutral hub with a rolling
 history and a Sentry envelope transport the app owns. There is no SDK. Only
 keys in `DiagnosticSchema.fields` can leave the device; a title, URL, message
 or `localizedDescription` handed to it is dropped and counted. When adding a
@@ -498,8 +512,8 @@ controls and the Sentry setup are in the [diagnostics reference](reference/playb
 Build both platforms and run the relevant pure logic tests. Use
 `TouchPlayerUITests` for iPhone/iPad touch and auto-hide, and
 `PlayerRegressionUITests` for remote input, reporting, handoff, and teardown.
-HEL-153 records the passing simulator journeys and the remaining physical
-checks. What a journey may
+The touch journeys pass in the simulator; physical checks are still owed.
+What a journey may
 assume about the server and the simulator's state, and the resolver flags
 that open a title by property, are in the
 [regression lane reference](reference/regression-lane.md).
@@ -512,7 +526,7 @@ does not establish physical VoiceOver or PiP acceptance.
 
 For background fill, `scripts/fill-bench.sh` plays one title hands-off on a
 simulator and reports cached and network megabytes over time from the decode
-trace, so two builds can be compared on the same asset and link (HEL-160).
+trace, so two builds can be compared on the same asset and link.
 For performance, use `scripts/framedrop-bench.sh` and
 `scripts/playback-lifecycle-bench.sh`. Compare the same fixture, scene,
 media-time window, build configuration, and display path over at least three
