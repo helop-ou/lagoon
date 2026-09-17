@@ -133,5 +133,6 @@ identifiers and the app group to your own, and keep those local changes out of
 what you submit.
 
 The brand asset sources in `art/` are gitignored and not published. The PNG
-and PDF assets tracked in the repository are Lagoon's branding, not covered by
-whatever source licence is eventually chosen, and not for reuse elsewhere.
+and PDF assets tracked in the repository are Lagoon's branding. They sit
+outside the source licence, as the carve-out above describes, and are not for
+reuse elsewhere.
