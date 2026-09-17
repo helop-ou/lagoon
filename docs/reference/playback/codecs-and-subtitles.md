@@ -131,7 +131,8 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   DivX/Xvid rips pack two VOPs into one AVI chunk and mark the gap with a 7-byte
   "VOP not coded" packet; libavcodec logs `Discarding excessive bitstream in
   packed xvid` and consumes them correctly, with exact frame accounting either
-  way. A decode sweep of all 197 AVI titles on fixture found 29 packed and 1
+  way. A decode sweep of all 197 AVI titles on the fixture server found 29
+  packed and 1
   genuinely damaged file (the server transcode hits the same `illegal MB_type`
   errors, so direct play is not worse), and crucially **no zero-size packets** —
   minimum 7 bytes, and a zero-size packet is libavcodec's drain signal, which
@@ -219,7 +220,8 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   square*, so those format descriptions stay byte-identical — this code is on
   the path every h264/hevc title takes, and the same description goes to
   `AVDisplayCriteria` and `VTDecompressionSessionCreate`. Real files are full of
-  rounding artifacts: of the 245 items Jellyfin flags `IsAnamorphic` on fixture,
+  rounding artifacts: of the 245 items Jellyfin flags `IsAnamorphic` on the
+  fixture server,
   203 have a genuine pixel aspect (16:15 and 64:45 PAL, 4:3 HDV, 45:44, 8:9) and
   42 are artifacts (1744:1745, 180224:180219 — hundredths of a percent), so
   honouring those would have changed 42 descriptions to correct nothing visible.
@@ -276,8 +278,7 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
   closed. Off or another selection cancels superseded work, request generations
   prevent late results from taking over, and embedded subtitle writes and
   replacement commits share the engine lock. None of these failures pause or
-  restart playback. See the
-  [validation record](../../archive/download-hardening-validation.md).
+  restart playback.
 - **ASS/SSA authored placement** (HEL-107): `ASSSubtitleTextParser` keeps each
   decoded text composition separate rather than joining simultaneous speakers
   into one bottom-centre block. It reads `PlayResX/Y` from FFmpeg's subtitle
