@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
     <!-- Required-reason declarations. Collection/retention answers remain
-         pending in docs/archive/hel-143-release-preparation.md; omission of
-         NSPrivacyCollectedDataTypes is not a "Data Not Collected" claim. -->
+         pending under HEL-143; omission of NSPrivacyCollectedDataTypes is
+         not a "Data Not Collected" claim. -->
     <key>NSPrivacyTracking</key>
     <false/>
     <key>NSPrivacyTrackingDomains</key>
