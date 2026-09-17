@@ -1,10 +1,9 @@
 # Design System engineering notes
 
-Implementation rationale and dated investigations, kept from the September 10,
+Implementation rationale and dated investigations kept from the September 10,
 2026 documentation cleanup. Start with the [current design system
-guide](../design-system.md). The notes below describe the revision recorded at
-the time — not a release checklist, and not proof of current hardware
-acceptance.
+guide](../design-system.md). These notes describe a past revision — not a
+release checklist, and not proof of current hardware acceptance.
 
 The visual language is dark-locked, system-semantic-first, tvOS 26 Liquid
 Glass, with brand color reserved for genuine branding. Token values live in
@@ -17,18 +16,18 @@ to shrink the way structure does, so gutters, card widths, and hero heights
 answer to the 10-foot safe zone instead and stay separate. Steps grow roughly
 ×1.5 after `s`, so adjacent steps read as different, not as a mistake. Before
 the scale existed, views used 22 distinct spacing values and 71 literals
-bypassed the tokens, with no rule for when 10 versus 12 versus 14 applied —
-that arbitrariness, not any single value, made spacing feel off.
+bypassed the tokens, with no rule for when 10, 12, or 14 applied — the
+arbitrariness, not any single value, made spacing feel off.
 
 `.system(size:)` appears nowhere in a screen. The only legitimate escapes are
 SF Symbols used as artwork and display type that is effectively a logo, named
 in `Typography` (`glyph`, `largeGlyph`, `quickConnectCode`). A raw size in a
-view is the smell: a new one-off is being invented. Symbols sized with a
-semantic style — a placeholder glyph at `.title` — are fine.
+view means a new one-off is being invented. Symbols sized with a semantic
+style — a placeholder glyph at `.title` — are fine.
 
-**One role, one style.** The type audit's real finding was that a *synopsis*
-was set three different ways: `.body` on the detail page, `.callout` in the
-hero, `.subheadline` in the player's info card. Same content, three sizes, no
+**One role, one style.** The type audit's real finding: a *synopsis* was set
+three different ways — `.body` on the detail page, `.callout` in the hero,
+`.subheadline` in the player's info card. Same content, three sizes, no
 reason. All three are `.callout` now, the workhorse for synopses, metadata
 lines, track names, and button labels.
 
@@ -39,14 +38,13 @@ used **only** for branding — the lockup, progress fills, selection markers,
 and the onboarding wash.
 
 **Black has to be stated, not inherited.** `.preferredColorScheme(.dark)` only
-gets the system's dark backing, which on tvOS is a lifted grey that also picks
-up a colour cast from whatever sits behind it: measured at rgb(47, 45, 42) on
-the Settings pages against rgb(0, 0, 0) everywhere else — why Settings read as
-belonging to a different app. Any screen not covered edge to edge by its own
-content needs an explicit `.background(Color.black.ignoresSafeArea())`.
-`TVSettingsPage` and `SettingsView.splitLayout` carry it for the whole
-settings hierarchy, including every page pushed from it; onboarding uses
-`BrandBackground` instead.
+gets the system's dark backing, which on tvOS is a lifted grey that picks up a
+colour cast from what's behind it: measured at rgb(47, 45, 42) on Settings
+against rgb(0, 0, 0) everywhere else — why Settings read as a different app.
+Any screen not covered edge to edge by its own content needs an explicit
+`.background(Color.black.ignoresSafeArea())`. `TVSettingsPage` and
+`SettingsView.splitLayout` carry it for the whole settings hierarchy,
+including every pushed page; onboarding uses `BrandBackground` instead.
 
 The token names deliberately diverge from the package. `.lagoonShore`
 (`#0D4A57`) is the mark's upper shore — the package calls it "Lagoon Teal,"
@@ -66,25 +64,25 @@ below.
 
 **Backgrounds.** The guidelines call Deep Navy "the default full-bleed field,"
 and `BrandBackground` is that literal reading: flat, full-bleed Deep Navy. All
-three onboarding screens use it, so they read as one place, not three that
-happen to share a palette. Past onboarding, black is the ground Lagoon plays
-content against — Deep Navy is RGB(11, 29, 40), so it isn't far from black to
-begin with. On iOS, server entry and sign-in keep their native text fields
-directly on that background: plain styling, a subtle bottom divider, a 44 pt
-minimum touch height — neither boxed `.roundedBorder` fields nor grey grouped
-Form rows belong on an onboarding screen. tvOS keeps its centered onboarding
-column and glass action buttons.
+three onboarding screens use it, so they read as one place, not three sharing
+a palette. Past onboarding, black is the ground Lagoon plays content against —
+Deep Navy is RGB(11, 29, 40), so it isn't far from black to begin with. On
+iOS, server entry and sign-in keep their native text fields directly on that
+background: plain styling, a subtle bottom divider, a 44 pt minimum touch
+height — neither boxed `.roundedBorder` fields nor grey grouped Form rows
+belong on an onboarding screen. tvOS keeps its centered onboarding column and
+glass action buttons.
 
 `LagoonLockup` composes the mark rather than shipping one asset: the package
 has no dark-background lockup. Its color lockup sets the wordmark in Ink
 `#07161D`, invisible on black; its white lockup flattens the two shores into
 one silhouette. Color symbol plus Light wordmark keeps both. Its proportions
-come from the package's own lockups, which disagree with each other — the
-horizontal one sets the wordmark nearly twice as large relative to the mark as
-the stacked one does, and centres it on cap height rather than its ink box. It
-also applies its own clear space — "equal to half the symbol height on all
-sides," per the guidelines — rather than leaving it to call sites, which had
-already broken the rule at all four of its placements.
+come from the package's own lockups, which disagree — the horizontal one sets
+the wordmark nearly twice as large relative to the mark as the stacked one
+does, and centres it on cap height rather than its ink box. It also applies
+its own clear space — "equal to half the symbol height on all sides," per the
+guidelines — rather than leaving it to call sites, which had already broken
+the rule at all four placements.
 
 `scripts/import-brand-vectors.swift` brings the marks in and crops each PDF to
 its ink, so a `.frame(height:)` sizes the mark, not the page's padding. Re-run
@@ -92,23 +90,22 @@ it and re-measure the ratios if the artwork changes shape.
 
 The jellyfish is the secondary accent, and the package restricts it: "only as
 punctuation in loading, empty-state, or atmospheric moments … small,
-one-color, and low contrast." It appears across onboarding and nowhere else in
-the app — the maintainer's call, for uniformity across the three screens,
-going further than the letter of that rule. It still holds to the rest of the
-rule: one colour, small, 0.15–0.30 opacity.
+one-color, and low contrast." It appears across onboarding and nowhere else —
+the maintainer's call, for uniformity across the three screens, going further
+than the letter of that rule. It still holds to the rest of the rule: one
+colour, small, 0.15–0.30 opacity.
 
 The mark swims (`JellyfishSwimLayer`): moving the supplied artwork along a
-path would read as a sticker being dragged, so it's rebuilt as a parametric
-path from the same geometry, deformed per frame. Four things are coupled:
+path would read as a dragged sticker, so it's rebuilt as a parametric path
+from the same geometry, deformed per frame. Four things are coupled:
 
 - The beat pushes **up**: lift takes the shape of the contraction, so the
   animal rises quickly while squeezing and sinks slowly while not — it holds
   height only while working for it, the way a treading swimmer goes under the
   moment they stop. Measured on device: +138 px of rise over roughly a third
   of the beat, then a sink about two and a half times slower.
-- Over a beat, lift and sink cancel exactly; where it actually ends up is a
-  separate, far slower drift, so it hovers rather than climbing off the
-  screen.
+- Over a beat, lift and sink cancel exactly; where it ends up is a separate,
+  far slower drift, so it hovers rather than climbing off the screen.
 - The bell narrows and elongates rather than scaling.
 - The tentacles answer a slightly earlier moment than the bell, streaming out
   behind a surge and curling under on the sink.
@@ -121,10 +118,10 @@ picker's rail owns the middle band and grows rightwards as accounts are added.
 
 Two more hard-won rules: the body stays upright and leans only into its
 sideways drift — turned fully into its heading, it swims flat on its side,
-reading as a dead one and losing recognisability as the mark. Every drift
-stays clear of the centre column and the 5% a TV may overscan, body width
-included. `LagoonJellyfishAccent` remains as the still artwork, and is what
-Reduce Motion falls back to.
+reading as dead and losing recognisability as the mark. Every drift stays
+clear of the centre column and the 5% a TV may overscan, body width included.
+`LagoonJellyfishAccent` remains as the still artwork, and is what Reduce
+Motion falls back to.
 
 ## Iconography
 
@@ -138,8 +135,8 @@ are strokes by construction, with no filled variant.
 
 Anything the app *navigates to* takes its glyph from `ContentIcon`, not a
 string at the call site. The tab bar, the library picker row, and Discover's
-catalogue buttons each spelled out Movies and Shows themselves and drifted
-apart: two outline, the rest filled.
+catalogue buttons each spelled out Movies and Shows and drifted apart: two
+outline, the rest filled.
 
 **Shape is a selection criterion, not only meaning.** At a common point size,
 `house.fill` and `gearshape.fill` are the tab bar's fixed anchors: 1.13 and
@@ -250,13 +247,13 @@ back another way.** The rule above is about foreground overrides; this one
 isn't. A *default-styled* `Button` or `Toggle` inside a tvOS `Form` doesn't
 flip its title colour under the focused white lozenge, so the label renders
 white-on-white and vanishes, with no `.foregroundStyle` anywhere near it.
-Oddly, the row's trailing *value* flips correctly, which is what makes it look
-like a colour bug, not a styling one. Giving the control a real style restores
-the flip — the original fix, and it still applies to any `Form` a future tvOS
-screen puts up. Settings no longer has one (below), so `Form` is now an
-iOS-only shape in this app. `Toggle` also has no `.button` style on tvOS at
-all, which is why the Playback HUD switch is a native button stating itself
-with a checkmark: content, not chrome.
+Oddly, the trailing *value* flips correctly, which makes it look like a colour
+bug, not a styling one. Giving the control a real style restores the flip —
+the original fix, and it still applies to any `Form` a future tvOS screen puts
+up. Settings no longer has one (below), so `Form` is now an iOS-only shape in
+this app. `Toggle` also has no `.button` style on tvOS at all, which is why
+the Playback HUD switch is a native button stating itself with a checkmark:
+content, not chrome.
 
 ### Settings uses platform-native category navigation
 
@@ -312,15 +309,15 @@ opening or navigating between categories must not change a saved preference.
   its center darkened for contrast. iOS keeps its bottom-leading single line.
 - **Library grid**: 5 columns on tvOS, not 6 — the cards are fixed width, so a
   flexible column can't widen a gap without room to grow into; dropping a
-  column is what actually buys the spacing, and the caption under each poster
-  needs the vertical room too. On iOS the grid sizes its cards to the column,
-  not the column to the card: `PosterLayout.grid(fitting:)` fits as many
-  columns as a 100 pt minimum allows on iPhone, 150 pt on iPad (per idiom — a
-  Pro Max reports regular width on its side), and hands the resulting card
-  width to the cards through the `posterCardWidth` environment value. A
-  portrait phone shows three across, an iPad four or more, larger text drops
-  columns. Poster rails, including More Like This, keep the 160 × 240 pt card
-  — both are Lagoon design choices, not Apple-prescribed poster sizes.
+  column buys the spacing, and the caption under each poster needs the
+  vertical room too. On iOS the grid sizes its cards to the column, not the
+  column to the card: `PosterLayout.grid(fitting:)` fits as many columns as a
+  100 pt minimum allows on iPhone, 150 pt on iPad (per idiom — a Pro Max
+  reports regular width on its side), and hands the resulting card width to
+  the cards through the `posterCardWidth` environment value. A portrait phone
+  shows three across, an iPad four or more, larger text drops columns. Poster
+  rails, including More Like This, keep the 160 × 240 pt card — both are
+  Lagoon design choices, not Apple-prescribed poster sizes.
 - **Hero** (`HeroSection`): a *contained* rounded panel, not a full-bleed
   banner, with the backdrop filling **all** of it. On tvOS it sets **no
   `clipShape` of its own** — the `.card` button style draws its plate at the
@@ -328,10 +325,10 @@ opening or navigating between categories must not change a saved preference.
   peeking out behind the panel's as a double edge when focused. The title is
   the item's own logo art via `TitleArtView` at `heroLogoHeight`, matching the
   detail pages. The mask that used to fade the artwork's leading third into
-  flat material is gone — the maintainer said it read as a grey wash over a
-  third of the image — legibility now comes from the same **leading wash** the
-  detail pages use: darken only the column the text occupies and let the rest
-  of the still be itself. The iOS banner keeps its own rounded clip and grows
+  flat material is gone: the maintainer said it read as a grey wash over a
+  third of the image. Legibility now comes from the same **leading wash** the
+  detail pages use — darken only the column the text occupies and leave the
+  rest of the still alone. The iOS banner keeps its own rounded clip and grows
   at larger Dynamic Type, since the shorter phone banner crushes text
   otherwise. Paging is a native horizontal paging ScrollView on iOS; on tvOS,
   Left/Right wraps through slides **without replacing the focused `.card`**,
@@ -359,17 +356,17 @@ opening or navigating between categories must not change a saved preference.
   clear by 68 %) rather than a uniform scrim, since the info block is
   left-aligned — that keeps the right of the still vivid, which a scrim strong
   enough for text over busy artwork would flatten. There's no dark panel and
-  **no scroll-linked dimming**: it was tried and cut — the maintainer wasn't
-  "a big fan of the screen going black," and moving focus into a rail jumps
-  further in one press than any sensible ramp covers, so it read as a slam to
-  black. The tvOS rails stay legible on their own: the leading wash covers the
-  column the headings and names sit in, and the cards are opaque artwork. The
-  hero space is a **scroll content margin, not a spacer view** — as a spacer
-  it was non-focusable content above the first button, leaving focus unable to
-  climb back out: Up from Play did nothing, and the tab bar stayed off-screen
-  and unreachable. Order: title art, facts line, genres, ★ rating, synopsis,
-  actions, then cast and related rails, sized so the cast heading is already
-  on the first screen.
+  **no scroll-linked dimming**. It was tried and cut: the maintainer's call
+  was "not a big fan of the screen going black." Moving focus into a rail also
+  jumps further in one press than any sensible ramp covers, so it read as a
+  slam to black. The tvOS rails stay legible on their own: the leading wash
+  covers the column the headings and names sit in, and the cards are opaque
+  artwork. The hero space is a **scroll content margin, not a spacer view** —
+  as a spacer it was non-focusable content above the first button, leaving
+  focus unable to climb back out: Up from Play did nothing, and the tab bar
+  stayed off-screen and unreachable. Order: title art, facts line, genres, ★
+  rating, synopsis, actions, then cast and related rails, sized so the cast
+  heading is already on the first screen.
 - **Phone detail composition**: iOS keeps the same full-bleed artwork, but a
   top-to-bottom wash moves from photographic at the title to near-black before
   the rails — a horizontal wash can't protect full-width phone text, and
@@ -414,10 +411,10 @@ opening or navigating between categories must not change a saved preference.
 - **Overlays over credits**: anything the player floats during an episode's
   end titles — the Up Next card today — uses a system translucent material,
   never a black wash. Credits are white text on black, and a flat scrim lets
-  them through at any opacity as *readable letters*; only blurring actually
-  stops it. On tvOS the track panel is centered regular-material content with
-  Liquid Glass tabs and actions above and inside it, avoiding nested glass;
-  its height is driven by the selected tab's content.
+  them through at any opacity as *readable letters*; only blurring stops it.
+  On tvOS the track panel is centered regular-material content with Liquid
+  Glass tabs and actions above and inside it, avoiding nested glass; its
+  height is driven by the selected tab's content.
 
 ## Image loading
 
