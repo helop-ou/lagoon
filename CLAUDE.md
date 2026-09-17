@@ -27,8 +27,8 @@ guide, the guide is current and this file needs fixing.
 | [Roadmap](docs/roadmap.md) | Remaining product work and device acceptance |
 
 `docs/reference/` holds the engineering notes and measurements behind the
-guides; `docs/archive/` holds dated evidence. Keep routine session history
-out of the guides (see "Keeping this clean" in docs/README.md).
+guides; dated validation evidence belongs on its ticket. Keep routine session
+history out of the guides (see "Keeping this clean" in docs/README.md).
 
 ## Session workflow
 
