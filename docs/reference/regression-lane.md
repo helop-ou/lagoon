@@ -123,5 +123,5 @@ run; two are fine. Read a passed lane as: every test either passed or skipped
 with a named fixture reason. A skip on a supplied fixture server is a
 missing-fixture finding to record, not a pass.
 
-Evidence for a given revision lives in the [archive](../archive/README.md);
-the lane's own contracts live here.
+Evidence for a given revision is recorded on its ticket; the lane's own
+contracts live here.
