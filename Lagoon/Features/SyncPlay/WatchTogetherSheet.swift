@@ -58,19 +58,44 @@ struct WatchTogetherSheet: View {
     @ViewBuilder
     private var page: some View {
         #if os(tvOS)
-        TVSettingsPage(
-            "Watch Together",
-            backTitle: "Close",
-            description: String(
-                localized: "Everyone in a group watches in step: play, pause and skip reach all of you, and the group waits for whoever is still loading."
-            )
-        ) {
-            if syncPlay.isJoined {
-                joinedSections
-            } else {
-                browseSections
+        // A modal panel, not a settings page. This once wore
+        // `TVSettingsPage`, which is the full-screen Settings *destination*
+        // — a 460pt identity column, a page-sized title, a Back button and
+        // its own opaque background — and inside a sheet that shrink-wraps
+        // to its content it read as a page someone had squeezed into a card
+        // (HEL-183). The changelog's three-part stack is the shape a tvOS
+        // modal takes here: title, scrolling content, Done.
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                    if syncPlay.isJoined {
+                        joinedSections
+                    } else {
+                        browseSections
+                    }
+                }
+                .padding(.horizontal, Metrics.Space.xl)
+                .padding(.bottom, Metrics.Space.xl)
             }
+
+            Button("Done") { dismiss() }
+                .buttonStyle(.glass)
+                .padding(Metrics.Space.l)
+                .accessibilityIdentifier("watchTogether.close")
         }
+        // A sheet with custom content ignores `presentationSizing` on tvOS,
+        // so a panel states its own size (`Metrics.modalPanelSize`). Fixed
+        // rather than fitted because the group list polls every few seconds:
+        // a panel sized to its content would resize under the viewer's focus
+        // the moment somebody else on the server started a group.
+        .frame(
+            width: Metrics.modalPanelSize.width,
+            height: Metrics.modalPanelSize.height
+        )
+        .presentationSizing(.fitted)
+        .onExitCommand { dismiss() }
         #else
         NavigationStack {
             ThemedForm {
@@ -93,6 +118,28 @@ struct WatchTogetherSheet: View {
         .presentationDragIndicator(.visible)
         #endif
     }
+
+    #if os(tvOS)
+    /// What the feature is, for whoever has not used it. It goes once the
+    /// group exists: a member watching the panel for who else has arrived
+    /// does not need the pitch again, and the room's own state is what the
+    /// space is better spent on.
+    private var header: some View {
+        VStack(spacing: Metrics.Space.s) {
+            Text("Watch Together")
+                .font(.title3.bold())
+
+            if !syncPlay.isJoined {
+                Text("Everyone in a group watches in step: play, pause and skip reach all of you, and the group waits for whoever is still loading.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Metrics.Space.l)
+    }
+    #endif
 
     // MARK: - Already in a group
 
