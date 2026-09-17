@@ -293,7 +293,7 @@ The cache is bounded at 200 images / 50 MB. Hero/backdrop decode budgets are
 at 16 MiB and validated before decoding; failed/incomplete images are not
 cached. Top Shelf uses the same validated input before composition. Trickplay
 has its own two-sheet decoded cache and 32 MiB compressed cache with the same
-response cap. See [download validation](archive/download-hardening-validation.md).
+response cap.
 
 For brand artwork, icon selection, detailed compositions, and the rationale
 behind focus decisions, see the [design engineering notes](reference/design-system.md).
