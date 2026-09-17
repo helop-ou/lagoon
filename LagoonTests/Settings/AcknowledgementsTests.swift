@@ -92,7 +92,7 @@ struct AcknowledgementsTests {
     }
 
     @Test func displayAddressStripsSchemeAndTrailingSlash() {
-        let url = URL(string: "https://lagoon.helop.ee/privacy/")!
-        #expect(LegalDestinations.displayAddress(url) == "lagoon.helop.ee/privacy")
+        let url = URL(string: "https://lagoon.helop.dev/privacy/")!
+        #expect(LegalDestinations.displayAddress(url) == "lagoon.helop.dev/privacy")
     }
 }

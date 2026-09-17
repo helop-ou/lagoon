@@ -241,7 +241,9 @@ prerendered SvelteKit site and Cloudflare configuration.
 
 Publication remains a release task: confirm the domain, publisher and contact,
 DNS, current rights-cleared screenshots, and the App Store/TestFlight
-destination. `lagoon.helop.ee` is the proposed domain. Check the live privacy
+destination. `lagoon.helop.dev` is the proposed domain, on the same `helop.dev` as the
+support and security contact. The `.dev` TLD is HSTS-preloaded, so an address
+a viewer types from the Apple TV screen cannot resolve over plaintext HTTP. Check the live privacy
 and support pages before filling
 `Lagoon/Features/Settings/LegalDestinations.swift` and App Store Connect.
 Those URLs are currently nil, so the app cannot link to unpublished pages.
