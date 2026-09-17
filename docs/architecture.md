@@ -1,12 +1,12 @@
 # Architecture
 
 Lagoon is one SwiftUI app target for tvOS 26 and iOS 26, with a tvOS Top Shelf
-extension, unit tests, and UI tests. The filesystem-synchronized app group
-includes new Swift files automatically. `Packages/LagoonFFmpeg` is the only
-local package dependency.
+extension, unit tests, and UI tests. Its filesystem-synced app group adds new
+Swift files automatically; `Packages/LagoonFFmpeg` is the only local package
+dependency.
 
-Follow [Coding standards](standards.md) for the target folder convention and
-rules for new code. The layout below describes the current implementation.
+Follow [Coding standards](standards.md) for folder conventions and rules for new
+code.
 
 ## Project layout
 
@@ -27,21 +27,19 @@ rules for new code. The layout below describes the current implementation.
 | `LagoonTopShelf/` | Credential-free Top Shelf extension |
 | `LagoonTests/`, `LagoonUITests/` | Pure logic, integration, platform journeys and shared UI-test support |
 
-Feature-owned state stays with its feature even when another feature presents
-its controls. For example, Settings binds to playback/Home preference stores;
-it does not own another copy of their values.
+Feature-owned state stays with its feature, even when another feature presents
+its controls. Settings, for example, binds to playback and Home preference
+stores instead of owning a second copy.
 
 ## State and ownership
 
-Use `@Observable` stores, owned with `@State` where their lifetime begins.
-The project defaults to `MainActor` isolation; DTOs and other values used off
-the main actor declare `nonisolated` explicitly. Drive asynchronous loading
-from stable `.task(id:)` roots so loading-state changes do not cancel their
-own work. Invalidate late results on account, query, or filter changes.
-
-`SessionStore` owns the active account and its `SeerrSessionStore`.
-`RootView` switches among connection phases; these are states, not pushed
-navigation destinations:
+Use `@Observable` stores, owned with `@State` where their lifetime begins. The
+project defaults to `MainActor` isolation; DTOs and other off-actor values
+declare `nonisolated`. Drive async loading from stable `.task(id:)` roots so
+loading-state changes do not cancel their own work, and invalidate late results
+on account, query, or filter changes. `SessionStore` owns the active account and
+its `SeerrSessionStore`. `RootView` switches among connection phases; these are
+states, not pushed navigation destinations:
 
 ```text
 needsServer → needsSignIn → signedIn
@@ -50,36 +48,33 @@ needsServer → needsSignIn → signedIn
 ```
 
 Accounts are server/user pairs, identified by `{serverURL}|{userId}`.
-UserDefaults stores account metadata and the active account ID; Keychain
-stores each account's token and the install's device ID. Restore the last
-usable account on launch. Preserve the idempotent legacy token migration.
-
-Add Account uses a separate draft session seeded with the current server,
-without copying credentials. Only a successful, current verification commits
-and activates it. Cancel leaves the active Jellyfin and Seerr sessions intact.
-Sign-out revokes and forgets the account and clears its owned local data.
-Seerr sessions remain scoped to the Jellyfin account and Seerr origin.
+UserDefaults stores account metadata and the active account ID; Keychain stores
+each account's token and the install's device ID. Restore the last usable
+account on launch, and preserve the idempotent legacy token migration. Add
+Account uses a separate draft session seeded with the current server, without
+copying credentials; a successful, current verification commits and activates
+it, and cancel leaves the active Jellyfin and Seerr sessions intact. Sign-out
+revokes and forgets the account and clears its owned local data. Seerr sessions
+stay scoped to the Jellyfin account and Seerr origin.
 
 `SyncPlayStore` is owned by `SessionStore` beside `SeerrSessionStore`, and
-`synchronizeAccountContext()` points it at the active account — a SyncPlay
-group belongs to the account that joined it, so a switch or a sign-out leaves
-it. `RootView` injects it into the environment, and the iOS UIKit player host
-re-injects it because that presentation rebuilds the environment from scratch.
-The store owns membership (socket, server clock, group, queue) and
-`GroupPlaybackDriver` owns the playback side, holding `PlaybackController`
-weakly and never an engine. See
+`synchronizeAccountContext()` points it at the active account. A SyncPlay group
+belongs to the account that joined it, so switching accounts or signing out
+leaves the group. `RootView` injects it into the environment; the iOS UIKit
+player host re-injects it because that presentation rebuilds the environment
+from scratch. The store owns membership: socket, server clock, group, and queue.
+`GroupPlaybackDriver` owns playback, holding `PlaybackController` weakly and
+never an engine. See
 [Watch Together](playback.md#watch-together-syncplay-hel-172).
 
-`DownloadStore.shared` (iOS only) is the one owner of offline downloads:
-its per-account manifest, the background `URLSession` that carries every
-transfer, and the artwork saved beside each file. `SessionStore` activates it
-for whichever account is current, on restore, switch, and sign-out; removing
-an account removes its downloads too.
-
-Its URLSession delegate uses `OperationQueue.main`. Commands and delegate
-callbacks therefore share MainActor ownership: completing a download checks
-the attempt, preserves the temporary file, and persists the manifest before
-the callback returns. The active account uses its observed manifest; inactive
+`DownloadStore.shared` (iOS only) is the one owner of offline downloads: its
+per-account manifest, the background `URLSession` carrying every transfer, and
+the artwork saved beside each file. `SessionStore` activates it for the current
+account on restore, switch, and sign-out, and removing an account removes its
+downloads too. The URLSession delegate uses `OperationQueue.main`, so commands
+and delegate callbacks share MainActor ownership: completing a download checks
+the attempt, preserves the temporary file, and persists the manifest before the
+callback returns. The active account uses its observed manifest; inactive
 accounts use their stored manifest. Generation and attempt checks protect
 operations that suspend, including permission queries and pause/restart.
 `DownloadArtworkIndex` is the separate, lock-protected value snapshot read by
@@ -88,22 +83,22 @@ background image loaders.
 ## Refresh and navigation
 
 `RootView` alone observes foreground transitions and advances the shared
-`ServerSyncState.generation`. Screens reconcile their own data. The
+`ServerSyncState.generation`; screens reconcile their own data. The
 `ServerRefreshModifier` adds manual refresh and a five-minute cadence to
-visible, active root browse destinations. `MainTabView` gates it by selected
-tab and navigation path; Home also suspends it while presenting playback.
-Keep existing content, focus, loaded page depth, and the last good snapshot
-when a refresh fails. Hidden tabs and content behind details must not poll.
+visible, active root browse destinations. `MainTabView` gates it by selected tab
+and navigation path, and Home also suspends it while presenting playback. Keep
+existing content, focus, loaded page depth, and the last good snapshot when a
+refresh fails. Hidden tabs and content behind details must not poll.
 
 Seerr's detail refresh is separate: pending approval waits 30 seconds, active
-download/import waits 10 seconds. Requests are sequential, stop when the
-detail becomes inactive or reaches a terminal state, and reconcile immediately
-after foregrounding or moderation. Static metadata stays out of that loop.
+download/import waits 10 seconds. Requests are sequential, stop when the detail
+becomes inactive or reaches a terminal state, and reconcile immediately after
+foregrounding or moderation. Static metadata stays out of that loop.
 
 Home, Discover, Library, Search, and Settings are stable tabs. Route identity
-belongs to `ContentNavigationRoute`; `MediaItem` retains value equality so
+belongs to `ContentNavigationRoute`, and `MediaItem` retains value equality so
 updated progress and metadata reach SwiftUI. Playback dismissal waits for
-`client.playbackReports.settle()` before refreshing the underlying screen;
+`client.playbackReports.settle()` before refreshing the underlying screen, but
 the dismissal itself never waits for that network report.
 
 ## Reusable components
@@ -122,8 +117,8 @@ Use the existing shared boundaries before adding another screen-specific copy:
 | Shared playback with platform presentation | `PlayerEngine`, `playerPresentation`, player overlay views |
 
 Keep a component local to its feature until multiple callers need the same
-behavior. Shared business state belongs in an owner or service, not in a
-generic view wrapper. See [Design system](design-system.md) for visual rules.
+behavior; shared business state belongs in an owner or service, not a generic
+view wrapper. See [Design system](design-system.md) for visual rules.
 
 ## tvOS invariants (violating these regresses real bugs)
 
@@ -131,34 +126,33 @@ generic view wrapper. See [Design system](design-system.md) for visual rules.
 - Preserve `.scrollClipDisabled()` and rail focus padding. Keep episode rails
   mounted while switching seasons so focus and layout survive loading.
 - The hero's focused navigation control stays outside its transitioning,
-  `.id()`-keyed artwork. Left/Right changes content without replacing focus.
+  `.id()`-keyed artwork, so Left/Right changes content without replacing focus.
 - Put `.searchable` on Search's content, never on the navigation stack or a
   browse screen.
 - Refresh moves with the native tab chrome. Keep its measuring control mounted
-  but inert over pushed details, retain the offset at tab scope, and route
-  Down from Refresh to Home's hero. It must not remain hittable over lower rails.
-- Top Shelf consumes a sanitized local snapshot and artwork. The extension
-  gets no credentials and does no network fetching. Preserve its extension
-  product type and `_NSExtensionMain` entry point when changing the project.
+  but inert over pushed details, retain the offset at tab scope, and route Down
+  from Refresh to Home's hero; it must not remain hittable over lower rails.
+- Top Shelf consumes a sanitized local snapshot and artwork. The extension gets
+  no credentials and does no network fetching. Preserve its extension product
+  type and `_NSExtensionMain` entry point when changing the project.
 
-See [Playback](playback.md#controls-and-presentation) for the separate touch
-and remote input rules, and the [engineering notes](reference/architecture.md)
-for Top Shelf composition, Seerr status interpretation, and Discover's
+See [Playback](playback.md#controls-and-presentation) for the separate touch and
+remote input rules, and the [engineering notes](reference/architecture.md) for
+Top Shelf composition, Seerr status interpretation, and Discover's
 server-defined rail layout.
 
 ## Refactoring priorities
 
-HEL-155 establishes the layout above. `PlaybackController` has its own file;
-reporting, successor preparation and optional HUD/trace sampling have explicit
-owners. `VideoPlayerView` retains the controller with `@State`. Seerr request
-list/detail models have separate homes, and Settings category views bind back
-to the root's existing stores. `LagoonUITests/Support/` owns shared player
-launching, fixture resolution and state waits; platform gestures remain in
-their suites. The [migration plan](reference/source-migration-plan.md) records
-verification progress and remaining acceptance.
-
-Further engine/cache extractions should follow queue and resource ownership.
-Line counts alone do not justify splitting a coupled implementation into
-extensions. Preserve the [playback invariants](playback.md#lifecycle-and-memory)
-and validate ownership changes with dismissal/replay, episode handoff, PiP
-and physical performance checks in addition to both platform builds/tests.
+An earlier restructuring established the layout above. `PlaybackController` has
+its own file; reporting, successor preparation, and optional HUD/trace sampling
+have explicit owners. `VideoPlayerView` retains the controller with `@State`.
+Seerr request list/detail models have separate homes, and Settings category
+views bind back to the root's existing stores. `LagoonUITests/Support/` owns
+shared player launching, fixture resolution, and state waits; platform gestures
+remain in their suites. The [migration plan](reference/source-migration-plan.md)
+records verification progress and remaining acceptance. Further engine/cache
+extractions should follow queue and resource ownership; line counts alone do not
+justify splitting a coupled implementation into extensions. Preserve the
+[playback invariants](playback.md#lifecycle-and-memory) and validate ownership
+changes with dismissal/replay, episode handoff, PiP and physical performance
+checks in addition to both platform builds/tests.
