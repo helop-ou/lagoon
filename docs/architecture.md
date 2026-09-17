@@ -65,7 +65,7 @@ player host re-injects it because that presentation rebuilds the environment
 from scratch. The store owns membership: socket, server clock, group, and queue.
 `GroupPlaybackDriver` owns playback, holding `PlaybackController` weakly and
 never an engine. See
-[Watch Together](playback.md#watch-together-syncplay-hel-172).
+[Watch Together](playback.md#watch-together-syncplay).
 
 `DownloadStore.shared` (iOS only) is the one owner of offline downloads: its
 per-account manifest, the background `URLSession` carrying every transfer, and
