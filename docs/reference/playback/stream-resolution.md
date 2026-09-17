@@ -201,17 +201,17 @@ the ladder is only ever descended after a real failure, never pre-emptively.
 **The bottom rung is bounded to HD, and only the bottom rung**
 (`DeviceProfile.lagoon(for:)` → `boundedForRealtimeTranscode`). Left alone it
 inherited the direct-play envelope and asked the server to re-encode at the
-source's own shape: measured against fixture, `VideoBitrate=119360000` with no
-`MaxWidth`/`MaxHeight` at all, i.e. 4K HEVC at 120 Mbps. That figure only ever
-meant "the bitrate of an untouched file this device will pull" and is
-meaningless as an instruction to an encoder; a server without a hardware
-encoder answers it at **9.5 fps for a 30 fps source**, so the rung meant to
-rescue playback stalls worse than the failure that triggered it. The bound
-sends `MaxWidth=1920 MaxHeight=1080` and a 20 Mbps ceiling instead. It
-deliberately does **not** apply to `remux`: that rung stream-copies the video,
-and a resolution condition there would force exactly the re-encode it exists to
-avoid. The negotiated and remux rungs still send the full envelope, so 4K
-direct play is untouched.
+source's own shape: measured against the fixture server,
+`VideoBitrate=119360000` with no `MaxWidth`/`MaxHeight` at all, i.e. 4K HEVC at
+120 Mbps. That figure only ever meant "the bitrate of an untouched file this
+device will pull" and is meaningless as an instruction to an encoder; a server
+without a hardware encoder answers it at **9.5 fps for a 30 fps source**, so
+the rung meant to rescue playback stalls worse than the failure that triggered
+it. The bound sends `MaxWidth=1920 MaxHeight=1080` and a 20 Mbps ceiling
+instead. It deliberately does **not** apply to `remux`: that rung stream-copies
+the video, and a resolution condition there would force exactly the re-encode
+it exists to avoid. The negotiated and remux rungs still send the full
+envelope, so 4K direct play is untouched.
 
 The retry reuses the episode-handoff teardown (`preservingPlayerSurface: true`)
 rather than a full one: the viewer keeps the last frame instead of a black
@@ -468,7 +468,8 @@ disc starts its video and first audio track together and a second audio track
 two thirds of a second later, and that offset is content, not clock.
 
 Neither disc path covers Dolby Vision profile 7: `DolbyVisionProfileConverter`
-(HEL-145) keys off a DoVi configuration record that MPEG-TS images do not carry,
-so such a disc plays as HDR10 from the base layer. H.264 Blu-rays (everything
-before 4K) and real DVD images are unexercised — the DVD path was built against
-an image authored with `dvdauthor` for the purpose, because fixture holds none.
+(HEL-145) keys off a DoVi configuration record that MPEG-TS images do not
+carry, so such a disc plays as HDR10 from the base layer. H.264 Blu-rays
+(everything before 4K) and real DVD images are unexercised — the DVD path was
+built against an image authored with `dvdauthor` for the purpose, because the
+fixture server holds none.
