@@ -12,7 +12,6 @@ rules that matter while changing the player.
 Hosted Sentry receives the reports: organisation `helop-ou`, project
 `lagoon`, EU ingest region, free Developer plan. The app skips the
 `sentry-cocoa` SDK, building every byte itself and posting it to the
-documented
 [envelope endpoint](https://develop.sentry.dev/sdk/data-model/envelopes/).
 Owning the payload is the privacy guarantee, keeps the repo to one
 native dependency, and will let the engine, once extracted, emit
@@ -99,8 +98,7 @@ name, prose — and asserts none appear in the envelope bytes.
 `api.failure`, `api.sessionExpired`; `app.memoryWarning`,
 `app.thermal`, `app.foreground`, `app.background`.
 
-`DiagnosticIncidentCode` names the reports, with each code's level,
-fingerprint variant, and firing condition below:
+`DiagnosticIncidentCode` names the reports and their fingerprints:
 
 | Code | Level | Fingerprint variant | Fires when |
 | --- | --- | --- | --- |
@@ -181,11 +179,11 @@ recording, the playback sampler stops, and the pending queue is
 discarded. Changing the switch mid-playback cancels the sampler's
 timer; turning it back on resumes sampling the same attempt with
 fresh freeze and frequent-stall windows. An in-flight renderer
-metrics request may still finish, but no further ones start while
-opted out. HUD, decode-trace, and benchmark sampling have their own
-controls. While reports are on, the renderer metrics load runs every
-two seconds, asynchronously, adding no SwiftUI body reads — not
-measurable in frame delivery on the Apple TV; see the reporting
+metrics request may finish; none start while opted out. HUD,
+decode-trace, and benchmark sampling have their own controls. While
+reports are on, the renderer metrics load runs every two seconds,
+asynchronously, adding no SwiftUI body reads. It made no measurable
+difference in frame delivery on the Apple TV; see the reporting
 on/off comparison under
 [physical device verification](#physical-device-verification-2026-09-11).
 Release builds default on; Debug builds default off so development
@@ -309,11 +307,11 @@ fingerprint `playback.fallback delivery unknown`, about 13:15 EEST on
 Sentry setup above). Not yet verified: a physical iPhone, and a
 Release build sending a naturally occurring incident.
 
-The same session also compared reporting on versus off, for
-criterion 6, on a Release build of the same commit: "The Creator" at
-600 s, 4K Dolby Vision profile 8 over VideoToolbox, HUD and decode
-trace off, subtitles off, interleaved, cool-downs of five minutes
-then one; the third pair was dropped at the developer's request:
+Reporting on versus off, for criterion 6, ran on a Release build of
+the same commit: "The Creator" at 600 s, 4K Dolby Vision profile 8
+over VideoToolbox, HUD and decode trace off, subtitles off,
+interleaved, cool-downs of five minutes then one; the third pair was
+dropped at the developer's request:
 
 | run | reporting | dropped/frames | stalls | footprint start → peak (MB) |
 | --- | --- | --- | --- | --- |
