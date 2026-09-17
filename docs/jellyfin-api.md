@@ -535,12 +535,22 @@ catalogue wholesale is actively wrong. The same server offers
 films three times. `HomeViewModel.nativelyCoveredSections` therefore drops
 every section Lagoon already draws and appends only the remainder by default.
 
-A later addition put an opt-in local layout in Settings. Once the viewer
-changes it, that ordered enabled set wins outright, including for normally
-covered sections; before then the additive behavior above is unchanged. The
-layout is keyed by server and user, newly discovered catalogue entries start
-disabled for configured layouts, and the entire Settings row stays hidden when
-the plugin route is unavailable.
+Settings, Home Rows holds one ordered arrangement covering every Home row,
+Lagoon's own and the plugin's together, so a plugin row can sit anywhere among
+the native ones. Until the viewer arranges it there is no stored arrangement
+at all: Lagoon's default order applies and the remaining catalogue sections
+follow it, which is the additive behavior above. Once they arrange it, that
+order wins and hides whatever it leaves out. Sections Lagoon already draws are
+never offered, so an arrangement cannot resurrect a duplicate of a native row.
+
+The arrangement is keyed by server and user. A catalogue entry discovered
+after plugin rows were arranged starts hidden; one discovered by an account
+that had only ever hidden a native row starts shown, because that account
+never arranged a plugin row. A row is never dropped from an arrangement:
+`homeSections()` answers a failed request with an empty catalogue, and pruning
+unknown rows would erase the viewer's order the first time the server was
+slow. A row added by a later Lagoon build is inserted at its designed place
+rather than appended under the plugin rows.
 
 Before testing: on a plain movies/TV server this feature correctly renders
 **nothing**, because every non-empty section is one Lagoon already has. It

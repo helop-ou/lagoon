@@ -31,6 +31,15 @@ Feature-owned state stays with its feature, even when another feature presents
 its controls. Settings, for example, binds to playback and Home preference
 stores instead of owning a second copy.
 
+Home's row order is data, not the order its body happens to be written in.
+`HomeSectionPreferenceResolver` owns the default order, the viewer's
+arrangement that replaces it, and which rows either one hides; `HomeView`
+resolves that to a list of identifiers and draws one row per identifier. A new
+Home row is added to the resolver's list at the place it belongs and given a
+branch to draw it, and the unit suite fails if it has only one of the two. See
+[Home Screen Sections](jellyfin-api.md#home-screen-sections-plugin) for how
+the server's plugin rows join the same arrangement.
+
 ## State and ownership
 
 Use `@Observable` stores, owned with `@State` where their lifetime begins. The

@@ -221,6 +221,10 @@ unfocused states.
   `cardMarkInset`.
 - **Settings:** use native category navigation on each platform. iOS uses
   Forms, pickers, toggles, and Edit/reorder. tvOS keeps remote focus behavior.
+  Home Rows is one list of every row rather than a section per source, since
+  the viewer arranges them against each other; each row names its source under
+  its title. Reordering is Edit and drag on iOS, and a pair of up/down glass
+  buttons beside each row on the TV, where there is no drag.
 - **Modals (tvOS):** a sheet with custom content ignores `presentationSizing`,
   so a panel states its own size — `Metrics.modalPanelSize` — or it fills the
   screen. The shape is the changelog's and the acknowledgements': a title, the
