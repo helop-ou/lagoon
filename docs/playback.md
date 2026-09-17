@@ -432,68 +432,69 @@ details](reference/playback/controls-and-reporting.md#progress-reporting).
 On iPhone and iPad, a surface tap toggles transport visibility. Centered
 play/pause and ±10-second buttons use `.glass(.clear)`. While playing,
 controls fade after four seconds without interaction. Paused playback and
-VoiceOver keep them available with the options sheet closed. Hidden
-controls disable hit testing and are marked accessibility-hidden. Keep the
-layout mounted, so fading and toolbar safe-area changes cannot move the
-center cluster.
+VoiceOver keep them available with the options sheet closed. Hidden controls
+disable hit testing and are marked accessibility-hidden. Keep the layout
+mounted, so fading and toolbar safe-area changes cannot move the center
+cluster.
 
 Double-tapping either half seeks ten seconds without revealing controls.
 Repeated double-taps within the 700 ms feedback window accumulate the shown
-amount. Changing direction resets it. Dragging the timeline previews
-trickplay and commits on release. Skip and Up Next accept direct taps.
-Close and Info live in the native toolbar. The options sheet suppresses
-surface interaction. Close closes the player outright. A swipe up over
-free video opens the options panel. A swipe down carries the whole player
-with the finger, YouTube-style, and past the threshold minimizes it into
-the phone's popup player, which is Picture in Picture. Where PiP is not
-possible, it closes instead. The timeline's own drag and every button win
-over the swipe, based on viewer feedback.
+amount. Changing direction resets it. Dragging the timeline previews trickplay
+and commits on release. Skip and Up Next accept direct taps. Close and Info
+live in the native toolbar. The options sheet suppresses surface interaction.
+Close closes the player outright. A swipe up over free video opens the options
+panel. A swipe down carries the whole player with the finger, YouTube-style,
+and past the threshold minimizes it into the phone's popup player, which is
+Picture in Picture. Where PiP is not possible, it closes instead. The
+timeline's own drag and every button win over the swipe, based on viewer
+feedback.
 
-On iPhone and iPad, locking the phone or leaving the app keeps playback
-going. Audio continues under the `audio` background mode. The picture is
-dropped until the scene is back, unless PiP or AirPlay is still showing it.
-The lock screen's controls drive the engine. Skip and Up Next are decided
-by `PlaybackAutomation` off the engine's clock, never in a view body, so
-intros are still skipped and the next episode still starts with the screen
-off. The overlays only draw its state.
+On iPhone and iPad, locking the phone or leaving the app keeps playback going.
+Audio continues under the `audio` background mode. The picture is dropped
+until the scene is back, unless PiP or AirPlay is still showing it. The lock
+screen's controls drive the engine. Skip and Up Next are decided by
+`PlaybackAutomation` off the engine's clock, never in a view body, so intros
+are still skipped and the next episode still starts with the screen off. The
+overlays only draw its state.
 
-Each countdown's action and visible fill share a monotonic deadline. Only
-the fill redraws as time passes, so a newly mounted overlay shows elapsed
-progress immediately, instead of animating from a previous view value. An
-overlay is created at the moment its countdown arms, so there is no earlier
-value to animate from. That is why both fills used to read as full for
-their whole run. An accepted hand-off keeps its timing: the card outlives
-`playNext` while the successor is prepared. A bar that emptied underneath
-it would read as the offer being withdrawn. tvOS pauses on background as
-before. See
-[system integration](reference/playback/system-integration.md).
+Each countdown's action and visible fill share a monotonic deadline. Only the
+fill redraws as time passes, so a newly mounted overlay shows elapsed progress
+immediately, instead of animating from a previous view value. An overlay is
+created at the moment its countdown arms, so there is no earlier value to
+animate from. That is why both fills used to read as full for their whole run.
+An accepted hand-off keeps its timing: the card outlives `playNext` while the
+successor is prepared. A bar that emptied underneath it would read as the
+offer being withdrawn. tvOS pauses on background as before. See [system
+integration](reference/playback/system-integration.md).
 
-The player follows the device on iPhone and iPad and never forces a rotation:
-a title opened in portrait plays letterboxed in portrait until the viewer
-turns the phone, superseding the earlier landscape lock. Audio uses normal
-movie-playback behavior: volume keys control output, and Silent Mode does not
-silence the movie.
+The player follows the device on iPhone and iPad. It never forces a rotation.
+A title opened in portrait plays letterboxed in portrait until the viewer
+turns the phone. This replaced an earlier landscape lock, based on viewer
+feedback. Audio uses normal movie-playback behavior. Volume keys control
+output, and Silent Mode does not silence the movie.
 
-On iOS, screens only *request* playback through `playerPresentation`; the one
-`playerPresentationHost` at the tab root (`PlayerPresentationHub`) presents it
-and retains the hosting controller across PiP. The swipe down requests PiP
-when available; only its successful start callback hides fullscreen. Restore
-reuses the same controller; closing PiP or withdrawing the request cleans up
-the session, and `onDismiss` still reaches the requesting screen. Physical
-PiP/background/caption acceptance remains open. Never present from inside a
-`NavigationStack` destination again: a presenter hosted in a pushed detail
-page made the stack briefly show its root, a view update in that window
-dropped the destination, and its teardown closed the player about a second
-after it opened from any detail page. Only Home and Continue Watching, which
-are not pushed, survived, which is why it looked title-dependent. The host is
-presented `.overFullScreen`: `.fullScreen` removes the presenting hierarchy
-and re-runs the `.task`s underneath, the regression bootstrap included.
+On iOS, a screen only *requests* playback, through `playerPresentation`. The
+one `playerPresentationHost` at the tab root, `PlayerPresentationHub`,
+presents it and retains the hosting controller across PiP. The swipe down
+requests PiP when available. Only its successful start callback hides
+fullscreen. Restore reuses the same controller. Closing PiP or withdrawing the
+request cleans up the session, and `onDismiss` still reaches the requesting
+screen. Physical PiP, background, and caption acceptance remain open.
+
+Never present the host from inside a `NavigationStack` destination again. That
+regressed once: a presenter hosted in a pushed detail page made the stack
+briefly show its root, a view update in that window dropped the destination,
+and its teardown closed the player about a second after it opened, from any
+detail page. Only Home and Continue Watching, which are not pushed, survived,
+which is why it looked title-dependent. The host is presented
+`.overFullScreen`. `.fullScreen` removes the presenting hierarchy and re-runs
+the `.task`s underneath, the regression bootstrap included.
 
 On tvOS, the video surface owns focus. Select prioritizes scrub, Skip, Up
-Next, then play/pause. A light Siri Remote touch is a separate input that
-reveals controls; it must not become Select. Menu cancels scrubbing, closes
-the panel, then exits. Keep the mounted panel and remote command ordering
-intact. See [remote
+Next, then play/pause, in that order. A light Siri Remote touch is a separate
+input that reveals controls. It must never become Select. Menu cancels
+scrubbing, then closes the panel, then exits. Keep the mounted panel and
+remote command ordering intact. See [remote
 reveal](reference/playback/controls-and-reporting.md#siri-remote-transport-reveal)
 and [tvOS
 gotchas](reference/playback/controls-and-reporting.md#player-view-gotchas-learned-the-hard-way-on-tvos).
@@ -501,16 +502,16 @@ gotchas](reference/playback/controls-and-reporting.md#player-view-gotchas-learne
 ## Diagnostic reporting
 
 Unexpected playback and request failures are reported automatically through
-`Diagnostics.shared`: a vendor-neutral hub with a rolling history and a Sentry
-envelope transport the app owns. There is no SDK. Only keys in
-`DiagnosticSchema.fields` can leave the device; a title, URL, message or
-`localizedDescription` handed to it is dropped and counted. When adding a
-failure path, give `PlaybackEngineFailure` a `PlaybackFailureDetail` (stage,
-error domain, code) rather than relying on its message, record the moment with
-`Diagnostics.record`, and report with a fingerprint that never varies per
-occurrence. Keep `record` cheap and off the pump queues; the hub already runs
-the sink on its own queue. Detectors, thresholds, limits, tester controls and
-the Sentry setup are in the [diagnostics
+`Diagnostics.shared`. It is a vendor-neutral hub with a rolling history and a
+Sentry envelope transport that the app owns itself. There is no SDK. Only keys
+in `DiagnosticSchema.fields` can leave the device. A title, URL, message, or
+`localizedDescription` handed to it is dropped and counted instead. When
+adding a failure path, give `PlaybackEngineFailure` a `PlaybackFailureDetail`
+with a stage, error domain, and code, rather than relying on its message.
+Record the moment with `Diagnostics.record`, and report it with a fingerprint
+that never varies per occurrence. Keep `record` cheap and off the pump queues.
+The hub already runs the sink on its own queue. Detectors, thresholds, limits,
+tester controls, and the Sentry setup are in the [diagnostics
 reference](reference/playback/diagnostics.md).
 
 ## Regression checks
@@ -518,19 +519,19 @@ reference](reference/playback/diagnostics.md).
 Build both platforms and run the relevant pure logic tests. Use
 `TouchPlayerUITests` for iPhone/iPad touch and auto-hide, and
 `PlayerRegressionUITests` for remote input, reporting, handoff, and teardown.
-The touch journeys pass in the simulator; physical checks are still owed. What
-a journey may assume about the server and the simulator's state, and the
-resolver flags that open a title by property, are in the [regression lane
-reference](reference/regression-lane.md).
+The simulator journeys pass in both suites. Physical checks are still owed.
+The [regression lane reference](reference/regression-lane.md) covers what a
+journey may assume about the server and the simulator's state, and the
+resolver flags that open a title by property.
 
 XCTest can expose faded buttons and nonzero frames even with
 `accessibilityHidden`. For auto-hide, assert the launch-gated `transport`
 state, toolbar disappearance, and screenshots together. Use full-screen
-screenshots for landscape; app screenshots can be cropped. Simulator evidence
+screenshots for landscape. App screenshots can be cropped. Simulator evidence
 does not establish physical VoiceOver or PiP acceptance.
 
 For background fill, `scripts/fill-bench.sh` plays one title hands-off on a
-simulator and reports cached and network megabytes over time from the decode
+simulator. It reports cached and network megabytes over time from the decode
 trace, so two builds can be compared on the same asset and link. For
 performance, use `scripts/framedrop-bench.sh` and
 `scripts/playback-lifecycle-bench.sh`. Compare the same fixture, scene,
