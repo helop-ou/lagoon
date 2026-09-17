@@ -40,15 +40,31 @@ final class SeerrSessionStore {
         return "Not Configured"
     }
 
-    /// The user's known first-party pairing. It is only suggested for the
-    /// matching Jellyfin host; other servers remain entirely user-configured.
+    /// What the address field starts with. Only this account's own configured
+    /// Seerr server is ever suggested; Lagoon never proposes an address the
+    /// viewer has not given it (HEL-187).
     func suggestedServerAddress(for account: StoredAccount?) -> String {
         if let configuredURL { return configuredURL.absoluteString }
-        if account?.serverURL.host()?.lowercased() == "fixture.example.eu" {
-            return "https://seerr.example.eu"
-        }
+        #if DEBUG
+        if let paired = Self.developmentPairing(for: account) { return paired }
+        #endif
         return ""
     }
+
+    #if DEBUG
+    /// Saves retyping a fixture server's Seerr address across the simulator
+    /// resets the regression lane does, supplied through the launch
+    /// environment the same way `LAGOON_REGRESSION_*` credentials are. Never
+    /// compiled into a shipping build.
+    private static func developmentPairing(for account: StoredAccount?) -> String? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let host = environment["LAGOON_SEERR_PAIRED_HOST"]?.lowercased(),
+              let address = environment["LAGOON_SEERR_PAIRED_URL"],
+              !host.isEmpty, !address.isEmpty,
+              account?.serverURL.host()?.lowercased() == host else { return nil }
+        return address
+    }
+    #endif
 
     func activate(for account: StoredAccount?) async {
         select(account)
