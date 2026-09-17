@@ -15,7 +15,7 @@ struct SentryEnvelopeTests {
         environment: "testflight",
         engineVersion: "lavf62.3.100"
     )
-    static let dsn = SentryDSN(string: "https://abc123@o4512064306282496.ingest.de.sentry.io/4512064311722064")!
+    static let dsn = SentryDSN(string: "https://abc123@o1.ingest.de.sentry.io/42")!
 
     static func incident(
         fields: [String: DiagnosticValue] = ["stage": .string("open"), "errorDomain": .string("ffmpeg"), "errorCode": .int(-1094995529)],
