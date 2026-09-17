@@ -30,10 +30,11 @@ build is badged in About.
 
 ## Internal TestFlight
 
-One-time setup uses development team `9GLTW5844P` and bundle ID
-`ee.helop.lagoon` for both platforms. The App Store Connect record must include
-both platforms. Xcode may need a registered physical device to create initial
-development profiles; connect a device or register its UDID in the portal.
+One-time setup uses the development team recorded as `DEVELOPMENT_TEAM` in the
+project file and bundle ID `ee.helop.lagoon` for both platforms. The App Store
+Connect record must include both platforms. Xcode may need a registered
+physical device to create initial development profiles; connect a device or
+register its UDID in the portal.
 
 1. Choose the revision, bump the build, and write its changelog entry.
 2. Run iOS and tvOS unit suites, including `ChangelogTests`, plus the UI and
@@ -57,7 +58,12 @@ The script checks the version/changelog before archiving.
 `testFlightInternalTestingOnly=true` and
 `manageAppVersionAndBuildNumber=false`. Keep those settings for this flow.
 The API-key environment is `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH`;
-the `.p8` belongs outside the repository. GUI distribution remains available.
+the `.p8` belongs outside the repository. `LAGOON_SENTRY_DSN` is required too
+(HEL-187): the DSN is not tracked in source, so the script passes it to
+`xcodebuild archive` as a build setting and the app reads it back from its
+Info.plist. A build archived without it reports nothing at all, which is why
+the script refuses to run rather than warning. GUI distribution remains
+available, but an Organizer archive carries no DSN.
 
 ## External TestFlight
 
