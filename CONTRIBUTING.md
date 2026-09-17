@@ -73,8 +73,8 @@ fixtures, so format work needs your own server.
 [`docs/standards.md`](docs/standards.md) holds the rules. Read the guide for
 the area you are changing before changing it: architecture, design system,
 Jellyfin API, playback, release, roadmap. Longer engineering notes live in
-`docs/reference/` and dated evidence in `docs/archive/`. Update the guide that
-owns a contract you change rather than adding session history to it.
+`docs/reference/`. Update the guide that owns a contract you change rather
+than adding session history to it.
 
 Verify UI changes visually in the simulator on the platforms they affect,
 including tvOS focus paths, not just the landing state.
