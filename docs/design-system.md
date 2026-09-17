@@ -30,6 +30,7 @@ screen-specific copies of its values.
 | `downloadMarkSize` | Not used | 18: the download progress ring |
 | `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's round "downloaded" and "watched" badges and their inset from the corner |
 | `themeSwatchSize` | Not used | 28: the theme swatch beside each theme's name in Settings › Appearance |
+| `qrCodeSize` / `qrCodeMinimumQuietZone` | 420 / 32 | 220 / 16, gallery only: a code scans from roughly ten times its width, so the TV needs a fifth of the screen. The real quiet zone is derived from the code, not this floor |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
 
 `Metrics.Space` provides `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
@@ -267,6 +268,24 @@ unfocused states.
   never hit-tested, and shared with the DEBUG gallery. `SyncPlayStateCopy` is
   the one place a group's state is put into words, so the sheet, the Together
   tab, and the banner never disagree.
+- **QR codes (tvOS):** `QRCodeView` is how the TV hands an address to a phone,
+  since tvOS cannot open a link. It is deliberately the one place that breaks
+  the dark lock: a code needs dark modules on a white card with a quiet zone
+  around it, so it draws its own white card and does not follow the theme.
+  Three rules keep it scannable, and none of them is visible when broken.
+  Scale with `.interpolation(.none)` — the generator emits one pixel per
+  module and smoothing blurs them into each other. Keep the modules square;
+  rounded or dotted ones look better up close and cost contrast at the
+  distance a sofa actually is. The quiet zone is four modules, measured from
+  the generated code rather than fixed, because a short address makes fewer
+  and wider modules than a long one. Branding is the centre mark only, which
+  correction level H is there to absorb: Lagoon's jellyfish on a
+  `lagoonNavy` tile, at `QRCode.markShare` of the width. `QRCodeTests` decodes
+  a covered code rather than trusting that budget, so growing the mark fails a
+  test instead of quietly producing a code that only scans from two feet away.
+  The address stays on screen in type beside it — the code is the quick way
+  out, not the only one — and the code itself is hidden from VoiceOver so the
+  address is not read twice.
 - **Loading and failures:** use the shared state views. Keep mounted content
   during reconciliation and use inline retry when there is usable content.
 

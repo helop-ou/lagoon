@@ -238,6 +238,28 @@ enum Metrics {
     static let focusHaloOpacity: Double = 0.55
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
+
+    /// The scannable side of a QR code, and the floor under its white margin.
+    ///
+    /// A code scans from roughly ten times its own width, so the television
+    /// needs a large one: someone three metres from a 55-inch set is holding
+    /// their phone about as far away as the rule of thumb allows, and 420
+    /// points is a little over a fifth of the 1920-point screen. Phones and
+    /// iPads never need this — they can open the link — so the smaller size
+    /// exists only for the component gallery.
+    ///
+    /// The margin itself is the quiet zone and is *not* a token: four modules
+    /// is what the specification asks for, and a module is only as wide as the
+    /// address is short, so `QRCode.quietZone(side:modulesAcross:)` measures
+    /// it from the code that was generated. This is the floor under that, for
+    /// the moment before one exists.
+    #if os(tvOS)
+    static let qrCodeSize: CGFloat = 420
+    static let qrCodeMinimumQuietZone: CGFloat = 32
+    #else
+    static let qrCodeSize: CGFloat = 220
+    static let qrCodeMinimumQuietZone: CGFloat = 16
+    #endif
     /// iOS hero clipping; tvOS heroes use the native card shape.
     static let heroCornerRadius: CGFloat = 16
     static let progressBarHeight: CGFloat = 6

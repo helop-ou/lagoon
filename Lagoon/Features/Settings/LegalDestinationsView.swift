@@ -124,7 +124,10 @@ struct LegalAddress: Identifiable {
     let url: URL
 }
 
-private struct LegalAddressSheet: View {
+/// Internal rather than private so the DEBUG component gallery can open it:
+/// both `LegalDestinations` URLs are nil until the site is published, so this
+/// sheet is otherwise unreachable in a running build.
+struct LegalAddressSheet: View {
     @Environment(\.dismiss) private var dismiss
     let address: LegalAddress
 
@@ -133,12 +136,18 @@ private struct LegalAddressSheet: View {
             Text(address.title)
                 .font(.title3.bold())
 
+            // The code first, then the address under it. Scanning is the
+            // quick way out of this sheet; typing is the fallback for a
+            // viewer with no phone to hand, or a camera that will not focus,
+            // so neither replaces the other.
+            QRCodeView(text: address.url.absoluteString)
+
             Text(LegalDestinations.displayAddress(address.url))
                 .font(.title2)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Open this address on your phone or computer.")
+            Text("Scan the code, or open this address on your phone or computer.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
