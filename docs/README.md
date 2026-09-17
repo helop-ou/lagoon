@@ -10,7 +10,7 @@ guides describe the current code and workflow.
 | [Design system](design-system.md) | Shared components, tokens, focus, accessibility, and artwork |
 | [Jellyfin API](jellyfin-api.md) | Authentication, endpoints, wire formats, and server compatibility |
 | [Playback](playback.md) | Engine boundaries, lifecycle, transport, controls, and regression checks |
-| [Release](release.md) | Build numbers, changelog, TestFlight, website integration, and public release gates |
+| [Release](release.md) | Build numbers, changelog, licence, internal and external TestFlight, website integration, and public release gates |
 | [Roadmap](roadmap.md) | Remaining product work and device acceptance |
 
 ## Supporting material
