@@ -1,6 +1,6 @@
 # Roadmap
 
-Product priorities and remaining acceptance as recorded on September 10, 2026.
+Product priorities and remaining acceptance as recorded on September 17, 2026.
 Jira is authoritative for live ticket status; this page does not claim a
 TestFlight upload or a public release. Shipped feature history belongs in
 [`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift), with the current feature
@@ -21,10 +21,19 @@ overview in the [repository README](../README.md).
    Include Increase Contrast and Dim Flashing Lights acceptance for the
    custom sample-buffer player; app-level flashing-light integration and
    system mitigation are not yet established by the current evidence.
-3. **Prepare the public candidate (HEL-143).** The single list of privacy,
+3. **Publish the source, then open external testing.** Lagoon is going open
+   source under MPL-2.0 (HEL-158); the name and brand assets stay outside the
+   grant. Publishing before the first external beta (HEL-185) is deliberate:
+   a public, buildable source tree is the cheapest way to satisfy FFmpeg's
+   licence for builds distributed outside the team, and it avoids a per-release
+   burden. Supporting work is HEL-187 (rotate the diagnostics key, remove
+   personal infrastructure), HEL-188 (history scrub), HEL-189 (documentation
+   trim) and HEL-190 (native licence normalisation). Engine extraction
+   (HEL-156) is not a prerequisite and stays after 1.0.
+4. **Prepare the public candidate (HEL-143).** The single list of privacy,
    native licensing, encryption, website, review metadata, and signed-archive
    requirements is in [Release](release.md#public-release).
-4. **Verify the remaining playback fixes on hardware.** The outgoing-engine
+5. **Verify the remaining playback fixes on hardware.** The outgoing-engine
    retention fix (HEL-152) needs device confirmation. Subtitle-over-HDR frame
    loss (HEL-148) improved but remains nonzero in recorded runs; retain its
    full-film acceptance work rather than claiming the issue resolved.
