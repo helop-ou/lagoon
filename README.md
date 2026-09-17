@@ -2,9 +2,9 @@
 
 A native Jellyfin client for Apple TV (and iPhone/iPad), in the spirit of
 Infuse: sign in to your server and your library becomes a fast, focused,
-10-foot experience — hero spotlight with artwork-tinted ambient glow,
-Continue Watching and Next Up rails, poster grids, and a unified native
-sample-buffer player with resume and progress sync.
+10-foot experience — hero spotlight with artwork-tinted ambient glow, Continue
+Watching and Next Up rails, poster grids, and a unified native sample-buffer
+player with resume and progress sync.
 
 ## Features
 
@@ -14,8 +14,8 @@ sample-buffer player with resume and progress sync.
   or use Left/Right on Apple TV; tap or select to open the visible title
 - Home with Continue Watching, unstarted episodes in Next Up, and Recently
   Added rails that group new episodes under their shows
-- Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state filters,
-  a 4K movie filter, and selections remembered per account
+- Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state
+  filters, a 4K movie filter, and selections remembered per account
 - Movie and series detail pages — seasons, episode rail, resume points
 - Native playback: direct play when the file allows it, server-side HLS
   transcode when it doesn't; watch progress syncs back to the server
@@ -30,8 +30,8 @@ sample-buffer player with resume and progress sync.
 
 ## Building
 
-Open `Lagoon.xcodeproj` in Xcode 26 and run the `Lagoon` scheme on an
-Apple TV or iOS destination, or:
+Open `Lagoon.xcodeproj` in Xcode 26 and run the `Lagoon` scheme on an Apple TV
+or iOS destination, or:
 
 ```sh
 xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
@@ -58,14 +58,14 @@ and [`Libdovi.README.md`](Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md).
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md) and
-[coding standards](docs/standards.md). The current guides cover architecture,
-design, Jellyfin API, playback, release, and roadmap, with detailed engineering
-notes and dated validation evidence linked separately.
+Start with the [documentation index](docs/README.md) and [coding
+standards](docs/standards.md). The current guides cover architecture, design,
+Jellyfin API, playback, release, and roadmap, with detailed engineering notes
+and dated validation evidence linked separately.
 
-[Contributing](CONTRIBUTING.md) has the prerequisites, build and test commands,
-and repository conventions; [security reports](SECURITY.md) go privately by
-email rather than into an issue.
+[Contributing](CONTRIBUTING.md) has the prerequisites, build and test
+commands, and repository conventions; [security reports](SECURITY.md) go
+privately by email rather than into an issue.
 
 ## Compatibility
 

@@ -50,7 +50,8 @@ adding a second player to get it:
   `changePlaybackRateCommand` exposes the same choices to Control Center,
   headset and system clients. The control once lived in the transport as a
   button above the scrubber that opened a menu; that was reverted — see
-  [putting controls in the transport](controls-and-reporting.md#putting-controls-in-the-transport-tvos).
+  [putting controls in the
+  transport](controls-and-reporting.md#putting-controls-in-the-transport-tvos).
 - **An engine that has shut down must never be revived**.
   `attach(displayLayer:)` guards on `shutdownRequested`, not just on an empty
   renderer. `finishRendererShutdown` nils `videoRenderer`, so emptiness alone
@@ -88,8 +89,8 @@ adding a second player to get it:
   `beginPlayback` honours `isPaused`. The video renderer stays attached to the
   synchronizer throughout, so only a few hundred milliseconds of audio are
   lost, not the film. If the swap itself fails, playback has no audio path,
-  and the failure is reported as `.delivery`, handed to the
-  [delivery ladder](stream-resolution.md#when-playback-fails-the-delivery-ladder-hel-100).
+  and the failure is reported as `.delivery`, handed to the [delivery
+  ladder](stream-resolution.md#when-playback-fails-the-delivery-ladder-hel-100).
   `debug.regressionInjectAudioRendererFailure` drives this path, since a
   renderer cannot be made to report `.failed` on demand. The HUD's `Recovery:`
   line counts audio replacements and service resets separately, since
@@ -183,9 +184,9 @@ the fixture to one rendition.
 ## Watch Together: the group as a transport authority
 
 Measured against the fixture server (Jellyfin 12.0.0) on 2026-09-14 with a
-scripted second member. The
-[playback guide](../../playback.md#watch-together-syncplay) states the
-rules; this records what the server did and why the code is shaped around it.
+scripted second member. The [playback
+guide](../../playback.md#watch-together-syncplay) states the rules; this
+records what the server did and why the code is shaped around it.
 
 **The socket has to be carrying messages before the join.** A join sent while
 a WebSocket's handshake is still in flight is lost: the app posted

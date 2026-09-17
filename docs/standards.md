@@ -18,9 +18,9 @@ describes the current checkout.
 | API naming | Swift emphasizes clarity at the call site and consistent type/member naming. [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/) | Use descriptive `UpperCamelCase` types and `lowerCamelCase` members with meaningful argument labels. |
 
 The folder recommendation comes from a WWDC19 talk. Current Xcode
-documentation describes the folder and group mechanics. These sources
-support the principles above, not Lagoon's exact tree, a `ViewModel` for
-every view, or a particular third-party architecture framework.
+documentation describes the folder and group mechanics. These sources support
+the principles above, not Lagoon's exact tree, a `ViewModel` for every view,
+or a particular third-party architecture framework.
 
 ## Folder structure
 
@@ -58,92 +58,86 @@ LagoonTopShelf/                 Separate extension target
 Packages/LagoonFFmpeg/          Existing native package and build provenance
 ```
 
-Do not create empty folders just to resemble the diagram. Keep small
-features flat, and add subfolders only when they improve navigation.
-Feature-owned models and helpers stay beside their feature. Move code to
-`Shared` only when independent features need the same contract, not just
-because its name ends in `Manager`. Avoid generic `Utils`, `Helpers`, or
-`Common` dumping grounds.
+Do not create empty folders just to resemble the diagram. Keep small features
+flat, and add subfolders only when they improve navigation. Feature-owned
+models and helpers stay beside their feature. Move code to `Shared` only when
+independent features need the same contract, not just because its name ends in
+`Manager`. Avoid generic `Utils`, `Helpers`, or `Common` dumping grounds.
 
 Follow the feature's existing home for a small fix. For a new feature or a
-deliberate extraction, follow this convention and update the architecture
-map. Move one cohesive area at a time, and do not keep parallel copies of
-a type. See [refactoring priorities](architecture.md#refactoring-priorities)
-for ownership boundaries and verification requirements.
+deliberate extraction, follow this convention and update the architecture map.
+Move one cohesive area at a time, and do not keep parallel copies of a type.
+See [refactoring priorities](architecture.md#refactoring-priorities) for
+ownership boundaries and verification requirements.
 
 ## Files and reusable components
 
-- Name a file after its main type, such as `PlaybackController.swift`.
-  Give independently useful screens and substantial models their own
-  file. A small private helper can stay beside its only caller. One type
-  per file is not an absolute rule.
-- Extract when responsibilities, state lifetime, or callers differ. A
-  large line count is a signal to review, not a hard limit, and not a
-  reason to split a cohesive implementation into arbitrary extensions.
-- Use `Type+Responsibility.swift` for a focused conformance or extension
-  when it aids discovery. Do not widen private state just to spread one
-  coupled object across files.
-- Keep views focused on rendering and interaction. Put stream
-  negotiation, request coordination, reporting, persistence, and
-  resource lifetime in explicit owners instead. A view does not
-  automatically need its own view-model layer.
-- Reuse [existing components](architecture.md#reusable-components)
-  before copying markup. Extract a shared view when callers share
-  behavior and semantics. Pass a few values, bindings, and actions
-  rather than an entire session to a presentational component.
-- Share platform-independent behavior, but keep iOS touch controls and
-  tvOS focus and remote presentation specific to their platform. Keep
-  `#if os(...)` concentrated at those boundaries.
-- Comment on the reason for a constraint, especially ownership or
-  timing. Remove dead code. Git keeps the history. Do not leave session
-  narratives or commented-out code in active source files.
+- Name a file after its main type, such as `PlaybackController.swift`. Give
+  independently useful screens and substantial models their own file. A small
+  private helper can stay beside its only caller. One type per file is not an
+  absolute rule.
+- Extract when responsibilities, state lifetime, or callers differ. A large
+  line count is a signal to review, not a hard limit, and not a reason to
+  split a cohesive implementation into arbitrary extensions.
+- Use `Type+Responsibility.swift` for a focused conformance or extension when
+  it aids discovery. Do not widen private state just to spread one coupled
+  object across files.
+- Keep views focused on rendering and interaction. Put stream negotiation,
+  request coordination, reporting, persistence, and resource lifetime in
+  explicit owners instead. A view does not automatically need its own
+  view-model layer.
+- Reuse [existing components](architecture.md#reusable-components) before
+  copying markup. Extract a shared view when callers share behavior and
+  semantics. Pass a few values, bindings, and actions rather than an entire
+  session to a presentational component.
+- Share platform-independent behavior, but keep iOS touch controls and tvOS
+  focus and remote presentation specific to their platform. Keep `#if os(...)`
+  concentrated at those boundaries.
+- Comment on the reason for a constraint, especially ownership or timing.
+  Remove dead code. Git keeps the history. Do not leave session narratives or
+  commented-out code in active source files.
 
 ## State, concurrency, and boundaries
 
 These are Lagoon implementation rules:
 
 - Use Observation for new observable state. The view or app that owns a
-  model's lifetime stores it in `@State`. Use `@Bindable` when controls
-  need bindings to that model. A caller's value is never a second
-  source of truth.
-- Respect the project's default `MainActor` isolation. Mark values that
-  cross isolation boundaries explicitly, and preserve their safety. Do
-  not use `@unchecked Sendable` or broaden isolation to shortcut a
-  compiler error. Document and verify the actual synchronization
-  contract instead.
-- Every asynchronous operation needs an owner, a cancellation behavior,
-  and a policy for late results. Preserve the generation checks on
-  account, query, seek, and episode changes. UI loading must not cancel
-  itself by replacing the view branch that owns its task.
-- Keep networking, credential handling, and response validation in
-  shared clients and helpers. Views must not assemble their own
-  authentication rules.
+  model's lifetime stores it in `@State`. Use `@Bindable` when controls need
+  bindings to that model. A caller's value is never a second source of truth.
+- Respect the project's default `MainActor` isolation. Mark values that cross
+  isolation boundaries explicitly, and preserve their safety. Do not use
+  `@unchecked Sendable` or broaden isolation to shortcut a compiler error.
+  Document and verify the actual synchronization contract instead.
+- Every asynchronous operation needs an owner, a cancellation behavior, and a
+  policy for late results. Preserve the generation checks on account, query,
+  seek, and episode changes. UI loading must not cancel itself by replacing
+  the view branch that owns its task.
+- Keep networking, credential handling, and response validation in shared
+  clients and helpers. Views must not assemble their own authentication rules.
 - Playback queues and C/AVFoundation resource lifetimes are explicit
-  boundaries. Preserve them during extraction. Keep weak engine
-  references in views and narrow Observation reads. The detailed
-  invariants live in [Playback](playback.md#lifecycle-and-memory).
-- Introduce protocols or local packages only for a concrete boundary,
-  test seam, or reuse need. The existing `PlayerEngine` abstraction is
-  one example. Do not add a protocol, service layer, or package for
-  every type by default.
+  boundaries. Preserve them during extraction. Keep weak engine references in
+  views and narrow Observation reads. The detailed invariants live in
+  [Playback](playback.md#lifecycle-and-memory).
+- Introduce protocols or local packages only for a concrete boundary, test
+  seam, or reuse need. The existing `PlayerEngine` abstraction is one example.
+  Do not add a protocol, service layer, or package for every type by default.
 
 ## Review and verification
 
 Keep structural moves separate from behavior changes. After moving code,
-verify target membership, access control, resource paths, and both iOS
-and tvOS builds. Run the relevant existing tests, and add behavioral
-coverage for new logic or a regression. Do not add tests that just
-restate a low-impact file move.
+verify target membership, access control, resource paths, and both iOS and
+tvOS builds. Run the relevant existing tests, and add behavioral coverage for
+new logic or a regression. Do not add tests that just restate a low-impact
+file move.
 
-Verify changed UI visually on both relevant platforms, including tvOS
-focus paths and iOS layout and accessibility sizes. Playback changes may
-also need handoff, dismissal and replay, PiP, and hardware performance
-checks. Do not introduce new compiler warnings, and do not hide them
-with blanket suppression.
+Verify changed UI visually on both relevant platforms, including tvOS focus
+paths and iOS layout and accessibility sizes. Playback changes may also need
+handoff, dismissal and replay, PiP, and hardware performance checks. Do not
+introduce new compiler warnings, and do not hide them with blanket
+suppression.
 
-Follow [Design system](design-system.md) for tokens, native controls,
-focus, artwork, and accessibility. Follow [Jellyfin API](jellyfin-api.md)
-for wire contracts, and [Release](release.md) for build numbers and
-release evidence. Update the guide that owns a changed contract. Keep
-dated results in the archive instead of creating a second current
-specification.
+Follow [Design system](design-system.md) for tokens, native controls, focus,
+artwork, and accessibility. Follow [Jellyfin API](jellyfin-api.md) for wire
+contracts, and [Release](release.md) for build numbers and release evidence.
+Update the guide that owns a changed contract. Keep dated results in the
+archive instead of creating a second current specification.

@@ -1,10 +1,10 @@
 # Playback
 
-All media plays through `PlayerEngine` and Lagoon's sample-buffer engine.
-The UI uses that protocol. Do not add an alternative AVPlayer or mpv path.
-Read this guide before changing player behavior, then follow the focused
-links into the [engineering notes](reference/playback/README.md) for
-implementation details.
+All media plays through `PlayerEngine` and Lagoon's sample-buffer engine. The
+UI uses that protocol. Do not add an alternative AVPlayer or mpv path. Read
+this guide before changing player behavior, then follow the focused links into
+the [engineering notes](reference/playback/README.md) for implementation
+details.
 
 ## Ownership and pipeline
 
@@ -22,9 +22,9 @@ PlaybackController
        └─ audio/video queues → AVSampleBuffer renderers and synchronizer
 ```
 
-Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift`
-owns the session. `Views/VideoPlayerView.swift` retains it with `@State`.
-Surfaces, controls, overlays and PiP presentation live in `Views/`. The
+Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift` owns
+the session. `Views/VideoPlayerView.swift` retains it with `@State`. Surfaces,
+controls, overlays and PiP presentation live in `Views/`. The
 demux/decode/render pipeline lives in `Engine/`. Byte sources and cache live
 in `Transport/`. Subtitle processing lives in `Subtitles/`. Sampling and
 benchmarks live in `Diagnostics/`.
@@ -32,22 +32,22 @@ benchmarks live in `Diagnostics/`.
 ## Network transport
 
 Every HTTP open uses `FFmpegNetworkTransport` over URLSession, including HLS
-playlists and segments. Repo-built libavformat has its network stack
-disabled. Do not restore native FFmpeg HTTP/TLS as a cache fallback. System
-certificate trust, account-scoped authorization, redirect rules,
-cancellation, and the size-capped fetches `BoundedDownload` applies to
-subtitles and artwork must apply to every streamed media path. That bound is
-a transport safeguard, not the offline Downloads feature: see
-[Downloads](#downloads) below for the feature that keeps a whole file on
-disk.
+playlists and segments. Repo-built libavformat has its network stack disabled.
+Do not restore native FFmpeg HTTP/TLS as a cache fallback. System certificate
+trust, account-scoped authorization, redirect rules, cancellation, and the
+size-capped fetches `BoundedDownload` applies to subtitles and artwork must
+apply to every streamed media path. That bound is a transport safeguard, not
+the offline Downloads feature: see [Downloads](#downloads) below for the
+feature that keeps a whole file on disk.
 
-Media credentials use the authorization header rather than token-bearing
-URLs. Keep endpoint/cross-origin rules in the shared authorization and
-transport helpers. Cache incompatibility changes the byte-source strategy,
-not the security policy. Failures remain errors. Only a successfully read
-resource's end is EOF. TLS validation is recorded in
-[transport details](reference/playback/transport.md#network-transport) and
-the [libavformat build record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
+Media credentials use the authorization header rather than token-bearing URLs.
+Keep endpoint/cross-origin rules in the shared authorization and transport
+helpers. Cache incompatibility changes the byte-source strategy, not the
+security policy. Failures remain errors. Only a successfully read resource's
+end is EOF. TLS validation is recorded in [transport
+details](reference/playback/transport.md#network-transport) and the
+[libavformat build
+record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
 
 ## Stream resolution
 
@@ -65,11 +65,11 @@ mistaken for an undecodable stream. `kVTInvalidSessionErr` and its siblings
 (`VideoToolboxDecoder.isSessionFault`) mean the decoder was taken away, not
 that the stream is undecodable. The answer is a new session
 (`PlaybackDecodeSessionPolicy`), bounded at one rebuild per playback
-generation, the same bound the renderer keeps on its own rebuilds. While
-video output is suspended there is nothing to rebuild for, so the fault is
-ignored outright: backgrounding leaves the old session alive on purpose, and
-the resume seek makes a fresh one. Both guards belong on the decoder path and
-the renderer path. The decoder path once had neither.
+generation, the same bound the renderer keeps on its own rebuilds. While video
+output is suspended there is nothing to rebuild for, so the fault is ignored
+outright: backgrounding leaves the old session alive on purpose, and the
+resume seek makes a fresh one. Both guards belong on the decoder path and the
+renderer path. The decoder path once had neither.
 
 Progressive H.264 uses the compressed sample-buffer path. Interlaced H.264 is
 software-decoded and deinterlaced, on the stream's probed field order, never
@@ -85,18 +85,20 @@ Its Atmos objects are not preserved. Subtitles come from embedded streams or
 Jellyfin's permission-gated subtitle routes. There is no direct provider
 login. Disc images use the app's bounded byte source and UDF handling.
 
-See [negotiation and delivery](reference/playback/stream-resolution.md#stream-resolution),
-[disc images](reference/playback/stream-resolution.md#disc-images-hel-133), and
-[decode details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
+See [negotiation and
+delivery](reference/playback/stream-resolution.md#stream-resolution), [disc
+images](reference/playback/stream-resolution.md#disc-images-hel-133), and
+[decode
+details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
 
 ### Audio track selection
 
 `TrackSelectionPolicy` chooses automatically: the viewer's audio mode, then
 their preferred languages, then Jellyfin's default. Some releases defeat all
-three. The 100's season-one remux carries five audio streams with no
-language, no title and no default flag. Four of them are identical DTS 5.1,
-and the first is Russian. `DefaultAudioStreamIndex` names that first stream,
-because the server had nothing to go on either, so every mode lands on it.
+three. The 100's season-one remux carries five audio streams with no language,
+no title and no default flag. Four of them are identical DTS 5.1, and the
+first is Russian. `DefaultAudioStreamIndex` names that first stream, because
+the server had nothing to go on either, so every mode lands on it.
 
 Where metadata cannot decide, the viewer's correction does.
 `AudioTrackMemoryStore` holds one audio choice per series, or per item for a
@@ -106,17 +108,17 @@ survives closing the player, not just an autoplay handoff.
 Record the choice when the viewer makes it, from the engine's
 `onTrackSelectionChanged`. Only `selectAudioTrack` fires that event, and only
 the track panel and the system now-playing menu call it. Automatic selection
-calls `applyAudioSelection` instead, so everything stored is a deliberate
-act. Reading the selection back at exit instead looks equivalent, but is
-not: by then the scope, the layout and the live engine can each already
-belong to the next episode. A viewer who left a non-applying memory alone
-would have their whole show's correction erased. The write is
-identity-guarded to the current engine, and skipped when the engine's track
-count disagrees with the layout the server described. A remux or transcode
-rung delivers one audio track where the source lists several, so an ordinal
-from one means nothing in the other. Landing back on what automatic
-selection would have chosen *forgets* the override rather than storing it.
-Keeping one would freeze the show against a later change of preferences.
+calls `applyAudioSelection` instead, so everything stored is a deliberate act.
+Reading the selection back at exit instead looks equivalent, but is not: by
+then the scope, the layout and the live engine can each already belong to the
+next episode. A viewer who left a non-applying memory alone would have their
+whole show's correction erased. The write is identity-guarded to the current
+engine, and skipped when the engine's track count disagrees with the layout
+the server described. A remux or transcode rung delivers one audio track where
+the source lists several, so an ordinal from one means nothing in the other.
+Landing back on what automatic selection would have chosen *forgets* the
+override rather than storing it. Keeping one would freeze the show against a
+later change of preferences.
 
 `AudioTrackMemoryPolicy` applies it as a ladder: a description that names
 exactly one track, then the remembered position against a layout whose
@@ -137,8 +139,8 @@ panel or recognised again afterwards.
 
 - The controller owns the engine. SwiftUI player views hold it through
   `@PlayerEngineRef`. View builders and gesture closures must not capture an
-  engine strongly, because SwiftUI can retain old view values after an
-  episode handoff.
+  engine strongly, because SwiftUI can retain old view values after an episode
+  handoff.
 - Stop is two-phase: cancel clocks and work, and interrupt FFmpeg,
   immediately. Serialize renderer stop, flush and release on the pump queue.
   Serialize decoder destruction on the demux queue. Network reporting never
@@ -160,63 +162,62 @@ panel or recognised again afterwards.
 - Preserve sample-exact audio timelines, seek generations, decoder callback
   ordering, and bounded stall recovery. Do not replace queue ownership with
   unstructured tasks as part of a file reorganization.
-- A seek into a container with no index must still start video on a
-  keyframe. A plain MPEG-TS file, such as a transcode download, has no
-  index. The demuxer peeks the landing packet, re-seeks to the last keyframe
-  before the target, and drops non-start packets until one arrives.
+- A seek into a container with no index must still start video on a keyframe.
+  A plain MPEG-TS file, such as a transcode download, has no index. The
+  demuxer peeks the landing packet, re-seeks to the last keyframe before the
+  target, and drops non-start packets until one arrives.
   `TransportStreamSeekTests` pins it against the fixture named by
   `LAGOON_TS_SEEK_FIXTURE_URL`, injected into the xctestrun.
 
 The repo builds dav1d with arm64 assembly. After changing its artifact, run
-`scripts/build-dav1d.sh --verify-only Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework`.
-Software 10-bit conversion uses the asynchronous Metal path. Synchronous
-conversion changes its performance characteristics. Native dependency
-changes also need matching acknowledgements, license text, and build
-evidence.
+`scripts/build-dav1d.sh --verify-only
+Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework`. Software 10-bit
+conversion uses the asynchronous Metal path. Synchronous conversion changes
+its performance characteristics. Native dependency changes also need matching
+acknowledgements, license text, and build evidence.
 
 ### Downloads
 
-Before negotiating, and before consulting a prepared successor, the
-controller asks `DownloadStore` whether the item is a finished download.
-When one exists, playback never touches the network to start: negotiation,
-`playbackInfo` and `streamURL` are skipped outright, the method is direct
-play, and the stream is the file on disk. This keeps the existing rule that
-a local file needs no cache in front of it. A downloaded title plays with no
+Before negotiating, and before consulting a prepared successor, the controller
+asks `DownloadStore` whether the item is a finished download. When one exists,
+playback never touches the network to start: negotiation, `playbackInfo` and
+`streamURL` are skipped outright, the method is direct play, and the stream is
+the file on disk. This keeps the existing rule that a local file needs no
+cache in front of it. A downloaded title plays with no
 `PlaybackCacheCoordinator` scope at all, the same as any other file URL.
 
-Track metadata depends on what was downloaded. An original-quality download
-is the stored file, so its source's stream list still describes it and
-drives audio and subtitle selection exactly as a negotiated stream would. A
+Track metadata depends on what was downloaded. An original-quality download is
+the stored file, so its source's stream list still describes it and drives
+audio and subtitle selection exactly as a negotiated stream would. A
 high/standard download is a transcode the server built for offline use: a
 different container carrying one audio track and no external subtitles. Its
 source's stream list does not describe the file on disk, so the controller
-hands the engine empty track metadata rather than stale descriptions. Both
-the engine's own track construction and the ordinal selection policies
-already degrade to what the file demuxes to when given nothing. The picker
-panel reflects whatever the engine finds. Only the language and title labels
-are lost for a transcode, not track selection itself.
+hands the engine empty track metadata rather than stale descriptions. Both the
+engine's own track construction and the ordinal selection policies already
+degrade to what the file demuxes to when given nothing. The picker panel
+reflects whatever the engine finds. Only the language and title labels are
+lost for a transcode, not track selection itself.
 
 A downloaded title also has no chapters, trickplay, or skip segments. The
 garnish requests that ride alongside negotiation for a streamed title are
-skipped rather than awaited, since asking an unreachable server for them
-would burn the client's full request timeout before the engine ever starts.
-Losing chapters, trickplay, and skip segments offline is an accepted gap for
-this feature's first pass. The start report follows the same reasoning: it
-fires without being awaited for a downloaded title, so a server the device
-cannot currently reach never delays the progress loop, HUD, or next-up
-warm-up.
+skipped rather than awaited, since asking an unreachable server for them would
+burn the client's full request timeout before the engine ever starts. Losing
+chapters, trickplay, and skip segments offline is an accepted gap for this
+feature's first pass. The start report follows the same reasoning: it fires
+without being awaited for a downloaded title, so a server the device cannot
+currently reach never delays the progress loop, HUD, or next-up warm-up.
 
-Position handling runs in both directions. Starting a downloaded title
-prefers its own locally recorded resume point over the server's last known
-position, since there was no negotiation to fetch a fresh one. Choosing to
-start from beginning still starts at 0 for a downloaded title, exactly as it
-does for a streamed one. Stopping one records the position back through
-`DownloadStore.recordPosition`, cleared once the position lands in the last
-2% of the runtime, so a downloaded title resumes correctly the next time it
-plays with no server involved. Whether or not an item is downloaded, a stop
-report the server refuses or cannot reach is queued as a
-`PendingPlaybackReport` and flushed on reconnect, so a session's true
-stopping point is never silently lost to a bad connection.
+Position handling runs in both directions. Starting a downloaded title prefers
+its own locally recorded resume point over the server's last known position,
+since there was no negotiation to fetch a fresh one. Choosing to start from
+beginning still starts at 0 for a downloaded title, exactly as it does for a
+streamed one. Stopping one records the position back through
+`DownloadStore.recordPosition`, cleared once the position lands in the last 2%
+of the runtime, so a downloaded title resumes correctly the next time it plays
+with no server involved. Whether or not an item is downloaded, a stop report
+the server refuses or cannot reach is queued as a `PendingPlaybackReport` and
+flushed on reconnect, so a session's true stopping point is never silently
+lost to a bad connection.
 
 ### Group transport hooks
 
@@ -231,11 +232,11 @@ every member agreed on after time sync, not "now, roughly." A request that
 arrives while the engine is still buffering is handed to `beginPlayback` in
 place of its own near-future anchor. `setCorrectionRate(_:)` nudges a member
 that has drifted without touching `rate`. `rate` is the viewer's own choice,
-and what the speed row and Now Playing publish. `PlaybackRatePolicy.effectiveRate`
-folds the two together, and every media-time cushion, watermark and
-synchronizer rate is computed from it. `onSeekReady` fires from
-`beginPlayback` on every open and every seek. It is the signal Ready is
-reported on, unlike the one-shot `onPlaybackStarted`.
+and what the speed row and Now Playing publish.
+`PlaybackRatePolicy.effectiveRate` folds the two together, and every
+media-time cushion, watermark and synchronizer rate is computed from it.
+`onSeekReady` fires from `beginPlayback` on every open and every seek. It is
+the signal Ready is reported on, unlike the one-shot `onPlaybackStarted`.
 
 The controller is the boundary: a group driver never holds the engine. It
 starts playback through `start(startPosition:startPaused:)`. The server's
@@ -244,197 +245,197 @@ until the group starts. The driver also drives `playGroup(atHostTime:)`,
 `pauseGroup()`, `seekGroup(to:)` and `setCorrectionRate(_:)`, reads
 `clockPosition` and `isPrimedAndPaused`, and hears about readiness and
 dismissal through `onEngineReady` and `onClosed`. Keeping the group transport
-separate from the viewer-facing controls is deliberate: the driver will
-later intercept the viewer's Play and Pause and turn them into group
-requests, and needs a way back down to the engine that does not recurse into
-itself. Because the wiring lives in `start`, an episode handoff or a
-delivery fallback carries it onto the successor engine for free.
+separate from the viewer-facing controls is deliberate: the driver will later
+intercept the viewer's Play and Pause and turn them into group requests, and
+needs a way back down to the engine that does not recurse into itself. Because
+the wiring lives in `start`, an episode handoff or a delivery fallback carries
+it onto the successor engine for free.
 
 ### Watch Together (SyncPlay)
 
 A group makes the server the transport authority. `SyncPlayStore`
 (`Lagoon/Features/SyncPlay/`) owns membership: the socket, the clock, the
 group and its queue. `GroupPlaybackDriver` owns everything that touches
-playback. The driver holds the controller weakly and the engine not at all.
-It drives the group transport described above and reads `clockPosition`.
+playback. The driver holds the controller weakly and the engine not at all. It
+drives the group transport described above and reads `clockPosition`.
 
 **Opening.** A `PlayQueue` update whose playing item changed resolves to a
 `MediaItem` and reaches `MainTabView` as `pendingPlayRequest`, which presents
-the player with `startPosition` and `startPaused: true`. The member
-therefore primes at the group's position and waits there.
-`SyncPlay/Buffering` goes out the moment the queue update lands, before the
-item is even fetched. That way the group waits from then, not from whenever
-this device finishes negotiating a stream. `SyncPlay/Ready` goes out when
-`onEngineReady` fires. Both messages carry `When` from `ServerClock`,
-`PositionTicks` from `clockPosition`, and the queue entry's
-`PlaylistItemId`. A Ready naming the wrong entry makes the server answer
-with a `SetCurrentItem` queue update. Readiness is a *state*: the driver
-reports only on a change, so the pair a seek produces collapses to one
-Buffering and one Ready.
+the player with `startPosition` and `startPaused: true`. The member therefore
+primes at the group's position and waits there. `SyncPlay/Buffering` goes out
+the moment the queue update lands, before the item is even fetched. That way
+the group waits from then, not from whenever this device finishes negotiating
+a stream. `SyncPlay/Ready` goes out when `onEngineReady` fires. Both messages
+carry `When` from `ServerClock`, `PositionTicks` from `clockPosition`, and the
+queue entry's `PlaylistItemId`. A Ready naming the wrong entry makes the
+server answer with a `SetCurrentItem` queue update. Readiness is a *state*:
+the driver reports only on a change, so the pair a seek produces collapses to
+one Buffering and one Ready.
 
 **A report says where the engine is, not where it was.** `clockPosition`
 answers from the synchronizer, and the synchronizer sits at the anchor being
 left behind until `beginPlayback` sets the new one. That anchor is zero on a
-first open. `beginPlayback` anchors the clock *before* it announces the end
-of buffering, and leaves `bufferingTargetSeconds` in place until it does, so
-the whole window has one answer. A Ready that is more than half a second
-from the group's position is not ignored: the server flags that member as
-buffering again and sends it a corrective `Seek` ("got lost in time,
-correcting"). A report that lies stalls the room it was meant to release.
+first open. `beginPlayback` anchors the clock *before* it announces the end of
+buffering, and leaves `bufferingTargetSeconds` in place until it does, so the
+whole window has one answer. A Ready that is more than half a second from the
+group's position is not ignored: the server flags that member as buffering
+again and sends it a corrective `Seek` ("got lost in time, correcting"). A
+report that lies stalls the room it was meant to release.
 
 **Commands.** `Unpause` seeks first, only if the member is more than 0.5 s
 from the named position, then calls `playGroup(atHostTime:)` straight away.
 The engine remembers the instant through priming, and a seek issued *after*
 the start call would drop it, so that order is load-bearing. `Pause` waits
-until the named instant arrives on the local clock, then pauses, and
-re-seeks only if more than 0.1 s out, because a seek re-primes the pipeline.
-`Seek` seeks and reports Buffering, then Ready. `Stop` closes the player and
-keeps the membership.
+until the named instant arrives on the local clock, then pauses, and re-seeks
+only if more than 0.1 s out, because a seek re-primes the pipeline. `Seek`
+seeks and reports Buffering, then Ready. `Stop` closes the player and keeps
+the membership.
 
 `SyncPlayGroupSession` decides what is worth acting on at all. It refuses
-another group's command, one emitted before this member joined, one naming
-an item that is not the current one (`Stop` excepted), the all-zero `Stop` a
-new group is greeted with, and a re-send of the command already taken. A
-`Seek` is excepted from that last refusal too: the server builds its
-corrective seek out of the group's own state, so it arrives identical to the
-seek already taken, apart from `EmittedAt`. Refusing it would leave the
-member with nothing left to report and the group waiting on it forever.
+another group's command, one emitted before this member joined, one naming an
+item that is not the current one (`Stop` excepted), the all-zero `Stop` a new
+group is greeted with, and a re-send of the command already taken. A `Seek` is
+excepted from that last refusal too: the server builds its corrective seek out
+of the group's own state, so it arrives identical to the seek already taken,
+apart from `EmittedAt`. Refusing it would leave the member with nothing left
+to report and the group waiting on it forever.
 
-**Drift.** While the last command is an `Unpause`, 1.5 s past its instant
-and not buffering, the driver compares `clockPosition` against where the
-group should be and applies `SyncCorrectionPolicy`: under 60 ms nothing, up
-to 1.5 s a rate nudge of `1 + diff / 1.5` clamped to 0.75…1.5 held for
-1.5 s, beyond that a seek. The nudge rides `setCorrectionRate`, never the
-viewer's `rate`. `syncplay.correction` (default on) turns correction off
-while still measuring. `driftMilliseconds` feeds the HUD's `Sync:` line.
+**Drift.** While the last command is an `Unpause`, 1.5 s past its instant and
+not buffering, the driver compares `clockPosition` against where the group
+should be and applies `SyncCorrectionPolicy`: under 60 ms nothing, up to 1.5 s
+a rate nudge of `1 + diff / 1.5` clamped to 0.75…1.5 held for 1.5 s, beyond
+that a seek. The nudge rides `setCorrectionRate`, never the viewer's `rate`.
+`syncplay.correction` (default on) turns correction off while still measuring.
+`driftMilliseconds` feeds the HUD's `Sync:` line.
 
 **The viewer's transport is a request.** Play, pause, seek, the double-tap
 skips, the scrub commit, the intro skip, "play next" and the lock screen all
 go through `PlaybackController`'s `user…` methods, which hand them to
-`groupTransport` instead of the engine when a group owns the session.
-Nothing moves locally. The server's echo moves every member together. The
-player chrome states the intention through `PlayerTransportActions`, and
-`NowPlaying` states it through the same struct, so there is one interception
-point rather than one per control. Audio track, subtitles, audio delay and
-playback speed stay local: they are this viewer's, not the group's.
+`groupTransport` instead of the engine when a group owns the session. Nothing
+moves locally. The server's echo moves every member together. The player
+chrome states the intention through `PlayerTransportActions`, and `NowPlaying`
+states it through the same struct, so there is one interception point rather
+than one per control. Audio track, subtitles, audio delay and playback speed
+stay local: they are this viewer's, not the group's.
 
 **Leaving the player is not leaving the group.** `onClosed` detaches the
-driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by
-a member that is not watching. `rejoinPlayback()` clears that flag and
-reopens from the stored queue, at wherever the group has got to.
-`positionSeconds(atServerSeconds:)` carries the last `Unpause` forward by
-the server time elapsed since its instant. Opening at the position that
-command named would be minutes behind a group that has been watching, and
-the server would hold everyone up correcting it. `leave()` posts
-`SyncPlay/Leave` and closes the socket and clock. An account switch does the
-same silently. Foreground forces a clock re-sample.
+driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by a
+member that is not watching. `rejoinPlayback()` clears that flag and reopens
+from the stored queue, at wherever the group has got to.
+`positionSeconds(atServerSeconds:)` carries the last `Unpause` forward by the
+server time elapsed since its instant. Opening at the position that command
+named would be minutes behind a group that has been watching, and the server
+would hold everyone up correcting it. `leave()` posts `SyncPlay/Leave` and
+closes the socket and clock. An account switch does the same silently.
+Foreground forces a clock re-sample.
 
 **What the viewer sees.** The way in is a *Watch Together* control in a film
 or episode page's secondary row. Its icon is `person.2.fill`, never
-SharePlay's glyph, because SharePlay is GroupActivities and this is not it.
-It is drawn only once `SyncPlayStore.availability` says the account may
-join a group, and the detail page is what asks for that answer. The control
-renders nothing until the answer arrives, and a task on a view that renders
-nothing never runs — the same trap `DownloadControl` documents. It opens
-`WatchTogetherSheet`: a sheet on iOS, a `TVSettingsPage` in a sheet on
-tvOS. That sheet lists the server's groups, polled every 5 s since the
-socket only carries the group this client is in. It offers *Start a
-Group*, where the policy is `CreateAndJoinGroups`, and once joined shows
-the room, its people, *Play This Here* and *Leave*. Group names are
-visible to every account on the server, and the copy says so. `startGroup`
-is two calls, not one: `SyncPlay/New` answers 204, and the id arrives over
-the socket, so the queue can only be set after `GroupJoined`.
+SharePlay's glyph, because SharePlay is GroupActivities and this is not it. It
+is drawn only once `SyncPlayStore.availability` says the account may join a
+group, and the detail page is what asks for that answer. The control renders
+nothing until the answer arrives, and a task on a view that renders nothing
+never runs — the same trap `DownloadControl` documents. It opens
+`WatchTogetherSheet`: a sheet on iOS, a `TVSettingsPage` in a sheet on tvOS.
+That sheet lists the server's groups, polled every 5 s since the socket only
+carries the group this client is in. It offers *Start a Group*, where the
+policy is `CreateAndJoinGroups`, and once joined shows the room, its people,
+*Play This Here* and *Leave*. Group names are visible to every account on the
+server, and the copy says so. `startGroup` is two calls, not one:
+`SyncPlay/New` answers 204, and the id arrives over the socket, so the queue
+can only be set after `GroupJoined`.
 
-While a group owns the session, the player's panel grows a fifth
-**Together** tab: the room, its state, the people in it, an *Ignore
-Waiting* switch and *Leave*. Everywhere the tabs are walked, the strip and
-the tvOS left/right grammar, reads `PlayerPanelTab.offered(inGroup:)`
-rather than `allCases`. Otherwise an arrow press lands on a tab that is not
-drawn. A group that ends moves the selection back to Info. The group
-reaches `CustomPlayerView` as a `PlayerTogetherState` value, never as the
-store, and joins `PlayerControlPanelHost`'s `Equatable` boundary so an
-arrival still reaches the tab.
+While a group owns the session, the player's panel grows a fifth **Together**
+tab: the room, its state, the people in it, an *Ignore Waiting* switch and
+*Leave*. Everywhere the tabs are walked, the strip and the tvOS left/right
+grammar, reads `PlayerPanelTab.offered(inGroup:)` rather than `allCases`.
+Otherwise an arrow press lands on a tab that is not drawn. A group that ends
+moves the selection back to Info. The group reaches `CustomPlayerView` as a
+`PlayerTogetherState` value, never as the store, and joins
+`PlayerControlPanelHost`'s `Equatable` boundary so an arrival still reaches
+the tab.
 
-Notices are a toast at the top of the screen: `SyncPlayNoticeToast`. It is
-an overlay leaf in `PlayerSkipOverlay`'s shape, so the player root never
+Notices are a toast at the top of the screen: `SyncPlayNoticeToast`. It is an
+overlay leaf in `PlayerSkipOverlay`'s shape, so the player root never
 subscribes to one. It shows for two seconds, respects Reduce Motion, and is
 never hit-tested. A state the picture already reports ("Playing", "Nothing
-playing") gets no toast, and neither does "Waiting," which the transport
-says for as long as it is true.
+playing") gets no toast, and neither does "Waiting," which the transport says
+for as long as it is true.
 
 **Waiting is not buffering.** A member primed and paused at the group's
-position is not stalled. The existing spinner carries the label *Waiting
-for the group* underneath it. `SyncPlayStore.isWaitingForGroup` drives that
-label, positioned clear of the touch grammar's centre play button. Waiting
-keeps that button on screen, and the two elements would otherwise share the
-middle of the frame.
+position is not stalled. The existing spinner carries the label *Waiting for
+the group* underneath it. `SyncPlayStore.isWaitingForGroup` drives that label,
+positioned clear of the touch grammar's centre play button. Waiting keeps that
+button on screen, and the two elements would otherwise share the middle of the
+frame.
 
-Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*.
-Home carries a banner above its rails, with the group name, *Rejoin* and
-*Leave*, while a group has this device as a member and nothing of its is
-on screen.
+Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*. Home
+carries a banner above its rails, with the group name, *Rejoin* and *Leave*,
+while a group has this device as a member and nothing of its is on screen.
 
-**The socket must be open before the join.** The server announces a join
-over the socket at the instant it happens. **Caution.** Joining while the
-handshake is still in flight loses both the `GroupJoined` and the
-`PlayQueue` update on the fixture server running Jellyfin 12.0.0, and the
-member then sits in a group it never hears another word from. The store
-waits for the socket to carry its first message, the server's own
-`ForceKeepAlive`, before asking to join. A handshake timeout or failed
-membership request keeps the sheet open with an error and a retry path.
+**The socket must be open before the join.** The server announces a join over
+the socket at the instant it happens. **Caution.** Joining while the handshake
+is still in flight loses both the `GroupJoined` and the `PlayQueue` update on
+the fixture server running Jellyfin 12.0.0, and the member then sits in a
+group it never hears another word from. The store waits for the socket to
+carry its first message, the server's own `ForceKeepAlive`, before asking to
+join. A handshake timeout or failed membership request keeps the sheet open
+with an error and a retry path.
 
 The store snapshots its account's client, so queued requests and the final
-Leave never adopt a replacement account's credentials. Leaving cancels
-queued commands and item loads, and late results must match the active
-membership before they can present or restart playback. A delivery fallback
-in a group primes paused and reports Ready before the server starts it
-again. Readiness reports retry once after a second, with the current
-timestamp and position, and cancellation or newer readiness supersedes that
-retry. Viewer transport commands are never retried automatically. Ignore
-Waiting changes publish after server acknowledgement. An unavailable queued
-title attempts to opt out of waiting and offers Rejoin or Leave instead of
-failing silently.
+Leave never adopt a replacement account's credentials. Leaving cancels queued
+commands and item loads, and late results must match the active membership
+before they can present or restart playback. A delivery fallback in a group
+primes paused and reports Ready before the server starts it again. Readiness
+reports retry once after a second, with the current timestamp and position,
+and cancellation or newer readiness supersedes that retry. Viewer transport
+commands are never retried automatically. Ignore Waiting changes publish after
+server acknowledgement. An unavailable queued title attempts to opt out of
+waiting and offers Rejoin or Leave instead of failing silently.
 
 **Verifying it** takes two members. `-debug.syncPlayJoinGroup <name>` joins
-the named group after the regression bootstrap signs in, polling for up to
-30 s so the other member can create it. The group's queue then drives
-playback in place of the bench fixture. Pair it with
-`-debug.playbackHUD YES` and read the `Sync:` line: group state, member
-count, last command, drift.
+the named group after the regression bootstrap signs in, polling for up to 30
+s so the other member can create it. The group's queue then drives playback in
+place of the bench fixture. Pair it with `-debug.playbackHUD YES` and read the
+`Sync:` line: group state, member count, last command, drift.
 
 ### The player's Observation scope
 
 The player root must not read `timePosition`, current subtitle values, or
 other tick-rate state in its body, modifier IDs, or animation values. Those
-reads belong in small overlay leaves. Return before reading the playhead
-when there is no applicable segment or successor. Avoid position reads in
-the hidden timeline. Observation subscribes to reads that actually execute.
+reads belong in small overlay leaves. Return before reading the playhead when
+there is no applicable segment or successor. Avoid position reads in the
+hidden timeline. Observation subscribes to reads that actually execute.
 
 The panel host's `Equatable` boundary separately protects its interior from
-unnecessary renders. Preserve both boundaries. See the
-[scope measurements](reference/playback/engine.md#the-players-observation-scope-hel-150)
-and [memory/lifecycle notes](reference/playback/frame-loss-bench.md#decoded-frame-memory-ceiling-hel-109).
+unnecessary renders. Preserve both boundaries. See the [scope
+measurements](reference/playback/engine.md#the-players-observation-scope-hel-150)
+and [memory/lifecycle
+notes](reference/playback/frame-loss-bench.md#decoded-frame-memory-ceiling-hel-109).
 
 ## Progress reporting
 
 Send `Sessions/Playing` once, progress every 10 seconds, and
 `Sessions/Playing/Stopped` exactly once after capturing the final position.
-Use the existing `Ticks` helpers. Reporting failure must not interrupt playback.
+Use the existing `Ticks` helpers. Reporting failure must not interrupt
+playback.
 
 Presenting screens await `client.playbackReports.settle()` before fetching
 watch state after dismissal. Keep API cache bypass and `MediaItem` value
-equality: both are needed for the fetched resume point to reach the UI.
-Test far enough into a title to pass the server's configured resume threshold.
-See [reporting details](reference/playback/controls-and-reporting.md#progress-reporting).
+equality: both are needed for the fetched resume point to reach the UI. Test
+far enough into a title to pass the server's configured resume threshold. See
+[reporting
+details](reference/playback/controls-and-reporting.md#progress-reporting).
 
 ## Controls and presentation
 
 On iPhone and iPad, a surface tap toggles transport visibility. Centered
-play/pause and ±10-second buttons use `.glass(.clear)`. While playing, controls
-fade after four seconds without interaction. Paused playback and VoiceOver
-keep them available with the options sheet closed. Hidden controls disable
-hit testing and are marked accessibility-hidden; keep the layout mounted so
-fading and toolbar safe-area changes cannot move the center cluster.
+play/pause and ±10-second buttons use `.glass(.clear)`. While playing,
+controls fade after four seconds without interaction. Paused playback and
+VoiceOver keep them available with the options sheet closed. Hidden controls
+disable hit testing and are marked accessibility-hidden; keep the layout
+mounted so fading and toolbar safe-area changes cannot move the center
+cluster.
 
 Double-tapping either half seeks ten seconds without revealing controls.
 Repeated double-taps within the 700 ms feedback window accumulate the shown
@@ -447,76 +448,77 @@ and past the threshold minimizes it into the phone's popup player, which is
 Picture in Picture (where PiP is not possible it closes instead). The
 timeline's own drag and every button win over the swipe.
 
-On iPhone and iPad, locking the phone or leaving the app keeps playback
-going: audio continues under the `audio` background mode, the
-picture is dropped until the scene is back (unless PiP or AirPlay is still
-showing it), and the lock screen's controls drive the engine. Skip and Up
-Next are decided by `PlaybackAutomation` off the engine's clock, never in a
-view body, so intros are still skipped and the next episode still starts
-with the screen off; the overlays only draw its state. Each countdown's action
-and visible fill share a monotonic deadline. Only the fill redraws as time
-passes, so a newly mounted overlay shows elapsed progress immediately instead
-of relying on an animation from a previous view value — an overlay is created
-at the moment its countdown arms, so there is no earlier value to animate from,
-which is why both fills used to read as full for their whole run. An accepted
-hand-off keeps its timing: the card outlives `playNext` while the successor is
-prepared, and a bar that emptied underneath it would read as the
-offer being withdrawn. tvOS pauses on
-background as before. See
-[system integration](reference/playback/system-integration.md).
+On iPhone and iPad, locking the phone or leaving the app keeps playback going:
+audio continues under the `audio` background mode, the picture is dropped
+until the scene is back (unless PiP or AirPlay is still showing it), and the
+lock screen's controls drive the engine. Skip and Up Next are decided by
+`PlaybackAutomation` off the engine's clock, never in a view body, so intros
+are still skipped and the next episode still starts with the screen off; the
+overlays only draw its state. Each countdown's action and visible fill share a
+monotonic deadline. Only the fill redraws as time passes, so a newly mounted
+overlay shows elapsed progress immediately instead of relying on an animation
+from a previous view value — an overlay is created at the moment its countdown
+arms, so there is no earlier value to animate from, which is why both fills
+used to read as full for their whole run. An accepted hand-off keeps its
+timing: the card outlives `playNext` while the successor is prepared, and a
+bar that emptied underneath it would read as the offer being withdrawn. tvOS
+pauses on background as before. See [system
+integration](reference/playback/system-integration.md).
 
 The player follows the device on iPhone and iPad and never forces a rotation:
-a title opened in portrait plays letterboxed in portrait until the viewer turns
-the phone, superseding the earlier landscape lock. Audio
-uses normal movie-playback behavior: volume keys control output, and Silent
-Mode does not silence the movie.
+a title opened in portrait plays letterboxed in portrait until the viewer
+turns the phone, superseding the earlier landscape lock. Audio uses normal
+movie-playback behavior: volume keys control output, and Silent Mode does not
+silence the movie.
 
 On iOS, screens only *request* playback through `playerPresentation`; the one
 `playerPresentationHost` at the tab root (`PlayerPresentationHub`) presents it
 and retains the hosting controller across PiP. The swipe down requests PiP
-when available; only its successful start callback hides fullscreen. Restore reuses
-the same controller; closing PiP or withdrawing the request cleans up the
-session, and `onDismiss` still reaches the requesting screen. Physical
+when available; only its successful start callback hides fullscreen. Restore
+reuses the same controller; closing PiP or withdrawing the request cleans up
+the session, and `onDismiss` still reaches the requesting screen. Physical
 PiP/background/caption acceptance remains open. Never present from inside a
-`NavigationStack` destination again: a presenter hosted in a pushed detail page
-made the stack briefly show its root, a view update in that window dropped the
-destination, and its teardown closed the player about a second after it opened
-from any detail page. Only Home and Continue Watching, which are not
-pushed, survived, which is why it looked title-dependent. The host is presented
-`.overFullScreen`: `.fullScreen` removes the presenting hierarchy and re-runs
-the `.task`s underneath, the regression bootstrap included.
+`NavigationStack` destination again: a presenter hosted in a pushed detail
+page made the stack briefly show its root, a view update in that window
+dropped the destination, and its teardown closed the player about a second
+after it opened from any detail page. Only Home and Continue Watching, which
+are not pushed, survived, which is why it looked title-dependent. The host is
+presented `.overFullScreen`: `.fullScreen` removes the presenting hierarchy
+and re-runs the `.task`s underneath, the regression bootstrap included.
 
-On tvOS, the video surface owns focus. Select prioritizes scrub, Skip,
-Up Next, then play/pause. A light Siri Remote touch is a separate input that
-reveals controls; it must not become Select. Menu cancels scrubbing, closes the
-panel, then exits. Keep the mounted panel and remote command ordering intact.
-See [remote reveal](reference/playback/controls-and-reporting.md#siri-remote-transport-reveal) and
-[tvOS gotchas](reference/playback/controls-and-reporting.md#player-view-gotchas-learned-the-hard-way-on-tvos).
+On tvOS, the video surface owns focus. Select prioritizes scrub, Skip, Up
+Next, then play/pause. A light Siri Remote touch is a separate input that
+reveals controls; it must not become Select. Menu cancels scrubbing, closes
+the panel, then exits. Keep the mounted panel and remote command ordering
+intact. See [remote
+reveal](reference/playback/controls-and-reporting.md#siri-remote-transport-reveal)
+and [tvOS
+gotchas](reference/playback/controls-and-reporting.md#player-view-gotchas-learned-the-hard-way-on-tvos).
 
 ## Diagnostic reporting
 
-Unexpected playback and request failures are reported automatically
-through `Diagnostics.shared`: a vendor-neutral hub with a rolling
-history and a Sentry envelope transport the app owns. There is no SDK. Only
-keys in `DiagnosticSchema.fields` can leave the device; a title, URL, message
-or `localizedDescription` handed to it is dropped and counted. When adding a
+Unexpected playback and request failures are reported automatically through
+`Diagnostics.shared`: a vendor-neutral hub with a rolling history and a Sentry
+envelope transport the app owns. There is no SDK. Only keys in
+`DiagnosticSchema.fields` can leave the device; a title, URL, message or
+`localizedDescription` handed to it is dropped and counted. When adding a
 failure path, give `PlaybackEngineFailure` a `PlaybackFailureDetail` (stage,
-error domain, code) rather than relying on its message, record the moment
-with `Diagnostics.record`, and report with a fingerprint that never varies
-per occurrence. Keep `record` cheap and off the pump queues; the hub already
-runs the sink on its own queue. Detectors, thresholds, limits, tester
-controls and the Sentry setup are in the [diagnostics reference](reference/playback/diagnostics.md).
+error domain, code) rather than relying on its message, record the moment with
+`Diagnostics.record`, and report with a fingerprint that never varies per
+occurrence. Keep `record` cheap and off the pump queues; the hub already runs
+the sink on its own queue. Detectors, thresholds, limits, tester controls and
+the Sentry setup are in the [diagnostics
+reference](reference/playback/diagnostics.md).
 
 ## Regression checks
 
 Build both platforms and run the relevant pure logic tests. Use
 `TouchPlayerUITests` for iPhone/iPad touch and auto-hide, and
 `PlayerRegressionUITests` for remote input, reporting, handoff, and teardown.
-The touch journeys pass in the simulator; physical checks are still owed.
-What a journey may
-assume about the server and the simulator's state, and the resolver flags
-that open a title by property, are in the
-[regression lane reference](reference/regression-lane.md).
+The touch journeys pass in the simulator; physical checks are still owed. What
+a journey may assume about the server and the simulator's state, and the
+resolver flags that open a title by property, are in the [regression lane
+reference](reference/regression-lane.md).
 
 XCTest can expose faded buttons and nonzero frames even with
 `accessibilityHidden`. For auto-hide, assert the launch-gated `transport`
@@ -526,11 +528,12 @@ does not establish physical VoiceOver or PiP acceptance.
 
 For background fill, `scripts/fill-bench.sh` plays one title hands-off on a
 simulator and reports cached and network megabytes over time from the decode
-trace, so two builds can be compared on the same asset and link.
-For performance, use `scripts/framedrop-bench.sh` and
+trace, so two builds can be compared on the same asset and link. For
+performance, use `scripts/framedrop-bench.sh` and
 `scripts/playback-lifecycle-bench.sh`. Compare the same fixture, scene,
 media-time window, build configuration, and display path over at least three
 untouched runs. Release measurements without coverage and diagnostic-overlay
 interference are the useful device comparison. Keep physical full-film,
-captions/HDR, and teardown acceptance separate from simulator results.
-See the [frame-loss procedure](reference/playback/frame-loss-bench.md#frame-loss-bench-hel-64).
+captions/HDR, and teardown acceptance separate from simulator results. See the
+[frame-loss
+procedure](reference/playback/frame-loss-bench.md#frame-loss-bench-hel-64).

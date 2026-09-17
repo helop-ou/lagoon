@@ -14,8 +14,8 @@ instead of an issue.
 macOS 26 and Xcode 26.6 (17F113) or newer, with an Apple TV 4K (3rd
 generation) and an iPhone simulator. Xcode 26.6 built the vendored native
 artifacts and older versions are untested. Nothing else is needed for a normal
-build; rebuilding the native artifacts needs more, see
-[Native artifacts](#native-artifacts).
+build; rebuilding the native artifacts needs more, see [Native
+artifacts](#native-artifacts).
 
 ## Clone, open, build
 
@@ -92,10 +92,11 @@ stays subject-only. Keep structural moves separate from behaviour changes.
 
 `Packages/LagoonFFmpeg` is the only dependency, and that is deliberate. A new
 one needs a real argument. If you add one, add its entry to
-[`Acknowledgements.swift`](Lagoon/Features/Settings/Acknowledgements.swift) and
-its licence text under `Lagoon/Resources/Licenses`, or `AcknowledgementsTests`
-fails the unit suite. That test also checks every binary target declared in
-`Packages/LagoonFFmpeg/Package.swift` is covered by an entry.
+[`Acknowledgements.swift`](Lagoon/Features/Settings/Acknowledgements.swift)
+and its licence text under `Lagoon/Resources/Licenses`, or
+`AcknowledgementsTests` fails the unit suite. That test also checks every
+binary target declared in `Packages/LagoonFFmpeg/Package.swift` is covered by
+an entry.
 
 ## Native artifacts
 
@@ -122,13 +123,13 @@ Regenerate `docs/reference/native-dependency-inventory.json` with
 
 ## Signing and assets
 
-Simulator builds need no signing setup. `project.pbxproj` hardcodes the owner's
-development team `9GLTW5844P` with automatic signing, bundle identifiers
-`ee.helop.lagoon`, `.topshelf`, `.tests` and `.uitests`, and the app group
-`group.ee.helop.lagoon`. To build on a device, change the team, the bundle
-identifiers and the app group to your own, and keep those local changes out of
-what you submit.
+Simulator builds need no signing setup. `project.pbxproj` hardcodes the
+owner's development team `9GLTW5844P` with automatic signing, bundle
+identifiers `ee.helop.lagoon`, `.topshelf`, `.tests` and `.uitests`, and the
+app group `group.ee.helop.lagoon`. To build on a device, change the team, the
+bundle identifiers and the app group to your own, and keep those local changes
+out of what you submit.
 
-The brand asset sources in `art/` are gitignored and not published. The PNG and
-PDF assets tracked in the repository are Lagoon's branding, not covered by
+The brand asset sources in `art/` are gitignored and not published. The PNG
+and PDF assets tracked in the repository are Lagoon's branding, not covered by
 whatever source licence is eventually chosen, and not for reuse elsewhere.

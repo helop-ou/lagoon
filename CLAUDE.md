@@ -10,8 +10,8 @@ AVPlayer path and no third-party Swift dependency.
 `AGENTS.md` is a symlink to this file, so Codex and other agents read the same
 instructions. Edit CLAUDE.md, never the link.
 
-**Start at [docs/README.md](docs/README.md), follow the
-[coding standards](docs/standards.md), and read the guide for the area you are
+**Start at [docs/README.md](docs/README.md), follow the [coding
+standards](docs/standards.md), and read the guide for the area you are
 changing before you work on it.** This file is a map and a session checklist,
 not a second copy of the guides. If a line here disagrees with a guide, the
 guide is right and this file needs fixing.
@@ -54,16 +54,17 @@ clean" in docs/README.md.
   and licence text as [Release](docs/release.md) describes, or
   `AcknowledgementsTests` fails the unit suite.
 - Verify UI changes in the simulator before calling them done. Build, then
-  `simctl install/launch`, then drive focus with
-  `osascript -e 'tell application "System Events" to key code …'` — 125/126/123/124
-  are the arrows, 36 select, 53 menu, and `keystroke "…"` types into the tvOS
-  keyboard — then `simctl io <udid> screenshot`. Exercise focus paths and deep
-  scrolls, not just the landing state.
+  `simctl install/launch`, then drive focus with `osascript -e 'tell
+  application "System Events" to key code …'` — 125/126/123/124 are the
+  arrows, 36 select, 53 menu, and `keystroke "…"` types into the tvOS keyboard
+  — then `simctl io <udid> screenshot`. Exercise focus paths and deep scrolls,
+  not just the landing state.
 - For end-to-end work, the public demo server supports the full flow including
   playback: `demo.jellyfin.org/stable`, user `demo`, empty password.
-- Report only what was verified. Before saying a change is done, run the builds
-  and the relevant tests, and say what ran. If a step was skipped or a check
-  failed, say so and show the output. Never describe an unrun check as passed.
+- Report only what was verified. Before saying a change is done, run the
+  builds and the relevant tests, and say what ran. If a step was skipped or a
+  check failed, say so and show the output. Never describe an unrun check as
+  passed.
 
 ## Working with subagents
 
@@ -88,32 +89,32 @@ so you know to read that guide before touching the area.
   `docs/reference/playback/`. All playback goes through the sample-buffer
   engine behind the `PlayerEngine` protocol, and the player UI only talks to
   the protocol. Player views hold the engine through `@PlayerEngineRef`, never
-  a strong reference, and closures handed to SwiftUI never capture an engine. A
-  renderer's request block is armed only while its queue has something to give.
-  A light Siri Remote touch-surface tap and a Select press are different inputs
-  and never share a path. Software-decoded 10-bit video reaches the renderer
-  through the asynchronous `MetalFrameConverter`. The delivery ladder descends
-  only on a verdict about the samples: a lost VideoToolbox session is rebuilt
-  rather than transcoded, and while video output is suspended it is ignored
-  outright.
+  a strong reference, and closures handed to SwiftUI never capture an engine.
+  A renderer's request block is armed only while its queue has something to
+  give. A light Siri Remote touch-surface tap and a Select press are different
+  inputs and never share a path. Software-decoded 10-bit video reaches the
+  renderer through the asynchronous `MetalFrameConverter`. The delivery ladder
+  descends only on a verdict about the samples: a lost VideoToolbox session is
+  rebuilt rather than transcoded, and while video output is suspended it is
+  ignored outright.
 - **Vendored FFmpeg** — [Playback](docs/playback.md). libavformat is built in
   this repo without its network stack, and every HTTP open goes through
   `FFmpegNetworkTransport` over URLSession; keep the build script and the
   artifact in sync. dav1d is also built here and must keep its arm64 assembly.
-  Run `scripts/build-dav1d.sh --verify-only` after touching it, because without
-  the assembly nothing fails — everything just decodes ten times slower. libdovi
-  is vendored rather than built, for the Dolby Vision profile 7 → 8.1
-  conversion.
+  Run `scripts/build-dav1d.sh --verify-only` after touching it, because
+  without the assembly nothing fails — everything just decodes ten times
+  slower. libdovi is vendored rather than built, for the Dolby Vision profile
+  7 → 8.1 conversion.
 - **Measurement** — [Playback](docs/playback.md), "Regression checks". Never
   trust a casual frame-loss comparison. Same scene, same media-time window,
   simulator untouched, three or more runs, using the Frame-Loss Bench and
   `scripts/framedrop-bench.sh`. Two fixes that skipped this were later
   retracted.
 - **Models and API** — [Jellyfin API](docs/jellyfin-api.md) and
-  [Architecture](docs/architecture.md). `@Observable` with `@MainActor` default
-  isolation; DTOs are `nonisolated struct`s with defensive decoding. Jellyfin
-  JSON is PascalCase and the client's key strategy handles it, so never add
-  `CodingKeys` for casing. Never decode `Date`. Positions are ticks.
+  [Architecture](docs/architecture.md). `@Observable` with `@MainActor`
+  default isolation; DTOs are `nonisolated struct`s with defensive decoding.
+  Jellyfin JSON is PascalCase and the client's key strategy handles it, so
+  never add `CodingKeys` for casing. Never decode `Date`. Positions are ticks.
   `MediaItem` compares by value and no DTO gets an id-only `==`, because
   SwiftUI drops a state write whose new value compares equal. API calls bypass
   the URL cache for the same reason.

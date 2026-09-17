@@ -17,15 +17,15 @@ you are changing. The six guides below describe how the code works today.
 `reference/` holds the longer engineering notes behind the guides:
 [playback](reference/playback/README.md),
 [architecture](reference/architecture.md),
-[design](reference/design-system.md) and
-[regression lane](reference/regression-lane.md). Read them for the reasoning
-and the measurements behind a particular implementation. Some describe
-experiments on a specific build, and the code may have moved on since.
+[design](reference/design-system.md) and [regression
+lane](reference/regression-lane.md). Read them for the reasoning and the
+measurements behind a particular implementation. Some describe experiments on
+a specific build, and the code may have moved on since.
 
 The [native dependency inventory](reference/native-dependency-inventory.json)
-is generated. Regenerate it with
-[the inventory script](../scripts/inventory-native-dependencies.py) whenever
-the linked artifacts change.
+is generated. Regenerate it with [the inventory
+script](../scripts/inventory-native-dependencies.py) whenever the linked
+artifacts change.
 
 ## Keeping this clean
 

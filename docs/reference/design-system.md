@@ -393,10 +393,10 @@ opening or navigating between categories must not change a saved preference.
   playback; tvOS still starts the focused episode directly.
 - **Facts line**: on tvOS this is one spaced row — runtime, year, a *boxed*
   certification (r4 outline), then plain capability tokens from
-  `MediaSource.qualityTokens` ("4K  DV  TrueHD 7.1  Atmos"). iOS splits
-  identity facts and playback capabilities into separate wrapping flows. Plain
-  text, not capsules — outlined chips read far louder than the facts deserve.
-  The vocabulary lives in `MediaQuality`, so the player's facts line and the
+  `MediaSource.qualityTokens` ("4K DV TrueHD 7.1 Atmos"). iOS splits identity
+  facts and playback capabilities into separate wrapping flows. Plain text,
+  not capsules — outlined chips read far louder than the facts deserve. The
+  vocabulary lives in `MediaQuality`, so the player's facts line and the
   detail row can't disagree about what counts as 4K.
 - **Title art** (`TitleArtView`): Jellyfin has a `Logo` — the title's own
   wordmark — for practically every film, and it's the title treatment on
