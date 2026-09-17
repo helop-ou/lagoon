@@ -21,9 +21,6 @@ guides describe the current code and workflow.
   [regression lane](reference/regression-lane.md) engineering notes. Read these for the
   reasoning and measurements behind a particular implementation. Dated
   experiments can describe code that was subsequently replaced.
-- [The archive](archive/README.md) indexes ticket audits, validation records,
-  the transport spike, and superseded website drafts. An archived check proves
-  only what its recorded revision, device, and fixture exercised.
 - [Native dependency inventory](reference/native-dependency-inventory.json)
   is generated evidence. Regenerate it when the linked artifacts change using
   [the inventory script](../scripts/inventory-native-dependencies.py).
@@ -32,10 +29,10 @@ guides describe the current code and workflow.
 
 Update the relevant guide when behavior or ownership changes. Keep one home
 for each instruction and link to it from the other guides. Put long technical
-investigations in `reference/` and dated validation evidence in `archive/`,
-including the revision, environment, result, and remaining acceptance work.
-Add the record to the archive index instead of appending a session transcript
-to a guide. Keep unresolved release gates in [Release](release.md#public-release).
+investigations in `reference/`. Dated validation evidence — the revision,
+environment, result, and remaining acceptance work — belongs on the ticket it
+verifies, not in a session transcript appended to a guide. Keep unresolved
+release gates in [Release](release.md#public-release).
 
 Jira owns live ticket status. [Changelog.swift](../Lagoon/Features/Settings/Changelog.swift)
 owns release history. Published website copy belongs to the separate
