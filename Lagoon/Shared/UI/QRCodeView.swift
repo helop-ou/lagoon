@@ -16,12 +16,12 @@ enum QRCode {
     /// code rather than trusting that arithmetic.
     static let markShare: CGFloat = 0.30
 
-    /// The dark tile's share of that plate. The rest is the white gap, which
-    /// is what makes the mark read as a deliberate hole punched in the
-    /// pattern rather than a sticker dropped on top of it. Without it the
-    /// tile's corners sit directly against live modules and the whole thing
-    /// looks pasted on.
-    static let markTileShare: CGFloat = 0.72
+    /// How much of the plate is margin around the symbol. The rest of the
+    /// plate is the gap, which is what makes the mark read as a deliberate
+    /// hole punched in the pattern rather than a sticker dropped on top of
+    /// it. Without it the symbol sits directly against live modules and the
+    /// whole thing looks pasted on.
+    static let markInsetShare: CGFloat = 0.20
 
     /// Rounding, as a share of whatever is being rounded, so the plate and
     /// the tile curve alike at any size.
@@ -65,7 +65,20 @@ enum QRCode {
         // costs no meaningful density.
         filter.correctionLevel = "H"
         guard let output = filter.outputImage else { return nil }
-        return context.createCGImage(output, from: output.extent)
+
+        // Ink on Mist rather than black on white: the brand package names
+        // those two as its monochrome dark and its light background, so the
+        // code is Lagoon's own colours without anyone choosing them. The cost
+        // is small and measurable — Ink on Mist is about 16:1 where black on
+        // white is 21:1, both far above anything a scanner needs. It is the
+        // *pair* that has to stay extreme; tinting the light half toward the
+        // accent is what would actually break it.
+        let tint = CIFilter.falseColor()
+        tint.inputImage = output
+        tint.color0 = CIColor(red: 0x07 / 255, green: 0x16 / 255, blue: 0x1D / 255)
+        tint.color1 = CIColor(red: 0xE9 / 255, green: 0xF1 / 255, blue: 0xF2 / 255)
+        guard let tinted = tint.outputImage else { return nil }
+        return context.createCGImage(tinted, from: tinted.extent)
     }
 }
 
@@ -111,11 +124,11 @@ struct QRCodeView: View {
                 // Generation does not fail in practice, but a blank card is
                 // better than a broken-image glyph, and every caller shows
                 // the address in type beside this.
-                Color.white.frame(width: side, height: side)
+                Color.lagoonMist.frame(width: side, height: side)
             }
         }
         .padding(quietZone)
-        .background(.white, in: .rect(cornerRadius: Metrics.cardCornerRadius))
+        .background(Color.lagoonMist, in: .rect(cornerRadius: Metrics.cardCornerRadius))
         // The address is already on screen as text, and VoiceOver reading it
         // twice is worse than not describing a thing nobody can hear anyway.
         .accessibilityHidden(true)
@@ -125,42 +138,24 @@ struct QRCodeView: View {
     /// `h_` lockup: a deliberate hole in the pattern rather than a smudge over
     /// it. Lagoon's mark rather than Helop's, because this is inside Lagoon,
     /// shown to Lagoon's viewers.
+    /// The symbol, on the Mist plate that punches the hole.
+    ///
+    /// The symbol rather than the jellyfish: the jellyfish is the package's
+    /// *secondary* mark, restricted to "punctuation in loading, empty-state or
+    /// atmospheric moments … small, one-color, and low contrast", which the
+    /// middle of an identity mark is none of. It also carries no plate of its
+    /// own, because the symbol is two-tone and its navy half would vanish into
+    /// one.
     private var mark: some View {
         let plate = side * QRCode.markShare
-        let tile = plate * QRCode.markTileShare
-        return jellyfish
-            .padding(tile * 0.12)
-            .frame(width: tile, height: tile)
-            .background(
-                Color.lagoonNavy,
-                in: .rect(cornerRadius: tile * QRCode.markCornerShare, style: .continuous)
-            )
+        return Image("LagoonSymbol")
+            .resizable()
+            .scaledToFit()
+            .padding(plate * QRCode.markInsetShare)
             .frame(width: plate, height: plate)
             .background(
-                .white,
+                Color.lagoonMist,
                 in: .rect(cornerRadius: plate * QRCode.markCornerShare, style: .continuous)
             )
-    }
-
-    private var jellyfish: some View {
-        Canvas { context, size in
-            let unit = min(
-                size.width / JellyfishGeometry.canvas.width,
-                size.height / JellyfishGeometry.canvas.height
-            )
-            var drawn = context
-            drawn.translateBy(
-                x: (size.width - JellyfishGeometry.canvas.width * unit) / 2,
-                y: (size.height - JellyfishGeometry.canvas.height * unit) / 2
-            )
-            drawn.scaleBy(x: unit, y: unit)
-            // At rest: contraction 0 is the supplied artwork, not a pose.
-            JellyfishGeometry.stroke(
-                in: &drawn,
-                contraction: 0,
-                trail: 0,
-                with: .color(.lagoonAqua)
-            )
-        }
     }
 }

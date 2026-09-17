@@ -328,6 +328,12 @@ extension Color {
     nonisolated static let lagoonNavy = Color(red: 0x0B / 255, green: 0x1D / 255, blue: 0x28 / 255)
     /// Lagoon Teal in the brand package — the mark's upper shore.
     nonisolated static let lagoonShore = Color(red: 0x0D / 255, green: 0x4A / 255, blue: 0x57 / 255)
+    /// Ink — the package's monochrome dark, for the one place Lagoon prints
+    /// something dark on something light instead of the other way round.
+    nonisolated static let lagoonInk = Color(red: 0x07 / 255, green: 0x16 / 255, blue: 0x1D / 255)
+    /// Mist — the package's light background and reverse support, the ground
+    /// Ink is meant to sit on.
+    nonisolated static let lagoonMist = Color(red: 0xE9 / 255, green: 0xF1 / 255, blue: 0xF2 / 255)
 }
 
 /// SF Symbols, in one place for the kinds of thing the app navigates to, so a

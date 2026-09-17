@@ -51,8 +51,10 @@ screens.
 ## Brand and materials
 
 Brand tokens are `.lagoonAqua` (`#2ED4C7`), `.lagoonShore` (`#0D4A57`), and
-`.lagoonNavy` (`#0B1D28`). Reserve them for the lockup and anything that must
-never follow a theme. Everywhere else the brand's moments read the current
+`.lagoonNavy` (`#0B1D28`), plus the package's monochrome pair `.lagoonInk`
+(`#07161D`) and `.lagoonMist` (`#E9F1F2`) for the one place Lagoon prints dark
+on light instead of the other way round. Reserve them for the lockup and
+anything that must never follow a theme. Everywhere else the brand's moments read the current
 theme through `Theme` (see Themes below). `AccentColor` stays white. A theme's
 `controlTint` is what colours iOS controls, never the asset. Use `.primary`,
 `.secondary`, `.tertiary`, fills, and materials for ordinary UI.
@@ -270,23 +272,28 @@ unfocused states.
   tab, and the banner never disagree.
 - **QR codes (tvOS):** `QRCodeView` is how the TV hands an address to a phone,
   since tvOS cannot open a link. It is deliberately the one place that breaks
-  the dark lock: a code needs dark modules on a white card with a quiet zone
-  around it, so it draws its own white card and does not follow the theme.
-  Three rules keep it scannable, and none of them is visible when broken.
+  the dark lock: a code needs dark on light with a quiet zone around it, so it
+  draws its own card and does not follow the theme. The colours are the brand
+  package's own monochrome pair, `lagoonInk` on `lagoonMist`, which is Lagoon's
+  without anyone choosing it — about 16:1 where black on white is 21:1, and
+  both are far above what a scanner needs. It is the *pair* that has to stay
+  extreme: tinting the light half toward the accent is what would break it.
+  Three more rules keep it scannable, and none of them is visible when broken.
   Scale with `.interpolation(.none)` — the generator emits one pixel per
   module and smoothing blurs them into each other. Keep the modules square;
   rounded or dotted ones look better up close and cost contrast at the
   distance a sofa actually is. The quiet zone is four modules, measured from
   the generated code rather than fixed, because a short address makes fewer
   and wider modules than a long one. Branding is the centre mark only, which
-  correction level H is there to absorb: Lagoon's jellyfish on a `lagoonNavy`
-  tile, on a white plate covering `QRCode.markShare` of the width. The white
-  gap between tile and modules is the part that matters. Without it the tile's
-  corners sit against live modules and the mark reads as a sticker dropped on
-  the code rather than a hole punched in it, which is how the first version
-  shipped and why it had to be redone. `QRCodeTests` renders the real view and
-  decodes it, so growing the mark fails a test instead of quietly producing a
-  code that only scans from two feet away.
+  correction level H is there to absorb: `LagoonSymbol` on a Mist plate
+  covering `QRCode.markShare` of the width. Not the jellyfish, which the brand
+  package restricts to small, low-contrast punctuation, and not on a dark tile,
+  which the two-tone symbol's navy half would vanish into. The gap between
+  symbol and modules is the part that matters. Without it the mark reads as a
+  sticker dropped on the code rather than a hole punched in it, which is how
+  the first version shipped and why it had to be redone. `QRCodeTests` renders
+  the real view and decodes it, so growing the mark fails a test instead of
+  quietly producing a code that only scans from two feet away.
   The address stays on screen in type beside it — the code is the quick way
   out, not the only one — and the code itself is hidden from VoiceOver so the
   address is not read twice.
