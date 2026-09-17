@@ -48,6 +48,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "104",
+            released: "September 2026",
+            headline: "Search stops leading to a dead end.",
+            sections: [
+                ChangelogSection(category: .bugFixes, changes: [
+                    "A search that matches nothing no longer offers to show all results. The button led to an empty page with nothing on it to select, which on Apple TV left the Menu button closing Lagoon instead of going back.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "103",
             released: "September 2026",
             headline: "Jellyseerr search stops coming up empty.",
