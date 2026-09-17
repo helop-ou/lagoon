@@ -1,21 +1,28 @@
 # Playback engineering notes
 
-Implementation rationale and measurements behind the [current playback guide](../../playback.md),
-retained during the September 10, 2026 documentation cleanup and split by topic.
-Dated experiments describe their recorded revision; they are not a release
-checklist or proof of current hardware acceptance.
+**These are deep notes, not a document to read end to end.** Start with the
+[playback guide](../../playback.md), which carries the rules that matter while
+changing the player. Come here when you are working inside one of these areas
+and need the reasoning or the measurements behind a particular decision.
 
-**One engine for everything** (the maintainer's call, 2026-08-16, HEL-48): all
-playback runs through the Lagoon sample-buffer engine. The AVPlayer and mpv
-players were removed the same day the decision was made — no split paths, no
-per-container routing. Since 2026-08-17 (M6) the FFmpeg libraries come from
-the local `Packages/LagoonFFmpeg` package, which pins three Libav* static
-xcframeworks from MPVKit's 1.0.0 release (FFmpeg 8.1.2: avcodec, avutil,
-swresample) plus dav1d, uavs3d and lcms2 — MPVKit itself, libmpv, MoltenVK,
-and libplacebo are no longer in the project. The archives are static: the app
-binary links only referenced objects, and the bundle embeds 7 framework shells
-instead of 27. Lagoon builds two of those seven itself: dav1d for its arm64
-assembly (HEL-137), and libavformat without a network stack (HEL-142).
+They record why the code is shaped the way it is, including approaches that
+were tried and abandoned. Treat a measurement as evidence for the decision it
+justified, not as a current acceptance result.
+
+**One engine for everything** — the maintainer's call. All playback runs
+through the Lagoon sample-buffer engine. The AVPlayer and mpv players were
+removed the same day the decision was made: no split paths, no per-container
+routing.
+
+The FFmpeg libraries come from the local `Packages/LagoonFFmpeg` package. It
+pins three Libav\* static xcframeworks from MPVKit's 1.0.0 release — avcodec,
+avutil and swresample, from FFmpeg 8.1.2 — plus dav1d, uavs3d and lcms2.
+MPVKit itself, libmpv, MoltenVK and libplacebo are no longer in the project.
+
+The archives are static, so the app binary links only the objects it
+references and the bundle embeds 7 framework shells instead of 27. Lagoon
+builds two of those seven itself: dav1d, for its arm64 assembly, and
+libavformat, without a network stack.
 
 | Topic | Notes |
 | --- | --- |
