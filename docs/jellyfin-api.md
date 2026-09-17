@@ -116,9 +116,10 @@ The harness picks whatever the server will play, and neither public demo
 returns a transcode for it, so `testNativeHLSPlaybackStartsAndCrossesSegment\
 Boundaries` resolves `DirectPlay` and fails its `Transcode` assertion on
 **both** 10.11.11 and 12.0.0 — a stale expectation in the test rather than a
-Jellyfin 12 regression; it passes against fixture, whose content does
-transcode. So the transcode path was checked directly instead, on 2026-09-04
-before the September 8 header-only change: authenticating on 12.0.0 and
+Jellyfin 12 regression; it passes against the fixture server, whose content
+does transcode. So the transcode path was checked directly instead, on
+2026-09-04 before the September 8 header-only change: authenticating on 12.0.0
+and
 calling `PlaybackInfo` with a profile that can direct-play nothing returned a
 `TranscodingUrl`, and resolving it the way the client did that day — with
 `ApiKey` in the query — reached a master playlist, a variant playlist and a
@@ -141,7 +142,7 @@ before.
 
 Still outstanding: sustained *video transcode* playback inside the app on 12,
 which needs a server whose content forces one, and the deployment check on
-fixture once it upgrades from 10.11.11.
+the fixture server once it upgrades from 10.11.11.
 
 ## Library endpoints
 
@@ -220,7 +221,7 @@ matching, including the older bibliographic ISO aliases.
 **`Shows/NextUp` is a rail, not a cursor.** It returns the episode *in
 progress* when there is one: `enableResumable` defaults to `true` (checked
 against the server's own `/api-docs/openapi.json` on 10.11.11 — the build
-both fixture and the public demo run). Home explicitly sets
+both the fixture server and the public demo run). Home explicitly sets
 `EnableResumable=false` and `EnableRewatching=false`: started episodes belong
 in Continue Watching. Jellyfin omits that series rather than skipping ahead
 to a later episode. Lagoon also defensively removes records reporting any
@@ -292,8 +293,8 @@ code knows whether a result came from OpenSubtitles or another plugin.
 permission, and it is off by default for every non-administrator** (Jellyfin
 10.9+). Accounts without it are shown administrator guidance instead of a
 search (HEL-146) — see `docs/playback.md`, "One subtitle source". Without it
-all four answer `403` with an HTML body — verified on both
-fixture 10.11.11 and the public demo server, whose accounts are both
+all four answer `403` with an HTML body — verified on both the fixture
+server on 10.11.11 and the public demo server, whose accounts are both
 non-admin with the flag unset. On a shared server that is the common case, so
 Lagoon reads `User.Policy.EnableSubtitleManagement` (free in the
 `AuthenticateByName` response, lazily from `Users/Me` for a restored token)
@@ -334,7 +335,7 @@ The normal captured-session check still precedes response handling, so an old
 account's late 401 cannot expire the account now in use. Oversized and invalid
 files have explicit errors and do not invoke the compatibility download.
 The same file-size limit applies to sidecars and to provider files fetched
-through Jellyfin; see [download hardening validation](archive/download-hardening-validation.md).
+through Jellyfin.
 
 Jellyfin 10.11's `DownloadRemoteSubtitles` controller catches its internal
 provider/save exception and still returns HTTP 204, so a successful status is
@@ -351,8 +352,8 @@ hearing-impaired metadata is preserved.
 
 Group playback. The server owns a group's state and tells every member
 *when*, on its own clock, to unpause, pause, seek or stop; a client that
-acts on a command immediately is already wrong. Probed against fixture
-12.0.0 on 2026-09-14.
+acts on a command immediately is already wrong. Probed against the fixture
+server on 12.0.0 on 2026-09-14.
 
 | Purpose | Endpoint | Notes |
 |---|---|---|
@@ -500,9 +501,8 @@ The fixture requires proxy paths for API requests and verifies both Jellyfin
 authentication and Seerr discovery. iOS exercises typed setup and invalid-input
 recovery; tvOS exercises restored sign-in and remote focus, then a synthetic
 account with a restored Seerr pairing. HTTPS disclosure is checked using a
-restored URL; that UI check is not a TLS-handshake test. See the
-[server address validation record](archive/server-address-validation.md) for evidence
-and remaining physical-network acceptance.
+restored URL; that UI check is not a TLS-handshake test. HEL-143 records the
+evidence and the remaining physical-network acceptance.
 
 ## Home Screen Sections plugin (HEL-47)
 
