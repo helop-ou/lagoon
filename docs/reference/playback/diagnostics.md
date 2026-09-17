@@ -185,8 +185,14 @@ footer states the same number and must change with it.
 ## Sentry setup
 
 - Organisation `helop-ou`, project `lagoon`, EU region (fixed at creation).
-  The DSN in `DiagnosticsConfiguration` is a client key; it can submit to
-  that project and nothing else.
+  The DSN is a client key; it can submit to that project and nothing else.
+  It is injected at build time, not tracked in source (HEL-187): the
+  `LAGOON_SENTRY_DSN` build setting lands in the app's Info.plist and
+  `DiagnosticsConfiguration` reads it back, with
+  `-diagnostics.sentryDSN` still overriding it for a capture run. A build
+  with no DSN — every ordinary checkout — configures no sink and reports
+  nothing, which is also what keeps a contributor's Release build off our
+  quota. `scripts/upload-testflight.sh` requires the variable.
 - Project → Settings → Security & Privacy: *Prevent Storing of IP Addresses*
   on. No data scrubbing rules are relied on; the app never sends the fields
   they would scrub. The app sends no `user` or `request` object. Until
