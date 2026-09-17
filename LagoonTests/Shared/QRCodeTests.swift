@@ -1,7 +1,10 @@
 import CoreGraphics
+import ImageIO
 import CoreImage
 import Foundation
+import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 @testable import Lagoon
 
 /// Reads a generated code back the way a camera would.
@@ -112,6 +115,33 @@ struct QRCodeTests {
 
     @Test func aCodeThatCouldNotBeGeneratedStillGetsAMargin() {
         #expect(QRCode.quietZone(side: Metrics.qrCodeSize, modulesAcross: 0) > 0)
+    }
+
+    /// The finished component, drawn the way the sheet draws it and read back
+    /// the way a camera would.
+    ///
+    /// The other tests approximate the centre mark with a filled square. This
+    /// one renders the real view — white plate, dark tile, jellyfish, quiet
+    /// zone and all — so the thing under test is the thing on screen. It also
+    /// writes the image into the simulator's temporary directory and prints
+    /// the path, which is how the mark's proportions get looked at without
+    /// waiting for a television.
+    @Test func theRenderedComponentStillDecodes() throws {
+        let renderer = ImageRenderer(content: QRCodeView(text: address))
+        renderer.scale = 1
+        let rendered = try #require(renderer.cgImage)
+
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("lagoon-qr.png")
+        if let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.png.identifier as CFString, 1, nil
+        ) {
+            CGImageDestinationAddImage(destination, rendered, nil)
+            CGImageDestinationFinalize(destination)
+            print("LAGOON_QR_SNAPSHOT \(url.path)")
+        }
+
+        #expect(decoded(rendered) == [address])
     }
 
     @Test func aCodeSurvivesTheLongestAddressLagoonWouldEverShow() throws {

@@ -279,10 +279,14 @@ unfocused states.
   distance a sofa actually is. The quiet zone is four modules, measured from
   the generated code rather than fixed, because a short address makes fewer
   and wider modules than a long one. Branding is the centre mark only, which
-  correction level H is there to absorb: Lagoon's jellyfish on a
-  `lagoonNavy` tile, at `QRCode.markShare` of the width. `QRCodeTests` decodes
-  a covered code rather than trusting that budget, so growing the mark fails a
-  test instead of quietly producing a code that only scans from two feet away.
+  correction level H is there to absorb: Lagoon's jellyfish on a `lagoonNavy`
+  tile, on a white plate covering `QRCode.markShare` of the width. The white
+  gap between tile and modules is the part that matters. Without it the tile's
+  corners sit against live modules and the mark reads as a sticker dropped on
+  the code rather than a hole punched in it, which is how the first version
+  shipped and why it had to be redone. `QRCodeTests` renders the real view and
+  decodes it, so growing the mark fails a test instead of quietly producing a
+  code that only scans from two feet away.
   The address stays on screen in type beside it — the code is the quick way
   out, not the only one — and the code itself is hidden from VoiceOver so the
   address is not read twice.
