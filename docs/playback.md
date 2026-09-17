@@ -42,8 +42,8 @@ Media credentials use the authorization header rather than token-bearing URLs.
 Keep endpoint/cross-origin rules in the shared authorization and transport
 helpers. Cache incompatibility changes the byte-source strategy, not the
 security policy. Failures remain errors; only a successfully read resource's
-end is EOF. See [transport details](reference/playback/transport.md#network-transport),
-[TLS validation](archive/hel-142-native-tls-validation.md), and the
+end is EOF. HEL-142 records the TLS validation; see also
+[transport details](reference/playback/transport.md#network-transport) and the
 [libavformat build record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
 
 ## Stream resolution
@@ -358,7 +358,8 @@ while a group has this device as a member and nothing of its is on screen.
 
 **The socket must be open before the join.** The server announces a join over
 the socket at the instant it happens; joining while the handshake was still in
-flight lost both the `GroupJoined` and the `PlayQueue` update on fixture 12.0.0,
+flight lost both the `GroupJoined` and the `PlayQueue` update on the fixture
+server running Jellyfin 12.0.0,
 and the member then sat in a group it never heard another word from. The store
 waits for the socket to carry its first message — the server's own
 `ForceKeepAlive` — before asking to join. A handshake timeout or failed
@@ -490,8 +491,8 @@ controls and the Sentry setup are in the [diagnostics reference](reference/playb
 Build both platforms and run the relevant pure logic tests. Use
 `TouchPlayerUITests` for iPhone/iPad touch and auto-hide, and
 `PlayerRegressionUITests` for remote input, reporting, handoff, and teardown.
-The [touch validation record](archive/hel-153-touch-validation.md) records the
-passing simulator journeys and remaining physical checks. What a journey may
+HEL-153 records the passing simulator journeys and the remaining physical
+checks. What a journey may
 assume about the server and the simulator's state, and the resolver flags
 that open a title by property, are in the
 [regression lane reference](reference/regression-lane.md).
