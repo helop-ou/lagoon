@@ -1,7 +1,8 @@
 # Source migration and diagnostics sampling
 
-Implementation plan for HEL-155 and the diagnostics opt-out follow-up, started
-September 11, 2026. The target conventions remain in [Coding standards](../standards.md).
+Implementation plan for the source migration and the diagnostics opt-out
+follow-up, started September 11, 2026. The target conventions remain in
+[Coding standards](../standards.md).
 
 ## Work sequence
 
@@ -63,10 +64,9 @@ behavior changes must be distinguishable in review.
   touch journeys, and Settings binding/persistence/accessibility journeys.
   Settings screenshots were inspected on tvOS, iPhone and iPad. Fixture skips
   and corrected test-driver failures are recorded with their evidence.
-- Apple TV acceptance on 2026-09-11: the same-scene frame-loss comparison
-  (three interleaved Release runs per arm), dismissal/replay and episode
-  handoff showed no change against the pre-migration build. PiP, the
-  suspended-startup dismissal and the sampler on/off cost remain open; the
-  UI-test runner cannot launch the app on that device, so the lifecycle checks
-  ran through the app's Debug hooks over `devicectl`. HEL-155 records the
-  validation.
+- Apple TV acceptance: the same-scene frame-loss comparison used three
+  interleaved Release runs per arm. Dismissal/replay and episode handoff
+  showed no change against the pre-migration build. PiP, the
+  suspended-startup dismissal and the sampler on/off cost remain open. The
+  UI-test runner cannot launch the app on that device, so the lifecycle
+  checks ran through the app's Debug hooks over `devicectl`.
