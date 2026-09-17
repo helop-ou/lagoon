@@ -225,6 +225,14 @@ struct SearchView: View {
             if UserDefaults.standard.bool(forKey: "debug.navigationRegression") {
                 await librarySearch.loadNavigationRegressionResults(client: session.client)
             }
+            // `-debug.searchRegressionQuery <term>`: the empty-results lane
+            // needs a term nothing matches, and XCUITest can only reach the
+            // tvOS keyboard one glyph at a time. Seeding the field runs the
+            // real search, debounce and all — only the typing is skipped.
+            if let seeded = UserDefaults.standard.string(forKey: "debug.searchRegressionQuery"),
+               !seeded.isEmpty, searchText.isEmpty {
+                searchText = seeded
+            }
         }
         #endif
         .accessibilityIdentifier("search.view")
@@ -291,11 +299,13 @@ struct SearchView: View {
             ) {
                 librarySearch.search(searchText, client: session.client)
             }
-            if !librarySearch.isSearching, librarySearch.errorMessage == nil, !normalizedSearch.isEmpty {
-                NavigationLink("See All Library Results", value: ContentNavigationRoute.search(normalizedSearch))
-                    .buttonStyle(.glass)
-                    .padding(.horizontal, Metrics.screenGutter)
-            }
+            // No "See All" beside an empty section (HEL-182). The rail is a
+            // preview of the same query the full page runs, so when the
+            // preview is empty the page behind the link is empty too: it
+            // repeats the message, and on tvOS a page of nothing but text
+            // has no focus to hold, so Menu quits the app instead of going
+            // back. The status block stays unfocusable, which is what lets
+            // Down from the field carry straight on to the Seerr section.
         }
     }
 
@@ -315,6 +325,7 @@ struct SearchView: View {
                         Text(seerr.isConfigured ? "Sign In to Seerr" : "Set Up Seerr")
                     }
                     .buttonStyle(.glass)
+                    .accessibilityIdentifier("search.seerr.setup")
                 }
             }
             .padding(.horizontal, Metrics.screenGutter)
@@ -330,11 +341,9 @@ struct SearchView: View {
             ) {
                 searchRetryID += 1
             }
-            if !isSearching, searchError == nil, !normalizedSearch.isEmpty {
-                NavigationLink("See All Seerr Results", value: SeerrNavigationRoute.search(normalizedSearch))
-                    .buttonStyle(.glass)
-                    .padding(.horizontal, Metrics.screenGutter)
-            }
+            // The library section's twin, dropped for the same reason
+            // (HEL-182): this rail is a preview of page one, so an empty
+            // preview opens a page that is empty as well.
         }
     }
 
