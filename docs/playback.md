@@ -1,9 +1,10 @@
 # Playback
 
 All media plays through `PlayerEngine` and Lagoon's sample-buffer engine.
-The UI uses that protocol; do not add an alternative AVPlayer or mpv path.
-Read this guide before changing player behavior, then follow the focused links
-into the [engineering notes](reference/playback/README.md) for implementation details.
+The UI uses that protocol. Do not add an alternative AVPlayer or mpv path.
+Read this guide before changing player behavior, then follow the focused
+links into the [engineering notes](reference/playback/README.md) for
+implementation details.
 
 ## Ownership and pipeline
 
@@ -21,111 +22,113 @@ PlaybackController
        └─ audio/video queues → AVSampleBuffer renderers and synchronizer
 ```
 
-Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift` owns
-the session; `Views/VideoPlayerView.swift` retains it with `@State`. Surfaces,
-controls, overlays and PiP presentation live in `Views/`, the demux/decode/render
-pipeline in `Engine/`, byte sources and cache in `Transport/`, subtitle
-processing in `Subtitles/`, and sampling/benchmarks in `Diagnostics/`.
+Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift`
+owns the session. `Views/VideoPlayerView.swift` retains it with `@State`.
+Surfaces, controls, overlays and PiP presentation live in `Views/`. The
+demux/decode/render pipeline lives in `Engine/`. Byte sources and cache live
+in `Transport/`. Subtitle processing lives in `Subtitles/`. Sampling and
+benchmarks live in `Diagnostics/`.
 
 ## Network transport
 
 Every HTTP open uses `FFmpegNetworkTransport` over URLSession, including HLS
-playlists and segments. Repo-built libavformat has its network stack disabled.
-Do not restore native FFmpeg HTTP/TLS as a cache fallback. System certificate
-trust, account-scoped authorization, redirect rules, cancellation, and the
-size-capped fetches `BoundedDownload` applies to subtitles and artwork must
-apply to every streamed media path. That bound is a transport safeguard, not
-the offline Downloads feature: see [Downloads](#downloads-hel-166) below for
-the feature that keeps a whole file on disk.
+playlists and segments. Repo-built libavformat has its network stack
+disabled. Do not restore native FFmpeg HTTP/TLS as a cache fallback. System
+certificate trust, account-scoped authorization, redirect rules,
+cancellation, and the size-capped fetches `BoundedDownload` applies to
+subtitles and artwork must apply to every streamed media path. That bound is
+a transport safeguard, not the offline Downloads feature: see
+[Downloads](#downloads) below for the feature that keeps a whole file on
+disk.
 
-Media credentials use the authorization header rather than token-bearing URLs.
-Keep endpoint/cross-origin rules in the shared authorization and transport
-helpers. Cache incompatibility changes the byte-source strategy, not the
-security policy. Failures remain errors; only a successfully read resource's
-end is EOF. HEL-142 records the TLS validation; see also
-[transport details](reference/playback/transport.md#network-transport) and the
-[libavformat build record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
+Media credentials use the authorization header rather than token-bearing
+URLs. Keep endpoint/cross-origin rules in the shared authorization and
+transport helpers. Cache incompatibility changes the byte-source strategy,
+not the security policy. Failures remain errors. Only a successfully read
+resource's end is EOF. TLS validation is recorded in
+[transport details](reference/playback/transport.md#network-transport) and
+the [libavformat build record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
 
 ## Stream resolution
 
 `DeviceProfile` advertises the current device's supported codec envelope.
 Jellyfin negotiation and the failure-driven delivery ladder choose direct
-play, remux, then video transcode; only the re-encode rung has the 1080p ceiling.
-Do not confuse remux selection with `SupportsDirectStream`. Preserve the
-failure cause and resume position when moving down a rung.
+play, remux, then video transcode. Only the re-encode rung has the 1080p
+ceiling. Do not confuse remux selection with `SupportsDirectStream`. Preserve
+the failure cause and resume position when moving down a rung.
 
 Descend only on a verdict about the samples. `.undecodable` skips the remux
-rung and is one-way — it costs a reload, the embedded subtitle tracks, and
-server CPU per viewer — so a failure that says nothing about the bitstream
-must never reach it. A lost VideoToolbox session is the case that keeps being
-mistaken for one: `kVTInvalidSessionErr` and its siblings
+rung and is one-way: it costs a reload, the embedded subtitle tracks, and
+server CPU per viewer. A failure that says nothing about the bitstream must
+never reach it. A lost VideoToolbox session is the case that keeps getting
+mistaken for an undecodable stream. `kVTInvalidSessionErr` and its siblings
 (`VideoToolboxDecoder.isSessionFault`) mean the decoder was taken away, not
-that the stream is undecodable, and the answer is a new session
+that the stream is undecodable. The answer is a new session
 (`PlaybackDecodeSessionPolicy`), bounded at one rebuild per playback
-generation as HEL-151 bounds the renderer's. While video output is suspended
-there is nothing to rebuild for and the fault is ignored outright, because
-backgrounding leaves the old session alive on purpose and the resume seek
-makes a fresh one (HEL-176). Both guards belong on the decoder path *and* the
-renderer path; HEL-181 was the decoder path having neither.
+generation, the same bound the renderer keeps on its own rebuilds. While
+video output is suspended there is nothing to rebuild for, so the fault is
+ignored outright: backgrounding leaves the old session alive on purpose, and
+the resume seek makes a fresh one. Both guards belong on the decoder path and
+the renderer path. The decoder path once had neither.
 
-Progressive H.264 uses the compressed sample-buffer path; interlaced H.264 is
+Progressive H.264 uses the compressed sample-buffer path. Interlaced H.264 is
 software-decoded and deinterlaced, on the stream's probed field order, never
-the server's flag (HEL-170). HEVC is decoded ahead through VideoToolbox. AV1
-uses hardware where available and the repo-built dav1d otherwise. Other
-supported legacy/software codecs use bounded software decode.
-Codec limits and HDR routing belong in the existing profile and decode policy,
-not duplicated checks in views. iOS metered-path limits affect both static and
-streaming bitrate offers and can be overridden in Playback settings.
+the server's flag. HEVC is decoded ahead through VideoToolbox. AV1 uses
+hardware where available and the repo-built dav1d otherwise. Other supported
+legacy/software codecs use bounded software decode. Codec limits and HDR
+routing belong in the existing profile and decode policy, not duplicated
+checks in views. iOS metered-path limits affect both static and streaming
+bitrate offers and can be overridden in Playback settings.
 
-E-AC-3 JOC keeps its compressed Atmos path. TrueHD decodes to lossless LPCM;
-its Atmos objects are not preserved. Subtitles come from embedded streams or
-Jellyfin's permission-gated subtitle routes; there is no direct provider login.
-Disc images use the app's bounded byte source and UDF handling.
+E-AC-3 JOC keeps its compressed Atmos path. TrueHD decodes to lossless LPCM.
+Its Atmos objects are not preserved. Subtitles come from embedded streams or
+Jellyfin's permission-gated subtitle routes. There is no direct provider
+login. Disc images use the app's bounded byte source and UDF handling.
 
 See [negotiation and delivery](reference/playback/stream-resolution.md#stream-resolution),
 [disc images](reference/playback/stream-resolution.md#disc-images-hel-133), and
 [decode details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
 
-### Audio track selection (HEL-184)
+### Audio track selection
 
 `TrackSelectionPolicy` chooses automatically: the viewer's audio mode, then
 their preferred languages, then Jellyfin's default. Some releases defeat all
-three. The 100's season-one remux carries five audio streams with no language,
-no title and no default flag — four of them identical DTS 5.1 — and the first
-is Russian; `DefaultAudioStreamIndex` names that first stream because the
-server had nothing to go on either, so every mode lands on it.
+three. The 100's season-one remux carries five audio streams with no
+language, no title and no default flag. Four of them are identical DTS 5.1,
+and the first is Russian. `DefaultAudioStreamIndex` names that first stream,
+because the server had nothing to go on either, so every mode lands on it.
 
 Where metadata cannot decide, the viewer's correction does.
-`AudioTrackMemoryStore` holds one audio choice per series (per item for films)
-per account, written through to `UserDefaults`, so a correction survives
-closing the player and not merely an autoplay handoff.
+`AudioTrackMemoryStore` holds one audio choice per series, or per item for a
+film, per account. It writes through to `UserDefaults`, so a correction
+survives closing the player, not just an autoplay handoff.
 
 Record the choice when the viewer makes it, from the engine's
-`onTrackSelectionChanged`. Only `selectAudioTrack` fires that, and only the
-track panel and the system now-playing menu reach it — automatic selection
-takes `applyAudioSelection` instead — so everything stored is a deliberate
-act. Reading the selection back at exit instead looks equivalent and is not:
-by then the scope, the layout and the live engine can each already belong to
-the next episode, and a viewer who simply left a non-applying memory alone
-would have their whole show's correction erased. The write is identity-guarded
-to the current engine, and skipped when the engine's track count disagrees
-with the layout the server described, because a remux or transcode rung
-delivers one audio track where the source lists several and an ordinal from
-one means nothing in the other. Landing back on what automatic selection would
-have chosen *forgets* the override rather than storing it; keeping one would
-freeze the show against a later change of preferences.
+`onTrackSelectionChanged`. Only `selectAudioTrack` fires that event, and only
+the track panel and the system now-playing menu call it. Automatic selection
+calls `applyAudioSelection` instead, so everything stored is a deliberate
+act. Reading the selection back at exit instead looks equivalent, but is
+not: by then the scope, the layout and the live engine can each already
+belong to the next episode. A viewer who left a non-applying memory alone
+would have their whole show's correction erased. The write is
+identity-guarded to the current engine, and skipped when the engine's track
+count disagrees with the layout the server described. A remux or transcode
+rung delivers one audio track where the source lists several, so an ordinal
+from one means nothing in the other. Landing back on what automatic
+selection would have chosen *forgets* the override rather than storing it.
+Keeping one would freeze the show against a later change of preferences.
 
 `AudioTrackMemoryPolicy` applies it as a ladder: a description that names
 exactly one track, then the remembered position against a layout whose
 fingerprint is unchanged, then the first track of the right language.
-Ambiguity is failure rather than a coin flip, so position is what expresses a
-choice between tracks tagged identically as well as tracks tagged not at all —
-it never overrules a description that actually identifies something, and a
-release that gains proper tagging or an added commentary track retires it.
+Ambiguity is failure rather than a coin flip. Position is what expresses a
+choice between tracks tagged identically and tracks tagged not at all. It
+never overrules a description that identifies something specific. A release
+that gains proper tagging or an added commentary track retires it.
 
 Match on `MediaStream.title`, never `displayTitle`. Jellyfin synthesizes the
 latter from codec and channel layout, so all four of those DTS tracks display
-as `DTS-HD MA - 5.1`, and matching on it silently returns the first one rather
+as `DTS-HD MA - 5.1`. Matching on it silently returns the first one rather
 than the track the viewer picked. The engine appends the position to track
 names that collide, because otherwise the rows cannot be told apart in the
 panel or recognised again afterwards.
@@ -133,11 +136,13 @@ panel or recognised again afterwards.
 ## Lifecycle and memory
 
 - The controller owns the engine. SwiftUI player views hold it through
-  `@PlayerEngineRef`, and view builders/gesture closures must not capture an
-  engine strongly. SwiftUI can retain old view values after an episode handoff.
-- Stop is two-phase: cancel clocks/work and interrupt FFmpeg immediately;
-  serialize renderer stop/flush and release on the pump queue, and decoder
-  destruction on the demux queue. Network reporting never blocks dismissal.
+  `@PlayerEngineRef`. View builders and gesture closures must not capture an
+  engine strongly, because SwiftUI can retain old view values after an
+  episode handoff.
+- Stop is two-phase: cancel clocks and work, and interrupt FFmpeg,
+  immediately. Serialize renderer stop, flush and release on the pump queue.
+  Serialize decoder destruction on the demux queue. Network reporting never
+  blocks dismissal.
 - Replacement waits for the outgoing engine's demux loop and renderers to
   retire, with a bounded timeout. Never revive a stopped engine or overlap two
   pipelines because teardown timed out.
@@ -150,120 +155,122 @@ panel or recognised again afterwards.
 - Arm `requestMediaDataWhenReady` only while a queue has data to offer.
   Returning empty-handed in a still-armed callback creates a busy loop.
 - Compressed packets retain their FFmpeg backing buffer. Decoded LPCM is
-  copied into CoreMedia-owned storage at emit; the previous zero-copy LPCM
+  copied into CoreMedia-owned storage at emit. The previous zero-copy LPCM
   handoff leaked a whole decoded audio stream.
 - Preserve sample-exact audio timelines, seek generations, decoder callback
   ordering, and bounded stall recovery. Do not replace queue ownership with
   unstructured tasks as part of a file reorganization.
-- A seek into a container with no index (a plain MPEG-TS file, such as a
-  transcode download) must still start video on a keyframe: the demuxer
-  peeks the landing packet and re-seeks to the last keyframe before the
-  target, and drops non-start packets until one arrives (HEL-166).
+- A seek into a container with no index must still start video on a
+  keyframe. A plain MPEG-TS file, such as a transcode download, has no
+  index. The demuxer peeks the landing packet, re-seeks to the last keyframe
+  before the target, and drops non-start packets until one arrives.
   `TransportStreamSeekTests` pins it against the fixture named by
   `LAGOON_TS_SEEK_FIXTURE_URL`, injected into the xctestrun.
 
 The repo builds dav1d with arm64 assembly. After changing its artifact, run
 `scripts/build-dav1d.sh --verify-only Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework`.
-Software 10-bit conversion uses the asynchronous Metal path; synchronous
+Software 10-bit conversion uses the asynchronous Metal path. Synchronous
 conversion changes its performance characteristics. Native dependency
-changes also need matching acknowledgements, license text, and build evidence.
+changes also need matching acknowledgements, license text, and build
+evidence.
 
-### Downloads (HEL-166)
+### Downloads
 
 Before negotiating, and before consulting a prepared successor, the
-controller asks `DownloadStore` whether the item is a finished download. When
-one exists, playback never touches the network to start: negotiation,
+controller asks `DownloadStore` whether the item is a finished download.
+When one exists, playback never touches the network to start: negotiation,
 `playbackInfo` and `streamURL` are skipped outright, the method is direct
-play, and the stream is the file on disk. This keeps the existing rule that a
-local file needs no cache in front of it; a downloaded title plays with no
+play, and the stream is the file on disk. This keeps the existing rule that
+a local file needs no cache in front of it. A downloaded title plays with no
 `PlaybackCacheCoordinator` scope at all, the same as any other file URL.
 
-Track metadata depends on what was actually downloaded. An original-quality
-download is the stored file, so its source's stream list still describes it
-and drives audio/subtitle selection exactly as a negotiated stream would. A
-high/standard download is a transcode the server built for offline use, a
-different container carrying one audio track and no external subtitles, so
-its source's stream list does not describe the file on disk; the controller
-hands the engine empty track metadata rather than stale descriptions, and
-both the engine's own track construction and the ordinal selection policies
+Track metadata depends on what was downloaded. An original-quality download
+is the stored file, so its source's stream list still describes it and
+drives audio and subtitle selection exactly as a negotiated stream would. A
+high/standard download is a transcode the server built for offline use: a
+different container carrying one audio track and no external subtitles. Its
+source's stream list does not describe the file on disk, so the controller
+hands the engine empty track metadata rather than stale descriptions. Both
+the engine's own track construction and the ordinal selection policies
 already degrade to what the file demuxes to when given nothing. The picker
-panel reflects whatever the engine actually finds; only the language/title
-labels are lost for a transcode, not track selection itself.
+panel reflects whatever the engine finds. Only the language and title labels
+are lost for a transcode, not track selection itself.
 
-A downloaded title also has no chapters, trickplay, or skip segments: the
+A downloaded title also has no chapters, trickplay, or skip segments. The
 garnish requests that ride alongside negotiation for a streamed title are
 skipped rather than awaited, since asking an unreachable server for them
 would burn the client's full request timeout before the engine ever starts.
 Losing chapters, trickplay, and skip segments offline is an accepted gap for
 this feature's first pass. The start report follows the same reasoning: it
-is fired without being awaited for a downloaded title, so a server the
-device cannot currently reach never delays the progress loop, HUD, or
-next-up warm-up.
+fires without being awaited for a downloaded title, so a server the device
+cannot currently reach never delays the progress loop, HUD, or next-up
+warm-up.
 
 Position handling runs in both directions. Starting a downloaded title
 prefers its own locally recorded resume point over the server's last known
-position, since there was no negotiation to fetch a fresh one; choosing to
-start from beginning still starts at 0 for a downloaded title exactly as it
-does for a streamed one. Stopping one
-records the position back through `DownloadStore.recordPosition`, cleared
-once the position lands in the last 2% of the runtime, so a downloaded title
-resumes correctly the next time it plays with no server involved. Whether or
-not an item is downloaded, a stop report the server refuses or cannot reach
-is queued as a `PendingPlaybackReport` and flushed on reconnect, so a
-session's true stopping point is never silently lost to a bad connection.
+position, since there was no negotiation to fetch a fresh one. Choosing to
+start from beginning still starts at 0 for a downloaded title, exactly as it
+does for a streamed one. Stopping one records the position back through
+`DownloadStore.recordPosition`, cleared once the position lands in the last
+2% of the runtime, so a downloaded title resumes correctly the next time it
+plays with no server involved. Whether or not an item is downloaded, a stop
+report the server refuses or cannot reach is queued as a
+`PendingPlaybackReport` and flushed on reconnect, so a session's true
+stopping point is never silently lost to a bad connection.
 
-### Group transport hooks (HEL-172)
+### Group transport hooks
 
 Jellyfin SyncPlay makes the server the transport authority, and three engine
 hooks exist for it. `clockPosition` is the media clock as the synchronizer
 reports it, never the optimistic `timePosition` a seek moves before anything
-is demuxed; while the clock is stopped for a load or a seek it answers with
-the position being headed for, which is what a Buffering report carries.
+is demuxed. While the clock is stopped for a load or a seek, it answers with
+the position being headed for. That is what a Buffering report carries.
 `play(atHostTime:)` starts so that the current position is presented at one
-named instant on `CMClockGetHostTimeClock()` — a group start is an instant
-every member agreed on after time sync, not "now, roughly" — and a request
-that arrives while the engine is still buffering is handed to `beginPlayback`
-in place of its own near-future anchor. `setCorrectionRate(_:)` nudges a
-member that has drifted without touching `rate`, which is the viewer's own
-choice and what the speed row and Now Playing publish;
-`PlaybackRatePolicy.effectiveRate` folds the two together and is what every
-media-time cushion, watermark and synchronizer rate is computed from.
-`onSeekReady` fires from `beginPlayback` on every open *and* every seek — the
-signal Ready is reported on, unlike the one-shot `onPlaybackStarted`.
+named instant on `CMClockGetHostTimeClock()`. A group start is an instant
+every member agreed on after time sync, not "now, roughly." A request that
+arrives while the engine is still buffering is handed to `beginPlayback` in
+place of its own near-future anchor. `setCorrectionRate(_:)` nudges a member
+that has drifted without touching `rate`. `rate` is the viewer's own choice,
+and what the speed row and Now Playing publish. `PlaybackRatePolicy.effectiveRate`
+folds the two together, and every media-time cushion, watermark and
+synchronizer rate is computed from it. `onSeekReady` fires from
+`beginPlayback` on every open and every seek. It is the signal Ready is
+reported on, unlike the one-shot `onPlaybackStarted`.
 
 The controller is the boundary: a group driver never holds the engine. It
-starts playback through `start(startPosition:startPaused:)` (the server's
+starts playback through `start(startPosition:startPaused:)`. The server's
 position outranks every resume rule, and a member can sit primed and paused
-until the group starts), drives `playGroup(atHostTime:)`, `pauseGroup()`,
-`seekGroup(to:)` and `setCorrectionRate(_:)`, reads `clockPosition` and
-`isPrimedAndPaused`, and hears about readiness and dismissal through
-`onEngineReady` and `onClosed`. Keeping the group transport separate from the
-viewer-facing controls is deliberate: the driver will later intercept the
-viewer's Play and Pause and turn them into group requests, and needs a way
-back down to the engine that does not recurse into itself. Because the wiring
-lives in `start`, an episode handoff or a delivery fallback carries it onto
-the successor engine for free.
+until the group starts. The driver also drives `playGroup(atHostTime:)`,
+`pauseGroup()`, `seekGroup(to:)` and `setCorrectionRate(_:)`, reads
+`clockPosition` and `isPrimedAndPaused`, and hears about readiness and
+dismissal through `onEngineReady` and `onClosed`. Keeping the group transport
+separate from the viewer-facing controls is deliberate: the driver will
+later intercept the viewer's Play and Pause and turn them into group
+requests, and needs a way back down to the engine that does not recurse into
+itself. Because the wiring lives in `start`, an episode handoff or a
+delivery fallback carries it onto the successor engine for free.
 
-### Watch Together (SyncPlay, HEL-172)
+### Watch Together (SyncPlay)
 
 A group makes the server the transport authority. `SyncPlayStore`
-(`Lagoon/Features/SyncPlay/`) owns membership — the socket, the clock, the
-group and its queue — and `GroupPlaybackDriver` owns everything that touches
-playback. The driver holds the controller weakly and the engine not at all;
-it drives the group transport above and reads `clockPosition`.
+(`Lagoon/Features/SyncPlay/`) owns membership: the socket, the clock, the
+group and its queue. `GroupPlaybackDriver` owns everything that touches
+playback. The driver holds the controller weakly and the engine not at all.
+It drives the group transport described above and reads `clockPosition`.
 
 **Opening.** A `PlayQueue` update whose playing item changed resolves to a
 `MediaItem` and reaches `MainTabView` as `pendingPlayRequest`, which presents
-the player with `startPosition` and `startPaused: true`. The member therefore
-primes at the group's position and waits there. `SyncPlay/Buffering` goes out
-the moment the queue update lands — before the item is even fetched, so the
-group waits from then rather than from whenever this device finishes
-negotiating a stream — and `SyncPlay/Ready` when `onEngineReady` fires. Both
-carry `When` from `ServerClock`, `PositionTicks` from `clockPosition`, and the
-queue entry's `PlaylistItemId`; a Ready naming the wrong entry makes the
-server answer with a `SetCurrentItem` queue update. Readiness is a *state*:
-the driver reports only on a change, so the pair a seek produces collapses to
-one Buffering and one Ready.
+the player with `startPosition` and `startPaused: true`. The member
+therefore primes at the group's position and waits there.
+`SyncPlay/Buffering` goes out the moment the queue update lands, before the
+item is even fetched. That way the group waits from then, not from whenever
+this device finishes negotiating a stream. `SyncPlay/Ready` goes out when
+`onEngineReady` fires. Both messages carry `When` from `ServerClock`,
+`PositionTicks` from `clockPosition`, and the queue entry's
+`PlaylistItemId`. A Ready naming the wrong entry makes the server answer
+with a `SetCurrentItem` queue update. Readiness is a *state*: the driver
+reports only on a change, so the pair a seek produces collapses to one
+Buffering and one Ready.
 
 **A report says where the engine is, not where it was.** `clockPosition`
 answers from the synchronizer, and the synchronizer sits at the anchor being
