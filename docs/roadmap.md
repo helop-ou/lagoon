@@ -11,8 +11,7 @@ overview in the [repository README](../README.md).
 1. **Finish touch-player acceptance (HEL-153).** Centered controls, clear
    glass, double-tap seeking, scrubbing, landscape handling, and repeated
    auto-hide/reveal pass the iPhone/iPad simulator journeys. Physical PiP,
-   VoiceOver, thumbnails, and Skip/Up Next touch journeys remain. See the
-   [validation record](archive/hel-153-touch-validation.md).
+   VoiceOver, thumbnails, and Skip/Up Next touch journeys remain.
 2. **Complete physical-device acceptance (HEL-144, HEL-41).** Exercise
    iPhone/iPad touch, rotation, keyboards, large text, VoiceOver, interruptions,
    lock screen, AirPlay, and PiP captions. Watch a full captioned film on Apple
@@ -50,10 +49,10 @@ not new feature requests or a live Jira status report:
 - Remote touch reveal and finish-time display (HEL-134), browse refresh
   (HEL-135), recent searches (HEL-129), and post-playback resume state (HEL-132).
 - Account/privacy cleanup, local-network permission recovery, and native
-  transport device checks (HEL-141/142/143); evidence is in the
-  [archive index](archive/README.md).
+  transport device checks (HEL-141/142/143); each ticket records its evidence.
 - Watch Together (HEL-172) on hardware. Simulator-verified end to end against
-  fixture 12.0.0 with a scripted second member; what is owed is two real
+  the fixture server on Jellyfin 12.0.0 with a scripted second member; what is
+  owed is two real
   devices in one group — an Apple TV and an iPhone — for the start instant,
   drift correction over a full film, a phone that locks mid-group, and the
   look of the Together tab and its toast on a television.
