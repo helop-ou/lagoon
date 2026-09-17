@@ -36,7 +36,7 @@ lowercase `api_key`, which Jellyfin 12 disables by default;
 sends the header instead — see
 [network transport](transport.md#network-transport).
 
-### What this device is offered (HEL-102)
+### What this device is offered
 
 `DeviceProfile.everything` is the envelope the engine can play;
 `DeviceProfile.lagoon` is that envelope minus whatever the running hardware
@@ -62,10 +62,11 @@ wholesale would strip the profile to nothing.
 Removing HEVC touches three places, and missing any one undoes the other two:
 the direct-play codec list, the obvious one; the `hevc` codec profile, or the
 server sees conditions for a codec it is not being offered; and the
-**transcoding** profile, which is the one that bites. Left listing `hevc,h264`
-it lets the server answer a fallback request with an HEVC rendition — the exact
-format the device just said it cannot decode, which is how a simulator run of
-the delivery ladder failed every rung with -12906.
+**transcoding** profile, which is the one that bites. Left listing `hevc,h264`,
+the transcoding profile lets the server answer a fallback request with an
+HEVC rendition — exactly the format the device just said it cannot decode.
+That is how a simulator run of the delivery ladder failed every rung with
+-12906.
 
 H.264 is also capped at 1080p in the reduced profile. Without that cap the
 subtraction makes things worse: a 4K HEVC film stops direct playing and the
@@ -82,7 +83,7 @@ load-bearing; it shows today on the simulator, which negotiates H.264 on its
 own. Its real payoff is AV1: A17/M3-class devices take the compressed hardware
 path while older ones stay inside the same honest envelope through software.
 
-### What a metered path is offered (HEL-108)
+### What a metered path is offered
 
 `DeviceProfile` advertised 120 Mbps on every device and every network path, so
 an 89 Mbps remux was offered as **direct play over cellular** — unwatchable and
@@ -102,10 +103,11 @@ Four things are deliberate:
 - **`maxStaticBitrate` comes down with `maxStreamingBitrate`.** The static
   ceiling is the one the server checks before offering the original file, so
   capping only the streaming figure would let the remux direct-play anyway.
-- **A resolution ceiling rides along**, which measurement argued for and the
-  ticket did not ask for: capping bitrate alone leaves `MaxWidth` absent, so
-  the server answers a 4K source with a 4K re-encode at 3 Mbps — minutes of
-  server CPU for a picture nobody wants on a phone that cannot show it.
+- **A resolution ceiling rides along**, which measurement argued for but
+  was not originally requested: capping bitrate alone leaves `MaxWidth`
+  absent, so the server answers a 4K source with a 4K re-encode at 3 Mbps —
+  minutes of server CPU for a picture nobody wants on a phone that cannot
+  show it.
 - **The viewer can override it** (Settings → Playback → Cellular). Apple
   reports that a path is *expensive*, never that it is *slow*, and a fast
   tethered 5G connection is indistinguishable from a throttled hotspot from
@@ -123,7 +125,7 @@ rather than by skipping, because two transforms now ask for one and no longer
 ask for the same number: the fallback bound is 1080p, the metered cap 720p.
 Whichever applies second, the smaller ceiling survives.
 
-### When the container describes no bitstream (HEL-131)
+### When the container describes no bitstream
 
 Matroska and MP4 are supposed to carry HEVC's VPS/SPS/PPS in the
 `CodecPrivate`/`hvcC` record, and `SampleBufferFactory.videoFormatDescription`
@@ -165,7 +167,7 @@ video packet and builds through
   images* below, where MPEG-TS hands over Annex-B in the field an `hvcC`
   arrives in.
 
-### When playback fails: the delivery ladder (HEL-100)
+### When playback fails: the delivery ladder
 
 Negotiation happens once, before the first frame, so a direct play the engine
 cannot actually handle used to end the film: the error overlay's only control
@@ -217,9 +219,9 @@ The retry reuses the episode-handoff teardown (`preservingPlayerSurface: true`)
 rather than a full one: the viewer keeps the last frame instead of a black
 screen while the next rung negotiates, and it is the path autoplay has
 hardened. It also sidesteps the retirement timeout that made every early
-fallback fail — which was the HEL-110 engine-revival bug, not, as first
-recorded here, a `removeRenderer` completion lost when SwiftUI destroyed the
-layer; a healthy engine dismissed with the surface torn down detaches perfectly.
+fallback fail — which was the engine-revival bug, not, as first recorded
+here, a `removeRenderer` completion lost when SwiftUI destroyed the layer;
+a healthy engine dismissed with the surface torn down detaches perfectly.
 
 Bounds worth knowing: the ladder belongs to one item and resets for the next;
 `next` only ever moves downward, so a stream that fails every way ends in the
@@ -230,14 +232,15 @@ engine mid-flight. `debug.regressionFailFirstDelivery` (`delivery` or
 only ever runs when something is already broken.
 
 **A fallback that succeeds used to erase its own explanation.**
-`failure.message` carries the detail that is the whole reason the ladder ran —
-the VideoToolbox status, the renderer error — but it only reaches `errorMessage`
-when the ladder runs *out* of rungs, so a descent that then played left a
-signpost as its only trace, readable through Instruments and therefore only on
-a pairable device. The playback HUD carries it (`Rung:` / `Fell n:` / `Why n:`),
-appearing only once a rung has been descended.
+`failure.message` carries the detail that is the whole reason the ladder ran
+— the VideoToolbox status, the renderer error. But it only reaches
+`errorMessage` when the ladder runs *out* of rungs, so a descent that then
+played left a signpost as its only trace. That trace is readable through
+Instruments, and therefore only on a pairable device. The playback HUD
+carries it (`Rung:` / `Fell n:` / `Why n:`), appearing only once a rung has
+been descended.
 
-#### A seek that lands in an open GOP (HEL-151)
+#### A seek that lands in an open GOP
 
 An H.264 High 1080p mkv direct-played for minutes and then fell to a transcode
 on the first **seek** — a scrub, an embedded subtitle switch (which re-seeks to
@@ -283,7 +286,7 @@ too: the A15 played the same seek clean before the fix and only the simulator
 refused the leading pictures, so the drop is what keeps the simulator lane
 honest on open-GOP encodes.
 
-#### A decode session the system took back (HEL-181)
+#### A decode session the system took back
 
 Three TestFlight reports on builds 99–100, on both an Apple TV and an iPhone,
 descended to transcode on a VideoToolbox status that was never about the
@@ -296,7 +299,7 @@ session that no longer exists.
 The renderer path had been hardened for exactly this twice, and the decoder
 path neither time. `recoverVideoRendererIfRequired` and
 `handleVideoRendererFailure` both bail while `videoOutputSuspended`;
-`failVideoDecode` had no such check. HEL-151's in-place retry above had exactly
+`failVideoDecode` had no such check. The in-place retry above had exactly
 one caller, the renderer failure path, so direct-play HEVC and AV1 — which run
 through `VideoToolboxDecoder` and never reach a renderer failure — had no retry
 at all and were terminal on the first fault. `VideoToolboxDecoder.reset()`
@@ -306,7 +309,7 @@ from an error path.
 The two reported shapes need different halves of the fix:
 
 - `LAGOON-G`, an iPhone, `appState: background`, DoVi direct play, 39 s in.
-  HEL-176 deliberately leaves the VT session alive when backgrounding, because
+  Background playback deliberately leaves the VT session alive, because
   making a new one in the background can be refused. But
   `setVideoOutputSuspended(true)` only sets a flag on the main actor: the demux
   loop applies the discard at the top of its *next* iteration, and
@@ -322,11 +325,11 @@ The two reported shapes need different halves of the fix:
   that had been playing.
 
 So `VideoToolboxDecoder.isSessionFault` names the three statuses that mean the
-decoder was taken away rather than the samples refused — `kVTInvalidSessionErr`,
-`kVTVideoDecoderMalfunctionErr`, `kVTVideoDecoderNotAvailableNowErr` — and
+decoder was taken away rather than the samples refused: `kVTInvalidSessionErr`,
+`kVTVideoDecoderMalfunctionErr`, `kVTVideoDecoderNotAvailableNowErr`.
 `PlaybackDecodeSessionPolicy` decides what to do, bounded exactly as
 `PlaybackRestartPointPolicy` is and for the same reason: one rebuild per
-playback generation, recorded against the generation the re-seek starts, so a
+playback generation, recorded against the generation the re-seek starts. A
 session that genuinely cannot be made descends the ladder one seek later and
 cannot loop. Suspended video ignores the fault outright — there is nothing to
 rebuild for, and the resume seek makes a fresh session anyway.
@@ -356,8 +359,8 @@ through to the finish boundary.
 samples and each reports the same dead session on its way out; a breadcrumb
 apiece would evict the history that explains the incident. The rebuild they are
 all waiting on is recorded, on the main actor, once it is known which of the
-two outcomes it was — and the near-the-end branch that declines to seek spends
-the generation's rebuild anyway, or every remaining sample would ask for
+two outcomes it was. The near-the-end branch that declines to seek spends the
+generation's rebuild anyway. Otherwise every remaining sample would ask for
 another one.
 
 Both outcomes report on the renderer-recovery channel they mirror, as
@@ -374,7 +377,7 @@ account of it. `LAGOON-B` (`-12909`, bad data, one access unit mid-film) is a
 different mechanism — per-frame tolerance with a budget — and is deliberately
 left alone here.
 
-### Disc images (HEL-133)
+### Disc images
 
 A disc image is a filesystem, not a stream, and Jellyfin describes one
 accurately and then contradicts itself: `VideoType` says `Iso`, `Container`
@@ -401,7 +404,7 @@ lives behind the cache session, a disc keeps its session even once the image
 is completely cached: an ordinary complete file plays straight from disk
 without one, but a disc handed to libavformat as a plain file is the raw
 image again and fell to the server remux (`PlaybackBufferPolicy
-.engineUsesCacheSession`, HEL-167). Four things about that were not obvious:
+.engineUsesCacheSession`). Four things about that were not obvious:
 
 - **UDF 2.50 hides every file entry inside a metadata partition** — a file in
   the physical partition that the volume then addresses as a partition of its
@@ -443,7 +446,7 @@ the session is refused with -4, built from the parameter sets read out of it it
 is created at 3840x2160. `AnnexBStream` reads those parameter sets out of a
 start-code record and rewrites every payload with four-byte lengths, for H.264
 as well as HEVC; the enhancement-layer filter runs after that conversion so it
-and VideoToolbox see one framing. This is HEL-131's failure reached from the
+and VideoToolbox see one framing. This is the same failure reached from the
 other side: a description that builds successfully and a decoder that refuses it.
 
 **A container's clock is not the film's clock.** The same disc then played but
@@ -468,8 +471,8 @@ disc starts its video and first audio track together and a second audio track
 two thirds of a second later, and that offset is content, not clock.
 
 Neither disc path covers Dolby Vision profile 7: `DolbyVisionProfileConverter`
-(HEL-145) keys off a DoVi configuration record that MPEG-TS images do not
-carry, so such a disc plays as HDR10 from the base layer. H.264 Blu-rays
+keys off a DoVi configuration record that MPEG-TS images do not carry, so
+such a disc plays as HDR10 from the base layer. H.264 Blu-rays
 (everything before 4K) and real DVD images are unexercised — the DVD path was
 built against an image authored with `dvdauthor` for the purpose, because the
 fixture server holds none.
