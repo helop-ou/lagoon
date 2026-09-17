@@ -68,5 +68,5 @@ behavior changes must be distinguishable in review.
   handoff showed no change against the pre-migration build. PiP, the
   suspended-startup dismissal and the sampler on/off cost remain open; the
   UI-test runner cannot launch the app on that device, so the lifecycle checks
-  ran through the app's Debug hooks over `devicectl`. See the
-  [validation record](../archive/hel-155-source-migration-validation.md).
+  ran through the app's Debug hooks over `devicectl`. HEL-155 records the
+  validation.
