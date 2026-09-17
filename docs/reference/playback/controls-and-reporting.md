@@ -24,15 +24,15 @@ which would have been enough on its own — and each fix is a live invariant:
 
 - **It raced the stop report.** The report only starts from the player's
   `onDisappear` (Menu calls `dismiss()` directly), which lands in the same
-  run-loop turn as `onDismiss`, and against fixture it takes about 2.5 s to
-  return because the server tears the session down before answering — so the
-  GET always read the position from before it. `JellyfinClient.playbackReports`
-  (a `PlaybackReportLedger`) closes the gap: the controller opens a session in
-  it the moment `playbackSessionActive` is set and closes it when the stop
-  report returns, and every presenting screen awaits `settle()` before
-  re-fetching. The wait is bounded (8 s) so a vanished server costs one pause
-  rather than a hang, and returns at once when nothing is open; dismissal
-  itself never waits on the network, only the re-fetch does.
+  run-loop turn as `onDismiss`, and against the fixture server it takes about
+  2.5 s to return because the server tears the session down before answering —
+  so the GET always read the position from before it.
+  `JellyfinClient.playbackReports` (a `PlaybackReportLedger`) closes the gap:
+  the controller opens a session in it the moment `playbackSessionActive` is
+  set and closes it when the stop report returns, and every presenting screen
+  awaits `settle()` before re-fetching. The wait is bounded (8 s) so a vanished
+  server costs one pause rather than a hang, and returns at once when nothing
+  is open; dismissal itself never waits on the network, only the re-fetch does.
 - **URLSession answered from its cache.** Jellyfin sends item JSON with no
   cache headers at all and CFNetwork still kept and reused it
   (`cache_hit=true` in its own log), so every API request sets
