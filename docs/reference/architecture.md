@@ -194,6 +194,15 @@ raw server items and Seerr cursors follow server page numbers, so filtering
 unsupported results and deduplicating cards must not touch either cursor. Seerr
 result identity includes media type as well as TMDB ID.
 
+An **empty section offers no See All** (HEL-182). The preview runs the query the
+page runs, so the page behind that link only repeats the message, and a tvOS
+page of nothing but text has no focus to hold — Menu quits the app instead of
+going back. `SearchResultsView` therefore keeps a focusable element in both the
+states where it has no cards to draw: `LoadingView` for the first page, and a
+retry beside an empty result, which rewinds the cursor rather than asking for a
+page past the end. Leaving the status block itself unfocusable is deliberate:
+that is what lets Down from the search field carry on to the Seerr section.
+
 Settings → About carries a Legal section (HEL-143, audit A06) whose
 Acknowledgements sheet follows the changelog sheet's tvOS pattern: no
 `NavigationStack`, its own header/footer at a fixed `Metrics.modalPanelSize`
