@@ -44,6 +44,15 @@ final class SearchResultsViewModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
+    /// Puts the cursor back at the start so a retry re-runs the search rather
+    /// than resuming one that has already reached its end — which is what a
+    /// retry offered beside an empty page means (HEL-182).
+    func restart() {
+        items = []
+        nextOffset = 0
+        errorMessage = nil
+    }
+
     /// The cursor counts raw server results, not the filtered or deduplicated
     /// cards. A page of people or empty collections must not skip later hits.
     func loadNext(fetch: (Int) async throws -> SearchResultsPage) async {
@@ -93,7 +102,12 @@ struct SearchResultsView: View {
                 }
                 .environment(\.posterCardWidth, grid.cardWidth)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
-                if model.isLoading {
+                if model.isLoading, model.items.isEmpty {
+                    // Focusable, unlike a bare spinner: the first page is the
+                    // stretch where this screen has nothing else to hold
+                    // focus, and Menu with nowhere to go quits the app.
+                    LoadingView()
+                } else if model.isLoading {
                     ProgressView("Loading Results")
                         .frame(maxWidth: .infinity)
                 } else if let error = model.errorMessage {
@@ -103,7 +117,16 @@ struct SearchResultsView: View {
                         .buttonStyle(.glass)
                         .accessibilityIdentifier("search.results.more")
                 } else if model.items.isEmpty {
-                    Text("No matching movies or shows.").foregroundStyle(.secondary)
+                    // The page's only focusable element when a search comes
+                    // back empty, which is what keeps Menu going back instead
+                    // of quitting the app (HEL-182). The cursor is spent by
+                    // now, so the retry rewinds it rather than asking for a
+                    // page past the end.
+                    InlineRetryView(message: "No matching movies or shows.") {
+                        model.restart()
+                        loadID += 1
+                    }
+                    .accessibilityIdentifier("search.results.empty")
                 }
             }
             .padding(.horizontal, Metrics.screenGutter)
