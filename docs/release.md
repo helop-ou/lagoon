@@ -59,6 +59,44 @@ The script checks the version/changelog before archiving.
 The API-key environment is `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH`;
 the `.p8` belongs outside the repository. GUI distribution remains available.
 
+## External TestFlight
+
+HEL-185. Adding a build to an external group submits it to Beta App Review
+against the full App Review Guidelines. Uploading never triggers review by
+itself. Apple reviews the first build of a platform; later builds usually pass
+without one, and Apple does not publish the threshold. iOS and tvOS are separate
+binaries under one app record, so each is reviewed on its own.
+
+**A build exported through the internal flow above can never reach external
+testing.** `ExportOptions.plist` pins `testFlightInternalTestingOnly=true`,
+which is not a label but a property of the upload. External testing needs the
+separate public export configuration described under
+[Public export procedure](#public-export-procedure) and a fresh archive; no
+existing build can be promoted.
+
+Required before submitting:
+
+- A working privacy policy. iOS takes a **URL**, tvOS takes privacy policy
+  **text** in App Store Connect. See [Website](#website).
+- Beta App Description, and a feedback email. tvOS testers cannot send in-app
+  feedback or screenshots, so that address is their only channel.
+- App Review Information: contact details, and sign-in credentials, which are
+  unavoidable because the app shows nothing before a server is configured.
+- Age rating and content rights, both app-level. Content rights covers
+  displaying third-party content.
+- Export compliance, already satisfied by `ITSAppUsesNonExemptEncryption=NO`.
+
+A reviewer needs a reachable Jellyfin server and an account; there is no demo
+mode outside `#if DEBUG`. `demo.jellyfin.org/stable` is rights-cleared and
+nothing in the app auto-connects to it, but it is a third party's server and an
+outage during review reads as a broken app. Review notes should give
+username/password rather than Quick Connect, say that Seerr is optional and will
+show its connect prompt, and state that requests reach the user's own Jellyseerr
+and downloads come from the user's own server under that account's policy.
+
+Distributing to testers outside the team is distribution for licence purposes;
+see the native-component gate under [Public release](#public-release).
+
 ## Project declarations and native inputs
 
 The project currently declares `ITSAppUsesNonExemptEncryption=NO`, local-network
@@ -92,8 +130,18 @@ Check them against the final signed candidate, not an earlier audit revision.
 
 ### Decisions before a public candidate
 
-- [ ] Complete the licensing decision and deliver/test the corresponding-source,
-  notices and relinking materials for every native component.
+- [x] Licence selected (HEL-158): **MPL-2.0** for Lagoon's own code, with the
+  Lagoon name and brand assets carved out of the grant. Chosen for attribution
+  rather than reciprocity; it matches Swiftfin and jellyfin-sdk-swift and avoids
+  the GPL's conflict with App Store terms. Decided, not applied: the repository
+  still has no `LICENSE` file.
+- [ ] Deliver/test the corresponding-source, notices and relinking materials for
+  every native component. FFmpeg is statically linked, so the shared-library
+  route is unavailable. Publishing the source (HEL-158) discharges this most
+  cheaply and removes the per-release burden; HEL-190 removes LGPL-3.0 entirely
+  by rebuilding the three MPVKit binaries without `--enable-version3`. Whether
+  any route satisfies the licence for App Store distribution is a legal
+  judgement, not an engineering one.
 - [ ] Record encryption classification and territories, including France; align
   build declarations and retain any required documentation.
 - [ ] Approve data collection/retention answers, complete the app's collection
