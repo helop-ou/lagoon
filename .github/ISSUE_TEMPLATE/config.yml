@@ -6,3 +6,6 @@ contact_links:
   - name: Contributing and build setup
     url: https://github.com/helop-ou/lagoon/blob/main/CONTRIBUTING.md
     about: Prerequisites, build and test commands, conventions.
+  - name: Code of Conduct
+    url: https://github.com/helop-ou/lagoon/blob/main/CODE_OF_CONDUCT.md
+    about: What is expected of everyone taking part, and how to report a problem.

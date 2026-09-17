@@ -8,7 +8,9 @@ The licence is **MPL-2.0** for Lagoon's own code, in [LICENSE](LICENSE), with
 the Lagoon name and brand assets carved out of the grant by
 [TRADEMARKS.md](TRADEMARKS.md). Contributions are made under those terms.
 Bugs go through the issue form; anything with security or privacy impact
-follows [SECURITY.md](SECURITY.md) instead of an issue.
+follows [SECURITY.md](SECURITY.md) instead of an issue. Everyone taking part
+keeps to the [Code of Conduct](CODE_OF_CONDUCT.md), which is reported to
+support@helop.dev.
 
 ## Prerequisites
 

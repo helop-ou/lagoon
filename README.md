@@ -75,7 +75,8 @@ and dated validation evidence linked separately.
 
 [Contributing](CONTRIBUTING.md) has the prerequisites, build and test
 commands, and repository conventions; [security reports](SECURITY.md) go
-privately by email rather than into an issue.
+privately by email rather than into an issue. Taking part here means keeping
+to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Compatibility
 
