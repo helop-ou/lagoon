@@ -147,11 +147,12 @@ revision.
 
 ### Decisions before a public candidate
 
-- [x] Licence selected: **MPL-2.0** for Lagoon's own code, with the Lagoon
-  name and brand assets carved out of the grant. Chosen for attribution rather
-  than reciprocity. It matches Swiftfin and jellyfin-sdk-swift, and avoids the
-  GPL's conflict with App Store terms. Decided, not applied: the repository
-  still has no `LICENSE` file.
+- [x] Licence selected and applied: **MPL-2.0** for Lagoon's own code, with
+  the Lagoon name and brand assets carved out of the grant. Chosen for
+  attribution rather than reciprocity. It matches Swiftfin and
+  jellyfin-sdk-swift, and avoids the GPL's conflict with App Store terms.
+  `LICENSE` carries the canonical text verbatim, `TRADEMARKS.md` the
+  carve-out, and `CODE_OF_CONDUCT.md` the Contributor Covenant.
 - [ ] Deliver and test the corresponding-source, notices and relinking
   materials for every native component. FFmpeg is statically linked, so the
   shared-library route is unavailable. Publishing the source discharges this
