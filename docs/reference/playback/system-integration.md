@@ -90,7 +90,7 @@ adding a second player to get it:
   synchronizer throughout, so only a few hundred milliseconds of audio are
   lost, not the film. If the swap itself fails, playback has no audio path,
   and the failure is reported as `.delivery`, handed to the [delivery
-  ladder](stream-resolution.md#when-playback-fails-the-delivery-ladder-hel-100).
+  ladder](stream-resolution.md#when-playback-fails-the-delivery-ladder).
   `debug.regressionInjectAudioRendererFailure` drives this path, since a
   renderer cannot be made to report `.failed` on demand. The HUD's `Recovery:`
   line counts audio replacements and service resets separately, since

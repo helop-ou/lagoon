@@ -87,7 +87,7 @@ login. Disc images use the app's bounded byte source and UDF handling.
 
 See [negotiation and
 delivery](reference/playback/stream-resolution.md#stream-resolution), [disc
-images](reference/playback/stream-resolution.md#disc-images-hel-133), and
+images](reference/playback/stream-resolution.md#disc-images), and
 [decode
 details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
 
@@ -374,8 +374,8 @@ carries a banner above its rails, with the group name, *Rejoin* and *Leave*,
 while a group has this device as a member and nothing of its is on screen.
 
 **The socket must be open before the join.** The server announces a join over
-the socket at the instant it happens. **Caution.** Joining while the handshake
-is still in flight loses both the `GroupJoined` and the `PlayQueue` update on
+the socket at the instant it happens. Joining while the handshake is still
+in flight loses both the `GroupJoined` and the `PlayQueue` update on
 the fixture server running Jellyfin 12.0.0, and the member then sits in a
 group it never hears another word from. The store waits for the socket to
 carry its first message, the server's own `ForceKeepAlive`, before asking to
@@ -409,9 +409,9 @@ hidden timeline. Observation subscribes to reads that actually execute.
 
 The panel host's `Equatable` boundary separately protects its interior from
 unnecessary renders. Preserve both boundaries. See the [scope
-measurements](reference/playback/engine.md#the-players-observation-scope-hel-150)
+measurements](reference/playback/engine.md#the-players-observation-scope)
 and [memory/lifecycle
-notes](reference/playback/frame-loss-bench.md#decoded-frame-memory-ceiling-hel-109).
+notes](reference/playback/frame-loss-bench.md#decoded-frame-memory-ceiling).
 
 ## Progress reporting
 
@@ -540,4 +540,4 @@ untouched runs. Release measurements without coverage and diagnostic-overlay
 interference are the useful device comparison. Keep physical full-film,
 captions/HDR, and teardown acceptance separate from simulator results. See the
 [frame-loss
-procedure](reference/playback/frame-loss-bench.md#frame-loss-bench-hel-64).
+procedure](reference/playback/frame-loss-bench.md#frame-loss-bench).

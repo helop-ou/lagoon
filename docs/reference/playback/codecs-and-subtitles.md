@@ -26,7 +26,7 @@ index](README.md).
   chunks, and the chunk is then **copied** into a CoreMedia-owned block at
   emit; do not remove that copy — the zero-copy handoff that skipped it leaked
   the entire decoded audio stream (see [the decoded-frame memory
-  ceiling](frame-loss-bench.md#decoded-frame-memory-ceiling-hel-109)).
+  ceiling](frame-loss-bench.md#decoded-frame-memory-ceiling)).
   FFmpeg's native channel-bit order matches CoreAudio's channel bitmap
   bit-for-bit on the first 18 positions, so a native layout mask maps straight
   into the `AudioChannelLayout`.
@@ -96,7 +96,7 @@ index](README.md).
   and `minQ=0`; the same scene rerun at the 18/12 cushion was **0 / 1438**
   with `minQ=10`. Both figures need the HUD off — the same build measured 5 /
   1445 with the overlay up despite a healthy queue; see the [bench
-  procedure](frame-loss-bench.md#frame-loss-bench-hel-64). No finite
+  procedure](frame-loss-bench.md#frame-loss-bench). No finite
   sub-second cushion can turn an upstream feed running below real time into
   uninterrupted playback: sustained 91 Mbps pulls slowed even format probing
   to 20–40 s, so those cases correctly enter buffering.

@@ -196,9 +196,9 @@ unfocused states.
   sits under the Resume pill rather than under the block. Those circles are
   `DetailCircleButton`, and `DetailCircleMenu` for the download control's
   menus: a plain button under `.glassEffect(.regular.interactive(), in:
-  .circle)`. **Caution.** Don't use `.buttonStyle(.glass)` with a circular
-  border shape here: its pressed highlight is a capsule sized to the label,
-  and it showed through the circle as a lozenge. Regular-width iPad windows
+  .circle)`. Don't use `.buttonStyle(.glass)` with a circular border shape
+  here: its pressed highlight is a capsule sized to the label, and it
+  showed through the circle as a lozenge. Regular-width iPad windows
   keep the landscape backdrop, with more of it above the title, and the
   leading column. tvOS keeps its own order. Series playback actions describe
   the episode that will play: the focused card, else the server's up-next
