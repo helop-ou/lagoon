@@ -62,8 +62,9 @@ Deep Navy.
 This has now been got wrong twice. It is the system-wide tint, so setting it to
 Aqua does not accent one thing — it repaints every button label, every list
 row, and every control in the app, which is the opposite of "brand colour only
-for branding". Jaagop's call, and a standing one: "simple and white like
-Infuse" (HEL-50, and again during the HEL-97 refresh). If a control looks wrong
+for branding". The maintainer's call, and a standing one: "simple and white
+like Infuse" (HEL-50, and again during the HEL-97 refresh). If a control looks
+wrong
 in white, the button *style* is the culprit — see `.glassProminent` below —
 never the accent.
 
@@ -96,8 +97,9 @@ Re-run it, and re-measure the ratios, if the artwork changes shape.
 The jellyfish is the secondary accent, and the package restricts it: "only as
 punctuation in loading, empty-state, or atmospheric moments … small, one-color,
 and low contrast." It appears across onboarding and nowhere else in the app —
-Jaagop's call, for uniformity across the three screens, and further than the
-letter of that rule goes. Held to the rest of it: one colour, small, and
+the maintainer's call, for uniformity across the three screens, and further
+than the letter of that rule goes. Held to the rest of it: one colour, small,
+and
 0.15–0.30 opacity.
 
 There it swims (`JellyfishSwimLayer`). Moving the supplied artwork along a path
@@ -227,9 +229,9 @@ The reference's own Play and Trailer are plain glass pills too, so prominence
 comes from position and order, never from a filled colour. On tvOS this is a
 hard constraint — a prominent fill at rest is indistinguishable from the
 focused lozenge, and the page reads as having two focused controls. On touch
-there is no lozenge to collide with, so there it is purely Jaagop's call, and
-the call is the same: one design language across both (HEL-50). Don't reopen it
-per platform.
+there is no lozenge to collide with, so there it is purely the maintainer's
+call, and the call is the same: one design language across both (HEL-50).
+Don't reopen it per platform.
 
 **Never set a foreground color on a focusable control or on any ancestor of
 one.** The focused lozenge picks its own label color to sit on the white
@@ -304,9 +306,10 @@ opening or navigating between categories must not change a saved preference.
   `Metrics.landscapeWidth` at 16:9, approximately 320×180 pt on tvOS and
   214×120 pt on iOS. It opens details on iOS and plays on tvOS. Progress uses
   the teal `ItemProgressBar`, hidden at ≥95 % watched.
-- **A poster's title goes *under* the artwork, never over it** (Jaagop,
-  2026-08-17): a scrim and a headline across the bottom third cover the part
-  of a poster its designer cared most about, and a poster is already a title
+- **A poster's title goes *under* the artwork, never over it** (the
+  maintainer, 2026-08-17): a scrim and a headline across the bottom third
+  cover the part of a poster its designer cared most about, and a poster is
+  already a title
   card. `PosterCard` shows the name over the year beneath the art, in a
   minimum-height caption so grid rows stay aligned at the chosen text size.
   The gap above that caption has to clear the **focus lift**, not merely look
@@ -337,8 +340,9 @@ opening or navigating between categories must not change a saved preference.
   peeking out behind the panel's as a double edge when focused. The title is
   the item's own logo art via `TitleArtView` at `heroLogoHeight`, matching the
   detail pages. The mask that used to fade the artwork's leading third into
-  flat material is gone (Jaagop: it read as a grey wash over a third of the
-  image); legibility now comes from the same **leading wash** the detail pages
+  flat material is gone (the maintainer: it read as a grey wash over a third
+  of the image); legibility now comes from the same **leading wash** the detail
+  pages
   use — darken only the column the text occupies and let the rest of the still
   be itself. The iOS banner keeps its own rounded clip and grows at larger
   Dynamic Type, because the shorter phone banner crushes text otherwise.
@@ -362,15 +366,17 @@ opening or navigating between categories must not change a saved preference.
   4-bit RGB histogram ranked by `count × (saturation+0.05) × (brightness+0.1)`
   (the floors stop letterbox bars from winning), sampled at 64×64 off-main,
   memoized per URL in `ArtworkPaletteCache`.
-- **Detail pages** (HEL-46, built against Jaagop's Infuse reference; the
-  earlier poster-left composition is gone): the backdrop **is** the artwork,
+- **Detail pages** (HEL-46, built against the maintainer's Infuse reference;
+  the earlier poster-left composition is gone): the backdrop **is** the
+  artwork,
   full-bleed. On tvOS legibility comes from a **leading wash** (0.9 → clear by
   68 %) rather than a uniform scrim, because the info block is left-aligned:
   that keeps the right of the still vivid, which a scrim strong enough for
   text over busy artwork would flatten. There is no dark panel and **no
   scroll-linked dimming** — the latter was tried and cut
-  (Jaagop: "not a big fan of the screen going black"), because moving focus
-  into a rail jumps further in one press than any sensible ramp covers, so it
+  (the maintainer: "not a big fan of the screen going black"), because moving
+  focus into a rail jumps further in one press than any sensible ramp covers,
+  so it
   read as a slam to black. The tvOS rails stay legible on their own: the
   leading wash covers the column the headings and names sit in, and the cards
   are opaque artwork. The hero space is a **scroll content margin, not a
@@ -441,8 +447,7 @@ placeholders and are not cached, so a broken URL cannot poison the cache.
 Always pass a sensible `maxPixelSize` — requesting full-size art on a rail
 card is the difference between smooth and stuttering focus scrolling. Card
 budgets follow layout dimensions and display scale via `ArtworkSizing`; heroes
-and backdrops use 1920 and palette sampling 120. See
-[download hardening validation](../archive/download-hardening-validation.md).
+and backdrops use 1920 and palette sampling 120.
 
 ## App artwork
 
