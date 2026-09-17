@@ -221,6 +221,22 @@ final class PlaybackController {
     /// What the viewer picked in the track panel, carried into the next
     /// episode (HEL-66). Nil on a first load — there is nothing to carry.
     private var trackPreference: TrackPreference?
+    /// Series-scoped memory of the viewer's audio choice, which outlives
+    /// this controller and so survives closing the player (HEL-184). Set by
+    /// the player view before the first start; nil in tests and previews,
+    /// where the in-session carry above is the whole mechanism.
+    @ObservationIgnored var audioTrackMemory: AudioTrackMemoryStore?
+    /// Which show (or film) the current item answers for in that memory.
+    @ObservationIgnored private var audioMemoryScope: String?
+    /// The audio layout that scope was resolved against. Held rather than
+    /// re-read from `audioStreams` at exit, so the shape a choice is stored
+    /// against is always the one it was chosen from — a start that fails
+    /// partway cannot pair a new item's scope with the last one's streams.
+    @ObservationIgnored private var audioMemoryLayout: [AudioLayoutStream] = []
+    /// What automatic selection alone chose for this item, before any
+    /// remembered override. Kept so the exit can tell an override from a
+    /// viewer who simply left the default alone.
+    @ObservationIgnored private var policyAudioOrdinal: Int?
     /// The current item's streams in the order the engine numbers them, so
     /// a selected track can be named rather than just counted. Audio is the
     /// embedded list; subtitles are embedded first, then external.
@@ -592,11 +608,30 @@ final class PlaybackController {
             )
             // A choice carried in from the previous episode outranks the
             // server's default: the viewer overrode it once already.
+            let audioLayout = embeddedAudio.map(Self.layoutStream)
+            policyAudioOrdinal = initialAudioOrdinal
+            audioMemoryLayout = audioLayout
+            audioMemoryScope = AudioTrackMemoryStore.scope(
+                seriesID: media.seriesId,
+                itemID: media.id
+            )
             if let preference = trackPreference,
-               let carried = Self.ordinal(
+               let carried = AudioTrackMemoryPolicy.descriptiveOrdinal(
                    matchingLanguage: preference.audioLanguage,
                    title: preference.audioTitle,
-                   in: embeddedAudio
+                   in: audioLayout
+               ) {
+                initialAudioOrdinal = carried
+            }
+            // And a choice the viewer made for this show outranks both, for
+            // as long as it still describes a track here. Its last rung is
+            // the track's position, which speaks only where the layout
+            // offers nothing else to reason about (HEL-184).
+            if let scope = audioMemoryScope,
+               let remembered = audioTrackMemory?.choice(for: scope),
+               let carried = AudioTrackMemoryPolicy.ordinal(
+                   for: remembered,
+                   in: audioLayout
                ) {
                 initialAudioOrdinal = carried
             }
@@ -783,6 +818,11 @@ final class PlaybackController {
             }
             engine.onTrackSelectionChanged = { [weak self, weak engine] in
                 self?.nowPlaying.updateLanguageOptions()
+                // Identity-guarded: a shut-down engine keeps reporting the
+                // track it had, and this writes durable state.
+                if let self, let engine, self.engine === engine {
+                    self.rememberAudioChoice(engine: engine)
+                }
                 if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag,
                    let normalized = SubtitlePreferencesStore.normalizedLanguage(language) {
                     // Apple's caption contract asks custom selectors to
@@ -980,6 +1020,56 @@ final class PlaybackController {
     func recordPlayerSurface(identity: String) {
         if playerSurfaceIdentity != identity {
             playerSurfaceIdentity = identity
+        }
+    }
+
+    private nonisolated static func layoutStream(_ stream: MediaStream) -> AudioLayoutStream {
+        AudioLayoutStream(
+            codec: stream.codec,
+            channels: stream.channels,
+            language: stream.language,
+            title: stream.title,
+            isDefault: stream.isDefault == true
+        )
+    }
+
+    /// Persists — or drops — an audio choice the viewer just made.
+    ///
+    /// Driven by the engine's selection callback, which only `selectAudioTrack`
+    /// fires and only the track panel and the system now-playing menu reach.
+    /// Automatic selection takes the engine's internal path instead, so
+    /// everything recorded here is a deliberate act (HEL-184). Recording at
+    /// the moment of the act, rather than reading a selection back at exit,
+    /// is also what keeps the item, its layout and the live engine in step:
+    /// at exit any of the three can already belong to the next episode.
+    private func rememberAudioChoice(engine: SampleBufferPlayerEngine) {
+        guard let audioTrackMemory,
+              let scope = audioMemoryScope,
+              let selected = engine.audioTracks.first(where: \.isSelected),
+              audioMemoryLayout.indices.contains(selected.engineID - 1),
+              // Engine ordinals count what was delivered; the layout counts
+              // what the server described. On a remux or transcode rung
+              // those differ — one delivered track against the source's
+              // several — and an ordinal from one means nothing in the
+              // other.
+              engine.audioTracks.count == audioMemoryLayout.count else { return }
+        switch AudioTrackMemoryPolicy.outcome(
+            chosen: selected.engineID,
+            automatic: policyAudioOrdinal
+        ) {
+        case .forget:
+            audioTrackMemory.forget(scope)
+        case .remember(let ordinal):
+            let stream = audioMemoryLayout[ordinal - 1]
+            audioTrackMemory.remember(
+                RememberedAudioChoice(
+                    language: stream.language,
+                    title: stream.title,
+                    ordinal: ordinal,
+                    layout: AudioTrackMemoryPolicy.fingerprint(of: audioMemoryLayout)
+                ),
+                for: scope
+            )
         }
     }
 
@@ -1247,7 +1337,11 @@ final class PlaybackController {
         let subtitleStream = subtitle.flatMap { Self.stream(at: $0.engineID, in: orderedSubtitleStreams) }
         trackPreference = TrackPreference(
             audioLanguage: audioStream?.language,
-            audioTitle: audioStream?.displayTitle,
+            // The file's own title, not Jellyfin's synthesized display
+            // title: the latter is built from codec and channel layout, so
+            // it reads the same on every untagged track and would match the
+            // first of them rather than the one the viewer picked (HEL-184).
+            audioTitle: audioStream?.title,
             subtitleLanguage: subtitleStream?.language,
             subtitleTitle: subtitleStream?.displayTitle,
             // No selected subtitle track is the engine's way of saying off.

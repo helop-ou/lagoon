@@ -86,6 +86,50 @@ See [negotiation and delivery](reference/playback/stream-resolution.md#stream-re
 [disc images](reference/playback/stream-resolution.md#disc-images-hel-133), and
 [decode details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
 
+### Audio track selection (HEL-184)
+
+`TrackSelectionPolicy` chooses automatically: the viewer's audio mode, then
+their preferred languages, then Jellyfin's default. Some releases defeat all
+three. The 100's season-one remux carries five audio streams with no language,
+no title and no default flag — four of them identical DTS 5.1 — and the first
+is Russian; `DefaultAudioStreamIndex` names that first stream because the
+server had nothing to go on either, so every mode lands on it.
+
+Where metadata cannot decide, the viewer's correction does.
+`AudioTrackMemoryStore` holds one audio choice per series (per item for films)
+per account, written through to `UserDefaults`, so a correction survives
+closing the player and not merely an autoplay handoff.
+
+Record the choice when the viewer makes it, from the engine's
+`onTrackSelectionChanged`. Only `selectAudioTrack` fires that, and only the
+track panel and the system now-playing menu reach it — automatic selection
+takes `applyAudioSelection` instead — so everything stored is a deliberate
+act. Reading the selection back at exit instead looks equivalent and is not:
+by then the scope, the layout and the live engine can each already belong to
+the next episode, and a viewer who simply left a non-applying memory alone
+would have their whole show's correction erased. The write is identity-guarded
+to the current engine, and skipped when the engine's track count disagrees
+with the layout the server described, because a remux or transcode rung
+delivers one audio track where the source lists several and an ordinal from
+one means nothing in the other. Landing back on what automatic selection would
+have chosen *forgets* the override rather than storing it; keeping one would
+freeze the show against a later change of preferences.
+
+`AudioTrackMemoryPolicy` applies it as a ladder: a description that names
+exactly one track, then the remembered position against a layout whose
+fingerprint is unchanged, then the first track of the right language.
+Ambiguity is failure rather than a coin flip, so position is what expresses a
+choice between tracks tagged identically as well as tracks tagged not at all —
+it never overrules a description that actually identifies something, and a
+release that gains proper tagging or an added commentary track retires it.
+
+Match on `MediaStream.title`, never `displayTitle`. Jellyfin synthesizes the
+latter from codec and channel layout, so all four of those DTS tracks display
+as `DTS-HD MA - 5.1`, and matching on it silently returns the first one rather
+than the track the viewer picked. The engine appends the position to track
+names that collide, because otherwise the rows cannot be told apart in the
+panel or recognised again afterwards.
+
 ## Lifecycle and memory
 
 - The controller owns the engine. SwiftUI player views hold it through

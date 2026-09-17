@@ -2341,7 +2341,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         } else {
             nil
         }
-        let tracks = streams.enumerated().map { offset, stream in
+        let tracks = Self.disambiguated(streams.enumerated().map { offset, stream in
             let metadata = audioMetadata.indices.contains(offset) ? audioMetadata[offset] : nil
             return PlayerTrack(
                 engineID: offset + 1,
@@ -2352,7 +2352,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 isForced: metadata?.isForced ?? false,
                 isHearingImpaired: metadata?.isHearingImpaired ?? false
             )
-        }
+        })
 
         // Subtitle ordinal space: embedded streams in demux order, then
         // the external tracks — the same layout the controller used to map
@@ -3238,6 +3238,31 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             name += " · Atmos"
         }
         return name.isEmpty ? "Track \(stream.streamIndex)" : name
+    }
+
+    /// Four rows all reading "DTS 5.1" are four coin flips. A release that
+    /// tags none of its tracks leaves position as the only thing telling
+    /// them apart, so where a name is not unique the position joins it —
+    /// both to pick with and to recognise afterwards (HEL-184).
+    nonisolated static func disambiguated(_ tracks: [PlayerTrack]) -> [PlayerTrack] {
+        var counts: [String: Int] = [:]
+        for track in tracks {
+            counts[track.displayName, default: 0] += 1
+        }
+        guard counts.values.contains(where: { $0 > 1 }) else { return tracks }
+        return tracks.map { track in
+            guard counts[track.displayName, default: 0] > 1 else { return track }
+            return PlayerTrack(
+                engineID: track.engineID,
+                kind: track.kind,
+                displayName: "\(track.displayName) · Track \(track.engineID)",
+                isSelected: track.isSelected,
+                languageTag: track.languageTag,
+                isForced: track.isForced,
+                isHearingImpaired: track.isHearingImpaired,
+                source: track.source
+            )
+        }
     }
 
     nonisolated private static func friendlyCodecName(_ codecName: String) -> String {

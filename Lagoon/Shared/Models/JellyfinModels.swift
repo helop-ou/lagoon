@@ -265,6 +265,12 @@ nonisolated struct MediaStream: Decodable, Hashable {
     let type: String?
     let codec: String?
     let displayTitle: String?
+    /// The title the file actually carries, absent when it carries none.
+    /// Distinct from `displayTitle`, which Jellyfin synthesizes from codec
+    /// and channel layout — so four untagged DTS tracks all "display" as
+    /// "DTS-HD MA - 5.1" and only this tells you they are anonymous
+    /// (HEL-184).
+    let title: String?
     let language: String?
     let index: Int?
     let isDefault: Bool?

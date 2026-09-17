@@ -19,6 +19,10 @@ struct VideoPlayerView: View {
     @State private var pictureInPicture = SampleBufferPictureInPicture()
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
+    /// Outlives the player presentation by writing straight through to
+    /// UserDefaults, so a corrected audio track is still remembered when
+    /// the viewer comes back to the show tomorrow (HEL-184).
+    @State private var audioTrackMemory = AudioTrackMemoryStore()
     @State private var panelOpen = false
     #if os(iOS)
     /// The iPhone's swipe grammar (HEL-162). A downward drag carries the
@@ -190,6 +194,8 @@ struct VideoPlayerView: View {
             guard controller.engine == nil else { return }
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
             trackPreferences.configure(accountID: session.activeAccount?.id)
+            audioTrackMemory.configure(accountID: session.activeAccount?.id)
+            controller.audioTrackMemory = audioTrackMemory
             // Before the start, so the group's driver has its readiness and
             // buffering hooks on the controller by the time the first
             // engine is built (HEL-172).

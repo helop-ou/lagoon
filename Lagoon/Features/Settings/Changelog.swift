@@ -48,6 +48,20 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "105",
+            released: "September 2026",
+            headline: "The audio track you pick is the one that keeps playing.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "Audio tracks that would otherwise read exactly alike now show their position in the list, so four tracks all called DTS-HD MA 5.1 can be told apart and the one you chose can be found again.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "Lagoon now remembers the audio track you choose for a series. Some releases label their audio so poorly that nothing in the file says which track is English, and the first one is not always it, so the wrong language could start playing on every episode. Correct it once and the rest of the show follows, including after you close the player and come back later.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "104",
             released: "September 2026",
             headline: "Search stops leading to a dead end.",

@@ -576,6 +576,7 @@ final class SubtitleSearchCoordinator {
                     type: "Subtitle",
                     codec: candidate.format,
                     displayTitle: candidate.name,
+                    title: candidate.name,
                     language: candidate.language,
                     index: nil,
                     isDefault: nil,
