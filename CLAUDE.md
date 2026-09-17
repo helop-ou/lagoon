@@ -48,7 +48,7 @@ out of the guides (see "Keeping this clean" in docs/README.md).
 
 - Commits that implement a Jira ticket carry its key as a suffix so Jira's
   development panel links them: `feat: add app icon and top shelf artwork (HEL-31)`.
-  Lagoon work lives under the Labs epic (HEL-15) on helop-ou.atlassian.net;
+  Lagoon work lives under the Labs epic (HEL-15) in the maintainer's Jira;
   meta and chore commits without a ticket stay keyless.
 - Build numbers are owned by the repo; never let Xcode manage them at upload
   ([Release](docs/release.md)). A change a viewer would notice gets a line in
