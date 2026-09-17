@@ -81,10 +81,12 @@ including tvOS focus paths, not just the landing state.
 
 ## Commits
 
-Work goes straight to `main`. A commit implementing a Jira ticket carries its
-key as a suffix so the development panel links it, for example
-`feat: add app icon and top shelf artwork (HEL-31)`. Meta and chore commits
-stay keyless. Keep structural moves separate from behaviour changes.
+Work goes straight to `main`. Subjects are conventional and lowercase
+imperative — `feat: add app icon and top shelf artwork`, `fix:`, `chore:`,
+`docs:` — with no scope parentheses. The house style is many small thematic
+commits, usually one file each, ordered so every intermediate state builds. A
+substantial `fix:` earns a body explaining the mechanism; a mechanical one
+stays subject-only. Keep structural moves separate from behaviour changes.
 
 ## Dependencies
 
