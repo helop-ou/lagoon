@@ -2470,6 +2470,35 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertTrue(focusedPoster.hasFocus, "Search focus was not restored to the selected result")
     }
 
+    /// A search nothing matches must not offer a See All (HEL-182). The rail
+    /// is a preview of the query the full page runs, so the page behind that
+    /// link only repeats the message — and with nothing on it to hold focus,
+    /// Menu quits the app instead of going back.
+    func testEmptySearchDropsSeeAllAndStillCarriesFocusBelowTheLibrarySection() {
+        let app = launchSeededSearchApp(query: "zzqxjvw")
+        let homeTab = app.tabBars.buttons["Home"]
+        let searchTab = app.tabBars.buttons["Search"]
+        XCTAssertTrue(searchTab.waitForExistence(timeout: 20))
+        moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
+        moveFocus(to: searchTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        // The library section only draws this message once the seeded query
+        // has run and come back with nothing, so it is the state's signal.
+        let empty = app.staticTexts["No matching movies or shows in your library."]
+        XCTAssertTrue(empty.waitForExistence(timeout: 25), "The seeded query never reached its empty state")
+        let seeAll = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'see all'"))
+        XCTAssertEqual(seeAll.count, 0, "An empty search still offers a See All into an empty page")
+
+        // The status block is deliberately unfocusable, so this is what shows
+        // Down still carries past it into the section below — the Seerr row
+        // once Seerr is connected, and its setup link in this lane, which
+        // starts from a wiped Seerr configuration.
+        let setUpSeerr = app.buttons["search.seerr.setup"]
+        XCTAssertTrue(setUpSeerr.waitForExistence(timeout: 10))
+        moveFocus(to: setUpSeerr, maxPresses: 12) { remote.press(.down) }
+    }
+
     func testDiscoverSetupNavigationAndBackFocus() {
         let app = launchNavigationRegressionApp()
         let homeTab = app.tabBars.buttons["Home"]
@@ -2677,6 +2706,21 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             Thread.sleep(forTimeInterval: 0.1)
         }
         remote.press(.select)
+    }
+
+    /// The navigation lane with the search field seeded instead of the
+    /// preloaded results: XCUITest reaches the tvOS keyboard one glyph at a
+    /// time, so a term nothing matches is handed over rather than typed.
+    private func launchSeededSearchApp(query: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-debug.playerRegression", "YES",
+            "-debug.regressionBootstrapPublicDemo", "YES",
+            "-debug.regressionResetState", "YES",
+            "-debug.searchRegressionQuery", query,
+        ]
+        app.launch()
+        return app
     }
 
     private func launchNavigationRegressionApp() -> XCUIApplication {
