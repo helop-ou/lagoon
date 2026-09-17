@@ -12,7 +12,7 @@ Settings → About shows the version and build you are running.
 Please report privately rather than opening an issue, and give the fix a
 chance to ship before describing the problem publicly.
 
-- Email **security@helop.ee**.
+- Email **support@helop.dev**.
 - Include the app version and build, the platform and OS version, the device
   or simulator, what an attacker could achieve, and the steps to reproduce it.
 - Say whether you want credit in the release notes, and under what name.
