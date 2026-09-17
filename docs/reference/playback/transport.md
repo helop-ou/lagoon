@@ -117,5 +117,4 @@ preserve credentials; late responses cannot expire a newer session.
 
 `python3 scripts/test-session-recovery.py` exercises direct and native HLS
 playback, remote revocation and sign-in against a loopback synthetic server;
-the [HEL-142 validation record](../../archive/hel-142-native-tls-validation.md)
-documents the bounds and regression coverage behind both sections.
+HEL-142 documents the bounds and regression coverage behind both sections.
