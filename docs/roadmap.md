@@ -56,6 +56,10 @@ requests or a live status report:
   direct play and HLS on the remux rung have passed there inside the app. The
   [API guide](jellyfin-api.md) records what that covers. A sustained video
   transcode on 12 is still unexercised.
+- Player dismissal that races a suspended startup request, on an Apple TV.
+  The source migration's other lifecycle checks, dismissal/replay and
+  episode handoff, showed no change against the pre-migration build; this
+  one stays unexercised.
 
 ## Next
 

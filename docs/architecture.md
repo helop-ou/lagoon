@@ -151,8 +151,8 @@ sampling have explicit owners. `VideoPlayerView` retains the controller with
 `@State`. Seerr request list/detail models have separate homes, and Settings
 category views bind back to the root's existing stores.
 `LagoonUITests/Support/` owns shared player launching, fixture resolution, and
-state waits; platform gestures remain in their suites. The [migration
-plan](reference/source-migration-plan.md) records verification progress and
+state waits; platform gestures remain in their suites. The
+[roadmap](roadmap.md#awaiting-device-or-deployment-verification) records the
 remaining acceptance. Further engine/cache extractions should follow queue and
 resource ownership; line counts alone do not justify splitting a coupled
 implementation into extensions. Preserve the [playback

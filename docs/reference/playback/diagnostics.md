@@ -307,4 +307,5 @@ exercises the stop path; `--status 429` and `--status 500` exercise rate
 limiting and backoff. Read the JSON for anything that should not be there.
 
 Physical-device acceptance for criteria 1, 2, and 6 is still owed; that
-evidence belongs in the archive, with the revision, device, and fixture.
+evidence belongs wherever the work is tracked, with the revision, device,
+and fixture.
