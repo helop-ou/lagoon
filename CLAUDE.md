@@ -23,7 +23,7 @@ guide, the guide is current and this file needs fixing.
 | [Design system](docs/design-system.md) | Tokens, brand colors, native controls, focus, image loading |
 | [Jellyfin API](docs/jellyfin-api.md) | Authentication, endpoints, wire formats, decoding rules, server compatibility |
 | [Playback](docs/playback.md) | Engine boundaries, transport, lifecycle, controls, diagnostics, regression checks |
-| [Release](docs/release.md) | Build numbers, changelog, acknowledgements, TestFlight, release gates |
+| [Release](docs/release.md) | Build numbers, changelog, acknowledgements, licence, TestFlight (internal and external), release gates |
 | [Roadmap](docs/roadmap.md) | Remaining product work and device acceptance |
 
 `docs/reference/` holds the engineering notes and measurements behind the
