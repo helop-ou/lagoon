@@ -54,6 +54,7 @@ nonisolated enum Changelog {
             sections: [
                 ChangelogSection(category: .bugFixes, changes: [
                     "A search that matches nothing no longer offers to show all results. The button led to an empty page with nothing on it to select, which on Apple TV left the Menu button closing Lagoon instead of going back.",
+                    "On Apple TV, Watch Together opens as a panel in the middle of the screen, with the name of a new group clearly a field you can type into. It used to look like a page from Settings squeezed into a box.",
                 ]),
             ]
         ),
