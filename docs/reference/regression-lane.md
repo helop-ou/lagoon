@@ -2,9 +2,9 @@
 
 What each UI journey may assume about the server and the simulator it runs
 on, so a run on a clean machine and a run on a developer's machine mean the
-same thing (HEL-144, audit A18). Unit tests run under the `Lagoon` scheme;
-UI journeys run under `LagoonHardwareRegression`, and `-only-testing:` with
-the `Lagoon` scheme fails because the UI target is not in that plan.
+same thing (audit A18). Unit tests run under the `Lagoon` scheme. UI
+journeys run under `LagoonHardwareRegression`. `-only-testing:` fails with
+the `Lagoon` scheme because the UI target is not in that plan.
 
 ## Three fixture tiers
 
@@ -21,20 +21,19 @@ somebody happens to be signed into on the simulator.
 Journeys in the third tier skip with "Requires the synthetic … fixture"
 whenever the variable is absent. Journeys in the first two tiers share one
 launcher, `PlayerUITestCase.launchSignedIn`, which forwards
-`LAGOON_REGRESSION_*` to every launch. That is deliberate, and it has a
+`LAGOON_REGRESSION_*` to every launch. That is deliberate, but it has a
 consequence: setting the environment for the fixture suites redirects the
-demo journeys to the same server. A journey written against the demo's
-direct-play catalogue therefore has to say what it needs through a resolver
-flag rather than assume it, or it will time out on a fixture server whose
-first playable title transcodes (the September 11 run lost two journeys this
-way).
+demo journeys to the same server too. A journey written against the demo's
+direct-play catalogue has to say what it needs through a resolver flag
+instead of assuming it. Otherwise it times out on a fixture server whose
+first playable title transcodes. One run lost two journeys this way.
 
 ## Resolver flags
 
-The bench hook (`-debug.benchSearchTerm <title>`, with
-`-debug.benchProductionYear` and `-debug.regressionSeriesName` to
-disambiguate) opens a named title. The resolver flags open a title by
-property instead, so the journey holds on any server that has one:
+The bench hook, `-debug.benchSearchTerm <title>`, opens a named title.
+`-debug.benchProductionYear` and `-debug.regressionSeriesName` disambiguate
+it. The resolver flags below open a title by property instead, so the
+journey holds on any server that has one:
 
 | Flag | Picks | Fails with |
 | --- | --- | --- |
@@ -49,14 +48,14 @@ property instead, so the journey holds on any server that has one:
 
 The app publishes the outcome on the `player.regression.resolution` probe.
 `requireRegressionFixture` turns a `missing:` value into an `XCTSkip` that
-names the fixture, an `error:` value (a failed library scan) into a test
-failure, and retries a launch once when neither probe appears because the
-cold sign-in handshake failed. A journey that needs a Home hero calls
-`requireHomeHero`, which skips on the public demo and fails on a supplied
-fixture server.
+names the fixture. An `error:` value means a failed library scan, and that
+becomes a test failure instead. If neither probe appears because the cold
+sign-in handshake failed, it retries the launch once. A journey that needs
+a Home hero calls `requireHomeHero`, which skips on the public demo and
+fails on a supplied fixture server.
 
-Delivery hooks sit beside the resolvers: `-debug.regressionInitialDelivery
-remux|transcode` starts on that rung instead of negotiating, and
+Delivery hooks sit beside the resolvers. `-debug.regressionInitialDelivery
+remux|transcode` starts on that rung instead of negotiating.
 `-debug.regressionFailFirstDelivery delivery|undecodable` injects the first
 failure so the fallback ladder runs. `-debug.simulatorTranscode` only
 withdraws HEVC and Dolby Vision from the profile; it never forces a
@@ -64,16 +63,17 @@ transcode on its own.
 
 ## State on the simulator
 
-`-debug.regressionResetState YES`, honoured only next to the demo bootstrap
-flag, runs before the session restores anything and removes what a previous
-run left behind: stored accounts and the active one, the mid-connect server,
-every per-account preference (libraries, home rows, subtitle and track
-preferences, recent searches), the Seerr server keyed by Jellyfin URL, and
-every keychain item of the app's service except the device id. App-wide
-settings such as skip mode, autoplay and caption style stay; a journey that
-cares sets them through launch arguments and restores what it flips. The
-bootstrap then always signs into the lane's server, whatever account the
-simulator last used, and persists nothing.
+`-debug.regressionResetState YES` is honoured only next to the demo
+bootstrap flag. It runs before the session restores anything, and it
+removes what a previous run left behind: stored accounts and the active
+one, the mid-connect server, every per-account preference, the Seerr
+server keyed by Jellyfin URL, and every keychain item of the app's service
+except the device id. Per-account preference means libraries, home rows,
+subtitle and track preferences, and recent searches. App-wide settings
+such as skip mode, autoplay and caption style stay. A journey that cares
+sets them through launch arguments and restores what it flips afterward.
+The bootstrap then always signs into the lane's server, whatever account
+the simulator last used, and persists nothing.
 
 Which launches pass the reset, and why:
 
@@ -91,10 +91,10 @@ Which launches pass the reset, and why:
   (`-debug.accountPrivacyRegression` on a loopback address) and then relaunches
   without the bootstrap to drive the ordinary picker.
 
-The reset erases real sign-ins. Run the lane only on simulators kept for it;
-never on a simulator a person keeps signed into their own library, and never
-on a physical device (a `devicectl` bench launch omits the flag for this
-reason).
+The reset erases real sign-ins. Run the lane only on simulators kept for
+it. Never run it on a simulator a person keeps signed into their own
+library, and never on a physical device. A `devicectl` bench launch omits
+the flag for this reason.
 
 ## Running the lane
 
@@ -118,10 +118,10 @@ scripts/test-session-recovery.py --subtitle-downloads --platforms iOS tvOS
 
 A UI run and an `xcodebuild build` share one build database unless the run
 has its own `-derivedDataPath`; without it the test dies with "database is
-locked". Three lanes on one machine produced load flakes in the September 11
-run; two are fine. Read a passed lane as: every test either passed or skipped
-with a named fixture reason. A skip on a supplied fixture server is a
-missing-fixture finding to record, not a pass.
+locked". Running three lanes at once on one machine produced load flakes;
+two lanes at once are fine. Read a passed lane as: every test
+either passed or skipped with a named fixture reason. A skip on a supplied
+fixture server is a missing-fixture finding to record, not a pass.
 
 Evidence for a given revision is recorded on its ticket; the lane's own
 contracts live here.
