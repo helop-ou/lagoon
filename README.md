@@ -46,6 +46,16 @@ sample-buffer player.
 To try it without a home server, connect to the public Jellyfin demo:
 `demo.jellyfin.org/stable`, user `demo`, empty password.
 
+## Licence
+
+Lagoon's own code is under the **Mozilla Public License 2.0**
+([LICENSE](LICENSE)). Fork it, change it, ship it; publish your changes to the
+files it covers, and say where they came from.
+
+The Lagoon name and brand artwork are not part of that grant. Give a fork its
+own name and icon — [TRADEMARKS.md](TRADEMARKS.md) explains what is carved out
+and why.
+
 ### Third-party notices
 
 The native libraries Lagoon links carry their own licences. The bundled texts

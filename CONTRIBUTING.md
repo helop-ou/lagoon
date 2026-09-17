@@ -4,12 +4,11 @@ Lagoon is one multiplatform SwiftUI app target for tvOS 26 and iOS 26, plus a
 Top Shelf extension, test targets, and a single local Swift package that pins
 the native media libraries.
 
-The licence is **MPL-2.0** for Lagoon's own code, with the Lagoon name and
-brand assets carved out of the grant. That is decided but not yet applied: the
-repository carries no licence file, so ask before redistributing the source or
-a build until one lands. Bugs go through the issue form; anything with
-security or privacy impact follows [SECURITY.md](SECURITY.md) instead of an
-issue.
+The licence is **MPL-2.0** for Lagoon's own code, in [LICENSE](LICENSE), with
+the Lagoon name and brand assets carved out of the grant by
+[TRADEMARKS.md](TRADEMARKS.md). Contributions are made under those terms.
+Bugs go through the issue form; anything with security or privacy impact
+follows [SECURITY.md](SECURITY.md) instead of an issue.
 
 ## Prerequisites
 
@@ -134,5 +133,5 @@ what you submit.
 
 The brand asset sources in `art/` are gitignored and not published. The PNG
 and PDF assets tracked in the repository are Lagoon's branding. They sit
-outside the source licence, as the carve-out above describes, and are not for
-reuse elsewhere.
+outside the source licence, and [TRADEMARKS.md](TRADEMARKS.md) describes what
+that means for a fork.
