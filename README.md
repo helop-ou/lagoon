@@ -72,6 +72,5 @@ email rather than into an issue.
 Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
 Lagoon works against 10.8 through current. What has actually been contacted is
 narrower than that range: the public **10.11.11** stable demo and the public
-**12.0.0** unstable demo. The 12.0 compatibility work (HEL-138) is not
-finished — see [Jellyfin API](docs/jellyfin-api.md) for what has and has not
-been checked.
+**12.0.0** unstable demo. The 12.0 compatibility work is not finished — see
+[Jellyfin API](docs/jellyfin-api.md) for what has and has not been checked.
