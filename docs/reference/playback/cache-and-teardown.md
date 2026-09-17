@@ -6,14 +6,14 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
 
 ## Playback cache and teardown
 
-The cache predates the HEL-142 transport replacement. Where these notes say a
-read falls back to libavformat's "native" HTTP path, that path is now the
-URLSession transport as well (see
-[Network transport](../../playback.md#network-transport)); what a fallback
-changes is the byte source, never the security policy.
+The cache predates the transport replacement described in
+[Network transport](../../playback.md#network-transport). Where these notes
+say a read falls back to libavformat's "native" HTTP path, that path is now
+the URLSession transport too; what a fallback changes is the byte source,
+never the security policy.
 
-Release direct-play and direct-stream files use the sparse range buffer
-(HEL-86). One custom `AVIOContext` lets libavformat read and seek through a
+Release direct-play and direct-stream files use the sparse range buffer. One
+custom `AVIOContext` lets libavformat read and seek through a
 discardable file under `Library/Caches/Lagoon/Playback`; authenticated `Range`
 misses fill that file and repeated reads are local. The engine tries this path
 first, but if the server rejects or ignores byte ranges during open it closes
@@ -35,7 +35,7 @@ cushion has reached the renderer, and fills cooperatively rather than in one
 large background request: one 1 MiB chunk at a time, with
 `PlaybackFillPolicy` (a pure, unit-tested value type) deciding what follows
 each chunk from the cushion of cached media ahead of the playhead and the
-throughput the chunk just measured (HEL-160). Below `targetAheadSeconds`
+throughput the chunk just measured. Below `targetAheadSeconds`
 (120 s of wall-clock playback at the current rate), the next chunk follows
 after a yield of half the request's own duration, uncapped so foreground reads
 keep a third of the link while a fast link never idles, but only when the
@@ -51,7 +51,8 @@ since the previous chunk; a 1 MiB chunk holds 0.25 s of media only below
 about 33 Mbps, so every 4K title fell back to the gentle pace and the 1080p
 bench could not see it. At or above the target the older pacing returns:
 four times the measured request duration, capped at 8 s.
-The pre-HEL-160 loop applied that pacing always, a fixed ~20% duty cycle that
+Before this scheduler, the fill loop applied that pacing always, a fixed
+~20% duty cycle that
 capped read-ahead near 2 MiB/s however fast the link was. Pacing measures the
 prefetch's own request, never the cache's aggregate that foreground traffic
 also feeds. A 20-second cooldown follows buffering or a new stall. Pause allows
@@ -91,7 +92,7 @@ wherever it sits: near the start it stays `[0, cap]` and only begins to slide
 once the playhead has passed the reserve distance. Without that clamp its lower
 half hung off the front of the file and that capacity went unspent — a viewer
 who paused a minute in buffered up to 256 MiB less than the cache was allowed
-to hold (HEL-99). `preferredPrefetchOffset` follows every foreground read, so a
+to hold. `preferredPrefetchOffset` follows every foreground read, so a
 backwards seek re-centres the window on its next demux read and the bytes now
 far *ahead* become the eviction candidates; anything evicted is simply
 refetched, because the range set is the sole authority on what the file may be
@@ -114,9 +115,9 @@ deterministic range incompatibility does not retry, because the fallback open
 is both faster and safer. A proactive fetch reports a `PlaybackPrefetchOutcome`
 rather than a Boolean: a `.failed` chunk (the loader exhausted its retries)
 backs off, doubling from 1 s to a 30 s cap, and is retried, so fill resumes on
-its own once the link recovers, without a seek or a new session; before
-HEL-160 a failure was indistinguishable from completion and ended fill for the
-rest of the title, with the finished task handle also blocking
+its own once the link recovers, without a seek or a new session; before this
+policy, a failure was indistinguishable from completion and ended fill for
+the rest of the title, with the finished task handle also blocking
 `resumeBufferFill`. Reaching the disk cap does not end proactive fill for a
 windowed title — `.exhausted` there means the read-ahead is full, so the
 controller waits for the playhead to make room rather than giving up on the
@@ -145,7 +146,7 @@ hit rate, request count and latency; a `Playback Buffer Progress` signpost
 carries the same fraction and stall count for Instruments runs.
 
 Cache ownership is part of the player lifecycle, never an offline-download
-feature. Offline downloads are a separate owner, `DownloadStore` (HEL-166): a
+feature. Offline downloads are a separate owner, `DownloadStore`: a
 finished download lives under Application Support, not Caches, and its
 playback runs with no cache scope at all, activated or otherwise. There is
 one active scope and at most one staged successor. Dismissal,
@@ -155,7 +156,7 @@ Deletion waits for an in-flight demux read on a utility queue so the main actor
 does not inherit file/network teardown. Stale scope directories are discarded
 when a new coordinator starts.
 
-Player exit is deliberately two-phase (HEL-57), and its first phase is
+Player exit is deliberately two-phase, and its first phase is
 synchronous: before the full-screen cover returns to Home or Settings the main
 actor cancels the clocks, observer and subtitle work, detaches system media
 state, marks the engine cancelled and interrupts FFmpeg. Renderer stop/flush,

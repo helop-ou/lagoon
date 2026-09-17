@@ -432,38 +432,41 @@ details](reference/playback/controls-and-reporting.md#progress-reporting).
 On iPhone and iPad, a surface tap toggles transport visibility. Centered
 play/pause and ±10-second buttons use `.glass(.clear)`. While playing,
 controls fade after four seconds without interaction. Paused playback and
-VoiceOver keep them available with the options sheet closed. Hidden controls
-disable hit testing and are marked accessibility-hidden; keep the layout
-mounted so fading and toolbar safe-area changes cannot move the center
-cluster.
+VoiceOver keep them available with the options sheet closed. Hidden
+controls disable hit testing and are marked accessibility-hidden. Keep the
+layout mounted, so fading and toolbar safe-area changes cannot move the
+center cluster.
 
 Double-tapping either half seeks ten seconds without revealing controls.
 Repeated double-taps within the 700 ms feedback window accumulate the shown
-amount; changing direction resets it. Dragging the timeline previews trickplay
-and commits on release. Skip and Up Next accept direct taps. Close and Info
-live in the native toolbar; the options sheet suppresses surface interaction.
-Close closes the player outright. A swipe up over free video opens the options
-panel; a swipe down carries the whole player with the finger, YouTube-style,
-and past the threshold minimizes it into the phone's popup player, which is
-Picture in Picture (where PiP is not possible it closes instead). The
-timeline's own drag and every button win over the swipe.
+amount. Changing direction resets it. Dragging the timeline previews
+trickplay and commits on release. Skip and Up Next accept direct taps.
+Close and Info live in the native toolbar. The options sheet suppresses
+surface interaction. Close closes the player outright. A swipe up over
+free video opens the options panel. A swipe down carries the whole player
+with the finger, YouTube-style, and past the threshold minimizes it into
+the phone's popup player, which is Picture in Picture. Where PiP is not
+possible, it closes instead. The timeline's own drag and every button win
+over the swipe, based on viewer feedback.
 
-On iPhone and iPad, locking the phone or leaving the app keeps playback going:
-audio continues under the `audio` background mode, the picture is dropped
-until the scene is back (unless PiP or AirPlay is still showing it), and the
-lock screen's controls drive the engine. Skip and Up Next are decided by
-`PlaybackAutomation` off the engine's clock, never in a view body, so intros
-are still skipped and the next episode still starts with the screen off; the
-overlays only draw its state. Each countdown's action and visible fill share a
-monotonic deadline. Only the fill redraws as time passes, so a newly mounted
-overlay shows elapsed progress immediately instead of relying on an animation
-from a previous view value — an overlay is created at the moment its countdown
-arms, so there is no earlier value to animate from, which is why both fills
-used to read as full for their whole run. An accepted hand-off keeps its
-timing: the card outlives `playNext` while the successor is prepared, and a
-bar that emptied underneath it would read as the offer being withdrawn. tvOS
-pauses on background as before. See [system
-integration](reference/playback/system-integration.md).
+On iPhone and iPad, locking the phone or leaving the app keeps playback
+going. Audio continues under the `audio` background mode. The picture is
+dropped until the scene is back, unless PiP or AirPlay is still showing it.
+The lock screen's controls drive the engine. Skip and Up Next are decided
+by `PlaybackAutomation` off the engine's clock, never in a view body, so
+intros are still skipped and the next episode still starts with the screen
+off. The overlays only draw its state.
+
+Each countdown's action and visible fill share a monotonic deadline. Only
+the fill redraws as time passes, so a newly mounted overlay shows elapsed
+progress immediately, instead of animating from a previous view value. An
+overlay is created at the moment its countdown arms, so there is no earlier
+value to animate from. That is why both fills used to read as full for
+their whole run. An accepted hand-off keeps its timing: the card outlives
+`playNext` while the successor is prepared. A bar that emptied underneath
+it would read as the offer being withdrawn. tvOS pauses on background as
+before. See
+[system integration](reference/playback/system-integration.md).
 
 The player follows the device on iPhone and iPad and never forces a rotation:
 a title opened in portrait plays letterboxed in portrait until the viewer
