@@ -59,6 +59,11 @@ nonisolated enum Changelog {
                     "Home now opens with what you were watching and what each library just gained: Continue Watching, Next Up, Recently Added Movies, Top 10 Movies, then Recently Added Shows and Top 10 Shows, with the rest following in a run of films and a run of television.",
                     "Recently Added is now three rows rather than one switch covering all of them, so the movies one and the shows one can be moved and hidden separately.",
                 ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "Sign Out on Apple TV now asks you to confirm, and then signs you out. Pressing it did nothing at all before.",
+                    "Signing out of your last account now takes you back to the server screen, rather than to a sign in form that named no server.",
+                    "Change Server, on the screen asking you to sign in again, now forgets that account instead of leaving it in the user list with no way to remove it.",
+                ]),
             ]
         ),
         ChangelogEntry(
