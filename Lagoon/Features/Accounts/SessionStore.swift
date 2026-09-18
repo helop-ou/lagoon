@@ -612,7 +612,10 @@ final class SessionStore {
         reauthenticationAccount = nil
         userName = nil
         defaults.removeObject(forKey: DefaultsKey.activeAccountId)
-        phase = accounts.isEmpty ? .needsSignIn : .choosingAccount
+        // `remove` has already cleared the stored server, so there is nothing
+        // left to sign in to — asking for a password on the last account
+        // stranded the viewer on a form naming no server.
+        phase = accounts.isEmpty ? .needsServer : .choosingAccount
         async let jellyfinLogout: Void? = try? remote.logout()
         async let seerrLogout: Void? = linkedRemote.sessionCookie == nil ? nil : try? linkedRemote.logout()
         _ = await (jellyfinLogout, seerrLogout)
@@ -620,6 +623,11 @@ final class SessionStore {
 
     func forgetServer() async {
         connectionGeneration += 1
+        // An account waiting to re-authenticate is never the active one —
+        // `beginReauthentication` clears that — so hold on to it before the
+        // reset. Dropping it here left the entry in the picker with its
+        // credential intact and no route to remove it.
+        let reauthenticating = reauthenticationAccount
         reauthenticationAccount = nil
         if isAccountDraft {
             client.clearSession()
@@ -634,7 +642,7 @@ final class SessionStore {
         // waiting for revocation of this one.
         let remote = client.sessionSnapshot()
         let linkedRemote = seerr.client.sessionSnapshot()
-        if let account = activeAccount { try? remove(account) }
+        if let account = activeAccount ?? reauthenticating { try? remove(account) }
         client.clearSession()
         activeAccount = nil
         defaults.removeObject(forKey: DefaultsKey.activeAccountId)
