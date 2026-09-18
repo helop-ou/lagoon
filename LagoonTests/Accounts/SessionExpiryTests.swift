@@ -144,6 +144,44 @@ struct SessionExpiryTests {
         #expect(store.reauthenticationAccount == nil)
     }
 
+    /// Changing server from the re-authentication form is the only route a
+    /// viewer has out of an expired account, and it used to leave the entry
+    /// in the picker: `forgetServer` looked at `activeAccount`, which
+    /// `beginReauthentication` has already cleared.
+    @Test func changingServerWhileReauthenticatingStillForgetsThatAccount() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let store = fixture.store()
+        SessionExpiryProtocol.setReply(.http(401, ""))
+        _ = try? await store.client.getData("Users/Me")
+        #expect(store.reauthenticationAccount == fixture.first)
+        #expect(store.activeAccount == nil)
+
+        await store.forgetServer()
+
+        #expect(store.accounts == [fixture.second])
+        #expect(store.reauthenticationAccount == nil)
+        #expect(store.phase == .needsServer)
+        // The account on the other server keeps its credential.
+        #expect(KeychainStore.string(for: fixture.second.keychainAccount) == "second-token")
+    }
+
+    /// Signing out of the last account cleared the stored server too, so
+    /// asking for a password next stranded the viewer on a form naming no
+    /// server at all.
+    @Test func signingOutOfTheLastAccountAsksForAServerNotAPassword() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let store = fixture.store()
+        try store.remove(fixture.second)
+        #expect(store.accounts == [fixture.first])
+
+        await store.signOut()
+
+        #expect(store.accounts.isEmpty)
+        #expect(store.phase == .needsServer)
+    }
+
     @Test func aPendingLogoutCannotClearTheNextAccount() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
