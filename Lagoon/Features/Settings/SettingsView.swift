@@ -78,7 +78,7 @@ struct SettingsView: View {
     var body: some View {
         Group {
             #if os(tvOS)
-            confirmingAccountActions { splitLayout }
+            splitLayout
             #else
             touchForm
                 .navigationTitle("Settings")
@@ -151,8 +151,11 @@ struct SettingsView: View {
         #endif
     }
 
-    /// Attach to the visible action on iOS so its native confirmation
-    /// popover is anchored to Sign Out, not to the hidden settings root.
+    /// Attach to whatever is on screen when Sign Out is pressed, never to the
+    /// settings root. On iOS that anchors the native popover to the button
+    /// rather than the hidden root. On tvOS the account actions sit on a
+    /// pushed page, and a dialog left on the root behind it armed without
+    /// ever presenting, so the row did nothing at all.
     private func confirmingAccountActions<Content: View>(
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -315,23 +318,25 @@ struct SettingsView: View {
     }
 
     private var accountSettings: some View {
-        TVSettingsPage(
-            "Account",
-            description: "View the active Jellyfin connection, switch between saved users, or add and remove an account."
-        ) {
-            TVSettingsSection("Connection") {
-                settingsInfo("Server", value: session.serverName ?? "Jellyfin")
-                settingsInfo("Address", value: session.client.serverURL?.host() ?? "—")
-                settingsInfo("User", value: session.userName ?? "—")
-            }
-
-            TVSettingsSection("Account Actions") {
-                if session.accounts.count > 1 {
-                    settingsAction("Switch User", id: "switch") { session.showAccountPicker() }
+        confirmingAccountActions {
+            TVSettingsPage(
+                "Account",
+                description: "View the active Jellyfin connection, switch between saved users, or add and remove an account."
+            ) {
+                TVSettingsSection("Connection") {
+                    settingsInfo("Server", value: session.serverName ?? "Jellyfin")
+                    settingsInfo("Address", value: session.client.serverURL?.host() ?? "—")
+                    settingsInfo("User", value: session.userName ?? "—")
                 }
-                settingsAction("Add Account", id: "add") { session.addAccount() }
-                settingsAction("Sign Out", id: "signOut", role: .destructive) {
-                    pendingAccountAction = .signOut
+
+                TVSettingsSection("Account Actions") {
+                    if session.accounts.count > 1 {
+                        settingsAction("Switch User", id: "switch") { session.showAccountPicker() }
+                    }
+                    settingsAction("Add Account", id: "add") { session.addAccount() }
+                    settingsAction("Sign Out", id: "signOut", role: .destructive) {
+                        pendingAccountAction = .signOut
+                    }
                 }
             }
         }
