@@ -169,8 +169,10 @@ revision.
 - [x] In-app legal and acknowledgements access exists before login and in
   About.
 - [ ] Publish privacy/support pages with the selected domain, publisher
-  identity and monitored contact. Fill `LegalDestinations` with verified URLs,
-  and check their iPhone/iPad and tvOS presentation. See [Website](#website).
+  identity and monitored contact, and enter the same URLs in App Store
+  Connect. The pages are live and `LegalDestinations` carries them; their
+  iPhone/iPad and tvOS presentation is still unchecked. See
+  [Website](#website).
 - [ ] Complete physical acceptance testing, including the permission journey
   from the assessment above, and outstanding device checks.
 
@@ -240,13 +242,17 @@ The site source and maintained copy live in the separate `lagoon-website`
 repository. The sibling checkout is `../lagoon-website`. It contains the
 prerendered SvelteKit site and Cloudflare configuration.
 
-Publication remains a release task: confirm the domain, publisher and contact,
-DNS, current rights-cleared screenshots, and the App Store/TestFlight
-destination. `lagoon.helop.dev` is the proposed domain, on the same `helop.dev` as the
-support and security contact. The `.dev` TLD is HSTS-preloaded, so an address
-a viewer types from the Apple TV screen cannot resolve over plaintext HTTP. Check the live privacy
-and support pages before filling
-`Lagoon/Features/Settings/LegalDestinations.swift` and App Store Connect.
-Those URLs are currently nil, so the app cannot link to unpublished pages.
-Keep the site and store copy consistent with the actual supported formats,
-devices, server setup, and subtitle permissions.
+The site is live on `lagoon.helop.dev`, on the same `helop.dev` as the support
+and security contact. The `.dev` TLD is HSTS-preloaded, so an address a viewer
+types from the Apple TV screen cannot resolve over plaintext HTTP.
+
+`Lagoon/Features/Settings/LegalDestinations.swift` carries the published
+`/privacy/` and `/support/` addresses, and App Store Connect has to be given
+the same two, because a reviewer checks one against the other. A destination
+whose page is not published stays nil and its row disappears rather than
+pointing at an address that does not answer.
+
+Still a release task: publisher identity and a monitored contact, current
+rights-cleared screenshots, and the App Store/TestFlight destination. Keep the
+site and store copy consistent with the actual supported formats, devices,
+server setup, and subtitle permissions.
