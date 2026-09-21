@@ -5,12 +5,10 @@ import Foundation
 /// `-debug.regressionBootstrapPublicDemo YES`: drop every account- and
 /// server-scoped record a previous run left, so the lane starts identical.
 ///
-/// Goes: stored accounts and the active one, the mid-connect server, every
-/// per-account preference, the Seerr server and its pending-removal
-/// bookkeeping, and every keychain item of this service except the device id.
-/// Stays: app-wide settings the lane sets by launch argument, and the debug
-/// switches themselves — the argument domain, which `removeObject` never
-/// touches.
+/// Goes: stored accounts, the mid-connect server, per-account preferences, the
+/// Seerr server and its bookkeeping, and every keychain item except the device
+/// id. Stays: app-wide settings the lane sets by launch argument, and the
+/// debug switches — the argument domain, which `removeObject` never touches.
 ///
 /// This wipes real sign-ins. Only the public-demo lane passes the flag.
 nonisolated enum RegressionStateReset {
