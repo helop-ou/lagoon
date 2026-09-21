@@ -66,28 +66,25 @@ activates it, and cancel leaves the active Jellyfin and Seerr sessions intact.
 Sign-out revokes and forgets the account and clears its owned local data.
 Seerr sessions stay scoped to the Jellyfin account and Seerr origin.
 
-`SyncPlayStore` is owned by `SessionStore` beside `SeerrSessionStore`, and
-`synchronizeAccountContext()` points it at the active account. A SyncPlay
-group belongs to the account that joined it, so switching accounts or signing
-out leaves the group. `RootView` injects it into the environment; the iOS
-UIKit player host re-injects it because that presentation rebuilds the
-environment from scratch. The store owns membership: socket, server clock,
-group, and queue. `GroupPlaybackDriver` owns playback, holding
+`SyncPlayStore` is owned by `SessionStore` beside `SeerrSessionStore`, pointed
+at the active account by `synchronizeAccountContext()`. A group belongs to the
+account that joined it, so switching accounts or signing out leaves it.
+`RootView` injects it; the iOS UIKit player host re-injects because that
+presentation rebuilds the environment. The store owns membership — socket,
+clock, group, queue — and `GroupPlaybackDriver` owns playback, holding
 `PlaybackController` weakly and never an engine. See [Watch
 Together](playback.md#watch-together-syncplay).
 
-`DownloadStore.shared` (iOS only) is the one owner of offline downloads: its
-per-account manifest, the background `URLSession` carrying every transfer, and
-the artwork saved beside each file. `SessionStore` activates it for the
-current account on restore, switch, and sign-out, and removing an account
-removes its downloads too. The URLSession delegate uses `OperationQueue.main`,
-so commands and delegate callbacks share MainActor ownership: completing a
-download checks the attempt, preserves the temporary file, and persists the
-manifest before the callback returns. The active account uses its observed
-manifest; inactive accounts use their stored manifest. Generation and attempt
-checks protect operations that suspend, including permission queries and
-pause/restart. `DownloadArtworkIndex` is the separate, lock-protected value
-snapshot read by background image loaders.
+`DownloadStore.shared` (iOS only) is the one owner of offline downloads: the
+per-account manifest, the background `URLSession`, and the artwork beside each
+file. `SessionStore` activates it on restore, switch and sign-out, and removing
+an account removes its downloads. The delegate uses `OperationQueue.main`, so
+commands and callbacks share MainActor ownership: completing a download checks
+the attempt, preserves the temporary file and persists the manifest before the
+callback returns. The active account uses its observed manifest, inactive ones
+their stored manifest, and generation and attempt checks protect anything that
+suspends. `DownloadArtworkIndex` is the separate lock-protected snapshot
+background image loaders read.
 
 ## Refresh and navigation
 
@@ -154,17 +151,12 @@ server-defined rail layout.
 
 ## Refactoring priorities
 
-An earlier restructuring established the layout above. `PlaybackController`
-has its own file; reporting, successor preparation, and optional HUD/trace
-sampling have explicit owners. `VideoPlayerView` retains the controller with
-`@State`. Seerr request list/detail models have separate homes, and Settings
-category views bind back to the root's existing stores.
-`LagoonUITests/Support/` owns shared player launching, fixture resolution, and
-state waits; platform gestures remain in their suites. The
+Further engine and cache extractions should follow queue and resource
+ownership. Line counts alone do not justify splitting a coupled implementation
+into extensions.
+
+Preserve the [playback invariants](playback.md#lifecycle-and-memory), and
+validate an ownership change with dismissal/replay, episode handoff, PiP and
+physical performance checks as well as both platform builds and tests. The
 [roadmap](roadmap.md#awaiting-device-or-deployment-verification) records the
-remaining acceptance. Further engine/cache extractions should follow queue and
-resource ownership; line counts alone do not justify splitting a coupled
-implementation into extensions. Preserve the [playback
-invariants](playback.md#lifecycle-and-memory) and validate ownership changes
-with dismissal/replay, episode handoff, PiP and physical performance checks in
-addition to both platform builds/tests.
+remaining acceptance.
