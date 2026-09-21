@@ -931,30 +931,22 @@ nonisolated final class FFmpegDemuxer {
     /// a landing arrives well inside this.
     private static let landingProbePacketBudget = 480
 
-    /// Walks a mid-GOP seek landing back to the last keyframe at or before
-    /// the target.
+    /// Walks a mid-GOP seek back to the last keyframe at or before the target.
     ///
-    /// A container's seek lands where its index says. MPEG-TS has no index:
-    /// libavformat binary-searches the PES timestamps (`mpegts_get_dts`,
-    /// whose own source carries a "FIXME keyframe?" on the index entries it
-    /// synthesises) and stops at whatever packet carries the nearest one,
-    /// which is mid-GOP as often as not. libavcodec decodes on from there
-    /// without complaining; `AVSampleBufferVideoRenderer` does not, and the
-    /// first sample after the flush came back as kVTVideoDecoderBadDataErr
-    /// (-8969), which the delivery ladder reads as `.undecodable`. A
-    /// downloaded progressive transcode that plays perfectly from the start
-    /// fell to a server transcode as soon as it was resumed.
+    /// MPEG-TS has no index, so libavformat binary-searches the PES timestamps
+    /// and stops mid-GOP as often as not. libavcodec decodes on regardless;
+    /// `AVSampleBufferVideoRenderer` returns kVTVideoDecoderBadDataErr (-8969)
+    /// on the first sample after a flush, which the ladder reads as
+    /// `.undecodable` — a downloaded transcode fell to a server transcode when
+    /// resumed.
     ///
-    /// At or before the target is what the rest of the engine expects of a
-    /// seek: `PlaybackClockAnchor` keeps the clock on the requested time and
-    /// the audio admission floor drops the run-in, so an early landing costs
-    /// a short decode burst, while a late one would silently skip content.
+    /// *At or before* is what the engine expects: `PlaybackClockAnchor` holds
+    /// the clock at the requested time and the audio floor drops the run-in,
+    /// so early costs a decode burst where late would skip content.
     ///
-    /// Only for containers the demuxer reads as one seekable byte stream: a
-    /// file by path, the direct-play cache, a disc image. An `AVFMT_NOFILE`
-    /// demuxer fetches its own media, and HLS in particular seeks to a
-    /// segment boundary, a keyframe by construction, so proving it would cost
-    /// a second fetch of the segment.
+    /// Only for one seekable byte stream — file, direct-play cache, disc
+    /// image. `AVFMT_NOFILE` demuxers fetch their own media, and HLS seeks to
+    /// a segment boundary, a keyframe by construction.
     private func alignLandingToKeyframe(_ ctx: UnsafeMutablePointer<AVFormatContext>, target: Int64) {
         guard videoRandomAccessCodec != nil, videoStreamIndex >= 0,
               let format = ctx.pointee.iformat, format.pointee.flags & noFileFormatFlag == 0,
@@ -1123,24 +1115,21 @@ nonisolated final class FFmpegDemuxer {
     /// its timestamps cannot lose its video track.
     private static let leadingPictureDropLimit = 32
 
-    /// Whether this video packet is one of the open GOP's leading pictures.
+    /// Whether this packet is one of the open GOP's leading pictures.
     ///
-    /// The renderer flush that precedes every seek destroys the decoder's
-    /// reference pictures, so a picture that references the GOP *before* the
-    /// point the seek landed on cannot be decoded — `AVSampleBufferVideoRenderer`
-    /// answers one with `didFailToDecodeNotification`, and the delivery
-    /// ladder reads that as `.undecodable` and drops the viewer onto a
-    /// server transcode for the rest of the film. libavcodec is
-    /// forgiving here and Apple's decoder is not, which is why this had never
-    /// shown up in a software-decoded path.
+    /// The flush before every seek destroys the decoder's reference pictures,
+    /// so a picture referencing the GOP *before* the seek landing cannot be
+    /// decoded. `AVSampleBufferVideoRenderer` answers `didFailToDecode` and
+    /// the ladder reads `.undecodable`, dropping the viewer onto a server
+    /// transcode for the rest of the film. libavcodec is forgiving here and
+    /// Apple's decoder is not, which is why software paths never showed it.
     ///
-    /// Every such picture is presented before the point the seek landed on,
-    /// which is at or before the position the viewer asked for, so nothing
-    /// dropped here was ever going to be shown.
+    /// Every such picture presents before the seek landing, which is at or
+    /// before what the viewer asked for, so nothing dropped was going to be
+    /// shown.
     ///
-    /// Armed only when the anchor is a genuine keyframe that is *not* an
-    /// IDR/IRAP: an IDR closes its GOP by definition, so closed-GOP content —
-    /// which is nearly everything — takes exactly its earlier path.
+    /// Armed only when the anchor is a keyframe that is not an IDR/IRAP: an
+    /// IDR closes its GOP, so closed-GOP content takes the earlier path.
     private func postSeekVideoDecision(
         packet: UnsafeMutablePointer<AVPacket>,
         payload: Data?
