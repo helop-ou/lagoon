@@ -2,27 +2,18 @@ import CoreMedia
 import Foundation
 import VideoToolbox
 
-/// What the running device can actually decode, as distinct from what the
-/// engine knows how to ask for.
+/// What the device can decode, as opposed to what the engine can ask for.
 ///
-/// `VTIsHardwareDecodeSupported` reports *hardware* support and nothing else —
-/// on the tvOS simulator it
-/// answers false for every codec including H.264, which the simulator plainly
-/// plays. Gating on it wholesale would strip a profile down to nothing.
+/// `VTIsHardwareDecodeSupported` reports hardware only, and answers false for
+/// every codec on the simulator — including H.264, which it plainly plays. So
+/// query only the paths where the answer changes routing:
 ///
-/// So the rule is: query exactly the paths where the answer changes routing.
-/// HEVC requires hardware. `VideoToolboxDecoder` creates its session with
-/// `kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder`, so a
-/// device without one cannot play HEVC at all — it answers -12906 and the
-/// title fails. AV1 uses that same compressed hardware path where available,
-/// but has Lagoon's bounded libdav1d software path otherwise. H.264 is handed
-/// to `AVSampleBufferVideoRenderer` compressed and may be decoded in software;
-/// the remaining advertised codecs are decoded by libavcodec on the CPU.
+/// - HEVC needs hardware. The session is created requiring it, so a device
+///   without one answers -12906 and the title fails.
+/// - AV1 uses hardware where available, bounded libdav1d otherwise.
+/// - H.264 goes to the renderer compressed; the rest are libavcodec on CPU.
 ///
-/// Apple notes that a true here "does not guarantee that hardware decode
-/// resources will be available at all times", so this narrows what Lagoon
-/// claims without ever promising it — the delivery ladder is what
-/// covers the remainder.
+/// A true is not a promise of availability. The delivery ladder covers that.
 nonisolated struct PlaybackCapabilities: Equatable, Sendable {
     let hardwareHEVC: Bool
     let hardwareAV1: Bool
