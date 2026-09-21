@@ -627,26 +627,20 @@ nonisolated enum SampleBufferFactory {
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sampleBuffer else { return nil }
 
-        // Frame dependencies (third and final chapter of 4e2ad5f).
+        // Frame dependencies.
         //
-        // CMSampleBuffer.h, verbatim: "A frame is considered droppable if
-        // and only if kCMSampleAttachmentKey_IsDependedOnByOthers is
-        // present and set to kCFBooleanFalse." Absent means NOT droppable —
-        // the opposite of what 4e2ad5f assumed when it landed this marking
-        // as a fix. Setting the key false on AV_PKT_FLAG_DISPOSABLE frames
-        // therefore *licenses* the renderer's pre-decode dropper
-        // (AVVideoPerformanceMetrics counts "frames dropped prior to
-        // decoding") for every non-reference frame — 67% of the stream on
-        // the title that measured 10.7% steady loss at a matched display
-        // rate with full queues and zero stalls. The sim A/B that showed
-        // "no difference" ran where that dropper never engages (60 Hz
-        // virtual display, software decode).
+        // CMSampleBuffer.h: "A frame is considered droppable if and only if
+        // kCMSampleAttachmentKey_IsDependedOnByOthers is present and set to
+        // kCFBooleanFalse." Absent means NOT droppable — the opposite of what
+        // 4e2ad5f assumed. Setting it false on AV_PKT_FLAG_DISPOSABLE frames
+        // licenses the renderer's pre-decode dropper for every non-reference
+        // frame: 67% of the stream on the title measuring 10.7% steady loss at
+        // a matched display rate with full queues. The sim A/B showing no
+        // difference ran where that dropper never engages.
         //
-        // So the marking is now opt-in (debug.markDroppableFrames) for the
-        // hardware A/B, and the default volunteers nothing: NotSync and
-        // DependsOnOthers stay — they describe decode dependencies and
-        // carry no droppability meaning — while IsDependedOnByOthers is
-        // set true for reference frames only, and left absent otherwise.
+        // So it is opt-in (debug.markDroppableFrames). By default NotSync and
+        // DependsOnOthers stay — decode dependencies, not droppability — and
+        // IsDependedOnByOthers is set true for reference frames only.
         if isVideo,
            let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: true),
            CFArrayGetCount(attachments) > 0 {
