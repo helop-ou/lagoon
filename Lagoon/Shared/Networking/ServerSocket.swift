@@ -101,21 +101,19 @@ nonisolated enum ServerSocketURL {
 }
 
 /// Jellyfin's server-to-client WebSocket: the only way a SyncPlay group's
-/// commands reach a client.
+/// commands reach a client. Main-actor owned.
 ///
-/// Main-actor owned, by the project's default isolation. Built from a
-/// snapshot of the client's URL, token and device id — the same rule
-/// `sessionSnapshot()` follows — so a socket that outlives an account
-/// change fails and reconnects as the account it was opened for, instead of
-/// silently adopting the new one.
+/// Built from a snapshot of the client's URL, token and device id, like
+/// `sessionSnapshot()`, so a socket outliving an account change fails and
+/// reconnects as the account it was opened for rather than adopting the new
+/// one.
 ///
 /// Keep-alive is handled here and never forwarded: the server sends
-/// `ForceKeepAlive` with a timeout in seconds, expects a `KeepAlive` reply
-/// at once and then one every half-timeout, and echoes a bare `KeepAlive`
-/// back at us, which is not a message anything upstream wants to see.
+/// `ForceKeepAlive` with a timeout, expects a `KeepAlive` at once and then
+/// every half-timeout, and echoes a bare `KeepAlive` back.
 ///
-/// Nothing tears this down on deinit: a `URLSessionWebSocketTask` outlives
-/// its owner happily. Whoever calls `connect()` owns calling `disconnect()`.
+/// Nothing tears this down on deinit — a `URLSessionWebSocketTask` outlives
+/// its owner happily. Whoever calls `connect()` owns `disconnect()`.
 final class ServerSocket {
     nonisolated enum State: Equatable, Sendable {
         case idle
