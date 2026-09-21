@@ -256,6 +256,40 @@ nonisolated enum PlaybackRestartPointPolicy {
     }
 }
 
+/// Whether a sample may be the *first* one a flushed renderer is given.
+///
+/// `AVSampleBufferVideoRenderer` starts only on a random-access point, and a
+/// seek is not the only way a sample reaches it after `flush()`. The demux
+/// thread can be parked inside a read at the moment of the flush, and the
+/// packet that read returns belongs to the position being left: it lands in
+/// the emptied queue and goes out as sample one, before the loop has noticed
+/// the seek. The renderer refuses it, and the ladder reads that refusal as a
+/// verdict on the bitstream and answers with a transcode.
+///
+/// So the pump asks this first. What the container calls a keyframe is
+/// admitted, which keeps the open-GOP I picture the demuxer deliberately
+/// hands over; anything else waits for one.
+nonisolated enum PlaybackRendererStartPolicy {
+    /// How many samples may be dropped looking for a start point before the
+    /// pump gives up and enqueues what it has.
+    ///
+    /// The same escape the demuxer's keyframe search keeps: a stream whose
+    /// keyframes are never flagged must not lose its picture altogether. One
+    /// stale sample is the expected case, because the flush empties the
+    /// intake too and only a read already in flight can still arrive.
+    static let startPointSearchLimit = 8
+
+    static func admits(
+        isSyncSample: Bool,
+        videoSamplesSinceFlush: Int,
+        droppedSinceFlush: Int
+    ) -> Bool {
+        videoSamplesSinceFlush > 0
+            || isSyncSample
+            || droppedSinceFlush >= startPointSearchLimit
+    }
+}
+
 /// What to do about a VideoToolbox *session* fault, which is not a verdict
 /// on the bitstream and must not descend the ladder on its own (HEL-181).
 ///
