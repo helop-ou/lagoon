@@ -432,23 +432,20 @@ enum DetailLayout {
 }
 #endif
 
-/// The actions block of a detail page, laid out once for every page that
-/// has one primary pill and some secondary controls. Film, series
-/// and Seerr pages each used to carry their own copy of the four
-/// compositions below, and the Seerr page's copy fell behind when the touch
-/// pages were redesigned.
+/// The actions block of a detail page: one primary pill and some secondary
+/// controls. Film, series and Seerr pages each carried their own copy, and
+/// Seerr's fell behind when the touch pages were redesigned.
 ///
-/// - tvOS and a regular-width iPad window: one row, the primary first so it
-///   takes first focus, with the accessory beneath the row.
-/// - A landscape phone: the secondary controls, the accessory, then the
-///   primary on one line along the hero's lower part. The row aligns on the
-///   primary's `detailPillCenter`, so a caption hung under the pill does not
-///   pull the circles off level.
-/// - A portrait phone: the primary alone, wide, then the secondary controls
-///   and the accessory as one row beneath it.
+/// - tvOS and regular-width iPad: one row, primary first so it takes first
+///   focus, accessory beneath.
+/// - Landscape phone: secondary controls, accessory, then primary on one line
+///   along the hero's lower part, aligned on the primary's
+///   `detailPillCenter` so a caption under the pill does not pull the circles
+///   off level.
+/// - Portrait phone: primary alone and wide, secondary controls and accessory
+///   in a row beneath.
 ///
-/// The accessory is the series page's season picker: a control that belongs
-/// with the circles on a phone but under the row where there is width.
+/// The accessory is the series page's season picker.
 struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View {
     @ViewBuilder let primary: Primary
     @ViewBuilder let secondary: Secondary
