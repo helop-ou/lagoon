@@ -536,15 +536,14 @@ nonisolated enum SubtitleParser {
 /// Turns subtitle bytes into text without silently inventing them.
 ///
 /// The previous chain ended in `isoLatin1`, which cannot fail — it maps every
-/// byte — so a Windows-1251 Cyrillic file decoded to mojibake and rendered as
-/// garbage with no error anywhere. Jellyfin converts to UTF-8 on its way out,
-/// which hid this; a provider fetched directly does not.
+/// byte — so a Windows-1251 Cyrillic file decoded to mojibake with no error
+/// anywhere. Jellyfin converts to UTF-8 on the way out, which hid it; a
+/// provider fetched directly does not.
 ///
-/// The language is the strongest available signal for a legacy file, since a
-/// codepage cannot be recovered from the bytes alone: a Cyrillic subtitle is
-/// almost certainly Windows-1251 and a Baltic one Windows-1257. Every
-/// candidate is still sanity-checked, so a wrong hint degrades to the next
-/// option rather than to nonsense.
+/// The language is the strongest signal for a legacy file, a codepage not
+/// being recoverable from bytes alone: Cyrillic is almost certainly
+/// Windows-1251, Baltic Windows-1257. Every candidate is still
+/// sanity-checked, so a wrong hint degrades to the next option.
 nonisolated enum SubtitleTextDecoder {
     static func text(from data: Data, languageHint: String? = nil) -> String? {
         guard !data.isEmpty else { return nil }
