@@ -23,7 +23,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 website="${LAGOON_WEBSITE_PATH:-$repo/../lagoon-website}"
 target="$website/src/lib/content/app-facts.json"
-destination="${LAGOON_SITE_FACTS_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation)}"
+destination="${LAGOON_SITE_FACTS_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=latest}"
 
 check=false
 [ "${1:-}" = "--check" ] && check=true
