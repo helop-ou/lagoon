@@ -2855,17 +2855,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// Frames from the software decode stage.
     ///
-    /// Deliberately not `acceptDecodedVideo`: a seek that has been *requested*
-    /// and not yet performed is not a reason to throw these away. The stage
-    /// discards its own pre-seek work when the demux loop resets it, and
-    /// `videoQueue.reset()` clears anything that landed in between, so both
-    /// ends of the seek are already covered.
+    /// Deliberately not `acceptDecodedVideo`: a seek requested and not yet
+    /// performed is no reason to throw these away. The stage discards its own
+    /// pre-seek work when the demux loop resets it, and `videoQueue.reset()`
+    /// clears anything in between.
     ///
-    /// Dropping here instead starves the renderer exactly when stall recovery
-    /// is re-priming — and re-priming is a seek every couple of seconds, so
-    /// the drop keeps the queue empty, which keeps the stall going. Measured
-    /// as 4 displayed frames against 2133 on the same title and position with
-    /// the same stall loop running.
+    /// Dropping here starves the renderer exactly when stall recovery is
+    /// re-priming — and re-priming is a seek every couple of seconds, so the
+    /// drop keeps the queue empty and the stall going. Measured as 4 displayed
+    /// frames against 2133 on the same title and position.
     nonisolated private func acceptSoftwareDecodedVideo(_ buffer: CMSampleBuffer) {
         guard !shared.withLock({ $0.cancelled }) else { return }
         videoQueue.enqueue(buffer)
@@ -3318,19 +3316,16 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
-    /// AVFoundation calls a renderer's request block whenever the renderer
-    /// wants more, and keeps calling it for as long as the block gives it
-    /// nothing. With the software decoder starving the video queue, that
-    /// loop measured 0.4 of a core at the highest priority in the process,
-    /// enqueueing nothing, on a device whose decoder was short exactly that
-    /// much CPU. The audio queue is empty almost always, because
-    /// the renderer takes audio as fast as it is demuxed, so its block spun
-    /// the same way on every title.
+    /// AVFoundation calls a renderer's request block whenever it wants more,
+    /// and keeps calling for as long as the block gives it nothing. With the
+    /// software decoder starving the video queue that loop measured 0.4 of a
+    /// core at the highest priority, enqueueing nothing, on a device whose
+    /// decoder was short exactly that much CPU. The audio queue is almost
+    /// always empty, so its block spun the same way on every title.
     ///
     /// So a request is armed only while there is something to give: a pump
-    /// that finds its queue empty stops it, and `kickPumps()`, which runs
-    /// whenever a queue receives a buffer, arms it again if the renderer
-    /// could not take everything at once.
+    /// that finds its queue empty stops it, and `kickPumps()` arms it again
+    /// when a queue receives a buffer.
     nonisolated private func armVideoRequests(_ renderer: AVSampleBufferVideoRenderer) {
         guard !videoRequestsArmed else { return }
         videoRequestsArmed = true
