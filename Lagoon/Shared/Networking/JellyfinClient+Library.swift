@@ -275,25 +275,16 @@ extension JellyfinClient {
 
     /// Every collection (a Jellyfin `BoxSet`) this user can see.
     ///
-    /// **Expect most of them to be empty.** A metadata scrape creates a
-    /// collection for a film's entire franchise whether or not the library
-    /// holds the rest of it, so the reference server answers this with 173
-    /// collections of which 35 contain anything at all and 18 contain more
-    /// than one title. `ChildCount` rides in `defaultFields` precisely so a
-    /// caller can drop the stubs without a request per collection — see
-    /// `CollectionShelf.minimumTitles`.
+    /// **Expect most to be empty.** A scrape creates a collection for a film's
+    /// whole franchise regardless of what the library holds: 173 on the
+    /// reference server, 35 with anything in them, 18 with more than one.
+    /// `ChildCount` rides in `defaultFields` so callers can drop the stubs
+    /// without a request each — see `CollectionShelf.minimumTitles`.
     ///
-    /// **`EnableUserData=false` is what makes this query usable, not a
-    /// micro-optimisation.** A collection's `UserData` carries
-    /// `UnplayedItemCount`, which the server can only answer by walking that
-    /// collection's children — about a quarter-second each. Measured against
-    /// the reference server's 173 collections: **38.6 s with user data and
-    /// 0.25 s without**, and the cost tracks the number of collections rather
-    /// than anything the query asks for (dropping `Fields`, naming the
-    /// Collections library as `ParentId`, and asking for 20 instead of 200
-    /// each changed nothing). Nothing here needs the flags: the row draws a
-    /// name and a count, and the contents of one collection are a separate,
-    /// cheap request that keeps its user data.
+    /// **`EnableUserData=false` is what makes this usable.** `UnplayedItemCount`
+    /// forces the server to walk every collection's children: **38.6 s with
+    /// user data, 0.25 s without**. The row draws a name and a count; opening
+    /// one collection is a separate cheap request that keeps its user data.
     func collections(limit: Int = 200) async throws -> [MediaItem] {
         try await items(
             includeTypes: [.boxSet],
