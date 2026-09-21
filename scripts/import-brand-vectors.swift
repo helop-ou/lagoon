@@ -3,20 +3,15 @@
 //
 //   scripts/import-brand-vectors.swift ../lagoon-branding
 //
-// Companion to import-artwork.swift, which produces the raster icon and Top
-// Shelf assets. This one handles the marks Lagoon draws *inside* the app, and
-// they are vectors: the onboarding lockup and the jellyfish accent.
+// Companion to import-artwork.swift, which does the raster icon and Top Shelf
+// assets. This one handles the vectors Lagoon draws inside the app: the
+// onboarding lockup and the jellyfish accent.
 //
-// The one thing it does beyond copying is crop each PDF to its ink. The
-// package's pages carry generous and *unequal* padding — the symbol sits 81pt
-// from the top of its page and 58pt from the bottom — so a SwiftUI
-// `.frame(height:)` on the raw page sizes the padding, not the mark. Two marks
-// framed that way cannot be given the proportion the artwork was drawn at
-// without compensation constants nobody can check. Cropped to ink, frame
+// Beyond copying, it crops each PDF to its ink. The package's pages carry
+// unequal padding — 81pt above the symbol, 58pt below — so `.frame(height:)`
+// on the raw page sizes the padding, not the mark. Cropped to ink, frame
 // height *is* mark height and `LagoonLockup` states the authored ratios
-// directly.
-//
-// Cropping is done by redrawing the page into a PDF context whose media box is
+// directly. The crop redraws the page into a PDF context whose media box is
 // the ink rect, so the result stays vector.
 
 import AppKit
