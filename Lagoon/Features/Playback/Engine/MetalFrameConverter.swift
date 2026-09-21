@@ -2,22 +2,20 @@ import CoreVideo
 import Foundation
 import Metal
 
-/// Turns a decoded 10-bit planar frame into a renderer-ready Core Video
-/// buffer on the GPU.
+/// Turns a decoded 10-bit planar frame into a renderer-ready Core Video buffer
+/// on the GPU.
 ///
-/// On an Apple TV every core is already spoken for by dav1d: the two CPU
-/// passes that used to follow it — the planar-to-P010 repack and
-/// VideoToolbox's PQ-to-SDR transfer — were measured at roughly 0.5 of a core
-/// inside the process and more outside it, and that is exactly the CPU the
-/// decoder was missing. One compute kernel does both passes in about a
-/// millisecond of GPU time and no CPU time at all.
+/// On an Apple TV every core is spoken for by dav1d. The two CPU passes that
+/// used to follow it — planar-to-P010 repack and VideoToolbox's PQ-to-SDR
+/// transfer — measured ~0.5 of a core in-process and more outside it, which is
+/// exactly the CPU the decoder was missing. One compute kernel does both in
+/// about a millisecond of GPU time and no CPU time.
 ///
-/// The source is read in place: FFmpeg's frame pool hands dav1d page-aligned
-/// allocations whose three planes are one block, so they are wrapped in a
-/// no-copy `MTLBuffer` for the duration of one dispatch. A frame that is not
-/// page-aligned, or whose planes are separate allocations, is copied into a
-/// shared staging buffer instead, which is slower but still cheaper than
-/// either CPU pass.
+/// The source is read in place: FFmpeg's pool hands dav1d page-aligned
+/// allocations whose three planes are one block, wrapped in a no-copy
+/// `MTLBuffer` for one dispatch. Anything not page-aligned, or with separate
+/// plane allocations, is copied into a staging buffer — slower, still cheaper
+/// than either CPU pass.
 nonisolated final class MetalFrameConverter: @unchecked Sendable {
     /// Mirrors `LagoonPlanarConvertParameters` in the shader, field for field.
     private struct Parameters {
