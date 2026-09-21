@@ -166,17 +166,14 @@ struct CollectionRail: View {
     }
 }
 
-/// The name sits **under** the artwork, for the reason a poster's does
-/// (Jaagop, 2026-08-17; confirmed again here 2026-08-26): a headline across
-/// the bottom of the picture covers the part its designer cared about.
+/// The name sits **under** the artwork, for the reason a poster's does: a
+/// headline across the bottom of the picture covers the part its designer
+/// cared about.
 ///
-/// Collections make the case twice over. Where the artwork is the
-/// collection's own, a metadata provider has usually already written the name
-/// into it — *Sinister Collection* and *The Jack Ryan Collection* both arrive
-/// with their titles painted across the image — so an overlay lands a second
-/// title on top of the first. And a caption has room to wrap, where an
-/// overlay was truncating "Spider-Man (MCU) Colle…" inside a card that had
-/// space to spare underneath it.
+/// Collections make the case twice. Where the artwork is the collection's own,
+/// a metadata provider has usually painted the name into it already, so an
+/// overlay lands a second title on the first. And a caption can wrap, where an
+/// overlay truncated "Spider-Man (MCU) Colle…" in a card with room to spare.
 private struct CollectionCard: View {
     let collection: CollectionShelfItem
     @Environment(SessionStore.self) private var session
