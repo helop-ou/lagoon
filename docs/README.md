@@ -38,6 +38,14 @@ build's notes for a release body. The in-app changelog stays the source of
 truth, so what a release says and what About shows cannot diverge. Run it with
 `--check` to fail on drift.
 
+The website's `app-facts.json` is generated too, by [the site-facts
+script](../scripts/generate-site-facts.sh), from the declared version and
+`DeviceProfile`. The site lives in its own repository and used to restate what
+Lagoon plays by hand, which is how it came to promise formats the app had
+changed underneath it. Prose, the Jellyfin floor and availability stay written
+there; the version, build and format rows come from here. `--check` fails on
+drift.
+
 ## Keeping this clean
 
 Update the guide that owns a contract when you change it. Give each rule one
