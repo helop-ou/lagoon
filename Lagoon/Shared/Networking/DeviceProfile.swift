@@ -1,22 +1,15 @@
 import Foundation
 
-// Capability profile sent with PlaybackInfo so the server can decide between
-// direct play and transcoding. It mirrors exactly what the Lagoon
-// sample-buffer engine can play: progressive h264 stays compressed
-// and interlaced h264 is software-decoded and deinterlaced, hevc is
-// hardware-decoded ahead, AV1 uses hardware when available, and
-// progressive AV1/VP9 (up to 10-bit) plus 8-bit VC-1, WMV3, MPEG-4
-// Part 2, and MPEG-2 up to 1080p are software-decoded into Core
-// Video buffers;
-// aac/mp3/ac3/eac3 audio stays compressed plus
-// non-square pixels carried through as a PixelAspectRatio extension, so
-// anamorphic sources (PAL DVD rips at 720x576 with a 16:15 pixel aspect)
-// direct-play instead of transcoding;
-// dts/truehd/flac/alac/mp2/opus/vorbis/PCM decoded to LPCM via libavcodec
-// (M4); text, PGS/VobSub/DVB subtitles embedded, vtt external (M5) — in
-// any container
-// libavformat demuxes, plus the fMP4 HLS transcode fallback (whose
-// hevc/h264 + eac3 output lands back inside the same envelope).
+// Capability profile sent with PlaybackInfo so the server can choose between
+// direct play and transcoding. It mirrors what the engine can play:
+// progressive h264 compressed and interlaced h264 software-deinterlaced, hevc
+// hardware-decoded ahead, AV1 hardware where available, and AV1/VP9 to 10-bit
+// plus 8-bit VC-1, WMV3, MPEG-4 Part 2 and MPEG-2 to 1080p in software.
+// aac/mp3/ac3/eac3 stay compressed, other audio decodes to LPCM, non-square
+// pixels ride through as a PixelAspectRatio extension so anamorphic DVD rips
+// direct-play, and subtitles are embedded or external vtt. Anything outside
+// this arrives as the fMP4 HLS transcode, which lands back in the same
+// envelope. The generated table is docs/codec-support.md.
 nonisolated enum DeviceProfile {
     struct Profile: Encodable {
         let maxStreamingBitrate: Int
