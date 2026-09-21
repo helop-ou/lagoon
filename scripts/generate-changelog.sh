@@ -17,8 +17,11 @@
 #   scripts/generate-changelog.sh --check     # fail if it is out of date
 #   scripts/generate-changelog.sh --notes 107 # print one build's notes
 #
-# --notes prints to stdout for pasting into a GitHub release, and defaults to
-# the newest build when no number is given.
+# --notes reads the committed CHANGELOG.md rather than rebuilding it, so it
+# needs no simulator and returns at once. That is only trustworthy because
+# --check can prove the file is current, which is what publish-release.sh runs
+# first. It prints to stdout for pasting into a release body, and defaults to
+# the newest build.
 #
 # Override the simulator with LAGOON_CHANGELOG_DOC_DESTINATION.
 set -euo pipefail
@@ -37,6 +40,33 @@ case "${1:-}" in
     *) echo "usage: $(basename "$0") [--check | --notes [build]]" >&2; exit 2 ;;
 esac
 
+if [ "$notes" = true ]; then
+    [ -f "$target" ] || { echo "error: $target does not exist yet" >&2; exit 1; }
+    # Build headings are the only level-two headings, which a test pins, so
+    # splitting on them cannot catch a category by accident. Trims the blank
+    # lines off both ends, because this is pasted into a release body.
+    body="$(awk -v want="$build" '
+        /^## / {
+            inside = (want == "" && !seen) || index($0, "(" want ")") > 0
+            if (inside) seen = 1
+            next
+        }
+        inside { print }
+    ' "$target" | awk '{ lines[NR] = $0 }
+        END { first = 1; while (first <= NR && lines[first] == "") first++
+              last = NR; while (last >= first && lines[last] == "") last--
+              for (i = first; i <= last; i++) print lines[i] }')"
+
+    # An unknown build would otherwise print nothing and succeed, which is a
+    # silent empty release body rather than a mistake somebody notices.
+    if [ -z "$body" ]; then
+        echo "error: no changelog entry for build ${build:-(newest)}" >&2
+        exit 1
+    fi
+    printf '%s\n' "$body"
+    exit 0
+fi
+
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 
@@ -54,32 +84,6 @@ generated="$(grep -o 'CHANGELOG_DOC .*' "$log" | head -1 | cut -d' ' -f2-)"
 if [ -z "$generated" ] || [ ! -f "$generated" ]; then
     echo "error: the generator did not report an output file" >&2
     exit 1
-fi
-
-if [ "$notes" = true ]; then
-    # Build headings are the only level-two headings, which a test pins, so
-    # splitting on them cannot catch a category by accident. Trims the blank
-    # lines off both ends, because this is pasted into a release body.
-    body="$(awk -v want="$build" '
-        /^## / {
-            inside = (want == "" && !seen) || index($0, "(" want ")") > 0
-            if (inside) seen = 1
-            next
-        }
-        inside { print }
-    ' "$generated" | awk '{ lines[NR] = $0 }
-        END { first = 1; while (first <= NR && lines[first] == "") first++
-              last = NR; while (last >= first && lines[last] == "") last--
-              for (i = first; i <= last; i++) print lines[i] }')"
-
-    # An unknown build would otherwise print nothing and succeed, which is a
-    # silent empty release body rather than a mistake somebody notices.
-    if [ -z "$body" ]; then
-        echo "error: no changelog entry for build ${build:-(newest)}" >&2
-        exit 1
-    fi
-    printf '%s\n' "$body"
-    exit 0
 fi
 
 if [ "$check" = true ]; then
