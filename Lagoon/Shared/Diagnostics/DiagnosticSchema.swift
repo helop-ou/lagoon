@@ -170,6 +170,10 @@ nonisolated enum DiagnosticSchema {
         "interruption": .choice(interruptionChoices),
         "routeReason": .token,
         "samplesSinceFlush": .int,
+        "startPointDrops": .int,
+        /// Which sample the renderer refused, in media milliseconds: what
+        /// tells a restart-point failure apart from a verdict on the stream.
+        "refusedSampleMs": .int,
         "retry": .bool,
         // Watch Together (HEL-172). Numbers and closed choices only: a
         // group has a name, an id, participants and an item, and none of
