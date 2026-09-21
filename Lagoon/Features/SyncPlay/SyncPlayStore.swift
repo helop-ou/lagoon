@@ -12,22 +12,20 @@ nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
     let playlistItemId: String
 }
 
-/// Watch Together: membership in a SyncPlay group, and the bridge between
-/// that group and this app's player.
+/// Watch Together: membership in a SyncPlay group, and the bridge between it
+/// and this app's player.
 ///
 /// Owned by `SessionStore` beside `seerr`, pointed at the active account by
-/// `synchronizeAccountContext()`, and injected from `RootView` — plus the
-/// iOS UIKit player host, which rebuilds the environment from scratch.
+/// `synchronizeAccountContext()`, injected from `RootView` and from the iOS
+/// UIKit player host, which rebuilds the environment from scratch.
 ///
-/// Membership is what lives here: the socket, the clock, the group, the
-/// queue and what the viewer is told. Everything that touches playback is
-/// in `GroupPlaybackDriver`, and everything that *decides* is in
+/// Membership lives here: socket, clock, group, queue, what the viewer is
+/// told. Playback is `GroupPlaybackDriver`; the decisions are
 /// `SyncPlayGroupSession`, which is pure and carries the tests.
 ///
-/// The socket and the clock are opened on the first join and closed on the
-/// last leave. Jellyfin's own clients keep a socket open for the whole
-/// session; Lagoon does not need one until a group exists, and an account
-/// that never uses Watch Together never opens one.
+/// Socket and clock open on the first join and close on the last leave.
+/// Jellyfin's own clients hold one for the whole session; an account that
+/// never uses Watch Together never opens one.
 @Observable
 final class SyncPlayStore {
     /// What this account may do with groups, as far as the server has been
