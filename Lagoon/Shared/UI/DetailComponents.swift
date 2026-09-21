@@ -223,21 +223,18 @@ struct DetailBackdropView: View {
     }
 }
 
-/// The shell both detail pages sit in: full-bleed backdrop, content inset
-/// below it, and the backdrop darkening as that content rises over it.
+/// The shell both detail pages sit in: full-bleed backdrop with content inset
+/// below it.
 ///
 /// The hero space is a **scroll content margin, not a spacer view**. As a
-/// spacer it was non-focusable content sitting above the first button, which
-/// left the focus engine no way back out — Up from Play did nothing, the
-/// scroll never returned to the top, and the tab bar stayed off-screen and
-/// unreachable (Jaagop, 2026-08-17). As an inset, the first button *is* the
-/// first content item, so Up leaves the page the way tvOS expects.
+/// spacer it was non-focusable content above the first button, leaving the
+/// focus engine no way out — Up from Play did nothing, the scroll never
+/// returned to the top, and the tab bar stayed unreachable. As an inset the
+/// first button *is* the first content item, so Up leaves the page.
 ///
-/// The backdrop does **not** darken as you scroll. That was tried and cut
-/// (Jaagop, 2026-08-17: "not a big fan of the screen going black"): moving
+/// The backdrop does **not** darken as you scroll. Tried and cut: moving
 /// focus into a rail jumps further in one press than the ramp covered, so it
-/// read as a slam to black rather than a settle. The artwork simply stays as
-/// it is, and the rails below rely on their own artwork for contrast.
+/// read as a slam to black. The rails rely on their own artwork for contrast.
 struct DetailPageScaffold<Content: View>: View {
     let backdropURL: URL?
     /// Portrait artwork for the compact touch hero; nil keeps the
