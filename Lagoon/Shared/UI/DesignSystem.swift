@@ -172,16 +172,12 @@ enum Metrics {
     /// blur cheap.
     static let detailPosterAmbientDecodeSize = 240
 
-    /// The spacing scale. Every gap and inset *inside* a screen
-    /// picks a step from here; the structural values above (gutter, card
-    /// sizes, hero height) stay separate because they answer to the 10-foot
-    /// safe zone rather than to rhythm.
+    /// The spacing scale: gaps and insets *inside* a screen. Structural values
+    /// above (gutter, card sizes, hero height) stay separate — they answer to
+    /// the 10-foot safe zone, not to rhythm.
     ///
-    /// Roughly ×1.5 after `s`, which is what makes adjacent steps read as
-    /// different rather than as a mistake. The same values on both platforms
-    /// for now: internal rhythm doesn't need to shrink the way structure
-    /// does, and giving iOS its own scale is a separate decision, not a
-    /// change to make blind.
+    /// Roughly ×1.5 after `s`, so adjacent steps read as different rather than
+    /// as a mistake. Same on both platforms for now.
     ///
     /// | step | pt | for |
     /// |---|---|---|
@@ -336,35 +332,19 @@ extension Color {
     nonisolated static let lagoonMist = Color(red: 0xE9 / 255, green: 0xF1 / 255, blue: 0xF2 / 255)
 }
 
-/// SF Symbols, in one place for the kinds of thing the app navigates to, so a
-/// library tab, the library picker and Discover's catalogue buttons cannot
-/// drift apart — which is exactly what had happened.
+/// SF Symbols for things the app navigates to, in one place so the library
+/// tab, the library picker and Discover's buttons cannot drift apart.
 ///
-/// **Fill is not a free choice.** Three families, each internally consistent:
+/// **Fill is not a free choice.** Navigation and transport are filled;
+/// empty and error states are outline, being artwork rather than controls.
+/// `checkmark`, `chevron.*`, `plus`, `minus`, `xmark`, `magnifyingglass` and
+/// `speedometer` have no filled variant.
 ///
-/// - **Navigation** (tabs, library rows) is *filled*. That is the platform
-///   convention for a tab bar and it is what survives being read across a
-///   room.
-/// - **Transport** (`play.fill`, `pause.fill`, `forward.end.alt.fill`) is
-///   *filled*, matching every other player on the platform.
-/// - **Empty and error states** (`exclamationmark.triangle`, `play.slash`,
-///   `tray`, `wifi.exclamationmark`) are *outline*. They are artwork rather
-///   than controls, and outline keeps them from shouting.
-///
-/// A literal "everything filled" is not achievable and should not be
-/// attempted: `checkmark`, `chevron.*`, `plus`, `minus`, `xmark`,
-/// `magnifyingglass` and `speedometer` are strokes by construction and have no
-/// filled variant.
-/// Glyphs are also chosen for *shape*, not only meaning. Measured at a common
-/// point size, `house.fill` and `gearshape.fill` are the fixed anchors of the
-/// tab bar at 1.13 and 1.00 width-to-height and ~0.55 ink density, and every
-/// other tab has to sit near them or it reads as out of place. The set below
-/// spans 1.00–1.13 and 0.28–0.81.
-///
-/// What that replaced: `film.fill` was 1.28 wide and 0.85 dense — both the
-/// widest *and* the heaviest glyph in the bar, which is why Movies looked
-/// wrong; and `play.square.stack.fill` was 0.75, the outlier at the opposite
-/// end, so the two sat beside each other mismatched in both directions.
+/// Glyphs are chosen for shape too. `house.fill` and `gearshape.fill` anchor
+/// the tab bar at 1.13 and 1.00 width-to-height and ~0.55 ink density; this
+/// set spans 1.00–1.13 and 0.28–0.81. `film.fill` (1.28, 0.85) and
+/// `play.square.stack.fill` (0.75) were the outliers that made Movies look
+/// wrong.
 nonisolated enum ContentIcon {
     /// A clapperboard. 1.04 — square enough to sit beside the gear, where a
     /// film strip's 1.28 could not.
