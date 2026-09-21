@@ -8,7 +8,7 @@ import Foundation
 /// for `ForceKeepAlive`, a bare string for `GroupLeft`, or absent.
 nonisolated struct ServerSocketMessage: Equatable, Sendable {
     let messageType: String
-    /// Absent on every SyncPlay message observed on fixture 12.0.0, so this
+    /// Absent on every SyncPlay message observed on the fixture server, 12.0.0, so this
     /// stays optional rather than defaulting to something invented.
     let messageId: String?
     /// The `Data` subtree, re-serialised, or nil when there was none.
@@ -82,7 +82,7 @@ nonisolated enum ServerSocketBackoff {
 /// rides in the query, which is the one first-party URL that still carries
 /// it: Jellyfin's socket handshake authenticates from `api_key`, and a
 /// WebSocket upgrade is not a request Lagoon's `Authorization` header was
-/// verified to reach. Verified against fixture 12.0.0.
+/// verified to reach. Verified against the fixture server, 12.0.0.
 nonisolated enum ServerSocketURL {
     static func socket(from httpURL: URL, token: String, deviceId: String) -> URL? {
         guard var components = URLComponents(url: httpURL, resolvingAgainstBaseURL: false) else { return nil }
