@@ -102,12 +102,12 @@ struct SentryEnvelopeTests {
         // A caller that hands a schema a sentence or a URL loses it here.
         let incident = Self.incident(fields: [
             "stage": .string("open"),
-            "message": .string("The stream https://fixture.example.eu/Items/x could not be opened"),
+            "message": .string("The stream https://lagoonfix.example.eu/Items/x could not be opened"),
             "route": .string("Items/12c4"),
         ])
         let envelope = try #require(SentryEnvelope.make(incident: incident, context: Self.context, dsn: Self.dsn))
         let text = String(decoding: envelope.data, as: UTF8.self)
-        #expect(!text.contains("fixture"))
+        #expect(!text.contains("lagoonfix"))
         #expect(!text.contains("could not be opened"))
         #expect(!text.contains("12c4"))
         #expect(text.contains("\"schemaRejected\":2"))
