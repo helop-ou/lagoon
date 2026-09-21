@@ -2,15 +2,14 @@ import Foundation
 
 /// Which items Home's hero shows.
 ///
-/// The hero used to have one source, the libraries' recently-added rails,
-/// and vanished whenever they came back empty: a server nobody has added to
-/// for a while, a library a scan has not reached, the public demo between
-/// its resets. `HomeViewModel` now hands in its sources as tiers in priority
-/// order — recently added, then Continue Watching and Next Up, then
-/// Favorites, then the plugin and curated rails, and last a random sample of
-/// the library fetched only when everything above is empty — and the first
-/// tier with anything eligible supplies the whole hero. Tiers are never mixed
-/// to reach six: the hero's job is to be interesting, not full.
+/// It used to have one source, the recently-added rails, and vanished whenever
+/// they came back empty — a server nobody has added to lately, a library a
+/// scan has not reached, the public demo between resets. `HomeViewModel` now
+/// hands in tiers in priority order: recently added, then Continue Watching
+/// and Next Up, then Favorites, then plugin and curated rails, and last a
+/// random library sample fetched only when everything above is empty. The
+/// first tier with anything eligible supplies the whole hero; tiers are never
+/// mixed to reach six, because the hero's job is to be interesting, not full.
 nonisolated enum HeroSelection {
     static let count = 6
 
