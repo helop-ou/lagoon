@@ -32,6 +32,12 @@ is generated. Regenerate it with [the inventory
 script](../scripts/inventory-native-dependencies.py) whenever the linked
 artifacts change.
 
+[CHANGELOG.md](../CHANGELOG.md) is generated from `Changelog.swift` by [the
+changelog script](../scripts/generate-changelog.sh), which also prints one
+build's notes for a release body. The in-app changelog stays the source of
+truth, so what a release says and what About shows cannot diverge. Run it with
+`--check` to fail on drift.
+
 ## Keeping this clean
 
 Update the guide that owns a contract when you change it. Give each rule one
