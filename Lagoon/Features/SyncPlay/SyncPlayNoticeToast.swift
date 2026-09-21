@@ -40,19 +40,16 @@ extension SyncPlayNotice {
     }
 }
 
-/// The player's transient line about the group: someone joined or left,
-/// the group paused, the library is out of reach.
+/// The player's transient line about the group: someone joined or left, the
+/// group paused, the library is out of reach.
 ///
-/// An overlay leaf in the shape `PlayerSkipOverlay` set: it reads the
-/// store in its own body, so the player root never subscribes to a notice
-/// and never re-renders for one. Top of the screen, clear of the
-/// transport and the skip shelf at the bottom, and never hit-tested — on
-/// tvOS a focusable overlay would take the remote away from the video
-/// surface mid-playback.
+/// An overlay leaf shaped like `PlayerSkipOverlay`: it reads the store in its
+/// own body, so the player root never re-renders for a notice. Top of screen,
+/// clear of the transport and skip shelf, never hit-tested — on tvOS a
+/// focusable overlay would take the remote from the video surface.
 ///
-/// Plain material and semantic text, with no dynamic-range lift: this is
-/// SDR chrome over what may be an HDR frame, the same as every other
-/// notice the player draws.
+/// Plain material and semantic text, no dynamic-range lift: SDR chrome over a
+/// possibly HDR frame, like every other notice the player draws.
 struct SyncPlayNoticeToast: View {
     let store: SyncPlayStore
     var reduceMotion = false
