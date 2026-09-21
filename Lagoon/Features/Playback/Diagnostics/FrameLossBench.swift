@@ -1,21 +1,20 @@
 import Foundation
 
-/// The measurement discipline, encoded so nobody has to remember
-/// it: a frame-loss number is only comparable when it comes from the same
-/// scene over the same media-time window, untouched. Both of this ticket's
-/// false positives came from violating that.
+/// The measurement discipline, encoded so nobody has to remember it: a
+/// frame-loss number is comparable only from the same scene over the same
+/// media-time window, untouched. Both earlier false positives broke that.
 ///
-/// Armed by Settings → Debug → Frame-loss bench: after every playback
-/// start or seek the bench warms up for `warmupSeconds` of *media time*,
-/// measures for `windowSeconds`, then freezes its result (HUD line +
-/// `Bench Result` signpost). Touching the transport re-arms it from the
-/// new position, so "seek to the scene, hands off, read the number" is the
-/// whole protocol — identical in the simulator and on real hardware.
+/// Armed by Settings → Debug → Frame-loss bench. After every start or seek it
+/// warms up for `warmupSeconds` of *media time*, measures for
+/// `windowSeconds`, then freezes the result (HUD line + `Bench Result`
+/// signpost). Touching the transport re-arms from the new position, so "seek
+/// to the scene, hands off, read the number" is the whole protocol, identical
+/// in the simulator and on hardware.
 ///
-/// Windows are keyed on playback position, not wall time: screenshots and
-/// stalls stretch wall time but not media time, so the denominator stays
-/// honest. Stalls during the window are reported, not discarded — a stall
-/// is a finding.
+/// Windows key on playback position, not wall time: screenshots and stalls
+/// stretch wall time but not media time, so the denominator stays honest.
+/// Stalls inside the window are reported, not discarded — a stall is a
+/// finding.
 nonisolated struct FrameLossBench: Equatable {
     struct Sample: Equatable {
         var position: Double
