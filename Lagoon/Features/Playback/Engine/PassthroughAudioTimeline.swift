@@ -1,28 +1,18 @@
 import CoreMedia
 
-/// Rewrites container timestamps on compressed passthrough audio into a
+/// Rewrites container timestamps on compressed passthrough audio onto a
 /// sample-exact timeline.
 ///
-/// Matroska stamps packets at 1 ms precision, but a compressed audio frame
-/// is an exact number of samples. AAC is 1024 samples — 21.33 ms at 48 kHz,
-/// unrepresentable in whole milliseconds — so trusting each packet's pts
-/// hands the renderer a discontinuity on almost every buffer (measured on a
-/// real mux: deltas of 21/22/23 ms, up to 1.67 ms off the sample-exact
-/// timeline, ~47 packets/s). The renderer aligns its decoded output to
-/// those stamps, and every mismatch is a dropped or doubled sliver of
-/// samples — audible as steady crackle. `AudioDecoder` fixes exactly this
-/// for decoded LPCM; this is the passthrough side of the same fix.
+/// Matroska stamps at 1 ms, but an AAC frame is 1024 samples — 21.33 ms at
+/// 48 kHz, which whole milliseconds cannot represent. Trusting each pts hands
+/// the renderer a discontinuity on nearly every buffer (measured: 21/22/23 ms
+/// deltas, up to 1.67 ms off, ~47 packets/s), and each one is a dropped or
+/// doubled sliver of samples — audible as steady crackle.
 ///
-/// The chain anchors to the container once, then advances by exactly
-/// `framesPerPacket` samples per packet. Forward discontinuities re-anchor
-/// the chain, while packets that overlap audio already queued are rejected;
-/// an explicit seek or flush resets the chain before its new anchor. Codecs
-/// whose frame duration
-/// is already whole-millisecond (ac3/eac3 at 48 kHz: 32 ms) produce
-/// identical timestamps either way, so the rewrite is a no-op for them by
-/// construction. If a stream advances faster than its declared packet size,
-/// the container crosses the tolerance and re-anchors rather than accumulating
-/// drift; the supported passthrough codecs otherwise have fixed packet sizes.
+/// Anchors to the container once, then advances by exactly `framesPerPacket`
+/// per packet. Forward discontinuities re-anchor, packets overlapping queued
+/// audio are rejected, seek and flush reset. Codecs already on whole
+/// milliseconds (ac3/eac3 at 48 kHz) are unaffected by construction.
 nonisolated struct PassthroughAudioTimeline {
     let sampleRate: Int32
     let framesPerPacket: Int64
