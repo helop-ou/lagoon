@@ -614,11 +614,15 @@ final class PlaybackIncidentMonitor {
             "audioStarvation": .int(engine.audioStarvationCount),
             "reprimes": .int(engine.stallReprimeCount),
             "idleRequests": .int(engine.idleRequestCallbacks),
+            "startPointDrops": .int(engine.videoStartPointDropDiagnostic),
             "memoryMB": .double(memory.footprintMB.rounded(toPlaces: 1)),
             "availableMB": .double(memory.availableMB.rounded(toPlaces: 1)),
             "thermal": .string(DiagnosticsProcessObserver.thermalName(ProcessInfo.processInfo.thermalState)),
             "appState": .string(appStateName),
         ]
+        if let refused = engine.refusedSampleMsDiagnostic {
+            fields["refusedSampleMs"] = .int(refused)
+        }
         if let performance = engine.videoPerformance {
             fields["dropped"] = .int(performance.droppedFrames)
             fields["corrupted"] = .int(performance.corruptedFrames)
