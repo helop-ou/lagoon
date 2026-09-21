@@ -58,8 +58,11 @@ nonisolated enum Changelog {
                 ChangelogSection(category: .improvements, changes: [
                     "Home now opens with what you were watching and what each library just gained: Continue Watching, Next Up, Recently Added Movies, Top 10 Movies, then Recently Added Shows and Top 10 Shows, with the rest following in a run of films and a run of television.",
                     "Recently Added is now three rows rather than one switch covering all of them, so the movies one and the shows one can be moved and hidden separately.",
+                    "Lagoon now remembers the subtitle track you choose for a series, including choosing to have none at all, the way it already remembers the audio track. Set it once and the rest of the show follows, including after you close the player and come back later.",
+                    "Skip Intro now waits until the picture is moving again before it jumps. On a connection that was struggling it used to fire while the episode was still filling up, which threw that buffering away and made the wait longer.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
+                    "An episode that was struggling to keep up no longer switches to a server transcode part way in. It usually happened moments after an intro was skipped, and left the rest of the episode playing a re-encoded copy with its built in subtitle tracks gone.",
                     "Sign Out on Apple TV now asks you to confirm, and then signs you out. Pressing it did nothing at all before.",
                     "Signing out of your last account now takes you back to the server screen, rather than to a sign in form that named no server.",
                     "Change Server, on the screen asking you to sign in again, now forgets that account instead of leaving it in the user list with no way to remove it.",
