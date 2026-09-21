@@ -8,7 +8,7 @@ import Testing
 /// responses a millisecond apart.
 @Suite("Jellyfin timestamp")
 struct JellyfinTimestampTests {
-    /// Both spellings came back from fixture 12.0.0 in the same response:
+    /// Both spellings came back from the fixture server, 12.0.0 in the same response:
     /// six digits on the reception time, seven on the transmission time.
     @Test func parsesSixAndSevenFractionalDigitsAlike() throws {
         let six = try #require(JellyfinTimestamp.seconds("2026-09-14T11:42:21.280578Z"))
