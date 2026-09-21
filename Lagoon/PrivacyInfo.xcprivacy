@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <!-- Required-reason declarations. Collection/retention answers remain
-         pending under HEL-143; omission of NSPrivacyCollectedDataTypes is
+         pending; omission of NSPrivacyCollectedDataTypes is
          not a "Data Not Collected" claim. -->
     <key>NSPrivacyTracking</key>
     <false/>
     <key>NSPrivacyTrackingDomains</key>
     <array/>
-    <!-- HEL-159 diagnostic reports: technical failure context only, not
+    <!-- Diagnostic reports: technical failure context only, not
          linked to an identity, not used for tracking. See
          docs/reference/playback/diagnostics.md. -->
     <key>NSPrivacyCollectedDataTypes</key>

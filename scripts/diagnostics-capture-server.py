@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture what Lagoon's diagnostic reporter would send to Sentry (HEL-159).
+"""Capture what Lagoon's diagnostic reporter would send to Sentry.
 
 Runs a local endpoint that accepts Sentry envelopes and writes each one to
 disk, split into its event JSON and history attachment, so the exact bytes

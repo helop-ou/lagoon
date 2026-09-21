@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Background-fill bench (HEL-160): plays one title hands-off on a simulator
+# Background-fill bench: plays one title hands-off on a simulator
 # with the decode trace on and reports how the direct-play cache filled over
 # time, so two builds can be compared on the same asset, media-time window
 # and link. It reads the `cacheMB=` / `netMB=` fields the decode trace prints

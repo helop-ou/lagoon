@@ -1,10 +1,10 @@
 import Foundation
 import Libavformat
 
-/// App-owned wiring for HEL-159: which backend stands behind
+/// App-owned wiring: which backend stands behind
 /// `Diagnostics.shared`.
 ///
-/// The DSN is injected at build time rather than committed (HEL-187). A DSN
+/// The DSN is injected at build time rather than committed. A DSN
 /// is write-only ingest and grants nobody access to our data, but a tracked
 /// one lets anyone flood the project's quota, and reporting defaults on in
 /// Release builds — so without this, any checkout that archived the app would

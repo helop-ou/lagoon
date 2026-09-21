@@ -1,10 +1,10 @@
 #!/bin/bash
-# Frame-loss bench harness (HEL-64).
+# Frame-loss bench harness.
 #
 # Runs the in-app frame-loss bench (Settings → Debug → Frame-Loss Bench)
 # against one movie at one pinned start position, N times, in the tvOS
 # simulator — and prints the per-run results plus a summary. This encodes
-# the measurement discipline that caught two false positives on HEL-64:
+# the measurement discipline that caught two false positives:
 #
 #   * same title, same pinned start position, same media-time window every
 #     run;
@@ -15,7 +15,7 @@
 # The app side does the measuring (10 s warmup + 60 s window keyed on
 # media time, result as a "Bench Result" signpost + HUD line); this script
 # just launches, waits, and reads the signpost back out of the unified
-# log. Since HEL-141, `DeepLinkRouter` only accepts `lagoon://` links
+# log. `DeepLinkRouter` only accepts `lagoon://` links
 # carrying an `?owner=&generation=` pair matching the current Top Shelf
 # publication, so the old `lagoon://play/{id}` link this script used to
 # open is now silently dropped. Instead this drives `MainTabView`'s

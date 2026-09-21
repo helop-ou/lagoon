@@ -1,13 +1,14 @@
 import Foundation
 
 /// Walks a length-prefixed HEVC access unit, NAL by NAL, applying an
-/// arbitrary per-unit transform (HEL-145).
+/// arbitrary per-unit transform.
 ///
 /// Started as a strip-only filter for the Dolby Vision profile 7
-/// enhancement layer (HEL-64 hardware experiment): P7 remuxes interleave the
+/// enhancement layer(hardware experiment): P7 remuxes interleave the
 /// enhancement layer and RPU into the base layer's track as NAL units of
 /// the unspecified types 63 and 62, which the decoder can't use — tvOS
-/// cannot reconstruct dual-layer DoVi. Generalized for HEL-145, which
+/// cannot reconstruct dual-layer DoVi. Generalized for the profile 7 to
+/// 8.1 conversion, which
 /// rewrites every RPU (type 62) to Dolby Vision profile 8.1 with libdovi
 /// instead of dropping it (`DolbyVisionProfileConverter`); dropping both
 /// unit types wholesale (`strippingEnhancementLayer`) is now the debug
@@ -96,7 +97,7 @@ nonisolated enum HEVCNALUnitRewriter {
         return result
     }
 
-    /// The payload with unspec-62/63 NALs removed — the HEL-64 strip
+    /// The payload with unspec-62/63 NALs removed — the strip
     /// experiment, now Settings → Advanced → Playback Diagnostics → "Dolby
     /// Vision Compatibility Mode"'s HDR10 fallback for profile 7.
     static func strippingEnhancementLayer(

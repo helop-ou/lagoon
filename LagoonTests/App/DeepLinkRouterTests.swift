@@ -4,7 +4,7 @@ import Testing
 
 /// The `lagoon://` contract is shared with `LagoonTopShelf/ContentProvider.swift`,
 /// which is a separate target that cannot import this one. Nothing but these
-/// tests holds the two halves together (HEL-119).
+/// tests holds the two halves together.
 @Suite("Deep links")
 struct DeepLinkRouterTests {
     @MainActor private func link(_ value: String) -> URL {

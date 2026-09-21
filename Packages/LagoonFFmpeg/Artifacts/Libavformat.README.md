@@ -1,4 +1,4 @@
-# Lagoon's libavformat build (HEL-142)
+# Lagoon's libavformat build
 
 `Libavformat.xcframework` is FFmpeg **n8.1.2 / libavformat 62.12.102**, built
 by `scripts/build-ffmpeg-format.py` with networking compiled out

@@ -3,7 +3,7 @@ import Foundation
 import os
 
 /// A nonisolated lookup from a saved download's artwork key to its file on
-/// disk (HEL-166). `DownloadStore` rebuilds it on the main actor whenever
+/// disk. `DownloadStore` rebuilds it on the main actor whenever
 /// the active manifest changes; `ImageCache` reads it off the main actor,
 /// before ever touching the network, so a downloaded title's poster and
 /// backdrop still show up with the account offline.

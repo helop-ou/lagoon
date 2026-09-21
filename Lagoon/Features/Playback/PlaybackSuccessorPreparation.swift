@@ -153,7 +153,7 @@ final class PlaybackSuccessorPreparation {
               info.errorCode == nil,
               let source = info.mediaSources.first else { return nil }
         // Disc images cannot use this warm-up; they negotiate their own
-        // delivery rung when playback starts (HEL-133).
+        // delivery rung when playback starts.
         let layout = PlaybackSourceLayout(videoType: source.videoType, isoType: source.isoType)
         guard !layout.isDisc else { return nil }
         let (url, method) = try client.streamURL(itemId: itemID, source: source)

@@ -200,8 +200,7 @@ private struct SeerrRequestCard: View {
     let layout = PosterLayout()
 
     /// "Processing" says nothing about whether anything is happening. When
-    /// the server knows how far the download has got, say that instead
-    /// (HEL-116).
+    /// the server knows how far the download has got, say that instead.
     private var badgeTitle: String {
         guard request.progress == .processing, let progress = request.downloadProgress else {
             return request.progress.title

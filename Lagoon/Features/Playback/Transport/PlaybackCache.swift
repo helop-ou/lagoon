@@ -6,7 +6,7 @@ import Foundation
 /// native transport unless the diagnostic switch is on.
 ///
 /// That leaves a transcode with no buffering whatsoever between the network
-/// and the renderers, which is HEL-130: any hitch in segment delivery drains
+/// and the renderers: any hitch in segment delivery drains
 /// both demux queues, and audio, having no cushion, goes silent at once.
 /// Whether turning this on fixes that is the open question the switch exists
 /// to answer.
@@ -27,7 +27,7 @@ nonisolated enum PlaybackBufferPolicy {
             // an Apple TV, and pairing one to Xcode costs it HDCP 2.2 until
             // it is unpaired again — so a debug build is not a thing that can
             // be run there in practice. Settings, Playback Diagnostics
-            // exposes the switch alongside the HUD (HEL-130).
+            // exposes the switch alongside the HUD.
             defaults.bool(forKey: "debug.experimentalPlaybackCache")
         }
     }
@@ -37,7 +37,7 @@ nonisolated enum PlaybackBufferPolicy {
     /// add a layer, except for a disc image: the demuxer mounts a disc
     /// through the session's byte source and cannot read the image from a
     /// plain file, so without the session a fully cached disc fell to the
-    /// server remux HEL-133 exists to avoid (HEL-167).
+    /// server remux the cache exists to avoid.
     static func engineUsesCacheSession(
         playsFromCompleteFile: Bool,
         disc: Bool,
@@ -86,8 +86,7 @@ nonisolated struct PlaybackByteRangeSet: Equatable, Sendable {
 
     /// End of the cached island that holds `offset`, or `offset` itself when
     /// that byte is not cached. The scheduler reads this at the playhead to
-    /// know how far ahead playback can run without touching the network
-    /// (HEL-160).
+    /// know how far ahead playback can run without touching the network.
     func contiguousUpperBound(from offset: Int64) -> Int64 {
         for range in ranges where range.lowerBound <= offset {
             if range.upperBound > offset { return range.upperBound }
@@ -215,7 +214,7 @@ nonisolated struct PlaybackCacheMetrics: Equatable, Sendable {
     /// whole file. Proactive fill never finishes in that mode.
     let isWindowed: Bool
     /// Cached bytes contiguous from the most recent foreground read onward:
-    /// the cushion the fill scheduler protects (HEL-160).
+    /// the cushion the fill scheduler protects.
     let cachedBytesAheadOfPlayhead: Int64
     /// Bytes downloaded that were already on disk when they arrived — the
     /// cost of a foreground read overtaking a prefetch of the same range.
@@ -412,7 +411,7 @@ nonisolated protocol PlaybackRangeLoading: AnyObject, Sendable {
     func cancelAll()
     /// A foreground read has caught up with an in-flight low-priority
     /// request for `range`: finish it at foreground priority rather than
-    /// letting a second request for the same bytes race it (HEL-160).
+    /// letting a second request for the same bytes race it.
     /// Optional for loaders that have no priority to raise.
     func promote(range: PlaybackByteRange)
 }
@@ -424,7 +423,7 @@ extension PlaybackRangeLoading {
 /// What one proactive fetch did. The scheduler needs to tell a fetch that
 /// failed (and should be retried after a backoff) from one that found
 /// nothing left to fetch (the file is complete under the cap, or the
-/// window is full); a Boolean collapsed both into "stop" (HEL-160).
+/// window is full); a Boolean collapsed both into "stop".
 nonisolated enum PlaybackPrefetchOutcome: Equatable, Sendable {
     /// A chunk landed: the bytes the request returned and how long that one
     /// request took, so pacing measures the prefetch itself rather than the
@@ -496,8 +495,7 @@ nonisolated private final class PlaybackRangeRequest: @unchecked Sendable {
         }
         // Strips any query-string token and sets the Authorization header,
         // but only for the Jellyfin origin — an HLS child playlist or
-        // segment can be server-generated and point elsewhere entirely
-        // (HEL-142/HEL-143).
+        // segment can be server-generated and point elsewhere entirely.
         authorization?.apply(to: &request)
         urlRequest = request
     }
@@ -868,7 +866,7 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         // A caller supplying its own loader (tests, or an HLS resource
         // sharing its parent's) keeps it exactly as before; only the
         // ordinary default constructs one, and that one needs the
-        // credential (HEL-142/HEL-143).
+        // credential.
         self.loader = loader ?? URLSessionPlaybackRangeLoader(authorization: authorization)
         self.cancelsLoaderOnRemoval = cancelsLoaderOnRemoval
         self.storageBudget = storageBudget
@@ -1030,7 +1028,7 @@ nonisolated final class PlaybackCacheScope: @unchecked Sendable {
         // second request used to move 2 MiB to store 1; instead promote the
         // one in flight to foreground priority and give it a bounded moment
         // to land. Past the bound the read falls through to its own request,
-        // so a seek onto a slow prefetch never waits behind it (HEL-160).
+        // so a seek onto a slow prefetch never waits behind it.
         if priority > URLSessionTask.lowPriority,
            let pending = inFlight.values.first(where: { $0.range.contains(requested) }) {
             loader.promote(range: pending.range)
@@ -1513,7 +1511,7 @@ nonisolated final class HLSPlaybackCacheScope: @unchecked Sendable {
         storageBudget = PlaybackCacheStorageBudget(byteLimit: byteLimit)
         // Test doubles keep whatever loader they were given; the ordinary
         // defaults each get their own session, both carrying the credential
-        // segments and the manifest itself need (HEL-142/HEL-143).
+        // segments and the manifest itself need.
         self.resourceLoader = resourceLoader ?? URLSessionPlaybackRangeLoader(authorization: authorization)
         self.playlistLoader = playlistLoader ?? URLSessionPlaybackRangeLoader(authorization: authorization)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

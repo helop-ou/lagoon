@@ -5,7 +5,7 @@ import UIKit
 #endif
 @testable import Lagoon
 
-/// The composite has to survive being turned into a JPEG (HEL-119).
+/// The composite has to survive being turned into a JPEG.
 ///
 /// This is the whole output of the feature: the extension draws nothing of
 /// its own, it points tvOS at these files. A composite that renders fine and

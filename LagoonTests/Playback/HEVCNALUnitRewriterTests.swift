@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// `HEVCNALUnitRewriter` replaced the strip-only `HEVCEnhancementLayerFilter`
-/// (HEL-145): it still knows how to drop the Dolby Vision profile 7
+/// `HEVCNALUnitRewriter` replaced the strip-only `HEVCEnhancementLayerFilter`:
+/// it still knows how to drop the Dolby Vision profile 7
 /// enhancement layer (unspec-63) and RPU (unspec-62) wholesale, but it can
 /// also walk a length-prefixed access unit applying an arbitrary per-NAL
 /// transform — the primitive the P7→8.1 RPU rewrite is built on. These tests
@@ -105,7 +105,7 @@ struct HEVCNALUnitRewriterTests {
         #expect(HEVCNALUnitRewriter.nalLengthSize(hvcc: Data(count: 10)) == nil)
     }
 
-    // MARK: - rewrite(payload:lengthSize:transform:) (HEL-145)
+    // MARK: - rewrite(payload:lengthSize:transform:)
 
     /// The primitive the RPU rewrite is built on: a transform can replace
     /// one unit while everything around it survives untouched, and the
@@ -158,7 +158,7 @@ struct HEVCNALUnitRewriterTests {
         #expect(result == kept)
     }
 
-    // MARK: - Parameter sets the container may or may not carry (HEL-131)
+    // MARK: - Parameter sets the container may or may not carry
 
     /// A well-formed record: 22 bytes of header, numOfArrays, then one
     /// array per parameter-set type.

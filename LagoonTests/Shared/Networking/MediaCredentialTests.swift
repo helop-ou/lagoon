@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-142/HEL-143: every media consumer attaches the Jellyfin credential as
+/// Every media consumer attaches the Jellyfin credential as
 /// a request header instead of a URL query token, so a failed task's URL —
 /// which CFNetwork logs into the unified log — never carries it.
 @Suite("Media credential travels as a header", .serialized)

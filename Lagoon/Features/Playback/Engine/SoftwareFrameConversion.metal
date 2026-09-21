@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-// GPU output stage for software-decoded 10-bit planar video (HEL-137).
+// GPU output stage for software-decoded 10-bit planar video.
 //
 // One thread handles one 2x2 luma block, which is exactly one chroma sample
 // in 4:2:0, so the kernel reads four luma and two chroma samples and writes

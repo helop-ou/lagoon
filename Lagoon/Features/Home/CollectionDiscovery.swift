@@ -132,7 +132,7 @@ nonisolated enum CollectionShelf {
     }
 }
 
-/// The Collections row (HEL-122).
+/// The Collections row.
 ///
 /// Its own view rather than a `MediaRail` because a collection card needs to
 /// say what it is. The artwork is often borrowed from one film inside, so an

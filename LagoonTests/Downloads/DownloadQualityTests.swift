@@ -3,7 +3,7 @@ import Testing
 @testable import Lagoon
 
 /// Pure coverage for what a download would cost and which quality is
-/// actually fetched (HEL-166), plus the artwork URL parser that backs the
+/// actually fetched, plus the artwork URL parser that backs the
 /// offline artwork match in `ImageCache`.
 @Suite("Download quality estimates")
 struct DownloadQualityTests {

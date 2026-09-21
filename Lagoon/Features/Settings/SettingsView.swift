@@ -11,18 +11,18 @@ struct SettingsView: View {
     @AppStorage(DiagnosticsPreference.reportingEnabledKey) private var diagnosticReports = DiagnosticsPreference.defaultReportingEnabled
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
-    /// HEL-137 lever 2, on a device that cannot be paired to Xcode: the only
+    /// A debug lever, on a device that cannot be paired to Xcode: the only
     /// way to A/B libavcodec's thread count against the performance cluster
     /// is to ship the switch. Read once when the decoder opens.
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     #if DEBUG
     /// One-shot, timed fault injections scheduled after playback starts.
     /// Debug-only: the exact same experiment runs in the simulator and,
-    /// from a Debug build, on the paired Apple TV (HEL-123/124).
+    /// from a Debug build, on the paired Apple TV.
     @AppStorage("debug.simulateAudioStarvation") private var simulateAudioStarvation = false
     @AppStorage("debug.simulateDeliveryStall") private var simulateDeliveryStall = false
     /// Read once when an engine is created; off until the hardware pass
-    /// sets the floor (HEL-123).
+    /// sets the floor.
     @AppStorage("debug.bufferOnAudioStarvation") private var bufferOnAudioStarvation = false
     #endif
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
@@ -366,7 +366,7 @@ struct SettingsView: View {
 
     // MARK: - Identity avatar (both platforms)
 
-    /// The signed-in user's picture when Jellyfin has one (HEL-168);
+    /// The signed-in user's picture when Jellyfin has one;
     /// initials while it loads and for users without one, because an empty
     /// avatar frame reads worse than a letter.
     private func identityAvatar(size: CGFloat, font: Font) -> some View {

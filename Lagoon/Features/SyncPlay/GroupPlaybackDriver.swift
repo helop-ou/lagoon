@@ -1,7 +1,7 @@
 import Foundation
 
 /// Drives one player session from a SyncPlay group, and the group from
-/// that player's viewer (HEL-172).
+/// that player's viewer.
 ///
 /// The split from `SyncPlayStore` is deliberate. The store is membership:
 /// the socket, the group, the queue, what the UI shows. This is the part
@@ -9,8 +9,8 @@ import Foundation
 /// engine not at all — every transport call goes through
 /// `PlaybackController`'s group entry points, which is what lets an
 /// episode handoff or a delivery fallback carry the group onto a successor
-/// engine without this object knowing (HEL-152 keeps engines out of
-/// long-lived references for exactly this reason).
+/// engine without this object knowing (engines stay out of long-lived
+/// references for exactly this reason).
 ///
 /// Two directions of traffic meet here:
 ///

@@ -32,7 +32,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
 
         /// The status VideoToolbox reported, whichever stage produced it.
         /// Every case carries one, and what it says is often the difference
-        /// between a dead session and a dead stream (HEL-181).
+        /// between a dead session and a dead stream.
         var status: OSStatus {
             switch self {
             case .sessionCreation(let status),
@@ -50,7 +50,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
     private let formatDescription: CMVideoFormatDescription
     /// False only for AV1 where the device has no AV1 silicon, so that Apple's
     /// software decoder is allowed to answer instead of the session being
-    /// refused (HEL-137).
+    /// refused.
     let requiresHardware: Bool
     private let imageBufferAttributes: CFDictionary
     private let ambientViewingEnvironment: Data?
@@ -82,7 +82,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
     /// what the caller actually needs to know before committing a stream to
     /// the compressed path. The two differ for AV1 on an A15: no hardware, and
     /// no software decoder behind it either, so the session is refused with
-    /// -12906 whether or not hardware is required (HEL-137).
+    /// -12906 whether or not hardware is required.
     ///
     /// Asked with no specification and no callback, so it answers for the
     /// decoder itself rather than for any particular configuration of it.
@@ -107,7 +107,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
     }
 
     /// Whether a status is about the decode *session* rather than the samples
-    /// it was handed (HEL-181).
+    /// it was handed.
     ///
     /// `kVTInvalidSessionErr` is the session having gone away underneath us:
     /// the system reclaims decoders, and a sample in flight when it does
@@ -226,7 +226,7 @@ nonisolated final class VideoToolboxDecoder: @unchecked Sendable {
         // decoder. All video formats Lagoon advertises here are supported by
         // the Apple TV hardware decoder.
         //
-        // The exception is AV1 on a device with no AV1 silicon (HEL-137).
+        // The exception is AV1 on a device with no AV1 silicon.
         // There the alternative is not a better decoder but libdav1d on the
         // CPU, so Apple's own software decoder is worth having if it exists,
         // and requiring hardware would refuse it.

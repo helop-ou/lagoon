@@ -2,7 +2,7 @@
 import Testing
 @testable import Lagoon
 
-/// Pins the iOS double-tap seek's stacking feedback (HEL-153): a further
+/// Pins the iOS double-tap seek's stacking feedback: a further
 /// double-tap on the same side while the glyph is up adds a step, a tap on
 /// the other side starts over.
 @Suite("Touch seek policy")

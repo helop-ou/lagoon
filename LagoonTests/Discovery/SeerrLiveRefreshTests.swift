@@ -134,7 +134,7 @@ struct SeerrLiveRefreshTests {
 @Suite("Seerr request detail polling", .serialized)
 @MainActor
 struct SeerrRequestDetailRefreshTests {
-    /// The whole point of HEL-136 is observing state the server has just
+    /// The whole point is observing state the server has just
     /// changed, so a cached body is the one answer that must never come back.
     @Test func everySeerrCallBypassesTheHTTPCache() async throws {
         let clients = makeClients(request: Fixtures.downloadingRequest)
@@ -390,7 +390,7 @@ private nonisolated final class SeerrDetailURLProtocol: URLProtocol, @unchecked 
             return requestJSON
         case "/api/v1/movie/603":
             return detailsJSON
-        // Best-effort metadata the detail asks for once (HEL-118).
+        // Best-effort metadata the detail asks for once.
         case "/api/v1/service/radarr":
             return "[]"
         case "/Users/user/Items/jellyfin-arrival":

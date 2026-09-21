@@ -159,7 +159,7 @@ def main():
             if args.subtitle_provider:
                 # The provider search, the provider file, and the upload that
                 # attaches it to the item — the three calls a real download
-                # makes (HEL-151).
+                # makes.
                 if re.fullmatch(r"/Items/fixture/RemoteSearch/Subtitles/[a-z]{2,3}", path):
                     with lock:
                         state["searches"] += 1

@@ -7,12 +7,12 @@ nonisolated private let log = Logger(subsystem: "ee.helop.lagoon", category: "do
 
 /// Which way a single-track Dolby Vision profile 7 HEVC stream (a UHD
 /// Blu-ray remux: base layer plus type-62 RPU and type-63 enhancement-layer
-/// NAL units interleaved in one track) reaches the decoder (HEL-145).
+/// NAL units interleaved in one track) reaches the decoder.
 nonisolated enum DolbyVisionProfile7Mode: Sendable, Equatable {
     /// Rewrite every RPU to profile 8.1 with libdovi and drop the
     /// enhancement layer, tagging the track for real Dolby Vision. Default.
     case convert
-    /// The old HEL-64 behaviour: drop both unit types and let the base
+    /// The older behaviour: drop both unit types and let the base
     /// layer present as HDR10. Settings → Advanced → Playback Diagnostics
     /// → "Dolby Vision Compatibility Mode".
     case stripToHDR10
@@ -39,7 +39,7 @@ nonisolated struct DolbyVisionRewriteStats: Equatable, Sendable {
 
 /// Rewrites a single-track Dolby Vision profile 7 HEVC stream to profile
 /// 8.1 in flight, packet by packet, so tvOS engages real Dolby Vision
-/// instead of the HDR10-only base layer (HEL-145).
+/// instead of the HDR10-only base layer.
 ///
 /// Every type-62 RPU is parsed with libdovi, converted with
 /// `dovi_convert_rpu_with_mode(rpu, 2)` (the same transform `dovi_tool -m 2`

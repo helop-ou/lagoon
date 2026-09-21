@@ -4,8 +4,8 @@ extension View {
     /// tvOS keeps SwiftUI's full-screen presentation and remote grammar on
     /// whichever screen started playback. iOS only *requests* playback here:
     /// the one `playerPresentationHost` at the tab root presents it, so the
-    /// player never depends on the screen that asked for it staying mounted
-    /// (HEL-162). `onDismiss` still reaches the requesting screen once the
+    /// player never depends on the screen that asked for it staying mounted.
+    /// `onDismiss` still reaches the requesting screen once the
     /// player has closed, PiP included.
     func playerPresentation(item: Binding<PlayerItem?>, onDismiss: @escaping () -> Void) -> some View {
         #if os(iOS)
@@ -31,8 +31,8 @@ extension View {
 /// used to host its own presenting controller; presenting from inside a
 /// `NavigationStack` destination made the stack briefly show its root, and
 /// any view update in that window dropped the destination, which dismantled
-/// the presenter and closed the player about a second after it opened
-/// (HEL-162). The tab root is outside every stack, so it has none of that.
+/// the presenter and closed the player about a second after it opened.
+/// The tab root is outside every stack, so it has none of that.
 @MainActor
 @Observable
 final class PlayerPresentationHub {
@@ -90,7 +90,7 @@ private struct PlayerPresentationBridge: UIViewControllerRepresentable {
     let hub: PlayerPresentationHub
     @Environment(SessionStore.self) private var session
     /// The hosted player is outside SwiftUI's environment, so everything
-    /// it reads is re-injected below — Watch Together included (HEL-172).
+    /// it reads is re-injected below — Watch Together included.
     @Environment(SyncPlayStore.self) private var syncPlay
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -118,7 +118,7 @@ private struct PlayerPresentationBridge: UIViewControllerRepresentable {
         // removes the presenting hierarchy from the window once its
         // transition ends, and SwiftUI answers by re-running the `.task`s of
         // everything underneath — the root view's regression bootstrap
-        // included (HEL-162). Keeping the hierarchy is also what lets
+        // included. Keeping the hierarchy is also what lets
         // `restore` find the presenter in a window after PiP.
         host.modalPresentationStyle = .overFullScreen
         // The player paints its own black; a clear host lets the requesting

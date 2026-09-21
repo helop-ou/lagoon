@@ -5,7 +5,7 @@ import Libavcodec
 import Libavformat
 import Libavutil
 
-// HEL-48 M1: thin wrapper over libavformat. All methods must be called on
+// Thin wrapper over libavformat. All methods must be called on
 // the engine's demux queue; nothing here is thread-safe on its own.
 //
 // FFmpeg imports as raw C: pointers, manual unref, sentinel values. The
@@ -16,7 +16,7 @@ import Libavutil
 /// until a disc did: MPEG-TS begins at whatever timestamp the muxer felt
 /// like, and WALL·E's Blu-ray starts at 4198 s. Everything above the demuxer
 /// expects media time to start at zero, so the container's origin is
-/// subtracted from every packet and added back onto every seek (HEL-133).
+/// subtracted from every packet and added back onto every seek.
 nonisolated enum ContainerTimeline {
     /// AV_TIME_BASE, the unit `AVFormatContext.start_time` is expressed in.
     static let microsecondsPerSecond = 1_000_000.0
@@ -115,7 +115,7 @@ nonisolated final class FFmpegDemuxer {
     enum ReadResult {
         case video(CMSampleBuffer)
         /// A compressed access unit for the software decode stage, which
-        /// runs off this queue so reading and decoding overlap (HEL-137).
+        /// runs off this queue so reading and decoding overlap.
         case videoPacket(SoftwareVideoPacket)
         case audio([CMSampleBuffer], streamIndex: Int32)
         case subtitle([SubtitleEvent], streamIndex: Int32)
@@ -135,7 +135,7 @@ nonisolated final class FFmpegDemuxer {
     private var selectedAudioStreamIndex: Int32 = -1
     /// `-debug.disableAudio YES` opens the title with no audio streams at
     /// all, so a hardware CPU trace can tell the audio path's cost apart from
-    /// the video path's (HEL-137). Diagnostic only; never a user setting.
+    /// the video path's. Diagnostic only; never a user setting.
     private static let audioDisabledForDiagnostics: Bool = {
         guard let value = SoftwareDecodeThreadPolicy.commandLineString(forKey: "debug.disableAudio") else {
             return false
@@ -146,11 +146,11 @@ nonisolated final class FFmpegDemuxer {
     // M4: codecs CoreAudio can't take compressed decode to LPCM here.
     private var audioDecoders: [Int32: AudioDecoder] = [:]
     private var subtitleDecoders: [Int32: SubtitleDecoder] = [:]
-    // HEL-64: sample-exact pts chains for compressed passthrough audio —
+    // Sample-exact pts chains for compressed passthrough audio —
     // container timestamps are quantized (Matroska: 1 ms) and the renderer
     // turns every quantization mismatch into an audible discontinuity.
     private var passthroughTimelines: [Int32: PassthroughAudioTimeline] = [:]
-    // HEL-64: remove Matroska's millisecond quantization from video PTS.
+    // Remove Matroska's millisecond quantization from video PTS.
     // This was not the root cause of the measured 10% HEVC frame loss, but
     // keeps both compressed and decoded presentation timing sample-exact.
     private var videoTimeline: VideoFrameTimeline?
@@ -160,19 +160,18 @@ nonisolated final class FFmpegDemuxer {
     // codec.
     /// Built here because this is where the codec parameters are, then handed
     /// to the engine, which drives it from a decode queue of its own. Nil
-    /// again the moment it is taken: the demuxer does not decode video
-    /// (HEL-137).
+    /// again the moment it is taken: the demuxer does not decode video.
     private var softwareVideoDecoder: SoftwareVideoDecoder?
     private var softwareGridDescription: String?
 
-    /// HEL-145: how a single-track Dolby Vision profile 7 stream is
+    /// How a single-track Dolby Vision profile 7 stream is
     /// handled — rewritten to profile 8.1 (`.convert`, default) or stripped
-    /// to the HEL-64 HDR10 fallback (`.stripToHDR10`, Settings → Debug).
+    /// to the HDR10 fallback (`.stripToHDR10`, Settings → Debug).
     /// Set before `open`.
     var dolbyVisionProfile7Mode: DolbyVisionProfile7Mode = .convert
     /// Armed by the open-time gate in `.convert` mode; demux-queue use only.
     private var profile7Converter: DolbyVisionProfileConverter?
-    /// HEL-64 A/B: opt back into marking disposable frames droppable
+    /// A/B toggle: opt back into marking disposable frames droppable
     /// (4e2ad5f's behavior) — see the factory's attachment comment for
     /// why the default volunteers nothing. Set before `open`.
     var markDroppableFrames = false
@@ -180,16 +179,16 @@ nonisolated final class FFmpegDemuxer {
     /// use only.
     private var videoNALLengthSize: Int?
     /// Set when the video track arrives start-code delimited, which is every
-    /// MPEG-TS and so every Blu-ray clip the disc reader opens (HEL-133).
+    /// MPEG-TS and so every Blu-ray clip the disc reader opens.
     private var videoUsesStartCodes = false
-    /// HEL-151: what the compressed video payloads handed to the renderer are,
+    /// What the compressed video payloads handed to the renderer are,
     /// so a post-seek packet can be asked whether a decoder can *start* on it
     /// rather than only whether the container would seek to it. Both nil for
     /// software-decoded video and for any codec this cannot read, which
-    /// leaves that stream on exactly its pre-HEL-151 path.
+    /// leaves that stream on exactly its earlier path.
     private var videoRandomAccessCodec: VideoRandomAccessPoint.Codec?
     private var videoPayloadNALLengthSize: Int?
-    /// Where a seek left the video stream (HEL-151). Demux-queue use only.
+    /// Where a seek left the video stream. Demux-queue use only.
     private var postSeekVideoFilter: PostSeekVideoFilter = .idle
     /// Per stream, the container origin to subtract from its timestamps.
     /// Empty for every container that already starts at zero.
@@ -248,7 +247,7 @@ nonisolated final class FFmpegDemuxer {
     private(set) var outputsDecodedVideo = false
 
     /// Stops routing AV1 to an Apple decoder, for a reopen after one could
-    /// not be created. Call before `open` (HEL-137).
+    /// not be created. Call before `open`.
     func disableVideoToolboxAV1() {
         routesAV1ToVideoToolbox = false
     }
@@ -263,7 +262,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     /// Wall time spent inside `av_read_frame` and the packets it produced —
-    /// the delivery half of "where does the time go" (HEL-137). Cumulative
+    /// the delivery half of "where does the time go". Cumulative
     /// since the last seek, matching the decoder's own profile.
     var ioProfile: (readSeconds: Double, packets: Int, elapsedSeconds: Double) {
         ioLock.withLock {
@@ -288,7 +287,7 @@ nonisolated final class FFmpegDemuxer {
     ///
     /// `interlaced` is the stream's own field order, as libavformat probed
     /// it. Interlaced H.264 goes to the software decoder because that is
-    /// the only path with a deinterlacing stage (HEL-170): VideoToolbox on
+    /// the only path with a deinterlacing stage: VideoToolbox on
     /// tvOS would hand back woven field pairs and the picture would comb on
     /// every motion. Progressive H.264 is untouched. HEVC has no software
     /// route here, so it is compressed whatever the field order says, and
@@ -390,8 +389,7 @@ nonisolated final class FFmpegDemuxer {
             // the title, and hand libavformat that title's clips laid end to
             // end — it never learns the image was a disc. Every failure here
             // is a delivery failure, so a disc this cannot read falls to the
-            // server remux exactly as it did before any of this existed
-            // (HEL-133).
+            // server remux exactly as it did before any of this existed.
             do {
                 let volume = try UDFVolume(
                     source: PlaybackCacheDiscSource(source: cacheScope),
@@ -448,7 +446,7 @@ nonisolated final class FFmpegDemuxer {
         // format's origin rather than each stream's own preserves the offsets
         // between them: WALL·E's disc starts video and one audio track
         // together and a second audio track two thirds of a second later,
-        // which is content, not clock (HEL-133).
+        // which is content, not clock.
         for index in 0..<Int(ctx.pointee.nb_streams) {
             guard let stream = ctx.pointee.streams[index] else { continue }
             let offset = ContainerTimeline.startOffset(
@@ -496,13 +494,12 @@ nonisolated final class FFmpegDemuxer {
         ) && (videoPar.pointee.codec_id != AV_CODEC_ID_AV1 || routesAV1ToVideoToolbox)
         // A container that describes no parameter sets has to be caught
         // before the description is built, not after: the description is
-        // created successfully either way and only the decoder refuses
-        // (HEL-131).
+        // created successfully either way and only the decoder refuses.
         // MPEG-TS describes its parameter sets in Annex-B, which is not an
         // hvcC however much the field it arrives in says otherwise. Taken at
         // face value it builds a description no decoder accepts, and the
         // refusal arrives as "no hardware decoder" rather than as anything
-        // about framing (HEL-133).
+        // about framing.
         let annexBParameterSets = usesCompressedVideo
             ? annexBParameterSets(codecpar: videoPar)
             : nil
@@ -521,13 +518,13 @@ nonisolated final class FFmpegDemuxer {
                     )
                     : nil
             }
-        // HEL-145: a profile 7 remux (UHD Blu-ray) interleaves base-layer,
+        // A profile 7 remux (UHD Blu-ray) interleaves base-layer,
         // RPU (unspec 62) and enhancement-layer (unspec 63) NALs in one
         // HEVC track. tvOS cannot reconstruct dual-layer DoVi, so by
         // default every RPU is rewritten to profile 8.1 with libdovi and
         // every enhancement-layer unit is dropped, tagging the track hvc1
         // + dvvC so the system engages real Dolby Vision off the rewritten
-        // single layer. The debug toggle falls back to the old HEL-64
+        // single layer. The debug toggle falls back to the older
         // behaviour: drop both unit types and let the base layer present
         // as HDR10. Neither mode arms without a known NAL length size or a
         // profile other than 7 — MPEG-TS discs carry no DoVi configuration
@@ -595,7 +592,7 @@ nonisolated final class FFmpegDemuxer {
                 frameRateNum: guessedRate.num,
                 frameRateDen: guessedRate.den
             )
-            // HEL-151: only the compressed path reaches the renderer, and
+            // Only the compressed path reaches the renderer, and
             // only these two codecs are length-prefixed NAL streams there.
             switch videoPar.pointee.codec_id {
             case AV_CODEC_ID_H264: videoRandomAccessCodec = .h264
@@ -604,7 +601,7 @@ nonisolated final class FFmpegDemuxer {
             }
             if let codec = videoRandomAccessCodec {
                 // A converted start-code payload carries four-byte lengths
-                // whatever the container's own record said (HEL-133).
+                // whatever the container's own record said.
                 videoPayloadNALLengthSize = videoUsesStartCodes
                     ? Int(AnnexBStream.nalUnitHeaderLength)
                     : videoPar.pointee.extradata.flatMap { extradata in
@@ -732,7 +729,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     /// Whether the video stream is read at all. Discarded inside
-    /// libavformat while the app plays audio in the background (HEL-176),
+    /// libavformat while the app plays audio in the background,
     /// so a locked phone neither decodes nor holds pictures nobody sees.
     func setVideoDiscarded(_ discarded: Bool) {
         guard let ctx = formatContext, let videoStream else { return }
@@ -783,7 +780,7 @@ nonisolated final class FFmpegDemuxer {
     }
 
     /// VPS, SPS and PPS taken from the bitstream, for an HEVC track whose
-    /// container declared none of its own (HEL-131).
+    /// container declared none of its own.
     ///
     /// nil in the ordinary case, so a well-formed `hvcC` keeps the existing
     /// path and reads no packets at all. When it does run, the context is
@@ -879,9 +876,9 @@ nonisolated final class FFmpegDemuxer {
         // max_ts to the requested time asks for the keyframe at or before it.
         try Self.validateSeekStatus(reposition(ctx, to: timestamp))
         // A container with no index answers that request with whatever packet
-        // its binary search stops on, keyframe or not (HEL-166).
+        // its binary search stops on, keyframe or not.
         alignLandingToKeyframe(ctx, target: timestamp)
-        // HEL-151: the packet the container seeks to is not necessarily one
+        // The packet the container seeks to is not necessarily one
         // a hardware decoder can be started on, and the packets right behind
         // it may be presented before it. Both are decided on the first video
         // packet this seek produces.
@@ -897,7 +894,7 @@ nonisolated final class FFmpegDemuxer {
         videoTimeline?.reset()
         // The software decoder is the decode stage's, and the stage resets it
         // itself right after this returns. Flushing it from here would touch
-        // libavcodec from two queues at once (HEL-137).
+        // libavcodec from two queues at once.
         for decoder in subtitleDecoders.values {
             decoder.flush()
         }
@@ -935,7 +932,7 @@ nonisolated final class FFmpegDemuxer {
     private static let landingProbePacketBudget = 480
 
     /// Walks a mid-GOP seek landing back to the last keyframe at or before
-    /// the target (HEL-166).
+    /// the target.
     ///
     /// A container's seek lands where its index says. MPEG-TS has no index:
     /// libavformat binary-searches the PES timestamps (`mpegts_get_dts`,
@@ -1013,7 +1010,7 @@ nonisolated final class FFmpegDemuxer {
     ///
     /// The container's key flag is the candidate; the post-seek filter still
     /// classifies the packet the cursor ends up on, so an open GOP keeps its
-    /// leading-picture drop (HEL-151). Presentation decides whether a
+    /// leading-picture drop. Presentation decides whether a
     /// keyframe is early enough, decode decides where to seek: the search a
     /// container without an index runs compares decode stamps.
     private func lastKeyframe(
@@ -1040,7 +1037,7 @@ nonisolated final class FFmpegDemuxer {
 
     /// `av_read_frame` with the clock around it. This is the transport: on a
     /// direct-played file it is a cache read, on a stream it is the network,
-    /// and either way it is the third of HEL-137's three costs — the one that
+    /// and either way it is the third of the three costs — the one that
     /// used to be indistinguishable from decode because both happened on this
     /// queue, one after the other.
     private func readFrameTimed(
@@ -1071,7 +1068,7 @@ nonisolated final class FFmpegDemuxer {
     /// strip mode uses `HEVCNALUnitRewriter.rewrite` directly, rather than
     /// the canned `strippingEnhancementLayer`, so it can keep the RPU/EL
     /// breakdown `dolbyVisionRewriteStats` reports instead of just a byte
-    /// count (HEL-145).
+    /// count.
     private func rewrittenDolbyVisionPayload(
         payload: UnsafeRawBufferPointer,
         lengthSize: Int
@@ -1104,13 +1101,13 @@ nonisolated final class FFmpegDemuxer {
         return filtered
     }
 
-    /// What a seek left the compressed video stream doing (HEL-151).
+    /// What a seek left the compressed video stream doing.
     private enum PostSeekVideoFilter {
         case idle
         /// Nothing has been read since the seek: the next video packet is
         /// wherever the decoder is about to be restarted.
         case awaitingAnchor
-        /// The container put the cursor inside a GOP (HEL-166) and video is
+        /// The container put the cursor inside a GOP and video is
         /// being dropped until a picture a decoder can start on.
         case droppingToKeyframe(dropped: Int)
         /// The seek landed on an *open* GOP — a picture the container flags
@@ -1133,7 +1130,7 @@ nonisolated final class FFmpegDemuxer {
     /// point the seek landed on cannot be decoded — `AVSampleBufferVideoRenderer`
     /// answers one with `didFailToDecodeNotification`, and the delivery
     /// ladder reads that as `.undecodable` and drops the viewer onto a
-    /// server transcode for the rest of the film (HEL-151). libavcodec is
+    /// server transcode for the rest of the film. libavcodec is
     /// forgiving here and Apple's decoder is not, which is why this had never
     /// shown up in a software-decoded path.
     ///
@@ -1143,7 +1140,7 @@ nonisolated final class FFmpegDemuxer {
     ///
     /// Armed only when the anchor is a genuine keyframe that is *not* an
     /// IDR/IRAP: an IDR closes its GOP by definition, so closed-GOP content —
-    /// which is nearly everything — takes exactly its pre-HEL-151 path.
+    /// which is nearly everything — takes exactly its earlier path.
     private func postSeekVideoDecision(
         packet: UnsafeMutablePointer<AVPacket>,
         payload: Data?
@@ -1216,7 +1213,7 @@ nonisolated final class FFmpegDemuxer {
         switch isStartPoint {
         case .some(false) where packet.pointee.flags & keyPacketFlag == 0:
             // Not a start point and not even a picture the container calls a
-            // keyframe: the seek landed inside a GOP (HEL-166). Everything
+            // keyframe: the seek landed inside a GOP. Everything
             // here references pictures the renderer's flush destroyed, so it
             // is dropped until the GOP that can be started on.
             guard dropped < Self.keyframeSearchDropLimit else { return .keep }
@@ -1230,7 +1227,7 @@ nonisolated final class FFmpegDemuxer {
             return .drop
         case .some(false):
             // A keyframe that is not a start point is the open GOP: keep it
-            // and drop the pictures presented before it (HEL-151).
+            // and drop the pictures presented before it.
             postSeekVideoFilter = .droppingLeadingPictures(anchor: anchor, dropped: 0)
             return .keep
         default:
@@ -1268,7 +1265,7 @@ nonisolated final class FFmpegDemuxer {
         }
         if status == avErrorEOF || isInterrupted {
             // Delayed pictures still inside libavcodec are the decode stage's
-            // to drain; it owns the decoder (HEL-137).
+            // to drain; it owns the decoder.
             //
             // Hand the audio decoder's tail (coalesced partial buffer) to the
             // renderer before declaring the end.
@@ -1327,7 +1324,7 @@ nonisolated final class FFmpegDemuxer {
         if streamIndex == videoStreamIndex, let description = videoStream?.formatDescription {
             // Start codes become length prefixes before anything downstream
             // sees the payload, so the filter below and VideoToolbox itself
-            // read one framing (HEL-133).
+            // read one framing.
             var strippedPayload: Data?
             if videoUsesStartCodes, let data = packet.pointee.data {
                 strippedPayload = AnnexBStream.lengthPrefixed(
@@ -1373,7 +1370,7 @@ nonisolated final class FFmpegDemuxer {
                     )
                 }
             }
-            // HEL-151. Ahead of the frame-grid snap below, so a dropped
+            // Ahead of the frame-grid snap below, so a dropped
             // packet never anchors the timeline on a stamp that is about to
             // be stepped backwards over.
             if case .drop = postSeekVideoDecision(packet: packet, payload: strippedPayload) {
@@ -1399,7 +1396,7 @@ nonisolated final class FFmpegDemuxer {
         if let audio = audioStreams.first(where: { $0.streamIndex == streamIndex }),
            let description = audio.formatDescription,
            let timeBase = audioTimeBases[streamIndex] {
-            // Sample-exact pts for passthrough audio (HEL-64) — the
+            // Sample-exact pts for passthrough audio — the
             // container's quantized stamp only anchors the chain.
             let ptsValue = packet.pointee.pts != avNoPTS ? packet.pointee.pts : packet.pointee.dts
             let containerSeconds: Double? = ptsValue == avNoPTS
@@ -1447,7 +1444,7 @@ nonisolated final class FFmpegDemuxer {
         // These wrappers free AVCodecContext/SWR resources in deinit.
         // close() runs on the demux queue; clearing them here prevents that
         // C teardown from being deferred until the main-actor engine is
-        // released after dismissal (HEL-57).
+        // released after dismissal.
         audioDecoders.removeAll(keepingCapacity: false)
         subtitleDecoders.removeAll(keepingCapacity: false)
         softwareVideoDecoder = nil

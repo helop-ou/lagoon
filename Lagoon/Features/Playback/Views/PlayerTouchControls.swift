@@ -1,7 +1,7 @@
 #if os(iOS)
 import SwiftUI
 
-/// The iOS touch grammar's centre cluster (HEL-153): a large play/pause with
+/// The iOS touch grammar's centre cluster: a large play/pause with
 /// a ±10 s skip either side, the same three-button row every phone player
 /// puts under the thumb. tvOS keeps its own remote grammar in
 /// `CustomPlayerView` untouched — this view exists only on iOS.
@@ -9,9 +9,9 @@ import SwiftUI
 /// Holds the engine the same way every other player view does: weak, via
 /// `@PlayerEngineRef`, so a stale copy of this cluster kept alive by a
 /// SwiftUI gesture context after an episode handoff reads
-/// `DetachedPlayerEngine` instead of leaking the drained one (HEL-152). The
+/// `DetachedPlayerEngine` instead of leaking the drained one. The
 /// closures below read `engine.isPaused` from the body, which is fine — it
-/// changes on viewer action, not at tick rate (HEL-150 only rules out
+/// changes on viewer action, not at tick rate (what is ruled out is
 /// `timePosition`, the subtitle cue properties, and other per-tick state).
 struct PlayerTouchTransportCluster: View {
     @PlayerEngineRef var engine: any PlayerEngine
@@ -67,14 +67,14 @@ struct PlayerTouchTransportCluster: View {
         .buttonBorderShape(.circle)
         .foregroundStyle(.white)
         .contentShape(Circle())
-        // Moved here from the toolbar (HEL-153): the centre cluster is now
+        // Moved here from the toolbar: the centre cluster is now
         // the one play/pause control on iOS, so it keeps the identifier the
         // regression suite already looks for.
         .accessibilityIdentifier("player.playPause")
     }
 }
 
-/// Pure policy behind the iOS double-tap seek's stacking feedback (HEL-153):
+/// Pure policy behind the iOS double-tap seek's stacking feedback:
 /// a further double-tap on the same side, while the glyph from the last one
 /// is still up, adds another step instead of resetting it, so three quick
 /// double-taps forward reads "30 s" rather than restarting at 10 s each time.

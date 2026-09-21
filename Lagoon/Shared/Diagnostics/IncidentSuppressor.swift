@@ -2,7 +2,7 @@ import Foundation
 
 /// Client-side suppression, so a failure that repeats every second costs one
 /// report and a count rather than the month's quota. Dashboard grouping
-/// alone does not reduce event volume (HEL-159). Pure: the hub owns one
+/// alone does not reduce event volume. Pure: the hub owns one
 /// behind its lock and feeds it the clock.
 nonisolated struct IncidentSuppressor: Equatable, Sendable {
     struct Limits: Equatable, Sendable {

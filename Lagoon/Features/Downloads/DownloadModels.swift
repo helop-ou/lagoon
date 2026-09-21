@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// What a viewer asks for when taking a title off the server (HEL-166).
+/// What a viewer asks for when taking a title off the server.
 /// Original is the file as stored; the other two are the server's
 /// progressive transcode under a bitrate and size cap, so a 30 GB 4K remux
 /// never lands on a phone unless asked for by name.
@@ -108,13 +108,13 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     /// A fresh UUID set on every `start`/`resume`, carried in the task
     /// description so a delegate report for an attempt that was replaced
     /// by a newer one (delete-then-restart, or a stale resume) is dropped
-    /// instead of landing on the current attempt (HEL-166 review finding
-    /// 4). Optional so a manifest saved before this field existed decodes.
+    /// instead of landing on the current attempt. Optional so a manifest
+    /// saved before this field existed decodes.
     var attemptToken: String?
     /// `resumeData` from a pause or a transport failure, kept as its own
     /// file because it can be megabytes. Only ever set for `.original`:
     /// the transcode endpoint has no range support, so resume data would
-    /// append a second encode onto the file (HEL-166 review finding 3).
+    /// append a second encode onto the file.
     var resumeDataFile: String?
     /// The resume point recorded by local playback, authoritative for a
     /// downloaded title until the server hears about it.
@@ -129,8 +129,8 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     var isComplete: Bool { state == .complete }
     var isActive: Bool { state == .queued || state == .downloading }
     /// Whether a resume of this entry has to start over from byte zero: a
-    /// transcode has no resume data to fall back on (HEL-166 review
-    /// finding 3), so the paused caption can say so up front.
+    /// transcode has no resume data to fall back on, so the paused caption
+    /// can say so up front.
     var resumesFromStart: Bool { quality != .original }
 
     /// Progress in 0...1 while the size is known, else nil.
@@ -213,7 +213,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     /// A no-op once the entry is paused or complete: a progress callback
     /// queued before a pause or a delete can still land after it, and must
     /// not un-pause the entry or resurrect a byte count for a title that
-    /// no longer exists (HEL-166 review finding 6).
+    /// no longer exists.
     mutating func recordProgress(_ itemID: String, received: Int64, expected: Int64?) {
         guard let entry = entry(for: itemID), entry.isActive else { return }
         update(itemID) {
@@ -230,8 +230,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
             $0.resumeDataFile = resumeDataFile
             $0.state = .paused
             // A late failure callback for the same cancel must not leave a
-            // stale error string sitting under a deliberate pause (HEL-166
-            // review finding 6).
+            // stale error string sitting under a deliberate pause.
             $0.failure = nil
         }
     }
@@ -268,12 +267,12 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     /// re-adopted; an entry whose file is already on disk under
     /// `completedFiles` finished while the process was suspended before it
     /// could record that itself, so it is promoted straight to `.complete`
-    /// with the file's own byte count rather than demoted to failed
-    /// (HEL-166 review finding 1); the store computes this set from the
-    /// account directory, keeping this method free of disk access. The
-    /// rest of the in-flight entries become paused when they hold resume
-    /// data, otherwise failed. Returns the ids that were actually lost,
-    /// not the ones recovered as complete.
+    /// with the file's own byte count rather than demoted to failed; the
+    /// store computes this set from the account directory, keeping this
+    /// method free of disk access. The rest of the in-flight entries
+    /// become paused when they hold resume data, otherwise failed.
+    /// Returns the ids that were actually lost, not the ones recovered as
+    /// complete.
     @discardableResult
     mutating func reconcile(
         liveTasks: [String: Int], completedFiles: [String: Int64] = [:],
@@ -318,8 +317,8 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
 }
 
 /// Where a server image URL points, for matching a downloaded title's saved
-/// artwork back to whatever a view would otherwise fetch over the network
-/// (HEL-166). Pure and platform-independent so the parser is pinned down by
+/// artwork back to whatever a view would otherwise fetch over the network.
+/// Pure and platform-independent so the parser is pinned down by
 /// a test without an iOS-only store.
 nonisolated enum DownloadArtworkKey {
     /// Reads `Items/{imageItemID}/Images/{Type}`. `Type` can itself carry a
@@ -348,8 +347,7 @@ nonisolated enum DownloadArtworkKey {
 /// `taskDescription`: everything a delegate callback needs to find a
 /// finished transfer's destination and confirm the report still belongs
 /// to the attempt that is current, even for an event delivered after a
-/// relaunch or for a different account than the one active in the process
-/// (HEL-166 review finding 4/12).
+/// relaunch or for a different account than the one active in the process.
 nonisolated struct DownloadTaskDescription: Equatable, Sendable {
     let itemID: String
     let fileName: String
@@ -368,8 +366,7 @@ nonisolated struct DownloadTaskDescription: Equatable, Sendable {
 
 /// Whether a finished download task actually succeeded, decided once so
 /// the delegate's synchronous write (which can run without the store
-/// active) and the store's own reporting path always agree (HEL-166
-/// review finding 12).
+/// active) and the store's own reporting path always agree.
 nonisolated enum DownloadCompletion {
     enum Outcome: Equatable {
         case complete(bytes: Int64)
@@ -395,7 +392,7 @@ nonisolated enum DownloadCompletion {
 
 /// Short, localized copy for a transport failure a viewer might see next
 /// to a stalled download, in place of raw `NSError` text like "NSURLErrorDomain
-/// -1005" (HEL-166 review finding 7).
+/// -1005".
 nonisolated enum DownloadTransportFailure {
     private static let log = Logger(subsystem: "ee.helop.lagoon", category: "downloads")
 

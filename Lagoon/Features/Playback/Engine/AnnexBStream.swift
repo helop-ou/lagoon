@@ -6,7 +6,7 @@ import Foundation
 /// Every source the engine had before disc images was length-prefixed: MP4
 /// and Matroska direct play, and Jellyfin's fMP4 remux and transcode alike.
 /// A Blu-ray's m2ts is MPEG-TS, which is not, so reading a disc introduced
-/// the engine's first Annex-B source (HEL-133).
+/// the engine's first Annex-B source.
 ///
 /// Two consequences, and both are fatal on their own. libavformat synthesises
 /// extradata for MPEG-TS out of the in-band parameter sets and hands it over

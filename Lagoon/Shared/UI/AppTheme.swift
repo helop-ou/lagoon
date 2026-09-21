@@ -1,7 +1,7 @@
 import Observation
 import SwiftUI
 
-/// The looks Lagoon can wear (HEL-173). One of them is the brand's own; the
+/// The looks Lagoon can wear. One of them is the brand's own; the
 /// other is for the partners who love pink. Each is a whole palette, so a
 /// screen never has to know which theme is on: it asks `Theme` for the
 /// accent, the ground or the background and gets the current answer.
@@ -139,7 +139,7 @@ nonisolated struct ThemePalette: Equatable, Sendable {
 
 /// Which theme is on, and for whom. The choice belongs to the Jellyfin
 /// profile, not the device: a partner's pink follows their account and
-/// nobody else's (HEL-173). `SessionStore` points the store at the active
+/// nobody else's. `SessionStore` points the store at the active
 /// account. While nobody is active (signing out, switching, adding an
 /// account) the last profile's theme stays up, so the picker and sign-in
 /// screens wear the look of whoever was just there; an account waiting to

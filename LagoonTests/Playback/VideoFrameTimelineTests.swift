@@ -2,7 +2,7 @@ import CoreMedia
 import Testing
 @testable import Lagoon
 
-/// HEL-64's video timestamp normalizer: every quantized container PTS lands
+/// The video timestamp normalizer: every quantized container PTS lands
 /// exactly on the frame grid, including through B-frame reordering where
 /// stamps arrive out of presentation order.
 struct VideoFrameTimelineTests {

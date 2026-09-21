@@ -16,7 +16,7 @@ nonisolated enum PlaybackStartError: LocalizedError {
     }
 }
 
-/// What the viewer's transport means when a server owns it (HEL-172).
+/// What the viewer's transport means when a server owns it.
 ///
 /// Implemented by the SyncPlay driver and held weakly by the controller,
 /// which is the one place every play, pause, seek and "next" passes
@@ -33,13 +33,13 @@ protocol GroupTransportRequests: AnyObject {
 }
 
 /// The transport intentions the player chrome states, and the owner acts
-/// on (HEL-172).
+/// on.
 ///
 /// Actions rather than an object, for the reason `CustomPlayerView` takes
 /// `automation` and a handful of values rather than the controller: the
 /// chrome says what the viewer asked for and stays out of who answers.
-/// Closures, not a reference, also keeps HEL-152 intact — nothing SwiftUI
-/// retains captures an engine.
+/// Closures, not a reference, also keep the engine out of anything SwiftUI
+/// retains.
 struct PlayerTransportActions {
     /// Idempotent, because the system integrations that use these describe
     /// the state they want rather than asking the app to invert its own.
@@ -50,14 +50,14 @@ struct PlayerTransportActions {
     let seekBy: (_ seconds: Double) -> Void
 }
 
-/// HEL-148 soak diagnostic: milliseconds for a `Duration`, shared by the
+/// Soak diagnostic: milliseconds for a `Duration`, shared by the
 /// DecodeTrace loop's `mainLateMs`/`pumpMs`/`Soak*` lines.
 private func ms(_ duration: Duration) -> Double {
     Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
 }
 
 /// Negotiates the stream with Jellyfin, runs the Lagoon engine (the app's
-/// only player since HEL-48 went all-in), and owns progress reporting.
+/// only player), and owns progress reporting.
 @Observable
 @MainActor
 final class PlaybackController {
@@ -75,16 +75,16 @@ final class PlaybackController {
     private(set) var isExternalPlaybackRouteActive = false
     let subtitleSearch = SubtitleSearchCoordinator()
     /// Reports failures, recoveries and degraded sessions to the
-    /// diagnostics hub, one attempt at a time (HEL-159).
+    /// diagnostics hub, one attempt at a time.
     let incidents = PlaybackIncidentMonitor()
 
     /// The episode queued behind this one, resolved once at start so the Up
-    /// Next card can appear the instant the credits do (HEL-66). Nil for
+    /// Next card can appear the instant the credits do. Nil for
     /// movies and at the end of a series.
     private(set) var nextUp: MediaItem? {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
-    /// Skip and Up Next timing, off the engine's clock (HEL-176).
+    /// Skip and Up Next timing, off the engine's clock.
     let automation = PlaybackAutomation()
     /// The end of the file is rolling into the next episode: set before the
     /// hand-off task runs, so the view's own end-of-file handling does not
@@ -92,30 +92,29 @@ final class PlaybackController {
     private(set) var isAutoplayPending = false
     /// The app is in the background on iOS and the picture is off: every
     /// engine, including a successor started by autoplay, plays audio only
-    /// until the app is back (HEL-176).
+    /// until the app is back.
     private var videoOutputSuspended = false
     /// The engine anchored its first frame after a load or a seek — every
-    /// time, not once per engine. A SyncPlay driver reports Ready on it
-    /// (HEL-172); the controller rewires it onto each successor engine, so
+    /// time, not once per engine. A SyncPlay driver reports Ready on it;
+    /// the controller rewires it onto each successor engine, so
     /// the driver never has to hold one.
     @ObservationIgnored var onEngineReady: (() -> Void)?
     /// The player session is over for good. A driver leaves its group here
-    /// rather than going on reporting from a controller with no engine
-    /// (HEL-172).
+    /// rather than going on reporting from a controller with no engine.
     @ObservationIgnored var onClosed: (() -> Void)?
     /// The engine started or stopped buffering — a stall, a seek, the
     /// initial prime. A SyncPlay group's Buffering and Ready reports are
-    /// this signal, since the slowest member sets the group's pace
-    /// (HEL-172). Rewired onto each successor engine like `onEngineReady`.
+    /// this signal, since the slowest member sets the group's pace.
+    /// Rewired onto each successor engine like `onEngineReady`.
     @ObservationIgnored var onBufferingChanged: ((Bool) -> Void)?
-    /// Set while a SyncPlay group owns the transport (HEL-172). Weak: the
+    /// Set while a SyncPlay group owns the transport. Weak: the
     /// store owns the driver, the driver holds this controller weakly, and
     /// neither end may keep the other alive. Nil is the ordinary case and
     /// the ordinary behaviour — every `user…` method below acts locally.
     @ObservationIgnored weak var groupTransport: (any GroupTransportRequests)?
     /// Extra playback-HUD lines from whatever else is driving this session.
     /// Supplied by the SyncPlay driver so the `Sync:` line is assembled by
-    /// the object that knows the group (HEL-172).
+    /// the object that knows the group.
     @ObservationIgnored var groupHUDLines: (() -> [String])?
     #if os(iOS)
     @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
@@ -134,7 +133,7 @@ final class PlaybackController {
 
     private var client: JellyfinClient?
     /// Retained so a failed attempt can be replayed on the next rung of the
-    /// delivery ladder (HEL-100); everything else `start` needs is already
+    /// delivery ladder; everything else `start` needs is already
     /// controller state.
     private var currentMedia: MediaItem?
     /// How the current item is being delivered, and the position a retry
@@ -144,17 +143,17 @@ final class PlaybackController {
     private var deliveryItemId: String?
     private var resumeOverride: Double?
     /// A position handed to `start` by its caller, outranking every resume
-    /// rule for that one start (HEL-172): joining a SyncPlay group means the
+    /// rule for that one start: joining a SyncPlay group means the
     /// server, not the viewer's own watch history, says where to begin.
     /// Deliberately not `resumeOverride`, which the new-item reset clears —
     /// and a group join is exactly when the item is new.
     private var startPositionOverride: Double?
     /// Whether the engine about to be built should sit at its start position
-    /// instead of rolling (HEL-172). A group member loads, waits there,
+    /// instead of rolling. A group member loads, waits there,
     /// reports Ready, and is started later by `playGroup(atHostTime:)`.
     private var startsPaused = false
     /// Whether the attempt currently starting (or last started) is playing a
-    /// downloaded file rather than a server stream (HEL-166). Always false
+    /// downloaded file rather than a server stream. Always false
     /// on tvOS, which carries no downloads.
     private var isLocalPlayback = false
     /// Set once a local-playback attempt fails and falls back, so the retry
@@ -182,8 +181,8 @@ final class PlaybackController {
     var activePlayMethod: PlayMethod { playMethod }
     /// Jellyfin's `PlayMethod` collapses the remux and transcode rungs to
     /// the same `Transcode` value, so the regression probe needs the
-    /// ladder rung itself to tell a forced HEL-124 remux apart from an
-    /// ordinary transcode.
+    /// ladder rung itself to tell a forced remux apart from an ordinary
+    /// transcode.
     var activeDeliveryRung: PlaybackDelivery { delivery }
 
     var isPlaybackCacheActive: Bool {
@@ -209,7 +208,7 @@ final class PlaybackController {
     /// Visible in the HUD and hardware accessibility probe for regression
     /// comparisons; nil before the first episode handoff.
     private(set) var lastHandoffMilliseconds: Double?
-    /// HEL-148 soak hook (`debug.soakExitAtSeconds`): flips once the film
+    /// Soak hook (`debug.soakExitAtSeconds`): flips once the film
     /// reaches the configured position, so the view's `onChange` can drive
     /// the same `dismiss()` a real exit would. Observable so that onChange
     /// fires; kept separate from `didFinish`, which means something
@@ -219,10 +218,10 @@ final class PlaybackController {
     /// the whole exit — not just `beginStop()` — took from that instant.
     @ObservationIgnored private var soakExitRequestedAt: ContinuousClock.Instant?
     /// What the viewer picked in the track panel, carried into the next
-    /// episode (HEL-66). Nil on a first load — there is nothing to carry.
+    /// episode. Nil on a first load — there is nothing to carry.
     private var trackPreference: TrackPreference?
     /// Series-scoped memory of the viewer's audio choice, which outlives
-    /// this controller and so survives closing the player (HEL-184). Set by
+    /// this controller and so survives closing the player. Set by
     /// the player view before the first start; nil in tests and previews,
     /// where the in-session carry above is the whole mechanism.
     @ObservationIgnored var audioTrackMemory: AudioTrackMemoryStore?
@@ -277,7 +276,7 @@ final class PlaybackController {
         // Application notifications rather than SwiftUI's `scenePhase`: the
         // player is presented from UIKit (`PlayerPresentationHub`), where
         // the environment's phase never changes, which is how the old
-        // pause-on-background silently never ran on iOS (HEL-176).
+        // pause-on-background silently never ran on iOS.
         let center = NotificationCenter.default
         lifecycleObservers = [
             center.addObserver(
@@ -326,8 +325,8 @@ final class PlaybackController {
 
     @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
-    /// `startPosition` and `startPaused` are the group-playback entry
-    /// (HEL-172): the server names the position and whether the member
+    /// `startPosition` and `startPaused` are the group-playback entry:
+    /// the server names the position and whether the member
     /// waits there for a start instant. Both apply to this start only.
     func start(
         media: MediaItem,
@@ -401,7 +400,7 @@ final class PlaybackController {
             // Regression hook: start on a chosen rung instead of negotiating,
             // so the HLS cases open a real playlist on a server whose content
             // would otherwise direct-play — every public-demo item is H.264
-            // (HEL-144 / audit A18). `debug.regressionInitialDelivery` is a
+            //(/ audit A18). `debug.regressionInitialDelivery` is a
             // `PlaybackDelivery` raw value: `remux` or `transcode`.
             if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
                let forced = UserDefaults.standard.string(forKey: "debug.regressionInitialDelivery"),
@@ -423,7 +422,7 @@ final class PlaybackController {
         // A downloaded title plays from its own file with no server round
         // trip at all: checked first, ahead of both negotiation and a
         // prepared successor, since a prepared successor still describes a
-        // network stream (HEL-166). Only iOS carries downloads.
+        // network stream. Only iOS carries downloads.
         var localSource: MediaSource?
         var localURL: URL?
         var localResumeTicks: Int64?
@@ -443,12 +442,12 @@ final class PlaybackController {
         do {
             // Chapters and trickplay ride alongside the negotiation rather
             // than after it — neither is in PlaybackInfo, and waiting for a
-            // second round trip would delay the first frame (HEL-39). A
+            // second round trip would delay the first frame. A
             // downloaded title has no negotiation to ride alongside, and
             // asking anyway would burn the client's full request timeout
             // against an unreachable server before the engine ever starts;
             // chapters, trickplay and skip segments are accepted losses
-            // offline for this MVP (HEL-166).
+            // offline for this MVP.
             async let extras: JellyfinClient.PlaybackExtras = isLocalPlayback
                 ? .none
                 : await client.playbackExtras(itemId: media.id)
@@ -478,7 +477,7 @@ final class PlaybackController {
                 // A disc cannot be played from the bytes this rung serves,
                 // whatever the server answers about direct play, so the
                 // ladder steps past it before an attempt rather than after
-                // one (HEL-133). No engine starts, but the HUD still gets a
+                // one. No engine starts, but the HUD still gets a
                 // record of why the rung below is in force.
                 let layout = PlaybackSourceLayout(
                     videoType: resolvedSource.videoType,
@@ -502,7 +501,7 @@ final class PlaybackController {
             // A disc image Lagoon can read is played by reading it, not by
             // asking the server to rebuild it — but only when the bytes on
             // offer are the image itself. A transcode of the same title is an
-            // ordinary stream and must stay one (HEL-133). A downloaded file
+            // ordinary stream and must stay one. A downloaded file
             // is never a raw disc image on disk, and disc reading depends on
             // the cache session a local file deliberately has none of.
             let discRequest: DiscPlaybackRequest? = !isLocalPlayback
@@ -525,7 +524,7 @@ final class PlaybackController {
             )
             let playbackURL = cacheSession?.completeFileURL ?? streamURL
             // A complete file plays from disk without the session, except a
-            // disc image, whose reader lives behind the session (HEL-167).
+            // disc image, whose reader lives behind the session.
             let transportCache = PlaybackBufferPolicy.engineUsesCacheSession(
                 playsFromCompleteFile: playbackURL.isFileURL,
                 disc: discRequest != nil,
@@ -591,8 +590,7 @@ final class PlaybackController {
             // described), so its source streams do not describe what is
             // actually on disk; empty metadata here is safe; the ordinal
             // policies below and the engine's own track building already
-            // degrade to what the file demuxes to when given nothing
-            // (HEL-166).
+            // degrade to what the file demuxes to when given nothing.
             #if os(iOS)
             let sourceStreams: [MediaStream] = localIsTranscode ? [] : (source.mediaStreams ?? [])
             #else
@@ -634,7 +632,7 @@ final class PlaybackController {
             // And a choice the viewer made for this show outranks both, for
             // as long as it still describes a track here. Its last rung is
             // the track's position, which speaks only where the layout
-            // offers nothing else to reason about (HEL-184).
+            // offers nothing else to reason about.
             if let scope = audioMemoryScope,
                let remembered = audioTrackMemory?.choice(for: scope),
                let carried = AudioTrackMemoryPolicy.ordinal(
@@ -646,7 +644,7 @@ final class PlaybackController {
 
             // Subtitles share the ordinal convention, with external
             // (sidecar) streams appended after the embedded ones — the
-            // engine lists them in the same order (HEL-48 M5).
+            // engine lists them in the same order.
             let allSubtitles = sourceStreams.filter { $0.type == "Subtitle" }
             let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
             // Kept paired with their streams: a sidecar whose URL won't
@@ -729,7 +727,7 @@ final class PlaybackController {
                ) {
                 initialSubtitleOrdinal = carried
             }
-            // Hands-off soak/bench hook (HEL-148), mirroring
+            // Hands-off soak/bench hook, mirroring
             // `debug.benchSearchTerm`: forces a subtitle language on so a
             // scripted long-film run always has cues to count, independent
             // of whatever this server/account's track preferences resolve
@@ -787,8 +785,7 @@ final class PlaybackController {
             if startsPaused {
                 // Before the view attaches and priming begins, so
                 // `beginPlayback` anchors the clock at rate 0 and the member
-                // sits on its first frame until the group is started
-                // (HEL-172).
+                // sits on its first frame until the group is started.
                 engine.pause()
             }
             startsPaused = false
@@ -872,7 +869,7 @@ final class PlaybackController {
             automation.isBuffering = engine.isBuffering
             // Through the controller rather than straight to the engine, so
             // a skip inside a group becomes the group's seek and everyone
-            // skips the intro together (HEL-172).
+            // skips the intro together.
             automation.onSkip = { [weak self] segment in self?.userSeek(to: segment.end) }
             automation.onPlayNext = { [weak self] in
                 guard let self, !self.isClosed, !self.isAdvancing else { return }
@@ -943,8 +940,8 @@ final class PlaybackController {
                 // ever hears about it, so nothing below should wait on this
                 // call: an unreachable server would otherwise hold up the
                 // progress loop, HUD and next-up warm-up for the client's
-                // full request timeout, entirely off the local file
-                // (HEL-166). The report still goes out when the server is
+                // full request timeout, entirely off the local file.
+                // The report still goes out when the server is
                 // reachable; a failure is silently dropped either way.
                 Task {
                     try? await reporting.reportStart(at: resumeSeconds)
@@ -1017,13 +1014,13 @@ final class PlaybackController {
 
     /// Which resume position wins when a title starts. An override always
     /// outranks the rest — a fallback retry's exact landing spot, or the
-    /// position a SyncPlay group is at (HEL-172). Neither is a stored
+    /// position a SyncPlay group is at. Neither is a stored
     /// position the viewer could be overruling: one is the internal
     /// recovery of a rung the viewer never chose, the other is where
     /// everyone else already is. So both apply even when the viewer chose
     /// to start over. Short of
     /// that, starting from beginning always starts at 0: a downloaded
-    /// title's own local position (HEL-166) only resumes it in place of the
+    /// title's own local position only resumes it in place of the
     /// server's last known position, since a fresh negotiation never runs
     /// to ask the server anything for a local file.
     nonisolated static func resumeStartSeconds(
@@ -1084,7 +1081,7 @@ final class PlaybackController {
     /// Driven by the engine's selection callback, which only `selectAudioTrack`
     /// fires and only the track panel and the system now-playing menu reach.
     /// Automatic selection takes the engine's internal path instead, so
-    /// everything recorded here is a deliberate act (HEL-184). Recording at
+    /// everything recorded here is a deliberate act. Recording at
     /// the moment of the act, rather than reading a selection back at exit,
     /// is also what keeps the item, its layout and the live engine in step:
     /// at exit any of the three can already belong to the next episode.
@@ -1254,8 +1251,8 @@ final class PlaybackController {
     #if DEBUG
     /// Debug-only: the paired Apple TV cannot be driven by the
     /// simulator-only regression suite, but must run the identical bounded
-    /// HEL-123/124 outages from a Debug build before either renderer-side
-    /// conclusion is trusted on hardware.
+    /// outages from a Debug build before either renderer-side conclusion is
+    /// trusted on hardware.
     private func schedulePlaybackStarvationDiagnostics(for engine: SampleBufferPlayerEngine) {
         let defaults = UserDefaults.standard
         let requestedDelay = defaults.double(forKey: "debug.starvationInjectionDelaySeconds")
@@ -1313,7 +1310,7 @@ final class PlaybackController {
     /// Deliberately after the engine is running rather than alongside the
     /// negotiation: nothing on screen needs it for another forty minutes,
     /// and `start` is the one place in the app where a round trip costs a
-    /// visibly later first frame (HEL-39).
+    /// visibly later first frame.
     private func resolveNextUp(after media: MediaItem, client: JellyfinClient) {
         nextUpTask?.cancel()
         successorPreparation.cancel()
@@ -1357,7 +1354,7 @@ final class PlaybackController {
         )
     }
 
-    /// Roll into the queued episode without leaving the player (HEL-66).
+    /// Roll into the queued episode without leaving the player.
     ///
     /// The order is the whole of it: the finished episode's stop report has
     /// to land *before* the next one starts. Jellyfin marks an item played
@@ -1428,7 +1425,7 @@ final class PlaybackController {
             // The file's own title, not Jellyfin's synthesized display
             // title: the latter is built from codec and channel layout, so
             // it reads the same on every untagged track and would match the
-            // first of them rather than the one the viewer picked (HEL-184).
+            // first of them rather than the one the viewer picked.
             audioTitle: audioStream?.title,
             subtitleLanguage: subtitleStream?.language,
             subtitleTitle: subtitleStream?.displayTitle,
@@ -1471,7 +1468,7 @@ final class PlaybackController {
     /// cushion and advances in 1 MiB requests. `PlaybackFillPolicy` decides
     /// the pace from the cushion of cached media ahead of the playhead, backs
     /// off after a failed fetch instead of giving up, and gives the link to
-    /// the foreground after a stall (HEL-160). Native foreground playback —
+    /// the foreground after a stall. Native foreground playback —
     /// not URLSession priority hints — stays the hard priority.
     private func startBufferFill(
         session: PlaybackCacheSession?,
@@ -1598,13 +1595,13 @@ final class PlaybackController {
     /// within a frame of each other, and whichever arrives first should
     /// win; `playNextEpisode` is guarded against being taken up on it
     /// twice. Decided here rather than in the view so a locked phone rolls
-    /// into the next episode too (HEL-176).
+    /// into the next episode too.
     private func playbackDidFinish() {
         didFinish = true
         // A group's queue is the group's business: the end of the file asks
         // the server for the next entry whether or not this item has a
         // series successor, and whether or not this viewer's autoplay
-        // preference would have rolled on alone (HEL-172).
+        // preference would have rolled on alone.
         if let groupTransport {
             groupTransport.requestNextItem()
             return
@@ -1617,7 +1614,7 @@ final class PlaybackController {
     /// The app left the screen: the phone was locked or the viewer went
     /// home. Audio carries on under the `audio` background mode; the
     /// picture is dropped unless something is still showing it — PiP, or
-    /// an AirPlay route — and proactive cache fill stops (HEL-176).
+    /// an AirPlay route — and proactive cache fill stops.
     private func applicationDidEnterBackground() {
         guard !isClosed, engine != nil else { return }
         suspendBufferFill()
@@ -1635,7 +1632,7 @@ final class PlaybackController {
     }
     #endif
 
-    // MARK: - Group playback (HEL-172)
+    // MARK: - Group playback
     //
     // The transport a SyncPlay driver drives, deliberately separate from the
     // viewer-facing controls below. The driver intercepts those and turns
@@ -1666,7 +1663,7 @@ final class PlaybackController {
     /// The media clock as the synchronizer reports it, and the position a
     /// group report carries. 0 with no engine. For the driver, not for a
     /// view: this reads tick-rate engine state, which the player root must
-    /// stay out of (HEL-150).
+    /// stay out of.
     var clockPosition: Double { engine?.clockPosition ?? 0 }
 
     /// Loaded and anchored without rolling: a member that has reported Ready
@@ -1685,7 +1682,7 @@ final class PlaybackController {
     }
 
     /// Swaps the item inside one player session, for a group that moved to
-    /// another queue entry while the player is open (HEL-172). The same
+    /// another queue entry while the player is open. The same
     /// stop-then-start `playNextEpisode` does — so the SwiftUI branch and
     /// its UIKit video surface survive — minus the successor warm-up, since
     /// the group, not the series order, decided what comes next.
@@ -1718,8 +1715,8 @@ final class PlaybackController {
     //
     // Every control the viewer touches comes through here rather than
     // reaching the engine itself, so that one `groupTransport` check turns
-    // the whole transport over to the server when a SyncPlay group owns it
-    // (HEL-172). Outside a group each of these is the engine call the caller
+    // the whole transport over to the server when a SyncPlay group owns it.
+    // Outside a group each of these is the engine call the caller
     // used to make. Audio and subtitle tracks, audio delay and playback
     // speed stay local and are not routed: they are this viewer's, not the
     // group's.
@@ -1823,7 +1820,7 @@ final class PlaybackController {
         nextUpTask?.cancel()
         nextUpTask = nil
         // A countdown still sleeping must not wake up on an engine that is
-        // gone; `start` wires the successor's own (HEL-176).
+        // gone; `start` wires the successor's own.
         automation.invalidate()
         if !preservingPreparedNext {
             successorPreparation.cancel()
@@ -1835,7 +1832,7 @@ final class PlaybackController {
 
         // Keep the dismissal-critical main-actor phase measurable and tiny.
         // The engine now serializes renderer flushing and queued-buffer
-        // release on its existing pump queue (HEL-57).
+        // release on its existing pump queue.
         os_signpost(
             .begin,
             log: PlaybackPerformance.log,
@@ -1887,10 +1884,10 @@ final class PlaybackController {
     func close() -> Task<Void, Never>? {
         isClosed = true
         // After the teardown either way, so a group driver leaves on a
-        // controller that has already let go of its engine (HEL-172).
+        // controller that has already let go of its engine.
         defer { onClosed?() }
         guard let soakExitRequestedAt else { return beginStop() }
-        // HEL-148 soak diagnostic: `soakExitRequestedAt` is only ever set by
+        // Soak diagnostic: `soakExitRequestedAt` is only ever set by
         // the (decodeTrace-gated) soak-exit hook, so this print needs no
         // separate gate. `closeMs` is `beginStop()` alone; `sinceRequestMs`
         // is the whole exit, from the soak hook's request to here.
@@ -1933,7 +1930,7 @@ final class PlaybackController {
             if isLocalPlayback {
                 // A download the engine could not play must not keep
                 // replaying itself: the next rung reaches the server instead
-                // of finding the same file on disk again (HEL-166). The entry
+                // of finding the same file on disk again. The entry
                 // is left alone; one failed attempt is not proof the file is
                 // bad, and the viewer can delete it from its page.
                 skipsLocalPlayback = true
@@ -2002,7 +1999,7 @@ final class PlaybackController {
     }
 
     /// Asks the server to deliver the same media a different way and starts
-    /// over where the failure landed (HEL-100).
+    /// over where the failure landed.
     ///
     /// The viewer sees the player reload rather than an error, so the rungs
     /// are worth their latency only because the alternative is the film

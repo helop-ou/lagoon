@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure state-machine coverage for offline downloads (HEL-166): no session,
+/// Pure state-machine coverage for offline downloads: no session,
 /// no disk, no clock beyond what a test hands in.
 @Suite("Download manifest")
 struct DownloadManifestTests {
@@ -50,8 +50,7 @@ struct DownloadManifestTests {
 
     @Test func pauseClearsAStaleFailureString() {
         // A late progress or failure callback for the attempt being paused
-        // must not leave old error text sitting under a fresh pause
-        // (HEL-166 review finding 6).
+        // must not leave old error text sitting under a fresh pause.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry())
         manifest.markStarted("item1", taskIdentifier: 1, attemptToken: "token1")
@@ -100,8 +99,7 @@ struct DownloadManifestTests {
     @Test func recordProgressIsANoOpOncePausedOrComplete() {
         // A progress callback queued before a pause (or a delete-and-restart
         // that finishes fast) can still land after the state moved on; it
-        // must not resurrect a byte count or un-pause the entry (HEL-166
-        // review finding 6).
+        // must not resurrect a byte count or un-pause the entry.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry(id: "paused"))
         manifest.markStarted("paused", taskIdentifier: 1, attemptToken: "token1")
@@ -153,8 +151,7 @@ struct DownloadManifestTests {
         // A `didFinishDownloadingTo` that landed while the process was dead
         // wrote the file and the manifest, but the process only sees the
         // task gone when it comes back; the file on disk still says the
-        // transfer actually finished, so it must not be declared lost
-        // (HEL-166 review finding 1).
+        // transfer actually finished, so it must not be declared lost.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry(id: "finishedOffline"))
         manifest.markStarted("finishedOffline", taskIdentifier: 1, attemptToken: "token1")
@@ -199,7 +196,7 @@ struct DownloadManifestTests {
     }
 
     @Test func attemptTokenDecodesAsNilFromAManifestSavedBeforeItExisted() throws {
-        // `attemptToken` (HEL-166 review finding 4) postdates the first
+        // `attemptToken` postdates the first
         // shipped manifest schema; a file written before it must still
         // decode, with the field simply absent.
         let json = """

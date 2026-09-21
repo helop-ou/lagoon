@@ -70,7 +70,7 @@ struct ApplePlaybackAlignmentTests {
 
     /// A lost session is not a verdict on the bitstream, so it must not be
     /// read as one — `LAGOON-A`/`LAGOON-G` descended to transcode on
-    /// `-12903`, which only ever meant the session needed remaking (HEL-181).
+    /// `-12903`, which only ever meant the session needed remaking.
     @Test func lostSessionsAreFaultsInTheSessionNotTheStream() {
         #expect(VideoToolboxDecoder.isSessionFault(kVTInvalidSessionErr))
         #expect(VideoToolboxDecoder.isSessionFault(kVTVideoDecoderMalfunctionErr))
@@ -144,8 +144,8 @@ struct ApplePlaybackAlignmentTests {
 
     /// WMV3 shares VC-1's decoder path and has always been in
     /// `SoftwareVideoDecoder.supports`; only the profile omitted it, so every
-    /// WMV3 file took a server transcode for a decoder already present
-    /// (HEL-125). Same envelope as VC-1, for the same reasons.
+    /// WMV3 file took a server transcode for a decoder already present.
+    /// Same envelope as VC-1, for the same reasons.
     @Test func wmv3DirectPlayIsBoundedToTheSameEnvelopeAsVC1() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first {
             $0.type == "Video"
@@ -174,7 +174,7 @@ struct ApplePlaybackAlignmentTests {
 
     /// Both decode through `AudioDecoder`'s generic `avcodec_find_decoder`
     /// path, so the only thing that kept them transcoding was the profile
-    /// not naming them (HEL-125). MP2 matters because the containers it
+    /// not naming them. MP2 matters because the containers it
     /// lives in — mpg, ts, vob — are all already advertised.
     @Test func mp2AndALACAreOfferedInVideoContainers() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first {
@@ -432,7 +432,8 @@ struct ApplePlaybackAlignmentTests {
     }
 
     @Test func AV1CompressedRoutingIsOfferedAndSettledAtRuntime() {
-        // This pinned "AV1 goes compressed only with hardware" until HEL-137.
+        // This pinned "AV1 goes compressed only with hardware" until software
+    // decode arrived.
         // The question it encoded was the wrong one: VTIsHardwareDecodeSupported
         // reports silicon, and Apple ships a software AV1 decoder inside
         // VideoToolbox on some platforms, so a false never meant VideoToolbox
@@ -478,7 +479,7 @@ struct ApplePlaybackAlignmentTests {
         #expect(subtype == kCMVideoCodecType_AV1)
     }
 
-    /// Opt-in same-process sink ladder for HEL-137. Set
+    /// Opt-in same-process sink ladder. Set
     /// `LAGOON_AV1_FIXTURE_URL` to a local or remote AV1 file and this reports
     /// the libdav1d ceiling separately from the complete P010/output path.
     /// Simulator values compare Lagoon revisions on the same Mac; they do not
@@ -667,7 +668,7 @@ struct ApplePlaybackAlignmentTests {
         } == true)
         // MPEG-2 no longer carries an interlace guard: the software path
         // that decodes it deinterlaces what it decodes, so an interlaced DVD
-        // or off-air recording is Direct Play like any other (HEL-127).
+        // or off-air recording is Direct Play like any other.
         #expect(mpeg2?.conditions.contains {
             $0.property == "IsInterlaced"
         } == false)
@@ -848,8 +849,8 @@ struct ApplePlaybackAlignmentTests {
         // Interlaced content still goes to the server for everything that
         // decodes in hardware, where there is no deinterlacing stage. MPEG-2
         // is the exception, because it decodes in software and that path
-        // deinterlaces (HEL-127), and so is H.264, whose interlaced streams
-        // the demuxer sends down the same software path (HEL-170).
+        // deinterlaces, and so is H.264, whose interlaced streams
+        // the demuxer sends down the same software path.
         let guarded = DeviceProfile.everything.codecProfiles.filter { profile in
             profile.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
@@ -863,7 +864,7 @@ struct ApplePlaybackAlignmentTests {
     }
 
     @Test func interlacedH264IsRoutedToTheSoftwareDecoderAndProgressiveIsNot() {
-        // HEL-170: a 1080i broadcast recording used to transcode because the
+        // A 1080i broadcast recording used to transcode because the
         // H.264 profile carried an interlace guard, VideoToolbox having no
         // deinterlacing stage. The guard is gone and the split is now the
         // demuxer's own field-order check: interlaced H.264 decodes in

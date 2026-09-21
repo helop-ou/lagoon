@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The one place a Jellyfin wall clock becomes a number (HEL-172), so the
+/// The one place a Jellyfin wall clock becomes a number, so the
 /// cases that broke `ISO8601DateFormatter` are pinned here: .NET's seventh
 /// fractional digit, and the fact that the digit count varies between two
 /// responses a millisecond apart.

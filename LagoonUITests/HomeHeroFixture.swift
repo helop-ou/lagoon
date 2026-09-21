@@ -6,7 +6,7 @@ import XCTest
 /// nothing to focus. That is a missing fixture, not a product failure, so on
 /// the public demo the journeys that need a hero skip and say why; a
 /// supplied fixture server is expected to have one, and its absence there
-/// stays a failure (HEL-144, audit A18).
+/// stays a failure.
 extension XCTestCase {
     func requireHomeHero(
         in app: XCUIApplication,

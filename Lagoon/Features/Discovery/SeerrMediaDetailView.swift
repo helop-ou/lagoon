@@ -2,8 +2,8 @@ import SwiftUI
 
 /// A Seerr title's page: the same composition as a library title's
 /// (`DetailPageScaffold`, `DetailMetadataHeader`, `DetailActionLayout`,
-/// `CastStrip`), with Seerr's request state where a library title has Play
-/// (HEL-174). The artwork is TMDB's: posters and backdrops through Seerr,
+/// `CastStrip`), with Seerr's request state where a library title has
+/// Play. The artwork is TMDB's: posters and backdrops through Seerr,
 /// the Jellyfin server's own logo once the title is in the library.
 struct SeerrMediaDetailView: View {
     let mediaID: Int
@@ -164,7 +164,7 @@ struct SeerrMediaDetailView: View {
             }
         case .pending, .processing:
             // When the server knows how far the download has got, the button
-            // says so rather than a bare "Processing" (HEL-116).
+            // says so rather than a bare "Processing".
             if availability == .processing, let progress = details.mediaInfo?.downloadProgress() {
                 statusButton(
                     title: progress.isImporting ? String(localized: "Importing") : progress.percentText,
@@ -194,7 +194,7 @@ struct SeerrMediaDetailView: View {
             }
         case .blocklisted:
             // An administrator who can lift the block should be able to do it
-            // here rather than reaching for the web UI (HEL-115). Jellyseerr
+            // here rather than reaching for the web UI. Jellyseerr
             // drops the media row along with the blocklist entry, so the
             // reload afterwards shows the ordinary Request button.
             if seerr.user?.canManageBlocklist == true {

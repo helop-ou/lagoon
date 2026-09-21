@@ -4,8 +4,8 @@ import Observation
 
 /// What the custom player UI is allowed to know about a playback engine.
 ///
-/// HEL-48 decided the end state is one custom player over a sample-buffer
-/// engine; until that exists the mpv engine (HEL-45) implements this. The
+/// The end state is one custom player over a sample-buffer
+/// engine; until that exists the mpv engine implements this. The
 /// transport/track UI must only ever talk to this protocol so the engine
 /// swap doesn't touch it.
 @MainActor
@@ -15,7 +15,7 @@ protocol PlayerEngine: AnyObject, Observable {
     /// `timePosition`, which `seek(to:)` moves optimistically the instant a
     /// scrub commits, this only advances once the clock is anchored — so a
     /// group transport reports where playback *is* rather than where the
-    /// viewer just asked it to go (HEL-172).
+    /// viewer just asked it to go.
     var clockPosition: Double { get }
     var duration: Double { get }
     var isPaused: Bool { get }
@@ -37,13 +37,13 @@ protocol PlayerEngine: AnyObject, Observable {
     var audioOutputPathDiagnostic: String { get }
     /// Debug/regression label for how decoded video reaches the renderer:
     /// "compressed", "videotoolbox", or a software output mode such as
-    /// "gpu-sdr-linear" (HEL-137).
+    /// "gpu-sdr-linear".
     var videoOutputPathDiagnostic: String { get }
     /// Times a renderer's media-data request block ran and found nothing to
     /// give. The engine stops requesting when that happens, so this stays
-    /// near zero; a runaway count is the half-core loop HEL-137 found.
+    /// near zero; a runaway count is the half-core loop.
     var idleRequestCallbacks: Int { get }
-    /// Renderer-side audio delivery diagnostics (HEL-123/HEL-124). The app
+    /// Renderer-side audio delivery diagnostics. The app
     /// queue is normally empty because AVFoundation takes samples promptly,
     /// so starvation is measured from the last sample actually enqueued to
     /// the renderer instead.
@@ -64,7 +64,7 @@ protocol PlayerEngine: AnyObject, Observable {
     var maximumVideoBacklogDiagnostic: Int { get }
     var videoQueueHardLimitDiagnostic: Int { get }
     /// Compressed video parked past the decoded limit while the demuxer
-    /// reads on for audio (HEL-124): current count and the session peak.
+    /// reads on for audio: current count and the session peak.
     var videoIntakeCountDiagnostic: Int { get }
     var maximumVideoIntakeDiagnostic: Int { get }
     var stallReprimeCount: Int { get }
@@ -84,7 +84,7 @@ protocol PlayerEngine: AnyObject, Observable {
     /// mpv convention (M6): positive delays the audio relative to video.
     var audioDelay: Double { get }
     /// What the display should be asked to match (tvOS Match Content,
-    /// HEL-64): the video's fully tagged format description — colorimetry,
+    /// the video's fully tagged format description — colorimetry,
     /// HDR10 metadata, DoVi atoms — plus its frame rate. nil until the
     /// demuxer knows, and when the frame rate is unknowable.
     var displayMatchRequest: DisplayMatchRequest? { get }
@@ -106,22 +106,21 @@ protocol PlayerEngine: AnyObject, Observable {
     func selectSubtitleTrack(id: Int?)
     func retrySubtitleLoad()
     /// Adds a server-downloaded sidecar to the live item and selects it
-    /// without rebuilding the renderers or restarting playback (HEL-49).
+    /// without rebuilding the renderers or restarting playback.
     func addExternalSubtitle(_ track: ExternalSubtitleTrack)
     func setAudioDelay(_ seconds: Double)
-    /// Audio-only playback while the app is in the background (HEL-176).
+    /// Audio-only playback while the app is in the background.
     func setVideoOutputSuspended(_ suspended: Bool)
     /// Start — or, when already primed and paused, resume — so that the
     /// current media position is presented exactly at `hostTime` on
     /// `CMClockGetHostTimeClock()`. A host time already in the past starts
     /// now. A SyncPlay group start is one host-clock instant every member
-    /// agreed on after time sync, so "play, roughly now" is not enough
-    /// (HEL-172).
+    /// agreed on after time sync, so "play, roughly now" is not enough.
     func play(atHostTime hostTime: CMTime)
     /// A sync-correction multiplier applied on top of the viewer's chosen
     /// `rate`. Nudging a member that has drifted from its group must not
     /// change what the speed row and Now Playing say the viewer picked, so
-    /// `rate` itself is untouched (HEL-172).
+    /// `rate` itself is untouched.
     func setCorrectionRate(_ multiplier: Double)
 }
 
@@ -172,7 +171,7 @@ nonisolated enum PlaybackRatePolicy {
     }
 
     /// What the media clock actually runs at: the viewer's rate with a sync
-    /// correction on top of it (HEL-172). The correction is a nudge for a
+    /// correction on top of it. The correction is a nudge for a
     /// group member that has drifted, not a second speed control, so the
     /// product stays inside the one envelope the rest of the engine scales
     /// its cushions and watermarks by. A correction of 1 — the only value
@@ -212,8 +211,8 @@ nonisolated enum PlaybackRatePolicy {
     }
 }
 
-/// What the physical display should be switched to for the current video
-/// (HEL-64): tvOS Match Content wants the tagged format description (it
+/// What the physical display should be switched to for the current video:
+/// tvOS Match Content wants the tagged format description (it
 /// derives dynamic range and resolution from it) and the frame rate.
 /// Without this request the display stays at its idle mode — typically
 /// 60 Hz in whatever range it happens to be in — and the compositor
@@ -284,8 +283,8 @@ nonisolated struct PlayerTrackMetadata: Equatable, Sendable {
     let isHearingImpaired: Bool
 }
 
-/// A stretch of the item the server has classified — intro, recap, credits
-/// (HEL-63). Jellyfin 10.10+ serves these natively from `MediaSegments`,
+/// A stretch of the item the server has classified — intro, recap, credits.
+/// Jellyfin 10.10+ serves these natively from `MediaSegments`,
 /// populated by whatever plugin the admin runs.
 nonisolated struct MediaSegment: Identifiable, Equatable {
     /// What Jellyfin calls the segment. Only `intro` and `recap` are ever
@@ -321,7 +320,7 @@ nonisolated struct MediaSegment: Identifiable, Equatable {
     }
 }
 
-/// A chapter mark on the transport (HEL-39 slice 3).
+/// A chapter mark on the transport(slice 3).
 nonisolated struct PlayerChapter: Identifiable, Equatable {
     /// Position in the chapter list, which is also its display number.
     let id: Int
@@ -342,7 +341,7 @@ nonisolated struct TrickplaySource: Equatable {
     let interval: Double
     let thumbnailCount: Int
     /// The trickplay route 401s without credentials and `sheetURLs` carry no
-    /// query token (HEL-142/HEL-143), so the header credential rides with
+    /// query token, so the header credential rides with
     /// the source for `TrickplayLoader` to apply per fetch.
     var authorization: MediaRequestAuthorization? = nil
 
@@ -382,17 +381,17 @@ nonisolated struct PlayerItemInfo: Equatable {
     let videoSummary: String?
     let posterURL: URL?
     /// Empty whenever the server has no chapters for the item — the ticks
-    /// and chapter jumps simply don't appear (HEL-39 slice 3).
+    /// and chapter jumps simply don't appear(slice 3).
     var chapters: [PlayerChapter] = []
     /// nil when the server hasn't generated trickplay tiles; the scrub chip
     /// then shows the timestamp alone.
     var trickplay: TrickplaySource?
-    /// Empty when the server has no segments for the item (HEL-63).
+    /// Empty when the server has no segments for the item.
     var segments: [MediaSegment] = []
 }
 
-/// The episode queued behind the one playing, as the Up Next card shows it
-/// (HEL-66). Resolved by the host so the player view stays free of the
+/// The episode queued behind the one playing, as the Up Next card shows it.
+/// Resolved by the host so the player view stays free of the
 /// Jellyfin client, exactly as `PlayerItemInfo` is.
 nonisolated struct NextUpEpisode: Equatable {
     /// The episode's own name — never the series, which is the one thing

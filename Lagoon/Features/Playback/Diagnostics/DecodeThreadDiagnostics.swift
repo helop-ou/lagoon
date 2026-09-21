@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Where the CPU goes while software video decodes (HEL-137).
+/// Where the CPU goes while software video decodes.
 ///
 /// A software decoder shares six cores with everything else the process and
 /// the system do, so "dav1d is slower in the app than in a bare test process"

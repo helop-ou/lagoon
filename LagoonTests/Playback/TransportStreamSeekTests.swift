@@ -6,7 +6,7 @@ import Testing
 @testable import Lagoon
 
 /// Opt-in check on a real progressive MPEG-TS transcode — the shape a
-/// download arrives in (HEL-166): `Videos/{id}/stream.ts`, H.264 High with
+/// download arrives in: `Videos/{id}/stream.ts`, H.264 High with
 /// AAC, no index and no segment boundaries.
 ///
 /// Resuming one at 24.8 s used to hand `AVSampleBufferVideoRenderer` the

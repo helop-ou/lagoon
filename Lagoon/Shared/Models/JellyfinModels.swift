@@ -22,24 +22,24 @@ nonisolated struct UserDto: Codable, Identifiable {
 /// The permissions Jellyfin attaches to an account. Only the ones Lagoon
 /// acts on are decoded. Subtitle management is off by default for every
 /// non-administrator, and without it Jellyfin answers 403 to every remote
-/// subtitle search, fetch and upload (HEL-91).
+/// subtitle search, fetch and upload.
 nonisolated struct UserPolicy: Codable {
     let isAdministrator: Bool?
     let enableSubtitleManagement: Bool?
-    /// "Allow media downloading" (HEL-166): gates `Items/{id}/Download`.
+    /// "Allow media downloading": gates `Items/{id}/Download`.
     let enableContentDownloading: Bool?
     /// "Allow video remuxing/transcoding": without it every progressive
     /// transcode the download picker could otherwise ask for answers 403.
     let enableVideoPlaybackTranscoding: Bool?
     /// Whether this account may create SyncPlay groups, only join them, or
-    /// neither (HEL-172). Absent on a server too old to have the setting,
+    /// neither. Absent on a server too old to have the setting,
     /// which reads as `unknown` rather than as a denial.
     let syncPlayAccess: SyncPlayAccess?
 
     /// Whether to let a subtitle search start.
     ///
     /// This is a pre-flight convenience, not the authority: the server
-    /// decides, and since HEL-91 a 403 is reported honestly. So it only
+    /// decides, and a 403 is reported honestly. So it only
     /// blocks when the answer is positively known, and anything ambiguous is
     /// allowed through to be settled by the server. Getting it wrong in the
     /// restrictive direction stops someone who would have succeeded, which is
@@ -49,7 +49,7 @@ nonisolated struct UserPolicy: Codable {
     /// subtitle management for them because it is implied, so the stored
     /// value on an admin account is routinely `false` — never ticked because
     /// there is no checkbox to tick. Reading that as a denial locked
-    /// administrators out of their own servers (HEL-96).
+    /// administrators out of their own servers.
     var allowsSubtitleManagement: Bool {
         if isAdministrator == true { return true }
         return enableSubtitleManagement ?? true
@@ -165,8 +165,8 @@ nonisolated struct MediaItem: Decodable, Identifiable {
 // value compares equal to the old one is dropped, and a child view handed an
 // "equal" item keeps what it has. The id-only `==` this replaced made a
 // re-fetched item with a new resume point equal to the stale one, so detail
-// pages kept offering Play after playback and rails kept stale progress
-// (HEL-132). Navigation identity lives on `ContentNavigationRoute`.
+// pages kept offering Play after playback and rails kept stale progress.
+// Navigation identity lives on `ContentNavigationRoute`.
 nonisolated extension MediaItem: Hashable {}
 
 nonisolated struct ItemsPage: Decodable {
@@ -220,7 +220,7 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     /// it probed *inside* a disc — `ts` for a Blu-ray — and still answers
     /// `SupportsDirectPlay = true`, so this is the only field that says the
     /// static stream would arrive as a disc image or a folder rather than as
-    /// something a demuxer can open (HEL-133).
+    /// something a demuxer can open.
     let videoType: String?
     /// `BluRay` or `Dvd` when `videoType` is `Iso`; nil otherwise.
     let isoType: String?
@@ -240,7 +240,7 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     let mediaStreams: [MediaStream]?
 }
 
-/// A cast or crew credit as the item endpoint reports it (HEL-46). Headshots
+/// A cast or crew credit as the item endpoint reports it. Headshots
 /// live at `Items/{person.id}/Images/Primary`, gated on `primaryImageTag`.
 nonisolated struct Person: Decodable, Identifiable, Hashable {
     let id: String
@@ -268,8 +268,7 @@ nonisolated struct MediaStream: Decodable, Hashable {
     /// The title the file actually carries, absent when it carries none.
     /// Distinct from `displayTitle`, which Jellyfin synthesizes from codec
     /// and channel layout — so four untagged DTS tracks all "display" as
-    /// "DTS-HD MA - 5.1" and only this tells you they are anonymous
-    /// (HEL-184).
+    /// "DTS-HD MA - 5.1" and only this tells you they are anonymous.
     let title: String?
     let language: String?
     let index: Int?
@@ -309,7 +308,7 @@ nonisolated struct RemoteSubtitleInfo: Decodable, Identifiable, Equatable {
     let frameRate: Double?
 }
 
-/// A chapter marker (HEL-39 slice 3). Both list and single-item responses
+/// A chapter marker. Both list and single-item responses
 /// carry these; servers that never scanned chapters just send an empty list.
 nonisolated struct ChapterInfo: Decodable {
     let startPositionTicks: Int64
@@ -347,7 +346,7 @@ nonisolated struct TrickplayTileInfo: Decodable {
 
 /// The vocabulary for describing a stream's quality, in one place: the
 /// player's Info facts and the detail page's badge row must agree on what
-/// counts as 4K or Dolby Vision (HEL-46).
+/// counts as 4K or Dolby Vision.
 nonisolated enum MediaQuality {
     static func resolutionClass(width: Int) -> String {
         switch width {
@@ -390,7 +389,7 @@ nonisolated enum MediaQuality {
 }
 
 extension MediaSource {
-    /// The capability line from the HEL-46 reference: plain tokens, spaced —
+    /// The capability line from `MediaQuality`: plain tokens, spaced —
     /// "4K   DV   TrueHD 7.1   Atmos" — describing the best the file can do,
     /// not the track that happens to be selected. Empty when the server told
     /// us nothing.

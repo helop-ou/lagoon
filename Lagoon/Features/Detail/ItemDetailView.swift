@@ -32,7 +32,7 @@ struct ItemDetailView: View {
             #endif
             // Asked here for the reason the download permission is: the
             // control renders nothing until the answer is in, and a task
-            // on a view that renders nothing never runs (HEL-172).
+            // on a view that renders nothing never runs.
             await syncPlay.refreshAvailability()
         }
         .onChange(of: serverSync.generation) { _, _ in
@@ -42,8 +42,7 @@ struct ItemDetailView: View {
         .playerPresentation(item: $playerItem, onDismiss: {
             Task {
                 // The stop report that moves the resume point is still in
-                // flight here; read the item back only once it has landed
-                // (HEL-132).
+                // flight here; read the item back only once it has landed.
                 await session.client.playbackReports.settle()
                 if let fresh = try? await session.client.item(id: item.id) {
                     detail = fresh
@@ -54,7 +53,7 @@ struct ItemDetailView: View {
 
     /// Refreshing in place preserves the detail and recommendation rail when
     /// a foreground request fails. A successful response replaces the whole
-    /// value, including watch progress changed in another client (HEL-135).
+    /// value, including watch progress changed in another client.
     private func loadFromServer() async {
         let generation = serverSync.generation
         async let refreshedDetail = try? session.client.item(id: item.id)
@@ -82,7 +81,7 @@ struct ItemDetailView: View {
     }
 
     /// Where Resume would start. A downloaded title's own recorded position
-    /// outranks the server's, which may be stale or unreachable (HEL-166);
+    /// outranks the server's, which may be stale or unreachable;
     /// the controller applies the same order.
     private var resumeTicks: Int64? {
         #if os(iOS)
@@ -96,7 +95,7 @@ struct ItemDetailView: View {
 
     /// The actions and, once there is a resume point, where Resume starts
     /// from. Wide compositions keep that caption under the row; on a phone
-    /// it belongs to the Resume pill (HEL-169) and sits centred under it in
+    /// it belongs to the Resume pill and sits centred under it in
     /// both orientations.
     @ViewBuilder
     private var playButtons: some View {
@@ -136,8 +135,8 @@ struct ItemDetailView: View {
     /// Play first everywhere it shares a row, so it takes first focus:
     /// stacked above the play buttons the toggles also took *first focus*,
     /// so arriving and pressing Select marked the film watched instead of
-    /// playing it. On a phone the resume caption belongs to the pill
-    /// (HEL-169); the shared layout puts the pill where each composition
+    /// playing it. On a phone the resume caption belongs to the pill;
+    /// the shared layout puts the pill where each composition
     /// wants it.
     private var actions: some View {
         DetailActionLayout {

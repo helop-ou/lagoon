@@ -8,14 +8,14 @@ import UIKit
 /// Both halves of the Top Shelf log to `ee.helop.lagoon`/`topshelf`, so one
 /// predicate on a real Apple TV shows the app publishing and the extension
 /// reading. This is not debug scaffolding: the shelf is only observable on
-/// hardware, in a process with no UI, and three rounds of HEL-119 were spent
+/// hardware, in a process with no UI, and three rounds of debugging were spent
 /// guessing at silent nil returns.
 ///
 ///     log stream --predicate 'subsystem == "ee.helop.lagoon"'
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
-/// Publishes a Continue Watching snapshot for the Top Shelf extension
-/// (HEL-37), now as a full-screen carousel (HEL-119).
+/// Publishes a Continue Watching snapshot for the Top Shelf extension,
+/// now as a full-screen carousel.
 ///
 /// The extension holds **no credentials and does no networking** — it draws
 /// whatever the app last wrote here. That was true when the payload carried
@@ -233,7 +233,7 @@ extension MediaItem {
 
     /// The capability badges tvOS draws for a carousel item, from the same
     /// stream facts the detail page and the player's Info panel read, so all
-    /// three agree on what counts as 4K or Dolby Vision (HEL-46).
+    /// three agree on what counts as 4K or Dolby Vision.
     ///
     /// Nil rather than zero when the server told us nothing about the streams,
     /// so an empty set is never mistaken for "checked, and it is plain SDR".

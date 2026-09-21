@@ -5,7 +5,7 @@ import Foundation
 /// Written rather than linked. Deinterlacing normally means libavfilter's
 /// yadif, and libavfilter is not among the FFmpeg artifacts this project
 /// pins — adding one to deinterlace a DVD is a dependency decision that
-/// wants more deliberation than a feature branch (HEL-127).
+/// wants more deliberation than a feature branch.
 ///
 /// What it does instead is the useful half of yadif's spatial pass: for each
 /// row of the field being dropped, predict along whichever direction the

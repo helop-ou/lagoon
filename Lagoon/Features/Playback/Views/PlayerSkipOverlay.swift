@@ -17,11 +17,11 @@ nonisolated enum SkipSegmentPolicy {
     }
 }
 
-/// The Skip Intro / Skip Recap shelf (HEL-63), lifted out of
-/// `CustomPlayerView` (HEL-150). It draws `PlaybackAutomation`'s answer and
+/// The Skip Intro / Skip Recap shelf, lifted out of
+/// `CustomPlayerView`. It draws `PlaybackAutomation`'s answer and
 /// nothing else: which segment is active, and how far the auto-skip fill
 /// has run, are decided off the engine's clock so a locked phone still
-/// skips (HEL-176). The parent only hears about a committed skip through
+/// skips. The parent only hears about a committed skip through
 /// the automation. Bottom-trailing, clear of the transport — the shelf the
 /// reference players use. Not focusable; on tvOS Select drives it from the
 /// video surface, because taking focus would move `onMoveCommand` off the
@@ -100,7 +100,7 @@ struct PlayerSkipPrompt: View {
     }
 }
 
-/// Skip-button geometry (HEL-63). Fixed width so the countdown fill can be
+/// Skip-button geometry. Fixed width so the countdown fill can be
 /// sized from it without a GeometryReader.
 private enum SkipMetrics {
     #if os(tvOS)

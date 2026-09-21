@@ -5,8 +5,7 @@ import TVServices
 #endif
 @testable import Lagoon
 
-/// The two facts the Top Shelf carousel derives rather than receives
-/// (HEL-119).
+/// The two facts the Top Shelf carousel derives rather than receives.
 ///
 /// Both matter because the extension cannot compute them: it has no library
 /// access and no credentials, so whatever the app writes into the App Group

@@ -1,8 +1,8 @@
 import Foundation
 
 /// The proactive fill scheduler's decisions, kept free of the engine, the
-/// cache and the clock so a unit test can walk it through a session
-/// (HEL-160). `PlaybackController.startBufferFill` owns the loop; this owns
+/// cache and the clock so a unit test can walk it through a session.
+/// `PlaybackController.startBufferFill` owns the loop; this owns
 /// what the loop does next.
 ///
 /// Below the cushion target, the measured fetch throughput must exceed the
@@ -51,7 +51,7 @@ nonisolated struct PlaybackFillPolicy: Equatable, Sendable {
     /// yield. An average container bitrate is an estimate, and a link that
     /// only just carries playback should keep the gentle background pace.
     static let minimumHeadroomRatio: Double = 1.1
-    /// Above the target: the pre-HEL-160 pacing, roughly a 20% duty cycle.
+    /// Above the target: the earlier pacing, roughly a 20% duty cycle.
     static let relaxedPacingMultiplier: Double = 4
     static let relaxedPacingCapSeconds: TimeInterval = 8
     static let minimumMeasuredRequestSeconds: TimeInterval = 0.125

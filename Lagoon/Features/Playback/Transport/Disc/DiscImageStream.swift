@@ -5,7 +5,7 @@ import Foundation
 /// The playback cache was the only answer until a disc image needed one more
 /// layer: the same reads, addressed to a title rather than to a file. Naming
 /// the requirement lets that layer exist without the AVIO shim knowing which
-/// of the two it is talking to (HEL-133).
+/// of the two it is talking to.
 nonisolated protocol FFmpegByteSource: AnyObject {
     /// Bytes one cache miss fetches, which is also how the AVIO buffer is
     /// sized.

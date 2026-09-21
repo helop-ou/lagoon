@@ -2,8 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// What Home is willing to call a collection, and what it draws it with
-/// (HEL-122).
+/// What Home is willing to call a collection, and what it draws it with.
 ///
 /// Every rule under test exists because of one measurement against a real
 /// library: 173 collections, of which 35 hold anything at all and 18 hold

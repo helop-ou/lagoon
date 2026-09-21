@@ -4,7 +4,7 @@ import AVKit
 import UIKit
 
 /// Asks the Apple TV to switch its display output to match the playing
-/// video (HEL-64) — the thing AVPlayerViewController does automatically
+/// video — the thing AVPlayerViewController does automatically
 /// and this custom player therefore has to do by hand.
 ///
 /// Why it matters beyond correctness: without a mode switch the display

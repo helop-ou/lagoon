@@ -38,7 +38,7 @@ final class SeerrClient {
 
     /// Its own session rather than `.shared`, so no Seerr response can be
     /// stored in — or answered from — the process-wide URL cache. `JellyfinClient`
-    /// does the same for the same reason (HEL-132). Tests pass their own.
+    /// does the same for the same reason. Tests pass their own.
     init(session: URLSession? = nil, requestTimeout: TimeInterval = 20) {
         self.session = session ?? Self.uncachedSession()
         self.requestTimeout = requestTimeout
@@ -195,7 +195,7 @@ final class SeerrClient {
     }
 
     /// TMDB's recommendations for a title, which is what Jellyfin's own
-    /// "More Like This" draws on for a library item (HEL-174). TMDB's
+    /// "More Like This" draws on for a library item. TMDB's
     /// `similar` list is keyword-matched and much weaker, so it is not
     /// offered.
     func recommendations(id: Int, mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
@@ -259,8 +259,7 @@ final class SeerrClient {
     /// TMDB serves a fixed set of widths and answers 400 for anything else —
     /// `w720` is not a rendition, it is a broken link. The requested width is
     /// therefore snapped up to the next size TMDB actually has, so a caller
-    /// can ask for the width its layout needs without knowing the list
-    /// (HEL-114).
+    /// can ask for the width its layout needs without knowing the list.
     nonisolated static let tmdbImageWidths = [92, 154, 185, 342, 500, 780, 1280]
 
     nonisolated static func imageURL(path: String?, width: Int) -> URL? {
@@ -303,8 +302,7 @@ final class SeerrClient {
     // MARK: - Radarr / Sonarr
 
     /// The configured servers for a media type. Readable without admin — the
-    /// request detail uses it to name the profile a request was made against
-    /// (HEL-118).
+    /// request detail uses it to name the profile a request was made against.
     func services(_ mediaType: SeerrMediaType) async throws -> [SeerrService] {
         try await get("service/\(mediaType == .movie ? "radarr" : "sonarr")")
     }
@@ -392,7 +390,7 @@ final class SeerrClient {
         // poll constant, cache-keyable URLs (`request/{id}`, `movie/{tmdbId}`)
         // for the express purpose of seeing state the server has just changed,
         // so any freshness lifetime Jellyseerr or a reverse proxy in front of
-        // it emits would make them silently observe nothing (HEL-132, HEL-136).
+        // it emits would make them silently observe nothing.
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-150: the Subtitles tab is either choosing a track or browsing search
+/// The Subtitles tab is either choosing a track or browsing search
 /// results. These pin the coordinator half of that — the panel can only be as
 /// honest about which state it is in as the state it reads.
 @Suite("Subtitle search browse state", .serialized)

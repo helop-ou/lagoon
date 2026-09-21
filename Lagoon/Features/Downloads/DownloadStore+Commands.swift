@@ -2,7 +2,7 @@
 import Foundation
 import os
 
-// The viewer-facing commands: start, pause, resume, delete (HEL-166).
+// The viewer-facing commands: start, pause, resume, delete.
 extension DownloadStore {
     /// Takes a title off the server: saves the item snapshot and artwork,
     /// then hands the transfer to the background session. `item` must
@@ -135,7 +135,7 @@ extension DownloadStore {
     /// stream the server builds as it goes, with no range support, so
     /// asking for resume data would only save bytes that can never be
     /// replayed into the same file, and `resume` always restarts a
-    /// transcode from the beginning (HEL-166 review finding 3).
+    /// transcode from the beginning.
     func pause(_ itemID: String) {
         guard let entry = manifest.entry(for: itemID), let taskIdentifier = entry.taskIdentifier,
               let accountKey, let attemptToken = entry.attemptToken else { return }
@@ -185,8 +185,7 @@ extension DownloadStore {
     /// some (only ever stored for an original; see `pause`), otherwise a
     /// fresh request built from the saved item snapshot. Always gets a new
     /// attempt token, so any report still in flight for the previous
-    /// attempt is dropped rather than applied to this one (HEL-166 review
-    /// finding 4).
+    /// attempt is dropped rather than applied to this one.
     func resume(_ itemID: String, client: JellyfinClient) {
         guard let entry = manifest.entry(for: itemID), let accountKey,
               entry.state == .paused || entry.state == .failed,

@@ -6,7 +6,7 @@
 # pages, and the default there rewrites the version and build number on the way
 # out — which is how the project came to say build 1 while ~43 tvOS builds
 # existed. ExportOptions.plist pins that off in a committed file instead of
-# leaving it to a checkbox someone has to remember (HEL-94).
+# leaving it to a checkbox someone has to remember.
 #
 #   scripts/upload-testflight.sh both --dry-run   # print the commands only
 #   scripts/upload-testflight.sh tvos
@@ -23,8 +23,8 @@
 #
 # Keep the .p8 out of the repository. It is a credential for the whole account.
 #
-# The Sentry DSN is injected the same way rather than tracked in source
-# (HEL-187), so an upload also needs:
+# The Sentry DSN is injected the same way rather than tracked in source,
+# so an upload also needs:
 #
 #   LAGOON_SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project>
 #
@@ -100,8 +100,8 @@ for platform in $targets; do
         -allowProvisioningUpdates \
         LAGOON_SENTRY_DSN="${LAGOON_SENTRY_DSN:-SENTRY_DSN}"
 
-    # With destination=upload in the plist this uploads rather than writing an
-    # .ipa, so there is nothing to hand off afterwards.
+    # With destination=upload in the plist this uploads rather than writing an.
+    # ipa, so there is nothing to hand off afterwards.
     run xcodebuild -exportArchive \
         -archivePath "$archive" \
         -exportOptionsPlist "$options" \

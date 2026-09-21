@@ -3,7 +3,7 @@ import Observation
 import Testing
 @testable import Lagoon
 
-/// Pins `PlayerEngineRef` (HEL-152): a copied player view struct must not
+/// Pins `PlayerEngineRef`: a copied player view struct must not
 /// keep a drained engine alive, and once it's gone every read is a no-op.
 @Suite("Player engine handle")
 @MainActor

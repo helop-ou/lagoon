@@ -276,7 +276,7 @@ struct GenreLibraryView: View {
                         // A navigation title becomes a floating overlay on
                         // tvOS as the grid scrolls. Keeping the heading in
                         // the scroll content makes it leave with the first
-                        // row instead of covering later posters (HEL-84).
+                        // row instead of covering later posters.
                         Text(genre)
                             .font(.largeTitle.bold())
                             .accessibilityIdentifier("genre.library.title")

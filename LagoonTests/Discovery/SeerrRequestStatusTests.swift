@@ -5,7 +5,7 @@ import Testing
 /// The numbers here are Jellyseerr's `MediaRequestStatus` and `MediaStatus`
 /// from `server/constants/media.ts`. They are the wire contract, so they are
 /// asserted literally: getting one wrong is invisible until someone reads a
-/// badge that is quietly lying (HEL-115).
+/// badge that is quietly lying.
 @Suite("Seerr request and media status")
 struct SeerrRequestStatusTests {
     @Test @MainActor func requestStatusNumbersMatchJellyseerr() {

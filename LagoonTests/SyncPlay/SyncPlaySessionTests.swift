@@ -3,7 +3,7 @@ import Testing
 @testable import Lagoon
 
 /// The rules a Watch Together member follows, against the same fixture
-/// 12.0.0 payloads the wire tests decode (HEL-172). Every one of these is a
+/// 12.0.0 payloads the wire tests decode. Every one of these is a
 /// rule that, got wrong, shows up as two televisions playing different
 /// things — which is why they live in a pure reducer and not inside an
 /// `async` method of a store.
@@ -232,7 +232,7 @@ struct SyncPlaySessionTests {
     /// state — the same `When`, the same `PositionTicks`, only `EmittedAt`
     /// moved on. Taking that for a re-send is what left a member sitting
     /// where it was, with nothing more to report, and the group waiting on
-    /// it past thirty seconds (HEL-172).
+    /// it past thirty seconds.
     @Test func aResentSeekIsACorrectionAndIsTakenAgain() throws {
         var session = try Self.joinedWithQueue()
         let seek = try Self.command(kind: "Seek", positionTicks: 1_200_000_000)
@@ -261,7 +261,7 @@ struct SyncPlaySessionTests {
     /// What a member coming back to the player has to open at: the group
     /// has been watching all the while, and opening where the last command
     /// left it makes the server drag this member forward — with everyone
-    /// else held up until it arrives (HEL-172).
+    /// else held up until it arrives.
     @Test func aRunningGroupHasMovedOnSinceItsLastCommand() throws {
         var session = try Self.joinedWithQueue()
         let started = "2026-09-14T11:46:30.0000000Z"

@@ -1,6 +1,6 @@
 import Foundation
 
-// Home Screen Sections plugin support (HEL-47). Entirely optional: a server
+// Home Screen Sections plugin support. Entirely optional: a server
 // without the plugin 404s the whole route and Home falls back to its own
 // rails, which is also what happens on any error here.
 extension JellyfinClient {

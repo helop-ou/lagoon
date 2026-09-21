@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Skip and Up Next timing off the engine's clock (HEL-176): the decisions
+/// Skip and Up Next timing off the engine's clock: the decisions
 /// the overlays used to make in their own bodies, now made where a locked
 /// phone can still reach them.
 @Suite("Playback automation")

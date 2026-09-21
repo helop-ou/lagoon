@@ -135,7 +135,7 @@ struct SubtitleRenderStyle {
 }
 
 /// Per-account subtitle preferences plus the live bridge to Apple's caption
-/// appearance and ordered caption-language settings (HEL-79/HEL-49).
+/// appearance and ordered caption-language settings.
 @MainActor
 @Observable
 final class SubtitlePreferencesStore {

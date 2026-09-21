@@ -10,7 +10,7 @@ nonisolated enum ExternalSubtitleLoader {
     /// `authorization` attaches the session credential as a header rather
     /// than letting it ride in `track.url`'s query — Jellyfin delivery URLs
     /// can arrive with a legacy `api_key`, and any URL is otherwise a
-    /// potential unified-log leak if the request fails (HEL-142/HEL-143).
+    /// potential unified-log leak if the request fails.
     static func load(
         _ track: ExternalSubtitleTrack,
         using downloader: BoundedDownload,

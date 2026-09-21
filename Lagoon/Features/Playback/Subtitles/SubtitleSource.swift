@@ -2,7 +2,7 @@ import Foundation
 
 /// One remote subtitle result as Jellyfin reports it. The player UI binds to
 /// this rather than to the wire DTO so the panel does not follow the server's
-/// shape (HEL-49). Jellyfin is the only source since HEL-146: its routes need
+/// shape. Jellyfin is the only source: its routes need
 /// the account's subtitle-management permission and persist the file for
 /// every client, and the server does the provider work with its own accounts.
 nonisolated struct SubtitleCandidate: Identifiable, Equatable, Sendable {

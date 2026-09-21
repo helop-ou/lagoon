@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Watched and favourite toggles above the play buttons (HEL-40), in the
-/// shape the HEL-46 reference uses: a row of small circular icon buttons.
+/// Watched and favourite toggles above the play buttons: a row of small
+/// circular icon buttons.
 ///
 /// Both are genuine toggles rather than one-way actions. Marking something
 /// watched that you never started is the point — it's how a film leaves the
@@ -9,8 +9,8 @@ import SwiftUI
 /// you watched elsewhere. Unmarking puts it back.
 ///
 /// State is optimistic: the icon flips immediately. `OptimisticToggleState`
-/// owns what follows (HEL-144, A14): a refusal reverts the icon and says so
-/// beneath the row; an accepted change hands authority back to the server
+/// owns what follows: a refusal reverts the icon and says so beneath
+/// the row; an accepted change hands authority back to the server
 /// once the page has re-read the item; a press during a request is dropped.
 struct ItemActionRow: View {
     /// What the checkmark acts on. On a series page this is the episode you
@@ -156,7 +156,7 @@ struct ItemActionRow: View {
     private func toggleGlyph(on: Bool, symbol: String) -> some View {
         Image(systemName: symbol)
             // Set state reads through weight, not colour: a tinted label
-            // would vanish inside the focused lozenge (HEL-50).
+            // would vanish inside the focused lozenge.
             .fontWeight(on ? .bold : .regular)
             .opacity(on ? 1 : 0.55)
     }

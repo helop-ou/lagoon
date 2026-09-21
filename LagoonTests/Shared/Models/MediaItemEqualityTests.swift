@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Why `MediaItem` compares by value (HEL-132): SwiftUI drops a `@State`
+/// Why `MediaItem` compares by value: SwiftUI drops a `@State`
 /// write whose new value compares equal to the old one, and the id-only `==`
 /// the model used to have made a re-fetched item with a new resume point
 /// "equal" to the stale one, so the detail page never re-rendered.

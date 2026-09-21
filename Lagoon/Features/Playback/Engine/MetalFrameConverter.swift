@@ -3,7 +3,7 @@ import Foundation
 import Metal
 
 /// Turns a decoded 10-bit planar frame into a renderer-ready Core Video
-/// buffer on the GPU (HEL-137).
+/// buffer on the GPU.
 ///
 /// On an Apple TV every core is already spoken for by dav1d: the two CPU
 /// passes that used to follow it — the planar-to-P010 repack and

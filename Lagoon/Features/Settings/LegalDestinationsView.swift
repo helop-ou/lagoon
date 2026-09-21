@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The Legal section: what Lagoon ships from other projects, and — once they
 /// are published — where its privacy policy and support pages live
-/// (HEL-143, audit A06).
+/// (audit A06).
 ///
 /// One view rather than two copies, because it appears twice: under
 /// Settings → About, and in the About sheet the sign-in screens offer. Legal

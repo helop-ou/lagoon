@@ -128,7 +128,7 @@ struct DiagnosticsSettingsView: View {
     }
     #endif
 
-    /// What a report contains, stated the way it is collected (HEL-159).
+    /// What a report contains, stated the way it is collected.
     /// Kept in one string so both platforms make the same promise.
     private static let diagnosticReportsFooter: LocalizedStringKey = "When playback or a server request fails unexpectedly, Lagoon sends a technical report to the developer: app build, device model and OS version, codec and delivery details, error codes, and about a minute of playback measurements. Reports never include your account, server address, media titles, subtitles, or screenshots. Reports are kept for 30 days."
 }

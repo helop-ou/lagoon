@@ -1,6 +1,6 @@
 import Foundation
 
-/// How the player treats a skippable segment — intro or recap (HEL-63).
+/// How the player treats a skippable segment — intro or recap.
 ///
 /// Jaagop's three, 2026-08-18. There is no "off": *button* already covers
 /// wanting nothing to happen, because an ignored button skips nothing.

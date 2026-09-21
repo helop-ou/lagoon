@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The bottom transport, lifted out of `CustomPlayerView` (HEL-150).
+/// The bottom transport, lifted out of `CustomPlayerView`.
 ///
 /// Nothing in *this* body moves at tick rate: the title block, the speed
 /// readout, the pause glyph and the gradient all read state that changes when
@@ -14,10 +14,10 @@ struct PlayerTransportOverlay: View {
     /// Whether the transport is actually on screen. `CustomPlayerView` keeps
     /// this view mounted at `.opacity(0)` so the fade can animate, so the
     /// tick-following leaves below need their own signal to stop following
-    /// the playhead while nobody can see it (HEL-150).
+    /// the playhead while nobody can see it.
     let isVisible: Bool
     /// The virtual playhead's position while scrubbing; nil when the
-    /// transport is live (HEL-39 slice 2).
+    /// transport is live(slice 2).
     let scrubTarget: Double?
     /// Swaps the remaining time for the clock time the item will finish at.
     let showsEndTime: Bool
@@ -128,7 +128,7 @@ struct PlayerTransportOverlay: View {
 /// the line, while a slim vertical marker appears only during scrubbing.
 ///
 /// One of the two views in the player that legitimately follows the playhead
-/// at tick rate, which is exactly why it is its own view (HEL-150).
+/// at tick rate, which is exactly why it is its own view.
 struct PlayerScrubber: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// See `PlayerTransportOverlay.isVisible`.
@@ -148,7 +148,7 @@ struct PlayerScrubber: View {
     /// in place of `engine.timePosition` while hidden so the un-taken
     /// `isVisible` branch below never reads it — Observation only
     /// registers reads that actually happen, so that is what drops the
-    /// hidden transport's subscription to the tick (HEL-150).
+    /// hidden transport's subscription to the tick.
     @State private var lastShownSeconds: Double = 0
 
     private var isScrubbing: Bool { scrubTarget != nil }
@@ -189,7 +189,7 @@ struct PlayerScrubber: View {
                     .fill(.white)
                     .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
                     // Glides between the engine's 0.1 s position updates
-                    // instead of ticking (HEL-39); big deltas (seeks)
+                    // instead of ticking; big deltas (seeks)
                     // become a quick slide to the target.
                     .animation(fillMotion, value: fillFraction)
                 chapterTicks(in: width)
@@ -209,7 +209,7 @@ struct PlayerScrubber: View {
         .frame(height: Metrics.scrubberHeight)
         // Tracks the live position into `lastShownSeconds` while visible,
         // so the instant the transport hides again it freezes on the frame
-        // the viewer last saw rather than snapping to 0 (HEL-150).
+        // the viewer last saw rather than snapping to 0.
         .onChange(of: seconds) { _, newValue in
             if isVisible { lastShownSeconds = newValue }
         }
@@ -406,7 +406,7 @@ struct PlayerScrubber: View {
 /// remaining time stays pinned to the trailing edge unless the two would
 /// overlap near the end of an item.
 ///
-/// The player's second legitimate tick-rate leaf (HEL-150).
+/// The player's second legitimate tick-rate leaf.
 struct PlayerTimelineLabels: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// See `PlayerTransportOverlay.isVisible`.
@@ -535,11 +535,11 @@ enum ScrubMetrics {
     static let runExpiry: Duration = .milliseconds(600)
     /// A further beat after that and the scrub lands itself. This is what
     /// keeps a single press a plain 10 s skip now that scrub opens during
-    /// playback (HEL-55) — tune it on hardware, not in the simulator: too
+    /// playback — tune it on hardware, not in the simulator: too
     /// short and a preview can't be read, too long and a nudge feels stuck.
     static let selfCommit: Duration = .milliseconds(600)
     /// A chapter hop waits longer than a step before landing. Found on
-    /// hardware (HEL-55, 2026-08-18): a hop is a *survey* gesture — you are
+    /// hardware: a hop is a *survey* gesture — you are
     /// reading where chapter 13 starts — where an arrow step is a nudge, and
     /// sharing the step's window turned browsing past the next chapter into
     /// a race against the timer.

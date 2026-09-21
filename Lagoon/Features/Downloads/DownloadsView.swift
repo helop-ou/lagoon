@@ -1,7 +1,7 @@
 import SwiftUI
 
 #if os(iOS)
-/// The offline downloads list (HEL-166): every title taken off the server,
+/// The offline downloads list: every title taken off the server,
 /// grouped so a downloaded series reads as one section instead of a loose
 /// pile of episodes. Every row's listing text comes from the entry itself,
 /// so the screen renders with no server reachable at all; only the poster
@@ -180,7 +180,7 @@ struct DownloadsView: View {
             // iOS ignores `value` for the circular style and always spins,
             // so a known fraction gets its own thin bar under the subtitle
             // instead; this spot keeps the spinner only while the size (and
-            // so the fraction) isn't known yet (HEL-166).
+            // so the fraction) isn't known yet.
             if entry.fractionComplete == nil {
                 ProgressView()
                     .progressViewStyle(.circular)
@@ -219,7 +219,7 @@ struct DownloadsView: View {
         case .paused:
             // A high/standard download is a transcode the server rebuilds on
             // resume rather than one it can continue byte-for-byte, so it
-            // restarts from the beginning of the file (HEL-166).
+            // restarts from the beginning of the file.
             return entry.resumesFromStart
                 ? String(localized: "Paused, resumes from the start")
                 : String(localized: "Paused")

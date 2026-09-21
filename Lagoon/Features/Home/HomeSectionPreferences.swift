@@ -21,8 +21,8 @@ nonisolated enum HomeRowID {
     static let movieGenres = "lagoon.movieGenres"
     static let showGenres = "lagoon.showGenres"
 
-    /// One toggle governed all three Recently Added rows before HEL-191 made
-    /// them individually placeable. Only read, never written.
+    /// One toggle governed all three Recently Added rows before they became
+    /// individually placeable. Only read, never written.
     static let legacyRecentlyAdded = "lagoon.recentlyAdded"
 
     /// Every native row's identifier begins with this. A plugin row is
@@ -51,7 +51,7 @@ nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
     /// bearing: it is what lets a Lagoon update change the default order, and
     /// introduce rows into the middle of it, for everyone who has never opened
     /// the screen. Once it holds an arrangement, the arrangement wins and new
-    /// rows are reconciled into it instead (HEL-191).
+    /// rows are reconciled into it instead.
     var layout: [HomeSectionPreferenceRow] = []
 
     init(layout: [HomeSectionPreferenceRow] = []) {
@@ -62,8 +62,8 @@ nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
         case layout
     }
 
-    /// The shape written before HEL-191: a plugin-only ordered list, plus
-    /// hide-only overrides for native rows that had no order of their own.
+    /// The legacy shape: a plugin-only ordered list, plus hide-only
+    /// overrides for native rows that had no order of their own.
     private enum LegacyCodingKeys: String, CodingKey {
         case isConfigured
         case rows
@@ -110,7 +110,7 @@ nonisolated enum HomeSectionPreferenceResolver {
     ///
     /// This list is the default layout, not a description of one written
     /// somewhere else: Home renders whatever order it resolves to, so a row
-    /// moved here moves on screen. The shape is the one HEL-191 settled on —
+    /// moved here moves on screen. The shape is the one settled on —
     /// what you were watching, then what each library just gained and what is
     /// popular in it, then a movie block and a show block each closing with
     /// its genre shelf, then the exits that belong to no single subject.
@@ -237,14 +237,14 @@ nonisolated enum HomeSectionPreferenceResolver {
 
     static let nativeIDs: Set<String> = Set(nativeChoices.map(\.id))
 
-    /// The three rows the single pre-HEL-191 Recently Added toggle became.
+    /// The three rows the single legacy Recently Added toggle became.
     private static let recentlyAddedIDs: Set<String> = [
         HomeRowID.recentlyAddedMovies,
         HomeRowID.recentlyAddedShows,
         HomeRowID.recentlyAddedOther,
     ]
 
-    /// Folds a layout saved before HEL-191 into the single ordered list.
+    /// Folds a legacy layout into the single ordered list.
     ///
     /// Hidden rows are carried over and the plugin rows keep the order they
     /// were given, after the native block, which is where they rendered. The
@@ -315,7 +315,7 @@ nonisolated enum HomeSectionPreferenceResolver {
 
         // An arrangement that has never held a plugin row has never arranged
         // one, so the server's sections arrive shown — that is an account that
-        // had only hidden a native row before HEL-191, and every plugin row it
+        // had only hidden a native row previously, and every plugin row it
         // was showing keeps showing. Once one has been arranged, a section the
         // server gained later arrives hidden instead: an arrangement is a
         // decision, and a row appearing in the middle of one was nobody's.
@@ -371,7 +371,7 @@ nonisolated enum HomeSectionPreferenceResolver {
 /// The viewer's Home layout: which rows appear and in what order, across both
 /// Lagoon's own rows and the optional Home Screen Sections plugin's. The
 /// account id already combines server URL and Jellyfin user id, which prevents
-/// choices leaking between servers or profiles (HEL-60).
+/// choices leaking between servers or profiles.
 @MainActor
 @Observable
 final class HomeSectionPreferencesStore {

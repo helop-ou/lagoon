@@ -8,14 +8,14 @@ final class HomeViewModel {
         let title: String
         let items: [MediaItem]
         /// The Jellyfin collection type this rail came from, so Home can file
-        /// it under movies or shows (HEL-120). Nil for rails that are neither
+        /// it under movies or shows. Nil for rails that are neither
         /// — the curated rows carry their own placement, and a plugin rail is
         /// whatever the server decided it is.
         var collectionType: String?
     }
 
     /// Plugin sections whose content Lagoon already draws with a rail of its
-    /// own (HEL-47). Rendering these as well is the failure mode the
+    /// own. Rendering these as well is the failure mode the
     /// catalogue invites: a real server offers `ContinueWatching`,
     /// `NextUp` *and* `ContinueWatchingNextUp` at once, plus `Latest*`
     /// alongside `RecentlyAdded*` — Home would show the same films three
@@ -39,14 +39,14 @@ final class HomeViewModel {
     var showGenreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
     /// The library's own random sample, fetched once per load and only when
-    /// every other hero source came back empty (HEL-147); kept so a refresh
+    /// every other hero source came back empty; kept so a refresh
     /// can keep those hero items on screen rather than roll the dice again.
     private var librarySample: [MediaItem] = []
-    /// The curated rows (HEL-120), each carrying its own title because two of
+    /// The curated rows, each carrying its own title because two of
     /// them name what they are about: the title they are similar to, and the
     /// genre or decade the rotation landed on today.
     var curatedRails: [String: LibraryRail] = [:]
-    /// The collections worth showing (HEL-122). Empty on a library with no
+    /// The collections worth showing. Empty on a library with no
     /// collections, and on one whose collections are all franchise stubs.
     var collections: [CollectionShelfItem] = []
     var isLoading = true
@@ -144,7 +144,7 @@ final class HomeViewModel {
             if heroItems.isEmpty {
                 // Nothing recently added, in progress, favourited or
                 // contributed by a plugin: sample the library itself so a
-                // full but dormant server still opens on a hero (HEL-147).
+                // full but dormant server still opens on a hero.
                 // One query, and only on this path.
                 let sample = (try? await client.items(
                     includeTypes: [.movie, .series],
@@ -206,7 +206,7 @@ final class HomeViewModel {
 
     /// Cheap re-fetch of the user-data-driven rails: on returning from
     /// playback, and after a card's context menu marks something watched or
-    /// favourited (HEL-40). All three rails are derived from user data, so
+    /// favourited. All three rails are derived from user data, so
     /// any one of those mutations can move an item between them.
     func refreshProgress(client: JellyfinClient) async {
         guard hasLoaded, !isLoading else { return }
@@ -226,7 +226,7 @@ final class HomeViewModel {
         if let refreshedFavorites {
             favorites = refreshedFavorites
         }
-        // These three rails are hero tiers too (HEL-147): keep what is on
+        // These three rails are hero tiers too: keep what is on
         // screen with its fresh record, fill anything that fell out.
         heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
     }
@@ -235,7 +235,7 @@ final class HomeViewModel {
     /// in the background. Existing content stays mounted while these requests
     /// run, and the primary progress/latest rails keep their last good value
     /// when a request fails; foregrounding on a sleeping server must not turn
-    /// a full Home screen into an error page (HEL-135).
+    /// a full Home screen into an error page.
     func refreshServerContent(
         client: JellyfinClient,
         homeSectionPreferences: HomeSectionPreferenceValues,
@@ -305,11 +305,11 @@ final class HomeViewModel {
         // Keep the hero's order stable across a foreground hop, but replace
         // its values with fresh server records and fill vacancies from the
         // leading tier — Recently Added when it has anything, otherwise
-        // whichever tier the hero came from (HEL-147).
+        // whichever tier the hero came from.
         heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
     }
 
-    /// Hero sources in priority order (HEL-147). The first tier with an
+    /// Hero sources in priority order. The first tier with an
     /// eligible item supplies the hero; see `HeroSelection`. Collections are
     /// deliberately absent: their cards route to a collection page, and the
     /// hero routes to an item.
@@ -358,7 +358,7 @@ final class HomeViewModel {
         }
     }
 
-    /// The curated rows (HEL-120), fetched together and published together.
+    /// The curated rows, fetched together and published together.
     ///
     /// Every one of these is discovery: nice to have, never the reason
     /// someone opened Lagoon. They are fetched concurrently and applied in
@@ -460,14 +460,14 @@ final class HomeViewModel {
             uniquingKeysWith: { current, _ in current }
         ).merging(topTen, uniquingKeysWith: { current, _ in current })
         // A hero that found nothing above this tier at load time can still
-        // be filled by the curated rows arriving now (HEL-147).
+        // be filled by the curated rows arriving now.
         if heroItems.isEmpty {
             heroItems = HeroSelection.select(tiers: heroTiers)
         }
 
     }
 
-    /// HEL-121's optional external popularity scan publishes independently
+    /// This optional external popularity scan publishes independently
     /// of the native shelves, while sharing their cancellation generation.
     private func loadTopTenRails(
         client: JellyfinClient, seerr: SeerrClient?,
@@ -487,7 +487,7 @@ final class HomeViewModel {
         if heroItems.isEmpty { heroItems = HeroSelection.select(tiers: heroTiers) }
     }
 
-    /// The Collections row (HEL-122).
+    /// The Collections row.
     ///
     /// Two passes, because one is not enough and one per collection is far
     /// too many. The first asks for every collection and keeps the ones that
@@ -620,7 +620,7 @@ final class HomeViewModel {
         return LibraryRail(id: id, title: title, items: page.items)
     }
 
-    /// Builds the HEL-121 fallback from Seerr's public discovery catalogue.
+    /// Builds the Top 10 fallback from Seerr's public discovery catalogue.
     /// TMDB ids are only used as a bridge; every displayed card is resolved
     /// back to an item the current Jellyfin user can actually play.
     private func topTenRails(

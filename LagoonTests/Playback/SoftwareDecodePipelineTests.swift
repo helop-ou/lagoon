@@ -3,7 +3,7 @@ import Libavcodec
 import Testing
 @testable import Lagoon
 
-/// HEL-137: 4K AV1 plays on the software path but does not hold frame rate.
+/// 4K AV1 plays on the software path but does not hold frame rate.
 ///
 /// The structural half of that ticket — decode moved off the demux queue —
 /// is a threading change that only a device can score. What is pinnable here
@@ -11,7 +11,7 @@ import Testing
 /// may hold, and what libavcodec is told about threads.
 struct SoftwareDecodePipelineTests {
     /// A 4:2:0 P010 surface at 3840x2160: luma plus half as many chroma
-    /// samples, each in a 16-bit word (HEL-109's figure, restated here so the
+    /// samples, each in a 16-bit word (a measured figure, restated here so the
     /// limit below is anchored to something rather than to itself).
     private let fourKP010Bytes: Int64 = 3840 * 2160 * 3
 
@@ -40,7 +40,7 @@ struct SoftwareDecodePipelineTests {
     @Test func smallerFramesKeepTheLimitTheyWereMeasuredWith() {
         // 1080p 10-bit is 6.2 MB a frame: 42 of them is 250 MB, comfortably
         // inside the budget, so the count stays the binding limit and every
-        // configuration measured before HEL-137 keeps its behavior.
+        // configuration measured earlier keeps its behavior.
         let hd10Bit: Int64 = 1920 * 1080 * 3
         #expect(DemuxBackpressurePolicy.videoHardLimit(
             videoIsDecoded: true,
@@ -106,7 +106,7 @@ struct SoftwareDecodePipelineTests {
         // silicon and nothing else, and went straight to libdav1d on a false.
         // AV1 is now always offered and VideoToolboxDecoder.canDecode settles
         // it per stream, so a platform with a software AV1 decoder is used
-        // without anyone having had to predict it (HEL-137).
+        // without anyone having had to predict it.
         let noAV1Silicon = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
         #expect(noAV1Silicon.decodesAV1WithVideoToolbox)
         #expect(FFmpegDemuxer.usesCompressedVideoPath(
@@ -224,9 +224,9 @@ struct SoftwareDecodePipelineTests {
 
     @Test func decodeProfileSeparatesTheThreeCostsAsSharesOfOneCore() {
         // 24 frames in one second of wall time, 0.44 s of it inside
-        // libavcodec and 0.12 s converting: the shape HEL-137 is asking the
-        // device to report, and the fractions are per-stage shares of a core
-        // rather than a split of the whole.
+        // libavcodec and 0.12 s converting: the shape the measurement asks
+        // the device to report, and the fractions are per-stage shares of
+        // a core rather than a split of the whole.
         let profile = SoftwareVideoDecoder.Profile(
             frames: 24,
             packets: 24,

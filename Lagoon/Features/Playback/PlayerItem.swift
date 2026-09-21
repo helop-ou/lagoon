@@ -6,7 +6,7 @@ nonisolated struct PlayerItem: Identifiable {
     let media: MediaItem
     var startFromBeginning = false
     /// Where to start, outranking every resume rule. Set by a SyncPlay
-    /// group, which knows where everyone else already is (HEL-172); nil
+    /// group, which knows where everyone else already is; nil
     /// everywhere else, so the ordinary resume logic decides.
     var startPosition: Double?
     /// Load and sit on the first frame instead of rolling. A group member

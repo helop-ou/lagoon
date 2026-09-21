@@ -42,7 +42,7 @@ final class SeerrSessionStore {
 
     /// What the address field starts with. Only this account's own configured
     /// Seerr server is ever suggested; Lagoon never proposes an address the
-    /// viewer has not given it (HEL-187).
+    /// viewer has not given it.
     func suggestedServerAddress(for account: StoredAccount?) -> String {
         if let configuredURL { return configuredURL.absoluteString }
         #if DEBUG

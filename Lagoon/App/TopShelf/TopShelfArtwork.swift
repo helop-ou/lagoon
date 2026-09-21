@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 #endif
 
-/// Builds the full-screen images the Top Shelf carousel shows (HEL-119).
+/// Builds the full-screen images the Top Shelf carousel shows.
 ///
 /// **The carousel has no title to set.** `TVTopShelfCarouselItem` inherits
 /// only `playAction`, `displayAction` and `setImageURL` from
@@ -12,7 +12,7 @@ import UIKit
 /// has one, so the name of the thing has to be part of the artwork. That is
 /// also what the Apple TV app does.
 ///
-/// The app composes and the extension only reads, which keeps HEL-37's rule
+/// The app composes and the extension only reads, which keeps to the rule
 /// that the extension holds no credentials and does no networking: these are
 /// finished JPEGs in the shared container, addressed by file URL.
 nonisolated enum TopShelfArtwork {
@@ -73,7 +73,7 @@ nonisolated enum TopShelfArtwork {
     /// On an Apple TV attached to an HDR television, `preferred` returns an
     /// extended-range format, and **`jpegData` returns nil for an
     /// extended-range image** — so every composite failed and the shelf
-    /// reported "no artwork could be built for any of 8 titles" (HEL-119).
+    /// reported "no artwork could be built for any of 8 titles".
     /// The simulator's screen is SDR, which is why it never showed there.
     /// Reading the main screen from `render`'s background thread was a second
     /// problem in the same call.
@@ -192,7 +192,7 @@ nonisolated enum TopShelfArtwork {
     /// purgeable, and a real device refuses the write: build 60 reported
     /// "could not write to the shared container" for all eight titles while
     /// every simulator wrote them happily, because a simulator's container is
-    /// a directory on a Mac and honours none of this (HEL-119).
+    /// a directory on a Mac and honours none of this.
     ///
     /// Purgeable is also the honest description. The artwork is derived,
     /// keyed by item id, and cheap to rebuild, and `publishIfEmpty` already

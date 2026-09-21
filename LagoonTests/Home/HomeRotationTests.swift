@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The Home genre and decade spotlights (HEL-120).
+/// The Home genre and decade spotlights.
 ///
 /// Worth pinning because "it changes sometimes" cannot be verified by looking
 /// at the screen once, and the two failure modes are opposites: a rotation

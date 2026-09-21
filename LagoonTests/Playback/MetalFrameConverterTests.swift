@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-137: the Metal output stage replaced two CPU passes, so what it
+/// The Metal output stage replaced two CPU passes, so what it
 /// writes is pinned: the repack is exact, and the tone map matches its own
 /// specification for grey, keeps black black, reaches white at the source
 /// peak, never inverts, and leaves grey neutral. The kernel runs on the

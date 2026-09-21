@@ -6,7 +6,7 @@ import Foundation
 /// files whole, which is all a disc image needs before the demuxer takes
 /// over. Written rather than linked because libavformat has no UDF at all,
 /// and libbluray/libudfread would be a new dependency that still could not
-/// reach a disc over HTTP without the same callbacks (HEL-133).
+/// reach a disc over HTTP without the same callbacks.
 ///
 /// UDF 2.50, which is what BD-ROM uses, keeps every file entry inside a
 /// *metadata partition* — a file in the physical partition that the volume

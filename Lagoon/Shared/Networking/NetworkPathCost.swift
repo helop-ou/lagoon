@@ -4,7 +4,7 @@ import Network
 #endif
 
 /// What the current network path *costs*, which is a different question from
-/// how fast it is (HEL-108).
+/// how fast it is.
 ///
 /// `DeviceProfile` advertised 120 Mbps on every device and every path, so an
 /// 80 Mbps remux was offered as direct play over cellular or a hotspot —

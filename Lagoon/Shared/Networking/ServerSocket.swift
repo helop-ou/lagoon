@@ -1,7 +1,7 @@
 import Foundation
 
 /// One message off Jellyfin's WebSocket, with its payload kept as JSON so
-/// the caller decodes whatever shape that message type carries (HEL-172).
+/// the caller decodes whatever shape that message type carries.
 ///
 /// The envelope is `{"MessageType": …, "MessageId": …, "Data": …}` and
 /// `Data` is anything: an object for `SyncPlayGroupUpdate`, a bare integer
@@ -101,7 +101,7 @@ nonisolated enum ServerSocketURL {
 }
 
 /// Jellyfin's server-to-client WebSocket: the only way a SyncPlay group's
-/// commands reach a client (HEL-172).
+/// commands reach a client.
 ///
 /// Main-actor owned, by the project's default isolation. Built from a
 /// snapshot of the client's URL, token and device id — the same rule

@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 #endif
 
-/// Detects playback that stopped without anyone saying so (HEL-159).
+/// Detects playback that stopped without anyone saying so.
 ///
 /// The engine's own stall detection covers a dry queue: it pauses the
 /// clock, sets `isBuffering`, and recovers. This watches two other cases,

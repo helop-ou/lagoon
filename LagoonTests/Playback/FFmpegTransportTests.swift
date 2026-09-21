@@ -7,7 +7,7 @@ import Testing
 
 @Suite("Native FFmpeg transport", .serialized)
 struct FFmpegTransportTests {
-    /// libavformat is now repo-built without its network stack (HEL-142):
+    /// libavformat is now repo-built without its network stack:
     /// every network fetch must go through `FFmpegNetworkTransport`'s
     /// URLSession-backed io_open, never a native protocol. This fails until
     /// the rebuilt library lands; that is expected and wanted.

@@ -1,7 +1,7 @@
 import CoreMedia
 
 /// Rewrites container timestamps on compressed passthrough audio into a
-/// sample-exact timeline (HEL-64).
+/// sample-exact timeline.
 ///
 /// Matroska stamps packets at 1 ms precision, but a compressed audio frame
 /// is an exact number of samples. AAC is 1024 samples — 21.33 ms at 48 kHz,

@@ -32,7 +32,7 @@ struct PlaybackFallbackTests {
         // Jellyfin describes WALL·E's Blu-ray image as container `ts` with
         // direct play available, then serves 64 GB of UDF. VideoType and
         // IsoType are the only fields that say so, and both have to survive
-        // decoding (HEL-133).
+        // decoding.
         let image = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
         {
           "Id":"disc", "Container":"ts", "VideoType":"Iso", "IsoType":"BluRay",
@@ -238,7 +238,7 @@ struct PlaybackFallbackTests {
     }
 }
 
-/// HEL-108: the profile advertised 120 Mbps on every path, so an 80 Mbps
+/// The profile advertised 120 Mbps on every path, so an 80 Mbps
 /// remux was offered as direct play over cellular.
 @Suite("Metered path cap")
 struct MeteredPathTests {
@@ -342,7 +342,7 @@ struct MeteredPathTests {
         #expect(reversed.conditions.first { $0.property == "Width" }?.value == "1280")
     }
 
-    // MARK: - Restart-point retry (HEL-151)
+    // MARK: - Restart-point retry
 
     @Test func aDecodeFailureRightAfterAFlushEarnsOneRetryBeforeTheLadder() {
         // Exit 8's shape: the picture the seek landed on, then the open
@@ -378,7 +378,7 @@ struct MeteredPathTests {
 
     @Test func theRetryCannotLoop() {
         // The second failure at the same position descends the ladder,
-        // exactly as every failure did before HEL-151 — one seek later.
+        // exactly as every failure did before — one seek later.
         #expect(
             !PlaybackRestartPointPolicy.shouldRetryInPlace(
                 videoSamplesSinceFlush: 0,
@@ -387,8 +387,8 @@ struct MeteredPathTests {
         )
     }
 
-    /// A decoder the system took away is rebuilt rather than transcoded
-    /// (HEL-181). `LAGOON-A` and `LAGOON-G` both spent the one-way rung on a
+    /// A decoder the system took away is rebuilt rather than transcoded.
+    /// `LAGOON-A` and `LAGOON-G` both spent the one-way rung on a
     /// `-12903` that only ever meant "make another session".
     @Test func aLostDecodeSessionIsRebuiltRatherThanDescended() {
         #expect(
@@ -439,7 +439,7 @@ struct MeteredPathTests {
 
     @Test func suspendedVideoHasNoSessionWorthSaving() {
         // Backgrounding leaves the old session alive on purpose and the
-        // resume seek builds a fresh one (HEL-176), so a sample that reached
+        // resume seek builds a fresh one, so a sample that reached
         // a torn-down session says nothing — and must not end the film. This
         // is `LAGOON-G`: a fallback to transcode with the app in the
         // background, which could not have completed anyway.

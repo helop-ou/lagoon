@@ -1,7 +1,6 @@
 import Foundation
 
-/// How a member that has drifted from its group gets back in line
-/// (HEL-172).
+/// How a member that has drifted from its group gets back in line.
 ///
 /// A group member's clock is never exactly the group's: the start instant
 /// is honoured to within a frame or two, and from there decode, display
@@ -75,7 +74,7 @@ nonisolated enum SyncCorrectionPolicy {
     }
 }
 
-/// Turning a server instant into a local wait (HEL-172).
+/// Turning a server instant into a local wait.
 ///
 /// A `Pause` command names the instant every member should stop at, and a
 /// member that stops when the message arrives stops early by its own

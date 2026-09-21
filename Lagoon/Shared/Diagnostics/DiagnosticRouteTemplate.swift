@@ -11,8 +11,7 @@ nonisolated enum DiagnosticRouteTemplate {
     /// A version segment such as `v1`: a lowercase `v` followed by digits and
     /// nothing else. Kept verbatim because Seerr mounts every route under
     /// `api/v1`, so blanking it reported all of them as `api/{id}/…` and made
-    /// one Seerr route indistinguishable from another on the dashboard
-    /// (HEL-180).
+    /// one Seerr route indistinguishable from another on the dashboard.
     ///
     /// Deliberately the narrowest exception that fixes that. A numeric id, a
     /// UUID, a slug and a filename all still become `{id}`, because the rule

@@ -38,7 +38,7 @@ final class ImageCache {
     /// Synchronous probe so views can skip the placeholder for cached images.
     /// Only the in-memory cache is consulted here: a downloaded title's
     /// artwork lives on disk and needs the same off-main decode a network
-    /// fetch gets, which `load` below does (HEL-166).
+    /// fetch gets, which `load` below does.
     func image(for url: URL, maxPixelSize: Int) -> UIImage? {
         let key = key(url, maxPixelSize: maxPixelSize)
         return cache.object(forKey: key as NSString)
@@ -46,7 +46,7 @@ final class ImageCache {
 
     #if os(iOS)
     /// A downloaded title's own poster or backdrop, decoded the same way a
-    /// network fetch would be, before ever touching the network (HEL-166).
+    /// network fetch would be, before ever touching the network.
     /// Reads the file and decodes it off the main actor, same as the
     /// network path, since a 4K backdrop is exactly the decode this cache
     /// exists to keep off the render thread.

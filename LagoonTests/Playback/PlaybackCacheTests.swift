@@ -55,7 +55,7 @@ struct PlaybackCacheTests {
             playsFromCompleteFile: true, disc: false, method: .directPlay, defaults: defaults))
         // A complete disc image still needs the session: the UDF reader
         // mounts it through the session's byte source, and without one the
-        // raw image reached libavformat and fell to a server remux (HEL-167).
+        // raw image reached libavformat and fell to a server remux.
         #expect(PlaybackBufferPolicy.engineUsesCacheSession(
             playsFromCompleteFile: true, disc: true, method: .directPlay, defaults: defaults))
         // A transcode never gets the session in Release, disc or not.
@@ -1085,7 +1085,7 @@ private nonisolated final class PlaybackCacheLoaderStub: PlaybackRangeLoading, @
 
     /// Makes the next `load` for exactly this range block outside the lock
     /// until `release()` is called, so a test can land a foreground read
-    /// while the matching prefetch is still in flight (HEL-160). Consumed by
+    /// while the matching prefetch is still in flight. Consumed by
     /// the first matching call; later calls for the same range are unaffected.
     func hold(range: PlaybackByteRange) {
         lock.lock()

@@ -5,8 +5,8 @@ import UIKit
 
 /// What the hero needs of a title, independent of where the title came from.
 ///
-/// Home builds these from Jellyfin items and Discover from Seerr results
-/// (HEL-114); `route` is generic so each keeps its own navigation identity
+/// Home builds these from Jellyfin items and Discover from Seerr results;
+/// `route` is generic so each keeps its own navigation identity
 /// rather than both being flattened into one erased value. Seerr has no logo
 /// artwork anywhere in its API, so `logoURL` is nil there and the panel falls
 /// back to the title in type — the same fallback `TitleArtView` already makes

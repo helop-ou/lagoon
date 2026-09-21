@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure scheduler-policy coverage (HEL-160): no cache, no clock, no engine —
+/// Pure scheduler-policy coverage: no cache, no clock, no engine —
 /// just the decision table `PlaybackController.startBufferFill` drives.
 ///
 /// Eager pacing is judged from measured throughput against the title's
@@ -178,7 +178,7 @@ struct PlaybackFillPolicyTests {
         expectWait(decision, PlaybackFillPolicy.relaxedPacingCapSeconds)
     }
 
-    // MARK: - afterFetch: fetched, playing, throughput headroom (HEL-160 4K)
+    // MARK: - afterFetch: fetched, playing, throughput headroom(4K)
 
     private func relaxedWait(_ seconds: Double) -> Double {
         min(

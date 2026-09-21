@@ -4,7 +4,7 @@ import Foundation
 /// numbers, flags, and short tokens. There is no place for a sentence, a
 /// URL, a title, or an error's `localizedDescription`, which is how the
 /// allowlist in `DiagnosticSchema` stays the only thing that can reach the
-/// reporting backend (HEL-159).
+/// reporting backend.
 nonisolated enum DiagnosticValue: Equatable, Sendable {
     case int(Int)
     case double(Double)
@@ -67,7 +67,7 @@ nonisolated enum DiagnosticSchema {
         "stallReprime", "stallResume", "cacheFallback",
         // A VideoToolbox session that was rebuilt instead of being read as an
         // undecodable stream, and one that needed no rebuild because nothing
-        // was waiting on it (HEL-181).
+        // was waiting on it.
         "decodeSessionRebuilt", "decodeSessionIgnored",
     ]
     static let outcomeChoices: Set<String> = [
@@ -83,8 +83,8 @@ nonisolated enum DiagnosticSchema {
     static let httpMethodChoices: Set<String> = ["GET", "POST", "DELETE", "PUT"]
     static let clientChoices: Set<String> = ["jellyfin", "seerr", "media", "image", "subtitle"]
     static let networkChoices: Set<String> = ["unrestricted", "constrained", "expensive", "unknown"]
-    /// SyncPlay's four transport commands, and how a drift was corrected
-    /// (HEL-172). The correction has its own key rather than reusing
+    /// SyncPlay's four transport commands, and how a drift was corrected.
+    /// The correction has its own key rather than reusing
     /// `method`, which is Jellyfin's delivery method and a different
     /// closed set.
     static let syncPlayCommandChoices: Set<String> = ["unpause", "pause", "seek", "stop"]
@@ -175,7 +175,7 @@ nonisolated enum DiagnosticSchema {
         /// tells a restart-point failure apart from a verdict on the stream.
         "refusedSampleMs": .int,
         "retry": .bool,
-        // Watch Together (HEL-172). Numbers and closed choices only: a
+        // Watch Together. Numbers and closed choices only: a
         // group has a name, an id, participants and an item, and none of
         // them belongs in a report.
         "command": .choice(syncPlayCommandChoices),

@@ -1,6 +1,6 @@
 import Foundation
 
-// URLs for taking a title off the server (HEL-166). Both carry no credential;
+// URLs for taking a title off the server. Both carry no credential;
 // the caller attaches `mediaRequestAuthorization()` as a header exactly as
 // every other media consumer does.
 extension JellyfinClient {

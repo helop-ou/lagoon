@@ -9,7 +9,7 @@ extension JellyfinClient {
         let maxStreamingBitrate: Int
         /// Jellyfin defaults all four of these to true. They are sent
         /// explicitly so a retry can withdraw them one rung at a time
-        /// (HEL-100) rather than restating the whole profile.
+        /// rather than restating the whole profile.
         let enableDirectPlay: Bool
         let enableDirectStream: Bool
         let allowVideoStreamCopy: Bool
@@ -118,7 +118,7 @@ extension JellyfinClient {
         }
         if let transcodingUrl = source.transcodingUrl, serverURL != nil {
             // TranscodingUrl arrives server-relative, query string included,
-            // and must keep the server's base path (HEL-144).
+            // and must keep the server's base path.
             guard let resolvedURL = serverRelativeURL(transcodingUrl) else {
                 throw JellyfinError.unplayable
             }
@@ -139,7 +139,7 @@ extension JellyfinClient {
         return mediaRequestAuthorization()?.sanitizedURL(url) ?? url
     }
 
-    // MARK: - Remote subtitles (HEL-49)
+    // MARK: - Remote subtitles
 
     /// Searches every subtitle provider configured on the Jellyfin server.
     /// Jellyfin expects an ISO language identifier and preserves provider
@@ -219,16 +219,15 @@ extension JellyfinClient {
     }
 
     /// Every media consumer — the FFmpeg transport, the playback cache, the
-    /// subtitle loader, the trickplay loader — attaches the credential
-    /// itself via `MediaRequestAuthorization`, so no URL Lagoon builds
-    /// carries the token (HEL-142/HEL-143: CFNetwork logs a failed task's
-    /// full URL into the unified log, and a query token would leak into
-    /// diagnostics where the header never does). Server-provided playback
-    /// and subtitle URLs may still contain either legacy spelling
-    /// (`api_key`/`ApiKey`); `sanitizedURL(_:)` strips it on the Jellyfin
-    /// origin and leaves any other origin's URL untouched.
+    /// subtitle loader, the trickplay loader — attaches the credential itself
+    /// via `MediaRequestAuthorization`, so no URL Lagoon builds carries the
+    /// token (CFNetwork logs a failed task's full URL into the unified log, and
+    /// a query token would leak into diagnostics where the header never does).
+    /// Server-provided playback and subtitle URLs may still contain either
+    /// legacy spelling (`api_key`/`ApiKey`); `sanitizedURL(_:)` strips it on
+    /// the Jellyfin origin and leaves any other origin's URL untouched.
 
-    // MARK: - Transport extras (HEL-39 slice 3)
+    // MARK: - Transport extras (slice 3)
 
     /// Chapters and trickplay geometry, as the item endpoint reports them.
     nonisolated struct PlaybackExtras: Decodable {
@@ -305,7 +304,7 @@ extension JellyfinClient {
     /// Unlike `Items/…/Images/…`, the trickplay route is authenticated — it
     /// 401s without credentials. Like every other media URL Lagoon builds,
     /// this one carries no query token; the credential travels as a header
-    /// instead (HEL-142/HEL-143).
+    /// instead.
     private func trickplaySheetURL(itemId: String, width: Int, index: Int) -> URL? {
         guard accessToken != nil else { return nil }
         return try? url(path: "Videos/\(itemId)/Trickplay/\(width)/\(index).jpg")
@@ -324,7 +323,7 @@ extension JellyfinClient {
     }
 }
 
-// MARK: - Media segments (HEL-63)
+// MARK: - Media segments
 
 extension JellyfinClient {
     private nonisolated struct MediaSegmentsPage: Decodable {

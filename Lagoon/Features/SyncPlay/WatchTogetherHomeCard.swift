@@ -1,15 +1,15 @@
 import SwiftUI
 
 /// Home's reminder that a group is still running, and the way back into
-/// it (HEL-172).
+/// it.
 ///
 /// A banner above the rails rather than a card inside one: a rail head is
 /// a piece of a list of titles, and this is neither a title nor something
 /// to browse — it is a temporary state of this session, which is also why
-/// it is not a sixth tab (the bar is full, and HEL-169 reserves its last
-/// slot). It appears only while a group has this device as a member and
-/// nothing of that group's is on screen; closing the player is what puts
-/// it there, and Rejoin is what takes it away again.
+/// it is not a sixth tab (the bar is full, and its last slot is already
+/// claimed). It appears only while a group has this device as a member
+/// and nothing of that group's is on screen; closing the player is what
+/// puts it there, and Rejoin is what takes it away again.
 struct WatchTogetherHomeCard: View {
     @Environment(SyncPlayStore.self) private var syncPlay
 

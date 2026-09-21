@@ -3,7 +3,7 @@ import Testing
 @testable import Lagoon
 
 /// Pure coverage for the background session delegate's supporting logic
-/// (HEL-166 review): the task-description wire format, the finished-vs-failed
+///(review): the task-description wire format, the finished-vs-failed
 /// classification a download's HTTP status and byte count decide, and the
 /// short copy a transport error is mapped to. None of these touch a session,
 /// a manifest or a clock, so a delegate callback and the store's own
@@ -29,7 +29,7 @@ struct DownloadTaskDescriptionTests {
     }
 
     @Test func returnsNilWhenAFieldIsMissing() {
-        // The pre-HEL-166-review wire format carried only three fields; a
+        // The earlier wire format carried only three fields; a
         // task that survived a relaunch from before this change must not be
         // misparsed into a bogus attempt token.
         #expect(DownloadTaskDescription.parse("item1|item1.mp4|accountkey") == nil)

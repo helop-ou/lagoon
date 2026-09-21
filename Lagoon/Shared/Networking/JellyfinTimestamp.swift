@@ -1,7 +1,7 @@
 import Foundation
 
 /// The one place a Jellyfin wall-clock timestamp becomes a number, and the
-/// deliberate exception to "no `Date` is decoded anywhere" (HEL-172).
+/// deliberate exception to "no `Date` is decoded anywhere".
 ///
 /// SyncPlay is the first feature that needs an instant rather than a
 /// duration: a `SendCommand` says *when*, on the server's clock, every

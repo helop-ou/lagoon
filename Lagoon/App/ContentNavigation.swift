@@ -8,7 +8,7 @@ nonisolated enum ContentNavigationRoute: Hashable {
     case genre(name: String, includeTypes: [MediaItemType])
     case search(String)
     #if os(iOS)
-    /// The offline downloads list (HEL-166). iOS only: tvOS has no
+    /// The offline downloads list. iOS only: tvOS has no
     /// persistent storage guarantee and no downloads.
     case downloads
     #endif
@@ -16,7 +16,7 @@ nonisolated enum ContentNavigationRoute: Hashable {
     // A route carries whatever copy of the item a rail had, and the detail
     // page re-fetches the rest. Two routes to the same item are the same
     // destination however stale one copy's user data is, so identity here is
-    // the item's id; `MediaItem` itself compares by value (HEL-132).
+    // the item's id; `MediaItem` itself compares by value.
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.item(a), .item(b)):
@@ -87,7 +87,7 @@ extension View {
 
 #if os(iOS)
 extension EnvironmentValues {
-    /// Shows the downloads list where it lives, on the Library tab (HEL-166).
+    /// Shows the downloads list where it lives, on the Library tab.
     /// Settings > Downloads offers it too, but cannot push it: the Settings
     /// stack is built from destination-owned links and the list's rows are
     /// value-owned routes, and mixing the two in one stack lost pushes and

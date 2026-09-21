@@ -3,7 +3,7 @@ import Foundation
 import Libavcodec
 import Libavutil
 
-/// HEL-48 M5: decodes embedded subtitle packets via libavcodec, which
+/// Decodes embedded subtitle packets via libavcodec, which
 /// normalizes every text codec (srt/ass/ssa/mov_text/webvtt) to ASS event
 /// payloads and every bitmap codec (PGS/VobSub) to paletted rects.
 /// All methods run on the demux queue.

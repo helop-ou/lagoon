@@ -5,11 +5,11 @@ import CoreVideo
 import Foundation
 import OSLog
 
-/// HEL-48 M1: the Lagoon playback engine — libavformat demux into
+/// The Lagoon playback engine — libavformat demux into
 /// CMSampleBuffers rendered by AVSampleBufferDisplayLayer /
 /// AVSampleBufferAudioRenderer under an AVSampleBufferRenderSynchronizer.
 /// VideoToolbox/libavcodec and AVFoundation perform codec work, color
-/// management, presentation, and audio output (see HEL-48).
+/// management, presentation, and audio output.
 ///
 /// The app's only playback engine since 2026-08-16 (Jaagop's call: one
 /// player for everything). Envelope: h264 video passed through compressed;
@@ -33,7 +33,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var isPaused = false
     private(set) var isBuffering = true
     private(set) var rate: Double = 1
-    /// Sync correction on top of `rate` (HEL-172). 1 outside a SyncPlay
+    /// Sync correction on top of `rate`. 1 outside a SyncPlay
     /// group, which is every session today. `rate` stays the viewer's
     /// choice; `effectiveRate` is what the synchronizer is ever given.
     @ObservationIgnored private(set) var correctionRate: Double = 1
@@ -58,18 +58,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// keeps counting every confirmed stall regardless of cause.
     private(set) var audioStallCount = 0
     /// Episodes where the renderer has no audio scheduled ahead of the
-    /// media clock (HEL-123). Counted regardless of
+    /// media clock. Counted regardless of
     /// `buffersOnAudioStarvation`; the mode only decides whether an episode
     /// also stops the clock, not whether it's counted.
     private(set) var audioStarvationCount = 0
     /// Off by default. While off, audio starvation is counted (`aDry`) and
-    /// never stops the clock. The floor `PlaybackStarvationPolicy
-    /// .audioFloorSeconds` was chosen in the simulator, and build 66 is why
+    /// never stops the clock. The floor `PlaybackStarvationPolicy.
+    /// audioFloorSeconds` was chosen in the simulator, and build 66 is why
     /// this mode stays off until a hardware pass shows a healthy title's
     /// lead sitting well above it.
     let buffersOnAudioStarvation = UserDefaults.standard.bool(forKey: "debug.bufferOnAudioStarvation")
     /// Bounded stall recovery should normally refill in place. Count the
-    /// five-second seek fallback separately so HEL-124 can prove whether it
+    /// five-second seek fallback separately so the regression can prove
+    /// whether it
     /// really needed one rather than inferring that from the playhead.
     private(set) var stallReprimeCount = 0
     /// Route/output recovery counters are intentionally session-scoped. The
@@ -77,7 +78,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// event took the same path as a real notification.
     private(set) var audioRendererRecoveryCount = 0
     private(set) var mediaServicesResetRecoveryCount = 0
-    /// Frame-loss bench progress/result for the HUD (HEL-64); nil unless
+    /// Frame-loss bench progress/result for the HUD; nil unless
     /// Settings → Debug → Frame-loss bench is on.
     private(set) var benchStatus: String?
     /// Flips true the moment a bench window freezes its result — the
@@ -85,14 +86,14 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// can leave the player through the clean teardown path instead of
     /// being killed mid-playback.
     private(set) var benchCompleted = false
-    /// The display-matching request for this video (HEL-64) — published
+    /// The display-matching request for this video — published
     /// once the demuxer knows the stream; the player view owns applying it.
     private(set) var displayMatchRequest: DisplayMatchRequest?
     /// "grid 24000/1001" when video pts are snapped to the exact frame
-    /// grid, nil when container stamps pass through (HEL-64 gate check).
+    /// grid, nil when container stamps pass through(gate check).
     private(set) var videoTimingDiagnostic: String?
 
-    /// The media clock as the synchronizer reports it (HEL-172).
+    /// The media clock as the synchronizer reports it.
     /// `timePosition` is optimistic — `seek(to:)` moves it before anything
     /// has been demuxed — and the synchronizer is the opposite: while the
     /// clock is stopped for a load or a seek it still sits at the anchor
@@ -159,14 +160,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     var maximumVideoIntakeDiagnostic: Int { videoIntake.peakCount }
     /// Whether the title has sound at all. A silent one cannot starve for
     /// it, and must never be held in buffering waiting for a cushion that
-    /// is never going to arrive (HEL-123).
+    /// is never going to arrive.
     private var hasAudioTrack: Bool { !audioTracks.isEmpty }
     /// Edge tracking for `audioStarvationCount`, which counts episodes
     /// rather than the 10 Hz observer ticks inside one.
     @ObservationIgnored private var wasAudioStarved = false
     /// The audio depth the demux loop is aiming for. Shown beside the queue
-    /// so the bigger uncached cushion is visible rather than inferred
-    /// (HEL-130).
+    /// so the bigger uncached cushion is visible rather than inferred.
     var audioCushionTarget: Int {
         DemuxBackpressurePolicy.audioCushionTarget(
             deliveryIsCached: shared.withLock { $0.deliveryIsCached }
@@ -174,7 +174,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// Timestamp discontinuities in the audio feed — the measurable form
-    /// of "the audio crackles" (HEL-64). Should read 0 during untouched
+    /// of "the audio crackles". Should read 0 during untouched
     /// playback; steady growth means the renderer is being handed a
     /// misaligned timeline.
     var audioTimingGapCount: Int {
@@ -182,7 +182,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// Where the software decode path's time goes, separated into the three
-    /// costs it is made of (HEL-137): libavcodec, the conversion into Core
+    /// costs it is made of: libavcodec, the conversion into Core
     /// Video surfaces, and reading the container. Each is wall time on its own
     /// queue, so the percentages read as the share of one core that stage
     /// holds — they are independent and do not sum to 100%. Cumulative since
@@ -199,7 +199,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Cost per frame first, because it is the number that answers whether
         // the device has the headroom: unlike a rate it does not fall when the
         // decoder is deliberately throttled, and reading the rate instead is
-        // what left HEL-137 ambiguous for two builds. `budget` is that cost as
+        // what left the measurement ambiguous for two builds. `budget` is it as
         // a fraction of one frame period, so anything at or above 100% cannot
         // hold frame rate however the queues are behaving.
         let frameRate = demuxer.videoFrameRate > 0 ? demuxer.videoFrameRate : 24
@@ -251,8 +251,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// Proof the profile 7 rewrite engaged, for the HUD — nil until the
-    /// stream actually carries a Dolby Vision profile 7 track (HEL-145;
-    /// formerly the HEL-64 EL-strip experiment's info line).
+    /// stream actually carries a Dolby Vision profile 7 track (formerly the
+    /// EL-strip experiment's info line).
     var dolbyVisionRewriteInfo: String? {
         guard let stats = demuxer.dolbyVisionRewriteStats else { return nil }
         let megabytes = Double(stats.bytesRemoved) / 1_000_000
@@ -300,12 +300,11 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// The clock moved: `timePosition` and `duration`, on the main actor at
     /// the same 0.1 s cadence as the published position. The controller's
     /// timed decisions hang off it rather than off a view body, so they
-    /// run with the screen locked (HEL-176).
+    /// run with the screen locked.
     @ObservationIgnored var onTimeAdvanced: ((Double, Double) -> Void)?
     /// Playback could not continue. The failure carries whether a different
     /// delivery of the same media might work, so the controller can drop to
-    /// the next rung of the fallback ladder instead of stranding the viewer
-    /// (HEL-100).
+    /// the next rung of the fallback ladder instead of stranding the viewer.
     @ObservationIgnored var onError: ((PlaybackEngineFailure) -> Void)?
     @ObservationIgnored var onTrackSelectionChanged: (() -> Void)?
     /// Fires once the initial audio/video cushion is enqueued and the media
@@ -316,12 +315,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// `onPlaybackStarted`, which is one-shot per engine, this runs every
     /// time the clock is re-anchored. SyncPlay reports Ready on it: the
     /// server asks each member to confirm it has arrived at the position
-    /// before the group is started again (HEL-172).
+    /// before the group is started again.
     @ObservationIgnored var onSeekReady: (() -> Void)?
     /// Buffering began or ended: a stall, a seek, the first prime. The one
     /// signal a SyncPlay group's Buffering and Ready reports are made of —
     /// the group waits for its slowest member, so it has to hear about a
-    /// stall this engine recovers from on its own (HEL-172). Fired only on
+    /// stall this engine recovers from on its own. Fired only on
     /// a change, from `setBuffering`.
     @ObservationIgnored var onBufferingChanged: ((Bool) -> Void)?
     /// A direct-file cache is an optimization. If its range transport cannot
@@ -339,15 +338,15 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated private let pumpQueue = DispatchQueue(label: "ee.helop.lagoon.pump", qos: .userInteractive)
     @ObservationIgnored nonisolated private let pumpKickState = PumpKickState()
     /// Compressed video read past the decoded-frame limit while the demuxer
-    /// reads on for audio (HEL-124). Demux queue, plus the resets.
+    /// reads on for audio. Demux queue, plus the resets.
     @ObservationIgnored nonisolated private let videoIntake = VideoIntakeQueue()
     /// Serialises admission to and drain from the intake, because both the
     /// demux loop and the video pump feed the decoders from it and decode
-    /// order must survive the two racing (HEL-124).
+    /// order must survive the two racing.
     @ObservationIgnored nonisolated private let videoFeedLock = NSLock()
     /// How long a backpressure wait may sleep before the loop re-evaluates
     /// the policy on its own. A full decoded queue under a stopped clock
-    /// never dequeues, and audio can run dry behind it (HEL-124).
+    /// never dequeues, and audio can run dry behind it.
     nonisolated private static let demuxWaitTimeout: TimeInterval = 0.25
     #if DEBUG
     @ObservationIgnored nonisolated private let diagnosticFaultGate = PlaybackDiagnosticFaultGate()
@@ -356,7 +355,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// apart from attach and teardown, which run before and after any pump.
     @ObservationIgnored nonisolated(unsafe) private var videoRequestsArmed = false
     @ObservationIgnored nonisolated(unsafe) private var audioRequestsArmed = false
-    /// Request-block invocations that found nothing to give (HEL-137). The
+    /// Request-block invocations that found nothing to give. The
     /// pump stops requesting on each, so this stays near zero; the loop that
     /// once cost half a core would count thousands a second. Read by the
     /// regression probe, hence atomic.
@@ -379,8 +378,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored nonisolated(unsafe) private var av1PipelineTimer: DispatchSourceTimer?
     @ObservationIgnored nonisolated(unsafe) private var videoDecoder: VideoToolboxDecoder?
     /// libavcodec's decoder, driven from a queue of its own so reading and
-    /// decoding overlap. Non-nil exactly when the software path is in use
-    /// (HEL-137).
+    /// decoding overlap. Non-nil exactly when the software path is in use.
     @ObservationIgnored nonisolated(unsafe) private var softwareDecodeStage: SoftwareVideoDecodeStage?
     @ObservationIgnored private var bench: FrameLossBench?
     @ObservationIgnored private var benchEnabled = false
@@ -408,12 +406,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var didFinish = false
     @ObservationIgnored private var didNotifyPlaybackStarted = false
     /// Where the clock is heading while it is stopped for a load or a seek,
-    /// which is what `clockPosition` answers with in that window (HEL-172).
+    /// which is what `clockPosition` answers with in that window.
     /// Nil while running, and while a stall holds the clock in place — the
     /// position is then the live `timePosition`.
     @ObservationIgnored private var bufferingTargetSeconds: Double?
     /// A group start instant that arrived while the engine was still
-    /// buffering (HEL-172). `beginPlayback` anchors on it instead of its own
+    /// buffering. `beginPlayback` anchors on it instead of its own
     /// near-future host time, provided it has not already passed.
     @ObservationIgnored private var scheduledStartHostTime: CMTime?
     @ObservationIgnored private var stallRecoveryTask: Task<Void, Never>?
@@ -421,7 +419,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var stallConfirmationID: UUID?
     @ObservationIgnored private var stallSignpostActive = false
     @ObservationIgnored private var shutdownRequested = false
-    /// HEL-148 soak diagnostics: cost and cadence of the 10 Hz main-actor
+    /// Soak diagnostics: cost and cadence of the 10 Hz main-actor
     /// tick (`observeTime`), accumulated only while `ProcessCPUTrace.enabled`
     /// and drained into one DecodeTrace field every two seconds. Report-only.
     @ObservationIgnored private var mainTick = MainTickStatistics()
@@ -429,8 +427,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     @ObservationIgnored private var rendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var audioRendererNotificationTokens: [NSObjectProtocol] = []
     @ObservationIgnored private var rendererRecoveryInProgress = false
-    /// The playback generation whose one restart-point retry has been spent
-    /// (HEL-151). nil until a decode failure has earned one.
+    /// The playback generation whose one restart-point retry has been spent.
+    /// nil until a decode failure has earned one.
     @ObservationIgnored private var restartPointRetryGeneration: Int?
     @ObservationIgnored private var audioRendererRecoveryInProgress = false
     /// Non-nil while a fresh audio renderer is being swapped in. Both paths
@@ -484,7 +482,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     func attach(displayLayer: AVSampleBufferDisplayLayer) {
-        // A shut-down engine must never come back to life (HEL-110).
+        // A shut-down engine must never come back to life.
         // `finishRendererShutdown` nils `videoRenderer`, so the emptiness
         // check alone lets a retired engine pass — and SwiftUI does re-mount
         // the surface after a failed playback, which used to re-register a
@@ -588,7 +586,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// `AVSampleBufferAudioRenderer` documents `multichannel` alone. Left at
     /// its default, a stereo soundtrack that AVPlayer would spatialize on
     /// AirPods plays flat here — which covers a great deal of television,
-    /// anime and older film (HEL-105).
+    /// anime and older film.
     ///
     /// This grants permission rather than forcing an effect: the viewer's
     /// Spatial Audio setting still decides, and over HDMI to a receiver it
@@ -617,7 +615,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         rearmBench(at: timePosition)
     }
 
-    /// Group start (HEL-172): reach `hostTime` on the host clock with the
+    /// Group start: reach `hostTime` on the host clock with the
     /// current media position on screen, rather than starting whenever the
     /// call happens to land. Anything already in the past, or a clock not
     /// yet primed enough to be scheduled, falls through to `play()`.
@@ -649,8 +647,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         rearmBench(at: timePosition)
     }
 
-    /// The one writer of `isBuffering`, so the transition can be announced
-    /// (HEL-172). Every caller already only sets it when it means it; the
+    /// The one writer of `isBuffering`, so the transition can be announced.
+    /// Every caller already only sets it when it means it; the
     /// guard is for the observer, not for the flag.
     private func setBuffering(_ buffering: Bool) {
         guard isBuffering != buffering else { return }
@@ -660,7 +658,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// Speed up or slow down a group member that has drifted, without
     /// touching the rate the viewer chose — which is what the speed row and
-    /// Now Playing publish (HEL-172). 1 restores the viewer's rate exactly.
+    /// Now Playing publish. 1 restores the viewer's rate exactly.
     func setCorrectionRate(_ multiplier: Double) {
         let resolved = multiplier.isFinite && multiplier > 0 ? multiplier : 1
         guard resolved != correctionRate else { return }
@@ -680,7 +678,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // A group pause overrides a group start that has not arrived yet.
         scheduledStartHostTime = nil
         Diagnostics.record(.playbackPause, ["position": .double(timePosition.rounded(toPlaces: 1))])
-        // HEL-148 soak diagnostic: this is the one call in the pause path
+        // Soak diagnostic: this is the one call in the pause path
         // that reaches AVFoundation's own state; a pause that starts taking
         // real wall time is what "pause takes a minute" looks like from the
         // inside. Report-only.
@@ -798,7 +796,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // cue write, so an old embedded packet cannot append after the
             // external replacement is committed. An embedded track (or off)
             // starts an empty window that the demuxer fills and display
-            // refresh prunes (HEL-163).
+            // refresh prunes.
             if ordinal > embeddedSubtitleCount {
                 subtitleStore.replaceExternalTrack(with: cues)
             } else {
@@ -944,7 +942,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
         // requestMediaDataWhenReady and every enqueue already run on this
         // serial queue. Teardown belongs on the same queue: it removes a
-        // race with an in-flight pump and, critically for HEL-57, keeps
+        // race with an in-flight pump and, critically, keeps
         // renderer flushes and hundreds of CMSampleBuffer releases off the
         // main actor while the presenting screen animates back in.
         pumpQueue.async { [self] in
@@ -1011,7 +1009,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
-    // MARK: - HEL-148 soak diagnostics (report-only)
+    // MARK: - soak diagnostics (report-only)
 
     /// Drains the main-actor tick accumulator into one DecodeTrace field and
     /// resets it for the next window.
@@ -1083,7 +1081,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // main-actor engine dies. Removing them asynchronously lets their
         // decoder resources retire without hitching the returning UI.
         //
-        // HEL-148 soak diagnostic: `retirementStart` spans exactly this
+        // Soak diagnostic: `retirementStart` spans exactly this
         // DispatchGroup, from the first `removeRenderer` call to the
         // `notify` below firing — how long hardware actually takes to
         // retire a decoder and its queued surfaces. Report-only.
@@ -1135,7 +1133,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// then the first enqueued one, which `PlaybackClockAnchor` prefers over
     /// the target whenever it lies beyond it, so a backward scrub restarted
     /// the clock at the old position and the picture caught up to it
-    /// instead of landing (HEL-144 lane, 2026-09-12).
+    /// instead of landing.
     nonisolated private func flushRenderersAndQueues() {
         videoRenderer?.flush()
         audioRenderer?.flush()
@@ -1155,9 +1153,9 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let clamped = max(0, duration > 0 ? min(target, duration - 1) : target)
         Diagnostics.record(.playbackSeek, ["position": .double(clamped.rounded(toPlaces: 1))])
         // Optimistic: the playhead moves the instant the seek is asked
-        // for (HEL-39) — the engine will resume from exactly here. The
+        // for — the engine will resume from exactly here. The
         // timed decisions hear about it too, so a paused scrub into an
-        // intro shows the pill (HEL-176).
+        // intro shows the pill.
         timePosition = clamped
         didFinish = false
         removeFinishObserver()
@@ -1176,7 +1174,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Apple's post-flush keyframe rule deterministic: an in-flight old
         // sample cannot race in after the flush.
         //
-        // HEL-148 soak diagnostic: this is the pumpQueue.sync every seek
+        // Soak diagnostic: this is the pumpQueue.sync every seek
         // (and every recovery path that re-seeks) blocks the caller on.
         // Report-only.
         if ProcessCPUTrace.enabled {
@@ -1209,7 +1207,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         onTimeAdvanced?(clamped, duration)
     }
 
-    /// Audio-only playback for a phone in the background (HEL-176). While
+    /// Audio-only playback for a phone in the background. While
     /// suspended the demuxer discards video, nothing is decoded, and the
     /// renderer holds no pictures; audio, the clock, subtitles and the
     /// finish boundary carry on. Resuming seeks to the current position so
@@ -1273,7 +1271,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 CMTime(seconds: 0.1, preferredTimescale: 1_000_000_000)
             )
             // A group start names the one instant every member presents this
-            // position at (HEL-172). Priming took as long as it took, so
+            // position at. Priming took as long as it took, so
             // honour it only while it is still ahead of us; a missed instant
             // is the server's to reissue, and the default anchor is what a
             // late member needs to get playing at all.
@@ -1292,8 +1290,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // anchored until the lines above run: zero on a first open, the
         // position left behind after a seek. Reporting Ready from there
         // tells the server this member is somewhere it is not, and the
-        // server answers by dragging the whole group to that position
-        // (HEL-172). Until the flag clears, the same reader answers with
+        // server answers by dragging the whole group to that position.
+        // Until the flag clears, the same reader answers with
         // `bufferingTargetSeconds`, so the window has one answer
         // throughout: the position being anchored.
         setBuffering(false)
@@ -1305,7 +1303,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             onPlaybackStarted?()
         }
         // Every open and every seek: the position asked for is now anchored
-        // and the renderers are holding its first frame (HEL-172).
+        // and the renderers are holding its first frame.
         onSeekReady?()
         os_signpost(
             .event,
@@ -1417,7 +1415,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // Hard failure has no notification: Apple exposes it as `status`,
         // documented key-value observable and "terminal status from which
         // recovery is not always possible". Unobserved, a failed renderer
-        // left the film playing on in silence with nothing reported (HEL-101).
+        // left the film playing on in silence with nothing reported.
         //
         // KVO is delivered on whichever thread changed the property, which
         // for a CoreMedia-owned renderer is not the main one — hence a hop
@@ -1590,7 +1588,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Debug-only, off-by-default fault injection used by both the simulator
     /// regression and the hardware calibration pass on the paired Apple TV,
     /// run from a Debug build. It withholds samples from AVFoundation while
-    /// demuxing and video continue, which isolates HEL-123 from network and
+    /// demuxing and video continue, which isolates audio starvation from
+    /// network and
     /// codec behavior.
     func simulateAudioStarvationForDiagnostics(durationSeconds: Double = 3) {
         guard !shutdownRequested,
@@ -1622,7 +1621,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// Stops `av_read_frame` without touching either renderer. Releasing the
-    /// gate exercises the real demux/backpressure refill path for HEL-124.
+    /// gate exercises the real demux/backpressure refill path.
     func simulateDeliveryStallForDiagnostics(durationSeconds: Double = 3) {
         guard !shutdownRequested,
               !didSimulateDeliveryStall,
@@ -1649,7 +1648,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// The same for hard failure. A renderer cannot be made to report
     /// `.failed` on demand, so the regression drives the replacement the
-    /// observation would have started (HEL-101).
+    /// observation would have started.
     func simulateAudioRendererFailureForRegression() {
         guard let audioRenderer else { return }
         replaceAudioRenderer(audioRenderer, for: .rendererFailed)
@@ -1657,7 +1656,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     #endif
 
     private func recoverVideoRendererIfRequired(_ renderer: AVSampleBufferVideoRenderer) {
-        // A suspended picture is flushed on resume anyway (HEL-176).
+        // A suspended picture is flushed on resume anyway.
         guard !shutdownRequested,
               renderer === videoRenderer,
               renderer.requiresFlushToResumeDecoding,
@@ -1705,7 +1704,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         // What the ladder is about to act on, for a hands-off device run.
         // `AVErrorPresentationTimeStampKey` is the field that matters: it
-        // names which sample the decoder refused, which is how HEL-151 was
+        // names which sample the decoder refused, which is how a restart
+        // point was
         // told apart from the seek point itself.
         if ProcessCPUTrace.enabled {
             let underlying = (notificationError ?? renderer.error) as NSError?
@@ -1719,8 +1719,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             ))
         }
         // A failure this soon after a flush is about the restart point, not
-        // the bitstream: one flush-and-re-seek before the ladder descends
-        // (HEL-151). Once per generation, so it cannot loop.
+        // the bitstream: one flush-and-re-seek before the ladder descends.
+        // Once per generation, so it cannot loop.
         let (samplesSinceFlush, generation) = shared.withLock {
             ($0.videoSamplesSinceFlush, $0.playbackGeneration)
         }
@@ -1779,7 +1779,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     private func observeTime(_ time: CMTime) {
-        // HEL-148 soak diagnostic: cost and cadence of this 10 Hz
+        // Soak diagnostic: cost and cadence of this 10 Hz
         // main-actor tick, accumulated into `mainTick` and drained into one
         // DecodeTrace field every two seconds. Guarded on the trace flag so
         // the normal path pays nothing beyond the one Bool read.
@@ -1800,7 +1800,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let seconds = time.seconds
         guard seconds.isFinite else { return }
         // 0.1 s granularity so the animated scrubber has fresh targets to
-        // glide toward (HEL-39).
+        // glide toward.
         if abs(seconds - timePosition) >= 0.1 {
             timePosition = seconds
             onTimeAdvanced?(seconds, duration)
@@ -1812,7 +1812,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // frames while it runs.
         // Video always reaches the recovery path. Audio is counted so a
         // silence leaves a trace, and only reaches the recovery path when
-        // `buffersOnAudioStarvation` is on (HEL-123).
+        // `buffersOnAudioStarvation` is on.
         switch starvation(at: seconds) {
         case .video:
             wasAudioStarved = false
@@ -1850,7 +1850,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
     }
 
-    // MARK: - Frame-loss bench (HEL-64)
+    // MARK: - Frame-loss bench
 
     /// (Re)start the controlled measurement window from `position` —
     /// called at playback start and whenever the transport is touched,
@@ -1891,7 +1891,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             benchStatus = result.regressionSummary
             // Plain stdout beside the signpost: `devicectl ... --console`
             // streams this from a real device, where the unified log is
-            // out of reach for a headless harness (HEL-64). Carries the
+            // out of reach for a headless harness. Carries the
             // gate states so a remote run is self-describing.
             var gates = "vtime=\"\(videoTimingDiagnostic ?? "container")\""
             gates += " droppable=\"\(demuxer.markDroppableFrames ? "on" : "off")\""
@@ -2210,7 +2210,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             PlaybackLifecycleDiagnostics.demuxEnded(lifecycleID)
         }
         // Whether this stream ended up with a cache, which is what decides
-        // how much cushion the demux queues have to be (HEL-130). Keyed on
+        // how much cushion the demux queues have to be. Keyed on
         // the cache rather than on the play method so the two compose: a
         // transcode with the experimental cache switched on is no longer
         // uncached, and a direct play that fell back to the native
@@ -2218,7 +2218,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         var deliveryIsCached = cacheSession != nil
         // libavformat's file protocol takes a path, not a URL: it does not
         // percent-decode, so "Application Support" in a file URL arrives as
-        // a directory that does not exist (HEL-166).
+        // a directory that does not exist.
         let openTarget = url.isFileURL ? url.path(percentEncoded: false) : url.absoluteString
         do {
             do {
@@ -2232,7 +2232,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // A disc has no native-transport retry to fall back on: without
             // the cache there is nothing to read the filesystem through, and
             // handing libavformat the raw image is the failure this whole
-            // path exists to avoid (HEL-133).
+            // path exists to avoid.
             } catch where cacheSession != nil && disc == nil {
                 demuxer.close()
                 deliveryIsCached = false
@@ -2257,7 +2257,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         shared.withLock { $0.deliveryIsCached = deliveryIsCached }
         // An Apple decoder that cannot be created is a reason to decode this
-        // stream some other way, not a reason to fail the title (HEL-137).
+        // stream some other way, not a reason to fail the title.
         // AV1 always has libdav1d behind it, so a session refused here -
         // whether because the system-decoder experiment asked for a decoder
         // this platform does not have, or because hardware Apple says may be
@@ -2292,8 +2292,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         }
         // The demuxer builds the software decoder (it has the codec
         // parameters) but never drives it: decoding on the demux queue meant
-        // reading and decoding took turns, which 4K AV1 cannot afford
-        // (HEL-137).
+        // reading and decoding took turns, which 4K AV1 cannot afford.
         if demuxer.outputsDecodedVideo, let decoder = demuxer.takeSoftwareVideoDecoder() {
             softwareDecodeStage = SoftwareVideoDecodeStage(
                 decoder: decoder,
@@ -2318,7 +2317,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 // AV1 only reaches here when the probe above found a
                 // decoder for it, which may be Apple's software one on a
                 // platform that has it. Requiring hardware would refuse that,
-                // so only the silicon case demands it (HEL-137).
+                // so only the silicon case demands it.
                 let requiresHardware = codecName != "av1"
                     || PlaybackCapabilities.current.hardwareAV1
                 videoDecoder = try VideoToolboxDecoder(
@@ -2336,7 +2335,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             } catch {
                 // No loop yet to run a rebuild's seek — this runs before the
                 // demux loop and returns instead of entering it — so the
-                // ladder has to hear about it (HEL-181). A decoder the system
+                // ladder has to hear about it. A decoder the system
                 // will not hand out at open is what the transcode rung is
                 // for; the rungs below do not need one.
                 failVideoDecode(error, allowSessionRecovery: false)
@@ -2448,7 +2447,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // against the shared desired stream each pass so main-actor
         // subtitle switches land without a queue hop.
         var appliedSubtitleStreamIndex: Int32 = -1
-        // Same for the background's audio-only mode (HEL-176): the video
+        // Same for the background's audio-only mode: the video
         // stream is discarded at the demuxer and whatever the decoders
         // still hold is dropped; the seek that resumes it restores both.
         var appliedVideoOutputSuspended = false
@@ -2536,11 +2535,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // Decoded frames plus the packets the stage still owes. Both
             // are video already read and not yet shown, and counting only the
             // first would let the loop read a decoder backlog ahead of itself
-            // the moment decode stopped happening on this queue (HEL-137).
+            // the moment decode stopped happening on this queue.
             //
             // Parked video goes first: it is older than anything the next
-            // read would return, and it only waits for decoded-queue room
-            // (HEL-124).
+            // read would return, and it only waits for decoded-queue room.
             drainVideoIntake()
             let decodedFrameBytes = softwareDecodeStage?.decodedFrameBytes ?? 0
             let videoIsDecoded = videoDecoder != nil || demuxer.outputsDecodedVideo
@@ -2584,7 +2582,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             case .waitForVideo(let target):
                 // Bounded: with the clock stopped nothing dequeues, and the
                 // other queue's state can change underneath a wait on this
-                // one. The loop re-evaluates the policy on its own (HEL-124).
+                // one. The loop re-evaluates the policy on its own.
                 videoQueue.waitUntilBelow(target, timeout: Self.demuxWaitTimeout) {
                     self.softwareDecodeStage?.pendingCount ?? 0
                 }
@@ -2655,8 +2653,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // was still holding and nothing else: there is no more input to
             // decode, and the boundary below still fires. Descending the
             // ladder to re-fetch a film that just finished, or seeking to
-            // rebuild for it, would both be worse than those frames
-            // (HEL-181). Anything else is a real decode failure.
+            // rebuild for it, would both be worse than those frames.
+            // Anything else is a real decode failure.
             if let status = (error as? VideoToolboxDecoder.DecoderError)?.status,
                VideoToolboxDecoder.isSessionFault(status) {
                 recordVideoSessionFault(status, recovery: "decodeSessionIgnored")
@@ -2680,8 +2678,8 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// Recreates the decode session this seek is about to feed.
     ///
-    /// A session VideoToolbox declines is not a statement about the samples
-    /// (HEL-181), so it gets one more attempt before the ladder hears about
+    /// A session VideoToolbox declines is not a statement about the samples,
+    /// so it gets one more attempt before the ladder hears about
     /// it: the first attempt has already torn the old session down, which is
     /// often the whole reason the second one succeeds. This is where
     /// `LAGOON-A` failed — a seek 178 ms in, on a stream that had been
@@ -2693,7 +2691,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     ///
     /// While video output is suspended a failure here is not one at all:
     /// nothing is being decoded, and the seek that resumes the picture runs
-    /// this again with the app in the foreground (HEL-176).
+    /// this again with the app in the foreground.
     ///
     /// Returns false when the demux loop must stop; the ladder has been told.
     nonisolated private func prepareVideoDecoderForSeek() -> Bool {
@@ -2728,7 +2726,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// Hands video to the next stage in order: straight through while the
     /// decoded queue has room and nothing is parked ahead of it, otherwise
-    /// into the intake behind whatever is already waiting (HEL-124).
+    /// into the intake behind whatever is already waiting.
     nonisolated private func admitVideo(_ item: VideoIntakeItem) {
         videoFeedLock.lock()
         defer { videoFeedLock.unlock() }
@@ -2821,7 +2819,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     let output = delay == 0 ? buffer : Self.retimed(buffer, by: delay)
                     // A seek into a coarse fragment reads that fragment's
                     // audio from its keyframe; the part before the target
-                    // is never played and must not be counted (HEL-124).
+                    // is never played and must not be counted.
                     if let end = Self.presentationEnd(of: output), end <= floor { continue }
                     recordMediaEnd(output)
                     audioQueue.enqueue(output)
@@ -2845,7 +2843,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         case .endOfFile:
             // Video still parked in the intake is the end of the film too.
             // The demux loop drains it as the decoded queue makes room and
-            // finishes then (HEL-124).
+            // finishes then.
             guard videoIntake.isEmpty else {
                 shared.withLock { $0.endOfFilePendingIntake = true }
                 return
@@ -2878,7 +2876,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// is re-priming — and re-priming is a seek every couple of seconds, so
     /// the drop keeps the queue empty, which keeps the stall going. Measured
     /// as 4 displayed frames against 2133 on the same title and position with
-    /// the same stall loop running (HEL-137).
+    /// the same stall loop running.
     nonisolated private func acceptSoftwareDecodedVideo(_ buffer: CMSampleBuffer) {
         guard !shared.withLock({ $0.cancelled }) else { return }
         videoQueue.enqueue(buffer)
@@ -2913,7 +2911,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     ///   trade a reported failure for a silent hang.
     nonisolated private func failVideoDecode(_ error: Error, allowSessionRecovery: Bool = true) {
         // A lost or refused VideoToolbox session is not a verdict on the
-        // bitstream, and the rung below is one-way (HEL-181).
+        // bitstream, and the rung below is one-way.
         if allowSessionRecovery, absorbVideoSessionFault(error) { return }
         let wasAlreadyCancelled = shared.withLock { state -> Bool in
             let previous = state.cancelled
@@ -2946,10 +2944,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// A VideoToolbox session that is gone, rather than samples that cannot
-    /// be decoded (HEL-181). True when the fault has been dealt with here and
+    /// be decoded. True when the fault has been dealt with here and
     /// must not reach the delivery ladder.
     ///
-    /// The renderer path has had both of these since HEL-176 and HEL-151; the
+    /// The renderer path has had both of these; the
     /// decoder path had neither, so a session the system reclaimed read as
     /// "this device cannot decode this file" and went straight to transcode.
     nonisolated private func absorbVideoSessionFault(_ error: Error) -> Bool {
@@ -2993,13 +2991,13 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     }
 
     /// The rebuild: a seek to where the playhead already is, which is how
-    /// HEL-151 recovers a renderer and how HEL-176 restores the picture on
+    /// a renderer is recovered and how the picture is restored on
     /// resume. The demux loop's seek branch resets the decoder, so the new
     /// session starts on a keyframe with a clean dependency chain.
     private func rebuildVideoDecodeSession(after status: OSStatus) {
         // Inside the last second `seek` clamps backwards, and the finish
-        // boundary is about to fire anyway (the same guard HEL-176 uses to
-        // decide whether resuming is worth a seek). The frames the dead
+        // boundary is about to fire anyway (the same guard the resume path
+        // uses to decide whether resuming is worth a seek). The frames the dead
         // session was holding are the end of the film; losing them costs
         // less than replaying the last second would.
         guard !shutdownRequested, !didFinish,
@@ -3026,7 +3024,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             position
         )
         seek(to: position)
-        // Recorded *after* the seek, as in HEL-151: `seek` bumps the
+        // Recorded *after* the seek: `seek` bumps the
         // generation, so the rebuild is spent against the attempt it starts.
         // A second dead session at the same position descends the ladder,
         // while a later seek by the viewer earns a rebuild of its own.
@@ -3106,7 +3104,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // already have handed the renderer some of it, and that share is
         // exactly what `audioQueue` no longer shows. Audio that ends before
         // the target counts for nothing on either side; a seek into a
-        // coarse fragment primes on exactly that otherwise (HEL-123/124).
+        // coarse fragment primes on exactly that otherwise(/124).
         let audioAhead = { () -> Double in
             let delivered = self.shared.withLock { state in
                 state.lastEnqueuedAudioEndSeconds.map { max($0 - target, 0) } ?? 0
@@ -3114,7 +3112,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             return delivered + self.audioQueue.bufferedDuration(after: target)
         }
         // With video suspended the picture is not waited for, and the end
-        // of input is the audio queue's to declare (HEL-176).
+        // of input is the audio queue's to declare.
         let videoSuspended = shared.withLock { $0.videoOutputSuspended }
         let inputOpen = { videoSuspended ? !self.audioQueue.isFinished : !self.videoQueue.isFinished }
         while ((!videoSuspended && videoQueue.count < minimumVideoReserve)
@@ -3131,7 +3129,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // The decoded queue is full and audio is still short. On an HLS
             // fragment the audio block sits behind the rest of the video
             // block, so keep reading and park the video compressed, up to the
-            // intake's own bounds (HEL-124).
+            // intake's own bounds.
             if hasAudio, audioAhead() < minimumAudioReserve,
                videoIntake.count < DemuxBackpressurePolicy.videoIntakeHardLimit,
                videoIntake.byteCount < DemuxBackpressurePolicy.videoIntakeByteBudget,
@@ -3144,7 +3142,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             // waiting for it is the difference between starting playback on a
             // full renderer and starting it on an empty one — with decode off
             // this queue, "read enough" and "decoded enough" are no longer the
-            // same moment (HEL-137).
+            // same moment.
             guard let stage = softwareDecodeStage, pendingDecode > 0 else { break }
             stage.waitUntilPendingBelow(pendingDecode)
         }
@@ -3268,7 +3266,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// Four rows all reading "DTS 5.1" are four coin flips. A release that
     /// tags none of its tracks leaves position as the only thing telling
     /// them apart, so where a name is not unique the position joins it —
-    /// both to pick with and to recognise afterwards (HEL-184).
+    /// both to pick with and to recognise afterwards.
     nonisolated static func disambiguated(_ tracks: [PlayerTrack]) -> [PlayerTrack] {
         var counts: [String: Int] = [:]
         for track in tracks {
@@ -3336,7 +3334,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// nothing. With the software decoder starving the video queue, that
     /// loop measured 0.4 of a core at the highest priority in the process,
     /// enqueueing nothing, on a device whose decoder was short exactly that
-    /// much CPU (HEL-137). The audio queue is empty almost always, because
+    /// much CPU. The audio queue is empty almost always, because
     /// the renderer takes audio as fast as it is demuxed, so its block spun
     /// the same way on every title.
     ///
@@ -3369,7 +3367,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // give it. During an injected hold, the queue keeps filling from the
         // demuxer, so every `kickPumps` cycle re-armed this block, the
         // callback fired once and disarmed it again, dozens of times a
-        // second (HEL-137's armVideoRequests lesson, applied here too).
+        // second('s armVideoRequests lesson, applied here too).
         if let renderer = audioRenderer, audioQueue.count > 0, !diagnosticFaultGate.audioDeliverySuspended {
             armAudioRequests(renderer)
         }
@@ -3442,7 +3440,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                 to: ProcessInfo.processInfo.systemUptime
             )
             // A frame left the decoded queue; the intake may have its
-            // replacement (HEL-124).
+            // replacement.
             drainVideoIntake()
         }
     }
@@ -3517,7 +3515,7 @@ nonisolated enum AudioRendererReplacement: Equatable {
 
     /// Only reached when the replacement itself fails, which leaves playback
     /// with no audio path at all. `detail` is the renderer's own error where
-    /// it had one — the server's reason beats ours (HEL-98's lesson).
+    /// it had one — the server's reason beats ours('s lesson).
     func failureMessage(detail: String?) -> String {
         switch self {
         case .mediaServicesReset:
@@ -3542,7 +3540,7 @@ nonisolated enum StallRecoveryDecision: Equatable {
 /// a deterministic unit-test failure. Twelve decoded frames matches the
 /// demuxer's low-water cushion; five seconds is long enough for the normal
 /// network refill path but bounded well below a visibly frozen player.
-/// Which half of the pipeline has run dry, if either (HEL-123).
+/// Which half of the pipeline has run dry, if either.
 nonisolated enum PlaybackStarvation: String, Equatable {
     case none
     case video
@@ -3550,7 +3548,7 @@ nonisolated enum PlaybackStarvation: String, Equatable {
 }
 
 /// Video starvation stops the clock. Audio starvation is **only counted**,
-/// and the difference is the whole lesson of HEL-123.
+/// and the difference is the whole lesson.
 ///
 /// The original defect is real: an audio queue at zero produced no stall,
 /// no buffering state and no counter movement, so a film could play on with
@@ -3778,12 +3776,12 @@ nonisolated private final class SharedState: @unchecked Sendable {
         var externalSubtitles: [ExternalSubtitleTrack] = []
         /// Highest video pts the demuxer has delivered (M6 stall detection).
         var videoBufferedTo: Double = 0
-        /// Audio-only playback while the app is in the background
-        /// (HEL-176). The demux loop discards video at the demuxer, and
+        /// Audio-only playback while the app is in the background.
+        /// The demux loop discards video at the demuxer, and
         /// every decision that would wait for video treats it as finished.
         var videoOutputSuspended = false
         /// Whether the stream got a playback cache. Read on the main actor
-        /// so the HUD can show which demux cushion is in force (HEL-130).
+        /// so the HUD can show which demux cushion is in force.
         var deliveryIsCached = true
         /// Furthest presentation end observed across audio and video. EOF
         /// uses this as the renderer boundary even without container duration.
@@ -3797,7 +3795,7 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// How many video samples the renderer has taken since the last
         /// flush. A decode failure inside the first few of them is a
         /// restart-point failure rather than a verdict on the stream, and
-        /// earns one in-place retry before the ladder descends (HEL-151).
+        /// earns one in-place retry before the ladder descends.
         var videoSamplesSinceFlush = 0
         /// Samples the pump refused to start a flushed renderer on: since
         /// the last flush, and for the whole attempt. The second is
@@ -3807,19 +3805,19 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// Presentation stamp of the last sample a renderer refused, in
         /// media milliseconds.
         var lastRefusedSampleMs: Int?
-        /// One rebuild of the VideoToolbox session per playback generation
-        /// (HEL-181): which generation has spent its rebuild, and whether one
+        /// One rebuild of the VideoToolbox session per playback generation:
+        /// which generation has spent its rebuild, and whether one
         /// is in flight right now. Both are needed — every sample already
         /// inside a decoder reports the same dead session on the way out, and
         /// they are one fault, not a dozen.
         var videoSessionRebuiltGeneration: Int?
         var videoSessionRecoveryInFlight = false
         /// Furthest audio presentation end actually handed to AVFoundation.
-        /// Compared with the synchronizer clock for HEL-123; unlike the app
+        /// Compared with the synchronizer clock; unlike the app
         /// queue it includes samples AVFoundation already owns.
         var lastEnqueuedAudioEndSeconds: Double?
         /// Captured from the active decode path so the hardware/simulator
-        /// probe can assert HEL-124 never exceeds its real memory bound.
+        /// probe can assert it never exceeds its real memory bound.
         var videoQueueHardLimit = 0
         /// Peak decoded-frame-plus-pending backlog observed under that
         /// bound, retained for the whole engine session and Release HUD.
@@ -3830,7 +3828,7 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// The position playback last started from. Audio that ends at or
         /// before it is audio the renderer discards; queued, it would count
         /// toward the audio high water and throttle the read-ahead exactly
-        /// when the renderer holds least (HEL-124).
+        /// when the renderer holds least.
         var audioAdmissionFloorSeconds: Double = -.infinity
     }
 
@@ -3893,11 +3891,11 @@ nonisolated enum DemuxBackpressurePolicy {
     // A stream arriving without a playback cache has nothing between the
     // network and the renderers: no sparse cache, no proactive range fill,
     // no playhead prefetch. The demux queues are the entire cushion, so
-    // they are asked to be a bigger one (HEL-130).
+    // they are asked to be a bigger one.
     //
     // **Only audio grows, and the asymmetry is the whole point.** Video's
     // queue holds decoded frames — 24.9 MB each at 4K 10-bit, which is why
-    // its hard limit is 30 and why HEL-126 exists — while audio holds
+    // its hard limit is 30 — while audio holds
     // compressed packets at roughly 80 KB a second. Doubling the audio
     // cushion costs about 1.5 MB against a video queue already permitted
     // 746 MB. Even the worst case, a locally decoded 8-channel track held
@@ -3906,7 +3904,7 @@ nonisolated enum DemuxBackpressurePolicy {
     // Audio is also the half that has no cushion of its own. The video
     // renderer coasts on frames it already holds, which is why a starved
     // transcode reaches the viewer as silence over a moving picture rather
-    // than as a freeze (HEL-123).
+    // than as a freeze.
     private static let uncachedAudioHighWater = 360
     private static let uncachedAudioLowWater = 288
     private static let uncachedAudioHardWater = 540
@@ -3916,7 +3914,7 @@ nonisolated enum DemuxBackpressurePolicy {
     /// segment rather than a cache read.
     private static let uncachedAudioSafetySeconds = 3.0
     /// Bounds on the compressed video the demux loop may park past the
-    /// decoded limit while it reads on for audio (HEL-124). Both have to
+    /// decoded limit while it reads on for audio. Both have to
     /// hold a whole fragment, because the audio block sits behind the
     /// video block and the read-ahead only helps if it reaches it: 600
     /// access units is 25 s at 24 fps or 10 s at 60 fps, and 128 MB is
@@ -3936,12 +3934,12 @@ nonisolated enum DemuxBackpressurePolicy {
 
     /// The most decoded frames Lagoon's own queue may hold, bounded by count
     /// and — once a frame is expensive enough for the count to stop meaning
-    /// anything — by bytes (HEL-137 lever 5).
+    /// anything — by bytes(lever 5).
     ///
     /// 42 frames was chosen when the software path carried SD and HD: at
     /// 1080p 10-bit that is 250 MB. Software AV1 reaching 4K made the same
     /// 42 frames 1.05 GB of P010 surfaces, in a process jetsam has already
-    /// killed once at 2.1 GB (HEL-109). The budget below is the ceiling the
+    /// killed once at 2.1 GB. The budget below is the ceiling the
     /// hardware-decoded path was already allowed — 30 frames of 4K P010 —
     /// so every configuration measured before this keeps the limit it was
     /// measured with, and only 4K software decode comes back under it.
@@ -4017,7 +4015,7 @@ nonisolated enum DemuxBackpressurePolicy {
             let drainSeconds = Double(max(videoCount - videoLowWater, 0)) / safeFrameRate
             let audioCanCoverDrain = !hasAudio
                 || audioBufferedSeconds >= audioSafetySeconds * safePlaybackRate + drainSeconds
-            // HEL-124 residual: `audioBufferedSeconds` is the app-side queue,
+            // Residual: `audioBufferedSeconds` is the app-side queue,
             // which sits near zero on any title with audio because the
             // renderer takes samples as fast as they are demuxed, so this
             // batch-drain branch is effectively unreachable there and the
@@ -4032,7 +4030,7 @@ nonisolated enum DemuxBackpressurePolicy {
                 // demuxer may not sit here: on an HLS fragment the audio
                 // block is behind the video block, so reaching it means
                 // reading video the decoded queue has no room for, which
-                // parks compressed in the intake (HEL-124). The audio high
+                // parks compressed in the intake. The audio high
                 // water is what stops the read-ahead on a finely interleaved
                 // stream, and the intake's own bounds stop it on a coarse
                 // one. Without audio, one slot at a time as before.
@@ -4066,7 +4064,7 @@ nonisolated enum DemuxBackpressurePolicy {
 }
 
 /// Counts timestamp discontinuities in the audio buffers handed to the
-/// renderer — the measurable form of "the audio crackles" (HEL-64). Each
+/// renderer — the measurable form of "the audio crackles". Each
 /// buffer is expected to start exactly where the previous one ended; a
 /// mismatch beyond 1 ms is the renderer being told to leave a gap or
 /// overlap in the decoded stream. Written on the demux queue, read from
@@ -4145,7 +4143,7 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
     /// Seconds of queued audio that end after `seconds`. Priming after a
     /// seek lands inside a fragment whose audio block starts at the
     /// keyframe, and audio that ends before the target is audio the
-    /// renderer will discard, not a cushion (HEL-124).
+    /// renderer will discard, not a cushion.
     func bufferedDuration(after seconds: Double) -> Double {
         condition.lock()
         defer { condition.unlock() }
@@ -4236,12 +4234,12 @@ nonisolated final class SampleBufferQueue: @unchecked Sendable {
     /// a useful amount of work, EOF/reset occurs, or shutdown interrupts it.
     ///
     /// `alsoCounting` adds work already spoken for but not yet in this queue —
-    /// video sitting in the software decode stage (HEL-137). It is evaluated
+    /// video sitting in the software decode stage. It is evaluated
     /// under the lock on every wake, so the stage settles this wait by
     /// signalling here rather than needing a condition of its own.
     /// With a `timeout`, returns after at most that long even if the queue
     /// is still full, so the caller can re-evaluate something the queue
-    /// cannot see (HEL-124).
+    /// cannot see.
     func waitUntilBelow(
         _ targetCount: Int,
         timeout: TimeInterval? = nil,

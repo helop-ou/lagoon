@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The arithmetic behind staying in sync (HEL-172): how far out is far
+/// The arithmetic behind staying in sync: how far out is far
 /// enough to act, what acting costs, and when a named server instant
 /// arrives on this clock.
 @Suite("SyncPlay correction")

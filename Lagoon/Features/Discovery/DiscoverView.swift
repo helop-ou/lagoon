@@ -4,7 +4,7 @@ import Observation
 /// Discover's own state is now only the two things the page as a whole
 /// needs: which rows to draw, and what fills the hero. Every rail fetches
 /// itself (`SeerrDiscoverRail`), so a slow or dead endpoint no longer holds
-/// up or discards the rest of the screen (HEL-114).
+/// up or discards the rest of the screen.
 @Observable
 private final class DiscoverViewModel {
     var rows: [SeerrDiscoverRow] = []
@@ -121,7 +121,7 @@ struct DiscoverView: View {
         // A viewer already signed in to Jellyfin should not meet a second
         // login. This uses the Jellyfin session Lagoon holds to sign in to
         // Seerr without a password; it is silent when there is nothing to do
-        // and gives up after one attempt per activation (HEL-95).
+        // and gives up after one attempt per activation.
         .task(id: "seerr-auto-signin:\(seerr.configuredURL?.absoluteString ?? "")") {
             await seerr.signInUsingJellyfinIfNeeded(session.client)
         }
@@ -184,7 +184,7 @@ struct DiscoverView: View {
     ///
     /// One row on every screen. They used to fall into a column on a phone
     /// once their labels outgrew the width, which read as three unrelated
-    /// buttons rather than one set of destinations (HEL-174). On a phone the
+    /// buttons rather than one set of destinations. On a phone the
     /// row scrolls, the way the Requests page's own filter row does, and
     /// drops the glyphs so all three fit at the default text size; the TV
     /// keeps its fixed row and focus geometry.

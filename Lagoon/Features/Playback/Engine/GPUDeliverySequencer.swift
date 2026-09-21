@@ -1,7 +1,7 @@
 import Foundation
 
 /// Keeps GPU-converted frames in decode order and bounds how many are in
-/// flight (HEL-137).
+/// flight.
 ///
 /// The decode queue reserves a slot per frame before it submits the kernel
 /// and moves on; the GPU's completions arrive on threads of Metal's choosing,

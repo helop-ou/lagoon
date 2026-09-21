@@ -2,7 +2,7 @@ import SwiftUI
 
 // Focus strategy: no custom scaling anywhere — cards rely on the system
 // `.card` lift/parallax for the movement, and add one thing of their own: an
-// ambient halo sampled from the card's artwork (HEL-139). Nothing here scales,
+// ambient halo sampled from the card's artwork. Nothing here scales,
 // replaces or competes with the system treatment.
 
 /// 2:3 poster card that navigates to the item's detail page.
@@ -176,7 +176,7 @@ struct LandscapeCard: View {
             .clipped()
 
             // A card with no artwork at all still needs to say what it is;
-            // without the label it is an anonymous grey tile (HEL-157).
+            // without the label it is an anonymous grey tile.
             if showsMetadata || thumbURL == nil {
                 LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
                     .frame(height: Metrics.landscapeHeight * 0.55)
@@ -263,7 +263,7 @@ private struct ArtworkFocusHue: ViewModifier {
                     LinearGradient(
                         // The halo wears the theme: its blush over the
                         // sampled colours, its own glow when sampling
-                        // failed (HEL-173).
+                        // failed.
                         colors: Theme.glow(for: palette).colors,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -317,7 +317,7 @@ struct ItemProgressBar: View {
 }
 
 #if os(iOS)
-/// A small badge over artwork whose title has been taken offline (HEL-166):
+/// A small badge over artwork whose title has been taken offline:
 /// the same glyph `DownloadControl` shows once a download completes, white
 /// on a dark disc so it reads over any poster. Shared by every card that
 /// shows a downloadable item's artwork.
@@ -330,10 +330,10 @@ struct DownloadedMark: View {
 }
 #endif
 
-/// A small badge over an episode the viewer has watched (HEL-175): a
+/// A small badge over an episode the viewer has watched: a
 /// checkmark on the same dark disc as `DownloadedMark`, so the two read as
 /// one family when an episode carries both. A disc and weight rather than a
-/// colour, like every other watched state in the app (HEL-50), and only
+/// colour, like every other watched state in the app, and only
 /// once the server says played: the progress bar covers the time before.
 struct WatchedMark: View {
     var body: some View {

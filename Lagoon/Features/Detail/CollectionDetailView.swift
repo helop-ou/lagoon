@@ -35,7 +35,7 @@ final class CollectionDetailViewModel {
     }
 }
 
-/// A collection's page: what is in it, in release order (HEL-122).
+/// A collection's page: what is in it, in release order.
 ///
 /// Deliberately without a Play button. "Play" on a franchise has no honest
 /// answer — the first film, the first unwatched one, and the one you are

@@ -182,7 +182,7 @@ struct HomeRowPreferenceTests {
 
     // MARK: The default order
 
-    /// The six rows HEL-191 named, in the order it named them.
+    /// The six rows, in their default order.
     @Test func theDefaultOrderOpensWithWatchingThenWhatEachLibraryGained() {
         let opening = Array(order(HomeSectionPreferenceValues()).prefix(6))
 
@@ -267,7 +267,7 @@ struct HomeRowPreferenceTests {
         #expect(reconciled.first { $0.id == "MyList" }?.isEnabled == true)
     }
 
-    /// An account that had only hidden a native row before HEL-191 never
+    /// An account that had only hidden a native row beforehand never
     /// arranged a plugin row, so the catalogue still arrives shown.
     @Test func theCatalogueArrivesShownWhenNoPluginRowWasEverArranged() {
         let reconciled = HomeSectionPreferenceResolver.reconciled(
@@ -348,7 +348,7 @@ struct HomeRowPreferenceTests {
         #expect(selected.first?.displayText == "My List")
     }
 
-    // MARK: Layouts saved before HEL-191
+    // MARK: Layouts saved beforehand
 
     @Test func anUntouchedLegacyLayoutAdoptsTheNewDefaultOrder() throws {
         let values = try decoded(#"{"isConfigured":false,"rows":[],"nativeRows":[]}"#)
@@ -433,7 +433,7 @@ struct HomeRowPreferenceTests {
 
     /// Recently Added is three placeable rows rather than one toggle over all
     /// of them, which is what lets the movie one sit third and the show one
-    /// fifth (HEL-191).
+    /// fifth.
     @Test func recentlyAddedIsOfferedOncePerKindOfLibrary() {
         let titles = Dictionary(
             HomeSectionPreferenceResolver.nativeChoices.map { ($0.id, $0.title) },
@@ -452,7 +452,7 @@ struct HomeRowPreferenceTests {
     /// move, and the mistake is invisible: the row renders, Settings simply
     /// never mentions it. Asserting against the identifier constants rather
     /// than a hand-copied list means a new row fails here the moment it has an
-    /// id and before it has a screen (HEL-122).
+    /// id and before it has a screen.
     @Test func everyRowWithAnIdentifierIsOfferedInSettings() {
         let offered = Set(HomeSectionPreferenceResolver.nativeChoices.map(\.id))
         let owned = [

@@ -15,7 +15,7 @@ final class PlaybackDiagnosticsSampler {
     private var decodeTraceTask: Task<Void, Never>?
     private var hudTask: Task<Void, Never>?
     /// Supplied by the controller so the decode trace can print the cache's
-    /// fill progress next to the engine counters (HEL-160).
+    /// fill progress next to the engine counters.
     var cacheMetrics: (() -> PlaybackCacheMetrics?)?
 
     deinit {
@@ -30,8 +30,7 @@ final class PlaybackDiagnosticsSampler {
         hudTask = nil
     }
 
-    /// A console time series of the software decode path, every two seconds
-    /// (HEL-137).
+    /// A console time series of the software decode path, every two seconds.
     ///
     /// The HUD shows the same numbers, but a HUD reading is one glance at one
     /// moment, and the question this ticket is stuck on is a *curve*: cost per
@@ -51,7 +50,7 @@ final class PlaybackDiagnosticsSampler {
         decodeTraceTask = Task { [weak engine] in
             let cpuTrace = ProcessCPUTrace()
             let pumpPing = PumpPing()
-            // HEL-148 soak hooks: a hands-off pause/resume and a hands-off
+            // Soak hooks: a hands-off pause/resume and a hands-off
             // exit at fixed media-time positions, each off (0) unless set.
             // Read once so a value that changes mid-soak (it shouldn't)
             // can't retrigger either one.
@@ -60,7 +59,7 @@ final class PlaybackDiagnosticsSampler {
             var didSoakPause = false
             var didSoakExit = false
             while !Task.isCancelled {
-                // HEL-148 soak diagnostic: overshoot past the requested 2 s
+                // Soak diagnostic: overshoot past the requested 2 s
                 // sleep is time the main actor was unavailable to resume
                 // this task — this loop runs on the main actor because it
                 // was created inside `PlaybackController`, a `@MainActor`
@@ -75,7 +74,7 @@ final class PlaybackDiagnosticsSampler {
                 guard !Task.isCancelled, let engine else { return }
                 // Whether frames take the direct-display path or are being
                 // composited with UI — readable here with the HUD off, which
-                // the HUD itself never could be (HEL-137).
+                // the HUD itself never could be.
                 engine.refreshVideoPerformanceMetrics()
                 let performance = engine.videoPerformance
                 let memory = MemorySnapshot.current()
@@ -91,7 +90,7 @@ final class PlaybackDiagnosticsSampler {
                 case .critical: thermalName = "critical"
                 @unknown default: thermalName = "unknown"
                 }
-                // The renderer-side audio signal (HEL-123) rides on the same
+                // The renderer-side audio signal rides on the same
                 // line, so a device console can correlate it with position
                 // and the queues without the HUD or the accessibility probe.
                 var trace = "DecodeTrace"
@@ -111,7 +110,7 @@ final class PlaybackDiagnosticsSampler {
                     + " opt=\(performance?.optimizedCompositingFrames ?? -1)"
                     + " dropped=\(performance?.droppedFrames ?? -1)"
                     + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\""
-                    // HEL-148 soak diagnostics: main-actor scheduling
+                    // Soak diagnostics: main-actor scheduling
                     // latency, pump-queue ping, the 10 Hz tick summary,
                     // subtitle cue count, renderer observer count, thermal
                     // state — everything the 100-minute soak needs to show
@@ -133,7 +132,7 @@ final class PlaybackDiagnosticsSampler {
                 trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"
                     + " deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)"
                 #endif
-                // HEL-160: the cache's fill progress on the same line, so a
+                // The cache's fill progress on the same line, so a
                 // console run can read the fill rate against position.
                 if let cache = cacheMetrics?() {
                     trace += String(
@@ -280,9 +279,9 @@ final class PlaybackDiagnosticsSampler {
         // App-side count/seconds explain demux backpressure. `lead` is the
         // separate renderer-side starvation signal: media already handed to
         // AVFoundation beyond the clock, which stays positive after Lagoon's
-        // own queue drains to zero (HEL-123). `+cur/peak` is compressed video
+        // own queue drains to zero. `+cur/peak` is compressed video
         // parked in the intake, past the decoded limit, waiting for the
-        // demuxer to reach it again (HEL-124).
+        // demuxer to reach it again.
         lines.append(String(
             format: "Queues:  V %d/%d/%d +%d/%d · A %d/%d (%.1fs) · lead %.2fs ready%d · stalls %d (%d audio) · reprime %d · aDry %d · aGaps %d",
             engine.videoQueueCountDiagnostic,
@@ -318,7 +317,7 @@ final class PlaybackDiagnosticsSampler {
         }
         // Only once something has actually been rebuilt. A renderer that
         // failed and was replaced leaves no other trace — playback simply
-        // carries on, which is the point (HEL-101).
+        // carries on, which is the point.
         if engine.audioRendererRecoveryCount > 0 || engine.mediaServicesResetRecoveryCount > 0 {
             lines.append(
                 "Recovery: audio ×\(engine.audioRendererRecoveryCount) · service ×\(engine.mediaServicesResetRecoveryCount)"
@@ -346,7 +345,7 @@ final class PlaybackDiagnosticsSampler {
                 cache.resourceCount,
                 cache.evictionCount
             ))
-            // HEL-160: the cushion the fill scheduler is protecting, and what
+            // The cushion the fill scheduler is protecting, and what
             // overtaking a prefetch cost or saved.
             lines.append(String(
                 format: "Ahead:   %.1f MB cached past the playhead · %.1f MB duplicate · %d shared fetches",
@@ -359,7 +358,7 @@ final class PlaybackDiagnosticsSampler {
             lines.append("Vtime:   \(videoTiming)")
         }
         // Where the software path's frame budget goes, split three ways so a
-        // slow one can be attributed rather than guessed at (HEL-137). Each
+        // slow one can be attributed rather than guessed at. Each
         // percentage is a share of one core on its own queue; they overlap,
         // so they are not meant to sum.
         if let software = engine.softwareDecodeDiagnostic {
@@ -404,7 +403,7 @@ final class PlaybackDiagnosticsSampler {
     }
 }
 
-/// HEL-148 soak diagnostic: holds the DecodeTrace loop's pump-queue ping
+/// Soak diagnostic: holds the DecodeTrace loop's pump-queue ping
 /// result. A box rather than a local var because the callback that fills it
 /// runs on the main actor a tick later than the print that reads it.
 @MainActor

@@ -84,7 +84,7 @@ def main():
                 "required_reason_imports": {category: sorted(symbols & values) for category, values in API_SYMBOLS.items() if symbols & values},
             })
         targets.append(target)
-    # Eight since HEL-145 added libdovi: libavcodec, libavformat, libavutil,
+    # Eight added libdovi: libavcodec, libavformat, libavutil,
     # libswresample, dav1d, lcms2, uavs3d, libdovi. The GnuTLS stack left
     # with libavformat's network stack.
     if len(targets) != 8:

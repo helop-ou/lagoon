@@ -10,7 +10,7 @@ final class SessionStore {
         case needsServer
         case needsSignIn
         /// More than one account is remembered and none is active — the
-        /// "who's watching?" picker (HEL-38).
+        /// "who's watching?" picker.
         case choosingAccount
         case signedIn
     }
@@ -28,7 +28,7 @@ final class SessionStore {
     var isAddingAccount = false
     let client: JellyfinClient
     let seerr: SeerrSessionStore
-    /// Watch Together (HEL-172). Owned here beside `seerr` and pointed at
+    /// Watch Together. Owned here beside `seerr` and pointed at
     /// the active account below, because a SyncPlay group belongs to the
     /// account that joined it; `RootView` injects it into the environment.
     let syncPlay = SyncPlayStore()
@@ -58,13 +58,13 @@ final class SessionStore {
         static let accounts = "accounts"
         static let activeAccountId = "session.activeAccountId"
         static let expiredAccounts = "session.expiredAccountIds"
-        /// Single-slot layout, pre-HEL-38. Read once by the migration.
+        /// The pre-migration single-slot layout. Read once by the migration.
         static let legacyUserId = "session.userId"
         static let legacyUserName = "session.userName"
     }
 
     private enum KeychainKey {
-        /// Single-slot layout, pre-HEL-38. Read once by the migration.
+        /// The pre-migration single-slot layout. Read once by the migration.
         static let legacyAccessToken = "accessToken"
         static let deviceId = "deviceId"
     }
@@ -94,7 +94,7 @@ final class SessionStore {
         client.onSessionExpired = { [weak self] identity in self?.sessionExpired(identity) }
         if !accountDraft {
             #if DEBUG
-            // The regression lane's clean slate (HEL-144): drop what an
+            // The regression lane's clean slate: drop what an
             // earlier run left on this simulator before restore() can
             // re-activate any of it. Once per process — the account-draft
             // store constructed while adding an account skips this block.
@@ -107,7 +107,7 @@ final class SessionStore {
             #endif
             retryCredentialCleanup()
             restore()
-            // HEL-146: sweep any stored state left by the retired direct
+            // Sweep any stored state left by the retired direct
             // OpenSubtitles integration (builds 87–91).
             RetiredSubtitleProviderCleanup.run(
                 defaults: defaults,
@@ -127,10 +127,10 @@ final class SessionStore {
         TopShelfStore.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
         // Leaves whatever group the previous account was in and forgets
-        // the socket and clock opened for it (HEL-172).
+        // the socket and clock opened for it.
         syncPlay.configure(client: client, accountID: activeAccount?.id)
         #if os(iOS)
-        // Downloads follow the account the same way (HEL-166): restore,
+        // Downloads follow the account the same way: restore,
         // sign-in, switch, sign-out and removal all land here.
         DownloadStore.shared.activate(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
         if activeAccount != nil {
@@ -180,7 +180,7 @@ final class SessionStore {
         phase = .needsSignIn
     }
 
-    // MARK: - Accounts (HEL-38)
+    // MARK: - Accounts
 
     /// Points the client at a remembered account. Fails only when its token
     /// has gone or has been rejected. Restore never probes the server, so
@@ -204,7 +204,7 @@ final class SessionStore {
 
     /// Activation never waits on the server, so the picture or name a user
     /// changed on the web since the last sign-in is caught up here, after
-    /// the account is already usable (HEL-168). An unreachable server
+    /// the account is already usable. An unreachable server
     /// leaves the stored record as it was; a switch or sign-out while the
     /// read is in flight discards the answer.
     private func refreshProfile(of account: StoredAccount) {
@@ -236,7 +236,7 @@ final class SessionStore {
     func switchTo(_ account: StoredAccount) {
         connectionGeneration += 1
         // The shelf still shows the outgoing user's viewing until Home
-        // refreshes; on a TV anyone in the room can read it (HEL-37).
+        // refreshes; on a TV anyone in the room can read it.
         TopShelfStore.clear()
         client.clearSession()
         guard !activate(account) else { return }
@@ -365,7 +365,7 @@ final class SessionStore {
     }
 
     /// Libraries last seen for the active account, so the tab bar can draw
-    /// at launch instead of popping in when the fetch lands (HEL-61).
+    /// at launch instead of popping in when the fetch lands.
     ///
     /// Keyed by account on purpose: servers have different libraries, and
     /// showing the previous account's tabs for a moment after a switch would
@@ -489,8 +489,8 @@ final class SessionStore {
         // Deliberately not gated on `phase`: `restore()` has already
         // re-activated whatever account the simulator last used, and the
         // regression lane must run against the server it was told about,
-        // never a developer's own library that happened to be signed in
-        // (HEL-144 / audit A18). Nothing below persists, so the next ordinary
+        // never a developer's own library that happened to be signed in.
+        // Nothing below persists, so the next ordinary
         // launch restores that account untouched.
         guard UserDefaults.standard.bool(forKey: "debug.playerRegression"),
               UserDefaults.standard.bool(forKey: "debug.regressionBootstrapPublicDemo") else { return }

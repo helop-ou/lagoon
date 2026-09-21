@@ -135,7 +135,7 @@ struct JellyfishSwimLayer: View {
         } else {
             // Read here, in the body, so the theme is registered with
             // Observation; the Canvas closure below only ever sees the
-            // already-resolved color, never `Theme` itself (HEL-173).
+            // already-resolved color, never `Theme` itself.
             let ink = Theme.accent
             TimelineView(.animation) { timeline in
                 Canvas { context, size in

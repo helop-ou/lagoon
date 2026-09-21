@@ -1,6 +1,6 @@
 import Foundation
 
-/// What the player does when an episode runs out (HEL-66).
+/// What the player does when an episode runs out.
 ///
 /// Jaagop's three, 2026-08-18. Deliberately shaped like `SkipMode` — same
 /// row in Settings, same countdown length — so the two playback decisions

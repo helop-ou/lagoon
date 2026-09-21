@@ -1,6 +1,6 @@
 import Foundation
 
-// What this session tells the server it can do (HEL-172).
+// What this session tells the server it can do.
 extension JellyfinClient {
     /// `ClientCapabilitiesDto`. Only the four fields Lagoon can honestly
     /// claim are sent; the rest of the DTO is about remote control features

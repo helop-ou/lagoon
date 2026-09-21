@@ -15,7 +15,7 @@ nonisolated struct MediaRequestAuthorization: Sendable, Equatable {
 
     /// Same scheme, host (case-insensitive) and effective port as `origin`.
     /// This is the sole authority every media consumer defers to for
-    /// same-origin checks (HEL-142/HEL-143) — nothing else reimplements it.
+    /// same-origin checks — nothing else reimplements it.
     func applies(to url: URL) -> Bool {
         url.scheme?.lowercased() == origin.scheme?.lowercased()
             && url.host?.lowercased() == origin.host?.lowercased()

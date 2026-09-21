@@ -16,7 +16,7 @@ enum Metrics {
     static let posterCaptionHeight: CGFloat = 58
     /// Room under a landscape card for a name and a count. Taller than a
     /// poster's because the names that need it are collections, and
-    /// "Spider-Man (MCU) Collection" does not fit on one line (HEL-122).
+    /// "Spider-Man (MCU) Collection" does not fit on one line.
     static let landscapeCaptionHeight: CGFloat = 96
     /// Width reserved for the oversized rank beside a Top 10 card.
     static let topTenRankWidth: CGFloat = 150
@@ -47,7 +47,7 @@ enum Metrics {
     /// is given.
     static let heroTextWidth: CGFloat = 640
     static let heroTextInset: CGFloat = 56
-    /// Square avatar tile in the account picker (HEL-38).
+    /// Square avatar tile in the account picker.
     static let accountTileSize: CGFloat = 220
     /// The brand symbol's height in the onboarding lockup. Sized to read as
     /// a mark across a room without competing with the screen's heading.
@@ -68,7 +68,7 @@ enum Metrics {
     static let accessibilityPosterWidth: CGFloat = 240
     /// Smallest grid card before a column is dropped: three across on every
     /// portrait phone down to the SE and six on its side; four or more on an
-    /// iPad (HEL-161).
+    /// iPad.
     static let phoneGridPosterMinimum: CGFloat = 100
     static let padGridPosterMinimum: CGFloat = 150
     static let landscapeWidth: CGFloat = 240
@@ -94,9 +94,9 @@ enum Metrics {
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
     static let detailHeroSpace: CGFloat = 100
     /// A regular-width iPad window shows more of the landscape backdrop
-    /// above the title than a phone can afford (HEL-169).
+    /// above the title than a phone can afford.
     static let expandedDetailHeroSpace: CGFloat = 240
-    /// The poster hero on a phone or compact iPad window (HEL-169): at most
+    /// The poster hero on a phone or compact iPad window: at most
     /// this share of the window height inside the safe area, so the title
     /// is never pushed off-screen. On a phone this cap is what binds, and
     /// the hero is the poster's upper part rather than the whole image.
@@ -111,12 +111,12 @@ enum Metrics {
     /// A landscape phone shows the poster as the whole hero and lays the
     /// title, actions and Play along its bottom in one row; the row starts
     /// at this share of the window height, low enough that the facts and
-    /// synopsis sit below the fold the way Infuse places them (HEL-169).
+    /// synopsis sit below the fold the way Infuse places them.
     static let detailLandscapeRowShare: CGFloat = 0.88
     /// Blur of the poster copy that fills the sides of a landscape hero.
     static let detailPosterAmbientBlur: CGFloat = 36
     /// The phone's Play pill: wide enough to be the page's one big target,
-    /// capped so it never becomes a bar across the screen (HEL-169, after
+    /// capped so it never becomes a bar across the screen (after
     /// Infuse's proportions). The landscape row shares its width with the
     /// title art and the circles, so its cap is smaller.
     static let detailPlayButtonMaxWidth: CGFloat = 360
@@ -172,7 +172,7 @@ enum Metrics {
     /// blur cheap.
     static let detailPosterAmbientDecodeSize = 240
 
-    /// The spacing scale (HEL-51). Every gap and inset *inside* a screen
+    /// The spacing scale. Every gap and inset *inside* a screen
     /// picks a step from here; the structural values above (gutter, card
     /// sizes, hero height) stay separate because they answer to the 10-foot
     /// safe zone rather than to rhythm.
@@ -180,8 +180,8 @@ enum Metrics {
     /// Roughly ×1.5 after `s`, which is what makes adjacent steps read as
     /// different rather than as a mistake. The same values on both platforms
     /// for now: internal rhythm doesn't need to shrink the way structure
-    /// does, and giving iOS its own scale is HEL-41's call, not a change to
-    /// make blind.
+    /// does, and giving iOS its own scale is a separate decision, not a
+    /// change to make blind.
     ///
     /// | step | pt | for |
     /// |---|---|---|
@@ -208,7 +208,7 @@ enum Metrics {
     /// fixed count is the right call there and keeps the approved 5-column
     /// rhythm. iOS spans SE to Pro Max, where a fixed count is what made
     /// cards wider than their columns and cut the first and last off the
-    /// screen (HEL-41) — so the count follows the width instead.
+    /// screen — so the count follows the width instead.
     static var posterGridColumns: [GridItem] {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: cardSpacing), count: gridColumns)
@@ -265,7 +265,7 @@ enum Metrics {
     static let progressBarHeight: CGFloat = 6
     /// The theme swatch beside a theme's name in Appearance settings.
     static let themeSwatchSize: CGFloat = 28
-    /// A card's small round badges: "downloaded" and "watched" (HEL-175).
+    /// A card's small round badges: "downloaded" and "watched".
     /// Sized to read at each platform's viewing distance, and equal to the
     /// download control's `downloadMarkSize` on iOS so the badge and the
     /// ring stay one family.
@@ -279,7 +279,7 @@ enum Metrics {
     static let touchTarget: CGFloat = 44
 }
 
-/// The only sanctioned escapes from the Dynamic Type scale (HEL-51).
+/// The only sanctioned escapes from the Dynamic Type scale.
 ///
 /// Everything that is *text* uses a semantic style — `.callout`, `.headline`,
 /// `.caption` — so it scales and stays consistent. Two things legitimately
@@ -428,7 +428,7 @@ extension View {
 /// purely identity, so the mark gets a field behind it rather than a void. Past
 /// it, the theme's background is the ground Lagoon plays content against.
 /// Which theme shows here is `ThemeStore`'s call: the last profile's until
-/// another signs in (HEL-173).
+/// another signs in.
 struct GroundBackground: View {
     var body: some View {
         Theme.ground.ignoresSafeArea()

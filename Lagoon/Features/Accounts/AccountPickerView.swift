@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// "Who's watching?" — the remembered server+user pairs, plus a way to add
-/// another (HEL-38).
+/// another.
 ///
 /// Not shown at every launch: `SessionStore.restore()` resumes the last
 /// account, so a single-profile install never sees this. It appears when no
@@ -130,7 +130,7 @@ struct AccountPickerView: View {
         .accessibilityIdentifier("account.add")
     }
 
-    /// The user's picture when Jellyfin has one (HEL-168); initials while it
+    /// The user's picture when Jellyfin has one; initials while it
     /// loads and for the many users who have none, because an empty avatar
     /// frame reads worse than a letter.
     private func avatar(for account: StoredAccount) -> some View {

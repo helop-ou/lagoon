@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings › Appearance: which theme this profile wears (HEL-173).
+/// Settings › Appearance: which theme this profile wears.
 struct AppearanceSettingsView: View {
     @Environment(SessionStore.self) private var session
 

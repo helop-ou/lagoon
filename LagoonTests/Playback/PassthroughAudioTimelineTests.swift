@@ -2,7 +2,7 @@ import CoreMedia
 import Testing
 @testable import Lagoon
 
-/// The HEL-64 audio-crackle fix, pinned down: compressed passthrough audio
+/// The audio-crackle fix, pinned down: compressed passthrough audio
 /// must reach the renderer on a sample-exact timeline no matter how
 /// coarsely the container quantized its timestamps.
 struct PassthroughAudioTimelineTests {

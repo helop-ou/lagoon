@@ -47,7 +47,7 @@ final class SearchViewModel {
         }
     }
 
-    /// Drops the collections not worth offering (HEL-122).
+    /// Drops the collections not worth offering.
     ///
     /// Searching a franchise name matches the collection *and* every film in
     /// it, so the stubs a metadata scrape leaves behind would otherwise put a
@@ -171,7 +171,7 @@ extension String {
 /// The app's one search screen. On tvOS `.searchable` is not a bar you summon:
 /// the system draws the field and a full keyboard and expects to own the
 /// screen, which is why this is a tab of its own rather than a fixture on
-/// Discover (HEL-111).
+/// Discover.
 struct SearchView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
@@ -214,7 +214,7 @@ struct SearchView: View {
         .onChange(of: serverSync.generation) { _, _ in
             // An open result list carries user data too; repeat only the
             // Jellyfin half, keeping Seerr's separate session lifecycle out
-            // of a Jellyfin foreground sync (HEL-135).
+            // of a Jellyfin foreground sync.
             librarySearch.search(searchText, client: session.client)
         }
         .task(id: "\(seerr.user?.id ?? -1):\(normalizedSearch):\(searchRetryID)") {
@@ -299,7 +299,7 @@ struct SearchView: View {
             ) {
                 librarySearch.search(searchText, client: session.client)
             }
-            // No "See All" beside an empty section (HEL-182). The rail is a
+            // No "See All" beside an empty section. The rail is a
             // preview of the same query the full page runs, so when the
             // preview is empty the page behind the link is empty too: it
             // repeats the message, and on tvOS a page of nothing but text
@@ -341,8 +341,8 @@ struct SearchView: View {
             ) {
                 searchRetryID += 1
             }
-            // The library section's twin, dropped for the same reason
-            // (HEL-182): this rail is a preview of page one, so an empty
+            // The library section's twin, dropped for the same reason:
+            // this rail is a preview of page one, so an empty
             // preview opens a page that is empty as well.
         }
     }

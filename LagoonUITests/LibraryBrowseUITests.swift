@@ -1,6 +1,7 @@
 import XCTest
 
-// Siri Remote journeys: tvOS only. The target also builds for iOS (HEL-153), where these are compiled out.
+// Siri Remote journeys: tvOS only. The target also builds for iOS,
+// where these are compiled out.
 #if os(tvOS)
 
 final class LibraryBrowseUITests: XCTestCase {
@@ -267,7 +268,7 @@ final class LibraryBrowseUITests: XCTestCase {
             // missing one is a missing fixture, not a broken menu — the
             // public demo shrinks between its periodic resets (one series and
             // eleven films on the evening of September 8) and a private
-            // server has its own shape (HEL-144 / audit A18). The fixed
+            // server has its own shape(/ audit A18). The fixed
             // options are the menu itself, and their absence is a failure.
             if submenu != nil {
                 throw XCTSkip("Fixture server required: the catalogue offers no \"\(title)\" option under \(submenu ?? "")")

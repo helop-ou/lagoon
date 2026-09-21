@@ -4,7 +4,7 @@ import OSLog
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "playback-reports")
 
 /// The playback sessions whose final `Sessions/Playing/Stopped` report the
-/// server may not have applied yet (HEL-132).
+/// server may not have applied yet.
 ///
 /// Leaving the player and re-fetching what it played are deliberately
 /// independent: the stop report is fire-and-forget so a slow server never

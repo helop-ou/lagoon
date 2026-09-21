@@ -2,7 +2,7 @@
 import Foundation
 import os
 
-// Directories, manifest persistence and artwork files (HEL-166). Reading and
+// Directories, manifest persistence and artwork files. Reading and
 // writing the manifest is split from the transfer logic in
 // `DownloadStore+Transfers.swift` so a relaunch, an account switch and a
 // background delegate callback for a non-active account can all go through
@@ -13,8 +13,7 @@ extension DownloadStore {
     /// the artwork index: rebuilding it decodes every entry's files back
     /// into a lookup table, which is wasted work on the frequent saves a
     /// progress callback triggers, so callers that add, remove or activate
-    /// entries call `rebuildArtworkIndex()` themselves (HEL-166 review
-    /// finding 5).
+    /// entries call `rebuildArtworkIndex()` themselves.
     func save() {
         guard let accountDirectory else { return }
         Self.saveManifest(manifest, at: accountDirectory.appending(path: "manifest.json"))
@@ -23,7 +22,7 @@ extension DownloadStore {
     /// Saves at most once per second: a fast transfer's `didWriteData`
     /// callback can fire many times a second, and encoding and writing the
     /// whole manifest on every one of them was measurable cost for no
-    /// benefit the viewer could see (HEL-166 review finding 5). Real state
+    /// benefit the viewer could see. Real state
     /// changes (start, pause, resume, complete, fail) always call `save()`
     /// directly instead, so they are never delayed by this throttle.
     func saveProgressThrottled() {
@@ -92,8 +91,8 @@ extension DownloadStore {
     /// account is active, whose in-memory manifest must not change. Never
     /// creates the account directory: an account that was removed while a
     /// transfer for it was in flight has no directory to write into, and
-    /// this must not recreate one for files that will never arrive
-    /// (HEL-166 review finding 2). A missing directory still loads an
+    /// this must not recreate one for files that will never arrive. A
+    /// missing directory still loads an
     /// empty manifest, so `mutate` can check for that itself when it
     /// matters.
     static func withStoredManifest(
@@ -134,9 +133,9 @@ extension DownloadStore {
         directory: URL, checkPreparation: () throws -> Void
     ) async throws -> [String: String] {
         var files: [String: String] = [:]
-        // Matches the widths the detail page requests live (HEL-166 review
-        // finding 11), so a downloaded title's offline artwork is never a
-        // visibly softer copy of the one the viewer saw online.
+        // Matches the widths the detail page requests live, so a
+        // downloaded title's offline artwork is never a visibly softer
+        // copy of the one the viewer saw online.
         let kinds: [(ItemImageKind, Int)] = [(.poster, Metrics.detailPosterRequestWidth), (.backdrop, 1920)]
         for (kind, maxWidth) in kinds {
             guard let url = client.imageURL(for: item, kind: kind, maxWidth: maxWidth),

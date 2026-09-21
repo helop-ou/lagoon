@@ -4,7 +4,7 @@ import os
 
 /// Instruments/Console category shared by the controller and engine.
 /// Signposts stay enabled in Release so the TestFlight-only hardware path
-/// can be measured without shipping a separate diagnostics build (HEL-56).
+/// can be measured without shipping a separate diagnostics build.
 enum PlaybackPerformance {
     nonisolated static let log = OSLog(
         subsystem: "ee.helop.lagoon",
@@ -289,7 +289,7 @@ nonisolated struct MemorySnapshot {
 /// 1.5 bytes per pixel; P010 stores each 10-bit component in a 16-bit word,
 /// so it is 3 bytes per pixel. This is an estimate of Lagoon's visible queue,
 /// not VideoToolbox or renderer-private surfaces; the controlled bench peak
-/// above is the authority for the process ceiling (HEL-109).
+/// above is the authority for the process ceiling.
 nonisolated enum DecodedFrameMemory {
     static func bytesPer420Frame(width: Int, height: Int, bitDepth: Int) -> Int64 {
         guard width > 0, height > 0 else { return 0 }
@@ -310,7 +310,7 @@ nonisolated struct VideoPerformanceSnapshot {
     /// Frames shown via the power-efficient direct path that bypasses UI
     /// compositing ("optimized/detached mode"). The ratio of this to
     /// `totalFrames` is the measurable answer to "is our video being
-    /// composited with UI every frame?" (HEL-64).
+    /// composited with UI every frame?".
     let optimizedCompositingFrames: Int
     /// Apple's own jitter metric: accumulated seconds between prescribed
     /// and actual display times. "Non-zero delays are a sign of playback

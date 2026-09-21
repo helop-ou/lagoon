@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The wait between leaving the player and re-fetching what it played
-/// (HEL-132). Timing assertions use generous bounds: the point is the
+/// The wait between leaving the player and re-fetching what it played.
+/// Timing assertions use generous bounds: the point is the
 /// ordering, not the milliseconds. The upper bounds sit far below the
 /// settle timeout and far above anything a loaded test host has produced
 /// (a 100 ms close once took over two seconds to be observed while the

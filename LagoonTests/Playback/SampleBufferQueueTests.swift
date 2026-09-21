@@ -2,7 +2,7 @@ import CoreMedia
 import Testing
 @testable import Lagoon
 
-/// HEL-124: priming after a seek lands inside a fragment whose audio block
+/// Priming after a seek lands inside a fragment whose audio block
 /// starts at the keyframe, so audio queued from before the seek target is
 /// audio the renderer will discard, not a cushion. `bufferedDuration(after:)`
 /// is what tells the demux loop and `primeAndStart` how much of the queue

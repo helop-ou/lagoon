@@ -4,7 +4,7 @@ import Foundation
 import Observation
 import os
 
-/// Owns offline downloads on iPhone and iPad (HEL-166): the per-account
+/// Owns offline downloads on iPhone and iPad: the per-account
 /// manifest on disk, the one background `URLSession` that carries every
 /// transfer, the item snapshot and artwork saved beside each file, and the
 /// stop reports kept for a server that could not be reached.
@@ -90,16 +90,15 @@ final class DownloadStore {
 
     /// `snapshotItem(for:)` decodes a saved item from disk; a row body reads
     /// it on every draw, so results are kept here until the item they
-    /// belong to changes (HEL-166 review finding 10).
+    /// belong to changes.
     @ObservationIgnored var snapshotCache: [String: MediaItem] = [:]
     /// The last time a progress-only save reached disk, so `saveProgressThrottled`
-    /// can coalesce the callbacks a fast transfer produces (HEL-166 review
-    /// finding 5).
+    /// can coalesce the callbacks a fast transfer produces.
     @ObservationIgnored var lastProgressSaveDate: Date?
     /// Resumed once `urlSessionDidFinishEvents` reports every background
     /// callback delivered, or after a timeout if it never does, so the
     /// app's background task can wait for on-disk state to catch up before
-    /// the OS suspends it (HEL-166 review finding 1).
+    /// the OS suspends it.
     @ObservationIgnored private var backgroundEventsContinuation: CheckedContinuation<Void, Never>?
 
     var entries: [DownloadEntry] { manifest.entries }
@@ -137,8 +136,7 @@ final class DownloadStore {
     /// The quality picked by default; Original is never the default. A
     /// stored property (not computed over `UserDefaults`) so `@Observable`
     /// can track reads of it: a computed property is invisible to
-    /// Observation, and the settings page never redrew when it changed
-    /// (HEL-166 review finding 9).
+    /// Observation, and the settings page never redrew when it changed.
     var defaultQuality: DownloadQuality {
         didSet { UserDefaults.standard.set(defaultQuality.rawValue, forKey: Self.defaultQualityKey) }
     }
@@ -175,8 +173,7 @@ final class DownloadStore {
         save()
         self.accountID = accountID
         permitted = nil
-        // Every cached snapshot belongs to the account that is leaving
-        // (HEL-166 review finding 10).
+        // Every cached snapshot belongs to the account that is leaving.
         snapshotCache.removeAll()
 
         guard let accountID else {
@@ -210,8 +207,7 @@ final class DownloadStore {
     /// an account that never downloaded anything. Cancels every live
     /// transfer for the account first: the session is shared across
     /// accounts and outlives this call, so a task left running would keep
-    /// writing into a directory that is about to disappear (HEL-166 review
-    /// finding 2).
+    /// writing into a directory that is about to disappear.
     func removeAll(forAccountKey key: String) {
         if accountKey == key {
             accountGeneration &+= 1
@@ -247,9 +243,9 @@ final class DownloadStore {
     /// The item as the server described it at download time, for a detail
     /// page reached from the Downloads screen without a server. Memoized:
     /// a row body calls this on every draw, and decoding from disk each
-    /// time showed up as real cost in a long downloads list (HEL-166
-    /// review finding 10). The cache is cleared wherever the item on disk
-    /// can change: `activate`, `delete`, `start`.
+    /// time showed up as real cost in a long downloads list. The cache is
+    /// cleared wherever the item on disk can change: `activate`, `delete`,
+    /// `start`.
     func snapshotItem(for itemID: String) -> MediaItem? {
         if let cached = snapshotCache[itemID] { return cached }
         guard let accountDirectory else { return nil }
@@ -338,7 +334,7 @@ final class DownloadStore {
     /// Waits for every callback the background session already queued for
     /// this launch to reach the manifest on disk, so `LagoonApp`'s
     /// `.backgroundTask(.urlSession(...))` body has something durable to
-    /// show before the OS can suspend the app (HEL-166 review finding 1).
+    /// show before the OS can suspend the app.
     /// Falls back to a timeout: a background relaunch that never calls
     /// `urlSessionDidFinishEvents` must not hang the background task
     /// forever.

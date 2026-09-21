@@ -200,7 +200,7 @@ struct SeerrSettingsView: View {
         } else {
             // The password-free path: Lagoon approves a Quick Connect code
             // for the account it is already signed in as, so nothing has to
-            // be typed or approved elsewhere (HEL-95).
+            // be typed or approved elsewhere.
             Button("Use This Jellyfin Account", action: signInUsingJellyfin)
                 #if os(tvOS)
                 .buttonStyle(.glass)

@@ -7,7 +7,7 @@ import Foundation
 /// is the 2.50 reader minus the metadata partition, and it mounts unchanged.
 /// And a title is not assembled from a playlist but simply *is* a title set's
 /// VOB files in numeric order, split at 1 GB because that is as much as the
-/// filesystem was ever asked to address in one file (HEL-133).
+/// filesystem was ever asked to address in one file.
 nonisolated enum DVDDisc {
     static let directory = "VIDEO_TS"
 

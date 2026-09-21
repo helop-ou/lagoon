@@ -1,11 +1,10 @@
 import SwiftUI
 
 #if os(iOS)
-/// The download action beside Play on a movie or episode's detail page
-/// (HEL-166): a glass circle in the same family as `ItemActionRow`'s
-/// watched and favorite toggles (`DetailCircleMenu`), its glyph and menu
-/// following the entry's state. State reads through symbol weight and opacity, never color
-/// (HEL-50).
+/// The download action beside Play on a movie or episode's detail page:
+/// a glass circle in the same family as `ItemActionRow`'s watched and favorite
+/// toggles (`DetailCircleMenu`), its glyph and menu following the entry's
+/// state. State reads through symbol weight and opacity, never color.
 ///
 /// Hidden entirely while the account can't download and there is nothing
 /// already on disk for this item, so a server that disallows downloads
@@ -88,7 +87,7 @@ struct DownloadControl: View {
     /// Quality choices with the default first, so the common case is the
     /// menu's first tap. High and Standard are transcodes the server has to
     /// build, so they only appear when the account may ask for one; Original
-    /// is always offered once downloading itself is permitted (HEL-166).
+    /// is always offered once downloading itself is permitted.
     private var orderedQualities: [DownloadQuality] {
         let allowed: [DownloadQuality] = transcodingAllowed == true ? DownloadQuality.allCases : [.original]
         guard allowed.contains(store.defaultQuality) else { return allowed }
@@ -240,7 +239,7 @@ struct DownloadControl: View {
 }
 
 /// The queued/downloading glyph's progress ring: a determinate arc once the
-/// expected size is known, an indeterminate spin before it (HEL-166).
+/// expected size is known, an indeterminate spin before it.
 private struct DownloadProgressRing: View {
     let fraction: Double?
 
@@ -267,7 +266,7 @@ private struct DownloadProgressRing: View {
 }
 
 /// Starts a download from a lighter-weight caller than `DownloadControl`,
-/// such as the item context menu (HEL-166): no size estimate, no large- or
+/// such as the item context menu: no size estimate, no large- or
 /// free-space confirmation, just the quality the viewer picked. Failures are
 /// returned for the caller to log rather than shown, since a context menu
 /// has no room for an alert.

@@ -20,7 +20,7 @@ nonisolated struct PlaybackEngineFailure: Equatable {
     let cause: Cause
     /// What the viewer is told if the ladder runs out of rungs.
     let message: String
-    /// The same failure in codes, for the diagnostic report (HEL-159):
+    /// The same failure in codes, for the diagnostic report:
     /// which stage, which error domain, which code. Never the message.
     let detail: PlaybackFailureDetail?
 
@@ -122,17 +122,17 @@ nonisolated struct PlaybackDeliveryFallbackRecord: Equatable {
 /// the disc (`ts` for a Blu-ray), and `SupportsDirectPlay` still comes back
 /// true. What the static stream then serves is the image or the folder
 /// itself — 64 GB of UDF for an image — and libavformat has no filesystem to
-/// walk it with, so the open fails with `invalid data` every time (HEL-133).
+/// walk it with, so the open fails with `invalid data` every time.
 nonisolated enum PlaybackSourceLayout: Equatable {
     /// One file, whose served bytes are the bytes to demux.
     case file
     /// A Blu-ray image, which Lagoon reads itself: it mounts the UDF
     /// filesystem over the same byte-range transport everything else uses and
-    /// plays the main title's clips directly (HEL-133).
+    /// plays the main title's clips directly.
     case blurayImage
     /// A DVD image, read here as well: the same UDF reader mounts it, and
     /// `VIDEO_TS` needs no playlist because a title is simply its VOB files
-    /// in order. Interlaced ones are deinterlaced on the way out (HEL-127).
+    /// in order. Interlaced ones are deinterlaced on the way out.
     case dvdImage
     /// An image the server did not type, which is not assumed to be readable.
     case discImage
@@ -198,7 +198,7 @@ nonisolated enum PlaybackFallbackPolicy {
     /// disc images Lagoon can now read. Anything else has to be rebuilt by
     /// the server, and starting above that spends an open which cannot
     /// succeed plus a second negotiation to learn what `VideoType` already
-    /// said (HEL-133).
+    /// said.
     static func start(for layout: PlaybackSourceLayout) -> PlaybackDelivery {
         switch layout {
         case .file, .blurayImage, .dvdImage: .negotiated
@@ -227,7 +227,7 @@ nonisolated enum PlaybackFallbackPolicy {
 }
 
 /// Whether a video decode failure is a verdict on the stream or only on the
-/// point playback was restarted from (HEL-151).
+/// point playback was restarted from.
 ///
 /// The ladder's `.undecodable` rung is expensive and one-way: it costs the
 /// viewer three seconds of reload, the embedded subtitle tracks, and the
@@ -291,7 +291,7 @@ nonisolated enum PlaybackRendererStartPolicy {
 }
 
 /// What to do about a VideoToolbox *session* fault, which is not a verdict
-/// on the bitstream and must not descend the ladder on its own (HEL-181).
+/// on the bitstream and must not descend the ladder on its own.
 ///
 /// `kVTInvalidSessionErr` and its siblings say the decode session is gone or
 /// was refused. The samples were never judged: the system reclaims decoders,
@@ -314,7 +314,7 @@ nonisolated enum PlaybackDecodeSessionPolicy {
         /// Suspended video has no session worth saving. Backgrounding leaves
         /// the old one alive deliberately, because making a new one in the
         /// background can be refused, and the resume seek builds a fresh one
-        /// anyway (HEL-176) — so a sample that reached a session the system
+        /// anyway — so a sample that reached a session the system
         /// had already torn down says nothing about anything.
         case ignore
         /// A rebuild is already on its way. Every other sample inside the

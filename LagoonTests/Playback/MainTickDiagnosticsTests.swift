@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pins `MainTickStatistics`' arithmetic and drain/reset contract (HEL-148):
+/// Pins `MainTickStatistics`' arithmetic and drain/reset contract:
 /// a soak's only proof this instrumentation is trustworthy is a fixed unit
 /// pinning its ms math and its empty/reset behaviour.
 struct MainTickDiagnosticsTests {

@@ -1,4 +1,4 @@
-# Lagoon's libdovi artifact (HEL-145)
+# Lagoon's libdovi artifact
 
 `Libdovi.xcframework` is **libdovi**, the C API of the `dolby_vision` Rust
 crate behind [dovi_tool](https://github.com/quietvoid/dovi_tool), crate
@@ -49,4 +49,4 @@ dav1d and libavformat did.
 
 libdovi is dual-licensed MIT or Apache-2.0 and is used here under the MIT
 option; the copyright notice that must accompany the binary is quietvoid's
-and belongs in the acknowledgements (HEL-143). LibDovi's own packaging is MIT.
+and belongs in the acknowledgements. LibDovi's own packaging is MIT.

@@ -21,12 +21,12 @@ import VideoToolbox
 ///
 /// Apple notes that a true here "does not guarantee that hardware decode
 /// resources will be available at all times", so this narrows what Lagoon
-/// claims without ever promising it — the delivery ladder (HEL-100) is what
+/// claims without ever promising it — the delivery ladder is what
 /// covers the remainder.
 nonisolated struct PlaybackCapabilities: Equatable, Sendable {
     let hardwareHEVC: Bool
     let hardwareAV1: Bool
-    /// Whether AV1 may be offered to VideoToolbox at all (HEL-137).
+    /// Whether AV1 may be offered to VideoToolbox at all.
     ///
     /// `VTIsHardwareDecodeSupported` reports hardware and nothing else, as
     /// this file's own comment has always said, and Apple ships a *software*

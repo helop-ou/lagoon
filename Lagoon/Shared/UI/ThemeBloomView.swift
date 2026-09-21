@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The moment a theme is chosen (HEL-173): a soft bloom of the new accent
+/// The moment a theme is chosen: a soft bloom of the new accent
 /// swells from the middle of the screen and lets go, and a handful of the
 /// theme's own motif drift up through it: flowers for Baby Pink, swimming
 /// jellyfish for Lagoon. Under two seconds, never in the way, and over

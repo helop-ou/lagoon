@@ -29,7 +29,7 @@ struct MetadataFlowLayout: Layout {
     var spacing: CGFloat = Metrics.Space.m
     /// Where each row sits in the width it did not use. Leading is the
     /// column composition; centre is the phone's block under the poster
-    /// hero, where the title and actions are centred too (HEL-169).
+    /// hero, where the title and actions are centred too.
     var alignment: HorizontalAlignment = .leading
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -85,7 +85,7 @@ struct MetadataFlowLayout: Layout {
 
 extension EnvironmentValues {
     /// Set by a poster grid on its cards so they fill their column instead
-    /// of keeping the rail width (HEL-161). Rails leave it nil.
+    /// of keeping the rail width. Rails leave it nil.
     @Entry var posterCardWidth: CGFloat?
 }
 
@@ -118,7 +118,7 @@ struct PosterLayout: DynamicProperty {
 
     /// iOS grids size their cards to the column rather than the column to a
     /// rail-sized card: a portrait phone gets three across, an iPad four or
-    /// more, and a wider window simply adds columns (HEL-161). The minimum
+    /// more, and a wider window simply adds columns. The minimum
     /// is per idiom, not per size class: a Pro Max reports regular width in
     /// landscape, and a phone on its side wants six small posters, not four
     /// iPad-sized ones. The minimum scales with Dynamic Type the way the

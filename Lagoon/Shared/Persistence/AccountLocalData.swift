@@ -44,7 +44,7 @@ final class AccountLocalData {
             defaults.removeObject(forKey: prefix + accountID)
         }
         // Downloads are iOS only; tvOS keeps this file compiling but has
-        // nothing to remove (HEL-166).
+        // nothing to remove.
         #if os(iOS)
         DownloadStore.shared.removeAll(forAccountKey: DownloadStore.accountKey(for: accountID))
         #endif

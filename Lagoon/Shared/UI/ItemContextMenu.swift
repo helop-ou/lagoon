@@ -3,8 +3,8 @@ import SwiftUI
 import os
 #endif
 
-/// Long-press menu on any card: mark watched/unwatched and favourite
-/// (HEL-40). The same two mutations `ItemActionRow` offers on the detail
+/// Long-press menu on any card: mark watched/unwatched and favourite.
+/// The same two mutations `ItemActionRow` offers on the detail
 /// page, so saying "I've seen this" doesn't cost a trip into the item and
 /// back — which is the whole point of a rail you're scanning.
 ///
@@ -81,8 +81,8 @@ private struct ItemUserDataMenu: ViewModifier {
             #if os(iOS)
             .task {
                 // Warms the client's permission caches once, so the first
-                // long-press already knows whether to offer Download at all
-                // (HEL-166). A cache that already has an answer skips the
+                // long-press already knows whether to offer Download at all.
+                // A cache that already has an answer skips the
                 // round trip.
                 if session.client.cachedContentDownloadingAllowed == nil {
                     _ = await session.client.canDownloadContent()
@@ -99,7 +99,7 @@ private struct ItemUserDataMenu: ViewModifier {
     /// to take offline, and a box set is a browsing convenience rather than
     /// something to play. Downloaded and in-flight states get a one-tap
     /// action; a title with nothing started yet gets the quality picker
-    /// `DownloadControl` uses on the detail page (HEL-166).
+    /// `DownloadControl` uses on the detail page.
     @ViewBuilder
     private var downloadMenuItems: some View {
         if item.type == .movie || item.type == .episode {
@@ -137,7 +137,7 @@ private struct ItemUserDataMenu: ViewModifier {
     /// The default quality first, matching `DownloadControl`'s menu. High and
     /// Standard only appear when the account may have the server transcode
     /// for it; Original is always offered here since this menu only builds
-    /// once downloading itself is permitted (HEL-166).
+    /// once downloading itself is permitted.
     private var downloadQualities: [DownloadQuality] {
         let store = DownloadStore.shared
         let allowed: [DownloadQuality] = session.client.cachedVideoTranscodingAllowed == true

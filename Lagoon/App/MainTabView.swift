@@ -17,11 +17,11 @@ struct MainTabView: View {
     @State private var librariesLoaded = false
     @State private var playerItem: PlayerItem?
     #if os(iOS)
-    /// The one iOS player host (HEL-162); every screen's `playerPresentation`
+    /// The one iOS player host; every screen's `playerPresentation`
     /// requests through it. See `PlayerPresentationHub`.
     @State private var playerHub = PlayerPresentationHub()
     /// Guards the offline-launch tab switch below so it happens at most
-    /// once per app session, not on every failed retry (HEL-166).
+    /// once per app session, not on every failed retry.
     @State private var hasSwitchedToLibraryForOfflineDownloads = false
     #endif
     @State private var deepLinkError: String?
@@ -35,7 +35,7 @@ struct MainTabView: View {
     // while still allowing a local result and a Seerr result to share a page.
     @State private var discoverNavigationPath = NavigationPath()
     // Search presents the same two result sets, so its stack is heterogeneous
-    // for the same reason (HEL-111).
+    // for the same reason.
     @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
     @State private var selectedTab: MainTabSelection = .home
@@ -106,8 +106,7 @@ struct MainTabView: View {
         // A SyncPlay group decides what plays for everyone in it, and it
         // can decide while nothing is on screen. Presented from here for
         // the same reason a Top Shelf selection is: the player belongs to
-        // the tab root, not to whichever screen happens to be showing
-        // (HEL-172).
+        // the tab root, not to whichever screen happens to be showing.
         .onChange(of: syncPlay.pendingPlayRequest?.id) { _, request in
             guard request != nil, let play = syncPlay.pendingPlayRequest else { return }
             syncPlay.pendingPlayRequest = nil
@@ -169,7 +168,7 @@ struct MainTabView: View {
             }
         }
         // The carousel's More Info button, which has to open the detail page
-        // rather than start playback (HEL-119). Home owns the stack because
+        // rather than start playback. Home owns the stack because
         // that is where Continue Watching lives.
         .task(id: "\(deepLinks.pendingDetailItemID ?? ""):\(deepLinkRetry)") {
             guard let id = deepLinks.pendingDetailItemID else { return }
@@ -270,7 +269,7 @@ struct MainTabView: View {
 
             // Search is a destination of its own, not a fixture on a browse
             // screen: on tvOS `.searchable` draws a resident keyboard and
-            // expects to own the screen (HEL-111).
+            // expects to own the screen.
             Tab(
                 "Search",
                 systemImage: ContentIcon.search,
@@ -315,7 +314,7 @@ struct MainTabView: View {
     }
     #endif
 
-    /// Keep source choices available through transient failures (HEL-61).
+    /// Keep source choices available through transient failures.
     /// Library itself is now a stable tab, independent of this request.
     private func loadLibraries() async {
         let accountID = session.activeAccount?.id
@@ -349,7 +348,7 @@ struct MainTabView: View {
                 serverSync.serverUnreachable = true
                 // A server that can't be reached yet still has whatever was
                 // taken offline; land on Library rather than an empty Home,
-                // so those titles are the first thing seen (HEL-166).
+                // so those titles are the first thing seen.
                 #if os(iOS)
                 if !hasSwitchedToLibraryForOfflineDownloads, !DownloadStore.shared.entries.isEmpty {
                     hasSwitchedToLibraryForOfflineDownloads = true
@@ -375,7 +374,7 @@ struct MainTabView: View {
 
     /// Hands-off SyncPlay runs: `-debug.syncPlayJoinGroup <name>` joins the
     /// group with that name once the regression bootstrap has signed in,
-    /// and lets the group's queue drive playback from there (HEL-172). The
+    /// and lets the group's queue drive playback from there. The
     /// group is usually created by the other member a moment later, so the
     /// list is polled rather than read once.
     private func joinSyncPlayGroupIfRequested() async {
@@ -399,7 +398,7 @@ struct MainTabView: View {
     #if os(iOS)
     /// Hands-off simulator runs: `-debug.downloadItemID <id>` starts a
     /// download without walking the detail page, so the transfer pipeline
-    /// can be exercised headlessly (HEL-166). `-debug.downloadQuality`
+    /// can be exercised headlessly. `-debug.downloadQuality`
     /// picks `original`, `high` or `standard` (default `high`);
     /// `-debug.downloadRestart YES` deletes a matching entry first so the
     /// same launch arguments can be replayed.
@@ -618,7 +617,7 @@ struct MainTabView: View {
             // ask for a direct-play source explicitly, so a fixture server
             // whose first playable title transcodes hands them a matching
             // title or an explicit missing-fixture skip instead of a
-            // timeout (HEL-144, audit A18).
+            // timeout (audit A18).
             let requireDirectPlay = UserDefaults.standard.bool(forKey: "debug.regressionRequireDirectPlay")
             let requireAudio = UserDefaults.standard.bool(forKey: "debug.regressionRequireAudio")
             for item in page.items {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// One remembered server+user pair (HEL-38).
+/// One remembered server+user pair.
 ///
 /// Everything here is safe for UserDefaults; the access token is the one
 /// piece that isn't, and lives in the keychain under `keychainAccount`.
@@ -15,8 +15,8 @@ nonisolated struct StoredAccount: Codable, Identifiable, Hashable {
     let userName: String?
     /// Jellyfin's tag for the user's profile picture, nil when there is
     /// none. Taken at sign-in and refreshed from `Users/Me` whenever the
-    /// account is activated, so a picture set or changed on the web follows
-    /// (HEL-168). Records written before the field decode without it.
+    /// account is activated, so a picture set or changed on the web
+    /// follows. Records written before the field decode without it.
     var primaryImageTag: String? = nil
 
     /// Identity is the server and the user id, never the display names:

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The cue layer, lifted out of `CustomPlayerView` (HEL-150).
+/// The cue layer, lifted out of `CustomPlayerView`.
 ///
 /// `currentSubtitleText`, `currentSubtitleCues` and `currentSubtitleImages`
 /// all move at the engine's tick rate, and Observation tracks property reads
@@ -41,8 +41,8 @@ struct PlayerSubtitleOverlay: View {
                 if !textCues.isEmpty,
                    textCues.allSatisfy({ $0.usesDefaultPlacement && $0.usesDefaultStyle }),
                    let text = engine.currentSubtitleText {
-                    // Preserve the exact pre-HEL-107 path for ordinary SRT,
-                    // WebVTT and unstyled dialogue.
+                    // Preserve the original path for ordinary SRT, WebVTT
+                    // and unstyled dialogue.
                     VStack {
                         Spacer()
                         PlayerSubtitleText(text: text, style: style)

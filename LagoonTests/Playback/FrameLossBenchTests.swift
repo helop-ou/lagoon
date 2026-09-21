@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The measurement discipline that HEL-64's two false positives paid for:
+/// The measurement discipline that two false positives paid for:
 /// warmup before counting, a fixed media-time window, and no window that
 /// survives the transport being touched.
 struct FrameLossBenchTests {
@@ -95,7 +95,7 @@ struct FrameLossBenchTests {
     /// LagoonUITests parses it with this exact regex. Dropping a field from
     /// the summary stops the VC-1 continuity regression reading a window it
     /// actually finished, which is a timeout that looks like a playback
-    /// failure and is not one. HEL-109 did exactly that.
+    /// failure and is not one. That has happened.
     @Test func regressionSummaryIsParseable() {
         let result = FrameLossBench.Result(
             startPosition: 310,
@@ -121,7 +121,7 @@ struct FrameLossBenchTests {
         )
         #expect(match != nil, "the UI regression can no longer parse: \(summary)")
         #expect(match?.numberOfRanges == 7)
-        // The memory figures HEL-109 added have to survive too.
+        // The memory figures added later have to survive too.
         #expect(summary.contains("peak"))
         #expect(summary.contains("minQ"))
     }

@@ -20,7 +20,7 @@ final class PlaybackReportingSession {
     private let signpostID: OSSignpostID
     private let ledgerSession: UUID
     /// The title's runtime, for deciding whether a stopped position counts
-    /// as played through (HEL-166). Nil when the source never reported one.
+    /// as played through. Nil when the source never reported one.
     private let runtimeTicks: Int64?
     private var progressTask: Task<Void, Never>?
     private(set) var isActive = true
@@ -109,7 +109,7 @@ final class PlaybackReportingSession {
 
     /// A position within the last 2% of a known runtime counts as played
     /// through: a downloaded title's local resume point is cleared rather
-    /// than parked one frame from the end (HEL-166). Unknown runtime never
+    /// than parked one frame from the end. Unknown runtime never
     /// counts as played through.
     nonisolated static func isPlayedThrough(positionTicks: Int64, runtimeTicks: Int64?) -> Bool {
         guard let runtimeTicks, runtimeTicks > 0 else { return false }

@@ -1,6 +1,7 @@
 import XCTest
 
-// Siri Remote journeys: tvOS only. The target also builds for iOS (HEL-153), where these are compiled out.
+// Siri Remote journeys: tvOS only. The target also builds for iOS,
+// where these are compiled out.
 #if os(tvOS)
 
 final class PlayerRegressionUITests: PlayerUITestCase {
@@ -349,7 +350,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         )
     }
 
-    /// Pins the audio-buffering mode (HEL-123): withheld audio stops the
+    /// Pins the audio-buffering mode: withheld audio stops the
     /// clock after the confirmation delay, is counted as an audio stall,
     /// and playback resumes once the renderer has its lead back.
     func testAudioStarvationBuffersWhenTheModeIsOn() throws {
@@ -422,7 +423,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// video cushion enters buffering, then playback resumes afterwards
     /// within the video hard limit. The seek fallback is asserted absent
     /// only when the confirmed stall was clearly shorter than the
-    /// five-second rule. Not evidence about HEL-124.
+    /// five-second rule. Not evidence about the memory bound.
     func testBoundedDeliveryOutageRecoversThroughStallWithoutReprime() throws {
         let app = launchPlayer(
             title: "delivery-stall-regression",
@@ -483,7 +484,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertEqual(recovered.int("audioHeld"), 0)
     }
 
-    /// Pins the HEL-124 fix: each HLS fragment's `mdat` is one contiguous
+    /// Pins the fix: each HLS fragment's `mdat` is one contiguous
     /// video block followed by one contiguous audio block, so a demuxer
     /// that stops reading once the decoded video queue hits its hard limit
     /// only reaches a fragment's audio after that fragment's last video
@@ -1466,7 +1467,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         // the same on every run. Leaving Continue Watching switched off would
         // silently change which rails Home draws for every later test on this
         // simulator — including the ServerSync navigation cases that step a
-        // fixed number of rows down from the hero (HEL-144 / audit A18).
+        // fixed number of rows down from the hero(/ audit A18).
         // Put it back before moving on.
         remote.press(.select)
         XCTAssertEqual(
@@ -1476,7 +1477,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         )
         // Plugin rows sit after Lagoon's own by default, so reaching one means
         // crossing every native row, and a fixed budget rots the moment one is
-        // added: the eight curated rows (HEL-120) and Collections (HEL-122)
+        // added: the eight curated rows and Collections
         // both landed after this was written, and 12 presses had quietly
         // stopped being enough. Size it from what is actually on the screen so
         // the next row costs nothing.
@@ -1611,7 +1612,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     /// The same panel sweep as `testPlayerPanelPreviewPerformance`, but over
-    /// live playback instead of the Debug gallery's static preview (HEL-150).
+    /// live playback instead of the Debug gallery's static preview.
     /// The gallery has no engine behind it, so it cannot show what the
     /// player's own per-tick invalidation costs the panel's focus animations;
     /// this case is the number that can.
@@ -1774,7 +1775,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         // Lazy track construction must not trade performance for broken
         // focus navigation. Exercise the full 30-track stress fixture.
         for _ in 0..<3 { remote.press(.right) }
-        // Since HEL-150 the tab shows either the track chooser or the search
+        // The tab shows either the track chooser or the search
         // results browser, never both, and the gallery deliberately opens on
         // the browser. Done puts the chooser back; without it the walk below
         // counts result rows and never reaches a track.
@@ -1851,7 +1852,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             results.append(result)
             XCTAssertLessThan(
                 state(in: app).int("idleRequests") - startingIdleRequests, 2_000,
-                "Run \(run): renderer request blocks kept firing with nothing to give (HEL-137)"
+                "Run \(run): renderer request blocks kept firing with nothing to give"
             )
 
             XCTAssertGreaterThan(result.frames, 1_000, "Run \(run) did not cover a full 60 s scene")
@@ -2005,7 +2006,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         )
     }
 
-    /// HEL-137: the software-decoded path, with its asynchronous GPU output
+    /// The software-decoded path, with its asynchronous GPU output
     /// stage, has to survive what a viewer does to a film: pause, seek both
     /// ways, subtitles, and then keep going. Device only, and Release only
     /// (`xcodebuild test -configuration Release`): the simulator never starts
@@ -2096,7 +2097,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertEqual(final.int("unclean"), 0)
         XCTAssertLessThan(
             Double(final.int("idleRequests") - initialIdleRequests) / elapsed, 50,
-            "renderer request blocks kept firing with nothing to give (HEL-137)"
+            "renderer request blocks kept firing with nothing to give"
         )
 
         remote.press(.menu)
@@ -2401,7 +2402,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// Search is a tab of its own, and Discover browses without a keyboard
     /// over it. On tvOS `.searchable` renders a resident search field and
     /// full A–Z keyboard — correct on a search screen, and the reason
-    /// Discover's content sat below the fold while it carried one (HEL-111).
+    /// Discover's content sat below the fold while it carried one.
     func testDiscoverBrowsesWithoutASearchFieldAndSearchHasItsOwnTab() {
         let app = launchNavigationRegressionApp()
         let homeTab = app.tabBars.buttons["Home"]
@@ -2420,7 +2421,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         )
     }
 
-    /// Restored with the Search tab it covers (HEL-111): Back from a result
+    /// Restored with the Search tab it covers: Back from a result
     /// must return to the same result list, with focus on the poster that
     /// was opened, rather than rebuilding the search.
     func testSearchDetailBackStackPreservesResultsAndFocus() {
@@ -2471,7 +2472,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertTrue(focusedPoster.hasFocus, "Search focus was not restored to the selected result")
     }
 
-    /// A search nothing matches must not offer a See All (HEL-182). The rail
+    /// A search nothing matches must not offer a See All. The rail
     /// is a preview of the query the full page runs, so the page behind that
     /// link only repeats the message — and with nothing on it to hold focus,
     /// Menu quits the app instead of going back.
@@ -2961,7 +2962,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// opened. That is what the public demo does: every item there is H.264,
     /// so these two cases asserted `Transcode`, failed on the first
     /// assertion, and never reached the segment-boundary window they exist
-    /// for (HEL-144 / audit A18).
+    /// for(/ audit A18).
     ///
     /// A missing fixture is not a player regression, so the public-demo lane
     /// skips with an explicit reason. A supplied fixture server is expected to

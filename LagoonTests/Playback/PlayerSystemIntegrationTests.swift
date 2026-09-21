@@ -72,7 +72,7 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func subtitleFailuresKeepTheCauseTheViewerCanActOn() {
-        // The whole point of HEL-91: a 403 is a server permission, not an
+        // The whole point: a 403 is a server permission, not an
         // exhausted provider quota, and the two need different answers.
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 403)) == .notPermitted)
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 401)) == .sessionExpired)
@@ -86,7 +86,7 @@ struct PlayerSystemIntegrationTests {
         #expect(SubtitleDownloadError.classify(SubtitleDownloadError.unsupportedFile) == .unsupportedFile)
 
         let permission = SubtitleDownloadError.notPermitted.errorDescription ?? ""
-        // HEL-146: the message names the dashboard switch the administrator flips.
+        // The message names the dashboard switch the administrator flips.
         #expect(permission.contains("Allow subtitle management"))
         // The quota wording must not appear on failures that are not quota.
         #expect(SubtitleDownloadError.notPermitted.errorDescription?.contains("download limit") == false)
@@ -98,7 +98,7 @@ struct PlayerSystemIntegrationTests {
         // failed got "the provider could not supply this file — it may have
         // been removed or the limit reached", which is two guesses. Jellyfin
         // wraps the provider's exception into a 500 and puts the real reason
-        // in the body; it was being discarded (HEL-98).
+        // in the body; it was being discarded.
         let quota = JellyfinError.server(
             status: 500,
             message: "OpenSubtitles download limit reached for today"
@@ -189,12 +189,12 @@ struct PlayerSystemIntegrationTests {
         // Administrators pass regardless of the flag. Jellyfin hides the
         // checkbox for them because the permission is implied, so an admin's
         // stored value is routinely false — reading that as a denial locked
-        // administrators out of their own servers (HEL-96).
+        // administrators out of their own servers.
         #expect(try decode(#"{"IsAdministrator": true, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": true}"#).allowsSubtitleManagement)
 
         // Unknown is not a denial: the server is the authority and answers
-        // 403 if it disagrees, which HEL-91 reports properly.
+        // 403 if it disagrees, which is reported properly.
         #expect(try decode(#"{}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": false}"#).allowsSubtitleManagement)
     }
@@ -376,7 +376,7 @@ struct PlayerSystemIntegrationTests {
 
     @Test func aSyncCorrectionRidesOnTheViewersRateWithoutLeavingTheEnvelope() {
         // A group nudge multiplies the viewer's speed rather than replacing
-        // it (HEL-172), and no correction leaves it exactly alone — which is
+        // it, and no correction leaves it exactly alone — which is
         // every session outside a SyncPlay group.
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1, correction: 1) == 1)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.5, correction: 1) == 1.5)
@@ -526,8 +526,7 @@ struct PlayerSystemIntegrationTests {
         // nils the renderer, so an emptiness check alone let a retired engine
         // pass: it re-registered a renderer set that could never detach — its
         // `shutdown` early-returns once requested — and started a second
-        // demux loop that reopened the stream, server transcode and all
-        // (HEL-110).
+        // demux loop that reopened the stream, server transcode and all.
         let before = PlaybackLifecycleDiagnostics.snapshot()
         let engine = SampleBufferPlayerEngine()
         engine.prepare(
@@ -600,7 +599,7 @@ struct PlayerSystemIntegrationTests {
         ) == .reprime)
     }
 
-    /// HEL-142/HEL-143: the credential travels as a header
+    /// The credential travels as a header
     /// (`MediaRequestAuthorization`) rather than in the URL for every media
     /// consumer, so none of the URLs Lagoon resolves here — direct play,
     /// direct stream, transcode, subtitle sidecar, trickplay sheet — may
@@ -644,8 +643,8 @@ struct PlayerSystemIntegrationTests {
         """#)
         let transcodeResult = try client.streamURL(itemId: "item", source: transcode)
         #expect(transcodeResult.method == .transcode)
-        // A server-relative TranscodingUrl keeps the reverse-proxy base path
-        // (HEL-144): resolving it against the origin alone sent every
+        // A server-relative TranscodingUrl keeps the reverse-proxy base path:
+        // resolving it against the origin alone sent every
         // transcode on a base-path server to a route that does not exist.
         #expect(transcodeResult.url.path == "/jellyfin/Videos/item/master.m3u8")
         // The server's own legacy token is stripped, but its other query
@@ -688,7 +687,7 @@ struct PlayerSystemIntegrationTests {
     }
 
     /// `serverRelativeURL` is what makes a base-path server work for the
-    /// routes Jellyfin hands back inside response bodies (HEL-144).
+    /// routes Jellyfin hands back inside response bodies.
     @Test func serverRelativeRoutesKeepTheBasePath() throws {
         let client = JellyfinClient(deviceId: "relative-route-test")
 
@@ -1224,7 +1223,7 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
     }
 }
 
-/// The starvation half of HEL-123: an audio queue at zero used to produce no
+/// The starvation half: an audio queue at zero used to produce no
 /// stall, no buffering state and no counter movement, so a film played on
 /// with the picture running and no sound while every indicator read healthy.
 @Suite("Playback starvation")
@@ -1363,7 +1362,7 @@ struct PlaybackStarvationTests {
         #expect(PlaybackStarvationPolicy.starvation(snapshot) == .audio)
     }
 
-    // MARK: - Buffering on audio starvation (HEL-123, off by default)
+    // MARK: - Buffering on audio starvation(off by default)
 
     @Test func confirmsGatesAudioOnTheModeAndAlwaysConfirmsVideo() {
         #expect(StallRecoveryPolicy.confirms(.video, buffersOnAudioStarvation: false))
@@ -1634,7 +1633,7 @@ struct UncachedDeliveryCushionTests {
     }
 }
 
-/// HEL-124 reopened once the app-side queue was cleared as a suspect: a
+/// Reopened once the app-side queue was cleared as a suspect: a
 /// Jellyfin HLS fragment's `mdat` is one contiguous video block followed by
 /// one contiguous audio block, so `primeAndStart` fills the decoded video
 /// queue to its hard limit and starts the clock before any of that

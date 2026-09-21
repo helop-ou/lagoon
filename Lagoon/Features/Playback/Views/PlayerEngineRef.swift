@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 import Observation
 
-/// A player view's handle on the engine: weak on purpose (HEL-152).
+/// A player view's handle on the engine: weak on purpose.
 ///
 /// `PlaybackController` owns the engine for exactly as long as the item plays
 /// and replaces it at every episode handoff. The chrome over it is SwiftUI

@@ -1,6 +1,6 @@
 import Foundation
 
-// SyncPlay: shared playback across the devices in a group (HEL-172).
+// SyncPlay: shared playback across the devices in a group.
 //
 // The wire types live here rather than in JellyfinModels because only this
 // feature and the socket read them. Two rules apply throughout:
@@ -460,7 +460,7 @@ extension JellyfinClient {
 
     /// Whether this server serves SyncPlay at all. A probe: its failure is
     /// an answer rather than a fault, so it is never reported as an
-    /// incident (HEL-159).
+    /// incident.
     func isSyncPlayAvailable() async -> Bool {
         do {
             let _: [SyncPlayGroup] = try await get("SyncPlay/List", probe: true)

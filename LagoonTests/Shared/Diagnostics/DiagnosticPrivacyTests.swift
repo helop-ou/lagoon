@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Acceptance criterion 4 of HEL-159, as a test: drive the production
+/// An acceptance criterion, as a test: drive the production
 /// reporting paths (the API helper both clients call, and the playback
 /// monitor the controller owns) with synthetic sensitive values, then
 /// assert none of them reach the bytes that would leave the device.

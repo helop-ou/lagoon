@@ -75,7 +75,7 @@ struct SeerrMediaCard: View {
     /// No badge for a title nobody has asked for yet — including one whose
     /// media record was deleted, which reads the same way to a viewer. A
     /// blocklisted title *does* get one, since "you cannot have this" is
-    /// worth saying (HEL-115).
+    /// worth saying.
     private var visibleStatus: SeerrAvailabilityStatus? {
         let status = item.mediaInfo?.availability ?? .unknown
         return status.allowsRequesting ? nil : status
@@ -86,8 +86,8 @@ struct SeerrMediaRail: View {
     let title: String
     let items: [SeerrDiscoverResult]
     /// When the rail is backed by a paged list, a card at the end of it opens
-    /// the full list. Every Discover rail is (HEL-114); the search result
-    /// rails are not.
+    /// the full list. Every Discover rail is backed by a paged list; the
+    /// search result rails are not.
     var destination: SeerrNavigationRoute?
 
     var body: some View {

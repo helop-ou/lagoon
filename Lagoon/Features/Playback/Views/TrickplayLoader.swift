@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import Observation
 
-/// Feeds preview frames to the scrub chip (HEL-39 slice 3).
+/// Feeds preview frames to the scrub chip(slice 3).
 ///
 /// Jellyfin serves trickplay as sprite sheets — typically a 10×10 grid of
 /// 320×180 thumbnails per JPEG, one thumbnail every 10 s — so a "frame" is a
@@ -29,7 +29,7 @@ final class TrickplayLoader {
 
     private let source: TrickplaySource
     /// The trickplay route 401s without credentials, and the sheet URL
-    /// carries no query token (HEL-142/HEL-143), so every sheet fetch sends
+    /// carries no query token, so every sheet fetch sends
     /// the header credential the source arrived with.
     private var authorization: MediaRequestAuthorization? { source.authorization }
     /// Decoded sheets, most-recently-used first.

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The arithmetic SyncPlay scheduling rests on (HEL-172). A group's command
+/// The arithmetic SyncPlay scheduling rests on. A group's command
 /// says "unpause at 11:44:21.356 by my clock", so an offset that is wrong by
 /// a tenth of a second is a tenth of a second of desync on every device.
 @Suite("Server clock estimate")

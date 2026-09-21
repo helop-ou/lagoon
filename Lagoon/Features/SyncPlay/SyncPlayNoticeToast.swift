@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// What a Watch Together notice says to the viewer (HEL-172).
+/// What a Watch Together notice says to the viewer.
 ///
 /// Separate from `SyncPlayNotice` itself, which is pure and carries the
 /// tests: the reducer decides *that* something happened, and this decides
@@ -41,7 +41,7 @@ extension SyncPlayNotice {
 }
 
 /// The player's transient line about the group: someone joined or left,
-/// the group paused, the library is out of reach (HEL-172).
+/// the group paused, the library is out of reach.
 ///
 /// An overlay leaf in the shape `PlayerSkipOverlay` set: it reads the
 /// store in its own body, so the player root never subscribes to a notice

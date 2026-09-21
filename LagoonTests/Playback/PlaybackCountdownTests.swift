@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The deadline a countdown's action and its visible fill share (HEL-178).
+/// The deadline a countdown's action and its visible fill share.
 /// Progress is read from a monotonic clock rather than animated away from a
 /// previous view value, because an overlay is created at the same moment its
 /// countdown arms: there is no earlier value to animate from, which is why
@@ -18,8 +18,8 @@ struct PlaybackCountdownTests {
         #expect(countdown.progress(at: countdown.deadline) == 1)
     }
 
-    /// The card outlives its own countdown while the successor is prepared
-    /// (HEL-144), so progress past the deadline holds at full rather than
+    /// The card outlives its own countdown while the successor is prepared,
+    /// so progress past the deadline holds at full rather than
     /// wrapping or emptying underneath an accepted hand-off.
     @Test func progressClampsOutsideItsWindow() {
         let start = ContinuousClock.now

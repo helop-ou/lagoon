@@ -2,7 +2,7 @@
 #
 # Builds dav1d as an xcframework for Lagoon, with its arm64 assembly enabled.
 #
-# Why this exists (HEL-137): Lagoon used to take dav1d from
+# Why this exists: Lagoon used to take dav1d from
 # mpvkit/libdav1d-build, whose recipe passes
 #
 #     -Denable_asm=false   // disable "No platform load command found" warning after xcode 15

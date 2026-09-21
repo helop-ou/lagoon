@@ -1,7 +1,7 @@
 import Foundation
 
 /// Accumulates the cost and cadence of the engine's 10 Hz main-actor tick
-/// between two DecodeTrace lines (HEL-148). Pure so it can be pinned by a
+/// between two DecodeTrace lines. Pure so it can be pinned by a
 /// test; the engine is the only caller, and only while
 /// `ProcessCPUTrace.enabled`.
 nonisolated struct MainTickStatistics: Equatable, Sendable {

@@ -81,7 +81,7 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
             // ingest fills user.ip_address from the connection and derives
             // a location from it unless the project setting forbids it. The
             // app sends no user object and wants none inferred; "native" is
-            // a valid platform that Sentry leaves alone (HEL-159).
+            // a valid platform that Sentry leaves alone.
             "platform": "native",
             "level": incident.level.rawValue,
             "logger": sdkName,

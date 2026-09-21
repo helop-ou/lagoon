@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Watch Together's one screen (HEL-172): the groups this server is
+/// Watch Together's one screen: the groups this server is
 /// running, a way to start another, and — once this device is in one —
 /// who else is there and what to do about it.
 ///
@@ -62,8 +62,8 @@ struct WatchTogetherSheet: View {
         // `TVSettingsPage`, which is the full-screen Settings *destination*
         // — a 460pt identity column, a page-sized title, a Back button and
         // its own opaque background — and inside a sheet that shrink-wraps
-        // to its content it read as a page someone had squeezed into a card
-        // (HEL-183). The changelog's three-part stack is the shape a tvOS
+        // to its content it read as a page someone had squeezed into a card.
+        // The changelog's three-part stack is the shape a tvOS
         // modal takes here: title, scrolling content, Done.
         VStack(spacing: 0) {
             header
@@ -365,7 +365,7 @@ struct WatchTogetherSheet: View {
 }
 
 /// The group's state in the viewer's words, shared by every screen that
-/// shows it (HEL-172) so the sheet, the player's Together tab and the
+/// shows it so the sheet, the player's Together tab and the
 /// toast never disagree about what "Waiting" means.
 nonisolated enum SyncPlayStateCopy {
     static func title(for state: SyncPlayGroupState) -> String {

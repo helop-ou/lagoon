@@ -32,7 +32,7 @@ nonisolated enum SubtitleSearchPhase: Equatable {
 /// Why a subtitle search or download failed, kept specific enough to be
 /// actionable. Collapsing every failure into "the provider could not supply
 /// this file" sent viewers after an imagined download quota when the real
-/// cause was a 403, an expired session or a timeout (HEL-91).
+/// cause was a 403, an expired session or a timeout.
 nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     case notAvailable
     case providerUnavailable
@@ -47,7 +47,7 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     case server(Int)
     /// The server explained itself. Its own words beat any wording invented
     /// here, because it is the only party that knows whether the provider
-    /// refused, timed out, or ran the account out of downloads (HEL-98).
+    /// refused, timed out, or ran the account out of downloads.
     case reported(status: Int, message: String)
 
     var errorDescription: String? {
@@ -282,7 +282,7 @@ struct DownloadedSubtitlePoller {
 
 /// Host-side service for the player's subtitle tab. Search/download stays
 /// outside PlayerEngine; only the final authenticated sidecar URL crosses
-/// the engine boundary (HEL-49).
+/// the engine boundary.
 @MainActor
 @Observable
 final class SubtitleSearchCoordinator {
@@ -291,7 +291,7 @@ final class SubtitleSearchCoordinator {
     /// The Subtitles tab is either choosing a track or browsing search
     /// results, never both. Results used to be stacked above the track list
     /// with no way back, which left two rows of candidates squeezed over the
-    /// tracks a viewer was actually trying to reach (HEL-150).
+    /// tracks a viewer was actually trying to reach.
     private(set) var isBrowsingResults = false
     private(set) var preferredLanguages: [String] = []
     private(set) var languageChoices: [String] = []

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The measurement discipline of HEL-64, encoded so nobody has to remember
+/// The measurement discipline, encoded so nobody has to remember
 /// it: a frame-loss number is only comparable when it comes from the same
 /// scene over the same media-time window, untouched. Both of this ticket's
 /// false positives came from violating that.
@@ -23,7 +23,7 @@ nonisolated struct FrameLossBench: Equatable {
         var droppedFrames: Int
         var corruptedFrames: Int
         var stalls: Int
-        /// Of those, the ones called on audio (HEL-123).
+        /// Of those, the ones called on audio.
         var audioStalls: Int = 0
         /// Audio-dry episodes (`aDry`), counted regardless of whether they
         /// became a confirmed stall.
@@ -33,7 +33,7 @@ nonisolated struct FrameLossBench: Equatable {
         var optimizedFrames = 0
         var accumulatedDelay = 0.0
         /// Physical footprint and jetsam headroom sampled in the same
-        /// controlled window as frame loss (HEL-109).
+        /// controlled window as frame loss.
         var footprintBytes: Int64 = 0
         var availableBytes: Int = 0
     }
@@ -45,7 +45,7 @@ nonisolated struct FrameLossBench: Equatable {
         var dropped: Int
         var corrupted: Int
         var stalls: Int
-        /// Of those, the ones called on audio (HEL-123).
+        /// Of those, the ones called on audio.
         var audioStalls: Int = 0
         /// Audio-dry episodes (`aDry`), counted regardless of whether they
         /// became a confirmed stall. Silence used to leave no trace in a
@@ -55,7 +55,7 @@ nonisolated struct FrameLossBench: Equatable {
         var minVideoQueue: Int
         /// Frames that took the direct-display path inside the window —
         /// compare against `frames` to see whether video is being
-        /// composited with UI (HEL-64).
+        /// composited with UI.
         var optimizedFrames = 0
         /// Seconds of accumulated display lateness inside the window.
         var accumulatedDelay = 0.0
@@ -71,10 +71,10 @@ nonisolated struct FrameLossBench: Equatable {
         /// One line for the HUD *and* for the `player.regression.frameLoss`
         /// probe, which `FrameLossRegressionResult` in the UI tests parses.
         /// Every field named here is part of that contract; removing one
-        /// silently stops the regression reading its own result, which is how
-        /// HEL-109 broke `testVC1DirectPlayMaintainsContinuousAudioAndVideo`
-        /// by dropping `corrupt` and `aGaps` to make room for the memory
-        /// figures. `regressionSummaryIsParseable` pins it.
+        /// silently stops the regression reading its own result, which is
+        /// how `testVC1DirectPlayMaintainsContinuousAudioAndVideo` was once
+        /// broken, by dropping `corrupt` and `aGaps` to make room for the
+        /// memory figures. `regressionSummaryIsParseable` pins it.
         var regressionSummary: String {
             String(
                 format: "%.2f%% (%d/%d) · corrupt %d · stalls %d · aStalls %d · aDry %d · aGaps %d · minQ %d · peak %.0f MB (+%.0f) · @%.0f+%.0fs",

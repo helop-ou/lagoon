@@ -1,7 +1,7 @@
 #if os(iOS)
 import XCTest
 
-/// The iOS touch journey HEL-153 asks for: the player's touch grammar has no
+/// The iOS touch journey: the player's touch grammar has no
 /// remote to drive it, so this exercises the surface gestures directly —
 /// single tap to toggle the transport, double-tap either half of the video
 /// to seek ±10 s (with the `player.seekFeedback` glyph), and the centre
@@ -167,7 +167,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertFalse(probe.exists, "Close should dismiss the player and its probe")
     }
 
-    /// The iPhone swipe grammar (HEL-162 feedback): swipe up over free video
+    /// The iPhone swipe grammar(feedback): swipe up over free video
     /// opens the options panel, Close closes outright, and a swipe down
     /// minimizes — into Picture in Picture on a phone, and where PiP is not
     /// possible, as on the simulator, it closes instead.
@@ -200,7 +200,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertTrue(probe.waitForNonExistence(timeout: 10), "a swipe down should minimize, which closes without PiP")
     }
 
-    /// HEL-162: a player started from a pushed detail page closed itself about
+    /// A player started from a pushed detail page closed itself about
     /// a second after opening, on every title reached through Library, Search
     /// or Discover. The bench journeys above never saw it because they present
     /// from the tab root. Presenting from inside a `NavigationStack`

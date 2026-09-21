@@ -48,7 +48,7 @@ nonisolated enum ServerRefreshPolicy {
 /// background, so their ordinary `task` and `onAppear` work does not run again
 /// when the scene becomes active. RootView advances this clock at that
 /// boundary; visible server-backed screens observe it and reconcile their own
-/// state without the root needing to know what they have loaded (HEL-135).
+/// state without the root needing to know what they have loaded.
 @Observable
 final class ServerSyncState {
     private(set) var generation = 0
@@ -59,7 +59,7 @@ final class ServerSyncState {
     /// Set by `MainTabView` (iOS only) once the libraries load fails to
     /// reach the server, cleared on the next success. Library reads this to
     /// show the offline banner and to know a downloaded title still plays
-    /// with nothing else reachable (HEL-166).
+    /// with nothing else reachable.
     var serverUnreachable = false
 
     #if DEBUG

@@ -8,7 +8,7 @@ import Foundation
 /// track. They earn their place for the opposite reason: together they
 /// describe the shape of a layout, and it is the shape — not any one
 /// stream — that decides whether a remembered position still means
-/// anything (HEL-184).
+/// anything.
 nonisolated struct AudioLayoutStream: Equatable {
     let codec: String?
     let channels: Int?

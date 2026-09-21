@@ -2,9 +2,9 @@ import Foundation
 import Observation
 
 /// The request detail's data and its refresh rules, kept out of the view
-/// because HEL-136 states them as behaviour — poll only what can change, and
-/// hold the last good snapshot through a transient failure — and behaviour
-/// that exists only inside a `View`'s private `@State` cannot be tested.
+/// because these are behaviour — poll only what can change, and hold the
+/// last good snapshot through a transient failure — and behaviour that
+/// exists only inside a `View`'s private `@State` cannot be tested.
 @Observable
 final class SeerrRequestDetailModel {
     var currentRequest: SeerrMediaRequest
@@ -79,7 +79,7 @@ final class SeerrRequestDetailModel {
     /// re-reads TMDB only when it must: `jellyfinMediaId` lands on the media
     /// row when the title reaches the library, and that gates "Open in Lagoon".
     /// Availability flipping therefore buys exactly one more fetch, not one
-    /// every ten seconds (HEL-136).
+    /// every ten seconds.
     private func mediaDetails(
         for request: SeerrMediaRequest,
         client: SeerrClient,
@@ -96,7 +96,7 @@ final class SeerrRequestDetailModel {
     /// Names the quality profile the request was made against. `MediaRequest`
     /// carries only a `profileId`, so the name comes from the Radarr/Sonarr
     /// service; when the request does not say which server, the default one
-    /// is the server that would have taken it (HEL-118).
+    /// is the server that would have taken it.
     ///
     /// Best-effort throughout: a missing profile is one absent token, never
     /// an error on a page that is about the request.
@@ -132,7 +132,7 @@ final class SeerrRequestDetailModel {
     /// A request whose title has arrived should be playable from here rather
     /// than only removable — the same match `SeerrMediaDetailView` makes, and
     /// on the same terms: the Jellyfin id Seerr recorded when it can, an
-    /// exact TMDB lookup when it cannot (HEL-115). Once matched, the item is
+    /// exact TMDB lookup when it cannot. Once matched, the item is
     /// as static as the artwork, so a poll keeps the one it already has.
     private func jellyfinItem(
         for request: SeerrMediaRequest,

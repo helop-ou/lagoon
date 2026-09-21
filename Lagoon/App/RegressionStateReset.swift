@@ -5,7 +5,7 @@ import Foundation
 /// `-debug.regressionBootstrapPublicDemo YES`: before the session restores
 /// anything, drop every account- and server-scoped record a previous run on
 /// this simulator left behind, so the regression lane starts from the same
-/// state every time (HEL-144, audit A18).
+/// state every time (audit A18).
 ///
 /// Scoped on purpose. What goes: the stored accounts and the active one, the
 /// mid-connect server, every per-account preference (libraries, home rows,

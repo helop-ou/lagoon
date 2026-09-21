@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Full-bleed backdrop behind a detail page (HEL-46). Only lightly dimmed —
+/// Full-bleed backdrop behind a detail page. Only lightly dimmed —
 /// the artwork is meant to be the first thing you see, and the scrim that
 /// makes text readable travels with the content block instead, so it lands
 /// exactly where the words are.
 struct DetailBackdropView: View {
     let url: URL?
-    /// Portrait artwork for the compact touch layout (HEL-169). On a phone
+    /// Portrait artwork for the compact touch layout. On a phone
     /// or a compact iPad window the poster is the hero: it fills the width
     /// at the top and fades into the reading surface, and the landscape
     /// backdrop is not drawn at all. Regular-width iPad windows keep the
@@ -176,7 +176,7 @@ struct DetailBackdropView: View {
             // A regular-width iPad window is laid out like the TV: the
             // information column on the leading half, so the wash is the
             // TV's leading fade and the trailing half stays vivid, with a
-            // bottom fade for the rails that scroll up over it (HEL-169).
+            // bottom fade for the rails that scroll up over it.
             ZStack {
                 Theme.background.opacity(heavy ? 0.85 : 0.18)
                 LinearGradient(
@@ -240,7 +240,7 @@ struct DetailBackdropView: View {
 /// it is, and the rails below rely on their own artwork for contrast.
 struct DetailPageScaffold<Content: View>: View {
     let backdropURL: URL?
-    /// Portrait artwork for the compact touch hero (HEL-169); nil keeps the
+    /// Portrait artwork for the compact touch hero; nil keeps the
     /// backdrop composition on every platform.
     var posterURL: URL? = nil
     @ViewBuilder let content: Content
@@ -270,7 +270,7 @@ struct DetailPageScaffold<Content: View>: View {
                     // while it is loading. Without a concrete viewport, the
                     // enclosing vertical ScrollView accepted that width and
                     // centered a phone-sized page inside a ~1,300pt layout,
-                    // putting the detail actions off-screen (HEL-41). The
+                    // putting the detail actions off-screen. The
                     // rails still scroll on their own axis; only the page is
                     // pinned to the screen it belongs to.
                     .frame(width: proxy.size.width, alignment: .leading)
@@ -344,7 +344,7 @@ extension VerticalAlignment {
     static let detailPillCenter = VerticalAlignment(DetailPillCenter.self)
 }
 
-/// A glass circle for the phone's row of secondary detail actions (HEL-169).
+/// A glass circle for the phone's row of secondary detail actions.
 /// Built on the interactive glass effect rather than `.buttonStyle(.glass)`
 /// with a circular border shape: that style draws its pressed highlight as
 /// a capsule sized to the label, not to the circle, so a press showed a
@@ -366,7 +366,7 @@ struct DetailCircleButton<Label: View>: View {
 }
 
 /// The menu-shaped sibling of `DetailCircleButton`: the download control's
-/// circles open a menu rather than firing an action (HEL-166), and they
+/// circles open a menu rather than firing an action, and they
 /// press as circles for the same reason.
 struct DetailCircleMenu<Content: View, Label: View>: View {
     @ViewBuilder let content: Content
@@ -390,7 +390,7 @@ extension View {
     /// A detail page on iPhone and iPad is the immersive one: artwork edge to
     /// edge, one decision to make. The floating tab bar has no place over it
     /// and is hidden for the page's lifetime, the way Photos hides it over a
-    /// photo (HEL-169). Back is the way out; the bar returns with the list
+    /// photo. Back is the way out; the bar returns with the list
     /// it belongs to. tvOS has no tab bar to hide inside a pushed page.
     func detailPageChrome() -> some View {
         #if os(iOS)
@@ -411,7 +411,7 @@ enum DetailLayout {
     }
 
     /// A landscape phone: the poster is the whole hero and the title,
-    /// actions and Play share one row along its lower part (HEL-169).
+    /// actions and Play share one row along its lower part.
     static func usesLandscapeRow(
         _ horizontalSizeClass: UserInterfaceSizeClass?,
         _ verticalSizeClass: UserInterfaceSizeClass?
@@ -420,7 +420,7 @@ enum DetailLayout {
     }
 
     /// Where the title art sits: centred under the portrait phone's hero,
-    /// leading in the landscape row and the iPad's column (HEL-169).
+    /// leading in the landscape row and the iPad's column.
     static func titleAlignment(
         _ horizontalSizeClass: UserInterfaceSizeClass?,
         _ verticalSizeClass: UserInterfaceSizeClass?
@@ -433,10 +433,10 @@ enum DetailLayout {
 #endif
 
 /// The actions block of a detail page, laid out once for every page that
-/// has one primary pill and some secondary controls (HEL-174). Film, series
+/// has one primary pill and some secondary controls. Film, series
 /// and Seerr pages each used to carry their own copy of the four
 /// compositions below, and the Seerr page's copy fell behind when the touch
-/// pages were redesigned (HEL-169).
+/// pages were redesigned.
 ///
 /// - tvOS and a regular-width iPad window: one row, the primary first so it
 ///   takes first focus, with the accessory beneath the row.
@@ -513,7 +513,7 @@ struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View
 extension View {
     /// The label of a detail page's one hero action (Play, Resume, Request,
     /// Open in Lagoon): `title3` on touch, always on one line, and capped in
-    /// width on a phone so it is big without becoming a bar (HEL-169). The
+    /// width on a phone so it is big without becoming a bar. The
     /// TV's glass pill sizes itself.
     func detailPrimaryLabel() -> some View {
         modifier(DetailPrimaryLabelModifier())
@@ -578,7 +578,7 @@ struct DetailHeader<Buttons: View>: View {
     /// is the next episode, not the premise of the series (Infuse does the
     /// same). The title art stays the show's — that's the page's identity.
     var upNext: MediaItem?
-    /// Keep the synopsis's height fixed while `upNext` changes (HEL-175).
+    /// Keep the synopsis's height fixed while `upNext` changes.
     var reservesOverviewLines = false
     @ViewBuilder let buttons: Buttons
 
@@ -719,7 +719,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
             buttons
                 .padding(.top, Metrics.Space.xs)
             #else
-            // Touch order (HEL-169): the decision first. Title, facts and
+            // Touch order: the decision first. Title, facts and
             // the actions form one block over the artwork, and the synopsis
             // follows in full below it; a synopsis you have to expand was
             // the one thing every viewer tapped and nobody wanted to. The
@@ -784,7 +784,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         } else if overviewReservesLines {
             #if os(tvOS)
             // An episode with no synopsis keeps the block's height, or the
-            // page would jump on that one card (HEL-175).
+            // page would jump on that one card.
             DetailOverview(text: "", reservesLines: true)
             #endif
         }
@@ -911,12 +911,12 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
 /// The synopsis. Three lines at 10 feet, where the page is a glance and the
 /// rest of the block has to fit beside the artwork; the whole text on touch,
 /// where the page scrolls and an expand button only stood between the viewer
-/// and the paragraph they had already started reading (HEL-169).
+/// and the paragraph they had already started reading.
 ///
 /// On a series page the text follows the focused episode, and the synopsis
 /// sits between the facts and the Play row, so its height moved everything
 /// beneath it, the episode rail being browsed included, by up to two lines
-/// per step (HEL-175). `reservesLines` keeps all three lines' worth of
+/// per step. `reservesLines` keeps all three lines' worth of
 /// height whatever the current text needs. Touch shows the whole synopsis
 /// and changes it only after playback, so it takes no reservation.
 private struct DetailOverview: View {
@@ -966,7 +966,7 @@ struct TitleArtView: View {
 /// A title's logo where there is one, and the title set in type where there
 /// is not. Split out of `TitleArtView` so the hero can use it for sources
 /// that resolve their own artwork — Seerr serves no logo images at all, so
-/// Discover's hero always takes the type path (HEL-114).
+/// Discover's hero always takes the type path.
 struct TitleArtImage: View {
     let url: URL?
     let title: String
@@ -1010,8 +1010,7 @@ struct TitleArtImage: View {
 }
 
 /// One person in the cast strip, from whichever service supplied them: a
-/// Jellyfin `Person` on a library title, TMDB's credits on a Seerr title
-/// (HEL-174).
+/// Jellyfin `Person` on a library title, TMDB's credits on a Seerr title.
 struct CastCredit: Identifiable, Hashable {
     let id: String
     let name: String

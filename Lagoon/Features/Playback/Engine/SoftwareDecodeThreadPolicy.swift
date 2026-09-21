@@ -1,7 +1,7 @@
 import Dispatch
 import Foundation
 
-/// How libavcodec is configured for software video decode (HEL-137).
+/// How libavcodec is configured for software video decode.
 ///
 /// The worker-count baseline survived measurement on an Apple TV: it stays at
 /// the device's five active processors; controlled runs found dav1d auto and
@@ -41,7 +41,7 @@ nonisolated enum SoftwareDecodeThreadPolicy {
     /// It was once "measured" from the HUD and that answer was worthless:
     /// decode cost on this content tracks scene complexity, so a cumulative
     /// average read at a different playback position compares scenes rather
-    /// than settings (HEL-137).
+    /// than settings.
     static let threadCountDefaultsKey = "debug.softwareDecodeThreadCount"
 
     /// Maximum pictures dav1d may keep in flight. Production matches the

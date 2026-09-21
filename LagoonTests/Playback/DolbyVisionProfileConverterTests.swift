@@ -4,7 +4,7 @@ import Libavutil
 import Testing
 @testable import Lagoon
 
-/// The HEL-145 profile 7 → 8.1 RPU rewrite: `DolbyVisionProfileConverter`
+/// The profile 7 → 8.1 RPU rewrite: `DolbyVisionProfileConverter`
 /// rewrites every RPU (unspec-62) NAL with libdovi's own
 /// `dovi_convert_rpu_with_mode(rpu, 2)` and drops the enhancement layer
 /// (unspec-63) wholesale, using `HEVCNALUnitRewriter.rewrite` as the

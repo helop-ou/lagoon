@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-187: the DSN is injected at build time instead of tracked in source,
+/// The DSN is injected at build time instead of tracked in source,
 /// so "no DSN" is now an ordinary state rather than a mistake. Every way a
 /// build can arrive without one has to resolve to `nil`, because the
 /// alternative is an app that tries to report to a half-substituted address.

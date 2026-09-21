@@ -11,7 +11,7 @@ nonisolated private let eac3AtmosProfile: Int32 = 30 // AV_PROFILE_EAC3_DDP_ATMO
 nonisolated private let ec3JOCFormatID = AudioFormatID(0x6563_2B33) // 'ec+3'
 
 /// Turns FFmpeg codec parameters and packets into the CoreMedia objects the
-/// AVSampleBuffer* renderers eat (HEL-48 M1).
+/// AVSampleBuffer* renderers eat.
 ///
 /// The trick that makes the whole architecture cheap: Matroska stores
 /// h264/hevc exactly like mp4 (avcC/hvcC extradata, length-prefixed NALs),
@@ -30,7 +30,7 @@ nonisolated enum SampleBufferFactory {
     /// record and returns `noErr`, and the refusal only arrives later, when
     /// `VTDecompressionSessionCreate` declines the session with -4. That
     /// reads as a hardware fault rather than a container one, which is
-    /// exactly how it was first misread (HEL-131).
+    /// exactly how it was first misread.
     static func hevcExtradataCarriesParameterSets(_ hvcc: Data) -> Bool {
         // 22 bytes of fixed header, then numOfArrays and the arrays.
         guard hvcc.count > 22 else { return false }
@@ -59,9 +59,9 @@ nonisolated enum SampleBufferFactory {
     /// order, together with the framing of the samples they describe.
     ///
     /// Two containers need this and for different reasons: one that declares
-    /// no parameter sets at all and repeats them in-band (HEL-131), and one
+    /// no parameter sets at all and repeats them in-band, and one
     /// that declares them in a framing Apple's decoders do not read, which is
-    /// every MPEG-TS the disc reader opens (HEL-133).
+    /// every MPEG-TS the disc reader opens.
     nonisolated struct BitstreamParameterSets {
         let sets: [Data]
         /// Bytes prefixing each NAL in the samples, not in these sets.
@@ -108,7 +108,7 @@ nonisolated enum SampleBufferFactory {
         }
         var extensions: [CFString: Any] = [:]
 
-        // HEL-48 M3: colorimetry tags. The display pipeline only engages
+        // Colorimetry tags. The display pipeline only engages
         // HDR/EDR when the format description declares what the bitstream
         // carries — untagged BT.2020+PQ renders as washed-out SDR.
         if let primaries = colorPrimaries(codecpar.pointee.color_primaries) {
@@ -160,7 +160,7 @@ nonisolated enum SampleBufferFactory {
         // rewrites it, so it plays as HDR10 via the tags above. Profile 7
         // (UHD Blu-ray remuxes) is tagged the same way as profile 8
         // whenever the demuxer hands in `dolbyVisionOverride` — its RPUs
-        // have been rewritten to profile 8.1 in flight, HEL-145 — and
+        // have been rewritten to profile 8.1 in flight — and
         // otherwise gets no atom, same as profile 4, which is the debug
         // HDR10 fallback (Settings → Advanced → Playback Diagnostics →
         // "Dolby Vision Compatibility Mode").
@@ -188,7 +188,7 @@ nonisolated enum SampleBufferFactory {
         // than its parameter sets were. In practice this never carries a
         // profile 7 override anyway: it's MPEG-TS discs that need the
         // bitstream harvest, and those never have a DoVi configuration
-        // record to convert in the first place (HEL-145). The base layer
+        // record to convert in the first place. The base layer
         // still presents as HDR10 off the tags either way.
         if let parameterSets, !parameterSets.sets.isEmpty {
             switch codecpar.pointee.codec_id {
@@ -570,7 +570,7 @@ nonisolated enum SampleBufferFactory {
         let size: Int
         let blockBuffer: CMBlockBuffer?
         if let payloadOverride {
-            // A rewritten payload (the DoVi EL strip, HEL-64) no longer
+            // A rewritten payload(the DoVi EL strip) no longer
             // aliases FFmpeg's allocation, so it is copied into a
             // CoreMedia-owned block instead of retained.
             size = payloadOverride.count
@@ -627,7 +627,7 @@ nonisolated enum SampleBufferFactory {
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sampleBuffer else { return nil }
 
-        // Frame dependencies (HEL-64, third and final chapter of 4e2ad5f).
+        // Frame dependencies(third and final chapter of 4e2ad5f).
         //
         // CMSampleBuffer.h, verbatim: "A frame is considered droppable if
         // and only if kCMSampleAttachmentKey_IsDependedOnByOthers is
@@ -768,7 +768,7 @@ nonisolated enum SampleBufferFactory {
         return blockBuffer
     }
 
-    // MARK: - HDR / Dolby Vision tagging (HEL-48 M3)
+    // MARK: - HDR / Dolby Vision tagging
 
     static func colorPrimaries(_ primaries: AVColorPrimaries) -> CFString? {
         switch primaries {
@@ -819,8 +819,8 @@ nonisolated enum SampleBufferFactory {
 
     /// The stream's Dolby Vision configuration, when the container carries
     /// one — the demuxer uses it to decide whether a profile 7 stream gets
-    /// converted to profile 8.1 or stripped to the HDR10 fallback (HEL-145;
-    /// formerly the HEL-64 strip-only experiment).
+    /// converted to profile 8.1 or stripped to the HDR10 fallback (formerly
+    /// a strip-only experiment).
     static func doviConfiguration(codecpar: UnsafeMutablePointer<AVCodecParameters>) -> AVDOVIDecoderConfigurationRecord? {
         sideData(codecpar, type: AV_PKT_DATA_DOVI_CONF)
     }

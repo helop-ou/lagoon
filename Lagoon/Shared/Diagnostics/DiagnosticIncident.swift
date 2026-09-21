@@ -20,7 +20,7 @@ nonisolated enum DiagnosticIncidentCode: String, Sendable, CaseIterable {
     /// reproduce from a description.
     case playbackFrozen = "playback.frozen"
     /// A session that ended without an error but with counters over the
-    /// documented thresholds (HEL-159).
+    /// documented thresholds.
     case playbackDegraded = "playback.degraded"
     /// A server-side subtitle could not be loaded; playback continued.
     case playbackSubtitleLoadFailed = "playback.subtitleLoadFailed"

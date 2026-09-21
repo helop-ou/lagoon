@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The regression lane's clean slate (HEL-144, audit A18): scoped to what a
+/// The regression lane's clean slate: scoped to what a
 /// previous run could leak into the next, and nothing else.
 @Suite("Regression state reset")
 struct RegressionStateResetTests {

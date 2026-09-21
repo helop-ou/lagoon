@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The pure parts of Jellyfin's WebSocket (HEL-172): the envelope split, the
+/// The pure parts of Jellyfin's WebSocket: the envelope split, the
 /// reconnection schedule, and the URL. All three are things a live socket
 /// would only tell you about by misbehaving.
 @Suite("Server socket")
@@ -94,7 +94,7 @@ struct ServerSocketTests {
 
     /// The socket is built from `serverRelativeURL("socket")`, so a
     /// reverse-proxy base path has to survive the scheme swap — the exact
-    /// thing that broke every transcode on a base-path server (HEL-144).
+    /// thing that broke every transcode on a base-path server.
     @Test func theSocketURLSwapsTheSchemeAndKeepsTheBasePath() throws {
         let base = try #require(URL(string: "https://media.example/jellyfin/socket"))
         let url = try #require(ServerSocketURL.socket(from: base, token: "tok en", deviceId: "device-1"))

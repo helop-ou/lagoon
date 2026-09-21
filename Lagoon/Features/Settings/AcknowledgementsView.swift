@@ -2,7 +2,7 @@ import SwiftUI
 
 /// What Lagoon ships that it did not write: every third-party component, the
 /// licence that governs it, and the names that belong to other projects
-/// (HEL-143, audit A06).
+/// (audit A06).
 ///
 /// Modelled on `ChangelogView`, and for its reasons: a modal you read and
 /// dismiss rather than a pushed page, no `NavigationStack` on tvOS — its

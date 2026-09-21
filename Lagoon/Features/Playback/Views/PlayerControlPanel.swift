@@ -23,13 +23,13 @@ enum PlayerPanelTab: CaseIterable, Hashable {
     /// The tabs actually on offer. Together exists only while a group
     /// does, and every place that walks the tabs — the strip, the tvOS
     /// left/right grammar — must walk *this* rather than `allCases`, or
-    /// arrowing right lands on a tab that is not drawn (HEL-172).
+    /// arrowing right lands on a tab that is not drawn.
     static func offered(inGroup: Bool) -> [PlayerPanelTab] {
         inGroup ? allCases : allCases.filter { $0 != .together }
     }
 }
 
-/// What the Together tab draws (HEL-172).
+/// What the Together tab draws.
 ///
 /// A value rather than the store: the panel host is `Equatable` so the
 /// playback clock cannot walk its tabs and track rows, and that boundary
@@ -240,7 +240,7 @@ struct PlayerControlPanel: View {
 
     /// Who is in the room, what the room is doing, and the two decisions
     /// that belong to this member alone: whether to hold everyone up, and
-    /// whether to stay (HEL-172). Everything about *playback* is the
+    /// whether to stay. Everything about *playback* is the
     /// group's and is not offered here.
     @ViewBuilder
     private var togetherCard: some View {
@@ -652,8 +652,7 @@ struct PlayerControlPanel: View {
 
     /// The tab is either choosing a track or browsing search results, never
     /// both. Stacking results above the tracks gave the candidates two visible
-    /// rows and left no way back to a track list they were now burying
-    /// (HEL-150).
+    /// rows and left no way back to a track list they were now burying.
     private var subtitleCard: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
             if let subtitleSearch, subtitleSearch.isBrowsingResults {

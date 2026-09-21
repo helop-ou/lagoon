@@ -5,7 +5,7 @@ import Foundation
 /// The volume reader asks for small scattered reads — descriptors,
 /// directories, playlists — so an implementation is expected to cache rather
 /// than fetch exactly what it is asked for. Over a network the whole mount
-/// costs a handful of requests when it does (HEL-133).
+/// costs a handful of requests when it does.
 nonisolated protocol DiscImageSource: AnyObject {
     /// The image's total length, when the transport knows it.
     var imageLength: Int64? { get }

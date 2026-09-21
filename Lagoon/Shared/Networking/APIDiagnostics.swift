@@ -1,7 +1,7 @@
 import Foundation
 
 /// The one place a failed Jellyfin or Seerr request becomes a diagnostic
-/// record (HEL-159). Both clients call in from their shared request path
+/// record. Both clients call in from their shared request path
 /// so every route gets the same classification: expected conditions (an
 /// unreachable server, a lost connection, 401/403) are recorded into the
 /// history and never reported; everything else is an incident grouped by

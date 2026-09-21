@@ -1,7 +1,7 @@
 import Testing
 @testable import Lagoon
 
-/// The transitions behind the watched and favourite toggles (HEL-144, A14):
+/// The transitions behind the watched and favourite toggles(A14):
 /// optimistic flip, refusal with feedback, and reconciliation with the
 /// server after an accepted change.
 @Suite("Optimistic toggle state")

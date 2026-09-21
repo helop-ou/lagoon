@@ -18,7 +18,7 @@ import LagoonPixelOps
 /// NV12, while little-endian 10-bit planar/P010 becomes Core Video P010.
 /// Anything else fails closed instead of silently presenting incorrect color.
 nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
-    /// Concrete controls for the HEL-137 output matrix. "Source" preserves
+    /// Concrete controls for the output matrix. "Source" preserves
     /// the decoded color signalling (PQ/BT.2020 for the HDR test title), while
     /// "SDR" asks VTPixelTransfer to convert to BT.709. Lossless modes use
     /// Apple's tiled lossless pixel formats; direct/linear modes remain
@@ -29,8 +29,8 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         case linearSDR = "linear-sdr"
         case losslessSDR = "lossless-sdr"
         /// The Metal kernel repacks (and, for `gpuSDR`, tone-maps) straight
-        /// into the renderer's buffer: no CPU conversion, no VideoToolbox
-        /// (HEL-137). Where Metal cannot serve the stream these fall back to
+        /// into the renderer's buffer: no CPU conversion, no VideoToolbox.
+        /// Where Metal cannot serve the stream these fall back to
         /// their pixel-transfer equivalents.
         case gpuSource = "gpu-source"
         case gpuSDR = "gpu-sdr"
@@ -136,7 +136,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     private let outputBitDepth: Int
     private let pixelBufferPool: CVPixelBufferPool
     /// Non-nil when frames leave here in Apple's lossless-compressed tiled
-    /// format rather than as linear planes (HEL-137).
+    /// format rather than as linear planes.
     ///
     /// The renderer's power-efficient-compositing metric reached about 87%
     /// for these surfaces and 0% for the linear surfaces on the test Apple TV.
@@ -153,7 +153,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// own queue once the kernel has finished, in decode order.
     typealias Delivery = @Sendable (CMSampleBuffer) -> Void
 
-    /// GPU frames in flight (HEL-137). The decode queue submits and moves
+    /// GPU frames in flight. The decode queue submits and moves
     /// on, so dav1d's wait and the GPU's latency overlap instead of adding;
     /// the cap keeps a slow GPU from running away with pictures.
     private let deliveryQueue = DispatchQueue(label: "ee.helop.lagoon.gpuoutput", qos: .userInitiated)
@@ -162,7 +162,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     private var gpuFailure: Error?
     /// What the frames leaving this decoder are tagged as. Identical to
     /// `colorProperties` except on tvOS for HDR sources, where it is the
-    /// BT.709 result of the transfer-session tone map (HEL-137).
+    /// BT.709 result of the transfer-session tone map.
     private let outputProperties: ColorProperties
     /// True when HDR content leaves here as tone-mapped SDR on tvOS. In the
     /// controlled A/B, this compressed SDR path dropped fewer frames and used
@@ -177,7 +177,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     private let detailedTimings: PipelineStageTimings
     private var profileStartedAt: Double?
     /// Rolling window, so the HUD can show what the decoder is managing now
-    /// rather than an average dragged up by a fast start (HEL-137).
+    /// rather than an average dragged up by a fast start.
     private var windowStartedAt: Double?
     private var windowFrames = 0
     private static let windowSeconds = 2.0
@@ -200,7 +200,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// libavcodec does not expose dav1d's resulting worker count here.
     let resolvedThreadCount: Int32
 
-    /// Where the software path's time actually goes (HEL-137), separated so
+    /// Where the software path's time actually goes, separated so
     /// nobody has to guess which stage is the expensive one. Cumulative since
     /// the last flush, which is every seek — the same boundary the frame-loss
     /// bench re-arms on, so a bench window and this profile describe the same
@@ -230,7 +230,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         /// Frames per second since the last seek.
         ///
         /// **This cannot tell a healthy pipeline from a struggling one**, and
-        /// two builds of HEL-137 were read wrongly because of it. Once the
+        /// two builds of measurements were read wrongly because of it. Once the
         /// queues fill, backpressure throttles the decoder to playback rate,
         /// so a decoder with headroom to spare and one with none both settle
         /// here at the frame rate of the content. Read `decodeMilliseconds`
@@ -263,7 +263,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         /// Everything a frame costs this stage, which is what has to fit
         /// inside a frame period. Reporting decode alone read 76% of budget
         /// while the real total was over 100%, and hid the conversion for
-        /// four builds (HEL-137).
+        /// four builds.
         var frameMilliseconds: Double {
             decodeMilliseconds + conversionMilliseconds
         }
@@ -287,7 +287,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     }
 
     /// Bytes one decoded surface occupies, for the queue limit that has to
-    /// bound them (HEL-137 lever 5; a 4K P010 frame is 23.7 MiB).
+    /// bound them(lever 5; a 4K P010 frame is 23.7 MiB).
     var decodedFrameBytes: Int64 {
         DecodedFrameMemory.bytesPer420Frame(
             width: width,
@@ -306,7 +306,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         detailedTimings.reset()
     }
 
-    /// H.264 is accepted only when the stream is interlaced (HEL-170). The
+    /// H.264 is accepted only when the stream is interlaced. The
     /// progressive case belongs to VideoToolbox, and keeping it out of here
     /// means a hardware description that fails to build for progressive
     /// H.264 still surfaces as the failure it is rather than quietly
@@ -484,7 +484,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
 
         // The transfer function is what puts tvOS into HDR; the primaries and
         // matrix are left alone so the colour is as close as it can be without
-        // tone mapping (HEL-137). Dropping the static metadata with it keeps
+        // tone mapping. Dropping the static metadata with it keeps
         // the display from being told about a master it is no longer being
         // shown in.
         let properties = ColorProperties(
@@ -924,7 +924,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
         }
 
         // An interlaced frame is made progressive before it is copied out,
-        // so nothing downstream ever sees a field pair (HEL-127). Ten-bit
+        // so nothing downstream ever sees a field pair. Ten-bit
         // formats are left alone: interlaced content at that depth is not
         // something this engine has met, and guessing at one is worse than
         // the transcode the profile still asks for.
@@ -1140,7 +1140,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     }
 
     /// The GPU output stage: one pool allocation, one kernel dispatch, no
-    /// intermediate buffer and no transfer session (HEL-137). The dav1d
+    /// intermediate buffer and no transfer session. The dav1d
     /// picture is kept alive by a frame reference until the kernel has read
     /// it; the sample is wrapped and delivered from the delivery queue.
     private func submitGPUSample(
@@ -1372,10 +1372,10 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// Deinterlaces the decoded frame in place, before it is copied out.
     ///
     /// Only the software path has this. It is where MPEG-2 is decoded and so
-    /// where DVD lives, and since HEL-170 where interlaced H.264 is sent so
+    /// where DVD lives, and where interlaced H.264 is sent so
     /// that 1080i broadcast recordings direct-play; the hardware path has no
     /// deinterlacing stage, which is why the device profile still asks the
-    /// server to handle interlaced HEVC (HEL-127).
+    /// server to handle interlaced HEVC.
     ///
     /// The frame is made writable first. What the decoder handed over may
     /// still be a reference frame that later pictures are predicted from, and
@@ -1472,7 +1472,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// Worth 0.5 ms of a 4.8 ms conversion on an Apple TV, measured. Only that
     /// much because the copy is bounded by memory bandwidth rather than by
     /// cores. Chunks stay well below the core count for the same reason the
-    /// gain is small: these threads compete with dav1d's (HEL-137).
+    /// gain is small: these threads compete with dav1d's.
     private static let conversionChunks: Int = {
         let override = SoftwareDecodeThreadPolicy.commandLineInteger(
             forKey: "debug.softwareDecodeConvertChunks"

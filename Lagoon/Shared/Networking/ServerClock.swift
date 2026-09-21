@@ -2,7 +2,7 @@ import CoreMedia
 import Foundation
 
 /// One round trip to `GetUtcTime`, in seconds since 1970 on whichever clock
-/// observed each instant (HEL-172).
+/// observed each instant.
 ///
 /// This is NTP's four-timestamp measurement, which is what SyncPlay's design
 /// assumes: the two local instants bracket the request, the two server
@@ -68,7 +68,7 @@ nonisolated struct ServerClockEstimate: Equatable, Sendable {
 
 /// Keeps an estimate of the server's clock, so a SyncPlay group's "unpause
 /// at 11:44:21.356" can be turned into a local instant — and then into a
-/// host-clock time the playback engine can schedule against (HEL-172).
+/// host-clock time the playback engine can schedule against.
 ///
 /// Main-actor owned, by the project's default isolation; the pure parts
 /// above are `nonisolated` and carry the tests.

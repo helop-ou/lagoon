@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure decision coverage for offline downloads (HEL-166): which resume
+/// Pure decision coverage for offline downloads: which resume
 /// position wins when a title starts, and whether a stopped position counts
 /// as played through. Neither needs a server, a clock, or a download on
 /// disk.

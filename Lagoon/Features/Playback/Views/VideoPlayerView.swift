@@ -10,7 +10,7 @@ struct VideoPlayerView: View {
     @State private var leftForPictureInPicture = false
 
     @Environment(SessionStore.self) private var session
-    /// Watch Together (HEL-172). Always present — `RootView` injects it,
+    /// Watch Together. Always present — `RootView` injects it,
     /// and so does the iOS UIKit player host, which rebuilds the
     /// environment from scratch. Outside a group `attach` does nothing.
     @Environment(SyncPlayStore.self) private var syncPlay
@@ -21,12 +21,12 @@ struct VideoPlayerView: View {
     @State private var trackPreferences = TrackPreferencesStore()
     /// Outlives the player presentation by writing straight through to
     /// UserDefaults, so a corrected audio track is still remembered when
-    /// the viewer comes back to the show tomorrow (HEL-184).
+    /// the viewer comes back to the show tomorrow.
     @State private var audioTrackMemory = AudioTrackMemoryStore()
     @State private var subtitleTrackMemory = SubtitleTrackMemoryStore()
     @State private var panelOpen = false
     #if os(iOS)
-    /// The iPhone's swipe grammar (HEL-162). A downward drag carries the
+    /// The iPhone's swipe grammar. A downward drag carries the
     /// whole player with the finger, YouTube-style, and past the threshold
     /// minimizes it into the phone's popup player, Picture in Picture; an
     /// upward swipe opens the options panel. Close closes, nothing else.
@@ -39,7 +39,7 @@ struct VideoPlayerView: View {
     /// What the panel's Together tab draws, or nil outside a group. Read
     /// here rather than in the panel so `CustomPlayerView` stays a view
     /// over values, and so the store's membership has exactly one reader
-    /// in the player (HEL-172).
+    /// in the player.
     private var togetherState: PlayerTogetherState? {
         guard syncPlay.isJoined else { return nil }
         return PlayerTogetherState(
@@ -98,7 +98,7 @@ struct VideoPlayerView: View {
                     subtitleSearch: controller.subtitleSearch
                 ) { [weak engine] in
                     // Weak for the same reason the player views hold the
-                    // engine through `PlayerEngineRef` (HEL-152): SwiftUI
+                    // engine through `PlayerEngineRef`: SwiftUI
                     // keeps copies of `CustomPlayerView`, this closure
                     // included, past the next episode handoff, and a strong
                     // capture here would pin the outgoing engine just as the
@@ -125,7 +125,7 @@ struct VideoPlayerView: View {
 
             // A leaf that reads the notices itself, so this body never
             // subscribes to them and a toast costs the player nothing
-            // but its own render (HEL-172).
+            // but its own render.
             SyncPlayNoticeToast(store: syncPlay, reduceMotion: reduceMotion)
 
             // Keep CustomPlayerView and, critically, its UIKit-backed
@@ -201,7 +201,7 @@ struct VideoPlayerView: View {
             controller.subtitleTrackMemory = subtitleTrackMemory
             // Before the start, so the group's driver has its readiness and
             // buffering hooks on the controller by the time the first
-            // engine is built (HEL-172).
+            // engine is built.
             syncPlay.attach(controller)
             await controller.start(
                 media: playerItem.media,
@@ -218,13 +218,12 @@ struct VideoPlayerView: View {
         .onChange(of: controller.didFinish) { _, finished in
             guard finished else { return }
             // The controller decides whether the end of the file rolls
-            // into the next episode (HEL-176). `.card` means never acting
+            // into the next episode. `.card` means never acting
             // alone, so an offer that went unanswered closes the player
             // exactly as `.off` does. An *accepted* offer is a different
             // thing: the file can run out while the successor is still
             // being prepared, and dismissing there tears down a handoff the
-            // viewer asked for and drops them back on the browse screen
-            // (HEL-144).
+            // viewer asked for and drops them back on the browse screen.
             if !controller.isAdvancing, !controller.isAutoplayPending {
                 closePlayer()
             }
@@ -255,11 +254,11 @@ struct VideoPlayerView: View {
         }
         // Backgrounding mid-playback must hand the display back — the
         // home screen has no business running at the content's mode — and
-        // returning re-requests it (HEL-64).
+        // returning re-requests it.
         // tvOS only in effect: on iOS the player is presented from UIKit
         // and this environment value never changes there, so the
         // controller listens to the application's own notifications
-        // instead and keeps playing in the background (HEL-176).
+        // instead and keeps playing in the background.
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
@@ -299,7 +298,7 @@ struct VideoPlayerView: View {
                 closePlayer()
             }
         }
-        // HEL-148 soak hook (debug.soakExitAtSeconds): the film reached the
+        // Soak hook (debug.soakExitAtSeconds): the film reached the
         // configured position, so leave through the same clean teardown
         // path a real exit takes.
         .onChange(of: controller.soakExitRequested) { _, requested in
@@ -369,7 +368,7 @@ struct VideoPlayerView: View {
         if let onPresentationClose { onPresentationClose() } else { dismiss() }
     }
 
-    /// tvOS Match Content (HEL-64): ask the display for the video's own
+    /// tvOS Match Content: ask the display for the video's own
     /// frame rate and dynamic range instead of letting the compositor
     /// cadence-convert and tone-map every full-4K frame. Lagoon always
     /// provides the criteria; the system's own Match Content settings are

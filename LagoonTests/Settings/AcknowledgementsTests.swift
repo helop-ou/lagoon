@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-143, audit A06: the in-app acknowledgements screen is only honest if
+/// The in-app acknowledgements screen is only honest if
 /// every bundled licence resolves, every binary target LagoonFFmpeg links is
 /// covered by an entry, and the trademark notice actually names the marks it
 /// disclaims.

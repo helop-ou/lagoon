@@ -52,8 +52,7 @@ struct SignInView: View {
                         .padding(.top, Metrics.Space.xl)
 
                     // Last in the column, so the username field keeps the
-                    // initial focus and signing in stays the obvious path
-                    // (HEL-143).
+                    // initial focus and signing in stays the obvious path.
                     AboutLagoonButton()
                         .padding(.top, Metrics.Space.l)
                 }

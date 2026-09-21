@@ -9,7 +9,7 @@ final class DeepLinkRouter {
     var pendingItemID: String?
     /// The item to open a detail page for. The Top Shelf carousel offers
     /// Play and More Info as two separate buttons, and they have to do two
-    /// separate things (HEL-119).
+    /// separate things.
     var pendingDetailItemID: String?
     private(set) var owner: String?
     private(set) var generation: UUID?

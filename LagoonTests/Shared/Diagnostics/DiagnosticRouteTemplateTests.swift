@@ -17,7 +17,7 @@ struct DiagnosticRouteTemplateTests {
 
     /// Seerr mounts every route under `api/v1`, and a version segment that
     /// blanked to `{id}` made `search`, `request` and `movie/{id}` all read
-    /// `api/{id}/…` on the dashboard (HEL-180).
+    /// `api/{id}/…` on the dashboard.
     @Test func versionSegmentsSurviveSoSeerrRoutesStayDistinct() {
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/search") == "api/v1/search")
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/movie/603") == "api/v1/movie/{id}")

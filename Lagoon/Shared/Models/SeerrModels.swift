@@ -42,7 +42,7 @@ nonisolated struct SeerrUser: Decodable, Hashable, Identifiable {
 
     var canManageRequests: Bool { hasPermission(.manageRequests) }
     /// Lifting a block is an administrator's job; `hasPermission` already
-    /// treats the admin flag as an override (HEL-115).
+    /// treats the admin flag as an override.
     var canManageBlocklist: Bool { hasPermission(.manageBlocklist) }
     var canViewAllRequests: Bool {
         hasPermission(.manageRequests) || hasPermission(.requestView)
@@ -82,7 +82,7 @@ nonisolated enum SeerrPermission: Int, Hashable {
 /// multi-search and answers with more than these — `collection` today, and
 /// whatever a later release adds — so every DTO that carries one decodes it
 /// with `try?` into an optional: an unrecognised type must leave that one
-/// result typeless, never fail the page it arrived in (HEL-180). The cases
+/// result typeless, never fail the page it arrived in. The cases
 /// stay exactly the three the app can request and route, so the outbound
 /// `SeerrCreateRequest` and the `details`/`recommendations` switches keep
 /// meaning what they say.
@@ -105,7 +105,7 @@ nonisolated enum SeerrMediaType: String, Codable, Hashable, CaseIterable, Identi
 /// spelled out rather than left to `case` order — 6 was previously read as
 /// "deleted" when it is *blocklisted*, which offered a Request button for a
 /// title the server would refuse, and pushed the real deleted value (7) into
-/// the unknown fallback (HEL-115).
+/// the unknown fallback.
 nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
     case unknown = 1
     case pending = 2
@@ -148,7 +148,7 @@ nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
 /// Jellyseerr's `MediaRequestStatus`. Lagoon knew only 1-3 and read anything
 /// else as `.pending`, so a **completed** request — what an approved request
 /// becomes once the title lands in the library — reported "Pending Approval"
-/// forever, and a failed one did too (HEL-115).
+/// forever, and a failed one did too.
 ///
 /// An unrecognised value is now its own case rather than a fourth way to say
 /// pending: claiming a state we do not understand is what caused that bug.
@@ -188,10 +188,10 @@ nonisolated enum SeerrRequestStatus: Int, Hashable {
 /// The request's own status answers that only until it is approved; after
 /// that the media's availability does. Keeping both in one value is what
 /// stops an approved-and-available title reading as "Approved" while it is
-/// sitting in the library ready to play (HEL-115).
+/// sitting in the library ready to play.
 /// How a status glyph animates while its row or button holds focus. Named
 /// here beside the symbols it belongs to; the effect itself is applied in the
-/// view layer (HEL-117).
+/// view layer.
 nonisolated enum SeerrStatusMotion: Hashable {
     case still
     /// The refresh arrows turning — the literal reading of the symbol.
@@ -245,7 +245,7 @@ nonisolated enum SeerrRequestProgress: Hashable {
 
     /// Only the states that are still *going somewhere* animate. A finished
     /// or refused request is a fact, and a fact that wobbles reads as an
-    /// error (HEL-117).
+    /// error.
     var motion: SeerrStatusMotion {
         switch self {
         case .pending: .pulse
@@ -269,7 +269,7 @@ nonisolated enum SeerrRequestProgress: Hashable {
             // original bug in the first place: it quietly reported a specific,
             // reassuring state for one nobody had thought about. Adding a case
             // to `SeerrAvailabilityStatus` should fail this switch and make
-            // someone decide (HEL-115).
+            // someone decide.
             switch availability {
             case .available: .available
             case .partiallyAvailable: .partiallyAvailable
@@ -286,7 +286,7 @@ nonisolated enum SeerrRequestProgress: Hashable {
 }
 
 /// One entry in Radarr/Sonarr's queue, as Jellyseerr relays it on
-/// `mediaInfo.downloadStatus` (HEL-116).
+/// `mediaInfo.downloadStatus`.
 nonisolated struct SeerrDownloadItem: Decodable, Hashable, Identifiable {
     let downloadId: String
     let title: String
@@ -325,7 +325,7 @@ nonisolated struct SeerrDownloadItem: Decodable, Hashable, Identifiable {
 /// **Deduplicated by `downloadId`.** A season pack is one download that
 /// Sonarr reports once per episode, each row carrying the pack's full size —
 /// ten rows of 7.15 GB for a single 7.15 GB download on the test server.
-/// Summing the rows would claim 71 GB and a nonsense percentage (HEL-116).
+/// Summing the rows would claim 71 GB and a nonsense percentage.
 nonisolated struct SeerrDownloadProgress: Hashable {
     let fraction: Double
     let downloadCount: Int
@@ -460,7 +460,7 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
 
     /// The age rating a viewer here would recognise: their own region's
     /// certification when TMDB has one, the US one otherwise, as Jellyfin's
-    /// own metadata providers fall back (HEL-174). Nil rather than a foreign
+    /// own metadata providers fall back. Nil rather than a foreign
     /// board's label nobody can place.
     func officialRating(region: String? = Locale.current.region?.identifier) -> String? {
         let byCountry: [(country: String, rating: String)]
@@ -621,7 +621,7 @@ nonisolated struct SeerrGenre: Decodable, Hashable, Identifiable {
     let name: String
     /// Only `discover/genreslider/*` sends these — a handful of TMDB backdrop
     /// paths to draw the genre with. A detail page's genres carry none, so
-    /// this is empty there rather than absent (HEL-114).
+    /// this is empty there rather than absent.
     let backdrops: [String]
 
     init(from decoder: Decoder) throws {
@@ -743,7 +743,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let seasons: [SeerrRequestedSeason]?
     /// Which Radarr/Sonarr quality profile the request was made against, and
     /// on which server. Numbers only: the names live on the service, not on
-    /// the request (HEL-118).
+    /// the request.
     let profileId: Int?
     let serverId: Int?
 
@@ -770,7 +770,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     var requestStatus: SeerrRequestStatus { .init(apiValue: status) }
 
     /// What to show for this request: its approval state until it is granted,
-    /// and the library's answer after that (HEL-115).
+    /// and the library's answer after that.
     var progress: SeerrRequestProgress {
         .resolve(
             request: requestStatus,

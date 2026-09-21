@@ -1,7 +1,7 @@
 import Foundation
 
-/// Cached library identity and query scope (HEL-61). These now populate
-/// the unified Library's source filter rather than separate tabs (HEL-140).
+/// Cached library identity and query scope. These now populate
+/// the unified Library's source filter rather than separate tabs.
 nonisolated struct LibraryTab: Codable, Identifiable, Hashable {
     let id: String
     let name: String?

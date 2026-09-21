@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A Seerr status as an icon and a word, where the icon animates while the
-/// thing it sits in holds focus (HEL-117).
+/// thing it sits in holds focus.
 ///
 /// Focus-only on purpose: a grid of twenty request cards all turning at once
 /// is noise, while one turning because you are looking at it is the tvOS

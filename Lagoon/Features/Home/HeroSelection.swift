@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which items Home's hero shows (HEL-147).
+/// Which items Home's hero shows.
 ///
 /// The hero used to have one source, the libraries' recently-added rails,
 /// and vanished whenever they came back empty: a server nobody has added to

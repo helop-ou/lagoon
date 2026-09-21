@@ -3,7 +3,7 @@ import Foundation
 import Libavcodec
 
 /// One compressed video access unit read from the container but not yet
-/// handed to whatever decodes or renders it (HEL-124). The engine keeps
+/// handed to whatever decodes or renders it. The engine keeps
 /// reading through a fragment's video block to reach its audio block, and
 /// what it reads past the decoded-frame limit waits here, compressed, until
 /// the decoded queue has room.

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Removes what the direct OpenSubtitles integration left behind on devices
-/// that ran builds 87–91. HEL-146 retired that path in favour of Jellyfin's
+/// that ran builds 87–91. That path was retired in favour of Jellyfin's
 /// own subtitle search, so nothing reads these values any more; they must not
 /// outlive the code that wrote them. Runs on every launch: four removals and a
 /// directory check are cheaper than a marker, and repeating them is harmless.

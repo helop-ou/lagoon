@@ -46,7 +46,7 @@ final class SearchResultsViewModel {
 
     /// Puts the cursor back at the start so a retry re-runs the search rather
     /// than resuming one that has already reached its end — which is what a
-    /// retry offered beside an empty page means (HEL-182).
+    /// retry offered beside an empty page means.
     func restart() {
         items = []
         nextOffset = 0
@@ -119,7 +119,7 @@ struct SearchResultsView: View {
                 } else if model.items.isEmpty {
                     // The page's only focusable element when a search comes
                     // back empty, which is what keeps Menu going back instead
-                    // of quitting the app (HEL-182). The cursor is spent by
+                    // of quitting the app. The cursor is spent by
                     // now, so the retry rewinds it rather than asking for a
                     // page past the end.
                     InlineRetryView(message: "No matching movies or shows.") {

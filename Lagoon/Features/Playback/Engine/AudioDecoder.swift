@@ -5,7 +5,7 @@ import Libavcodec
 import Libavutil
 import Libswresample
 
-/// HEL-48 M4: decodes audio codecs CoreAudio won't take compressed
+/// Decodes audio codecs CoreAudio won't take compressed
 /// (DTS, TrueHD, FLAC, Opus, Vorbis, …) into interleaved Float32 LPCM
 /// sample buffers for AVSampleBufferAudioRenderer. Passthrough codecs
 /// never come here — SampleBufferFactory.audioFormatDescription wraps
@@ -220,7 +220,8 @@ nonisolated final class AudioDecoder {
     }
 
     /// The LPCM payload is copied into a CoreMedia-owned block rather than
-    /// handed over zero-copy. HEL-58 tried the handoff (this buffer behind a
+    /// handed over zero-copy. An earlier attempt tried the handoff (this
+/// buffer behind a
     /// CMBlockBufferCustomBlockSource) and it leaked the entire decoded
     /// stream — ~2.3 MB/s on TrueHD 7.1, which walked the app into the 2 GB
     /// per-process limit and got it jetsam-killed mid-playback. The copy that

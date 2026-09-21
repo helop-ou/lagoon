@@ -1,10 +1,10 @@
 import Foundation
 import Observation
 
-/// The player's two timed decisions — skipping an intro or recap (HEL-63)
-/// and rolling into the next episode (HEL-66) — driven by the engine's
+/// The player's two timed decisions — skipping an intro or recap
+/// and rolling into the next episode — driven by the engine's
 /// clock instead of a view body, so they keep working with the phone
-/// locked or the player minimised into Picture in Picture (HEL-176).
+/// locked or the player minimised into Picture in Picture.
 ///
 /// The overlays draw from this and nothing else: the pill and Select
 /// cannot disagree because there is one answer. `SkipSegmentPolicy` and
@@ -64,7 +64,7 @@ final class PlaybackAutomation {
     /// item starts at a phantom zero, and a recap that covers zero would
     /// otherwise arm — and, on an open slower than its countdown, fire —
     /// before the clock has ever ticked (found while rejoining a SyncPlay
-    /// group at 10:30 and being dragged to the recap's end, HEL-172).
+    /// group at 10:30 and being dragged to the recap's end).
     private var hasPosition = false
     /// Segments already acted on or waved away, so a committed skip (or a
     /// "no thanks") does not re-arm the moment the playhead lands.
@@ -195,7 +195,7 @@ final class PlaybackAutomation {
     func playNext() {
         // The pending task is called off, but the timing stays. An accepted
         // hand-off outlives this call: the card is still on screen while the
-        // successor is prepared (HEL-144), and a bar that emptied underneath
+        // successor is prepared, and a bar that emptied underneath
         // it would read as the offer being withdrawn. Progress clamps at 1,
         // so the bar fills out its run and holds until the next item begins.
         nextUpCountdown?.cancel()

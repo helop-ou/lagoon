@@ -18,9 +18,9 @@ final class SeriesDetailViewModel {
 
     /// The episode Play starts when nothing is up next: the first of the
     /// visible season. A finished show has no next episode, and a page with
-    /// no Play button read as broken rather than as "you've seen it all"
-    /// (HEL-175). Starting the season over is the one obvious thing to
-    /// offer, and it moves with the season picker.
+    /// no Play button read as broken rather than as "you've seen it all".
+    /// Starting the season over is the one obvious thing to offer, and it
+    /// moves with the season picker.
     var firstEpisode: MediaItem? { episodes.first }
 
     func load(client: JellyfinClient, seriesId: String) async {
@@ -71,7 +71,7 @@ final class SeriesDetailViewModel {
     }
 
     /// After playback: a session can end seasons away from where it started,
-    /// so the rail follows the episode that is now up next (HEL-175). Nothing
+    /// so the rail follows the episode that is now up next. Nothing
     /// changes when it is already in view, or the show is finished.
     func followUpNext(client: JellyfinClient, seriesId: String) async {
         guard let seasonId = upNextSeasonId else { return }
@@ -134,7 +134,7 @@ final class SeriesDetailViewModel {
               self.selectedSeasonId == selectedSeasonId, !Task.isCancelled else { return false }
         // A foreground sync is opportunistic. Preserve the visible rail
         // when the server is asleep rather than turning a full season
-        // into an empty one (HEL-135).
+        // into an empty one.
         if let loaded { episodes = loaded }
         return loaded != nil
     }
@@ -156,7 +156,7 @@ struct SeriesDetailView: View {
     /// rail's content changes hands (a load, a season pick, a finished
     /// playback session) so the episode Play names is in view; browsing the
     /// rail leaves it to the scroll view, which would otherwise yank the row
-    /// under a moving focus (HEL-175).
+    /// under a moving focus.
     @State private var railPosition: String?
 
     private var displayed: MediaItem { viewModel.detail ?? item }
@@ -183,7 +183,7 @@ struct SeriesDetailView: View {
             #endif
             // The Watch Together control renders nothing until the server
             // has answered, and a task on a view that renders nothing never
-            // runs, so the page asks (HEL-172).
+            // runs, so the page asks.
             await syncPlay.refreshAvailability()
         }
         .onChange(of: serverSync.generation) { _, _ in
@@ -197,14 +197,14 @@ struct SeriesDetailView: View {
         .playerPresentation(item: $playerItem, onDismiss: {
             // Watching an episode moves the show on, so this reloads what's
             // up next as well as the rail — once the stop report that moves
-            // it has landed (HEL-132).
+            // it has landed.
             Task {
                 await session.client.playbackReports.settle()
                 await viewModel.reloadUserData(client: session.client, seriesId: item.id)
                 // The page is about wherever the session ended, not the
                 // card picked before it: a binge from S1 E1 can stop in
                 // S3, and the server's answer for what's up next is the
-                // only one that knows (HEL-175).
+                // only one that knows.
                 highlighted = nil
                 await viewModel.followUpNext(client: session.client, seriesId: item.id)
                 railPosition = subject?.id
@@ -224,7 +224,7 @@ struct SeriesDetailView: View {
     /// picker. Play leads so it takes first focus — the same reason the movie
     /// page orders it that way. The season picker is the layout's accessory:
     /// in the row with the circles on a phone, under the row where there is
-    /// width (HEL-169).
+    /// width.
     private var actions: some View {
         DetailActionLayout {
             if let episode = subject {
@@ -239,7 +239,7 @@ struct SeriesDetailView: View {
             #endif
             // A group started from a show is a group watching the episode
             // Play would start, from where that episode was left — the same
-            // subject every other control on this row acts on (HEL-172).
+            // subject every other control on this row acts on.
             if let episode = subject {
                 WatchTogetherControl(
                     item: episode,
@@ -315,7 +315,7 @@ struct SeriesDetailView: View {
                             // Weight alone marks the selected season: a colored
                             // label fought the focused lozenge, and `.primary`
                             // under this screen's dark scheme is white — so the
-                            // selected chip went invisible when focused (HEL-50).
+                            // selected chip went invisible when focused.
                             .font(.callout.weight(season.id == viewModel.selectedSeasonId ? .bold : .regular))
                         }
                     }
@@ -374,7 +374,7 @@ struct SeriesDetailView: View {
 struct EpisodeCard: View {
     let episode: MediaItem
     /// Fires as focus arrives, so the series header can describe whatever
-    /// episode you're looking at (HEL-46).
+    /// episode you're looking at.
     var onFocus: (() -> Void)?
     let action: () -> Void
 

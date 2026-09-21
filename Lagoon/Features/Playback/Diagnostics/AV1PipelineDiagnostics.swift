@@ -1,6 +1,6 @@
 import Foundation
 
-/// Benchmark-only timing storage for HEL-137. Recording is deliberately
+/// Benchmark-only timing storage. Recording is deliberately
 /// allocation-light and silent: printing once per frame changes the pipeline
 /// being measured. Exact samples are sorted only when the completed bench
 /// asks for its summary.

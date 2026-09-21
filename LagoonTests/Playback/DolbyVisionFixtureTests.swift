@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Opt-in end-to-end check on a real profile 7 remux (HEL-145): the head of
+/// Opt-in end-to-end check on a real profile 7 remux: the head of
 /// a UHD Blu-ray episode, fetched with a byte range, is enough for
 /// libavformat to open it and hand over a few dozen video packets. The
 /// simulator cannot decode or display any of it, but it can prove what the

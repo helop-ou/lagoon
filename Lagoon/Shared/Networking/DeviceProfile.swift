@@ -1,12 +1,12 @@
 import Foundation
 
 // Capability profile sent with PlaybackInfo so the server can decide between
-// direct play and transcoding. Since HEL-48 went all-in, it mirrors exactly
-// what the Lagoon sample-buffer engine can play: progressive h264 stays
-// compressed and interlaced h264 is software-decoded and deinterlaced
-// (HEL-170), hevc is hardware-decoded ahead, AV1 uses hardware when
-// available, and progressive AV1/VP9 (up to 10-bit) plus 8-bit VC-1, WMV3,
-// MPEG-4 Part 2, and MPEG-2 up to 1080p are software-decoded into Core
+// direct play and transcoding. It mirrors exactly what the Lagoon
+// sample-buffer engine can play: progressive h264 stays compressed
+// and interlaced h264 is software-decoded and deinterlaced, hevc is
+// hardware-decoded ahead, AV1 uses hardware when available, and
+// progressive AV1/VP9 (up to 10-bit) plus 8-bit VC-1, WMV3, MPEG-4
+// Part 2, and MPEG-2 up to 1080p are software-decoded into Core
 // Video buffers;
 // aac/mp3/ac3/eac3 audio stays compressed plus
 // non-square pixels carried through as a PixelAspectRatio extension, so
@@ -111,7 +111,7 @@ nonisolated enum DeviceProfile {
             // to profile 8.1 with libdovi and drops the enhancement-layer
             // NALs (unspec 63) in flight, tagging the track hvc1 plus a
             // supplementary dvvC so tvOS engages real Dolby Vision off the
-            // rewritten single layer (HEL-145). The base layer's own
+            // rewritten single layer. The base layer's own
             // HDR10(+) tags are the debug-toggle fallback when that
             // conversion is turned off. Either way direct play skips the
             // lossy server re-encode.
@@ -172,7 +172,7 @@ nonisolated enum DeviceProfile {
                     // deinterlaces, while progressive H.264 stays on
                     // VideoToolbox. The profile cannot say "interlaced only",
                     // so that split is the demuxer's field-order check, not
-                    // the server's (HEL-170). HEVC keeps its guard: it has no
+                    // the server's. HEVC keeps its guard: it has no
                     // software route here and interlaced HEVC is not
                     // something a library holds.
                 ]
@@ -311,7 +311,7 @@ nonisolated enum DeviceProfile {
             //
             // Note the container list does not include asf/wmv, so this
             // reaches WMV3 remuxed into mkv/avi rather than plain .wmv files.
-            // Adding the container is a separate decision (HEL-125).
+            // Adding the container is a separate decision.
             CodecProfile(
                 type: "Video",
                 codec: "wmv3",
@@ -397,7 +397,7 @@ nonisolated enum DeviceProfile {
             // other legacy codecs, and that path now deinterlaces what it
             // decodes, so the interlace guard this profile used to carry is
             // gone: an interlaced DVD or recording is Direct Play like any
-            // other MPEG-2 (HEL-127). The guard stays on every codec that
+            // other MPEG-2. The guard stays on every codec that
             // decodes in hardware, where there is no deinterlacing stage.
             CodecProfile(
                 type: "Video",
@@ -453,8 +453,8 @@ nonisolated enum DeviceProfile {
     /// hardware cannot decode.
     static var lagoon: Profile { profile(for: .current) }
 
-    /// What this device is offered for one rung of the delivery ladder
-    /// (HEL-100). Only the bottom rung differs, and only because that is
+    /// What this device is offered for one rung of the delivery ladder.
+    /// Only the bottom rung differs, and only because that is
     /// the one rung where the server re-encodes.
     ///
     /// The metered cap is applied after the rung, so a constrained path
@@ -464,8 +464,8 @@ nonisolated enum DeviceProfile {
         return cappedForMeteredPath(forRung)
     }
 
-    /// Bounds a profile to what a metered path should be asked to carry
-    /// (HEL-108), or returns it untouched on an ordinary one.
+    /// Bounds a profile to what a metered path should be asked to carry,
+    /// or returns it untouched on an ordinary one.
     ///
     /// **iOS only.** An Apple TV is a wired or strong-Wi-Fi appliance and
     /// Apple has no reason to report its path as expensive, so applying this
@@ -638,10 +638,10 @@ nonisolated enum DeviceProfile {
     /// What software AV1 is allowed to reach for.
     ///
     /// 4K rather than the HD this used to bound: dav1d decodes 3840x2160 AV1
-    /// comfortably once it is allowed more than one core, which it was not
-    /// until HEL-103's threading fix. Measured on a 4K HDR10+ episode, 30 s of
-    /// video decoded in 1.66 s threaded against 13.26 s on a single core, and
-    /// the single-core figure is what this bound was quietly assuming.
+    /// comfortably once it is allowed more than one core, made possible by a
+    /// threading fix. Measured on a 4K HDR10+ episode, 30 s of video decoded in
+    /// 1.66 s threaded against 13.26 s on a single core, and the single-core
+    /// figure is what this bound was quietly assuming.
     ///
     /// Still a ceiling rather than no bound at all. 8K AV1 exists, nothing has
     /// measured it here, and its frames are four times the size of these.

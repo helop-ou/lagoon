@@ -227,8 +227,8 @@ struct SearchPaginationTests {
         #expect(model.errorMessage == nil)
     }
 
-    /// The retry offered beside an empty page has to re-run the search
-    /// (HEL-182). A spent cursor makes `loadNext` a no-op, so a button that
+    /// The retry offered beside an empty page has to re-run the search.
+    /// A spent cursor makes `loadNext` a no-op, so a button that
     /// only bumped the load id would sit there doing nothing.
     @Test func retryingAnEmptyPageRewindsTheCursorAndSearchesAgain() async throws {
         let model = SearchResultsViewModel()

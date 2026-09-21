@@ -1,7 +1,7 @@
 import Foundation
 
 // Watch Together: the group's state as this client understands it, and the
-// rules for what to do about an update or a command (HEL-172).
+// rules for what to do about an update or a command.
 //
 // Everything here is pure. The socket, the clock, the player and the
 // network live in `SyncPlayStore` and `GroupPlaybackDriver`; this file is
@@ -94,8 +94,7 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
     /// the group is sitting still at the position it named. A member
     /// coming back to a group that has been running for ten minutes would
     /// otherwise open where that command left it, and the server would
-    /// have to drag it forward, holding everyone else up while it did
-    /// (HEL-172).
+    /// have to drag it forward, holding everyone else up while it did.
     func positionSeconds(atServerSeconds now: Double) -> Double {
         guard let lastCommand else { return startSeconds }
         guard lastCommand.command == .unpause,
@@ -218,7 +217,7 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
         // so it arrives byte-identical to the `Seek` this member has
         // already taken bar `EmittedAt`. Refusing it leaves the member
         // sitting where it is with nothing left to report, and the group
-        // waits on it for ever (HEL-172).
+        // waits on it for ever.
         if command.command != .seek, let lastCommand, Self.isRepeat(of: lastCommand, command) {
             return false
         }

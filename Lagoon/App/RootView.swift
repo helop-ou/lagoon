@@ -24,7 +24,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: Motion.standard), value: session.phase)
-        // The theme follows the profile (HEL-173); `SessionStore` points the
+        // The theme follows the profile; `SessionStore` points the
         // store at the account with the other per-account stores. iOS
         // controls take its tint from here, and the bloom sits over
         // everything so a choice made deep in Settings is announced across
@@ -53,7 +53,7 @@ struct RootView: View {
         // Returning from the device's home screen does not re-run `onAppear`
         // or `task` on the navigation tree SwiftUI kept mounted. Advance one
         // shared generation here so each server-backed screen can reconcile
-        // the state it owns (HEL-135).
+        // the state it owns.
         .onChange(of: scenePhase, initial: true) { _, phase in
             guard phase == .active, session.phase == .signedIn else { return }
             serverSync.requestRefresh()
@@ -61,7 +61,7 @@ struct RootView: View {
             // The Top Shelf's safety net. Publishing otherwise happens only
             // as a side effect of Home loading successfully, so one failed
             // load on a cold start left the shelf empty with nothing to retry
-            // it (HEL-119).
+            // it.
             TopShelfStore.publishIfEmpty(client: session.client)
             #endif
         }

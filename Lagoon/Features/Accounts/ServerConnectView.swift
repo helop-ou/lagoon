@@ -73,7 +73,7 @@ struct ServerConnectView: View {
 
                 // Legal information without an account: this is the first
                 // screen a new viewer sees, and the only one they see if they
-                // have no server yet (HEL-143). Last in the column, so the
+                // have no server yet. Last in the column, so the
                 // address field keeps the initial focus.
                 AboutLagoonButton()
                     .padding(.top, Metrics.Space.xl)

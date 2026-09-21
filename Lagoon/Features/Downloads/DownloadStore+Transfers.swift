@@ -2,7 +2,7 @@
 import Foundation
 import os
 
-// The background session and the transfer commands it carries (HEL-166):
+// The background session and the transfer commands it carries:
 // starting, pausing, resuming and deleting a download, and routing the
 // delegate's reports back into whichever account's manifest they belong to.
 extension DownloadStore {
@@ -68,7 +68,7 @@ extension DownloadStore {
     /// task but a finished file on disk (its `didFinishDownloadingTo`
     /// landed while the process was dead, between the write and this
     /// process getting a chance to run) is promoted to complete instead of
-    /// being declared lost (HEL-166 review finding 1). Anything left over
+    /// being declared lost. Anything left over
     /// becomes paused if it holds resume data, otherwise failed. Guards
     /// against a second switch completing first while this awaits.
     func reconcileLiveTasks(accountKey: String) {
@@ -110,8 +110,7 @@ extension DownloadStore {
         guard accountKey == self.accountKey else { return }
         // A delete-then-restart routes a stale progress callback to the
         // entry's new attempt; without this check it would resurrect a
-        // byte count for a transfer that no longer exists (HEL-166 review
-        // finding 4).
+        // byte count for a transfer that no longer exists.
         guard manifest.entry(for: itemID)?.attemptToken == token else { return }
         manifest.recordProgress(itemID, received: received, expected: expected > 0 ? expected : nil)
         saveProgressThrottled()
@@ -120,10 +119,10 @@ extension DownloadStore {
     /// Maps a transport error to short copy for the viewer and records it,
     /// skipping the manifest write entirely when the mapping says there is
     /// nothing to show: a cancellation is just the echo of a `pause` or
-    /// `delete` that already recorded the real state (HEL-166 review
-    /// finding 7). Resume data is only ever meaningful for an original
-    /// download; a transcode has no byte-range support to resume into, so
-    /// it always restarts from the beginning (HEL-166 review finding 3).
+    /// `delete` that already recorded the real state. Resume data is only
+    /// ever meaningful for an original download; a transcode has no
+    /// byte-range support to resume into, so it always restarts from the
+    /// beginning.
     func reportTransportFailure(accountKey: String, itemID: String, token: String, error: NSError, resumeData: Data?) {
         guard let reason = DownloadTransportFailure.failureDescription(domain: error.domain, code: error.code) else { return }
         if accountKey == self.accountKey {
@@ -172,7 +171,7 @@ extension DownloadStore {
     /// The account can change while an await here is in flight (a sign-out
     /// mid-flush), so the account is captured up front and checked again
     /// after every await: the manifest must never be mutated for an account
-    /// this call did not start out flushing (HEL-166 review finding 8).
+    /// this call did not start out flushing.
     func flushPendingReports(client: JellyfinClient) async {
         let account = accountKey
         let generation = accountGeneration

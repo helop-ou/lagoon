@@ -6,7 +6,7 @@ import SwiftUI
 /// Read once. It is a launch argument, so it cannot change while the app is
 /// running, and `videoSurface` used to ask `UserDefaults` for it twice per
 /// body evaluation — which, before the player's Observation scope was split
-/// up (HEL-150), meant twice per position tick. `CustomPlayerView` is generic
+/// up, meant twice per position tick. `CustomPlayerView` is generic
 /// over its surface and generics can't hold static storage, so the flag lives
 /// here, beside the modifier that reads it.
 nonisolated enum PlayerRegressionProbe {
@@ -17,8 +17,8 @@ nonisolated enum PlayerRegressionProbe {
 /// observes the same view state the viewer sees; it does not call player
 /// actions or replace the Siri Remote interaction path.
 ///
-/// It is a `ViewModifier` rather than a computed string in the player
-/// (HEL-150). Almost everything it reports moves at position-tick rate, and
+/// It is a `ViewModifier` rather than a computed string in the player.
+/// Almost everything it reports moves at position-tick rate, and
 /// a `ViewModifier` has a body of its own, so Observation attaches those
 /// reads here instead of to the player's body — and on tvOS to
 /// `MenuPressGate`'s hosting update with it. With the flag off the value is

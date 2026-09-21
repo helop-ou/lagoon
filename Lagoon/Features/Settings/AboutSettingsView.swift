@@ -40,7 +40,7 @@ struct AboutSettingsView: View {
 
             // Legal information also has to be reachable without signing in,
             // so this section is a view of its own and the sign-in screens'
-            // About sheet shows the same one (HEL-143).
+            // About sheet shows the same one.
             LegalSettingsSection()
 
             TVSettingsSection("Server") {

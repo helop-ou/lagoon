@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-// HEL-48 M5: subtitle model shared by the demuxed (embedded) and
+// Subtitle model shared by the demuxed (embedded) and
 // downloaded (Jellyfin external) paths. Cues render as a SwiftUI overlay
 // in the player — nothing here touches the sample-buffer renderers.
 
@@ -72,7 +72,7 @@ nonisolated struct SubtitleTextRun: Equatable, Sendable {
 
 /// A text composition that must stay independent from simultaneous cues.
 /// Joining these into one string is what used to stack left/right speakers
-/// and move authored signs to the dialogue shelf (HEL-107).
+/// and move authored signs to the dialogue shelf.
 nonisolated struct SubtitleTextCue: Equatable, Sendable {
     let runs: [SubtitleTextRun]
     let alignment: SubtitleTextAlignment?
@@ -191,7 +191,7 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
         lock.unlock()
     }
 
-    /// HEL-148 soak diagnostic: how many cues the store is holding, so a
+    /// Soak diagnostic: how many cues the store is holding, so a
     /// growing embedded window is visible alongside the other DecodeTrace
     /// figures. External tracks intentionally retain their full cue count.
     var count: Int {
@@ -208,7 +208,7 @@ nonisolated final class SubtitleStore: @unchecked Sendable {
         var images: [SubtitleImage] = []
         switch source {
         case .embedded:
-            // HEL-163: remove the elements themselves so expired CGImages
+            // Remove the elements themselves so expired CGImages
             // are released, not just skipped behind an advancing index.
             // Only the demuxer's current read-ahead window remains to scan;
             // future and overlapping/open-ended compositions stay intact.
@@ -538,7 +538,7 @@ nonisolated enum SubtitleParser {
 /// The previous chain ended in `isoLatin1`, which cannot fail — it maps every
 /// byte — so a Windows-1251 Cyrillic file decoded to mojibake and rendered as
 /// garbage with no error anywhere. Jellyfin converts to UTF-8 on its way out,
-/// which hid this; a provider fetched directly does not (HEL-92).
+/// which hid this; a provider fetched directly does not.
 ///
 /// The language is the strongest available signal for a legacy file, since a
 /// codepage cannot be recovered from the bytes alone: a Cyrillic subtitle is

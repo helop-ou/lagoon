@@ -3,7 +3,7 @@ import SwiftUI
 
 /// One rail's worth of state. Each rail owns its own, so a dead endpoint
 /// costs that rail and nothing else — the whole page used to be discarded on
-/// any single failure, which does not survive having eight of them (HEL-114).
+/// any single failure, which does not survive having eight of them.
 @Observable
 private final class SeerrRailLoader {
     var items: [SeerrDiscoverResult] = []

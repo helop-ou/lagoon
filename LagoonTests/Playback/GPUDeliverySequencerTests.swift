@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-137: the GPU output stage delivers frames from Metal's completion
+/// The GPU output stage delivers frames from Metal's completion
 /// threads, which promise no order, into a renderer that needs decode
 /// order. The sequencer is the whole guarantee, so it is pinned here.
 struct GPUDeliverySequencerTests {

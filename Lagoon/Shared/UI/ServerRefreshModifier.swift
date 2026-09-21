@@ -7,8 +7,7 @@ import UIKit
 /// Adds all refresh entry points owned by a visible top-level destination:
 /// foreground reconciliation, a five-minute active-session cadence, and the
 /// platform's explicit manual affordance. The task is tied to visibility and
-/// scene activity, so a mounted but hidden tab never polls in the background
-/// (HEL-135).
+/// scene activity, so a mounted but hidden tab never polls in the background.
 private struct ServerRefreshModifier: ViewModifier {
     let target: ServerSyncTarget
     let isActive: Bool

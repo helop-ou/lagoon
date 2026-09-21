@@ -42,7 +42,7 @@ nonisolated final class SoftwareVideoPacket: @unchecked Sendable {
 }
 
 /// Runs `SoftwareVideoDecoder` on a queue of its own so reading and decoding
-/// overlap (HEL-137).
+/// overlap.
 ///
 /// Until this existed, `FFmpegDemuxer.readNext()` called the software decoder
 /// inline, which meant the demux loop stopped reading for as long as a frame

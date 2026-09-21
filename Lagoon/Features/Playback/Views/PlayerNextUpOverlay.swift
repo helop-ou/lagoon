@@ -36,10 +36,10 @@ nonisolated enum NextUpPolicy {
     }
 }
 
-/// The Up Next card (HEL-66), lifted out of `CustomPlayerView` (HEL-150).
+/// The Up Next card, lifted out of `CustomPlayerView`.
 /// It draws `PlaybackAutomation`'s answer: whether the card is due and how
 /// far the countdown has run are decided off the engine's clock, so a
-/// locked phone still rolls into the next episode (HEL-176). The parent
+/// locked phone still rolls into the next episode. The parent
 /// only hears about a committed hand-off through the automation.
 /// Bottom-trailing, on the same shelf as the skip pill. The two can never
 /// be up together — intro and recap live at the front of an episode, the

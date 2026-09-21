@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The artwork fallback chain behind every rail card (HEL-157). Landscape
+/// The artwork fallback chain behind every rail card. Landscape
 /// cards ask for `.thumb`; a title that only has a poster must still
 /// resolve to it instead of an empty card, the way jellyfin-web does.
 @Suite("Item image fallback")

@@ -48,7 +48,7 @@ struct VideoRandomAccessPointTests {
     /// keyframe, it carries its own SPS and PPS and a recovery-point SEI —
     /// and every slice in it is type 1, a coded slice of a *non-IDR*
     /// picture. That is an open GOP, and the two packets behind it in decode
-    /// order were presented before it (HEL-151).
+    /// order were presented before it.
     @Test func theOpenGOPPictureExit8SeeksToIsNotADecoderStartPoint() {
         let unit = accessUnit(types: [7, 8, 6, 6, 6, 1, 1, 1, 1], codec: .h264)
         let types = unit.withUnsafeBytes {

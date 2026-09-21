@@ -1,7 +1,7 @@
 import Foundation
 
 /// One third-party component Lagoon ships, as shown under Settings → About →
-/// Acknowledgements and from the sign-in screen (HEL-143, audit A06).
+/// Acknowledgements and from the sign-in screen (audit A06).
 ///
 /// Curated by hand, like the changelog: each entry names the exact version
 /// and source the shipped binaries were built from, the licence that governs

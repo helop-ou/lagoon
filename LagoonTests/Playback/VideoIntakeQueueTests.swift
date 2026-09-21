@@ -2,7 +2,7 @@ import CoreMedia
 import Testing
 @testable import Lagoon
 
-/// HEL-124: the demuxer parks compressed video read past the decoded-frame
+/// The demuxer parks compressed video read past the decoded-frame
 /// limit here so it can keep reading on to a fragment's audio instead of
 /// stalling behind its video block. The queue's FIFO order, its count/byte
 /// bookkeeping, and the peak the HUD and regression probe rely on are the

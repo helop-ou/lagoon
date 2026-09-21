@@ -82,8 +82,8 @@ struct LibraryView: View {
     }
 
     #if os(iOS)
-    /// A card above the filters that opens the offline Downloads list
-    /// (HEL-166). Shown once something has been taken offline, or once the
+    /// A card above the filters that opens the offline Downloads list.
+    /// Shown once something has been taken offline, or once the
     /// server itself can't be reached, so a viewer with no downloads never
     /// sees an entry into an empty list.
     @ViewBuilder

@@ -12,11 +12,11 @@ nonisolated protocol DiagnosticSink: Sendable {
     func flush()
 }
 
-/// The vendor-neutral core of HEL-159: a rolling history any thread can
-/// append to, and a `report` that turns a moment into an incident carrying
-/// that history. Cheap on purpose. `record` is a lock and an array append;
-/// `report` adds a schema pass and a snapshot copy, then hands off to the
-/// sink, which does its serialization and I/O on its own queue.
+/// The vendor-neutral core of diagnostic reporting: a rolling history any
+/// thread can append to, and a `report` that turns a moment into an incident
+/// carrying that history. Cheap on purpose. `record` is a lock and an array
+/// append; `report` adds a schema pass and a snapshot copy, then hands off to
+/// the sink, which does its serialization and I/O on its own queue.
 nonisolated final class DiagnosticsHub: Sendable {
     private struct State {
         var history: DiagnosticHistory

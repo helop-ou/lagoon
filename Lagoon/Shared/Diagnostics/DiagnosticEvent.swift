@@ -21,7 +21,7 @@ nonisolated enum DiagnosticEventCode: String, Sendable, CaseIterable {
     case playbackFinished = "playback.finished"
     case playbackStop = "playback.stop"
     case playbackFailure = "playback.failure"
-    /// Watch Together (HEL-172). Group membership and the transport the
+    /// Watch Together. Group membership and the transport the
     /// server drives; never which group, which item or who is in it.
     case syncPlayJoin = "syncplay.join"
     case syncPlayLeave = "syncplay.leave"

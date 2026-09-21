@@ -1,7 +1,7 @@
 import Foundation
 
 /// The state behind one optimistic server toggle such as watched or
-/// favourite (HEL-144, A14). The icon flips the moment the viewer presses,
+/// favourite. The icon flips the moment the viewer presses,
 /// because a toggle that waits on a round trip feels broken; what happens
 /// afterwards is the part that used to be missing:
 ///

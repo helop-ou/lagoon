@@ -38,11 +38,11 @@ struct HomeView: View {
                         // A group whose player has been closed, above the
                         // rails and below the hero: the one thing on Home
                         // that is about right now rather than about the
-                        // library (HEL-172). It draws nothing otherwise.
+                        // library. It draws nothing otherwise.
                         WatchTogetherHomeCard()
 
                         // The order is the viewer's, or Lagoon's default when
-                        // they have not arranged one (HEL-191). Neither lives
+                        // they have not arranged one. Neither lives
                         // here: see `HomeSectionPreferenceResolver`, which
                         // owns the default order, the arrangement that
                         // replaces it, and which rows either one hides.
@@ -86,9 +86,9 @@ struct HomeView: View {
         // not: dismissing a `fullScreenCover` never re-appears the view
         // underneath it, so the one moment Continue Watching is most likely
         // to have changed — you just watched something — was the one moment
-        // neither the rail nor the Top Shelf refreshed (HEL-119). The stop
+        // neither the rail nor the Top Shelf refreshed. The stop
         // report is still in flight when this fires; `settle()` waits for
-        // it so the rails read the new position, not the old (HEL-132).
+        // it so the rails read the new position, not the old.
         .playerPresentation(item: $playerItem, onDismiss: {
             Task {
                 await session.client.playbackReports.settle()
@@ -129,7 +129,7 @@ struct HomeView: View {
 
     /// The rows to draw, in order, already stripped of the ones this account
     /// hides. Plugin rails are placed by the section they came from, so an
-    /// arrangement can put one between two of Lagoon's own rows (HEL-191).
+    /// arrangement can put one between two of Lagoon's own rows.
     private var rowOrder: [String] {
         HomeSectionPreferenceResolver.renderOrder(
             preferences: savedHomePreferences,
@@ -230,7 +230,7 @@ struct HomeView: View {
         }
     }
 
-    /// A row the server's Home Screen Sections plugin contributed (HEL-47).
+    /// A row the server's Home Screen Sections plugin contributed.
     /// Nothing at all without the plugin, and nothing for a section whose
     /// items came back empty.
     @ViewBuilder
@@ -247,7 +247,7 @@ struct HomeView: View {
         }
     }
 
-    /// One curated row, or nothing at all (HEL-120).
+    /// One curated row, or nothing at all.
     ///
     /// The view model only publishes a rail once it has enough items to look
     /// deliberate, so absence here means "this server had nothing worth a

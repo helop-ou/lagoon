@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// The Watch Together action in a film or episode page's secondary row
-/// (HEL-172): a glass circle on a phone, where every control in that row
-/// is one, and the labelled pill wherever there is width for it.
+/// The Watch Together action in a film or episode page's secondary row:
+/// a glass circle on a phone, where every control in that row is one,
+/// and the labelled pill wherever there is width for it.
 ///
 /// Whether the account may use groups at all is the store's answer, and
 /// the detail page is what asks for it — never this control. It renders
 /// nothing until it is allowed, and a task on a view that renders nothing
 /// never runs, so a control that resolved its own permission could never
-/// appear (the trap `DownloadControl` documents, HEL-166).
+/// appear (the trap `DownloadControl` documents).
 ///
 /// The symbol is `person.2.fill` and never `shareplay`: SharePlay is
 /// Apple's GroupActivities, which this does not use. Borrowing its glyph
@@ -65,7 +65,7 @@ struct WatchTogetherControl: View {
     }
 
     /// Membership reads through weight and opacity, not colour: a tinted
-    /// label disappears inside the tvOS focused lozenge (HEL-50).
+    /// label disappears inside the tvOS focused lozenge.
     private var glyph: some View {
         Image(systemName: "person.2.fill")
             .fontWeight(syncPlay.isJoined ? .bold : .regular)

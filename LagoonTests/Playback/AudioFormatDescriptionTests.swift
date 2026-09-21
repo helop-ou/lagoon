@@ -6,7 +6,7 @@ import Testing
 @testable import Lagoon
 
 /// The compressed-audio format descriptions the renderer is handed, pinned
-/// byte for byte (HEL-165). The E-AC-3 JOC recipe was settled on hardware
+/// byte for byte. The E-AC-3 JOC recipe was settled on hardware
 /// (2026-08-17): the `ec+3` media subtype plus a 16-channel presentation is
 /// what engages Atmos, and the synthesized `dec3` box rides along as the
 /// sample description atom. A wrong bit here decodes as plain DD+ with

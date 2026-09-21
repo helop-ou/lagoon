@@ -42,7 +42,7 @@ extension JellyfinClient {
     }
 
     /// One browse query, shared by the library screens and by Home's curated
-    /// rows (HEL-120). The filter arguments are all optional and all omitted
+    /// rows. The filter arguments are all optional and all omitted
     /// from the URL when unset, so a caller pays only for what it asks for.
     func items(
         parentId: String? = nil,
@@ -133,7 +133,7 @@ extension JellyfinClient {
         return try await get("Users/\(userId)/Items/\(id)")
     }
 
-    /// The item endpoint's raw body, for a download's snapshot (HEL-166):
+    /// The item endpoint's raw body, for a download's snapshot:
     /// saved as-is and decoded later with `JellyfinClient.decoder`, so a
     /// downloaded title's detail page renders without the server.
     func itemData(id: String) async throws -> Data {
@@ -164,7 +164,7 @@ extension JellyfinClient {
 
     /// Continue Watching. `MediaSources` rides along because this is the one
     /// query that feeds the Top Shelf, and the carousel shows 4K, HDR and
-    /// Atmos badges from the streams (HEL-119). Asking here costs one larger
+    /// Atmos badges from the streams. Asking here costs one larger
     /// response on a query that already runs; the alternative was a second
     /// round trip inside `TopShelfStore.publish` for the same facts.
     func resumeItems(limit: Int = 12) async throws -> [MediaItem] {
@@ -261,7 +261,7 @@ extension JellyfinClient {
         return orderedIDs.compactMap { seriesByID[$0] }
     }
 
-    /// "More Like This" on the detail page (HEL-46). The server does the
+    /// "More Like This" on the detail page. The server does the
     /// picking; an empty list just hides the rail.
     func similarItems(itemId: String, limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
@@ -322,7 +322,7 @@ extension JellyfinClient {
         ).items
     }
 
-    /// The Favorites rail (HEL-40). `Filters=IsFavorite` does the picking
+    /// The Favorites rail. `Filters=IsFavorite` does the picking
     /// server-side. Restricted to movies and series because favouriting is
     /// a show-level gesture — `ItemActionRow`'s star deliberately targets
     /// the series, so a rail full of individual episodes would be noise.
@@ -340,7 +340,7 @@ extension JellyfinClient {
         return page.items
     }
 
-    // MARK: - User data (HEL-40)
+    // MARK: - User data
 
     /// Marks an item played, or clears it. Clearing also puts a finished item
     /// *back* on Continue Watching, and marking played is how an item leaves
@@ -405,7 +405,7 @@ extension JellyfinClient {
     }
 
     /// The episode that follows this one in its series, or nil once the run
-    /// is over — what autoplay rolls into (HEL-66).
+    /// is over — what autoplay rolls into.
     ///
     /// Deliberately *not* `Shows/NextUp`. That endpoint returns the episode
     /// in progress when there is one (`enableResumable` defaults to true,
@@ -443,7 +443,7 @@ nonisolated enum ItemImageKind {
     case backdrop
     case thumb
     /// The title's own artwork — a transparent PNG wordmark. Jellyfin has
-    /// one for practically every film (HEL-46 reference shot).
+    /// one for practically every film (reference shot).
     case logo
 }
 
@@ -506,7 +506,7 @@ extension JellyfinClient {
             // Thumb, then backdrops. A title with only a poster still gets
             // that poster rather than an empty card: jellyfin-web's card
             // builder ends the same chain with Primary, and the demo's 1910
-            // King Lear has no wide artwork at all (HEL-157).
+            // King Lear has no wide artwork at all.
             if item.type == .episode, let primaryTag = item.imageTags?["Primary"] {
                 tag = primaryTag
             } else if let thumbTag = item.imageTags?["Thumb"] {
@@ -528,8 +528,8 @@ extension JellyfinClient {
         return try? url(path: "Items/\(itemId)/Images/\(type)", query: query)
     }
 
-    /// A user's profile picture, on the same conventions as item artwork
-    /// (HEL-168). nil without a tag: the route answers 404 for a user who
+    /// A user's profile picture, on the same conventions as item artwork.
+    /// nil without a tag: the route answers 404 for a user who
     /// has no picture, and initials are the right thing to show then. Built
     /// from a server URL rather than the configured client because the
     /// account picker shows accounts on every remembered server.
@@ -548,7 +548,7 @@ extension JellyfinClient {
     }
 
     /// Cast headshot. People are items too, so this is the same image route
-    /// with the credit's own id (HEL-46).
+    /// with the credit's own id.
     func personImageURL(for person: Person, maxWidth: Int) -> URL? {
         guard serverURL != nil, let tag = person.primaryImageTag else { return nil }
         return try? url(path: "Items/\(person.id)/Images/Primary", query: [

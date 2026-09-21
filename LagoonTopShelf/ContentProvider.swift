@@ -11,7 +11,7 @@ import TVServices
 /// looks exactly like an empty Continue Watching from the sofa.
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
-/// Full-screen Top Shelf carousel for Continue Watching (HEL-37, HEL-119).
+/// Full-screen Top Shelf carousel for Continue Watching.
 ///
 /// The extension deliberately does **no networking and holds no
 /// credentials**. The app writes a snapshot and a set of composed JPEGs into
@@ -63,7 +63,7 @@ class ContentProvider: TVTopShelfContentProvider {
 
     override func loadTopShelfContent() async -> (any TVTopShelfContent)? {
         // First line, so the log distinguishes "the extension never ran" from
-        // "it ran and had nothing" — the whole of HEL-119 turned on that.
+        // "it ran and had nothing" — the whole of debugging turned on that.
         log.info("loadTopShelfContent")
 
         guard let snapshot = loadSnapshot() else { return nil }

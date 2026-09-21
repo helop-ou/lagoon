@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The user's profile picture in the account picker and Settings (HEL-168).
+/// The user's profile picture in the account picker and Settings.
 @Suite("User avatar")
 struct UserAvatarTests {
     private let server = URL(string: "https://media.test/jellyfin")!

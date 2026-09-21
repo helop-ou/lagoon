@@ -3,7 +3,7 @@ import SwiftUI
 
 /// A detail page changes quickly while Radarr/Sonarr is transferring media,
 /// but a request waiting for a person to approve it does not justify the same
-/// network cadence (HEL-136).
+/// network cadence.
 nonisolated enum SeerrLiveRefreshCadence: Hashable {
     case waitingForApproval
     case transferring

@@ -1,16 +1,16 @@
 // swift-tools-version:5.9
 
-// HEL-48 M6 dependency slimming: Lagoon's sample-buffer engine needs only
+// M6 dependency slimming: Lagoon's sample-buffer engine needs only
 // FFmpeg's demux/decode libraries, not the mpv stack MPVKit exists for.
 // This package pins libavcodec/libavutil/libswresample from MPVKit's 1.0.0
 // release (FFmpeg 8.1.2). libavformat is built by this repo without its
-// network stack (scripts/build-ffmpeg-format.py, HEL-142): HTTP goes
+// network stack (scripts/build-ffmpeg-format.py): HTTP goes
 // through URLSession in the app, which is also where certificate trust
 // lives, so the GnuTLS/GMP/nettle/hogweed static libraries — and the
 // --enable-version3 that GnuTLS's license required — are gone, making the
 // repo-built libavformat LGPL-2.1-or-later. The three MPVKit binaries still
 // carry upstream's version3 election until they are rebuilt here too. dav1d is also built by this repo
-// (scripts/build-dav1d.sh, HEL-137) with its arm64 assembly kept. libmpv,
+// (scripts/build-dav1d.sh) with its arm64 assembly kept. libmpv,
 // MoltenVK-for-mpv, libplacebo, libass and friends stay out of the project
 // entirely.
 
@@ -59,7 +59,7 @@ let package = Package(
                 // Xcode 26 enables coverage for Swift-package targets even
                 // when the containing app's Release target disables it.
                 // These are the per-pixel hot loops, so make the Release
-                // override explicit at the package boundary (HEL-137).
+                // override explicit at the package boundary.
                 .unsafeFlags(
                     ["-fno-profile-instr-generate", "-fno-coverage-mapping"],
                     .when(configuration: .release)
@@ -73,7 +73,7 @@ let package = Package(
         ),
         .binaryTarget(
             name: "Libavformat",
-            // HEL-142: same FFmpeg release, built with networking compiled
+            // Same FFmpeg release, built with networking compiled
             // out (--disable-network --disable-protocols, file/data only).
             // Rebuild/provenance: scripts/build-ffmpeg-format.py.
             path: "Artifacts/Libavformat.xcframework"
@@ -88,7 +88,7 @@ let package = Package(
             url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libswresample.xcframework.zip",
             checksum: "d5c36acf2ff944e15706f4b7bfbf18bb1993ffc5b446c9f67f1aa79de5441f15"
         ),
-        // Lagoon also builds dav1d itself (HEL-137). mpvkit's dav1d is
+        // Lagoon also builds dav1d itself. mpvkit's dav1d is
         // compiled with -Denable_asm=false, to silence an Xcode 15 linker
         // warning about assembled objects carrying no platform load command,
         // so every AV1 frame ran dav1d's portable C path: 11.4 fps against
@@ -106,7 +106,7 @@ let package = Package(
         ),
         // libdovi: the dolby_vision crate's C API (dovi_tool, MIT), for
         // rewriting a Dolby Vision profile 7 RPU into profile 8.1 while the
-        // packet is in flight (HEL-145). Vendored from superuser404notfound/
+        // packet is in flight. Vendored from superuser404notfound/
         // LibDovi 2.1.0 (dolby_vision 3.4.0), iOS/tvOS/macOS slices only,
         // static libraries stripped of local symbols. The tvOS simulator slice
         // is arm64 only: x86_64-apple-tvos is a tier-3 Rust target, so the

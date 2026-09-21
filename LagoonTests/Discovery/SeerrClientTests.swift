@@ -109,7 +109,7 @@ struct SeerrClientTests {
     /// person it answers with `collection`, and a later release may add more.
     /// A type this build has never heard of must cost that one result its
     /// type, not the whole page — decoding the page used to throw
-    /// `dataCorrupted` on `mediaType` and empty the search screen (HEL-180).
+    /// `dataCorrupted` on `mediaType` and empty the search screen.
     @Test func searchSurvivesMediaTypesThisBuildDoesNotKnow() throws {
         let payload = #"""
         {"page":1,"totalPages":1,"totalResults":4,"results":[

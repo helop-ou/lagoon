@@ -3,7 +3,7 @@ import Observation
 import UIKit
 
 /// What the group wants played, for the presentation layer to turn into a
-/// `PlayerItem` (HEL-172). The store never presents anything itself: the
+/// `PlayerItem`. The store never presents anything itself: the
 /// player is owned by `MainTabView`, and this is the request it answers.
 nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
@@ -13,7 +13,7 @@ nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
 }
 
 /// Watch Together: membership in a SyncPlay group, and the bridge between
-/// that group and this app's player (HEL-172).
+/// that group and this app's player.
 ///
 /// Owned by `SessionStore` beside `seerr`, pointed at the active account by
 /// `synchronizeAccountContext()`, and injected from `RootView` — plus the

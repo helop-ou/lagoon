@@ -12,7 +12,7 @@ import UIKit
 /// intercepts that press so panel-open vs exit is our decision.
 ///
 /// It also distinguishes a light tap on the Siri Remote's touch surface from
-/// a Select press (HEL-134). SwiftUI's `onTapGesture` receives Select on tvOS;
+/// a Select press. SwiftUI's `onTapGesture` receives Select on tvOS;
 /// UIKit exposes a touch-only tap by giving `UITapGestureRecognizer` an empty
 /// `allowedPressTypes` array. Keeping these paths separate lets a light tap
 /// reveal the transport without toggling playback.
@@ -75,7 +75,7 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
         // the touch list to `.indirect` makes that Siri Remote intent
         // explicit. It does not cancel delivery to the hosted SwiftUI view,
         // so directional swipes and its focus ownership keep their existing
-        // paths (HEL-134).
+        // paths.
         let touchTap = UITapGestureRecognizer(
             target: self,
             action: #selector(remoteTouchTapRecognized)

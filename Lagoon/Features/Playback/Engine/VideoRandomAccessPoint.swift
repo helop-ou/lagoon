@@ -3,8 +3,8 @@ import Foundation
 /// Whether a length-prefixed access unit is somewhere a decoder can be
 /// *started*, as opposed to somewhere a container is willing to seek.
 ///
-/// The two are not the same thing, and the difference ends a direct play
-/// (HEL-151). `AV_PKT_FLAG_KEY` on a Matroska block means the muxer marked
+/// The two are not the same thing, and the difference ends a direct play.
+/// `AV_PKT_FLAG_KEY` on a Matroska block means the muxer marked
 /// the block seekable; for an open-GOP H.264 encode that is every
 /// recovery-point I picture, none of which is an IDR. libavcodec starts on
 /// one happily — it decodes the recovery period and lets the leading
@@ -115,7 +115,7 @@ nonisolated enum VideoRandomAccessPoint {
     ///
     /// nil means "cannot tell" — an unparseable payload, an unknown length
     /// size — and every caller treats that as "let it through", so a stream
-    /// this cannot read behaves exactly as it did before HEL-151.
+    /// this cannot read behaves exactly as it did before this existed.
     static func isDecoderStartPoint(
         lengthPrefixed payload: UnsafeRawBufferPointer,
         lengthSize: Int,

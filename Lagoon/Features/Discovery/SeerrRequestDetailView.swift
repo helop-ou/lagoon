@@ -30,7 +30,7 @@ struct SeerrRequestDetailView: View {
                 // claimed the page width, so the ScrollView hugged its
                 // content and the background was sized to that. The scaffold
                 // pins the page to the screen it belongs to — its own comment
-                // records this being fixed once already (HEL-41).
+                // records this being fixed once already.
                 DetailPageScaffold(
                     backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: 1280)
                 ) {
@@ -144,7 +144,7 @@ struct SeerrRequestDetailView: View {
                 : String(localized: "Seasons \(numbers)"))
         }
         if currentRequest.is4k == true { tokens.append("4K") }
-        // What an approver is actually agreeing to fetch (HEL-118).
+        // What an approver is actually agreeing to fetch.
         if let qualityProfile { tokens.append(qualityProfile) }
         if let year = details?.year { tokens.append(year) }
         return tokens
@@ -163,7 +163,7 @@ struct SeerrRequestDetailView: View {
             AdaptiveActionStack {
                 // A title still on its way has nothing to act on, so this is
                 // the one thing worth focusing — and the glyph animates while
-                // it is (HEL-117).
+                // it is.
                 if currentRequest.progress == .processing {
                     Button {
                         isShowingProgressDetail = true

@@ -1,9 +1,8 @@
 import Foundation
 
-/// The curated Home rows and the rotation that keeps two of them fresh
-/// (HEL-120).
+/// The curated Home rows and the rotation that keeps two of them fresh.
 ///
-/// Home's order follows the one HEL-114 settled on for Discover, because the
+/// Home's order follows the one settled on for Discover, because the
 /// same thing was wrong with both screens: browse shelves sitting in the
 /// middle of content, and movies and shows interleaved so the screen never
 /// settles on a subject. The order is personal, then new, then a whole movie
@@ -64,7 +63,7 @@ nonisolated enum HomeCuratedRows {
 
 /// Resolves Seerr's ranked catalogue back to playable Jellyfin records.
 /// Keeping this bridge pure makes the provider-ID contract explicit and
-/// testable without a network client (HEL-121).
+/// testable without a network client.
 nonisolated enum TopTenResolver {
     static func resolve(
         discoveries: [SeerrDiscoverResult],

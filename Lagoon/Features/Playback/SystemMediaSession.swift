@@ -6,7 +6,7 @@ import UIKit
 /// Owns the AVAudioSession lifecycle for Lagoon's one custom player.
 /// Renderer setup deliberately does not configure the process-wide audio
 /// session: interruptions and routes belong to the playback session, not to
-/// an individual AVSampleBufferAudioRenderer (HEL-80).
+/// an individual AVSampleBufferAudioRenderer.
 @MainActor
 final class PlaybackAudioSession {
     var onPauseRequested: (() -> Void)?
@@ -125,7 +125,7 @@ final class PlaybackAudioSession {
             as? AVAudioSessionRouteDescription
         Diagnostics.record(.audioRoute, ["routeReason": .string(Self.routeChangeReasonName(reason))])
         if ProcessCPUTrace.enabled {
-            // HEL-149 report-only diagnostic: route churn on the same
+            // Report-only diagnostic: route churn on the same
             // console as DecodeTrace/SoakWait, gated identically. Never
             // changes behaviour below.
             let previousPortTypes = (previousRoute?.outputs.map(\.portType.rawValue) ?? [])
@@ -149,7 +149,7 @@ final class PlaybackAudioSession {
         onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
     }
 
-    /// Name for the `RouteTrace` line (HEL-149) — not used for any playback
+    /// Name for the `RouteTrace` line — not used for any playback
     /// decision, which is why `shouldPauseAfterRouteLoss` below switches on
     /// the raw `AVAudioSession.RouteChangeReason` itself instead of this.
     private static func routeChangeReasonName(_ reason: AVAudioSession.RouteChangeReason) -> String {
@@ -217,15 +217,15 @@ final class PlaybackAudioSession {
 
 /// Publishes Lagoon's custom-engine state to the system and translates
 /// lock-screen, Control Center, Siri Remote, and headset commands back into
-/// the PlayerEngine protocol (HEL-41).
+/// the PlayerEngine protocol.
 @MainActor
 final class NowPlayingCoordinator {
     private weak var engine: (any PlayerEngine)?
     /// Where a transport command goes. The controller supplies it so the
     /// lock screen, Control Center and a headset button reach the same
     /// interception point the player chrome does — inside a SyncPlay group
-    /// they become requests to the server and nothing moves locally
-    /// (HEL-172). Track selection, rate and the published timeline are not
+    /// they become requests to the server and nothing moves locally.
+    /// Track selection, rate and the published timeline are not
     /// routed: those are this viewer's, not the group's.
     private var transport: PlayerTransportActions?
     private var commandTargets: [(MPRemoteCommand, Any)] = []

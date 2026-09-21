@@ -2,7 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The case behind HEL-184: The 100's season-one remux ships five audio
+/// The case behind the audio memory: The 100's season-one remux ships five
+/// audio
 /// tracks with no language, no title and no default flag — four of them
 /// reading "DTS-HD MA - 5.1" — and the first is Russian. Nothing in the
 /// metadata can pick the English one, so the viewer's own correction has to
