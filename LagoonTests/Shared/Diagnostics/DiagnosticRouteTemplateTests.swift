@@ -9,8 +9,8 @@ struct DiagnosticRouteTemplateTests {
         #expect(DiagnosticRouteTemplate.template(path: "/jellyfin/Items/a1b2", basePath: "/jellyfin") == "Items/{id}")
         #expect(DiagnosticRouteTemplate.template(path: "/Videos/x1/stream.mkv") == "Videos/{id}/{id}")
         #expect(DiagnosticRouteTemplate.template(path: "/") == "{id}")
-        let url = URL(string: "https://fixture.example.eu/jf/Sessions/Playing?positionTicks=5")!
-        #expect(DiagnosticRouteTemplate.template(url: url, serverURL: URL(string: "https://fixture.example.eu/jf")) == "Sessions/Playing")
+        let url = URL(string: "https://lagoonfix.example.eu/jf/Sessions/Playing?positionTicks=5")!
+        #expect(DiagnosticRouteTemplate.template(url: url, serverURL: URL(string: "https://lagoonfix.example.eu/jf")) == "Sessions/Playing")
         #expect(DiagnosticSchema.isRoute(DiagnosticRouteTemplate.template(path: "/Users/8f3a/Items/12c4/PlaybackInfo")))
         #expect(APIDiagnostics.routeToken(.string("Users/{id}/Items/{id}/PlaybackInfo")) == "Users.id.Items.id.PlaybackInfo")
     }
