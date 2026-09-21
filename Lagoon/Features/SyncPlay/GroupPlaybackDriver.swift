@@ -1,24 +1,18 @@
 import Foundation
 
-/// Drives one player session from a SyncPlay group, and the group from
-/// that player's viewer.
+/// Drives one player session from a SyncPlay group, and the group from that
+/// player's viewer.
 ///
-/// The split from `SyncPlayStore` is deliberate. The store is membership:
-/// the socket, the group, the queue, what the UI shows. This is the part
-/// that touches playback, and it holds the controller **weakly** and the
-/// engine not at all — every transport call goes through
-/// `PlaybackController`'s group entry points, which is what lets an
-/// episode handoff or a delivery fallback carry the group onto a successor
-/// engine without this object knowing (engines stay out of long-lived
-/// references for exactly this reason).
+/// `SyncPlayStore` is membership — socket, group, queue, UI. This is the part
+/// that touches playback. It holds the controller **weakly** and the engine
+/// not at all; transport goes through `PlaybackController`'s group entry
+/// points, so a handoff or fallback carries the group onto a successor engine
+/// without this object knowing.
 ///
-/// Two directions of traffic meet here:
-///
-/// - **Down**: a command from the server becomes a scheduled transport
-///   call, and the readiness the server waits on is reported back.
-/// - **Up**: the viewer's play, pause, seek, skip and "next" become
-///   requests to the group, doing nothing locally. The server's echo is
-///   what moves this player, so every member moves together.
+/// - **Down**: a server command becomes a scheduled transport call, and
+///   readiness is reported back.
+/// - **Up**: the viewer's play, pause, seek and skip become requests to the
+///   group and do nothing locally. The server's echo moves this player.
 @MainActor
 final class GroupPlaybackDriver: GroupTransportRequests {
     /// Re-seek before a group start when the member is further than this
