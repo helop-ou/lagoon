@@ -2,42 +2,6 @@ import MediaAccessibility
 import OSLog
 import SwiftUI
 
-/// Full-screen custom player styled after the Infuse reference shots on
-/// A "Swipe down for Info" hint, a bottom-left title block over a
-/// thin scrubber, and a swipe-down panel of centered pill tabs
-/// (Info · Video · Audio · Subtitles, plus Together inside a Watch
-/// Together group) above one floating material card.
-/// Talks only to `PlayerEngine`, so an engine swap never touches it.
-///
-/// tvOS focus invariants: the surface is focusable at all times (Menu
-/// would quit the app from an unfocusable screen). Remote grammar:
-/// a light touch-surface tap reveals the transport; play/pause
-/// toggles anywhere; on the surface left/right seek ±10 s while playing and
-/// walk the scrub playhead while paused, and down opens the
-/// panel; in the panel left/right walk the tabs (selection follows focus),
-/// down enters the track rows. Menu/Escape is intercepted at the UIKit press
-/// layer by `MenuPressGate` — scrubbing cancels back to the live position,
-/// else panel open closes the panel, otherwise the player exits (SwiftUI's
-/// `onExitCommand` never fires inside a fullScreenCover on tvOS 26).
-///
-/// iOS touch grammar: a tap toggles the transport instead of only
-/// revealing it, a double-tap on either half of the video surface seeks
-/// ±10 s and stacks a further ±10 s on another double-tap inside the
-/// glyph's dismiss window, and the centred cluster puts play/pause and a
-/// ±10 s skip either side under the thumb as buttons rather than remote
-/// directions. The scrubber is dragged directly, and the Skip/Up Next pills
-/// are tapped rather than selected.
-///
-/// Everything the engine moves at tick rate is rendered by a child view that
-/// reads it in its own body — `PlayerTransportOverlay`'s rail and timestamps,
-/// `PlayerSubtitleOverlay`, `PlayerSkipOverlay`, `PlayerNextUpOverlay`, and
-/// the launch-gated `PlayerRegressionValue`. This view owns the remote
-/// grammar and the state those transitions produce, and must stay clear of
-/// `timePosition`, the `currentSubtitle*` properties and anything else the
-/// engine updates ten times a second: Observation tracks reads per body, and
-/// on tvOS one such read here re-hosts `MenuPressGate`'s whole tree with
-/// every tick. Reads from event handlers and task closures run
-/// later and are not body reads, so they are fine.
 /// Bench hook (`debug.benchBareSurface`): nothing but the video surface, so
 /// a hardware run can say whether the chrome layered over an HDR frame is
 /// what keeps it off the display's optimized composition path. Read once; a
@@ -72,6 +36,26 @@ private extension View {
     }
 }
 
+/// Full-screen custom player: title block over a thin scrubber, and a
+/// swipe-down panel of pill tabs (Info · Video · Audio · Subtitles, plus
+/// Together in a group). Talks only to `PlayerEngine`.
+///
+/// **Never read `timePosition`, `currentSubtitle*` or anything else the engine
+/// moves at tick rate from this body.** Observation tracks reads per body, and
+/// one such read re-hosts `MenuPressGate`'s whole tree every tick. The child
+/// overlays read them in their own bodies. Handler and task closures are not
+/// body reads.
+///
+/// tvOS: the surface stays focusable always, or Menu quits the app. Touch tap
+/// reveals, play/pause toggles anywhere, left/right seek ±10 s playing and
+/// walk the playhead paused, down opens the panel, then left/right walk tabs
+/// and down enters rows. `MenuPressGate` takes Menu at the UIKit press layer
+/// (`onExitCommand` never fires inside a fullScreenCover on tvOS 26):
+/// scrubbing cancels, else the panel closes, else exit.
+///
+/// iOS: tap toggles rather than reveals, double-tap either half seeks ±10 s
+/// and stacks within the glyph's dismiss window, the centred cluster is
+/// buttons under the thumb, the scrubber drags, pills are tapped.
 struct CustomPlayerView<Surface: View>: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// Stable media identity, independent of the engine object's lifetime.
