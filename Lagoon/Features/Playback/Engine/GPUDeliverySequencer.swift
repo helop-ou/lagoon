@@ -3,16 +3,13 @@ import Foundation
 /// Keeps GPU-converted frames in decode order and bounds how many are in
 /// flight.
 ///
-/// The decode queue reserves a slot per frame before it submits the kernel
-/// and moves on; the GPU's completions arrive on threads of Metal's choosing,
-/// in no promised order and with no promise that one has returned before the
-/// next begins. `complete` runs each frame's delivery only once every earlier
-/// frame has been delivered, holding the early ones, so the renderer sees
-/// frames in the order libavcodec produced them, and only one delivery runs
-/// at a time whatever thread hands the frame over. `reserve` blocks once
-/// `capacity` frames are outstanding, which is the only backpressure the GPU
-/// stage needs: a slow GPU stalls the decode queue instead of piling up
-/// pictures.
+/// The decode queue reserves a slot per frame before submitting the kernel and
+/// moves on; Metal's completions arrive on any thread, in no order. `complete`
+/// runs a frame's delivery only once every earlier frame has been delivered,
+/// so the renderer sees libavcodec's order and only one delivery runs at a
+/// time. `reserve` blocks once `capacity` frames are outstanding — the only
+/// backpressure this stage needs, so a slow GPU stalls the decode queue rather
+/// than piling up pictures.
 nonisolated final class GPUDeliverySequencer: @unchecked Sendable {
     private let condition = NSCondition()
     private let capacity: Int
