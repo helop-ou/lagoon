@@ -3,20 +3,16 @@ import Foundation
 /// The one place a Jellyfin wall-clock timestamp becomes a number, and the
 /// deliberate exception to "no `Date` is decoded anywhere".
 ///
-/// SyncPlay is the first feature that needs an instant rather than a
-/// duration: a `SendCommand` says *when*, on the server's clock, every
-/// client should unpause, and `GetUtcTime` reports when the server received
-/// and answered a request. Those cannot be modelled as ticks. They stay
-/// `String` on the DTOs — nothing decodes a `Date` — and are converted here,
-/// at the one boundary where a number is actually wanted.
+/// SyncPlay needs an instant rather than a duration: `SendCommand` says when,
+/// on the server's clock, every client should unpause. Those stay `String` on
+/// the DTOs and are converted here, at the one boundary that wants a number.
 ///
-/// The format is .NET's: `yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z`, with a *variable*
-/// number of fractional digits (6 and 7 both observed on fixture 12.0.0 in
-/// the same minute). `ISO8601DateFormatter` rejects 7 of them, which is the
-/// original reason the codebase models no dates at all, so this parses the
-/// components itself and builds the instant through a fixed UTC Gregorian
-/// calendar. Anything that is not UTC — a real zone offset, a malformed
-/// field — returns nil rather than a plausible wrong answer.
+/// The format is .NET's `yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z`, with a *variable*
+/// number of fractional digits — 6 and 7 both observed on the same server in
+/// the same minute. `ISO8601DateFormatter` rejects 7, which is why the
+/// codebase models no dates at all, so this parses the components itself
+/// through a fixed UTC Gregorian calendar. Anything not UTC returns nil
+/// rather than a plausible wrong answer.
 nonisolated enum JellyfinTimestamp {
     /// .NET's fractional resolution: 100 ns, the same tick used for
     /// positions. The wire carries at most seven digits of it.
