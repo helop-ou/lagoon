@@ -261,7 +261,7 @@ struct PlayerControlPanel: View {
                 // `GroupJoined` usually lists the member that just joined,
                 // but a group's creator is sometimes handed an empty list
                 // and no `UserJoined` of its own, so an empty list still
-                // means a room with you in it (fixture 12.0.0, 2026-09-14).
+                // means a room with you in it (the fixture server on 12.0.0, 2026-09-14).
                 cardHeader("In the Group")
                 if together.participants.isEmpty {
                     Text("Just you so far.")
