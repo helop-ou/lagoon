@@ -672,6 +672,21 @@ nonisolated enum SampleBufferFactory {
         return sampleBuffer
     }
 
+    /// Whether a sample can start a decoder, as the sample itself says it.
+    ///
+    /// The answer to the question `PlaybackRendererStartPolicy` asks, read
+    /// back out of the attachment written above. Absent means sync, which is
+    /// also the right reading for a decoded frame carrying no attachments at
+    /// all: nothing the renderer has to decode, nothing it can refuse.
+    static func isSyncSample(_ buffer: CMSampleBuffer) -> Bool {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            buffer,
+            createIfNecessary: false
+        ) as? [[CFString: Any]],
+            let first = attachments.first else { return true }
+        return first[kCMSampleAttachmentKey_NotSync] as? Bool != true
+    }
+
     /// The payload copied into a CoreMedia-owned block (same shape as
     /// `AudioDecoder.makeSampleBuffer` uses for LPCM — see the leak note
     /// there before ever "optimizing" this into a handoff).
