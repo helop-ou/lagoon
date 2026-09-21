@@ -1,32 +1,27 @@
 # Lagoon
 
-A native Jellyfin client for Apple TV (and iPhone/iPad), in the spirit of
-Infuse: sign in to your server and your library becomes a fast, focused,
-10-foot experience — hero spotlight with artwork-tinted ambient glow, Continue
-Watching and Next Up rails, poster grids, and a unified native sample-buffer
-player with resume and progress sync.
+A native Jellyfin client for Apple TV (and iPhone/iPad), with the goal of being as simple to
+use as possible and following Apple's SwiftUI guidelines.
 
 ## Features
 
 - Connect by address (schemeless input works — Lagoon probes https/http and
   Jellyfin's default `:8096`), sign in with password or **Quick Connect**
 - Featured banners on Home and Discover: swipe between titles on iPhone/iPad,
-  or use Left/Right on Apple TV; tap or select to open the visible title
-- Home with Continue Watching, unstarted episodes in Next Up, and Recently
-  Added rails that group new episodes under their shows
+  or use Left/Right on Apple TV
+- Native home rows, so Home wouldn't feel empty without Home Screen Sections plugin
 - Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state
   filters, a 4K movie filter, and selections remembered per account
 - Movie and series detail pages — seasons, episode rail, resume points
 - Native playback: direct play when the file allows it, server-side HLS
-  transcode when it doesn't; watch progress syncs back to the server
+  transcode when it doesn't
 - Search your Jellyfin library and Seerr, with recent searches, See All, and
   paginated full results
-- Larger iOS posters, roomier rows, adaptive detail actions, and centered
-  touch-player controls with a native playback-options sheet
-- Settings organised into separate categories on iOS and tvOS
-- Multiple accounts and servers with keychain-persisted sessions; Add Account
-  starts on the current server, with Use Another Server available when needed
+- Multiple accounts and servers with keychain-persisted sessions
 - tvOS 26 Liquid Glass design, dark-locked on both platforms
+- Jellyfin Syncplay support
+- Subtitle fetching from your server
+- Offline playback (via Downloads)
 
 ## Building
 
@@ -81,7 +76,53 @@ to the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## Compatibility
 
 Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
-Lagoon works against 10.8 through current. What has actually been contacted is
-narrower than that range: the public **10.11.11** stable demo and the public
-**12.0.0** unstable demo. The 12.0 compatibility work is not finished — see
-[Jellyfin API](docs/jellyfin-api.md) for what has and has not been checked.
+Lagoon works against 10.8 through current. Jellyfin 10.11.11 and 12.0.0, 12.1 have been tested thorougly.
+
+
+## FAQ
+
+### Why another client?
+
+Fair question, and I understand. It is also why I am not advertising Lagoon
+anywhere (also because I'm quite bad at marketing).
+
+I built it for myself and for the people using my own Jellyfin server, who
+kept telling me there was nothing that just worked unless they paid for
+Infuse. The second reason is the engine: the sample-buffer player underneath
+Lagoon took most of the effort here, and I would rather it existed as
+something others can build on than not exist at all.
+
+### Was AI used in this project?
+
+Yes. I review and test everything it writes, and every change goes through me
+and through an internal TestFlight build before it reaches anyone else. I am a
+full-time senior SWE and my time outside work is limited and without AI this project
+would've taken me quite a while longer to get it ready for a release.
+
+### How is this better than other clients?
+
+For a specific need you already have covered, probably it is not. Lagoon aims
+to be simple enough that you can point a non-techy friend at it, have them
+sign in, and have it play, ideally without the server re-encoding anything.
+
+There are genuinely some very good clients out there and I won't be here,
+trying to advertise that my client is better than the other ones.
+
+### What formats are supported?
+
+[**Codec support**](docs/codec-support.md) has the full table: containers,
+video and audio codecs, subtitle formats, and the conditions attached to each.
+
+It is generated from the capability profile the app sends the server, so it is
+accurate by construction rather than by me remembering to update it.
+
+### Does it work offline?
+
+On iPhone and iPad, yes. Films and episodes can be downloaded and played back.
+Whether your account may download is decided by your Jellyfin
+server, not by Lagoon.
+
+### Does it work with Jellyseerr?
+
+Yes, optionally. Connect it and requests and discovery appear alongside your
+library. Without it, Lagoon works exactly as before.
