@@ -513,20 +513,16 @@ nonisolated enum DeviceProfile {
 
     /// Bounds the rung that re-encodes, and only that rung.
     ///
-    /// Left unbounded it inherits the envelope: the server is asked to
-    /// re-encode at the source's own shape, 4K HEVC at up to 120 Mbps.
-    /// A server without a hardware encoder cannot produce that anywhere
-    /// near realtime — 9.5 fps for a 30 fps 4K source on the reference
-    /// server, which stalls and rebuffers indefinitely. That makes the
-    /// rescue rung strictly worse than the failure it exists to rescue,
-    /// since the ladder is only ever descended when playback has already
-    /// broken once.
+    /// Unbounded it inherits the envelope, asking the server to re-encode at
+    /// the source's own shape — 4K HEVC up to 120 Mbps. A server without a
+    /// hardware encoder cannot do that near realtime (9.5 fps for a 30 fps 4K
+    /// source on the reference server) and stalls indefinitely, making the
+    /// rescue rung worse than the failure it exists to rescue.
     ///
-    /// HD is the same heuristic `boundedToHD` applies for a missing
-    /// hardware decoder, and errs the same way: toward a stream that
-    /// plays. It is deliberately not applied to `remux`, which
-    /// stream-copies the video — a resolution condition there would force
-    /// the very re-encode that rung exists to avoid.
+    /// HD is the same heuristic `boundedToHD` applies for a missing hardware
+    /// decoder, erring the same way: toward a stream that plays. Deliberately
+    /// not applied to `remux`, which stream-copies the video — a resolution
+    /// condition there would force the re-encode that rung avoids.
     static func boundedForRealtimeTranscode(_ profile: Profile) -> Profile {
         Profile(
             maxStreamingBitrate: min(profile.maxStreamingBitrate, realtimeTranscodeBitrateCeiling),
