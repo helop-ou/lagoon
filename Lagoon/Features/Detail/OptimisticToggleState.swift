@@ -1,21 +1,18 @@
 import Foundation
 
-/// The state behind one optimistic server toggle such as watched or
-/// favourite. The icon flips the moment the viewer presses,
-/// because a toggle that waits on a round trip feels broken; what happens
-/// afterwards is the part that used to be missing:
+/// One optimistic server toggle, such as watched or favourite. The icon flips
+/// on press, because waiting on a round trip feels broken. What follows:
 ///
-/// - **Refusal** reverts the icon and records which value the server
-///   refused, so the row can say so instead of silently snapping back.
-/// - **Acceptance** hands authority back to the server. Once the page has
-///   re-fetched the item, the local override is dropped and the icon shows
-///   whatever the server now says, so a change made on another client, or a
-///   server that accepted the request but disagreed, reaches the screen. If
-///   the re-fetch failed, the override stays: the server did accept.
+/// - **Refusal** reverts the icon and records which value the server refused,
+///   so the row can say so instead of silently snapping back.
+/// - **Acceptance** hands authority back. Once the page re-fetches, the local
+///   override is dropped and the icon shows what the server says, so a change
+///   from another client reaches the screen. If the re-fetch failed the
+///   override stays — the server did accept.
 /// - **A press during a request** is ignored rather than sent, so two
-///   overlapping requests cannot leave the icon and the server disagreeing.
+///   overlapping requests cannot leave icon and server disagreeing.
 ///
-/// Pure so the transitions can be pinned in `OptimisticToggleStateTests`.
+/// Pure, so the transitions are pinned in `OptimisticToggleStateTests`.
 nonisolated struct OptimisticToggleState: Equatable, Sendable {
     /// The value the viewer asked for, shown in place of the server's until
     /// the server has either refused it or been re-read after accepting it.
