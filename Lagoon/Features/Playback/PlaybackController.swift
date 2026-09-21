@@ -237,6 +237,14 @@ final class PlaybackController {
     /// remembered override. Kept so the exit can tell an override from a
     /// viewer who simply left the default alone.
     @ObservationIgnored private var policyAudioOrdinal: Int?
+    /// The same three for subtitles. Separate from the audio trio rather
+    /// than folded in with it: an item can lose its remembered subtitle and
+    /// keep its remembered audio, and a layout that describes one says
+    /// nothing about the other.
+    @ObservationIgnored var subtitleTrackMemory: SubtitleTrackMemoryStore?
+    @ObservationIgnored private var subtitleMemoryScope: String?
+    @ObservationIgnored private var subtitleMemoryLayout: [SubtitleLayoutStream] = []
+    @ObservationIgnored private var policySubtitleOrdinal: Int?
     /// The current item's streams in the order the engine numbers them, so
     /// a selected track can be named rather than just counted. Audio is the
     /// embedded list; subtitles are embedded first, then external.
@@ -668,6 +676,29 @@ final class PlaybackController {
                     initialSubtitleOrdinal = embeddedSubtitles.count + position + 1
                 }
             }
+            // What automatic selection would choose here, whether or not
+            // anything overrules it below: the exit compares against it to
+            // tell a deliberate change from the default left alone.
+            let selectedAudioLanguage = initialAudioOrdinal.flatMap { ordinal in
+                embeddedAudio.indices.contains(ordinal - 1)
+                    ? embeddedAudio[ordinal - 1].language
+                    : nil
+            }
+            let automaticSubtitleOrdinal: Int? = subtitleDefaultMode == .system
+                ? Self.systemDefaultSubtitleOrdinal(
+                    current: initialSubtitleOrdinal,
+                    subtitles: orderedSubtitles,
+                    selectedAudioLanguage: selectedAudioLanguage,
+                    preferredLanguages: self.preferredSubtitleLanguages
+                )
+                : TrackSelectionPolicy.subtitleOrdinal(
+                    mode: subtitleDefaultMode,
+                    candidates: orderedSubtitles.map(Self.selectionCandidate),
+                    serverDefault: initialSubtitleOrdinal,
+                    preferredLanguages: self.preferredSubtitleLanguages,
+                    selectedAudioLanguage: selectedAudioLanguage
+                )
+            policySubtitleOrdinal = automaticSubtitleOrdinal
             if let preference = trackPreference {
                 // 0 is the engine's "no subtitles" ordinal.
                 if preference.subtitlesOff {
@@ -680,27 +711,23 @@ final class PlaybackController {
                     initialSubtitleOrdinal = carried
                 }
             } else {
-                let selectedAudioLanguage = initialAudioOrdinal.flatMap { ordinal in
-                    embeddedAudio.indices.contains(ordinal - 1)
-                        ? embeddedAudio[ordinal - 1].language
-                        : nil
-                }
-                if subtitleDefaultMode == .system {
-                    initialSubtitleOrdinal = Self.systemDefaultSubtitleOrdinal(
-                        current: initialSubtitleOrdinal,
-                        subtitles: orderedSubtitles,
-                        selectedAudioLanguage: selectedAudioLanguage,
-                        preferredLanguages: self.preferredSubtitleLanguages
-                    )
-                } else {
-                    initialSubtitleOrdinal = TrackSelectionPolicy.subtitleOrdinal(
-                        mode: subtitleDefaultMode,
-                        candidates: orderedSubtitles.map(Self.selectionCandidate),
-                        serverDefault: initialSubtitleOrdinal,
-                        preferredLanguages: self.preferredSubtitleLanguages,
-                        selectedAudioLanguage: selectedAudioLanguage
-                    )
-                }
+                initialSubtitleOrdinal = automaticSubtitleOrdinal
+            }
+            // And a choice the viewer made for this show outranks both, for
+            // as long as it still describes a track here, or says there
+            // should be none.
+            subtitleMemoryLayout = orderedSubtitles.map(Self.subtitleLayoutStream)
+            subtitleMemoryScope = SubtitleTrackMemoryStore.scope(
+                seriesID: media.seriesId,
+                itemID: media.id
+            )
+            if let scope = subtitleMemoryScope,
+               let remembered = subtitleTrackMemory?.choice(for: scope),
+               let carried = SubtitleTrackMemoryPolicy.ordinal(
+                   for: remembered,
+                   in: subtitleMemoryLayout
+               ) {
+                initialSubtitleOrdinal = carried
             }
             // Hands-off soak/bench hook (HEL-148), mirroring
             // `debug.benchSearchTerm`: forces a subtitle language on so a
@@ -787,6 +814,9 @@ final class PlaybackController {
             }
             engine.onBufferingChanged = { [weak self, weak engine] buffering in
                 guard let self, let engine, self.engine === engine else { return }
+                // A timed skip waits for the picture to be moving again
+                // before it spends the buffer on a seek.
+                self.automation.isBuffering = buffering
                 self.onBufferingChanged?(buffering)
             }
             engine.setVideoOutputSuspended(videoOutputSuspended)
@@ -822,6 +852,7 @@ final class PlaybackController {
                 // track it had, and this writes durable state.
                 if let self, let engine, self.engine === engine {
                     self.rememberAudioChoice(engine: engine)
+                    self.rememberSubtitleChoice(engine: engine)
                 }
                 if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag,
                    let normalized = SubtitlePreferencesStore.normalizedLanguage(language) {
@@ -835,6 +866,10 @@ final class PlaybackController {
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
             automation.beginItem(identity: media.id, segments: playerInfo.segments)
+            // Seeded, not waited for: the callback above only reports
+            // changes, and it was installed before this engine was the
+            // controller's own.
+            automation.isBuffering = engine.isBuffering
             // Through the controller rather than straight to the engine, so
             // a skip inside a group becomes the group's seek and everyone
             // skips the intro together (HEL-172).
@@ -1023,6 +1058,17 @@ final class PlaybackController {
         }
     }
 
+    private nonisolated static func subtitleLayoutStream(_ stream: MediaStream) -> SubtitleLayoutStream {
+        SubtitleLayoutStream(
+            language: stream.language,
+            title: stream.title,
+            isForced: stream.isForced == true,
+            isHearingImpaired: stream.isHearingImpaired == true,
+            isExternal: stream.isExternal == true,
+            isDefault: stream.isDefault == true
+        )
+    }
+
     private nonisolated static func layoutStream(_ stream: MediaStream) -> AudioLayoutStream {
         AudioLayoutStream(
             codec: stream.codec,
@@ -1067,6 +1113,48 @@ final class PlaybackController {
                     title: stream.title,
                     ordinal: ordinal,
                     layout: AudioTrackMemoryPolicy.fingerprint(of: audioMemoryLayout)
+                ),
+                for: scope
+            )
+        }
+    }
+
+    /// Persists — or drops — a subtitle choice the viewer just made, on the
+    /// same terms as `rememberAudioChoice`.
+    ///
+    /// Two differences, both from the ordinal space. Nothing selected is
+    /// ordinal 0 and a real answer, so this records a selection *and* its
+    /// absence. And subtitle search appends tracks while the episode plays,
+    /// so the engine can list more than the layout captured at start: the
+    /// prefix still lines up, which is why this asks for at least as many
+    /// rather than exactly as many, and refuses an ordinal naming one of the
+    /// appended tracks.
+    private func rememberSubtitleChoice(engine: SampleBufferPlayerEngine) {
+        guard let subtitleTrackMemory,
+              let scope = subtitleMemoryScope,
+              engine.subtitleTracks.count >= subtitleMemoryLayout.count else { return }
+        let ordinal = engine.subtitleTracks.first(where: \.isSelected)?.engineID
+            ?? SubtitleTrackMemoryPolicy.offOrdinal
+        guard ordinal == SubtitleTrackMemoryPolicy.offOrdinal
+                || subtitleMemoryLayout.indices.contains(ordinal - 1) else { return }
+        switch SubtitleTrackMemoryPolicy.outcome(
+            chosen: ordinal,
+            automatic: policySubtitleOrdinal
+        ) {
+        case .forget:
+            subtitleTrackMemory.forget(scope)
+        case .remember(let ordinal):
+            let layout = SubtitleTrackMemoryPolicy.fingerprint(of: subtitleMemoryLayout)
+            let stream = ordinal == SubtitleTrackMemoryPolicy.offOrdinal
+                ? nil
+                : subtitleMemoryLayout[ordinal - 1]
+            subtitleTrackMemory.remember(
+                RememberedSubtitleChoice(
+                    isOff: ordinal == SubtitleTrackMemoryPolicy.offOrdinal,
+                    language: stream?.language,
+                    title: stream?.title,
+                    ordinal: ordinal,
+                    layout: layout
                 ),
                 for: scope
             )
