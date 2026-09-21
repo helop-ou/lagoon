@@ -48,6 +48,8 @@ done
 
 tag="build-${want_build}"
 ok() { printf '  \xe2\x9c\x93 %s\n' "$1"; }
+warn() { printf '  ! %s\n' "$1"; }
+note() { printf '  - %s\n' "$1"; }
 die() { printf '\n  error: %s\n' "$1" >&2; exit 1; }
 
 echo
@@ -113,7 +115,30 @@ if ! git -C "$root" merge-base --is-ancestor "$sha" origin/main 2>/dev/null; the
 fi
 ok "${sha:0:9} is on origin/main"
 
-# 8. Which revision was archived is not recorded anywhere, so the best we can
+# 8. The website restates the version and what Lagoon plays, and it is a
+#    separate repository that deploys on its own schedule. Leaving it behind is
+#    not a reason to refuse a release the App Store already has, so this warns
+#    rather than stopping. Distinguishing "behind" from "could not check"
+#    matters: reporting a check that never ran as passing is the one outcome
+#    worse than either.
+site_out=""
+site_status=0
+site_out="$("$root/scripts/generate-site-facts.sh" --check 2>&1)" || site_status=$?
+if [ "$site_status" -eq 0 ]; then
+    ok "the website's facts are current"
+elif printf '%s' "$site_out" | grep -q "no website checkout"; then
+    note "no website checkout beside this one, so its facts were not checked"
+elif printf '%s' "$site_out" | grep -q "out of date\|does not exist"; then
+    warn "the website's facts are behind this build"
+    echo "      Run scripts/generate-site-facts.sh, then commit and deploy"
+    echo "      lagoon-website. The site keeps serving the old version until"
+    echo "      it is redeployed. Releasing anyway."
+else
+    warn "could not check the website's facts"
+    printf '%s\n' "$site_out" | tail -3 | sed 's/^/      /'
+fi
+
+# 9. Which revision was archived is not recorded anywhere, so the best we can
 #    do is point at the commit that set this build number and let a human say
 #    whether the archive came from further along.
 bump="$(git -C "$root" log --format=%H -S"CURRENT_PROJECT_VERSION = ${want_build};" \
