@@ -489,15 +489,13 @@ final class HomeViewModel {
 
     /// The Collections row.
     ///
-    /// Two passes, because one is not enough and one per collection is far
-    /// too many. The first asks for every collection and keeps the ones that
-    /// hold more than a single title — `ChildCount` rides along in the list
-    /// response, so filtering 173 franchise stubs down to 18 real collections
-    /// costs nothing. The second fetches the contents of only those survivors
-    /// that have no landscape artwork of their own, to borrow a card picture
-    /// from the first film inside; on the reference library that is 11 small
-    /// concurrent requests, and on a library whose collections are all
-    /// illustrated it is none at all.
+    /// Two passes: one is not enough and one per collection is far too many.
+    /// The first asks for every collection and keeps those holding more than a
+    /// single title — `ChildCount` rides along in the list response, so
+    /// filtering 173 franchise stubs to 18 costs nothing. The second fetches
+    /// contents only for survivors with no landscape artwork, to borrow a card
+    /// picture from the first film inside: 11 small concurrent requests on the
+    /// reference library, none at all where collections are illustrated.
     private func loadCollections(client: JellyfinClient, generation: Int) async {
         let identity = client.sessionIdentity
         guard let all = try? await client.collections() else { return }
