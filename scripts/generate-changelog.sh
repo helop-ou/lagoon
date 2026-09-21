@@ -28,7 +28,7 @@ set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="$repo/CHANGELOG.md"
-destination="${LAGOON_CHANGELOG_DOC_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation)}"
+destination="${LAGOON_CHANGELOG_DOC_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=latest}"
 
 check=false
 notes=false
