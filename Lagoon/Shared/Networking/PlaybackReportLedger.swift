@@ -3,24 +3,20 @@ import OSLog
 
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "playback-reports")
 
-/// The playback sessions whose final `Sessions/Playing/Stopped` report the
-/// server may not have applied yet.
+/// Playback sessions whose final `Sessions/Playing/Stopped` the server may not
+/// have applied yet.
 ///
-/// Leaving the player and re-fetching what it played are deliberately
-/// independent: the stop report is fire-and-forget so a slow server never
-/// delays dismissal, and the screen underneath re-fetches in its
-/// `fullScreenCover`'s `onDismiss`. Left alone the two race — the report
-/// only starts from the player's `onDisappear`, in the same run-loop turn
-/// as `onDismiss` — and the re-fetch usually wins, so a detail page reads
-/// the position the server had *before* the report and keeps offering Play
-/// where it should offer Resume.
+/// Leaving the player and re-fetching are independent on purpose: the stop
+/// report is fire-and-forget so a slow server never delays dismissal, and the
+/// screen underneath re-fetches in `onDismiss`. Left alone they race — the
+/// report starts from `onDisappear`, the same run-loop turn — and the re-fetch
+/// usually wins, so the detail page reads the position from before the report
+/// and offers Play where it should offer Resume.
 ///
-/// The player opens a session here at the moment its server-side playback
-/// session becomes active and closes it once the stop report has returned,
-/// or once it is certain nothing will be reported. A screen calls `settle()`
-/// before it re-fetches. `settle()` is bounded: a screen must never hang on
-/// a report that fails to return, so after the timeout it re-fetches exactly
-/// as it did before this existed.
+/// The player opens a session when its server-side one becomes active and
+/// closes it once the report returns or cannot. Screens call `settle()` first.
+/// It is bounded: after the timeout the screen re-fetches as it did before
+/// this existed.
 final class PlaybackReportLedger {
     /// Long enough for a stop report on a slow remote server (a real stop
     /// took 2.6 s against fixture, most of it the server tearing the session
