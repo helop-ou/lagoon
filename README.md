@@ -12,7 +12,7 @@ use as possible and following Apple's SwiftUI guidelines.
 - Native home rows, so Home wouldn't feel empty without Home Screen Sections plugin
 - Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state
   filters, a 4K movie filter, and selections remembered per account
-- Movie and series detail pages — seasons, episode rail, resume points
+- Movie and series detail pages - seasons, episode rail, resume points
 - Native playback: direct play when the file allows it, server-side HLS
   transcode when it doesn't
 - Search your Jellyfin library and Seerr, with recent searches, See All, and
@@ -44,11 +44,11 @@ To try it without a home server, connect to the public Jellyfin demo:
 ## Licence
 
 Lagoon's own code is under the **Mozilla Public License 2.0**
-([LICENSE](LICENSE)). Fork it, change it, ship it; publish your changes to the
+([LICENSE](LICENSE)). Fork it, change it, ship it, publish your changes to the
 files it covers, and say where they came from.
 
 The Lagoon name and brand artwork are not part of that grant. Give a fork its
-own name and icon — [TRADEMARKS.md](TRADEMARKS.md) explains what is carved out
+own name and icon - [TRADEMARKS.md](TRADEMARKS.md) explains what is carved out
 and why.
 
 ### Third-party notices
@@ -78,6 +78,10 @@ to the [Code of Conduct](CODE_OF_CONDUCT.md).
 Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
 Lagoon works against 10.8 through current. Jellyfin 10.11.11 and 12.0.0, 12.1 have been tested thorougly.
 
+## AI Disclaimer
+
+Even though this info is also in the FAQ, but just in case, AI has been used in the development and documentation process of this project.
+I am a full-time SWE and I do review and test the changes made by Claude, or Codex.
 
 ## FAQ
 
@@ -126,3 +130,10 @@ server, not by Lagoon.
 
 Yes, optionally. Connect it and requests and discovery appear alongside your
 library. Without it, Lagoon works exactly as before.
+
+### Why target tvOS and iOS 26?
+
+Because most iOS devices are kept up to date and since I made the project mostly for me,
+I don't know anyone who uses OS versions older than those.
+
+This is not set in stone.
