@@ -122,7 +122,8 @@ if [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
     ahead="$(git -C "$root" rev-list --count "${bump}..${sha}" 2>/dev/null || echo "?")"
     echo
     echo "  ! ${sha:0:9} is ${ahead} commit(s) past the build ${want_build} bump (${bump:0:9}):"
-    git -C "$root" log --oneline "${bump}..${sha}" | sed 's/^/      /'
+    git -C "$root" log --oneline -10 "${bump}..${sha}" | sed 's/^/      /'
+    [ "$ahead" -gt 10 ] 2>/dev/null && echo "      ... and $((ahead - 10)) more"
     echo
     echo "    Tag the revision the archive was actually built from. Pass --rev"
     echo "    if that is not ${sha:0:9}."
