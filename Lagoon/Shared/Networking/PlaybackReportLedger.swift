@@ -19,7 +19,7 @@ private let log = Logger(subsystem: "ee.helop.lagoon", category: "playback-repor
 /// this existed.
 final class PlaybackReportLedger {
     /// Long enough for a stop report on a slow remote server (a real stop
-    /// took 2.6 s against fixture, most of it the server tearing the session
+    /// took 2.6 s against the fixture server, most of it the server tearing the session
     /// down), short enough that a server that has gone away costs one
     /// visible pause, not a hang.
     nonisolated static let defaultSettleTimeout: Duration = .seconds(8)
