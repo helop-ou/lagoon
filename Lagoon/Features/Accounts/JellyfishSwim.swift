@@ -2,31 +2,21 @@ import SwiftUI
 
 /// The jellyfish accent, swimming.
 ///
-/// A jellyfish does not travel at a constant speed, and it does not travel
-/// sideways. It contracts its bell in a quick squeeze, and *that squeeze is
-/// the propulsion* — it lifts, then sinks back while the bell reopens and the
-/// tentacles catch up. Translating the supplied artwork along a path would
-/// miss all of that and read as a sticker being dragged around, so the mark is
-/// rebuilt here as a parametric path from the same geometry as
-/// `Lagoon_Jellyfish_Accent.svg` and deformed per frame.
+/// A jellyfish contracts its bell in a quick squeeze, and that squeeze is the
+/// propulsion. Translating the artwork along a path reads as a dragged
+/// sticker, so the mark is rebuilt as a parametric path from the same geometry
+/// as `Lagoon_Jellyfish_Accent.svg` and deformed per frame.
 ///
-/// Four things are coupled, and the coupling is the whole effect:
+/// - Lift takes the shape of the contraction: rises squeezing, sinks between.
+/// - Lift and sink cancel over a beat; a separate slower drift is where it
+///   actually goes, so it hovers rather than climbing away.
+/// - The bell deforms rather than scales — narrows, draws taller, tucks the
+///   rim inward.
+/// - The tentacles answer a slightly earlier moment, so they stream behind a
+///   surge and curl under during the sink.
 ///
-/// - **The beat pushes up.** Lift takes the shape of the contraction, so the
-///   animal rises quickly while it squeezes and sinks slowly while it does
-///   not. It holds height only while working for it — the way someone treading
-///   water goes under the moment they stop.
-/// - **Over a beat, lift and sink cancel.** Where it actually ends up is a
-///   separate, far slower drift, so it hovers instead of climbing away.
-/// - **The bell deforms rather than scales.** Contracting narrows it, draws it
-///   taller, and tucks the rim inward; relaxing lets it spread back out.
-/// - **The tentacles lag.** They answer a slightly *earlier* moment than the
-///   bell, so they stream out straight behind a surge and curl back under
-///   during the sink.
-///
-/// Everything is a closed-form function of time — nothing integrates frame to
-/// frame — so the motion cannot drift, desynchronise, or depend on when the
-/// view happened to appear.
+/// All closed-form in time, nothing integrated frame to frame, so it cannot
+/// drift or desynchronise.
 struct JellyfishSwimLayer: View {
     /// Which stretch of water is free. Every onboarding screen shows the same
     /// three animals, but they cannot hover in the same places: the connect
