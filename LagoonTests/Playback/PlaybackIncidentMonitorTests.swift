@@ -81,7 +81,7 @@ struct PlaybackIncidentMonitorTests {
     static func failure(_ stage: PlaybackFailureDetail.Stage = .open) -> PlaybackEngineFailure {
         PlaybackEngineFailure(
             cause: .delivery,
-            message: "The stream could not be opened (https://fixture.example.eu/Videos/12c4/stream?api_key=secret-token).",
+            message: "The stream could not be opened (https://lagoonfix.example.eu/Videos/12c4/stream?api_key=secret-token).",
             detail: PlaybackFailureDetail(stage: stage, domain: "ffmpeg", code: -1094995529)
         )
     }
