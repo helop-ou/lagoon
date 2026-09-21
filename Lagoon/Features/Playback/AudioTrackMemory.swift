@@ -1,5 +1,4 @@
 import Foundation
-import Observation
 
 /// One audio stream reduced to what identifies it again in a sibling
 /// episode.
@@ -38,7 +37,9 @@ nonisolated struct AudioLayoutStream: Equatable {
 /// survive a layout change; `ordinal` is the only handle left when a
 /// release ships tracks that cannot be told apart by description, and is
 /// trustworthy only against the `layout` it was measured in.
-nonisolated struct RememberedAudioChoice: Codable, Equatable {
+nonisolated struct RememberedAudioChoice: RememberedTrackChoice {
+    static let memoryNamespace = "audioTrackMemory"
+
     var language: String?
     var title: String?
     /// 1-based, in the engine's embedded-audio ordinal space.
@@ -78,25 +79,16 @@ nonisolated enum AudioTrackMemoryPolicy {
     /// default flag are part of it: a release that gains proper tagging is
     /// a different layout, and a position measured before it should no
     /// longer apply.
-    ///
-    /// Fields are length-prefixed rather than merely joined, because a
-    /// title is uncontrolled file metadata and may contain the separators
-    /// itself — and two different layouts colliding here is the one way a
-    /// position could be applied to a layout it was never measured in.
     static func fingerprint(of streams: [AudioLayoutStream]) -> String {
-        streams
-            .map { stream in
-                [
-                    stream.codec ?? "",
-                    stream.channels.map(String.init) ?? "",
-                    stream.language ?? "",
-                    stream.title ?? "",
-                    stream.isDefault ? "d" : "",
-                ]
-                .map { "\($0.count):\($0)" }
-                .joined()
-            }
-            .joined(separator: "|")
+        TrackLayoutFingerprint.of(streams.map { stream in
+            [
+                stream.codec ?? "",
+                stream.channels.map(String.init) ?? "",
+                stream.language ?? "",
+                stream.title ?? "",
+                stream.isDefault ? "d" : "",
+            ]
+        })
     }
 
     /// Where the choice lands when its description names exactly one track
@@ -193,93 +185,6 @@ nonisolated enum AudioTrackMemoryPolicy {
     }
 }
 
-/// Per-account memory of audio choices, scoped to a series so that
-/// correcting one episode carries to the rest of the show — the ask behind
-/// HEL-184. Written straight through to `UserDefaults`, so it outlives the
-/// player presentation that holds the store.
-@MainActor
-@Observable
-final class AudioTrackMemoryStore {
-    private(set) var accountID: String?
-    private var choices: [String: RememberedAudioChoice] = [:]
-
-    private let defaults: UserDefaults
-    /// Enough for any plausible library of part-watched shows; the oldest
-    /// entries fall off rather than letting the payload grow without end.
-    private static let capacity = 200
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-    }
-
-    func configure(accountID: String?) {
-        guard self.accountID != accountID else { return }
-        self.accountID = accountID
-        choices = accountID.flatMap { Self.stored(for: $0, in: defaults) } ?? [:]
-    }
-
-    /// One show, one choice: an episode answers for its series, anything
-    /// else only for itself.
-    nonisolated static func scope(seriesID: String?, itemID: String) -> String {
-        seriesID ?? itemID
-    }
-
-    func choice(for scope: String) -> RememberedAudioChoice? {
-        choices[scope]
-    }
-
-    func remember(_ choice: RememberedAudioChoice, for scope: String) {
-        var merged = reloaded()
-        merged[scope] = choice
-        if merged.count > Self.capacity {
-            // Never the entry just written, whatever the clock has done.
-            let evictable = merged
-                .filter { $0.key != scope }
-                .sorted { $0.value.updatedAt < $1.value.updatedAt }
-                .prefix(merged.count - Self.capacity)
-                .map(\.key)
-            for key in evictable {
-                merged.removeValue(forKey: key)
-            }
-        }
-        choices = merged
-        persist()
-    }
-
-    /// Dropped when the viewer lands back on what automatic selection would
-    /// have picked anyway: there is no longer an override to carry.
-    func forget(_ scope: String) {
-        var merged = reloaded()
-        let removed = merged.removeValue(forKey: scope) != nil
-        choices = merged
-        guard removed else { return }
-        persist()
-    }
-
-    /// Re-reads what is on disk before changing it, so two players open
-    /// over one account — a Picture in Picture session and a new one — do
-    /// not write whole-map snapshots over each other's entries.
-    private func reloaded() -> [String: RememberedAudioChoice] {
-        guard let accountID,
-              let stored = Self.stored(for: accountID, in: defaults) else { return choices }
-        return stored
-    }
-
-    private func persist() {
-        guard let accountID,
-              let data = try? JSONEncoder().encode(choices) else { return }
-        defaults.set(data, forKey: Self.key(accountID))
-    }
-
-    private static func stored(
-        for accountID: String,
-        in defaults: UserDefaults
-    ) -> [String: RememberedAudioChoice]? {
-        guard let data = defaults.data(forKey: key(accountID)) else { return nil }
-        return try? JSONDecoder().decode([String: RememberedAudioChoice].self, from: data)
-    }
-
-    private static func key(_ accountID: String) -> String {
-        "playback.audioTrackMemory.\(accountID)"
-    }
-}
+/// The audio half of `TrackMemoryStore`. The namespace is what shipped, and
+/// what viewers already have their choices stored under.
+typealias AudioTrackMemoryStore = TrackMemoryStore<RememberedAudioChoice>
