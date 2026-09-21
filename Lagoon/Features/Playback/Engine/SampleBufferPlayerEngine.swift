@@ -3853,18 +3853,15 @@ nonisolated enum DemuxBackpressurePolicy {
     // no playhead prefetch. The demux queues are the entire cushion, so
     // they are asked to be a bigger one.
     //
-    // **Only audio grows, and the asymmetry is the whole point.** Video's
-    // queue holds decoded frames — 24.9 MB each at 4K 10-bit, which is why
-    // its hard limit is 30 — while audio holds
-    // compressed packets at roughly 80 KB a second. Doubling the audio
-    // cushion costs about 1.5 MB against a video queue already permitted
-    // 746 MB. Even the worst case, a locally decoded 8-channel track held
-    // as float LPCM, is about 26 MB.
+    // **Only audio grows.** Video's queue holds decoded frames — 24.9 MB each
+    // at 4K 10-bit, hence a hard limit of 30 — while audio holds compressed
+    // packets at ~80 KB/s. Doubling the audio cushion costs ~1.5 MB against a
+    // video queue already permitted 746 MB; the worst case, 8-channel float
+    // LPCM, is ~26 MB.
     //
-    // Audio is also the half that has no cushion of its own. The video
-    // renderer coasts on frames it already holds, which is why a starved
-    // transcode reaches the viewer as silence over a moving picture rather
-    // than as a freeze.
+    // Audio is also the half with no cushion of its own: the video renderer
+    // coasts on frames it holds, which is why a starved transcode reaches the
+    // viewer as silence over a moving picture rather than a freeze.
     private static let uncachedAudioHighWater = 360
     private static let uncachedAudioLowWater = 288
     private static let uncachedAudioHardWater = 540
