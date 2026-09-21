@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The SyncPlay wire, pinned against payloads captured from fixture 12.0.0
+/// The SyncPlay wire, pinned against payloads captured from the fixture server, 12.0.0
 /// on 2026-09-14. Every group update means something different by
 /// its `Type`, so each one gets a fixture; the two decoding rules that carry
 /// the feature — an unknown enumeration never fails a message, and a group
