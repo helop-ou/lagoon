@@ -36,7 +36,7 @@ struct UserAvatarTests {
 
     @Test func accountsStoredBeforeTheTagStillDecode() throws {
         let stored = Data(#"""
-        [{"serverURL":"https://media.test/jellyfin","serverName":"Fixture","userId":"93f3","userName":"Jaagop"}]
+        [{"serverURL":"https://media.test/jellyfin","serverName":"Fixture Server","userId":"93f3","userName":"Jaagop"}]
         """#.utf8)
         let accounts = try JSONDecoder().decode([StoredAccount].self, from: stored)
         #expect(accounts.count == 1)
