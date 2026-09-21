@@ -5,26 +5,19 @@ import CoreVideo
 import Foundation
 import OSLog
 
-/// The Lagoon playback engine — libavformat demux into
-/// CMSampleBuffers rendered by AVSampleBufferDisplayLayer /
-/// AVSampleBufferAudioRenderer under an AVSampleBufferRenderSynchronizer.
-/// VideoToolbox/libavcodec and AVFoundation perform codec work, color
-/// management, presentation, and audio output.
+/// The Lagoon playback engine: libavformat demux into CMSampleBuffers rendered
+/// by AVSampleBufferDisplayLayer / AVSampleBufferAudioRenderer under an
+/// AVSampleBufferRenderSynchronizer. The app's only engine since 2026-08-16.
 ///
-/// The app's only playback engine since 2026-08-16 (Jaagop's call: one
-/// player for everything). Envelope: h264 video passed through compressed;
-/// HEVC and hardware-supported AV1 are decoded ahead with VideoToolbox;
-/// AV1 otherwise, VP9, and the legacy video codecs are software-decoded into
-/// NV12/P010 Core Video frames; aac/mp3/ac3/eac3 audio passes through
-/// compressed and dts/truehd/flac/opus/vorbis decodes to LPCM via
-/// libavcodec (M4); embedded + external subtitles as an overlay (M5) —
-/// `DeviceProfile.lagoon` advertises exactly this, so anything outside it
-/// arrives as an fMP4 HLS transcode that libavformat demuxes back into
-/// the same envelope.
+/// Envelope: h264 passed through compressed; HEVC and hardware AV1 decoded
+/// ahead with VideoToolbox; AV1 otherwise, VP9 and the legacy codecs software
+/// decoded to NV12/P010; aac/mp3/ac3/eac3 passed through, other audio decoded
+/// to LPCM; subtitles as an overlay. `DeviceProfile.lagoon` advertises exactly
+/// this, so anything else arrives as an fMP4 HLS transcode that demuxes back
+/// into the same envelope.
 ///
-/// Threading: state and transport commands live on the main actor; the
-/// demux loop runs on a dedicated serial queue, feeding two thread-safe
-/// sample-buffer queues that the renderers' data pumps drain.
+/// Threading: state and transport on the main actor; demux on its own serial
+/// queue, feeding two thread-safe queues the renderers' pumps drain.
 @Observable
 final class SampleBufferPlayerEngine: PlayerEngine {
     private(set) var timePosition: Double = 0
@@ -2677,20 +2670,17 @@ final class SampleBufferPlayerEngine: PlayerEngine {
 
     /// Recreates the decode session this seek is about to feed.
     ///
-    /// A session VideoToolbox declines is not a statement about the samples,
-    /// so it gets one more attempt before the ladder hears about
-    /// it: the first attempt has already torn the old session down, which is
-    /// often the whole reason the second one succeeds. This is where
-    /// `LAGOON-A` failed — a seek 178 ms in, on a stream that had been
-    /// playing, reported as `sessionCreation -12903`.
+    /// A session VideoToolbox declines says nothing about the samples, so it
+    /// gets one more attempt before the ladder hears about it — the first
+    /// attempt has already torn the old session down, which is often why the
+    /// second succeeds. `LAGOON-A` failed here: a seek 178 ms into a playing
+    /// stream, reported as `sessionCreation -12903`.
     ///
-    /// The rebuild is in place rather than through `absorbVideoSessionFault`
-    /// because a false return stops the demux loop, and the seek a rebuild
-    /// would ask for needs a loop still running to apply it.
-    ///
-    /// While video output is suspended a failure here is not one at all:
-    /// nothing is being decoded, and the seek that resumes the picture runs
-    /// this again with the app in the foreground.
+    /// Rebuilt in place rather than through `absorbVideoSessionFault`, whose
+    /// false return stops the demux loop — and the seek needs a running loop
+    /// to apply it. While video output is suspended a failure here is not one:
+    /// nothing is decoding, and the seek that resumes the picture runs this
+    /// again in the foreground.
     ///
     /// Returns false when the demux loop must stop; the ladder has been told.
     nonisolated private func prepareVideoDecoderForSeek() -> Bool {
@@ -3546,37 +3536,17 @@ nonisolated enum PlaybackStarvation: String, Equatable {
     case audio
 }
 
-/// Video starvation stops the clock. Audio starvation is **only counted**,
-/// and the difference is the whole lesson.
-///
-/// The original defect is real: an audio queue at zero produced no stall,
-/// no buffering state and no counter movement, so a film could play on with
-/// the picture running and no sound while every indicator read healthy.
-/// The first fix treated that as a stall and stopped the clock for it, and
-/// that broke playback for every title with audio — verified against Ted 2
-/// and GTA VI, both of which had been playing correctly.
-///
-/// **`audioQueue` depth is not a measure of audio starvation.** `pumpAudio`
-/// drains it into `AVSampleBufferAudioRenderer` for as long as the renderer
-/// says `isReadyForMoreMediaData`, so the buffered seconds live inside the
-/// renderer and Lagoon's queue sits near zero on a *healthy* title. Reading
-/// it as starvation fires constantly, and stopping the clock for it turns
-/// continuous playback into a buffer/play/buffer cycle.
-///
-/// Switching the reading from packet count to buffered seconds does not fix
-/// that, which is the trap worth recording: this ticket's own text warns
-/// that a count near zero cannot distinguish a starved feed from one being
-/// taken as fast as it arrives, and the seconds are the same queue measured
-/// in different units. Both are the wrong side of the pump. A true audio
-/// starvation signal has to come from the renderer, and finding one is
-/// still open.
-///
-/// So `.audio` is a reported condition and never a recovery trigger. That
-/// is the minimum this ticket asked for — counted and reported — and it is
-/// as far as the evidence supports going.
-///
-/// Pure so the decision can be pinned by tests rather than reproduced on
-/// hardware: the engine only assembles the snapshot.
+    /// Video starvation stops the clock. Audio starvation is only counted.
+    ///
+    /// **`audioQueue` depth does not measure audio starvation.** `pumpAudio`
+    /// drains it while the renderer says `isReadyForMoreMediaData`, so the
+    /// buffered seconds sit inside the renderer and this queue reads near zero
+    /// on a healthy title. Treating that as a stall fires constantly and turns
+    /// playback into a buffer/play cycle — it broke every title with audio
+    /// (Ted 2, GTA VI). Buffered seconds is the same queue in other units.
+    ///
+    /// A real signal has to come from the renderer; finding one is open. Pure,
+    /// so tests pin it instead of hardware.
 nonisolated enum PlaybackStarvationPolicy {
     /// How little lead the clock may have over delivered video before the
     /// picture is called starved.
@@ -3702,29 +3672,20 @@ nonisolated enum StallRecoveryPolicy {
         }
     }
 
-    /// Was video-only because app-side audio depth is structurally near
-    /// zero: `audioQueue` drains into the renderer as fast as it fills, so
-    /// requiring a cushion there hung every video stall to `reprimeAfter`
-    /// (build 66). The audio condition below reads renderer delivery lead
-    /// and the renderer's own readiness flag. Audio waiting in Lagoon's
-    /// queue is deliberately not counted, because audio behind a renderer
-    /// that is not taking it is not audio that will play; counting it
-    /// resumed a held renderer into silence three times in four seconds.
-    /// It only applies when `audioRequired` is true. The engine passes
-    /// that from `buffersOnAudioStarvation`, so a video stall behaves
-    /// exactly as before while the mode is off.
+    /// Video-only originally: `audioQueue` drains into the renderer as fast as
+    /// it fills, so requiring a cushion there hung every video stall to
+    /// `reprimeAfter` (build 66). This reads renderer delivery lead and the
+    /// renderer's readiness flag instead. Audio waiting in Lagoon's queue is
+    /// not counted — audio behind a renderer that is not taking it will not
+    /// play, and counting it resumed into silence three times in four seconds.
     ///
-    /// The renderer's own readiness flag decides in the normal case,
-    /// because with the clock stopped the renderer takes about a second of
-    /// audio and then stops asking, which parks the lead just under a
-    /// fixed one-second threshold (measured in the simulator at 0.996 s).
-    /// The full-second lead remains as the fallback when the flag is not
-    /// set.
+    /// Readiness decides normally: with the clock stopped the renderer takes
+    /// about a second then stops asking, parking the lead just under the
+    /// one-second threshold (0.996 s in the simulator), which is the fallback.
     ///
-    /// The audio condition applies to a video-caused stall too when the
-    /// mode is on, because resuming on video alone with the renderer still
-    /// dry would re-starve within a second and turn one silence into a
-    /// stutter.
+    /// Only when `audioRequired`, so a video stall is unchanged while the mode
+    /// is off. When on it applies to video-caused stalls too — resuming on
+    /// video alone with the renderer dry re-starves within a second.
     static func decision(
         elapsed: Duration,
         videoQueueCount: Int,
