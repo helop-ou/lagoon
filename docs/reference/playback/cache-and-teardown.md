@@ -203,8 +203,8 @@ secondary check, attach Instruments' Leaks or run `leaks` during the second
 window.
 
 The public demo is sufficient for that H.264 simulator control; the scripted
-hardware/Fixture bench remains authoritative for VC-1, HEVC, HDR and TrueHD. On
-a device already signed into Fixture, target the reported software-decoded
+hardware/fixture-server bench remains authoritative for VC-1, HEVC, HDR and TrueHD. On
+a device already signed into the fixture server, target the reported software-decoded
 fixture instead of the public-demo fallback:
 
 ```sh
