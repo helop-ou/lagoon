@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The rules a Watch Together member follows, against the same fixture
+/// The rules a Watch Together member follows, against the same fixture-server
 /// 12.0.0 payloads the wire tests decode. Every one of these is a
 /// rule that, got wrong, shows up as two televisions playing different
 /// things — which is why they live in a pure reducer and not inside an
