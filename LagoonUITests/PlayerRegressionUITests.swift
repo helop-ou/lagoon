@@ -643,7 +643,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// one-shot task or a panel that stopped observing the load state would
     /// show, and none of those survive the first switch alone.
     func testExternalSubtitleTrackLoadsSwitchesAndClears() throws {
-        // Top Gear S1E1 on the fixture fixture: 576p H.264 (direct play under
+        // Top Gear S1E1 on the fixture server: 576p H.264 (direct play under
         // the device profile as well as the simulator one), one embedded
         // SubRip stream and one external eng SubRip sidecar. The device
         // profile is deliberate — it is what a real Apple TV negotiates, and
