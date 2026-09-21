@@ -604,21 +604,18 @@ nonisolated enum DeviceProfile {
         )
     }
 
-    /// Caps one codec at 1080p when it has to use a conservative fallback:
-    /// H.264 for a device without HEVC, or AV1 for software libdav1d decode.
+    /// Caps one codec at 1080p when it must use a conservative fallback:
+    /// H.264 for a device without HEVC.
     ///
-    /// Without this the subtraction has a sharp edge: a 4K HEVC film stops
-    /// direct-playing and the server is asked for H.264 instead — at 4K,
-    /// because nothing said otherwise. That is an enormous transcode produced
-    /// for a device that has no chance of decoding it, and it was observed
-    /// doing exactly that (the player sat at 0 s with empty queues while the
-    /// server worked). Hardware that cannot decode HEVC is not going to manage
-    /// 4K H.264 either. AV1 no longer uses this transform: its software path
-    /// is bounded at 4K by `boundedTo4K` instead, since dav1d keeps up there.
+    /// Without it the subtraction has a sharp edge — a 4K HEVC film stops
+    /// direct-playing and the server is asked for H.264 *at 4K*, an enormous
+    /// transcode for a device with no chance of decoding it. Observed doing
+    /// exactly that, the player sitting at 0 s with empty queues. Hardware
+    /// that cannot decode HEVC will not manage 4K H.264 either. AV1 uses
+    /// `boundedTo4K` instead, since dav1d keeps up there.
     ///
-    /// A heuristic, not a measurement: VideoToolbox answers per codec, never
-    /// per resolution, so there is no API that would make this exact. It errs
-    /// toward a stream that plays.
+    /// A heuristic: VideoToolbox answers per codec, never per resolution, so
+    /// nothing would make this exact. It errs toward a stream that plays.
     private static func boundedToHD(_ profile: CodecProfile, codec: String) -> CodecProfile {
         guard profile.codec == codec else { return profile }
         return boundedToHD(profile)
