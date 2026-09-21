@@ -1,18 +1,14 @@
 import Foundation
 
-/// Walks a length-prefixed HEVC access unit, NAL by NAL, applying an
-/// arbitrary per-unit transform.
+/// Walks a length-prefixed HEVC access unit, NAL by NAL, applying a per-unit
+/// transform.
 ///
-/// Started as a strip-only filter for the Dolby Vision profile 7
-/// enhancement layer (hardware experiment): P7 remuxes interleave the
-/// enhancement layer and RPU into the base layer's track as NAL units of
-/// the unspecified types 63 and 62, which the decoder can't use — tvOS
-/// cannot reconstruct dual-layer DoVi. Generalized for the profile 7 to
-/// 8.1 conversion, which
-/// rewrites every RPU (type 62) to Dolby Vision profile 8.1 with libdovi
-/// instead of dropping it (`DolbyVisionProfileConverter`); dropping both
-/// unit types wholesale (`strippingEnhancementLayer`) is now the debug
-/// fallback that plays the base layer as HDR10.
+/// P7 remuxes interleave the Dolby Vision enhancement layer and RPU into the
+/// base layer's track as unspecified types 63 and 62, which tvOS cannot use —
+/// it reconstructs no dual-layer DoVi. `DolbyVisionProfileConverter` rewrites
+/// every RPU to profile 8.1 with libdovi; `strippingEnhancementLayer` drops
+/// both types wholesale and is the debug fallback that plays the base layer as
+/// HDR10.
 nonisolated enum HEVCNALUnitRewriter {
     /// What `rewrite` does with one NAL unit.
     enum Action {
