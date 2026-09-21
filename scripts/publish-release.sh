@@ -134,8 +134,10 @@ elif printf '%s' "$site_out" | grep -q "out of date\|does not exist"; then
     echo "      lagoon-website. The site keeps serving the old version until"
     echo "      it is redeployed. Releasing anyway."
 else
-    warn "could not check the website's facts"
-    printf '%s\n' "$site_out" | tail -3 | sed 's/^/      /'
+    # Not the failure output: a missing simulator prints every candidate
+    # destination, which buries the point. The release is not blocked on it.
+    warn "could not check the website's facts, so they may be behind"
+    echo "      Run scripts/generate-site-facts.sh --check to see why."
 fi
 
 # 9. Which revision was archived is not recorded anywhere, so the best we can
