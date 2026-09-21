@@ -4,6 +4,46 @@ This is the single release checklist. The repository's upload tooling targets
 internal TestFlight. Public distribution has additional gates below. Recorded
 simulator results and unsigned archives do not complete those gates.
 
+## Cutting a build, start to finish
+
+The whole sequence in order. Each step links to the section that explains it;
+read those before doing this the first time. Public distribution has further
+gates under [Public release](#public-release) that this list does not cover.
+
+```sh
+scripts/bump-build.sh                             # 1. next build number
+# 2. write the entry in Changelog.swift, by hand
+scripts/generate-changelog.sh                     # 3. regenerate CHANGELOG.md
+scripts/generate-site-facts.sh                    # 4. update the website's facts
+xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
+xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
+xcodebuild test -scheme Lagoon \
+  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
+# 5. commit, one file per commit, and push
+export LAGOON_SENTRY_DSN=…
+scripts/upload-testflight.sh both --archive-only  # 6. archive with the DSN
+# 7. upload in Xcode's Organizer, then wait for it to be accepted
+scripts/publish-release.sh <build>                # 8. tag and publish
+```
+
+1. **[Bump the build](#version-and-changelog).** Only when preparing something
+   to distribute. Decide the marketing version here too: minor for new
+   features, patch for fixes only.
+2. **Write the changelog entry**, for a viewer rather than a reader of the
+   diff. `ChangelogTests` fails until the declared build has one.
+3. **[Regenerate `CHANGELOG.md`](#the-published-changelog).** It is the release
+   body in step 8.
+4. **[Regenerate the website's facts](../scripts/generate-site-facts.sh),** and
+   commit them in `lagoon-website`. The site keeps serving the old version
+   until it is redeployed, which is a separate deploy from any of this.
+5. **Build both platforms and run the unit suite.** Archiving does not run
+   tests.
+6. **[Archive](#internal-testflight).** Use `--archive-only` if uploading
+   through Xcode, because an Xcode-made archive has diagnostics switched off.
+7. **Upload**, keeping **Automatically manage version and build number**
+   unticked, and wait for App Store Connect to accept the build.
+8. **[Publish the release](#release-tags).** After acceptance, not before.
+
 ## Version and changelog
 
 Lagoon owns its build numbers. Bump only when preparing a build to distribute,
@@ -143,9 +183,9 @@ register its UDID in the portal.
 The CLI uses the same committed policy:
 
 ```sh
-scripts/upload-testflight.sh both --dry-run
-scripts/upload-testflight.sh tvos
-scripts/upload-testflight.sh both
+scripts/upload-testflight.sh both --dry-run      # print the commands only
+scripts/upload-testflight.sh both --archive-only # archive, upload in Xcode
+scripts/upload-testflight.sh both                # archive and upload
 ```
 
 The script checks the version and changelog before archiving.
@@ -155,11 +195,41 @@ The script checks the version and changelog before archiving.
 API-key environment is `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH`. The
 `.p8` file belongs outside the repository.
 
-`LAGOON_SENTRY_DSN` is required too. The DSN is not tracked in source, so the
-script passes it to `xcodebuild archive` as a build setting, and the app reads
-it back from its Info.plist. A build archived without it reports nothing at
-all, which is why the script refuses to run rather than warning. GUI
-distribution remains available, but an Organizer archive carries no DSN.
+### Archiving in Xcode switches diagnostics off
+
+**A build archived by Xcode reports nothing, and says nothing about it.**
+
+`LagoonInfo.plist` sets `LagoonSentryDSN` to `$(LAGOON_SENTRY_DSN)`, and the
+project declares that build setting empty. `upload-testflight.sh` fills it in
+at archive time; Xcode does not. `DiagnosticsConfiguration.resolveDSN` reads an
+empty or unexpanded value as "no DSN" and installs no sink, so the app runs
+normally and sends nothing.
+
+That default is deliberate — reporting is on in Release builds, so a tracked
+DSN would let any checkout report into the project's quota. It catches our own
+Organizer archives by the same rule.
+
+To upload through the Organizer without losing diagnostics, archive with the
+script and distribute by hand:
+
+```sh
+export LAGOON_SENTRY_DSN=…
+scripts/upload-testflight.sh both --archive-only
+```
+
+`--archive-only` needs **no App Store Connect key**, since that is used only by
+the export step. It archives both platforms with the DSN into the Organizer's
+own folder for today, named `Lagoon tvOS 0.2.0 (107)`, and stops. Then Xcode,
+Window, Organizer, Distribute App, and untick **Automatically manage version
+and build number** on the way through.
+
+To check what a build actually carries:
+
+```sh
+plutil -p "<archive>/Products/Applications/Lagoon.app/Info.plist" | grep DSN
+```
+
+An empty string there means that build reported nothing.
 
 ## External TestFlight
 
