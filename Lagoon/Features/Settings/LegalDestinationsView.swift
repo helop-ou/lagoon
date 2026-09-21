@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The Legal section: what Lagoon ships from other projects, and — once they
-/// are published — where its privacy policy and support pages live
-/// (audit A06).
+/// The Legal section: what Lagoon ships from other projects, and where its
+/// privacy policy and support pages live (audit A06).
 ///
 /// One view rather than two copies, because it appears twice: under
 /// Settings → About, and in the About sheet the sign-in screens offer. Legal
@@ -124,9 +123,8 @@ struct LegalAddress: Identifiable {
     let url: URL
 }
 
-/// Internal rather than private so the DEBUG component gallery can open it:
-/// both `LegalDestinations` URLs are nil until the site is published, so this
-/// sheet is otherwise unreachable in a running build.
+/// Internal rather than private so the DEBUG component gallery can open it
+/// without a published page behind the row.
 struct LegalAddressSheet: View {
     @Environment(\.dismiss) private var dismiss
     let address: LegalAddress
