@@ -13,8 +13,8 @@ import Foundation
 // anamorphic sources (PAL DVD rips at 720x576 with a 16:15 pixel aspect)
 // direct-play instead of transcoding;
 // dts/truehd/flac/alac/mp2/opus/vorbis/PCM decoded to LPCM via libavcodec
-// (M4); text,
-// PGS/VobSub/DVB subtitles embedded, vtt external (M5) — in any container
+// (M4); text, PGS/VobSub/DVB subtitles embedded, vtt external (M5) — in
+// any container
 // libavformat demuxes, plus the fMP4 HLS transcode fallback (whose
 // hevc/h264 + eac3 output lands back inside the same envelope).
 nonisolated enum DeviceProfile {

@@ -570,7 +570,7 @@ nonisolated enum SampleBufferFactory {
         let size: Int
         let blockBuffer: CMBlockBuffer?
         if let payloadOverride {
-            // A rewritten payload(the DoVi EL strip) no longer
+            // A rewritten payload (the DoVi EL strip) no longer
             // aliases FFmpeg's allocation, so it is copied into a
             // CoreMedia-owned block instead of retained.
             size = payloadOverride.count
@@ -627,7 +627,7 @@ nonisolated enum SampleBufferFactory {
             sampleBufferOut: &sampleBuffer
         ) == noErr, let sampleBuffer else { return nil }
 
-        // Frame dependencies(third and final chapter of 4e2ad5f).
+        // Frame dependencies (third and final chapter of 4e2ad5f).
         //
         // CMSampleBuffer.h, verbatim: "A frame is considered droppable if
         // and only if kCMSampleAttachmentKey_IsDependedOnByOthers is

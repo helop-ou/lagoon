@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure coverage for the background session delegate's supporting logic
-///(review): the task-description wire format, the finished-vs-failed
+/// Pure coverage for the background session delegate's supporting logic:
+/// the task-description wire format, the finished-vs-failed
 /// classification a download's HTTP status and byte count decide, and the
 /// short copy a transport error is mapped to. None of these touch a session,
 /// a manifest or a clock, so a delegate callback and the store's own

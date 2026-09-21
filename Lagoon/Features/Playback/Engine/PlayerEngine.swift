@@ -320,7 +320,7 @@ nonisolated struct MediaSegment: Identifiable, Equatable {
     }
 }
 
-/// A chapter mark on the transport(slice 3).
+/// A chapter mark on the transport.
 nonisolated struct PlayerChapter: Identifiable, Equatable {
     /// Position in the chapter list, which is also its display number.
     let id: Int
@@ -381,7 +381,7 @@ nonisolated struct PlayerItemInfo: Equatable {
     let videoSummary: String?
     let posterURL: URL?
     /// Empty whenever the server has no chapters for the item — the ticks
-    /// and chapter jumps simply don't appear(slice 3).
+    /// and chapter jumps simply don't appear.
     var chapters: [PlayerChapter] = []
     /// nil when the server hasn't generated trickplay tiles; the scrub chip
     /// then shows the timestamp alone.

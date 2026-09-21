@@ -287,7 +287,7 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     }
 
     /// Bytes one decoded surface occupies, for the queue limit that has to
-    /// bound them(lever 5; a 4K P010 frame is 23.7 MiB).
+    /// bound them (a 4K P010 frame is 23.7 MiB).
     var decodedFrameBytes: Int64 {
         DecodedFrameMemory.bytesPer420Frame(
             width: width,

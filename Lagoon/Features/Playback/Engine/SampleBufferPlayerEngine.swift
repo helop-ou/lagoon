@@ -16,9 +16,8 @@ import OSLog
 /// HEVC and hardware-supported AV1 are decoded ahead with VideoToolbox;
 /// AV1 otherwise, VP9, and the legacy video codecs are software-decoded into
 /// NV12/P010 Core Video frames; aac/mp3/ac3/eac3 audio passes through
-/// compressed and dts/truehd/flac/opus/vorbis decodes to LPCM via libavcodec
-/// (M4);
-/// embedded + external subtitles as an overlay (M5) —
+/// compressed and dts/truehd/flac/opus/vorbis decodes to LPCM via
+/// libavcodec (M4); embedded + external subtitles as an overlay (M5) —
 /// `DeviceProfile.lagoon` advertises exactly this, so anything outside it
 /// arrives as an fMP4 HLS transcode that libavformat demuxes back into
 /// the same envelope.
@@ -90,7 +89,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
     /// once the demuxer knows the stream; the player view owns applying it.
     private(set) var displayMatchRequest: DisplayMatchRequest?
     /// "grid 24000/1001" when video pts are snapped to the exact frame
-    /// grid, nil when container stamps pass through(gate check).
+    /// grid, nil when container stamps pass through.
     private(set) var videoTimingDiagnostic: String?
 
     /// The media clock as the synchronizer reports it.
@@ -3104,7 +3103,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // already have handed the renderer some of it, and that share is
         // exactly what `audioQueue` no longer shows. Audio that ends before
         // the target counts for nothing on either side; a seek into a
-        // coarse fragment primes on exactly that otherwise(/124).
+        // coarse fragment primes on exactly that otherwise.
         let audioAhead = { () -> Double in
             let delivered = self.shared.withLock { state in
                 state.lastEnqueuedAudioEndSeconds.map { max($0 - target, 0) } ?? 0
@@ -3367,7 +3366,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         // give it. During an injected hold, the queue keeps filling from the
         // demuxer, so every `kickPumps` cycle re-armed this block, the
         // callback fired once and disarmed it again, dozens of times a
-        // second('s armVideoRequests lesson, applied here too).
+        // second (the armVideoRequests lesson, applied here too).
         if let renderer = audioRenderer, audioQueue.count > 0, !diagnosticFaultGate.audioDeliverySuspended {
             armAudioRequests(renderer)
         }
@@ -3515,7 +3514,7 @@ nonisolated enum AudioRendererReplacement: Equatable {
 
     /// Only reached when the replacement itself fails, which leaves playback
     /// with no audio path at all. `detail` is the renderer's own error where
-    /// it had one — the server's reason beats ours('s lesson).
+    /// it had one — the server's reason beats ours.
     func failureMessage(detail: String?) -> String {
         switch self {
         case .mediaServicesReset:
@@ -3934,7 +3933,7 @@ nonisolated enum DemuxBackpressurePolicy {
 
     /// The most decoded frames Lagoon's own queue may hold, bounded by count
     /// and — once a frame is expensive enough for the count to stop meaning
-    /// anything — by bytes(lever 5).
+    /// anything — by bytes.
     ///
     /// 42 frames was chosen when the software path carried SD and HD: at
     /// 1080p 10-bit that is 250 MB. Software AV1 reaching 4K made the same

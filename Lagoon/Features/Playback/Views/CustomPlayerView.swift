@@ -13,7 +13,7 @@ import SwiftUI
 /// would quit the app from an unfocusable screen). Remote grammar:
 /// a light touch-surface tap reveals the transport; play/pause
 /// toggles anywhere; on the surface left/right seek ±10 s while playing and
-/// walk the scrub playhead while paused(slice 2), and down opens the
+/// walk the scrub playhead while paused, and down opens the
 /// panel; in the panel left/right walk the tabs (selection follows focus),
 /// down enters the track rows. Menu/Escape is intercepted at the UIKit press
 /// layer by `MenuPressGate` — scrubbing cancels back to the live position,
@@ -155,7 +155,7 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var seekFeedback: SeekFeedback?
     @State private var showsBuffering = false
     /// The virtual playhead's position while scrubbing; nil when the
-    /// transport is live(slice 2).
+    /// transport is live.
     @State private var scrubTarget: Double?
     /// Debug-only regression evidence for the most recent explicit/self
     /// commit; harmless in normal builds and omitted from the visible UI.
@@ -167,7 +167,7 @@ struct CustomPlayerView<Surface: View>: View {
     /// Whether the last scrub input was a chapter hop rather than a step —
     /// they get different self-commit windows (see the task below).
     @State private var scrubHopped = false
-    /// Only exists when the server generated trickplay tiles (slice 3).
+    /// Only exists when the server generated trickplay tiles.
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
     #if os(tvOS)
@@ -640,7 +640,7 @@ struct CustomPlayerView<Surface: View>: View {
                 case .right:
                     requestSeek(by: 10)
                     showSeekFeedback(forward: true)
-                // Mid-scrub, up/down hop chapters(slice 3). Down
+                // Mid-scrub, up/down hop chapters. Down
                 // keeps the panel everywhere else — opening it mid-scrub
                 // would strand a virtual playhead behind it.
                 case .up where isScrubbing:
@@ -737,7 +737,7 @@ struct CustomPlayerView<Surface: View>: View {
         MACaptionAppearanceDidDisplayCaptions(strings)
     }
 
-    // MARK: - Scrub mode(slice 2)
+    // MARK: - Scrub mode
 
     private var isScrubbing: Bool { scrubTarget != nil }
 
@@ -847,7 +847,7 @@ struct CustomPlayerView<Surface: View>: View {
         // same neighbourhood opens on it instead of a placeholder.
     }
 
-    /// Chapter hop while scrubbing(slice 3). Backwards lands on the
+    /// Chapter hop while scrubbing. Backwards lands on the
     /// current chapter's start first, the way track skip-back does, so a
     /// second press is what reaches the previous one.
     private func jumpChapter(direction: Int) {

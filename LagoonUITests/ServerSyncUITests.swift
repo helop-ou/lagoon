@@ -70,7 +70,7 @@ final class ServerSyncUITests: XCTestCase {
         // 1640 pt wide), which pulls its leading edge 20 pt left of the grid
         // line the resting layout shares with Refresh. The chrome aligns to
         // the resting geometry, so that is what the assertion compares
-        // against(/ audit A18). UIKit's focus frame extends
+        // against (audit A18). UIKit's focus frame extends
         // 4 pt beyond the rendered glass, hence the offset.
         XCTAssertEqual(
             refresh.frame.minX + 4,

@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import Observation
 
-/// Feeds preview frames to the scrub chip(slice 3).
+/// Feeds preview frames to the scrub chip.
 ///
 /// Jellyfin serves trickplay as sprite sheets — typically a 10×10 grid of
 /// 320×180 thumbnails per JPEG, one thumbnail every 10 s — so a "frame" is a

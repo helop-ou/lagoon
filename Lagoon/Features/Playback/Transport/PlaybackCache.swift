@@ -37,7 +37,7 @@ nonisolated enum PlaybackBufferPolicy {
     /// add a layer, except for a disc image: the demuxer mounts a disc
     /// through the session's byte source and cannot read the image from a
     /// plain file, so without the session a fully cached disc fell to the
-    /// server remux the cache exists to avoid.
+    /// server remux the session exists to avoid.
     static func engineUsesCacheSession(
         playsFromCompleteFile: Bool,
         disc: Bool,

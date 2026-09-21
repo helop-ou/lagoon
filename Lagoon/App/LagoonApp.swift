@@ -48,7 +48,7 @@ struct LagoonApp: App {
             // delegate, which is all the system needs. Waits for every
             // background callback already queued for this launch to reach
             // the manifest on disk before returning, so the OS does not
-            // suspend the app mid-write (review finding 1).
+            // suspend the app mid-write.
             await DownloadStore.shared.finishBackgroundEvents()
         }
         #endif

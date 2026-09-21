@@ -1467,7 +1467,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         // the same on every run. Leaving Continue Watching switched off would
         // silently change which rails Home draws for every later test on this
         // simulator — including the ServerSync navigation cases that step a
-        // fixed number of rows down from the hero(/ audit A18).
+        // fixed number of rows down from the hero (audit A18).
         // Put it back before moving on.
         remote.press(.select)
         XCTAssertEqual(
@@ -2962,7 +2962,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// opened. That is what the public demo does: every item there is H.264,
     /// so these two cases asserted `Transcode`, failed on the first
     /// assertion, and never reached the segment-boundary window they exist
-    /// for(/ audit A18).
+    /// for (audit A18).
     ///
     /// A missing fixture is not a player regression, so the public-demo lane
     /// skips with an explicit reason. A supplied fixture server is expected to

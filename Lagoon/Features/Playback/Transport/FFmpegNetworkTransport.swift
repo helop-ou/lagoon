@@ -3,7 +3,7 @@ import Foundation
 import Libavformat
 import Libavutil
 
-// Transport spike('s successor): libavformat is rebuilt without its
+// Transport spike: libavformat is rebuilt without its
 // network stack, so http/https opens can no longer resolve themselves.
 // Every byte a demuxed AVFormatContext needs from the network — the top-level
 // manifest/file plus every HLS child resource and key — now comes from

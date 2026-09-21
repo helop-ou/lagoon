@@ -400,7 +400,7 @@ final class PlaybackController {
             // Regression hook: start on a chosen rung instead of negotiating,
             // so the HLS cases open a real playlist on a server whose content
             // would otherwise direct-play — every public-demo item is H.264
-            //(/ audit A18). `debug.regressionInitialDelivery` is a
+            // (audit A18). `debug.regressionInitialDelivery` is a
             // `PlaybackDelivery` raw value: `remux` or `transcode`.
             if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
                let forced = UserDefaults.standard.string(forKey: "debug.regressionInitialDelivery"),

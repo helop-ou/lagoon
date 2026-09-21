@@ -17,7 +17,7 @@ struct PlayerTransportOverlay: View {
     /// the playhead while nobody can see it.
     let isVisible: Bool
     /// The virtual playhead's position while scrubbing; nil when the
-    /// transport is live(slice 2).
+    /// transport is live.
     let scrubTarget: Double?
     /// Swaps the remaining time for the clock time the item will finish at.
     let showsEndTime: Bool

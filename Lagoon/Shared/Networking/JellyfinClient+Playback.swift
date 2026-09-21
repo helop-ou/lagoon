@@ -227,7 +227,7 @@ extension JellyfinClient {
     /// legacy spelling (`api_key`/`ApiKey`); `sanitizedURL(_:)` strips it on
     /// the Jellyfin origin and leaves any other origin's URL untouched.
 
-    // MARK: - Transport extras (slice 3)
+    // MARK: - Transport extras
 
     /// Chapters and trickplay geometry, as the item endpoint reports them.
     nonisolated struct PlaybackExtras: Decodable {

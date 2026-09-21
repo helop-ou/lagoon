@@ -4,7 +4,7 @@ import Foundation
 /// arbitrary per-unit transform.
 ///
 /// Started as a strip-only filter for the Dolby Vision profile 7
-/// enhancement layer(hardware experiment): P7 remuxes interleave the
+/// enhancement layer (hardware experiment): P7 remuxes interleave the
 /// enhancement layer and RPU into the base layer's track as NAL units of
 /// the unspecified types 63 and 62, which the decoder can't use — tvOS
 /// cannot reconstruct dual-layer DoVi. Generalized for the profile 7 to
