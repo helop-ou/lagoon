@@ -170,9 +170,11 @@ revision.
   About.
 - [ ] Publish privacy/support pages with the selected domain, publisher
   identity and monitored contact, and enter the same URLs in App Store
-  Connect. The pages are live and `LegalDestinations` carries them; their
-  iPhone/iPad and tvOS presentation is still unchecked. See
-  [Website](#website).
+  Connect. The pages are live, `LegalDestinations` carries them, and the
+  iPhone and iPad rows open in Safari. Still owed: the tvOS rows seen on a
+  television rather than in a render, the code scanned with a phone, and App
+  Store Connect, which takes a URL for iOS but the policy text pasted in for
+  tvOS. See [Website](#website).
 - [ ] Complete physical acceptance testing, including the permission journey
   from the assessment above, and outstanding device checks.
 
