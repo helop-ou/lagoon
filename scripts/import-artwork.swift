@@ -1,20 +1,18 @@
 #!/usr/bin/env swift
-// Turns supplied artwork into every asset the catalogue needs, so the design
-// can come from wherever it comes from and the production is mechanical.
+// Turns supplied artwork into every asset the catalogue needs.
 //
 //   scripts/import-artwork.swift --icon art/icon.png
 //   scripts/import-artwork.swift --icon art/icon.png --topshelf art/banner.png
 //   scripts/import-artwork.swift --back art/back.png --middle art/mid.png \
 //                                --front art/front.png --icon art/icon.png
 //
-// --icon      square source. Becomes the iOS icon, and is composed onto the
-//             5:3 tvOS frame (tvOS icons are *not* square).
+// --icon      square source. Becomes the iOS icon and is composed onto the
+//             5:3 tvOS frame (tvOS icons are not square).
 // --back/--middle/--front
-//             optional per-layer art for the tvOS parallax stack. Supply
-//             these to control the depth effect; without them the icon is
-//             placed on the Back layer and the stack is flat but valid.
-// --topshelf  optional wide banner. Without it the banner is composed from
-//             the palette background and the icon.
+//             optional per-layer art for the tvOS parallax stack. Without
+//             them the icon goes on the Back layer: flat but valid.
+// --topshelf  optional wide banner. Without it, composed from the palette
+//             background and the icon.
 //
 // Everything is aspect-filled and centred, never squashed.
 
