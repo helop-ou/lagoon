@@ -19,17 +19,14 @@ nonisolated struct PlaybackCapabilities: Equatable, Sendable {
     let hardwareAV1: Bool
     /// Whether AV1 may be offered to VideoToolbox at all.
     ///
-    /// `VTIsHardwareDecodeSupported` reports hardware and nothing else, as
-    /// this file's own comment has always said, and Apple ships a *software*
-    /// AV1 decoder inside VideoToolbox on some platforms — so a false there
-    /// has never meant "VideoToolbox cannot decode this". Lagoon went straight
-    /// to libdav1d on that answer and never asked the real question.
+    /// `VTIsHardwareDecodeSupported` reports hardware only, and Apple ships a
+    /// *software* AV1 decoder inside VideoToolbox on some platforms, so a
+    /// false there never meant "VideoToolbox cannot decode this". Lagoon went
+    /// straight to libdav1d and never asked the real question.
     ///
-    /// So AV1 is always offered, and `VideoToolboxDecoder.canDecode` settles
-    /// it per stream by trying to create a session. On an A15 that answers no
-    /// (-12906, measured) and the engine reopens on the software path; where a
-    /// decoder does exist, hardware or software, it is used without anyone
-    /// having to have predicted which.
+    /// AV1 is now always offered and `VideoToolboxDecoder.canDecode` settles
+    /// it per stream by creating a session. An A15 answers -12906 and the
+    /// engine reopens on software; anywhere a decoder exists it is used.
     var decodesAV1WithVideoToolbox: Bool { true }
 
     init(hardwareHEVC: Bool, hardwareAV1: Bool = false) {
