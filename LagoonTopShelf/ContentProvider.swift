@@ -13,25 +13,18 @@ private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
 /// Full-screen Top Shelf carousel for Continue Watching.
 ///
-/// The extension deliberately does **no networking and holds no
-/// credentials**. The app writes a snapshot and a set of composed JPEGs into
-/// the shared App Group container after each Home refresh, and this reads
-/// them back. That is why there is no keychain access group here: sharing a
-/// token with an extension is a bigger trust boundary than this feature
-/// needs.
+/// **No networking, no credentials.** The app writes a snapshot and composed
+/// JPEGs into the shared App Group container after each Home refresh and this
+/// reads them back. Hence no keychain access group: sharing a token with an
+/// extension is a bigger trust boundary than this needs.
 ///
-/// **The carousel draws no title of its own.** `TVTopShelfCarouselItem`
-/// inherits `playAction`, `displayAction` and `setImageURL`, and adds
-/// `contextTitle`, `summary`, `genre` and `duration` — there is no `title`
-/// property of the kind `TVTopShelfSectionedItem` has. The name of the thing
-/// is therefore part of the artwork the app composed, which is also how the
-/// Apple TV app does it.
+/// **The carousel draws no title.** `TVTopShelfCarouselItem` has no `title`
+/// property, so the name is part of the composed artwork — as in the Apple TV
+/// app.
 ///
-/// The item shape is duplicated from `TopShelfStore.Item` in the app rather
-/// than shared: an app extension cannot import the app's module, and a
-/// framework target purely for these fields would cost more than it saves.
-/// Both sides are `Codable` over the same key names — change one, change
-/// the other.
+/// The item shape is duplicated from `TopShelfStore.Item`: an extension cannot
+/// import the app's module. Both are `Codable` over the same keys — change
+/// one, change the other.
 private struct TopShelfItem: Codable {
     let id: String
     let title: String
