@@ -1,18 +1,15 @@
 import SwiftUI
 
-/// The Watch Together action in a film or episode page's secondary row:
-/// a glass circle on a phone, where every control in that row is one,
-/// and the labelled pill wherever there is width for it.
+/// The Watch Together action in a detail page's secondary row: a glass circle
+/// on a phone, a labelled pill wherever there is width.
 ///
-/// Whether the account may use groups at all is the store's answer, and
-/// the detail page is what asks for it — never this control. It renders
-/// nothing until it is allowed, and a task on a view that renders nothing
-/// never runs, so a control that resolved its own permission could never
-/// appear (the trap `DownloadControl` documents).
+/// The store answers whether the account may use groups, and the detail page
+/// asks — never this control. It renders nothing until allowed, and a task on
+/// a view that renders nothing never runs, so a control resolving its own
+/// permission could never appear (the trap `DownloadControl` documents).
 ///
-/// The symbol is `person.2.fill` and never `shareplay`: SharePlay is
-/// Apple's GroupActivities, which this does not use. Borrowing its glyph
-/// would promise the wrong feature.
+/// The symbol is `person.2.fill`, never `shareplay`: SharePlay is Apple's
+/// GroupActivities, which this does not use.
 struct WatchTogetherControl: View {
     let item: MediaItem
     /// Where a group started here begins — the page's resume point.
