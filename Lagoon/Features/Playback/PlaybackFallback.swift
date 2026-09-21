@@ -261,14 +261,13 @@ nonisolated enum PlaybackRestartPointPolicy {
 /// `AVSampleBufferVideoRenderer` starts only on a random-access point, and a
 /// seek is not the only way a sample reaches it after `flush()`. The demux
 /// thread can be parked inside a read at the moment of the flush, and the
-/// packet that read returns belongs to the position being left: it lands in
-/// the emptied queue and goes out as sample one, before the loop has noticed
-/// the seek. The renderer refuses it, and the ladder reads that refusal as a
-/// verdict on the bitstream and answers with a transcode.
+/// packet it returns belongs to the position being left: it lands in the
+/// emptied queue and goes out as sample one. The renderer refuses it, and the
+/// ladder reads that refusal as a verdict on the bitstream and transcodes.
 ///
 /// So the pump asks this first. What the container calls a keyframe is
-/// admitted, which keeps the open-GOP I picture the demuxer deliberately
-/// hands over; anything else waits for one.
+/// admitted — keeping the open-GOP I picture the demuxer hands over —
+/// and anything else waits for one.
 nonisolated enum PlaybackRendererStartPolicy {
     /// How many samples may be dropped looking for a start point before the
     /// pump gives up and enqueues what it has.
