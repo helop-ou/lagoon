@@ -32,6 +32,19 @@ final class PlaybackAutomation {
     var isSuppressed = false {
         didSet { if oldValue != isSuppressed { evaluate() } }
     }
+    /// The engine is refilling its queues. A skip that comes due now waits
+    /// for it: the countdown runs on wall time so it keeps working with the
+    /// screen locked, which means it can come due mid-stall, where seeking
+    /// throws away the buffer the stall is waiting on.
+    var isBuffering = false {
+        didSet {
+            if oldValue != isBuffering, !isBuffering { commitDeferredSkip() }
+        }
+    }
+    /// A skip that came due while buffering and is owed the moment the
+    /// picture is moving again.
+    private var deferredSkip: MediaSegment?
+
     /// Back was pressed on the Up Next card. Outlives the card itself: the
     /// episode still has its credits to run, and the end of the file must
     /// not undo the answer that was already given.
@@ -130,6 +143,33 @@ final class PlaybackAutomation {
 
     // MARK: - Answers
 
+    /// A skip the clock asked for, rather than the viewer. Held back while
+    /// the engine is refilling, and taken up again when it is not.
+    ///
+    /// Only timed skips wait. Select and a tap are the viewer asking for
+    /// this now, and they go straight through `skip`.
+    private func commitTimedSkip(_ segment: MediaSegment) {
+        guard !isBuffering else {
+            deferredSkip = segment
+            return
+        }
+        skip(segment)
+    }
+
+    /// The picture is moving again. A skip is owed only while the playhead
+    /// is still inside the segment it was armed for: past its end, seeking
+    /// to that end would drag the viewer backwards through what they have
+    /// already watched.
+    private func commitDeferredSkip() {
+        guard let segment = deferredSkip else { return }
+        deferredSkip = nil
+        guard !isSuppressed, activeSegment?.id == segment.id, position < segment.end else {
+            evaluate()
+            return
+        }
+        skip(segment)
+    }
+
     /// Commits the skip, by the countdown, a tap, or Select.
     func skip(_ segment: MediaSegment) {
         // Marked before seeking: landing near the end would otherwise put
@@ -196,14 +236,14 @@ final class PlaybackAutomation {
         // Arms as the playhead crosses into a segment, once per segment.
         switch skipMode {
         case .instant:
-            skip(segment)
+            commitTimedSkip(segment)
         case .autoDelay:
             let timing = PlaybackCountdown(duration: countdown)
             skipTiming = timing
             skipCountdown = Task { [weak self] in
                 try? await Task.sleep(until: timing.deadline, clock: .continuous)
                 guard let self, !Task.isCancelled, self.activeSegment?.id == segment.id else { return }
-                self.skip(segment)
+                self.commitTimedSkip(segment)
             }
         case .button:
             break
@@ -250,6 +290,7 @@ final class PlaybackAutomation {
         skipCountdown?.cancel()
         skipCountdown = nil
         skipTiming = nil
+        deferredSkip = nil
     }
 
     private func cancelNextUpCountdown() {
