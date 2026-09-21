@@ -152,6 +152,10 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         shared.withLock { $0.videoQueueHardLimit }
     }
     var videoIntakeCountDiagnostic: Int { videoIntake.count }
+    /// Samples refused as a flushed renderer's first, for this attempt.
+    var videoStartPointDropDiagnostic: Int { shared.withLock { $0.videoStartPointDrops } }
+    /// Media stamp of the last sample a renderer refused to decode.
+    var refusedSampleMsDiagnostic: Int? { shared.withLock { $0.lastRefusedSampleMs } }
     var maximumVideoIntakeDiagnostic: Int { videoIntake.peakCount }
     /// Whether the title has sound at all. A silent one cannot starve for
     /// it, and must never be held in buffering waiting for a cushion that
@@ -1143,6 +1147,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             $0.lastEnqueuedAudioEndSeconds = nil
             $0.endOfFilePendingIntake = false
             $0.videoSamplesSinceFlush = 0
+            $0.videoStartPointDropsSinceFlush = 0
         }
     }
 
@@ -1239,6 +1244,7 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         shared.withLock {
             $0.firstEnqueuedVideoPTS = nil
             $0.videoSamplesSinceFlush = 0
+            $0.videoStartPointDropsSinceFlush = 0
         }
     }
 
@@ -1691,6 +1697,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         let notificationError = notification.userInfo?[
             AVSampleBufferVideoRenderer.didFailToDecodeNotificationErrorKey
         ] as? Error
+        // Which sample was refused, before anything is decided about it: a
+        // restart-point failure and a verdict on the stream are otherwise
+        // indistinguishable in a report.
+        if let milliseconds = Self.refusedSampleMilliseconds(notificationError ?? renderer.error) {
+            shared.withLock { $0.lastRefusedSampleMs = milliseconds }
+        }
         // What the ladder is about to act on, for a hands-off device run.
         // `AVErrorPresentationTimeStampKey` is the field that matters: it
         // names which sample the decoder refused, which is how HEL-151 was
@@ -1751,6 +1763,19 @@ final class SampleBufferPlayerEngine: PlayerEngine {
             message: "Playback failed in the Lagoon video renderer (\(detail)).",
             detail: PlaybackFailureDetail(stage: .videoRenderer, error: notificationError ?? renderer.error)
         ))
+    }
+
+    /// The stamp of the sample a renderer refused, in media milliseconds.
+    ///
+    /// The only field of `userInfo` read anywhere: a number, never a name or
+    /// a URL, which is why `PlaybackFailureDetail` stays out of `userInfo`
+    /// altogether.
+    nonisolated private static func refusedSampleMilliseconds(_ error: Error?) -> Int? {
+        guard let value = (error as? NSError)?
+            .userInfo[AVErrorPresentationTimeStampKey] as? NSValue else { return nil }
+        let stamp = value.timeValue
+        guard stamp.isValid, stamp.seconds.isFinite else { return nil }
+        return Int((stamp.seconds * 1_000).rounded())
     }
 
     private func observeTime(_ time: CMTime) {
@@ -3355,6 +3380,35 @@ final class SampleBufferPlayerEngine: PlayerEngine {
         #endif
     }
 
+    /// Apple's post-flush rule, enforced at the one place it applies.
+    ///
+    /// Only the first sample after a flush is asked, so every other one pays
+    /// a lock read and never touches its attachments. A drop leaves the
+    /// counter at zero, so the next sample is asked the same question.
+    nonisolated private func admitsAsRendererStart(_ buffer: CMSampleBuffer) -> Bool {
+        let (samples, dropped) = shared.withLock {
+            ($0.videoSamplesSinceFlush, $0.videoStartPointDropsSinceFlush)
+        }
+        guard samples == 0 else { return true }
+        guard !PlaybackRendererStartPolicy.admits(
+            isSyncSample: SampleBufferFactory.isSyncSample(buffer),
+            videoSamplesSinceFlush: samples,
+            droppedSinceFlush: dropped
+        ) else { return true }
+        shared.withLock {
+            $0.videoStartPointDropsSinceFlush += 1
+            $0.videoStartPointDrops += 1
+        }
+        if ProcessCPUTrace.enabled {
+            print(String(
+                format: "RendererStartDrop pts=%.3f dropped=%d",
+                CMSampleBufferGetPresentationTimeStamp(buffer).seconds,
+                dropped + 1
+            ))
+        }
+        return false
+    }
+
     nonisolated private func pumpVideo(fromRequest: Bool = false) {
         guard let renderer = videoRenderer else { return }
         while renderer.isReadyForMoreMediaData {
@@ -3367,6 +3421,12 @@ final class SampleBufferPlayerEngine: PlayerEngine {
                     renderer.stopRequestingMediaData()
                 }
                 return
+            }
+            guard admitsAsRendererStart(buffer) else {
+                // A refused sample left the queue exactly as an enqueued
+                // one would, so the intake still gets its chance to refill.
+                drainVideoIntake()
+                continue
             }
             let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
             shared.withLock { state in
@@ -3739,6 +3799,14 @@ nonisolated private final class SharedState: @unchecked Sendable {
         /// restart-point failure rather than a verdict on the stream, and
         /// earns one in-place retry before the ladder descends (HEL-151).
         var videoSamplesSinceFlush = 0
+        /// Samples the pump refused to start a flushed renderer on: since
+        /// the last flush, and for the whole attempt. The second is
+        /// reported, because a count that climbs says the race is live.
+        var videoStartPointDropsSinceFlush = 0
+        var videoStartPointDrops = 0
+        /// Presentation stamp of the last sample a renderer refused, in
+        /// media milliseconds.
+        var lastRefusedSampleMs: Int?
         /// One rebuild of the VideoToolbox session per playback generation
         /// (HEL-181): which generation has spent its rebuild, and whether one
         /// is in flight right now. Both are needed — every sample already
