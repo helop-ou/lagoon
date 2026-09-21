@@ -116,8 +116,10 @@ Tag a build when it is distributed, and only then. This matches the rule that
 build numbers advance only for a build going out; tagging every bump makes the
 list meaningless.
 
-Tags are keyed on the build number, not the marketing version, and a build is
-released with one command:
+Tags read as `<version>-<build>`, so `0.2.0-107`. The build number is what
+keeps them unique, since it never repeats while one marketing version spans
+many builds; the version is there so the Tags list says what a build shipped
+as. A build is released with one command:
 
 ```sh
 scripts/publish-release.sh 107
@@ -125,7 +127,7 @@ scripts/publish-release.sh 107 --dry-run    # print what it would do
 ```
 
 **A tag on its own only reaches the Tags tab.** The Releases tab holds a
-separate object created on top of a tag, so `git push origin build-107` alone
+separate object created on top of a tag, so `git push origin 0.2.0-107` alone
 looks done and publishes nothing. The script creates the tag and the release
 together, takes the body from `CHANGELOG.md`, and marks anything below 1.0 a
 pre-release.
@@ -148,9 +150,9 @@ reason to refuse a release the App Store already has. The fix is
 `lagoon-website`; until that deploy the site keeps serving the old version.
 
 The build number is the stable identity of a binary. It is what About shows a
-viewer and what they quote in a bug report, while `MARKETING_VERSION` spans
-many builds and changes shape underneath it. A version-keyed tag would need
-revisiting at the next bump; a build-keyed one never does.
+viewer and what they quote in a bug report, so it is the half of the tag that
+has to be there. The version is a label on top of it, and a tag is never
+renamed when the marketing version moves.
 
 This is also the mechanism by which someone holding a binary finds the source
 it was built from, which the vendored FFmpeg libraries' licence requires
