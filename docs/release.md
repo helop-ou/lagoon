@@ -97,6 +97,13 @@ revision is further along than the commit that set the build number, it says so
 and asks, since which revision was archived is not recorded anywhere. Pass
 `--rev` when the archive came from something other than `HEAD`.
 
+It also **warns**, without stopping, when the website's generated facts are
+behind the build being released, or when it could not check them. The site is a
+separate repository that deploys on its own, so leaving it behind is not a
+reason to refuse a release the App Store already has. The fix is
+`scripts/generate-site-facts.sh`, then a commit and a deploy in
+`lagoon-website`; until that deploy the site keeps serving the old version.
+
 The build number is the stable identity of a binary. It is what About shows a
 viewer and what they quote in a bug report, while `MARKETING_VERSION` spans
 many builds and changes shape underneath it. A version-keyed tag would need
