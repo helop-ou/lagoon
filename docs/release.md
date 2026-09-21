@@ -10,8 +10,26 @@ Lagoon owns its build numbers. Bump only when preparing a build to distribute,
 not for every commit. Run `scripts/bump-build.sh` to advance all
 configurations and the app/Top Shelf together. Pass `--set <number>` to select
 an explicit higher number. The script rejects backwards numbering and
-configuration drift. Change the marketing version with `xcrun agvtool
-new-marketing-version <version>`.
+configuration drift.
+
+The marketing version is `MAJOR.MINOR.PATCH`, three components always. Major
+is a significant rework of how the app works, minor is new features, and patch
+is a release that only fixes things. This is semantic versioning's shape
+rather than its promise: Lagoon exposes no API, so no compatibility guarantee
+is implied, and the size of the change for a viewer is what picks the
+component. A reusable package extracted from this repository would use real
+semantic versioning, because it would have real dependents.
+
+The build number, not the marketing version, identifies a binary. One
+marketing version spans many builds, and About shows both as `0.1.0 (107)`.
+
+Change the marketing version by editing `MARKETING_VERSION` in both
+configurations of `Lagoon.xcodeproj/project.pbxproj`, or in Xcode's target
+editor. **Do not use `xcrun agvtool new-marketing-version`.** This project
+sets `GENERATE_INFOPLIST_FILE = YES`, so the version keys are synthesised from
+the build settings and are absent from the partial Info.plist files agvtool
+edits. It reports success, changes nothing, and fails parsing the setting
+itself with `Cannot find "Lagoon.xcodeproj/../YES"`.
 
 Write the matching entry in
 [`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift) before
