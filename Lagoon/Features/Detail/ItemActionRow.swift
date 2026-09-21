@@ -1,17 +1,12 @@
 import SwiftUI
 
-/// Watched and favourite toggles above the play buttons: a row of small
-/// circular icon buttons.
+/// Watched and favourite toggles above the play buttons.
 ///
-/// Both are genuine toggles rather than one-way actions. Marking something
-/// watched that you never started is the point — it's how a film leaves the
-/// Continue Watching rail, and how you tell the server you've seen something
-/// you watched elsewhere. Unmarking puts it back.
+/// Both are genuine toggles, not one-way actions. Marking something watched
+/// you never started is the point — it is how a film leaves Continue Watching,
+/// and how you tell the server you saw it elsewhere. Unmarking puts it back.
 ///
-/// State is optimistic: the icon flips immediately. `OptimisticToggleState`
-/// owns what follows: a refusal reverts the icon and says so beneath
-/// the row; an accepted change hands authority back to the server
-/// once the page has re-read the item; a press during a request is dropped.
+/// State is optimistic and `OptimisticToggleState` owns what follows.
 struct ItemActionRow: View {
     /// What the checkmark acts on. On a series page this is the episode you
     /// are about to play, not the show — marking "watched" next to a Play
