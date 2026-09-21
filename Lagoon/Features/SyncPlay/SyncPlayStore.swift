@@ -412,7 +412,7 @@ final class SyncPlayStore {
     ///
     /// Not caution: the server announces a join over the socket at the
     /// instant it happens, and a handshake still in flight misses it.
-    /// Measured on fixture 12.0.0 — joining ~50 ms after `connect()` lost
+    /// Measured on the fixture server, 12.0.0 — joining ~50 ms after `connect()` lost
     /// both the `GroupJoined` and the `PlayQueue` update, and the member
     /// then sat in a group it never heard another word from. The socket
     /// counts as open once the server's first `ForceKeepAlive` lands,
