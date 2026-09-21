@@ -4,6 +4,10 @@ Playback engineering notes from the September 10, 2026 documentation cleanup.
 Start with the [current playback guide](../../playback.md) and the [notes
 index](README.md).
 
+For the list of what direct plays, rather than why, see [codec
+support](../../codec-support.md). It is generated from the capability profile,
+so it is current by construction; this note is the reasoning behind it.
+
 ## Codec and timing details
 
 - **Compressed packets stay zero-copy.** Matroska already stores h264 and hevc
