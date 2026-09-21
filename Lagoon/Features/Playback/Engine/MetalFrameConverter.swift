@@ -270,19 +270,17 @@ nonisolated final class MetalFrameConverter: @unchecked Sendable {
     /// frame exposes (a 4K picture is allocated 3840x2176).
     private static let allocationRowAlignment = 128
 
-    /// Whether the planes plausibly come from one allocation, which is what
-    /// the no-copy path assumes: it wraps every byte from the first plane's
-    /// page to the last plane's end, so an unmapped hole between them is a GPU
-    /// fault rather than a wrong picture.
+    /// Whether the planes plausibly come from one allocation, which the
+    /// no-copy path assumes: it wraps every byte from the first plane's page to
+    /// the last plane's end, so an unmapped hole between them is a GPU fault.
     ///
-    /// libdav1d's pooled pictures are one block, but not a tight one — the
-    /// padding rows above add about 150 KB to the span of a 4K frame, so a
-    /// bound of a page or two would reject every frame this stage exists
-    /// for. VP9 Profile 2 decodes to the same 10-bit planar format and reaches
-    /// the same kernel, but through `avcodec_default_get_buffer2`, which pools
-    /// one buffer per plane; that span crosses heap this frame does not own.
-    /// Allowing the padding rows plus a page of alignment per plane sits an
-    /// order of magnitude above the first case and far below the second.
+    /// libdav1d's pooled pictures are one block but not a tight one — padding
+    /// rows add ~150 KB to a 4K frame's span, so a bound of a page or two would
+    /// reject every frame this stage exists for. VP9 Profile 2 reaches the same
+    /// kernel through `avcodec_default_get_buffer2`, which pools one buffer per
+    /// plane and spans heap this frame does not own. Allowing the padding rows
+    /// plus a page per plane sits an order of magnitude above the first and far
+    /// below the second.
     static func planesShareOneAllocation(_ planes: [Plane], pageSize: Int) -> Bool {
         guard let lowest = planes.map({ Int(bitPattern: $0.base) }).min(),
               let highest = planes.map({ Int(bitPattern: $0.base) + $0.stride * $0.rows }).max() else {
