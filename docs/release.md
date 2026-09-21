@@ -21,7 +21,7 @@ component. A reusable package extracted from this repository would use real
 semantic versioning, because it would have real dependents.
 
 The build number, not the marketing version, identifies a binary. One
-marketing version spans many builds, and About shows both as `0.1.0 (107)`.
+marketing version spans many builds, and About shows both as `0.2.0 (107)`.
 
 Change it by editing `MARKETING_VERSION` in both configurations of
 `Lagoon.xcodeproj/project.pbxproj`, or in Xcode's target editor. **Not with
