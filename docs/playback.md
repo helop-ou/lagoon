@@ -72,23 +72,17 @@ resume seek makes a fresh one. Both guards belong on the decoder path and the
 renderer path. The decoder path once had neither.
 
 A renderer that has just been flushed is the other way a verdict gets faked.
-`AVSampleBufferVideoRenderer` starts on a random-access point or on nothing;
-anything else comes back as `didFailToDecodeNotification`, which reads as
-`.undecodable`. The sample that reaches it that way need not be the seek's
-landing. The demux thread can be parked inside a read when the flush happens,
-and the packet that read returns belongs to the position being left — it goes
-into the emptied queue and straight out to the renderer as sample one, before
-the loop has even noticed the seek. So `pumpVideo` asks
-`PlaybackRendererStartPolicy` before it starts a renderer, and refuses a
-sample the container does not call a keyframe. A container keyframe is
-admitted, which keeps the open-GOP I picture the demuxer deliberately hands
-over, and the search is bounded so a stream whose keyframes are never flagged
-still shows a picture. The window is as long as the demux thread sits in a
-read, so a stalling episode hits it and a healthy scrub does not: three
-attempts on one MPEG-TS remux each transcoded at the same auto-skip target,
-with the renderer failing 4, 6 and 384 ms after the seek. Every incident now
-carries `refusedSampleMs`, the stamp of the sample that was refused, and
-`startPointDrops`, how many this gate has dropped.
+`AVSampleBufferVideoRenderer` starts on a random-access point or on nothing,
+and the sample that reaches it need not be the seek's landing: the demux
+thread can be parked in a read when the flush happens, and the packet it
+returns goes straight out as sample one. So `pumpVideo` asks
+`PlaybackRendererStartPolicy` first and refuses anything the container does
+not call a keyframe, bounded so a stream with unflagged keyframes still shows
+a picture. The window is as long as the demux thread sits in a read, so a
+stalling episode hits it and a healthy scrub does not — three attempts on one
+MPEG-TS remux each transcoded at the same auto-skip target, failing 4, 6 and
+384 ms after the seek. Incidents carry `refusedSampleMs` and
+`startPointDrops`.
 
 Progressive H.264 uses the compressed sample-buffer path. Interlaced H.264 is
 software-decoded and deinterlaced, on the stream's probed field order, never
@@ -147,19 +141,17 @@ film, per account. It writes through to `UserDefaults`, so a correction
 survives closing the player, not just an autoplay handoff.
 
 Record the choice when the viewer makes it, from the engine's
-`onTrackSelectionChanged`. Only `selectAudioTrack` fires that event, and only
-the track panel and the system now-playing menu call it. Automatic selection
-calls `applyAudioSelection` instead, so everything stored is a deliberate act.
-Reading the selection back at exit instead looks equivalent, but is not: by
-then the scope, the layout and the live engine can each already belong to the
-next episode. A viewer who left a non-applying memory alone would have their
-whole show's correction erased. The write is identity-guarded to the current
-engine, and skipped when the engine's track count disagrees with the layout
-the server described. A remux or transcode rung delivers one audio track where
-the source lists several, so an ordinal from one means nothing in the other.
-Landing back on what automatic selection would have chosen *forgets* the
-override rather than storing it. Keeping one would freeze the show against a
-later change of preferences.
+`onTrackSelectionChanged`. Only `selectAudioTrack` fires it, and only the
+track panel and the system now-playing menu call that, so everything stored is
+deliberate. Reading the selection back at exit looks equivalent but is not: by
+then the scope, layout and live engine can each belong to the next episode,
+and a viewer who left a non-applying memory alone would lose the whole show's
+correction. The write is identity-guarded to the current engine and skipped
+when the engine's track count disagrees with the server's layout — a remux or
+transcode rung delivers one track where the source lists several, so an
+ordinal from one means nothing in the other. Landing on what automatic
+selection would have chosen *forgets* the override rather than storing it,
+which would freeze the show against a later change of preferences.
 
 `AudioTrackMemoryPolicy` applies it as a ladder: a description that names
 exactly one track, then the remembered position against a layout whose
@@ -318,148 +310,38 @@ it onto the successor engine for free.
 A group makes the server the transport authority. `SyncPlayStore`
 (`Lagoon/Features/SyncPlay/`) owns membership: the socket, the clock, the
 group and its queue. `GroupPlaybackDriver` owns everything that touches
-playback. The driver holds the controller weakly and the engine not at all. It
-drives the group transport described above and reads `clockPosition`.
+playback, holding the controller weakly and the engine not at all.
 
-**Opening.** A `PlayQueue` update whose playing item changed resolves to a
-`MediaItem` and reaches `MainTabView` as `pendingPlayRequest`, which presents
-the player with `startPosition` and `startPaused: true`. The member therefore
-primes at the group's position and waits there. `SyncPlay/Buffering` goes out
-the moment the queue update lands, before the item is even fetched. That way
-the group waits from then, not from whenever this device finishes negotiating
-a stream. `SyncPlay/Ready` goes out when `onEngineReady` fires. Both messages
-carry `When` from `ServerClock`, `PositionTicks` from `clockPosition`, and the
-queue entry's `PlaylistItemId`. A Ready naming the wrong entry makes the
-server answer with a `SetCurrentItem` queue update. Readiness is a *state*:
-the driver reports only on a change, so the pair a seek produces collapses to
-one Buffering and one Ready.
+The rules that must not be broken:
 
-**A report says where the engine is, not where it was.** `clockPosition`
-answers from the synchronizer, and the synchronizer sits at the anchor being
-left behind until `beginPlayback` sets the new one. That anchor is zero on a
-first open. `beginPlayback` anchors the clock *before* it announces the end of
-buffering, and leaves `bufferingTargetSeconds` in place until it does, so the
-whole window has one answer. A Ready that is more than half a second from the
-group's position is not ignored: the server flags that member as buffering
-again and sends it a corrective `Seek` ("got lost in time, correcting"). A
-report that lies stalls the room it was meant to release.
+- **The viewer's transport is a request.** Play, pause, seek, skips, scrub
+  commit and lock screen all reach `groupTransport` rather than the engine.
+  Nothing moves locally; the server's echo moves every member. Audio track,
+  subtitles, audio delay and speed stay local — they are the viewer's, not the
+  group's.
+- **A report says where the engine is, not where it was.** `beginPlayback`
+  anchors the clock before announcing the end of buffering. A Ready more than
+  half a second out gets a corrective `Seek` from the server, and a report that
+  lies stalls the room it was meant to release.
+- **The socket must be open before the join.** Joining mid-handshake loses
+  both `GroupJoined` and the `PlayQueue` update, and the member never hears
+  from the group again.
+- **Leaving the player is not leaving the group.** `onClosed` posts
+  `SetIgnoreWait(true)`; `rejoinPlayback()` reopens at wherever the group has
+  reached, never at the position the last command named.
+- **Waiting is not buffering.** A member primed and paused at the group's
+  position is not stalled, and the spinner says so.
 
-**Commands.** `Unpause` seeks first, only if the member is more than 0.5 s
-from the named position, then calls `playGroup(atHostTime:)` straight away.
-The engine remembers the instant through priming, and a seek issued *after*
-the start call would drop it, so that order is load-bearing. `Pause` waits
-until the named instant arrives on the local clock, then pauses, and re-seeks
-only if more than 0.1 s out, because a seek re-primes the pipeline. `Seek`
-seeks and reports Buffering, then Ready. `Stop` closes the player and keeps
-the membership.
+Drift is corrected by `SyncCorrectionPolicy` — nothing under 60 ms, a rate
+nudge through `setCorrectionRate` up to 1.5 s, a seek beyond that — never by
+touching the viewer's `rate`.
 
-`SyncPlayGroupSession` decides what is worth acting on at all. It refuses
-another group's command, one emitted before this member joined, one naming an
-item that is not the current one (`Stop` excepted), the all-zero `Stop` a new
-group is greeted with, and a re-send of the command already taken. A `Seek` is
-excepted from that last refusal too: the server builds its corrective seek out
-of the group's own state, so it arrives identical to the seek already taken,
-apart from `EmittedAt`. Refusing it would leave the member with nothing left
-to report and the group waiting on it forever.
+Verifying it takes two members: `-debug.syncPlayJoinGroup <name>` joins after
+the regression bootstrap, and `-debug.playbackHUD YES` shows the `Sync:` line.
 
-**Drift.** While the last command is an `Unpause`, 1.5 s past its instant and
-not buffering, the driver compares `clockPosition` against where the group
-should be and applies `SyncCorrectionPolicy`: under 60 ms nothing, up to 1.5 s
-a rate nudge of `1 + diff / 1.5` clamped to 0.75…1.5 held for 1.5 s, beyond
-that a seek. The nudge rides `setCorrectionRate`, never the viewer's `rate`.
-`syncplay.correction` (default on) turns correction off while still measuring.
-`driftMilliseconds` feeds the HUD's `Sync:` line.
-
-**The viewer's transport is a request.** Play, pause, seek, the double-tap
-skips, the scrub commit, the intro skip, "play next" and the lock screen all
-go through `PlaybackController`'s `user…` methods, which hand them to
-`groupTransport` instead of the engine when a group owns the session. Nothing
-moves locally. The server's echo moves every member together. The player
-chrome states the intention through `PlayerTransportActions`, and `NowPlaying`
-states it through the same struct, so there is one interception point rather
-than one per control. Audio track, subtitles, audio delay and playback speed
-stay local: they are this viewer's, not the group's.
-
-**Leaving the player is not leaving the group.** `onClosed` detaches the
-driver and posts `SetIgnoreWait(true)`, so the group is no longer held up by a
-member that is not watching. `rejoinPlayback()` clears that flag and reopens
-from the stored queue, at wherever the group has got to.
-`positionSeconds(atServerSeconds:)` carries the last `Unpause` forward by the
-server time elapsed since its instant. Opening at the position that command
-named would be minutes behind a group that has been watching, and the server
-would hold everyone up correcting it. `leave()` posts `SyncPlay/Leave` and
-closes the socket and clock. An account switch does the same silently.
-Foreground forces a clock re-sample.
-
-**What the viewer sees.** The way in is a *Watch Together* control in a film
-or episode page's secondary row. Its icon is `person.2.fill`, never
-SharePlay's glyph, because SharePlay is GroupActivities and this is not it. It
-is drawn only once `SyncPlayStore.availability` says the account may join a
-group, and the detail page is what asks for that answer. The control renders
-nothing until the answer arrives, and a task on a view that renders nothing
-never runs — the same trap `DownloadControl` documents. It opens
-`WatchTogetherSheet`: a sheet on iOS, a `TVSettingsPage` in a sheet on tvOS.
-That sheet lists the server's groups, polled every 5 s since the socket only
-carries the group this client is in. It offers *Start a Group*, where the
-policy is `CreateAndJoinGroups`, and once joined shows the room, its people,
-*Play This Here* and *Leave*. Group names are visible to every account on the
-server, and the copy says so. `startGroup` is two calls, not one:
-`SyncPlay/New` answers 204, and the id arrives over the socket, so the queue
-can only be set after `GroupJoined`.
-
-While a group owns the session, the player's panel grows a fifth **Together**
-tab: the room, its state, the people in it, an *Ignore Waiting* switch and
-*Leave*. Everywhere the tabs are walked, the strip and the tvOS left/right
-grammar, reads `PlayerPanelTab.offered(inGroup:)` rather than `allCases`.
-Otherwise an arrow press lands on a tab that is not drawn. A group that ends
-moves the selection back to Info. The group reaches `CustomPlayerView` as a
-`PlayerTogetherState` value, never as the store, and joins
-`PlayerControlPanelHost`'s `Equatable` boundary so an arrival still reaches
-the tab.
-
-Notices are a toast at the top of the screen: `SyncPlayNoticeToast`. It is an
-overlay leaf in `PlayerSkipOverlay`'s shape, so the player root never
-subscribes to one. It shows for two seconds, respects Reduce Motion, and is
-never hit-tested. A state the picture already reports ("Playing", "Nothing
-playing") gets no toast, and neither does "Waiting," which the transport says
-for as long as it is true.
-
-**Waiting is not buffering.** A member primed and paused at the group's
-position is not stalled. The existing spinner carries the label *Waiting for
-the group* underneath it. `SyncPlayStore.isWaitingForGroup` drives that label,
-positioned clear of the touch grammar's centre play button. Waiting keeps that
-button on screen, and the two elements would otherwise share the middle of the
-frame.
-
-Settings › Playback owns `syncplay.correction` as *Correct Sync Drift*. Home
-carries a banner above its rails, with the group name, *Rejoin* and *Leave*,
-while a group has this device as a member and nothing of its is on screen.
-
-**The socket must be open before the join.** The server announces a join over
-the socket at the instant it happens. Joining while the handshake is still
-in flight loses both the `GroupJoined` and the `PlayQueue` update on
-the fixture server running Jellyfin 12.0.0, and the member then sits in a
-group it never hears another word from. The store waits for the socket to
-carry its first message, the server's own `ForceKeepAlive`, before asking to
-join. A handshake timeout or failed membership request keeps the sheet open
-with an error and a retry path.
-
-The store snapshots its account's client, so queued requests and the final
-Leave never adopt a replacement account's credentials. Leaving cancels queued
-commands and item loads, and late results must match the active membership
-before they can present or restart playback. A delivery fallback in a group
-primes paused and reports Ready before the server starts it again. Readiness
-reports retry once after a second, with the current timestamp and position,
-and cancellation or newer readiness supersedes that retry. Viewer transport
-commands are never retried automatically. Ignore Waiting changes publish after
-server acknowledgement. An unavailable queued title attempts to opt out of
-waiting and offers Rejoin or Leave instead of failing silently.
-
-**Verifying it** takes two members. `-debug.syncPlayJoinGroup <name>` joins
-the named group after the regression bootstrap signs in, polling for up to 30
-s so the other member can create it. The group's queue then drives playback in
-place of the bench fixture. Pair it with `-debug.playbackHUD YES` and read the
-`Sync:` line: group state, member count, last command, drift.
+Opening and command handling, the refusal rules in `SyncPlayGroupSession`, the
+sheet and panel tab, notices, and the account-switch behaviour are in [Watch
+Together](reference/playback/watch-together.md).
 
 ### The player's Observation scope
 
@@ -520,17 +402,16 @@ are still skipped and the next episode still starts with the screen off. The
 overlays only draw its state.
 
 Each countdown's action and visible fill share a monotonic deadline. Only the
-fill redraws as time passes, so a newly mounted overlay shows elapsed progress
-immediately, instead of animating from a previous view value. An overlay is
-created at the moment its countdown arms, so there is no earlier value to
-animate from. That is why both fills used to read as full for their whole run.
+fill redraws, so a newly mounted overlay shows elapsed progress immediately
+rather than animating from a previous value — which is why both fills used to
+read as full for their whole run.
+
 A countdown runs on wall time, so it comes due during a stall as readily as
-during playback. The commit waits: a skip due while the engine is buffering is
-held and taken up when the picture is moving again, because seeking spends the
-very buffer the stall is waiting on. It is taken up only while the playhead is
-still inside its segment — past the end, seeking there would drag the viewer
-backwards through an intro they have now watched. Select and a tap are the
-viewer asking for it now and go straight through.
+during playback. The commit waits: a skip due while buffering is held until
+the picture moves, because seeking spends the very buffer the stall waits on.
+It is taken up only while the playhead is still inside its segment — past the
+end, seeking would drag the viewer back through an intro they have watched.
+Select and a tap go straight through.
 
 An accepted hand-off keeps its timing: the card outlives `playNext` while the
 successor is prepared. A bar that emptied underneath it would read as the
