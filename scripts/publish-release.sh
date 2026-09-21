@@ -9,7 +9,7 @@
 # source archive to it, which is how someone holding a binary obtains the
 # corresponding source for the vendored FFmpeg libraries.
 #
-#   scripts/publish-release.sh 108
+#   scripts/publish-release.sh 108              # tags 0.2.0-108
 #   scripts/publish-release.sh 108 --dry-run    # print what it would do
 #   scripts/publish-release.sh 108 --rev a1b2c3d
 #
@@ -46,11 +46,16 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-tag="build-${want_build}"
 ok() { printf '  \xe2\x9c\x93 %s\n' "$1"; }
 warn() { printf '  ! %s\n' "$1"; }
 note() { printf '  - %s\n' "$1"; }
 die() { printf '\n  error: %s\n' "$1" >&2; exit 1; }
+
+# Tags read as <version>-<build>, so the Tags list says which version a build
+# shipped as. The build number keeps them unique: it never repeats, while one
+# marketing version spans many builds.
+version="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-9.]*$')"
+tag="${version}-${want_build}"
 
 echo
 echo "Publishing ${tag}"
@@ -76,7 +81,6 @@ values="$(grep -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0-9]
     || die "CURRENT_PROJECT_VERSION differs across configurations: $(echo $values)"
 [ "$values" = "$want_build" ] \
     || die "the project declares build ${values}, not ${want_build}"
-version="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-9.]*$')"
 ok "project declares ${version} (${want_build})"
 
 # 4. Same rule the upload script and ChangelogTests enforce, restated here
