@@ -20,7 +20,7 @@ set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="$repo/docs/codec-support.md"
-destination="${LAGOON_CODEC_DOC_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation)}"
+destination="${LAGOON_CODEC_DOC_DESTINATION:-platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=latest}"
 
 check=false
 [ "${1:-}" = "--check" ] && check=true
