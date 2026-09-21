@@ -69,82 +69,30 @@ token is never sent to a subtitle provider or CDN.
 
 ## Jellyfin 12 compatibility
 
-Jellyfin 12 drops older server-generated HLS routes. `master.m3u8`,
-`main.m3u8`, `hls/…`, `hls1/…` and `live.m3u8` are in the 10.11.11 document
-and gone from the 12.0.0 one. Lagoon never constructs those routes: it
-resolves the `TranscodingUrl` supplied by `PlaybackInfo`. The relevant
-`BaseItemDto` and `MediaStream` changes are additive, so Lagoon's defensive
-decoders accept both versions without a model fork.
+Jellyfin 12 drops the older server-generated HLS routes — `master.m3u8`,
+`main.m3u8`, `hls/…`, `hls1/…`, `live.m3u8`. Lagoon never constructs those: it
+resolves the `TranscodingUrl` that `PlaybackInfo` supplies. `BaseItemDto` and
+`MediaStream` changes are additive, so the defensive decoders take both
+versions without a model fork.
 
-**What the schema comparison can and cannot settle.** Five of the routes
-Lagoon leans on hardest are documented in *neither* version's OpenAPI surface:
-`/Users/{userId}/Items`, `/Users/{userId}/Views`,
-`/Users/{userId}/Items/Latest`, `/Users/{userId}/Items/Resume` and
-`/Users/{userId}/Items/{itemId}`. They are undocumented legacy routes that
-both servers nonetheless serve, so a path-by-path diff of the two documents
-cannot clear them either way. An earlier version of this page claimed a
-conclusion its stated method could not have produced. What actually clears
-them is a direct probe: each of the five returns 200 on the 12.0.0 server.
-That is a fact about one server on one day rather than a published
-compatibility guarantee, which is why these five get re-probed, not re-read,
-when 12.0 ships.
+**Five routes Lagoon leans on are in neither version's OpenAPI surface** —
+`/Users/{userId}/Items`, `/Views`, `/Items/Latest`, `/Items/Resume` and
+`/Items/{itemId}`. They are undocumented legacy routes both servers serve, so
+a schema diff cannot clear them either way. They get re-probed, not re-read,
+whenever a server version changes.
 
-A live 12.0.0 probe verified password authentication and an authenticated
-library request with Lagoon's `Authorization` header. It also established the
-media-URL boundary directly, on 2026-09-04: `ApiKey` succeeded while lowercase
-`api_key` returned 401 on a normal authenticated endpoint. That is a fact
-about that server on that day, and the reason a server-returned credential is
-sanitized on sight rather than assumed absent. Focused integration coverage
-now checks the header-only state that replaced the query fallback:
-`playbackURLResolutionPreservesTheNegotiatedTransportMatrix` in
-`LagoonTests/Playback/PlayerSystemIntegrationTests.swift` asserts that no
-same-origin media URL — direct-play, direct-stream, transcode, external
-subtitle sidecar or trickplay sheet — carries `ApiKey` or `api_key` in its
-query, that the `Authorization` header carries the token instead, and that a
-foreign-origin subtitle URL is left untouched.
+**Media credentials go in the `Authorization` header, never the query.** On
+12.0.0, `ApiKey` in a query succeeded where lowercase `api_key` returned 401 —
+which is why a server-returned credential is sanitised on sight rather than
+assumed absent. `playbackURLResolutionPreservesTheNegotiatedTransportMatrix`
+pins it: no same-origin media URL carries either parameter, the header carries
+the token, and a foreign-origin subtitle URL is left untouched.
 
-**The app-level run against Jellyfin 12 (2026-09-04).** Lagoon was driven
-against the 12.0.0 public preview on a clean tvOS 26 simulator, pointed there
-with `LAGOON_REGRESSION_SERVER=https://demo.jellyfin.org/unstable`.
-`PlayerRegressionUITests.testBufferedDirectH264PlaybackStartsAndSustains`
-passed. It authenticates, browses for an episode with a direct-playable H.264
-successor, negotiates `DirectPlay` through `PlaybackInfo`, and reaches ready
-with no buffering. It then plays for 20 seconds, advancing more than 14
-seconds of media time with zero buffering events, at most one stall, exactly
-one engine, demuxer and renderer, no unclean teardown, and under 96 MB of
-growth.
-
-**The transcode chain was verified at the protocol level, not in the app.**
-The harness picks whatever the server will play, and neither public demo
-returns a transcode for it. So
-`testNativeHLSPlaybackStartsAndCrossesSegmentBoundaries` resolves `DirectPlay`
-and fails its `Transcode` assertion on **both** 10.11.11 and 12.0.0 — a stale
-expectation in the test, not a Jellyfin 12 regression — and passes against the
-fixture server, whose content does transcode. So the transcode path was
-checked directly instead, on 2026-09-04, before the September 8 header-only
-change: authenticating on 12.0.0 and calling `PlaybackInfo` with a profile
-that can direct-play nothing returned a `TranscodingUrl`. Resolving it the way
-the client did that day, with `ApiKey` in the query, reached a master
-playlist, a variant playlist and a first media segment that all returned 200,
-with the credential propagated at every hop and 620 KB of transport stream on
-the segment. That is the exact chain the header-only change altered; the same
-chain is exercised today with the token in the `Authorization` header instead.
-
-**The stable channel on 12.0.0 (2026-09-11).** With the public demo's stable
-channel reporting 12.0.0, the same lane was run again on a clean tvOS 26
-simulator against `demo.jellyfin.org/stable`, this time with the header-only
-credential and the base-path fix in place.
-`testBufferedDirectH264PlaybackStartsAndSustains` passed, and
-`testNativeHLSPlaybackStartsAndCrossesSegmentBoundaries` passed on the remux
-rung (`-debug.regressionInitialDelivery remux`, since the demo direct-plays
-everything). So HLS master, variant and segment routes behind a base path all
-answer the `Authorization` header on 12.0.0 inside the app. Browsing on the
-same server — views, latest, resume, next up, seasons, search, images — was
-probed the same day and answered as before.
-
-Still outstanding: sustained *video transcode* playback inside the app on 12,
-which needs a server whose content forces one, and the deployment check on the
-fixture server once it upgrades from 10.11.11.
+Exercised in the app against 12.0.0: authentication, browsing, direct play,
+and HLS master, variant and segment routes behind a base path. Still
+outstanding: a sustained *video transcode* on 12, which needs a server whose
+content forces one, and the fixture server's own upgrade from 10.11.11. Run
+results live on the tickets, not here.
 
 ## Library endpoints
 
@@ -292,18 +240,14 @@ code knows whether a result came from OpenSubtitles or another plugin.
 | Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | retained for provider formats Lagoon cannot parse directly |
 
 **Every one of those routes requires the per-user `EnableSubtitleManagement`
-permission, and it is off by default for every non-administrator** on Jellyfin
-10.9 and later. Accounts without it are shown administrator guidance instead
-of a search — see `docs/playback.md`, "One subtitle source". Without the
-permission all four routes answer `403` with an HTML body. That was verified
-on both the fixture server on 10.11.11 and the public demo server, whose
-accounts are both non-admin with the flag unset, which is the common case on a
-shared server. So Lagoon reads `User.Policy.EnableSubtitleManagement` — free
-in the `AuthenticateByName` response, lazily from `Users/Me` for a restored
-token — and says so up front instead of failing one result at a time. An
-unreachable server resolves to *permitted*, because a network problem must
-never be reported as a permissions problem. Administrators satisfy the policy
-implicitly.
+permission, which is off by default for every non-administrator** on Jellyfin
+10.9 and later. Without it all four answer `403` with an HTML body — the
+common case on a shared server, confirmed on both the fixture and public demo
+servers. So Lagoon reads `User.Policy.EnableSubtitleManagement`, free in the
+`AuthenticateByName` response and lazily from `Users/Me` for a restored token,
+and shows administrator guidance instead of a search. An unreachable server
+resolves to *permitted*: a network problem must never be reported as a
+permissions problem.
 
 Preferred languages are searched **concurrently**, and the results are
 re-sorted into request order so each provider's ranking is retained. A failure
