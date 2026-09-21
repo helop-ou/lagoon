@@ -100,6 +100,80 @@ struct PlaybackAutomationTests {
         #expect(!skipped)
     }
 
+    // MARK: - Buffering
+
+    /// The countdown runs on wall time so that a locked phone can still
+    /// reach it, which means it comes due during a stall — where seeking
+    /// spends the very buffer the stall is waiting on.
+    @Test func aSkipThatComesDueWhileBufferingWaits() async throws {
+        let automation = automation()
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+        automation.isBuffering = true
+
+        automation.tick(position: 12, duration: 1_320)
+        #expect(automation.activeSegment?.id == "intro")
+        try await Task.sleep(for: Self.settled)
+        #expect(landed == nil)
+        // The offer is still standing; only the seek is held.
+        #expect(automation.activeSegment?.id == "intro")
+
+        // Waited for rather than slept past: the countdown may not have
+        // come due yet on a loaded run, and then it is the release that
+        // lets it through rather than the hold that takes it up.
+        automation.isBuffering = false
+        await eventually { landed == 70 }
+        #expect(landed == 70)
+        #expect(automation.activeSegment == nil)
+    }
+
+    /// Held, not lost: if the picture caught up past the segment while the
+    /// skip waited, honouring it would drag the viewer backwards through an
+    /// intro they have now watched.
+    @Test func aHeldSkipIsDroppedOnceThePlayheadHasPassedIt() async throws {
+        let automation = automation()
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+        automation.isBuffering = true
+
+        automation.tick(position: 12, duration: 1_320)
+        let timing = try #require(automation.skipTiming)
+        await eventually { timing.progress(at: .now) == 1 }
+        try await Task.sleep(for: Self.settled)
+        automation.tick(position: 80, duration: 1_320)
+        automation.isBuffering = false
+
+        try await Task.sleep(for: Self.settled)
+        #expect(landed == nil)
+        #expect(automation.activeSegment == nil)
+    }
+
+    /// Select and a tap are the viewer asking for this now. Only the clock
+    /// waits.
+    @Test func theViewerSkipsWhileBufferingAllTheSame() {
+        let automation = automation(skip: .button)
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+        automation.isBuffering = true
+
+        automation.tick(position: 12, duration: 1_320)
+        automation.skip(Self.intro)
+        #expect(landed == 70)
+    }
+
+    /// Instant mode is a countdown of zero, and waits on the same terms.
+    @Test func instantModeWaitsForTheBufferToo() {
+        let automation = automation(skip: .instant)
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+        automation.isBuffering = true
+
+        automation.tick(position: 12, duration: 1_320)
+        #expect(landed == nil)
+        automation.isBuffering = false
+        #expect(landed == 70)
+    }
+
     @Test func instantModeSkipsOnEntry() {
         let automation = automation(skip: .instant)
         var landed: Double?
