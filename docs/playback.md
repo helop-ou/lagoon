@@ -150,7 +150,7 @@ correction. The write is identity-guarded to the current engine and skipped
 when the engine's track count disagrees with the server's layout — a remux or
 transcode rung delivers one track where the source lists several, so an
 ordinal from one means nothing in the other. Landing on what automatic
-selection would have chosen *forgets* the override rather than storing it,
+selection would have chosen _forgets_ the override rather than storing it,
 which would freeze the show against a later change of preferences.
 
 `AudioTrackMemoryPolicy` applies it as a ladder: a description that names
@@ -424,7 +424,7 @@ turns the phone. This replaced an earlier landscape lock, based on viewer
 feedback. Audio uses normal movie-playback behavior. Volume keys control
 output, and Silent Mode does not silence the movie.
 
-On iOS, a screen only *requests* playback, through `playerPresentation`. The
+On iOS, a screen only _requests_ playback, through `playerPresentation`. The
 one `playerPresentationHost` at the tab root, `PlayerPresentationHub`,
 presents it and retains the hosting controller across PiP. The swipe down
 requests PiP when available. Only its successful start callback hides

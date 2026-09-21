@@ -1,18 +1,8 @@
 # Jellyfin API
 
-Checked against the public Jellyfin **10.11.11** stable and **12.0.0**
-unstable servers on 2026-09-04. The unstable demo was a pre-release of 12.0,
-but nothing it exposes says which one. `System/Info/Public`, authenticated
-`System/Info` and its OpenAPI document all report the version as `12.0.0`, so
-that is the string used throughout these docs. Since then the public demo's
-stable channel has moved to 12.0.0 as well; both channels reported it on
-2026-09-11. The 10.11.11 coverage now comes from the private fixture server,
-which is still on that version.
-
 Lagoon keeps using the user-scoped `Users/{id}/…` routes because both servers
 answer them. That is a runtime observation, not a schema guarantee: several of
-those routes are documented in neither version's OpenAPI surface. See
-*Jellyfin 12 compatibility* below.
+those routes are documented in neither version's OpenAPI surface.
 
 ## Wire format
 
@@ -22,7 +12,7 @@ those routes are documented in neither version's OpenAPI surface. See
 - No `Date` fields are decoded anywhere. Jellyfin emits .NET 7-digit
   fractional-second timestamps that `ISO8601DateFormatter` rejects. The UI
   only needs `ProductionYear`, so dates are not modeled. SyncPlay is the one
-  documented exception, and it is still not a `Date`: see *SyncPlay* below.
+  documented exception, and it is still not a `Date`: see _SyncPlay_ below.
 - Positions and durations are .NET **ticks**: 100 ns, so 1 s is 10 000 000
   ticks. Convert only through the `Ticks` helpers.
 - Decoding is defensive: `decodeIfPresent` plus defaults, unknown item types
@@ -58,7 +48,7 @@ token is never sent to a subtitle provider or CDN.
 
 - `POST Users/AuthenticateByName` `{Username, Pw}` → `AccessToken` + `User`.
 - **Quick Connect**: `GET QuickConnect/Enabled` returns true, then `POST
-  QuickConnect/Initiate` — needs the MediaBrowser header, no token — returns
+QuickConnect/Initiate` — needs the MediaBrowser header, no token — returns
   `{Code, Secret}`. Poll `GET QuickConnect/Connect?secret=` every 2 s until
   `Authenticated`, then `POST Users/AuthenticateWithQuickConnect {Secret}`.
   Expiry surfaces as an error on the poll: reset the UI, don't retry the same
@@ -67,48 +57,21 @@ token is never sent to a subtitle provider or CDN.
 - Pre-auth server validation hits `GET System/Info/Public`, which needs no
   header. Its `ServerName` seeds the sign-in screen.
 
-## Jellyfin 12 compatibility
-
-Jellyfin 12 drops the older server-generated HLS routes — `master.m3u8`,
-`main.m3u8`, `hls/…`, `hls1/…`, `live.m3u8`. Lagoon never constructs those: it
-resolves the `TranscodingUrl` that `PlaybackInfo` supplies. `BaseItemDto` and
-`MediaStream` changes are additive, so the defensive decoders take both
-versions without a model fork.
-
-**Five routes Lagoon leans on are in neither version's OpenAPI surface** —
-`/Users/{userId}/Items`, `/Views`, `/Items/Latest`, `/Items/Resume` and
-`/Items/{itemId}`. They are undocumented legacy routes both servers serve, so
-a schema diff cannot clear them either way. They get re-probed, not re-read,
-whenever a server version changes.
-
-**Media credentials go in the `Authorization` header, never the query.** On
-12.0.0, `ApiKey` in a query succeeded where lowercase `api_key` returned 401 —
-which is why a server-returned credential is sanitised on sight rather than
-assumed absent. `playbackURLResolutionPreservesTheNegotiatedTransportMatrix`
-pins it: no same-origin media URL carries either parameter, the header carries
-the token, and a foreign-origin subtitle URL is left untouched.
-
-Exercised in the app against 12.0.0: authentication, browsing, direct play,
-and HLS master, variant and segment routes behind a base path. Still
-outstanding: a sustained *video transcode* on 12, which needs a server whose
-content forces one, and the fixture server's own upgrade from 10.11.11. Run
-results live on the tickets, not here.
-
 ## Library endpoints
 
-| Purpose | Endpoint | Quirk |
-|---|---|---|
-| Libraries | `Users/{uid}/Views` | filter `CollectionType` to `movies`/`tvshows` |
-| Browse/search | `Users/{uid}/Items` | `ParentId`, `IncludeItemTypes`, `SearchTerm`, paged via `StartIndex`/`Limit` |
-| Decade choices | `Items/Filters` | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`; recursive full catalogue, not `Filters2` (which has no years) |
-| Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
-| Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
-| Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`; **never** for autoplay, see below |
-| Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
-| Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | |
-| The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
-| Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s** — see below |
-| What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order |
+| Purpose                    | Endpoint                                                | Quirk                                                                                                                        |
+| -------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Libraries                  | `Users/{uid}/Views`                                     | filter `CollectionType` to `movies`/`tvshows`                                                                                |
+| Browse/search              | `Users/{uid}/Items`                                     | `ParentId`, `IncludeItemTypes`, `SearchTerm`, paged via `StartIndex`/`Limit`                                                 |
+| Decade choices             | `Items/Filters`                                         | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`; recursive full catalogue, not `Filters2` (which has no years) |
+| Item detail                | `Users/{uid}/Items/{id}`                                | re-fetched after playback for fresh `UserData`                                                                               |
+| Continue watching          | `Users/{uid}/Items/Resume`                              | `MediaTypes=Video`                                                                                                           |
+| Next up                    | `Shows/NextUp?UserId=`                                  | Home uses `EnableResumable=false&EnableRewatching=false`; **never** for autoplay, see below                                  |
+| Recently added             | `Users/{uid}/Items/Latest`                              | **returns a bare array**, not an `Items` wrapper                                                                             |
+| Seasons/episodes           | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=`     |                                                                                                                              |
+| The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2`        | index 1 is the next one                                                                                                      |
+| Collections                | `Users/{uid}/Items?IncludeItemTypes=BoxSet`             | **`EnableUserData=false` or it takes 40 s** — see below                                                                      |
+| What is in a collection    | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order                                                                             |
 
 List calls pass `Fields=Overview,Genres,…,OriginalLanguage` via
 `JellyfinClient.defaultFields`, because the server omits those fields from
@@ -139,7 +102,7 @@ collections:
   Collections library as `ParentId` instead of `Recursive=true`, and asking
   for 20 rows instead of 200 all still took about 40 s. `EnableUserData=false`
   is the whole fix. It is safe here because a collection's own watched flags
-  are not drawn anywhere; the titles *inside* one are a separate query that
+  are not drawn anywhere; the titles _inside_ one are a separate query that
   keeps its user data and answers in 50 ms.
 - **Most collections are empty.** A metadata scrape creates a collection for a
   film's entire franchise the moment the library holds one entry in it. Of
@@ -168,8 +131,8 @@ over the stream index Jellyfin marked as default. ISO 639-2 stream codes and
 BCP-47/ISO 639-1 preferences normalize to the same language before matching,
 including the older bibliographic ISO aliases.
 
-**`Shows/NextUp` is a rail, not a cursor.** It returns the episode *in
-progress* when there is one. `enableResumable` defaults to `true`: checked
+**`Shows/NextUp` is a rail, not a cursor.** It returns the episode _in
+progress_ when there is one. `enableResumable` defaults to `true`: checked
 against the server's own `/api-docs/openapi.json` on 10.11.11, the build both
 the fixture server and the public demo run. Home explicitly sets
 `EnableResumable=false` and `EnableRewatching=false`, because started episodes
@@ -202,11 +165,11 @@ the same way. A landscape card with no artwork at all shows its title.
 
 ## Downloads
 
-| Purpose | Endpoint | Notes |
-|---|---|---|
-| Original file | `GET Items/{id}/Download` | gated by the per-user `EnableContentDownloading` policy; the download control is hidden without it rather than let the server refuse |
-| Progressive transcode | `GET Videos/{id}/stream.ts` | one MPEG-TS response the encode writes as it runs, playable while incomplete, so a background `URLSession` task can carry a whole transcode; needs a fresh `playSessionId` on every request, since the server keys the transcode job on it and reuses whatever an abandoned earlier job left behind otherwise |
-| Permission and policy fields | `GET Users/Me` | decodes `EnableContentDownloading` and `EnableVideoPlaybackTranscoding` on `UserPolicy`, same pattern as `EnableSubtitleManagement` |
+| Purpose                      | Endpoint                    | Notes                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Original file                | `GET Items/{id}/Download`   | gated by the per-user `EnableContentDownloading` policy; the download control is hidden without it rather than let the server refuse                                                                                                                                                                          |
+| Progressive transcode        | `GET Videos/{id}/stream.ts` | one MPEG-TS response the encode writes as it runs, playable while incomplete, so a background `URLSession` task can carry a whole transcode; needs a fresh `playSessionId` on every request, since the server keys the transcode job on it and reuses whatever an abandoned earlier job left behind otherwise |
+| Permission and policy fields | `GET Users/Me`              | decodes `EnableContentDownloading` and `EnableVideoPlaybackTranscoding` on `UserPolicy`, same pattern as `EnableSubtitleManagement`                                                                                                                                                                           |
 
 An administrator may always download, regardless of the policy flags. Unlike
 subtitle management, an unknown or unreachable answer for content downloading
@@ -232,12 +195,12 @@ await one per tap.
 Lagoon uses Jellyfin's provider-agnostic remote-subtitle routes. No client
 code knows whether a result came from OpenSubtitles or another plugin.
 
-| Purpose | Endpoint | Notes |
-|---|---|---|
-| Search | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}` | language is ISO 639-2; Apple/BCP-47 preferences are normalized and converted to three-letter form |
-| Fetch provider file | `GET Providers/Subtitles/Subtitles/{subtitleId}` | result ids are opaque and remain one percent-encoded path component |
-| Persist fetched file | `POST Videos/{itemId}/Subtitles` | uploads the already validated bytes as base64, avoiding a second provider download |
-| Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | retained for provider formats Lagoon cannot parse directly |
+| Purpose                | Endpoint                                                  | Notes                                                                                             |
+| ---------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Search                 | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}`    | language is ISO 639-2; Apple/BCP-47 preferences are normalized and converted to three-letter form |
+| Fetch provider file    | `GET Providers/Subtitles/Subtitles/{subtitleId}`          | result ids are opaque and remain one percent-encoded path component                               |
+| Persist fetched file   | `POST Videos/{itemId}/Subtitles`                          | uploads the already validated bytes as base64, avoiding a second provider download                |
+| Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | retained for provider formats Lagoon cannot parse directly                                        |
 
 **Every one of those routes requires the per-user `EnableSubtitleManagement`
 permission, which is off by default for every non-administrator** on Jellyfin
@@ -246,7 +209,7 @@ common case on a shared server, confirmed on both the fixture and public demo
 servers. So Lagoon reads `User.Policy.EnableSubtitleManagement`, free in the
 `AuthenticateByName` response and lazily from `Users/Me` for a restored token,
 and shows administrator guidance instead of a search. An unreachable server
-resolves to *permitted*: a network problem must never be reported as a
+resolves to _permitted_: a network problem must never be reported as a
 permissions problem.
 
 Preferred languages are searched **concurrently**, and the results are
@@ -261,14 +224,14 @@ Failures are classified rather than collapsed: 403 is a permission, 401 an
 expired session, 429 rate limiting, 5xx a provider fault, and a timeout a
 timeout. The "provider could not supply this file / download limit" wording is
 reserved for the case that earns it, when the provider answered 404 for the
-file itself *and* Jellyfin's save then attached nothing. Retries cover only
+file itself _and_ Jellyfin's save then attached nothing. Retries cover only
 fast-failing transient errors. A timeout is excluded because the provider
 budget is already 90 s, and rate limiting is excluded because retrying inside
 seconds cannot clear a limit measured in minutes and only spends more of the
 provider's quota getting there.
 
 Provider calls carry a 90 s timeout rather than the 30 s client default, since
-a search makes the *server* fan out to third-party services. A 401 or 403 on
+a search makes the _server_ fan out to third-party services. A 401 or 403 on
 the direct fetch never falls through to the compatibility endpoint, because
 that would make Jellyfin fetch from the provider a second time on the way to
 the same error, spending quota to learn nothing.
@@ -297,20 +260,20 @@ rebuilt. Forced and hearing-impaired metadata is preserved.
 
 ## SyncPlay
 
-Group playback. The server owns a group's state and tells every member *when*,
+Group playback. The server owns a group's state and tells every member _when_,
 on its own clock, to unpause, pause, seek or stop. A client that acts on a
 command immediately is already wrong. Probed against the fixture server on
 12.0.0 on 2026-09-14.
 
-| Purpose | Endpoint | Notes |
-|---|---|---|
-| Groups | `GET SyncPlay/List` | `[]` with no groups; also the availability probe, since a server without SyncPlay fails the route |
-| Membership | `POST SyncPlay/New {GroupName}`, `Join {GroupId}`, `Leave` | 204 each. The new group's id is **not** read from the response: it arrives over the socket as a `GroupJoined` update, the same path a join takes |
-| Queue | `POST SyncPlay/SetNewQueue {PlayingQueue, PlayingItemPosition, StartPositionTicks}`, `SetPlaylistItem`, `NextItem`, `PreviousItem` | item ids go up, the `PlaylistItemId`s the group assigns come back as a `PlayQueue` update |
-| Transport | `POST SyncPlay/Unpause`, `Pause`, `Stop`, `Seek {PositionTicks}` | nothing happens locally; the server answers every member with a command |
-| Readiness | `POST SyncPlay/Buffering`, `Ready` `{When, PositionTicks, IsPlaying, PlaylistItemId}` | the slowest member sets the pace. `SetIgnoreWait {IgnoreWait}` opts this client out of holding the group up |
-| Latency | `POST SyncPlay/Ping {Ping}` | milliseconds, from the clock estimate below |
-| Capabilities | `POST Sessions/Capabilities/Full` | **not** required for command delivery: a session that never posted it still received every group command. Sent anyway so the session appears controllable; `SupportedCommands` is empty until the player handles `GeneralCommand` |
+| Purpose      | Endpoint                                                                                                                           | Notes                                                                                                                                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Groups       | `GET SyncPlay/List`                                                                                                                | `[]` with no groups; also the availability probe, since a server without SyncPlay fails the route                                                                                                                                 |
+| Membership   | `POST SyncPlay/New {GroupName}`, `Join {GroupId}`, `Leave`                                                                         | 204 each. The new group's id is **not** read from the response: it arrives over the socket as a `GroupJoined` update, the same path a join takes                                                                                  |
+| Queue        | `POST SyncPlay/SetNewQueue {PlayingQueue, PlayingItemPosition, StartPositionTicks}`, `SetPlaylistItem`, `NextItem`, `PreviousItem` | item ids go up, the `PlaylistItemId`s the group assigns come back as a `PlayQueue` update                                                                                                                                         |
+| Transport    | `POST SyncPlay/Unpause`, `Pause`, `Stop`, `Seek {PositionTicks}`                                                                   | nothing happens locally; the server answers every member with a command                                                                                                                                                           |
+| Readiness    | `POST SyncPlay/Buffering`, `Ready` `{When, PositionTicks, IsPlaying, PlaylistItemId}`                                              | the slowest member sets the pace. `SetIgnoreWait {IgnoreWait}` opts this client out of holding the group up                                                                                                                       |
+| Latency      | `POST SyncPlay/Ping {Ping}`                                                                                                        | milliseconds, from the clock estimate below                                                                                                                                                                                       |
+| Capabilities | `POST Sessions/Capabilities/Full`                                                                                                  | **not** required for command delivery: a session that never posted it still received every group command. Sent anyway so the session appears controllable; `SupportedCommands` is empty until the player handles `GeneralCommand` |
 
 **The socket.** `wss://<server>/socket?api_key=<token>&deviceId=<id>`, built
 from `serverRelativeURL("socket")` with the scheme swapped, so a reverse-proxy
@@ -336,7 +299,7 @@ is greeted with.
 **The clock, and the timestamp exception.** `GET GetUtcTime` returns
 `{RequestReceptionTime, ResponseTransmissionTime}`. With the local instants
 either side of the request, that gives NTP's four-timestamp measurement.
-`ServerClock` keeps the last eight samples and uses the one with the *lowest*
+`ServerClock` keeps the last eight samples and uses the one with the _lowest_
 round trip, never an average: a slow sample is asymmetric, not noisy, and
 averaging folds that error in. It takes three samples a second apart, then one
 a minute.
@@ -345,7 +308,7 @@ Those timestamps, and SyncPlay's `When`, `EmittedAt` and `LastUpdate`, are
 wall-clock instants the protocol cannot do without, so they are the documented
 exception to "no `Date` is decoded". They stay `String` on the DTOs and are
 converted only through `JellyfinTimestamp`, which parses
-`yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z` by hand. The fraction has a *variable* number
+`yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z` by hand. The fraction has a _variable_ number
 of digits, 6 and 7 in the same response, and `ISO8601DateFormatter` rejects 7.
 `JellyfinTimestamp` writes the seven-digit form back. A non-UTC offset is
 refused rather than guessed at.
@@ -379,8 +342,8 @@ Logo image.
 The worry was that this breaks the primary setup: a LAN server on plain http
 at `192.168.1.x:8096`, which is literally the connect screen's placeholder. It
 does not, and the reason matters, because the public record is contradictory.
-Apple's DTS says `NSAllowsLocalNetworking` has *no effect on IP-address
-loads*, because ATS never applied to them. CVE-2023-38596 reported that
+Apple's DTS says `NSAllowsLocalNetworking` has _no effect on IP-address
+loads_, because ATS never applied to them. CVE-2023-38596 reported that
 exemption as a vulnerability, and Apple confirmed a fix in iOS 17+.
 
 **Measured on tvOS 26.2 (2026-08-18), the exemption still holds.** With only
@@ -399,7 +362,7 @@ So the three shapes that matter all still work on cleartext:
 - **`.local` names** and **unqualified hostnames** (`http://mediaserver:8096`)
   are covered by `NSAllowsLocalNetworking`.
 
-What the change *does* block is cleartext to a fully-qualified public domain,
+What the change _does_ block is cleartext to a fully-qualified public domain,
 which is exactly the intent: a remote server must be https.
 
 This ATS change retained the existing discovery order: HTTP first for
@@ -467,7 +430,7 @@ and Home falls back to Lagoon's own rails.
 against a real install (2026-08-18), it returns all 28 section types the
 plugin knows, Books, Music and Jellyseerr rows included, for a
 movies-and-TV-only library, with `OrderIndex` 999 and `Limit` 1 on every one.
-It does *not* narrow to what the admin enabled, and the enabled set is not
+It does _not_ narrow to what the admin enabled, and the enabled set is not
 readable anywhere: `HomeScreen/UserSettings`, `HomeScreen/Settings`,
 `HomeScreen/Config` and `HomeScreen/Users/{id}/Settings` all 404, and core
 `DisplayPreferences/usersettings` carries no `homesection*` keys.
