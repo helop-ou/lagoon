@@ -45,6 +45,27 @@ project="$root/Lagoon.xcodeproj/project.pbxproj"
 options="$root/ExportOptions.plist"
 build_dir="$root/build"
 
+# Credentials from .env, if present. Exported values win.
+env_file="$root/.env"
+if [ -f "$env_file" ]; then
+    if git -C "$root" ls-files --error-unmatch .env >/dev/null 2>&1; then
+        echo "error: .env is tracked by git. It must never be committed." >&2
+        echo "Run: git rm --cached .env" >&2
+        exit 1
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line#export }"
+        case "$line" in ''|'#'*) continue ;; esac
+        name="${line%%=*}"
+        [ "$name" = "$line" ] && continue
+        value="${line#*=}"
+        value="${value%\"}"; value="${value#\"}"
+        value="${value%\'}"; value="${value#\'}"
+        [ -n "${!name:-}" ] && continue
+        export "$name=$value"
+    done < "$env_file"
+fi
+
 usage() {
     echo "usage: upload-testflight.sh [tvos|ios|both] [--dry-run] [--archive-only]" >&2
     exit 1

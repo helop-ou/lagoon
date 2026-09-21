@@ -11,19 +11,19 @@ read those before doing this the first time. Public distribution has further
 gates under [Public release](#public-release) that this list does not cover.
 
 ```sh
-scripts/bump-build.sh                             # 1. next build number
-# 2. write the entry in Changelog.swift, by hand
-scripts/generate-changelog.sh                     # 3. regenerate CHANGELOG.md
-scripts/generate-site-facts.sh                    # 4. update the website's facts
+scripts/bump-build.sh                             #  1. next build number
+#  2. write the entry in Changelog.swift, by hand
+scripts/generate-changelog.sh                     #  3. regenerate CHANGELOG.md
+scripts/generate-site-facts.sh                    #  4. the website's facts
 xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
 xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
-xcodebuild test -scheme Lagoon \
+xcodebuild test -scheme Lagoon \                  #  5. both builds, then tests
   -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
-# 5. commit, one file per commit, and push
-export LAGOON_SENTRY_DSN=…
-scripts/upload-testflight.sh both --archive-only  # 6. archive with the DSN
-# 7. upload in Xcode's Organizer, then wait for it to be accepted
-scripts/publish-release.sh <build>                # 8. tag and publish
+#  6. commit, one file per commit, and push
+cp .env.example .env                              #  7. once: fill in the DSN
+scripts/upload-testflight.sh both --archive-only  #  8. archive with the DSN
+#  9. upload in Xcode's Organizer, then wait for acceptance
+scripts/publish-release.sh <build>                # 10. tag and publish
 ```
 
 1. **[Bump the build](#version-and-changelog).** Only when preparing something
@@ -32,17 +32,20 @@ scripts/publish-release.sh <build>                # 8. tag and publish
 2. **Write the changelog entry**, for a viewer rather than a reader of the
    diff. `ChangelogTests` fails until the declared build has one.
 3. **[Regenerate `CHANGELOG.md`](#the-published-changelog).** It is the release
-   body in step 8.
-4. **[Regenerate the website's facts](../scripts/generate-site-facts.sh),** and
-   commit them in `lagoon-website`. The site keeps serving the old version
-   until it is redeployed, which is a separate deploy from any of this.
+   body in step 10.
+4. **[Regenerate the website's facts](#version-and-changelog),** and commit
+   them in `lagoon-website`. The site keeps serving the old version until it is
+   redeployed, which is a separate deploy from any of this.
 5. **Build both platforms and run the unit suite.** Archiving does not run
    tests.
-6. **[Archive](#internal-testflight).** Use `--archive-only` if uploading
+6. **Commit and push.** Step 10 refuses a revision the remote does not have.
+7. **Fill in `.env`**, once per checkout. See
+   [`.env.example`](../.env.example); the shell still overrides it.
+8. **[Archive](#internal-testflight).** Use `--archive-only` if uploading
    through Xcode, because an Xcode-made archive has diagnostics switched off.
-7. **Upload**, keeping **Automatically manage version and build number**
+9. **Upload**, keeping **Automatically manage version and build number**
    unticked, and wait for App Store Connect to accept the build.
-8. **[Publish the release](#release-tags).** After acceptance, not before.
+10. **[Publish the release](#release-tags).** After acceptance, not before.
 
 ## Version and changelog
 
@@ -194,6 +197,10 @@ The script checks the version and changelog before archiving.
 `manageAppVersionAndBuildNumber=false`. Keep those settings for this flow. The
 API-key environment is `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_PATH`. The
 `.p8` file belongs outside the repository.
+
+These can live in `.env` instead of the shell: copy
+[`.env.example`](../.env.example) and fill it in. Exported values override it.
+The script refuses to run if `.env` is ever staged.
 
 ### Archiving in Xcode switches diagnostics off
 
