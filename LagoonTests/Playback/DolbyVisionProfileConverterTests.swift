@@ -4,23 +4,20 @@ import Libavutil
 import Testing
 @testable import Lagoon
 
-/// The profile 7 → 8.1 RPU rewrite: `DolbyVisionProfileConverter`
-/// rewrites every RPU (unspec-62) NAL with libdovi's own
+/// The profile 7 → 8.1 RPU rewrite: `DolbyVisionProfileConverter` rewrites
+/// every RPU (unspec-62) NAL with libdovi's
 /// `dovi_convert_rpu_with_mode(rpu, 2)` and drops the enhancement layer
-/// (unspec-63) wholesale, using `HEVCNALUnitRewriter.rewrite` as the
-/// packet-walking primitive.
+/// (unspec-63), using `HEVCNALUnitRewriter.rewrite` to walk packets.
 ///
-/// Fixtures are dovi_tool's own MEL/FEL pairs from `assets/tests` at the
-/// libdovi-3.4.0 tag: `mel_orig`/`fel_orig` are real profile 7 RPUs,
-/// `mel_to_81`/`fel_to_81` are what its `mel_conversions`/`fel_conversions`
-/// tests (src/tests/rpu.rs) expect after converting to MEL and then to 8.1.
-/// The first two tests below exercise no Lagoon code at all — they confirm
-/// the *vendored library* converts the way dovi_tool's own tests say it
-/// should, before anything else here trusts it. Each constant is the file
-/// as shipped: the 4-byte Annex B start code (`00 00 00 01`), then one
-/// *escaped* RPU (first byte 0x19, the rpu_nal_prefix; no 0x7C 0x01 NAL
-/// header), which is why they go through `dovi_parse_unspec62_nalu` — the
-/// entry point dovi_tool's `_parse_file` uses — and not `dovi_parse_rpu`.
+/// Fixtures are dovi_tool's own MEL/FEL pairs from `assets/tests` at
+/// libdovi-3.4.0: `*_orig` are real profile 7 RPUs, `*_to_81` what its
+/// `mel_conversions`/`fel_conversions` tests expect. The first two tests
+/// exercise no Lagoon code — they confirm the vendored library converts the
+/// way dovi_tool's tests say before anything here trusts it.
+///
+/// Each constant is the file as shipped: a 4-byte Annex B start code then one
+/// *escaped* RPU (first byte 0x19, no 0x7C 0x01 NAL header), hence
+/// `dovi_parse_unspec62_nalu` rather than `dovi_parse_rpu`.
 @Suite("Dolby Vision profile 7 conversion")
 struct DolbyVisionProfileConverterTests {
     /// `DoviRpuOpaque *` is an opaque, forward-declared C struct with no
