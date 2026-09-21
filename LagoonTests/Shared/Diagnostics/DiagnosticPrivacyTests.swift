@@ -15,7 +15,7 @@ import Testing
 @Suite("Diagnostic privacy")
 struct DiagnosticPrivacyTests {
     static let sensitive = [
-        "fixture.example.eu", "secret-token-9f8e7d", "demo-user", "The Film Nobody Should See",
+        "lagoonfix.example.eu", "secret-token-9f8e7d", "demo-user", "The Film Nobody Should See",
         "api_key", "connect.sid", "sessionCookieValue", "Bearer", "It was the best of times",
         "/media/secret", "12c4", "8f3a1c2e", "MediaBrowser",
     ]
@@ -33,7 +33,7 @@ struct DiagnosticPrivacyTests {
     )
 
     static func request() -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://fixture.example.eu/jf/Users/8f3a1c2e/Items/12c4/PlaybackInfo?api_key=secret-token-9f8e7d")!)
+        var request = URLRequest(url: URL(string: "https://lagoonfix.example.eu/jf/Users/8f3a1c2e/Items/12c4/PlaybackInfo?api_key=secret-token-9f8e7d")!)
         request.httpMethod = "POST"
         request.setValue("MediaBrowser Token=\"secret-token-9f8e7d\"", forHTTPHeaderField: "Authorization")
         request.setValue("connect.sid=sessionCookieValue", forHTTPHeaderField: "Cookie")
@@ -44,11 +44,11 @@ struct DiagnosticPrivacyTests {
     @Test func nothingSensitiveSurvivesTheProductionEntryPoints() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
-        let server = URL(string: "https://fixture.example.eu/jf")!
+        let server = URL(string: "https://lagoonfix.example.eu/jf")!
 
         // The API helper, as both clients call it.
         let transportError = NSError(domain: NSURLErrorDomain, code: URLError.secureConnectionFailed.rawValue, userInfo: [
-            NSLocalizedDescriptionKey: "A secure connection to fixture.example.eu could not be made",
+            NSLocalizedDescriptionKey: "A secure connection to lagoonfix.example.eu could not be made",
             NSURLErrorFailingURLErrorKey: Self.request().url! as Any,
         ])
         APIDiagnostics.transportFailed(transportError, request: Self.request(), serverURL: server, client: "jellyfin", startedAt: 0, hub: hub)
@@ -73,7 +73,7 @@ struct DiagnosticPrivacyTests {
         monitor.engineFailed(
             PlaybackEngineFailure(
                 cause: .delivery,
-                message: "The stream could not be opened (https://fixture.example.eu/Videos/12c4/stream?api_key=secret-token-9f8e7d: It was the best of times).",
+                message: "The stream could not be opened (https://lagoonfix.example.eu/Videos/12c4/stream?api_key=secret-token-9f8e7d: It was the best of times).",
                 detail: DemuxError.openFailed("Server returned 5XX for The Film Nobody Should See", code: -1094995529).diagnosticDetail
             ),
             delivery: .negotiated, next: nil, engine: nil
@@ -119,7 +119,7 @@ struct DiagnosticPrivacyTests {
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
         hub.report(.playbackFailed, level: .error, fields: [
             "videoProfile": .string("The Film Nobody Should See"),
-            "errorDomain": .string("fixture.example.eu"),
+            "errorDomain": .string("lagoonfix.example.eu"),
             "container": .string("mkv"),
         ])
         let incident = try #require(sink.incidents.first)
