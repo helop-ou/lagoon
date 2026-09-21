@@ -20,7 +20,7 @@ extension JellyfinClient {
     /// client's dashboard would offer a control that does nothing. Fill it
     /// in when the player grows a handler.
     ///
-    /// Not required for SyncPlay: a fixture 12.0.0 session that never posted
+    /// Not required for SyncPlay: a fixture-server 12.0.0 session that never posted
     /// this still received every group command over the socket (measured
     /// 2026-09-14). It is sent anyway so the session shows up in Jellyfin's
     /// dashboard as a video client that can be controlled.
