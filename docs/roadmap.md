@@ -56,6 +56,12 @@ requests or a live status report:
   direct play and HLS on the remux rung have passed there inside the app. The
   [API guide](jellyfin-api.md) records what that covers. A sustained video
   transcode on 12 is still unexercised.
+- A stalling episode that no longer drops to a transcode, on an Apple TV over
+  a link slow enough to starve the picture. The gate that refuses to start a
+  flushed renderer on a stale sample is pinned by unit tests and both
+  platforms build, but the race it closes only appears when the demux thread
+  sits in a long read. Watch `startPointDrops` climb while the delivery stays
+  `negotiated`, and that a held skip takes itself up when the picture moves.
 - Player dismissal that races a suspended startup request, on an Apple TV.
   The source migration's other lifecycle checks, dismissal/replay and
   episode handoff, showed no change against the pre-migration build; this
