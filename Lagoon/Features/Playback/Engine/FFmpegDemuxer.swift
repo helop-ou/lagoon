@@ -13,10 +13,10 @@ import Libavutil
 /// Where a container decides its own timeline begins.
 ///
 /// MP4, Matroska and Jellyfin's fMP4 all start at zero, so this never came up
-/// until a disc did: MPEG-TS begins at whatever timestamp the muxer felt
-/// like, and WALL·E's Blu-ray starts at 4198 s. Everything above the demuxer
-/// expects media time to start at zero, so the container's origin is
-/// subtracted from every packet and added back onto every seek.
+/// until a disc did: MPEG-TS begins wherever the muxer felt like, and
+/// WALL·E's Blu-ray starts at 4198 s. Everything above the demuxer expects
+/// media time from zero, so the origin is subtracted from every packet and
+/// added back onto every seek.
 nonisolated enum ContainerTimeline {
     /// AV_TIME_BASE, the unit `AVFormatContext.start_time` is expressed in.
     static let microsecondsPerSecond = 1_000_000.0
@@ -280,18 +280,16 @@ nonisolated final class FFmpegDemuxer {
         self.capabilities = capabilities
     }
 
-    /// Whether a stream is handed to VideoToolbox as compressed samples or
-    /// decoded here first. AV1 is offered to VideoToolbox and settled per
-    /// stream at session creation; otherwise libdav1d produces P010/NV12
-    /// image buffers. VP9 is always software here.
+    /// Whether a stream goes to VideoToolbox as compressed samples or is
+    /// decoded here. AV1 is offered and settled per stream at session
+    /// creation; otherwise libdav1d produces P010/NV12. VP9 is always software.
     ///
-    /// `interlaced` is the stream's own field order, as libavformat probed
-    /// it. Interlaced H.264 goes to the software decoder because that is
-    /// the only path with a deinterlacing stage: VideoToolbox on
-    /// tvOS would hand back woven field pairs and the picture would comb on
-    /// every motion. Progressive H.264 is untouched. HEVC has no software
-    /// route here, so it is compressed whatever the field order says, and
-    /// the device profile keeps asking the server for interlaced HEVC.
+    /// `interlaced` is the stream's own probed field order. Interlaced H.264
+    /// takes the software decoder because that is the only path with a
+    /// deinterlacing stage — VideoToolbox would hand back woven field pairs
+    /// and the picture would comb on motion. Progressive H.264 is untouched.
+    /// HEVC has no software route here, so it stays compressed whatever the
+    /// field order says.
     static func usesCompressedVideoPath(
         codecID: AVCodecID,
         capabilities: PlaybackCapabilities,
