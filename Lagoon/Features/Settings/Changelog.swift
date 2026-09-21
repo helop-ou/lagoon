@@ -48,6 +48,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.1",
+            build: "107",
+            released: "September 2026",
+            headline: "The privacy policy and support pages are a scan away.",
+            sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "Settings, About now lists Lagoon's privacy policy and its support page. On iPhone and iPad they open in your browser. On Apple TV, which has no browser, each one shows a code to scan with your phone and the address to type if you would rather. Both are also in About Lagoon on the sign in screens, so you can read them before you have an account.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.1",
             build: "106",
             released: "September 2026",
             headline: "Home is yours to arrange.",
