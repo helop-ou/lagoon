@@ -73,12 +73,29 @@ Tag a build when it is distributed, and only then. This matches the rule that
 build numbers advance only for a build going out; tagging every bump makes the
 list meaningless.
 
-Tags are keyed on the build number, not the marketing version:
+Tags are keyed on the build number, not the marketing version, and a build is
+released with one command:
 
 ```sh
-git tag build-107
-git push origin build-107
+scripts/publish-release.sh 107
+scripts/publish-release.sh 107 --dry-run    # print what it would do
 ```
+
+**A tag on its own only reaches the Tags tab.** The Releases tab holds a
+separate object created on top of a tag, so `git push origin build-107` alone
+looks done and publishes nothing. The script creates the tag and the release
+together, takes the body from `CHANGELOG.md`, and marks anything below 1.0 a
+pre-release.
+
+Run it after the build is uploaded and accepted, not before. It records a
+binary that exists. Everything it does before creating the release is a guard,
+because the mistakes are silent and a published tag is hard to withdraw: it
+refuses a dirty tree, a build number the project does not declare, a missing
+changelog entry, a `CHANGELOG.md` that has drifted from `Changelog.swift`, a
+tag already in use, and a revision the remote does not have yet. Where the
+revision is further along than the commit that set the build number, it says so
+and asks, since which revision was archived is not recorded anywhere. Pass
+`--rev` when the archive came from something other than `HEAD`.
 
 The build number is the stable identity of a binary. It is what About shows a
 viewer and what they quote in a bug report, while `MARKETING_VERSION` spans
@@ -91,8 +108,13 @@ rather than merely encourages. See the native-component gate under [Public
 release](#public-release).
 
 Tagging starts clean at the first published build. Nothing earlier is tagged
-retroactively: the history was rewritten before publication, so no earlier
-revision resolves, and no build before it was distributed outside the team.
+retroactively, because no build before it was distributed outside the team, so
+nobody holds a binary whose corresponding source needs identifying. The history
+was rewritten before publication, which invalidates every revision quoted in
+older records, but the commits themselves survived the rewrite and the build
+bumps among them remain findable — backfilling tags is possible if the record
+is ever wanted, and it is the Releases tab that should stay limited to builds
+that actually went out.
 
 ## Internal TestFlight
 
@@ -283,11 +305,12 @@ numbers and platform assignments in App Store Connect. External TestFlight
 review and App Store submission are separate actions. An internal-only
 uploaded build cannot be repurposed as a public candidate.
 
-Once the build is accepted, tag the exact revision it was archived from and
-push the tag, following [Release tags](#release-tags). Do this from the
-revision that was archived rather than from whatever `main` has reached since.
-Without the tag a recipient has no way to identify the corresponding source,
-which is what the native licences require.
+Once the build is accepted, run `scripts/publish-release.sh <build>` to tag the
+exact revision it was archived from and publish the release, following [Release
+tags](#release-tags). Pass `--rev` if that revision is not `HEAD`. Without it a
+recipient has no way to identify the corresponding source, which is what the
+native licences require, and GitHub attaches that source archive to the release
+itself.
 
 ### Review package
 
