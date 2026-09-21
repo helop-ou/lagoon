@@ -96,6 +96,11 @@ ownership boundaries and verification requirements.
 - Comment on the reason for a constraint, especially ownership or timing.
   Remove dead code. Git keeps the history. Do not leave session narratives or
   commented-out code in active source files.
+- Keep ticket keys out of comments and commit messages. A comment explains the
+  constraint it guards; a reader who needs the history has the ticket, and a
+  key in the source only ages. The same goes for the evidence behind a fix —
+  incident identifiers, measurement runs, attempt counts and dates belong in
+  `docs/` or its `reference/` notes, where they can be kept current.
 
 ## State, concurrency, and boundaries
 
