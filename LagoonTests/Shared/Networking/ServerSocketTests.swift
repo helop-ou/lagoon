@@ -11,7 +11,7 @@ struct ServerSocketTests {
 
     /// `Data` is a bare integer here, which is not a JSON object — the
     /// reason the payload is re-serialised with fragments allowed rather
-    /// than decoded as a dictionary. 60 is what fixture 12.0.0 sends.
+    /// than decoded as a dictionary. 60 is what the fixture server sends on 12.0.0.
     @Test func forceKeepAliveCarriesABareInteger() throws {
         let message = try #require(envelope(#"{"MessageType":"ForceKeepAlive","Data":60}"#))
         #expect(message.messageType == "ForceKeepAlive")
