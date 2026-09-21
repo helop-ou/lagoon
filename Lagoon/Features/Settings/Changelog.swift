@@ -47,7 +47,7 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
-            version: "0.1",
+            version: "0.1.0",
             build: "107",
             released: "September 2026",
             headline: "The privacy policy and support pages are a scan away.",
