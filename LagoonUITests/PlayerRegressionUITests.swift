@@ -737,21 +737,18 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         waitForState(in: app, timeout: 12) { $0.double("time") > end.double("time") + 1 }
     }
 
-    /// Jaagop's 2026-09-10 report, exactly: download a subtitle from the
-    /// provider, go back to the player, come back to Subtitles and switch to
-    /// another track. A downloaded track is the one selection that changes
-    /// the item on the server — the sidecar is uploaded and attached — and
-    /// Jellyfin renumbers a source's streams when that happens, so the
-    /// switch after it is the one that could hand the demuxer a stream index
-    /// meant for a different stream and leave the picture stopped on a
-    /// spinner. The journey therefore asserts the playhead keeps moving,
-    /// not merely that the selection changed, and repeats the switch after a
-    /// relaunch, when the attached sidecar is a permanent part of the item.
+    /// Download a subtitle from the provider, return to the player, come back
+    /// to Subtitles and switch tracks. A downloaded track is the one selection
+    /// that changes the item on the server — the sidecar is uploaded and
+    /// attached — and Jellyfin renumbers a source's streams when it does, so
+    /// the switch after it could hand the demuxer an index meant for another
+    /// stream and stop the picture on a spinner. So this asserts the playhead
+    /// keeps moving, not just that the selection changed, and repeats after a
+    /// relaunch when the sidecar is permanent.
     ///
-    /// Runs against the synthetic provider fixture
-    /// (`scripts/jellyfin-regression-fixture.py --subtitle-provider`, driven
-    /// by `scripts/test-session-recovery.py --subtitle-provider`); no public
-    /// server offers a provider whose results can be downloaded on demand.
+    /// Needs the synthetic provider fixture
+    /// (`scripts/jellyfin-regression-fixture.py --subtitle-provider`); no
+    /// public server offers downloadable provider results.
     func testDownloadedSubtitleThenEmbeddedSwitchKeepsPlaying() throws {
         guard let address = ProcessInfo.processInfo.environment["LAGOON_SESSION_FIXTURE"],
               let server = URL(string: address), server.host == "127.0.0.1" else {
@@ -1612,21 +1609,18 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     /// The same panel sweep as `testPlayerPanelPreviewPerformance`, but over
-    /// live playback instead of the Debug gallery's static preview.
-    /// The gallery has no engine behind it, so it cannot show what the
-    /// player's own per-tick invalidation costs the panel's focus animations;
-    /// this case is the number that can.
+    /// live playback rather than the Debug gallery's static preview. The
+    /// gallery has no engine behind it, so it cannot show what per-tick
+    /// invalidation costs the panel's focus animations.
     ///
-    /// Deliberately assertion-free inside the measured block: the focus
-    /// queries are there to make each press settle before the next one, and a
-    /// hard assertion on focus over live playback is exactly the kind of
-    /// flake that would make the measurement unusable. What the sweep
-    /// actually did is checked once, outside the block.
+    /// Assertion-free inside the measured block on purpose: the focus queries
+    /// only settle each press, and a hard assertion on focus over live
+    /// playback is the kind of flake that makes a measurement unusable. What
+    /// the sweep did is checked once, outside the block.
     ///
-    /// `XCTHitchMetric` is asked for to match `testPlayerPanelPreviewPerformance`,
-    /// but the tvOS simulator reports no hitch figures for either case; the
-    /// CPU counters are the numbers to read here. Wall time is
-    /// remote-input-bound and will not move.
+    /// `XCTHitchMetric` matches the sibling case, but the tvOS simulator
+    /// reports no hitch figures; read the CPU counters. Wall time is
+    /// remote-input-bound.
     func testLivePlayerPanelSweepPerformance() throws {
         let app = launchPlayer(
             title: "live-panel-sweep-regression",
@@ -2954,20 +2948,16 @@ final class PlayerRegressionUITests: PlayerUITestCase {
 
     /// Guards the HLS cases against silently testing something else.
     ///
-    /// Jellyfin, not the client, chooses the delivery method, and it chooses
-    /// it from the device profile. `-debug.simulatorTranscode` swaps in
-    /// `DeviceProfile.simulatorRegression`, which only withdraws HEVC and
-    /// Dolby Vision — it still advertises H.264/VC1 direct play, so a server
-    /// whose items are H.264 answers `DirectPlay` and no HLS playlist is ever
-    /// opened. That is what the public demo does: every item there is H.264,
-    /// so these two cases asserted `Transcode`, failed on the first
-    /// assertion, and never reached the segment-boundary window they exist
-    /// for (audit A18).
+    /// Jellyfin chooses the delivery method from the device profile.
+    /// `-debug.simulatorTranscode` swaps in `DeviceProfile.simulatorRegression`,
+    /// which withdraws only HEVC and Dolby Vision — H.264 still direct-plays,
+    /// so the public demo (every item H.264) answers `DirectPlay` and no HLS
+    /// playlist is opened. These two cases asserted `Transcode` and never
+    /// reached the segment-boundary window they exist for.
     ///
     /// A missing fixture is not a player regression, so the public-demo lane
-    /// skips with an explicit reason. A supplied fixture server is expected to
-    /// carry content that must transcode, so `DirectPlay` there is a genuine
-    /// failure and stays one.
+    /// skips with a reason. A supplied fixture server is expected to carry
+    /// content that must transcode, so `DirectPlay` there stays a failure.
     private func requireNegotiatedTranscode(
         _ state: RegressionState,
         file: StaticString = #filePath,
