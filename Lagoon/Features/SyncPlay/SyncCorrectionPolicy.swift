@@ -2,17 +2,14 @@ import Foundation
 
 /// How a member that has drifted from its group gets back in line.
 ///
-/// A group member's clock is never exactly the group's: the start instant
-/// is honoured to within a frame or two, and from there decode, display
-/// cadence and the odd swallowed stall pull it apart by tens of
-/// milliseconds a minute. Correcting that with a seek every time would be
-/// worse than the drift — a seek re-primes the whole pipeline and is
-/// visible. So the answer is graded: ignore what nobody can see, ride the
-/// rate back for anything a nudge can absorb, and seek only when the
-/// member is somewhere else entirely.
+/// A member's clock is never exactly the group's: the start instant is
+/// honoured to a frame or two, then decode, display cadence and swallowed
+/// stalls pull it apart by tens of milliseconds a minute. Seeking every time
+/// would be worse than the drift — a seek re-primes the pipeline and is
+/// visible. So it is graded: ignore what nobody can see, ride the rate back
+/// for anything a nudge absorbs, seek only when the member is elsewhere.
 ///
-/// Pure, so the thresholds are pinned by tests rather than by watching two
-/// screens side by side.
+/// Pure, so the thresholds are pinned by tests.
 nonisolated enum SyncCorrectionPolicy {
     /// Below this nothing is done. Lip sync tolerance is around 45 ms of
     /// audio lead; two members 60 ms apart are watching the same thing, and
