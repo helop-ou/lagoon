@@ -5,16 +5,13 @@ import UIKit
 
 /// Builds the full-screen images the Top Shelf carousel shows.
 ///
-/// **The carousel has no title to set.** `TVTopShelfCarouselItem` inherits
-/// only `playAction`, `displayAction` and `setImageURL` from
-/// `TVTopShelfItem`, and adds `contextTitle`, `summary`, `genre` and
-/// `duration`. There is no `title` property the way `TVTopShelfSectionedItem`
-/// has one, so the name of the thing has to be part of the artwork. That is
-/// also what the Apple TV app does.
+/// **The carousel has no title to set.** `TVTopShelfCarouselItem` has no
+/// `title` property the way `TVTopShelfSectionedItem` does, so the name has to
+/// be part of the artwork — as in the Apple TV app.
 ///
-/// The app composes and the extension only reads, which keeps to the rule
-/// that the extension holds no credentials and does no networking: these are
-/// finished JPEGs in the shared container, addressed by file URL.
+/// The app composes and the extension only reads, keeping the extension free
+/// of credentials and networking: these are finished JPEGs in the shared
+/// container, addressed by file URL.
 nonisolated enum TopShelfArtwork {
     /// Full screen at @2x. tvOS lays out in 1920x1080 points.
     static let scale2x = CGSize(width: 3840, height: 2160)
