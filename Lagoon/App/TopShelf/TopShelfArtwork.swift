@@ -65,23 +65,18 @@ nonisolated enum TopShelfArtwork {
 
     /// A format that depends on nothing outside this function.
     ///
-    /// This used to be `UIGraphicsImageRendererFormat.preferred()`, and
-    /// Apple's header is explicit that `preferred` reads *the main screen's
-    /// current configuration* — for `scale`, and for the extended-range
-    /// setting. Both are wrong here.
-    ///
-    /// On an Apple TV attached to an HDR television, `preferred` returns an
-    /// extended-range format, and **`jpegData` returns nil for an
-    /// extended-range image** — so every composite failed and the shelf
-    /// reported "no artwork could be built for any of 8 titles".
+    /// `UIGraphicsImageRendererFormat.preferred()` reads the main screen's
+    /// current configuration for both `scale` and extended range. On an Apple
+    /// TV attached to an HDR television that returns an extended-range format,
+    /// and **`jpegData` returns nil for an extended-range image** — every
+    /// composite failed with "no artwork could be built for any of 8 titles".
     /// The simulator's screen is SDR, which is why it never showed there.
     /// Reading the main screen from `render`'s background thread was a second
     /// problem in the same call.
     ///
     /// Nothing was gained by asking: `scale` and `opaque` were overridden
-    /// immediately, and the range is one Lagoon should be choosing rather
-    /// than inheriting, because the output is a JPEG in a shared container
-    /// and not something drawn to this screen.
+    /// immediately, and the output is a JPEG in a shared container, not
+    /// something drawn to this screen.
     private static func opaqueFormat() -> UIGraphicsImageRendererFormat {
         let format = UIGraphicsImageRendererFormat()
         // The renderer is already working in pixels; letting it apply the
@@ -186,22 +181,17 @@ nonisolated enum TopShelfArtwork {
     /// Where composed artwork lives inside the App Group container.
     ///
     /// **`Library/Caches`, because tvOS allows nothing else.** An Apple TV
-    /// gives an app 500 KB of persistent local storage, through
-    /// `NSUserDefaults`, and everything beyond that has to be purgeable by
-    /// the system. Sixteen 4K-class JPEGs at the container's root is not
-    /// purgeable, and a real device refuses the write: build 60 reported
-    /// "could not write to the shared container" for all eight titles while
-    /// every simulator wrote them happily, because a simulator's container is
-    /// a directory on a Mac and honours none of this.
+    /// gives 500 KB of persistent storage through `NSUserDefaults`; everything
+    /// beyond must be purgeable. Sixteen 4K-class JPEGs at the container root
+    /// is not, and a device refuses the write — build 60 reported "could not
+    /// write to the shared container" for all eight titles while simulators
+    /// wrote them happily.
     ///
-    /// Purgeable is also the honest description. The artwork is derived,
-    /// keyed by item id, and cheap to rebuild, and `publishIfEmpty` already
-    /// redraws it when the directory comes back empty — which is exactly what
-    /// happens after tvOS reclaims the space.
+    /// Purgeable is honest anyway: the artwork is derived, keyed by item id,
+    /// and `publishIfEmpty` redraws it when the directory comes back empty.
     ///
-    /// **Mirrored by `ContentProvider.artworkDirectory`.** The extension
-    /// resolves the same path against its own container, and the two are
-    /// hand-kept: change one, change the other.
+    /// **Mirrored by `ContentProvider.artworkDirectory`** — change one, change
+    /// the other.
     static let containerSubpath = "Library/Caches/TopShelf"
 
     /// The shared directory, created on demand. Nil when the App Group is not
