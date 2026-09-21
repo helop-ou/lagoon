@@ -1012,17 +1012,17 @@ final class PlaybackController {
         return taskCancelled || closed
     }
 
-    /// Which resume position wins when a title starts. An override always
-    /// outranks the rest — a fallback retry's exact landing spot, or the
-    /// position a SyncPlay group is at. Neither is a stored
-    /// position the viewer could be overruling: one is the internal
-    /// recovery of a rung the viewer never chose, the other is where
-    /// everyone else already is. So both apply even when the viewer chose
-    /// to start over. Short of
-    /// that, starting from beginning always starts at 0: a downloaded
-    /// title's own local position only resumes it in place of the
-    /// server's last known position, since a fresh negotiation never runs
-    /// to ask the server anything for a local file.
+    /// Which resume position wins when a title starts.
+    ///
+    /// An override always outranks the rest — a fallback retry's exact landing
+    /// spot, or where a SyncPlay group already is. Neither is a stored position
+    /// the viewer could be overruling, so both apply even when the viewer chose
+    /// to start over.
+    ///
+    /// Short of that, starting from the beginning always starts at 0. A
+    /// downloaded title's local position resumes it only in place of the
+    /// server's last known position, since a fresh negotiation never runs for
+    /// a local file.
     nonisolated static func resumeStartSeconds(
         fallbackOverrideSeconds: Double?,
         startFromBeginning: Bool,
