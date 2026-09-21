@@ -71,6 +71,25 @@ outright: backgrounding leaves the old session alive on purpose, and the
 resume seek makes a fresh one. Both guards belong on the decoder path and the
 renderer path. The decoder path once had neither.
 
+A renderer that has just been flushed is the other way a verdict gets faked.
+`AVSampleBufferVideoRenderer` starts on a random-access point or on nothing;
+anything else comes back as `didFailToDecodeNotification`, which reads as
+`.undecodable`. The sample that reaches it that way need not be the seek's
+landing. The demux thread can be parked inside a read when the flush happens,
+and the packet that read returns belongs to the position being left — it goes
+into the emptied queue and straight out to the renderer as sample one, before
+the loop has even noticed the seek. So `pumpVideo` asks
+`PlaybackRendererStartPolicy` before it starts a renderer, and refuses a
+sample the container does not call a keyframe. A container keyframe is
+admitted, which keeps the open-GOP I picture the demuxer deliberately hands
+over, and the search is bounded so a stream whose keyframes are never flagged
+still shows a picture. The window is as long as the demux thread sits in a
+read, so a stalling episode hits it and a healthy scrub does not: three
+attempts on one MPEG-TS remux each transcoded at the same auto-skip target,
+with the renderer failing 4, 6 and 384 ms after the seek. Every incident now
+carries `refusedSampleMs`, the stamp of the sample that was refused, and
+`startPointDrops`, how many this gate has dropped.
+
 Progressive H.264 uses the compressed sample-buffer path. Interlaced H.264 is
 software-decoded and deinterlaced, on the stream's probed field order, never
 the server's flag. HEVC is decoded ahead through VideoToolbox. AV1 uses
@@ -134,6 +153,27 @@ as `DTS-HD MA - 5.1`. Matching on it silently returns the first one rather
 than the track the viewer picked. The engine appends the position to track
 names that collide, because otherwise the rows cannot be told apart in the
 panel or recognised again afterwards.
+
+### Subtitle track selection
+
+The same ladder, in the subtitles' own ordinal space: embedded tracks first,
+then external ones, with 0 meaning none. `SubtitleTrackMemoryStore` holds one
+choice per series per account, beside the audio one and under its own key.
+Both are `TrackMemoryStore`, which owns the re-read, merge, evict and persist
+mechanism the two would otherwise keep two copies of; the policies stay apart,
+because what makes a layout's shape differs and because off is an answer here.
+
+Off is the difference worth knowing. There is no such thing as no audio, but
+"no subtitles" is a deliberate choice and the one a server default is most
+likely to overrule on the next episode, so it is stored like any other — and
+it describes no track, so no layout change can retire it. A layout's shape
+includes forced, hearing-impaired and external, because those are exactly the
+distinctions a release makes between tracks that otherwise share a language.
+Subtitle search appends tracks while the episode plays, so the engine can list
+more than the layout captured at the start. The captured prefix still lines
+up: the write asks for at least as many rather than exactly as many, and
+refuses an ordinal naming one of the appended tracks, which would mean nothing
+next episode.
 
 ## Lifecycle and memory
 
@@ -462,6 +502,14 @@ fill redraws as time passes, so a newly mounted overlay shows elapsed progress
 immediately, instead of animating from a previous view value. An overlay is
 created at the moment its countdown arms, so there is no earlier value to
 animate from. That is why both fills used to read as full for their whole run.
+A countdown runs on wall time, so it comes due during a stall as readily as
+during playback. The commit waits: a skip due while the engine is buffering is
+held and taken up when the picture is moving again, because seeking spends the
+very buffer the stall is waiting on. It is taken up only while the playhead is
+still inside its segment — past the end, seeking there would drag the viewer
+backwards through an intro they have now watched. Select and a tap are the
+viewer asking for it now and go straight through.
+
 An accepted hand-off keeps its timing: the card outlives `playNext` while the
 successor is prepared. A bar that emptied underneath it would read as the
 offer being withdrawn. tvOS pauses on background as before. See [system
