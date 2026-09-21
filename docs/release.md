@@ -19,7 +19,7 @@ xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
 xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
 xcodebuild test -scheme Lagoon \                  #  5. both builds, then tests
   -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
-#  6. commit, one file per commit, and push
+#  6. commit, one change per commit, and push
 cp .env.example .env                              #  7. once: fill in the DSN
 scripts/upload-testflight.sh both --archive-only  #  8. archive with the DSN
 #  9. upload in Xcode's Organizer, then wait for acceptance
