@@ -416,6 +416,127 @@ opening or navigating between categories must not change a saved preference.
   Glass tabs and actions above and inside it, avoiding nested glass; its
   height is driven by the selected tab's content.
 
+## Themes
+
+Role meanings and mechanics behind the
+[guide](../design-system.md#themes).
+
+A theme is a `ThemePalette` of eight roles. `accent` colours progress fills,
+selection marks, the jellyfish, and the focus halo's fallback. `ground`
+colours card washes and the ambient glow. `background` is the surface behind
+content. `surface` colours the rows of a grouped form, one step above the
+background. Nil keeps the system's row grey, which belongs on black and
+clashes on rose. `glowDepth` is the third glow colour. `controlTint` is the
+tint iOS's native controls take, kept pale because it fills whole toggle
+tracks and not only the selected tab. `artworkTint` blushes into every artwork
+glow and focus halo through `Theme.glow(for:)`, so a hero never hides the
+theme. `chrome` is the wash behind iOS's tab and navigation bar glass, applied
+by `themedChrome()` on each tab's root screen and every themed form. Keep the
+wash faint: at 0.7 it turned the Liquid Glass into a flat pane with content
+smearing through it, so Baby Pink uses 0.25 of the ground. Text never takes a
+theme colour. Two themes exist. `AppTheme.lagoon` is the Twin Shores palette
+over true black, with controls in a pale aqua that is the accent lifted 40%
+toward white, and no surface, artwork, or chrome tint. `AppTheme.babyPink`
+uses `#FFB7CF` accents over a `#5E2848` rose ground, a `#1F1019` background,
+and `#33182A` rows, with the accent as both tints and a faint wash of the
+ground as the chrome. Keep the list short: a theme is a considered set checked
+over every screen, not a hue slider.
+
+Screens read colours from `Theme.accent`, `Theme.ground`, `Theme.background`,
+and `Theme.glow` inside `body`, never from the brand tokens or `Color.black`
+directly. That way a change re-renders through Observation without environment
+plumbing. Page backgrounds and the fades that carry artwork into the page use
+`Theme.background`. A scrim over artwork inside a card stays black. A grouped
+form on iOS is a `ThemedForm`, never a bare `Form` or `List`. It puts the page
+on the background, every row on the surface, and the bars in the chrome, so a
+new settings page is themed by using it and nothing else. `TouchSettingsPage`
+wraps it for the settings categories. Acknowledgements, Downloads, Home Rows,
+and the Seerr season picker use it directly. A plain scrolling page — the
+changelog, a licence, Seerr requests — sits on `Theme.background` like every
+browse screen. Only the player's own panel and the DEBUG Developer page keep
+the system's form. The player surface, its overlays, subtitles, and the Top
+Shelf stay pure black and outside the theme. tvOS controls are never tinted,
+per the focused lozenge rule above, and its tab bar keeps the system glass.
+`themedControls()` and `themedChrome()` apply `controlTint` and `chrome` on
+iOS only.
+
+The choice belongs to the Jellyfin profile. `SessionStore` points
+`ThemeStore.shared` at the active account along with the other per-account
+stores, passing itself as the owner. A nil account only counts from the owner
+that activated the current one. That is the `DownloadStore` rule: SwiftUI
+constructs the root's session store more than once, and the extras announce no
+account. Nobody active keeps the last profile's theme showing and only stops
+saving. So the account picker, the sign-in screen, and the add-account flow
+wear the look of whoever was just there. An account waiting to sign in again
+after its session expired wears its own. A launch with nobody remembered shows
+the brand. Those screens sit on `GroundBackground`, the theme's `ground`, with
+the jellyfish in the theme's accent.
+
+The choice persists under `appearance.theme.<accountID>`, which
+`AccountLocalData` removes with the account and which the regression reset
+clears. Settings › Appearance offers the themes on both platforms. Choosing
+one plays `ThemeBloomOverlay` from the root: a bloom of the new accent with
+the theme's `bloomMotif` drifting up through it for under two seconds. Baby
+Pink's motif is flowers; Lagoon's is the brand's jellyfish, beating as it
+rises, using the same `JellyfishGeometry` the sign-in screens swim. A new
+theme names its motif in `AppTheme.bloomMotif`. Reduce Motion reduces the
+bloom to a plain fade. The bloom plays for a viewer's choice, never for
+loading a saved one.
+
+Use native `.glass` actions and the existing circular control shape where
+appropriate. The iOS player's center transport uses `.glass(.clear)` to keep
+the video visible through the controls. Do not introduce `.glassProminent`.
+The tvOS player panel uses regular material for content with separate glass
+tabs/actions; iOS uses a native resizable options sheet. Avoid nested glass.
+Use translucent material for cards over credits so text underneath is blurred.
+
+## Detail pages
+
+How the shared scaffolding resolves per platform. The
+[guide](../design-system.md#components) carries the rules; this is the layout.
+
+On a phone or a compact-width iPad window the landscape key art is
+  the hero for both orientations, as Infuse frames it. In portrait, the hero
+  fills `detailBackdropHeroShare` of the height with the art's middle, cropped
+  at the sides. It centres the title, facts, a wide Play button capped at
+  `detailPlayButtonMaxWidth`, and the circular actions over its lower part,
+  with the whole synopsis below. In landscape, the art fills the window edge
+  to edge, centred. Since a phone's window is wider than 16:9, a little of the
+  top and bottom is trimmed rather than the sides padded. Title art, the
+  actions, and a smaller Play sit on one row along the lower part, with the
+  facts and synopsis following below the fold. A title with no backdrop falls
+  back to its poster. In portrait it's top-anchored; in landscape it's shown
+  whole over a blurred and dimmed copy of itself, using
+  `detailPosterAmbientBlur` and `detailPosterAmbientDecodeSize`. On a phone,
+  every secondary control in that row is a glass circle, including From
+  Beginning, so the row never folds into a column. The "Resume from" caption
+  sits under the Resume pill rather than under the block. Those circles are
+  `DetailCircleButton`, and `DetailCircleMenu` for the download control's
+  menus: a plain button under `.glassEffect(.regular.interactive(), in:
+  .circle)`. Don't use `.buttonStyle(.glass)` with a circular border shape
+  here: its pressed highlight is a capsule sized to the label, and it
+  showed through the circle as a lozenge. Regular-width iPad windows
+  keep the landscape backdrop, with more of it above the title, and the
+  leading column. tvOS keeps its own order. Series playback actions describe
+  the episode that will play: the focused card, else the server's up-next
+  episode, else the first episode of the visible season. That way a finished
+  show still offers Play. The watched toggle stops one step earlier, at the
+  show itself, because on a finished show it clears the whole show rather than
+  episode one. The page opens on the up-next episode's season; a finished show
+  opens on its first regular season, not Specials. The episode rail's position
+  is a `scrollPosition(id:)` binding. The page sets it only when the rail
+  changes hands: on load, a season pick, or after playback. Browsing never
+  sets it, or the rail would jump under a moving focus. The rail's gutter is a
+  scroll content margin so a scrolled-to episode lands at the gutter and a
+  focused card's lift still clears the edge. After playback the page follows
+  the server's up-next answer, seasons away if need be, and drops any card
+  picked before the session. On tvOS the series synopsis reserves three lines,
+  using `lineLimit(3, reservesSpace: true)`. That includes an episode without
+  one, because the synopsis sits above the rail and follows the focused
+  episode. Watched episodes carry `WatchedMark`, a checkmark on the same dark
+  disc as the download badge, both sized by `cardMarkSize` and inset by
+  `cardMarkInset`.
+
 ## Image loading
 
 This explains the loader's shape; the
