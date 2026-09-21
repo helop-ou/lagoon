@@ -341,22 +341,19 @@ nonisolated enum SampleBufferFactory {
         return status == noErr ? description : nil
     }
 
-    /// The stream's non-square pixel geometry, or nil when it is square,
-    /// near enough to square to be invisible, or the container never said
-    /// (libavformat reports 0/1 for unknown).
+    /// The stream's non-square pixel geometry, or nil when it is square, near
+    /// enough to be invisible, or unknown (libavformat reports 0/1).
     ///
-    /// Returning nil rather than 1:1 keeps every format description that
-    /// works today byte-identical: this sits on the path taken by every
-    /// h264/hevc title, and the same description is handed to
-    /// `AVDisplayCriteria` for tvOS display-mode matching and to
+    /// nil rather than 1:1 keeps every format description that works today
+    /// byte-identical: this is on the path of every h264/hevc title, and the
+    /// same description goes to `AVDisplayCriteria` and
     /// `VTDecompressionSessionCreate`.
     ///
-    /// The 1% tolerance matters as much as the square case. Real files carry
-    /// rounding artifacts — 1744:1745 on a 4K remux and 180224:180219 on an
-    /// AVI both appear in practice — and honouring those would attach an
-    /// extension, and change those descriptions, to correct a geometry error
-    /// of a hundredth of a percent. Genuine anamorphic PARs are far coarser:
-    /// 16:15, 12:11, 32:27 and 64:45 are all at least 6% off square.
+    /// The 1% tolerance matters as much. Real files carry rounding artifacts —
+    /// 1744:1745 on a 4K remux, 180224:180219 on an AVI — and honouring those
+    /// would change those descriptions to correct a hundredth of a percent.
+    /// Genuine anamorphic PARs are far coarser: 16:15, 12:11, 32:27 and 64:45
+    /// are all at least 6% off square.
     static func pixelAspectRatio(_ sar: AVRational) -> (horizontal: Int32, vertical: Int32)? {
         guard sar.num > 0, sar.den > 0 else { return nil }
         // Exact integer form of |num/den - 1| >= 1%.
