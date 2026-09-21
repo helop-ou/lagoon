@@ -17,7 +17,7 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
-## 0.1.0 (107)
+## 0.2.0 (107)
 
 September 2026
 
