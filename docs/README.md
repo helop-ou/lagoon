@@ -22,6 +22,11 @@ lane](reference/regression-lane.md). Read them for the reasoning and the
 measurements behind a particular implementation. Some describe experiments on
 a specific build, and the code may have moved on since.
 
+[Codec support](codec-support.md) is generated from `DeviceProfile.everything`
+by [the codec script](../scripts/generate-codec-support.sh), so the published
+table is the same envelope the app sends Jellyfin and cannot overstate what
+direct plays. Run it with `--check` to fail on drift rather than ship it.
+
 The [native dependency inventory](reference/native-dependency-inventory.json)
 is generated. Regenerate it with [the inventory
 script](../scripts/inventory-native-dependencies.py) whenever the linked
