@@ -239,7 +239,7 @@ nonisolated enum DiagnosticSchema {
         return charactersAllowed && !looksLikeAnAddress(text)
     }
 
-    /// The charset admits `fixture.example.eu` and `192.168.1.10`, which no
+    /// The charset admits `lagoonfix.example.eu` and `192.168.1.10`, which no
     /// identifier this app reports ever looks like. A dotted token whose
     /// last label is two or three lowercase letters, or whose labels are
     /// all numeric, is treated as an address and refused. Error domains
