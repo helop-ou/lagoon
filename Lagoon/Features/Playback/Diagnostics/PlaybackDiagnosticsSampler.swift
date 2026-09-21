@@ -33,13 +33,13 @@ final class PlaybackDiagnosticsSampler {
     /// A console time series of the software decode path, every two seconds.
     ///
     /// The HUD shows the same numbers, but a HUD reading is one glance at one
-    /// moment, and the question this ticket is stuck on is a *curve*: cost per
-    /// frame climbs from 31 ms to past the 41.7 ms budget within half a
-    /// minute, and whether the queue depth and footprint move with it is what
-    /// separates memory pressure from heat from scene complexity. Reading that
-    /// off a television by eye loses exactly the correlation that matters.
+    /// moment and the question is a *curve*: cost per frame climbs from 31 ms
+    /// past the 41.7 ms budget within half a minute, and whether queue depth
+    /// and footprint move with it separates memory pressure from heat from
+    /// scene complexity. Reading that off a television by eye loses the
+    /// correlation.
     ///
-    /// `devicectl ... --console` streams this from a real Apple TV, where the
+    /// `devicectl … --console` streams it from a real Apple TV, where the
     /// unified log is out of reach. Off unless `-debug.decodeTrace YES`.
     func startTrace(
         engine: SampleBufferPlayerEngine,
