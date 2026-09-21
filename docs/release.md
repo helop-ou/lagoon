@@ -46,6 +46,54 @@ screen as **New features**, **Improvements**, or **Bug fixes**. Keep related
 notes together under the category that best describes what a viewer will
 notice. The installed build is badged in About.
 
+### The published changelog
+
+[`CHANGELOG.md`](../CHANGELOG.md) is generated from `Changelog.swift` by
+`scripts/generate-changelog.sh`. Regenerate it whenever an entry changes.
+`--check` fails if it has drifted, and the file says not to edit it by hand.
+
+Only the Swift file is written. The About screen, the Markdown file and a
+GitHub release body are three renderings of one source, so they cannot
+disagree. The rules above govern all of them, and `ChangelogTests` enforces
+what it can: the declared build has an entry, categories are in order, no em
+dashes.
+
+```sh
+scripts/generate-changelog.sh             # regenerate the document
+scripts/generate-changelog.sh --check     # fail if it is out of date
+scripts/generate-changelog.sh --notes 107 # print one build's notes
+```
+
+`--notes` prints to stdout for pasting into a release body, and fails rather
+than printing nothing when the build has no entry.
+
+### Release tags
+
+Tag a build when it is distributed, and only then. This matches the rule that
+build numbers advance only for a build going out; tagging every bump makes the
+list meaningless.
+
+Tags are keyed on the build number, not the marketing version:
+
+```sh
+git tag build-107
+git push origin build-107
+```
+
+The build number is the stable identity of a binary. It is what About shows a
+viewer and what they quote in a bug report, while `MARKETING_VERSION` spans
+many builds and changes shape underneath it. A version-keyed tag would need
+revisiting at the next bump; a build-keyed one never does.
+
+This is also the mechanism by which someone holding a binary finds the source
+it was built from, which the vendored FFmpeg libraries' licence requires
+rather than merely encourages. See the native-component gate under [Public
+release](#public-release).
+
+Tagging starts clean at the first published build. Nothing earlier is tagged
+retroactively: the history was rewritten before publication, so no earlier
+revision resolves, and no build before it was distributed outside the team.
+
 ## Internal TestFlight
 
 One-time setup uses the development team recorded as `DEVELOPMENT_TEAM` in the
@@ -198,7 +246,8 @@ revision.
 
 1. Select the final source revision, a deliberate marketing version, and the
    next unused repository-owned build number. Write the corresponding
-   changelog entry.
+   changelog entry, then regenerate `CHANGELOG.md` with
+   `scripts/generate-changelog.sh`.
 2. Explicitly run the iOS and tvOS unit suites and the applicable UI/hardware
    journeys. Archive does **not** automatically run those tests. Retain result
    bundles and device/OS/media/server details for that revision.
@@ -233,6 +282,12 @@ public upload command, for those candidates. Verify the resulting build
 numbers and platform assignments in App Store Connect. External TestFlight
 review and App Store submission are separate actions. An internal-only
 uploaded build cannot be repurposed as a public candidate.
+
+Once the build is accepted, tag the exact revision it was archived from and
+push the tag, following [Release tags](#release-tags). Do this from the
+revision that was archived rather than from whatever `main` has reached since.
+Without the tag a recipient has no way to identify the corresponding source,
+which is what the native licences require.
 
 ### Review package
 
