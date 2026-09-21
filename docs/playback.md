@@ -99,6 +99,28 @@ routing belong in the existing profile and decode policy, not duplicated
 checks in views. iOS metered-path limits affect both static and streaming
 bitrate offers and can be overridden in Playback settings.
 
+HDR10+ needs no handling of its own, and code to "add" it would be code that
+does nothing. VideoToolbox stamps the dynamic metadata onto every decoded
+frame itself — an undocumented `HDR10PlusData` pixel-buffer attachment
+carrying the T.35 payload verbatim, country code 0xB5 first — it rides the
+frame through the queues to the renderer, and tvOS engages HDR10+ on a
+display that supports it. Verified 2026-09-21 on an Apple TV 4K 3rd
+generation driving an HDR10+ Samsung panel, reading the TV's own Picture Mode
+badge: a `HDR10Plus` title reports HDR10+, and so does a `DOVIWithHDR10Plus`
+title whose track carries our supplementary `dvvC`. On a display with no
+Dolby Vision the system falls back to the base layer and still uses its
+HDR10+ metadata, so the Dolby Vision tagging costs nothing there and no
+display-capability check is needed. A `DOVIWithHDR10` title reports plain HDR
+on the same panel, which is what rules out a display that simply badges
+everything.
+
+Two traps sit around measuring this. Screen mirroring from the Apple TV
+suppresses HDR output entirely, so any badge read while it is on is
+worthless — that confound produced an afternoon of false negatives and a
+wrong diagnosis before it was spotted. And the badge is not shown at all in
+the panel's Filmmaker Mode, so a missing badge there means nothing either
+way.
+
 E-AC-3 JOC keeps its compressed Atmos path. TrueHD decodes to lossless LPCM.
 Its Atmos objects are not preserved. Subtitles come from embedded streams or
 Jellyfin's permission-gated subtitle routes. There is no direct provider
