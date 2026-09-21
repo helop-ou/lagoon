@@ -4,24 +4,16 @@ import Observation
 
 /// A player view's handle on the engine: weak on purpose.
 ///
-/// `PlaybackController` owns the engine for exactly as long as the item plays
-/// and replaces it at every episode handoff. The chrome over it is SwiftUI
-/// views, and SwiftUI copies a view struct — every stored property with it —
-/// into the closure contexts it keeps for gestures. The copy the surface's
-/// Select gesture kept from before a handoff stayed alive beside the refreshed
-/// one for as long as the player was up (`leaks --traceTree` named the
-/// `AddGestureModifier` callback context; a later Select drove the new engine
-/// and still did not release the old one), so with a strong `let engine`
-/// every episode boundary leaked one drained `SampleBufferPlayerEngine` until
-/// the player was dismissed.
+/// SwiftUI copies a view struct, stored properties and all, into the closure
+/// contexts it keeps for gestures. The copy a gesture kept from before an
+/// episode handoff stays alive beside the refreshed one for as long as the
+/// player is up (`leaks --traceTree` named the `AddGestureModifier` context),
+/// so a strong `let engine` leaked one drained engine per episode boundary.
 ///
-/// So no player view holds the engine strongly. Declare the field as
-/// `@PlayerEngineRef var engine: any PlayerEngine`: the memberwise initializer
-/// still takes the engine itself, every read still goes to the live object
-/// while its owner has it, and Observation still tracks the properties read.
-/// A copy that outlives the engine reads `DetachedPlayerEngine` instead — a
-/// stand-in that reports nothing playing and does nothing — rather than
-/// crashing; the refreshed copy is the one whose closures run.
+/// Declare `@PlayerEngineRef var engine: any PlayerEngine`: the memberwise
+/// init still takes the engine, reads still reach the live object, Observation
+/// still tracks them. A copy that outlives it reads `DetachedPlayerEngine`
+/// rather than crashing.
 @propertyWrapper
 struct PlayerEngineRef {
     private weak var engine: (any PlayerEngine)?
