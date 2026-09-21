@@ -200,19 +200,16 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// libavcodec does not expose dav1d's resulting worker count here.
     let resolvedThreadCount: Int32
 
-    /// Where the software path's time actually goes, separated so
-    /// nobody has to guess which stage is the expensive one. Cumulative since
-    /// the last flush, which is every seek — the same boundary the frame-loss
-    /// bench re-arms on, so a bench window and this profile describe the same
-    /// stretch of playback.
+    /// Where the software path's time goes, so nobody has to guess which stage
+    /// is expensive. Cumulative since the last flush, which is every seek — the
+    /// same boundary the frame-loss bench re-arms on, so a bench window and
+    /// this profile describe the same stretch.
     ///
-    /// `decodeSeconds` is libavcodec (dav1d and its worker threads bill their
-    /// own time elsewhere, so on a threaded decoder this is the wait, not the
-    /// work). `conversionSeconds` is everything between a decoded AVFrame and
-    /// a ready `CMSampleBuffer`: the Core Video allocation, the 10-bit shift
-    /// and chroma interleave, the attachments. Both are wall time on the
-    /// decode queue, so as a fraction of `elapsedSeconds` they read as the
-    /// share of one core this stage holds.
+    /// `decodeSeconds` is libavcodec (dav1d's workers bill elsewhere, so on a
+    /// threaded decoder this is the wait, not the work). `conversionSeconds`
+    /// is everything between a decoded AVFrame and a ready `CMSampleBuffer`.
+    /// Both are wall time on the decode queue, so against `elapsedSeconds`
+    /// they read as the share of one core this stage holds.
     struct Profile: Equatable, Sendable {
         var frames = 0
         var packets = 0
@@ -1463,16 +1460,14 @@ nonisolated final class SoftwareVideoDecoder: @unchecked Sendable {
     /// Splits a plane's rows across cores.
     ///
     /// The primitives below are NEON but single-threaded. Row ranges are
-    /// independent — each reads row `n` of the source and writes row `n` of
-    /// the destination — so this needs no coordination beyond the split, and a
+    /// independent, so this needs no coordination beyond the split, and a
     /// negative stride is not a special case: the caller has already pointed
-    /// the base at the last row, and advancing by `start * stride` walks
-    /// backwards from there exactly as the serial loop does.
+    /// the base at the last row.
     ///
-    /// Worth 0.5 ms of a 4.8 ms conversion on an Apple TV, measured. Only that
-    /// much because the copy is bounded by memory bandwidth rather than by
-    /// cores. Chunks stay well below the core count for the same reason the
-    /// gain is small: these threads compete with dav1d's.
+    /// Worth 0.5 ms of a 4.8 ms conversion on an Apple TV, measured — only
+    /// that much because the copy is bandwidth-bound, not core-bound. Chunks
+    /// stay below the core count for the same reason: these threads compete
+    /// with dav1d's.
     private static let conversionChunks: Int = {
         let override = SoftwareDecodeThreadPolicy.commandLineInteger(
             forKey: "debug.softwareDecodeConvertChunks"
