@@ -41,23 +41,19 @@ nonisolated final class SoftwareVideoPacket: @unchecked Sendable {
     }
 }
 
-/// Runs `SoftwareVideoDecoder` on a queue of its own so reading and decoding
+/// Runs `SoftwareVideoDecoder` on its own queue so reading and decoding
 /// overlap.
 ///
-/// Until this existed, `FFmpegDemuxer.readNext()` called the software decoder
-/// inline, which meant the demux loop stopped reading for as long as a frame
-/// took to decode — reading and decoding took turns instead of running
-/// together, and both queues drained while a frame was in libavcodec. That
-/// never mattered while the software path carried only SD and HD MPEG-2, VC-1
-/// and MPEG-4: those decode in a fraction of a frame period, so the
-/// serialisation cost nothing visible. 4K AV1 is the first content expensive
-/// enough for the serialisation itself to be the problem.
+/// `FFmpegDemuxer.readNext()` used to call the decoder inline, so the demux
+/// loop stopped reading for as long as a frame took and both queues drained.
+/// That cost nothing visible while the software path carried only SD and HD
+/// MPEG-2, VC-1 and MPEG-4, which decode in a fraction of a frame period. 4K
+/// AV1 is the first content where the serialisation itself is the problem.
 ///
-/// The shape is deliberately the one `VideoToolboxDecoder` already has: the
-/// demux loop submits work and moves on, decoded frames arrive through an
-/// output handler, and failures arrive through an error handler. Backpressure
-/// stays with the demux loop, which counts `pendingCount` as part of the video
-/// it has already asked for (see `DemuxBackpressurePolicy`).
+/// Shaped like `VideoToolboxDecoder`: the demux loop submits and moves on,
+/// frames arrive through an output handler, failures through an error
+/// handler. Backpressure stays with the demux loop, which counts
+/// `pendingCount` as video already asked for (`DemuxBackpressurePolicy`).
 nonisolated final class SoftwareVideoDecodeStage: @unchecked Sendable {
     typealias OutputHandler = @Sendable (CMSampleBuffer) -> Void
     typealias ErrorHandler = @Sendable (Error) -> Void
