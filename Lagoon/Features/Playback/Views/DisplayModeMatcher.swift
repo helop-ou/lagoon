@@ -3,26 +3,20 @@ import AVFoundation
 import AVKit
 import UIKit
 
-/// Asks the Apple TV to switch its display output to match the playing
-/// video — the thing AVPlayerViewController does automatically
-/// and this custom player therefore has to do by hand.
+/// Asks the Apple TV to match display output to the playing video — what
+/// AVPlayerViewController does automatically and this player must do by hand.
 ///
-/// Why it matters beyond correctness: without a mode switch the display
-/// stays at its idle mode (typically 60 Hz, whatever range the UI runs
-/// in) and the compositor must cadence-convert and tone-map every video
-/// frame. That per-pixel work is the standing suspect for the hardware
-/// frame drops that hit full 3840×2160 HDR10 titles while a 3840×1600
-/// letterbox encode of the same codec/range/bitrate plays clean.
+/// Without it the display stays at its idle mode and the compositor
+/// cadence-converts and tone-maps every frame. That is the standing suspect
+/// for the hardware drops on full 3840×2160 HDR10 titles when a 3840×1600
+/// encode of the same codec, range and bitrate plays clean.
 ///
-/// The request is criteria, not a command: the system only honors it when
-/// the user has enabled Match Content (frame rate / dynamic range) in
-/// tvOS Settings → Video and Audio. `statusDescription` reports each
-/// layer separately — whether a display manager was reachable at all,
-/// what the user setting says, and how many real mode switches the
-/// system has posted — because the first hardware run showed "off" that
-/// could have meant either "disabled" or "never reached", and an A/B
-/// can't run on an ambiguous gate. Passing nil returns the display to
-/// the system's default.
+/// Criteria, not a command: honoured only with Match Content enabled in tvOS
+/// Settings. `statusDescription` reports display manager reachability, the
+/// user setting and real switches posted separately, because the first
+/// hardware run showed "off" that could have meant "disabled" or "never
+/// reached" — an A/B cannot run on an ambiguous gate. nil restores the
+/// default.
 @MainActor
 enum DisplayModeMatcher {
     /// Mode switches the system has announced since launch
