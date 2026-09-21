@@ -17,7 +17,7 @@ import Foundation
 /// Jellyfin spells the same group id two ways in the same session: the
 /// `GroupId` fields and `SyncPlay/New` use undashed lowercase hex
 /// (`ea9615382d214f9c9313c26fbd3bad89`), while the `GroupLeft` update's
-/// payload is the dashed form of the same value. Measured on fixture 12.0.0
+/// payload is the dashed form of the same value. Measured on the fixture server, 12.0.0
 /// on 2026-09-14. Compare through here, never with `==` on the raw strings.
 nonisolated enum SyncPlayGroupIdentifier {
     static func normalized(_ id: String) -> String {
@@ -104,7 +104,7 @@ nonisolated struct SyncPlayCommand: Decodable, Hashable, Sendable {
 
     /// A new group is greeted with a `Stop` whose playlist item is the
     /// all-zero GUID and whose position is 0 — there is nothing queued yet.
-    /// Verified on fixture 12.0.0.
+    /// Verified on the fixture server, 12.0.0.
     var hasPlaylistItem: Bool { !SyncPlayGroupIdentifier.isEmptyIdentifier(playlistItemId) }
 
     var positionSeconds: Double { Ticks.seconds(positionTicks) }
