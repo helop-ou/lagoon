@@ -23,13 +23,12 @@ semantic versioning, because it would have real dependents.
 The build number, not the marketing version, identifies a binary. One
 marketing version spans many builds, and About shows both as `0.1.0 (107)`.
 
-Change the marketing version by editing `MARKETING_VERSION` in both
-configurations of `Lagoon.xcodeproj/project.pbxproj`, or in Xcode's target
-editor. **Do not use `xcrun agvtool new-marketing-version`.** This project
-sets `GENERATE_INFOPLIST_FILE = YES`, so the version keys are synthesised from
-the build settings and are absent from the partial Info.plist files agvtool
-edits. It reports success, changes nothing, and fails parsing the setting
-itself with `Cannot find "Lagoon.xcodeproj/../YES"`.
+Change it by editing `MARKETING_VERSION` in both configurations of
+`Lagoon.xcodeproj/project.pbxproj`, or in Xcode's target editor. **Not with
+`xcrun agvtool new-marketing-version`**: this project sets
+`GENERATE_INFOPLIST_FILE = YES`, so the version keys are synthesised from build
+settings and absent from the partial Info.plists agvtool edits. It reports
+success and changes nothing.
 
 Write the matching entry in
 [`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift) before
@@ -88,10 +87,10 @@ distribution remains available, but an Organizer archive carries no DSN.
 ## External TestFlight
 
 Adding a build to an external group submits it to Beta App Review against the
-full App Review Guidelines. Uploading never triggers review by itself. Apple
-reviews the first build of a platform. Later builds usually pass without one,
-and Apple does not publish the threshold. iOS and tvOS are separate binaries
-under one app record, so each is reviewed on its own.
+full App Review Guidelines; uploading alone never does. Apple reviews the
+first build of a platform, and later ones usually pass without one. iOS and
+tvOS are separate binaries under one app record, so each is reviewed on its
+own.
 
 **A build exported through the internal flow above can never reach external
 testing.** `ExportOptions.plist` pins `testFlightInternalTestingOnly=true`,
@@ -113,14 +112,13 @@ Required before submitting:
   displaying third-party content.
 - Export compliance, already satisfied by `ITSAppUsesNonExemptEncryption=NO`.
 
-A reviewer needs a reachable Jellyfin server and an account. There is no demo
-mode outside `#if DEBUG`. `demo.jellyfin.org/stable` is rights-cleared, and
-nothing in the app auto-connects to it, but it is a third party's server, and
-an outage during review reads as a broken app. Review notes should give
-username/password rather than Quick Connect, say that Seerr is optional and
-will show its connect prompt, and state that requests reach the user's own
-Jellyseerr and downloads come from the user's own server under that account's
-policy.
+A reviewer needs a reachable server and an account; there is no demo mode
+outside `#if DEBUG`. `demo.jellyfin.org/stable` is rights-cleared and nothing
+auto-connects to it, but it is a third party's server and an outage during
+review reads as a broken app. Review notes should give username/password
+rather than Quick Connect, say Seerr is optional and will show its connect
+prompt, and state that requests reach the user's own Jellyseerr while
+downloads come from their own server under that account's policy.
 
 Distributing to testers outside the team is distribution for licence purposes.
 See the native-component gate under [Public release](#public-release).
