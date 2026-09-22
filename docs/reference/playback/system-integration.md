@@ -7,27 +7,12 @@ cleanup. Start with the [current playback guide](../../playback.md) and the
 ## System media integration
 
 Lagoon owns the system behavior AVPlayer would otherwise supply, without
-adding a second player to get it:
+adding a second player to get it. The engine owns its half — the audio
+session and spatialization, refusing to revive a shut-down engine, audio
+renderer recovery, and the PiP content source — in its [system integration
+notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/system-integration.md).
+What follows is this side:
 
-- `PlaybackAudioSession` activates `.playback` / `.moviePlayback`, enables
-  multichannel content, uses `.longFormVideo` on iOS, and deactivates with
-  `notifyOthersOnDeactivation` when playback ends. Interruption callbacks are
-  idempotent: they resume only if the item was playing and the system sets
-  `shouldResume`. Route changes pause when a personal output — wired,
-  Bluetooth, or AirPlay — disappears, but not on tvOS HDMI mode changes. A
-  media-services reset re-establishes the category and active session.
-- **Audio spatialization**. One factory,
-  `SampleBufferPlayerEngine.makeAudioRenderer`, builds every audio renderer,
-  so a replacement after a failure or a reset sounds identical to what it
-  replaced. Apple's two players disagree on the spatialization default:
-  `AVPlayerItem` documents `monoStereoAndMultichannel` for video, but
-  `AVSampleBufferAudioRenderer` documents — and runtime confirms —
-  `multichannel` alone. Left alone, a stereo soundtrack that AVPlayer would
-  spatialize on AirPods plays flat, true of a lot of television, anime and
-  older film. The property only grants permission: the viewer's Spatial Audio
-  setting still decides, and it changes nothing over HDMI to a receiver. A
-  test pins both defaults, so a future SDK that closes the gap fails it, and
-  the override can go.
 - **Playback speed**. 0.5× to 2×, set from the **Video** tab of the playback
   panel, shaped like the audio delay row — a label, the value, `-`/`+`
   steppers — rather than six selectable options: it is one value on a short
@@ -52,61 +37,12 @@ adding a second player to get it:
   button above the scrubber that opened a menu; that was reverted — see
   [putting controls in the
   transport](controls-and-reporting.md#putting-controls-in-the-transport-tvos).
-- **An engine that has shut down must never be revived**.
-  `attach(displayLayer:)` guards on `shutdownRequested`, not just on an empty
-  renderer. `finishRendererShutdown` nils `videoRenderer`, so emptiness alone
-  let a retired engine through — and SwiftUI *does* re-mount the player
-  surface after a failed playback, whose `makeUIView` attaches
-  unconditionally. The retired engine then re-registered a renderer set it
-  could never detach, because `shutdown` early-returns once requested, and
-  started a **second demux loop** that reopened the stream — for a transcode,
-  a second server-side ffmpeg job nobody would ever stop. The stale renderer
-  entry is process-global, and `PlaybackController.start` waits on it, so one
-  failed title delayed the next by the full 15 s timeout, showing "The
-  previous video could not release its player resources." Clearing the
-  counters in `deinit` was deliberately not tried: renderer removal is
-  asynchronous and outlives the Swift object, so only the real AVFoundation
-  completion can balance it, or the lifecycle benchmark could no longer see a
-  leak. Traced with `debug.playbackLifecycleLog`, printing each lifecycle
-  event with the engine id — the ids are what made "the same engine attached
-  twice" visible.
-- **Audio renderer failure**. An audio renderer posts two *recoverable*
-  notifications — `WasFlushedAutomatically` and `OutputConfigurationDidChange`
-  — and both reseek from the playhead. Hard failure posts none: Apple exposes
-  it only through the KVO-observable `status`, documented as "terminal status
-  from which recovery is not always possible." Unobserved, a failed renderer
-  kept the film playing in silence, with nothing reported anywhere. The
-  observation hops to the main actor instead of `MainActor.assumeIsolated`,
-  unlike the notification blocks, because KVO delivers on whichever thread
-  changed the property, and a CoreMedia-owned renderer does not change it on
-  the main one. Recovery means replacement — the object cannot be revived —
-  sharing one path with the media-services reset, which needs the same swap.
-  The two differ only in what the viewer is owed after, which
-  `AudioRendererReplacement` encodes: a reset stays paused, since Apple
-  requires an explicit viewer action before resuming, while a self-failed
-  renderer resumes, since nothing the viewer did caused it. Neither un-pauses
-  a viewer who paused on purpose: the refill goes through `seek`, and
-  `beginPlayback` honours `isPaused`. The video renderer stays attached to the
-  synchronizer throughout, so only a few hundred milliseconds of audio are
-  lost, not the film. If the swap itself fails, playback has no audio path,
-  and the failure is reported as `.delivery`, handed to the [delivery
-  ladder](stream-resolution.md#when-playback-fails-the-delivery-ladder).
-  `debug.regressionInjectAudioRendererFailure` drives this path, since a
-  renderer cannot be made to report `.failed` on demand. The HUD's `Recovery:`
-  line counts audio replacements and service resets separately, since
-  otherwise a replacement would leave no trace — which is the point of
-  counting it.
 - `NowPlayingCoordinator` publishes a stable Jellyfin item identifier, a
   title/episode line, poster, duration, elapsed time, rate and playback state,
   and registers play, pause, toggle, ±10 s, absolute position, playback-rate
   and audio/subtitle language-option commands. Handlers hop to the main actor
   because MediaPlayer promises no callback queue, and every target plus the
   Now Playing state are removed on teardown.
-- PiP uses `AVPictureInPictureController.ContentSource` over the existing
-  `AVSampleBufferDisplayLayer` with an
-  `AVPictureInPictureSampleBufferPlaybackDelegate` whose play/pause/skip
-  callbacks drive the same `SampleBufferPlayerEngine` — there is no hidden
-  AVPlayer. iOS exposes the system `AVRoutePickerView` for AirPlay.
   `AVInitialRouteSharingPolicy=LongFormVideo` and the audio background mode
   are declared in the plist.
 - Backgrounding on iOS keeps playing. `PlaybackController` observes
