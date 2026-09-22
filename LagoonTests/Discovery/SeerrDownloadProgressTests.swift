@@ -25,9 +25,8 @@ struct SeerrDownloadProgressTests {
         #expect(progress?.percentText == "75%")
     }
 
-    /// The trap, taken from the live server: a season pack is one download
-    /// that Sonarr reports once per episode, each row carrying the pack's
-    /// full size. Ten rows of 7.15 GB are one 7.15 GB download, not 71 GB.
+    /// Sonarr reports a season pack once per episode, each row with the full
+    /// size: ten rows of 7.15 GB are one 7.15 GB download.
     @Test @MainActor func aSeasonPackReportedPerEpisodeCountsOnce() throws {
         let size: Int64 = 7_154_124_710
         let rows = try (0..<10).map { _ in
@@ -47,9 +46,8 @@ struct SeerrDownloadProgressTests {
         #expect(progress.fraction == 0.5)
     }
 
-    /// Also seen live: every row complete with `sizeLeft: 0` while the media
-    /// is still PROCESSING — the download finished and Sonarr is importing.
-    /// Sitting at "100%" with no explanation reads as stuck.
+    /// Every row at `sizeLeft: 0` while the media is PROCESSING means Sonarr
+    /// is importing.
     @Test @MainActor func aFinishedDownloadSaysItIsImporting() throws {
         let progress = try #require(SeerrDownloadProgress(items: [
             try item(id: "a", size: 500, left: 0, status: "completed", timeLeft: "00:00:00"),
@@ -69,8 +67,7 @@ struct SeerrDownloadProgressTests {
         #expect(progress.summary.contains("00:12:34"))
     }
 
-    /// A finished row reports "00:00:00"; quoting that as the time remaining
-    /// would be worse than saying nothing.
+    /// A finished row reports "00:00:00".
     @Test @MainActor func aFinishedRowsZeroTimeIsNotQuoted() throws {
         let progress = try #require(SeerrDownloadProgress(items: [
             try item(id: "a", size: 1000, left: 500, timeLeft: "00:05:00"),
@@ -83,15 +80,13 @@ struct SeerrDownloadProgressTests {
         #expect(SeerrDownloadProgress(items: []) == nil)
     }
 
-    /// A zero size must not divide by zero or claim completion.
     @Test @MainActor func anUnknownSizeReportsNothingRatherThanCrashing() throws {
         let progress = try #require(SeerrDownloadProgress(items: [try item(id: "a", size: 0, left: 0)]))
         #expect(progress.fraction == 0)
         #expect(progress.percentText == "0%")
     }
 
-    /// Rows without an id cannot be deduplicated, and dropping them would
-    /// hide the only thing happening.
+    /// Rows without an id cannot be deduplicated, but may be all there is.
     @Test @MainActor func rowsWithoutAnIdAreKept() throws {
         let progress = try #require(SeerrDownloadProgress(items: [
             try item(id: "", size: 100, left: 50),
@@ -102,7 +97,6 @@ struct SeerrDownloadProgressTests {
 
     // MARK: - Through a request
 
-    /// 4K requests read the 4K queue, the same split as availability.
     @Test @MainActor func aFourKRequestReadsTheFourKQueue() throws {
         let json = """
         {"id":1,"status":2,"is4k":true,"type":"movie","media":{"id":1,"tmdbId":603,
@@ -115,8 +109,6 @@ struct SeerrDownloadProgressTests {
         #expect(request.downloadProgress?.fraction == 0.25)
     }
 
-    /// Every response Lagoon already reads carries these keys, but an older
-    /// server or a media row with nothing queued must decode cleanly.
     @Test @MainActor func aRequestWithNoQueueHasNoProgress() throws {
         let request = try JSONDecoder().decode(
             SeerrMediaRequest.self,

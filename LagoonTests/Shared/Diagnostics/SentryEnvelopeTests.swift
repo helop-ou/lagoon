@@ -53,8 +53,7 @@ struct SentryEnvelopeTests {
         #expect(event["release"] as? String == "ee.helop.lagoon@0.1+95")
         #expect(event["dist"] as? String == "95")
         #expect(event["environment"] as? String == "testflight")
-        // Never "cocoa" or "javascript": Sentry infers an IP address and a
-        // location for those platforms unless a project setting says not to.
+        // Never "cocoa" or "javascript": Sentry infers IP and location for those.
         #expect(event["platform"] as? String == "native")
         #expect(event["level"] as? String == "error")
         #expect(event["fingerprint"] as? [String] == ["playback.failed", "delivery", "open", "ffmpeg", "-1094995529"])

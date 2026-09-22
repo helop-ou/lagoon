@@ -5,10 +5,8 @@ import lcms2
 import Testing
 @testable import Lagoon
 
-/// The in-app acknowledgements screen is only honest if
-/// every bundled licence resolves, every binary target the engine package links is
-/// covered by an entry, and the trademark notice actually names the marks it
-/// disclaims.
+/// Every bundled licence resolves, every binary target the engine links has
+/// an entry, and the trademark notice names the marks it disclaims.
 @Suite("Acknowledgements", .serialized)
 struct AcknowledgementsTests {
     @Test func everyComponentsLicenseTextResolvesAndNamesItsCopyrightHolder() throws {
@@ -55,8 +53,7 @@ struct AcknowledgementsTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        // The native libraries moved out with the engine, so the manifest
-        // that declares them is the sibling package's.
+        // The engine package's manifest declares the native libraries.
         let packageSwiftURL = repoRoot
             .deletingLastPathComponent()
             .appendingPathComponent("lagoon-engine/Package.swift")
@@ -92,9 +89,7 @@ struct AcknowledgementsTests {
         )
     }
 
-    /// The engine is a versioned dependency, so the libraries it links can
-    /// move under an entry that still names the old release. Where a library
-    /// reports its own version at runtime, the entry has to agree with it.
+    /// An engine bump can move a library under an entry naming the old release.
     @Test func versionsMatchTheLinkedLibraries() throws {
         func entry(_ id: String) throws -> ThirdPartyComponent {
             try #require(Acknowledgements.components.first { $0.id == id })

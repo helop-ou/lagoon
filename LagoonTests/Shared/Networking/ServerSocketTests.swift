@@ -2,16 +2,13 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The pure parts of Jellyfin's WebSocket: the envelope split, the
-/// reconnection schedule, and the URL. All three are things a live socket
-/// would only tell you about by misbehaving.
+/// The pure parts of Jellyfin's WebSocket: envelope, reconnect schedule, URL.
 @Suite("Server socket")
 struct ServerSocketTests {
     // MARK: - Envelope
 
-    /// `Data` is a bare integer here, which is not a JSON object — the
-    /// reason the payload is re-serialised with fragments allowed rather
-    /// than decoded as a dictionary. 60 is what the fixture server sends on 12.0.0.
+    /// `Data` can be a bare integer, so the payload is re-serialised with
+    /// fragments allowed. A 12.0.0 server sends 60.
     @Test func forceKeepAliveCarriesABareInteger() throws {
         let message = try #require(envelope(#"{"MessageType":"ForceKeepAlive","Data":60}"#))
         #expect(message.messageType == "ForceKeepAlive")
@@ -32,16 +29,13 @@ struct ServerSocketTests {
         #expect(command.playlistItemId == "8a3228756d3e439f9b8cd5bdbfe8deb6")
         #expect(command.hasPlaylistItem)
         #expect(command.positionTicks == 0)
-        // `When` is a server instant a second ahead of `EmittedAt`: the
-        // group's margin for everyone to get ready.
+        // `When` is a second after `EmittedAt`: the group's margin to get ready.
         let when = try #require(command.whenSeconds)
         let emitted = try #require(JellyfinTimestamp.seconds(command.emittedAt))
         #expect(abs((when - emitted) - 1) < 1e-3)
     }
 
-    /// An unknown type parses like any other and is handed on; only the
-    /// caller decides it has nothing to do with it. A server that grows a
-    /// message must not break the socket.
+    /// Unknown types are handed on; only the caller ignores them.
     @Test func anUnknownTypeStillParses() throws {
         let message = try #require(envelope(#"{"MessageType":"SomethingNew","MessageId":"abc","Data":{"A":1}}"#))
         #expect(message.messageType == "SomethingNew")
@@ -92,9 +86,7 @@ struct ServerSocketTests {
 
     // MARK: - URL
 
-    /// The socket is built from `serverRelativeURL("socket")`, so a
-    /// reverse-proxy base path has to survive the scheme swap — the exact
-    /// thing that broke every transcode on a base-path server.
+    /// A reverse-proxy base path must survive the scheme swap.
     @Test func theSocketURLSwapsTheSchemeAndKeepsTheBasePath() throws {
         let base = try #require(URL(string: "https://media.example/jellyfin/socket"))
         let url = try #require(ServerSocketURL.socket(from: base, token: "tok en", deviceId: "device-1"))

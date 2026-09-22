@@ -211,8 +211,7 @@ struct HomeRailContentTests {
         #expect(model.curatedRails[HomeCuratedRows.ID.topMovies] == nil)
 
         HomeRailURLProtocol.release()
-        // Refresh owns and joins the replacement discovery tasks, so no
-        // optional work leaks into another URLProtocol fixture.
+        // Refresh joins its discovery tasks, so none leak into another fixture.
         await model.refreshServerContent(client: client, homeSectionPreferences: .init(), seerr: seerr)
         #expect(model.curatedRails[HomeCuratedRows.ID.topMovies]?.items.map(\.id) == ["d", "c", "b", "a"])
         #expect(model.curatedRails[HomeCuratedRows.ID.topShows] == nil)

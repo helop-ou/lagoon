@@ -2,9 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Home's hero fallback order: the first tier with an eligible
-/// item supplies the hero, tiers are never mixed to reach six, and a refresh
-/// keeps what is on screen wherever the server still returns it.
+/// The first tier with an eligible item supplies the hero, tiers never mix to
+/// reach six, and a refresh keeps what the server still returns.
 @Suite("Hero selection")
 struct HeroSelectionTests {
     private func item(_ id: String, backdrop: Bool = true, overview: Bool = true, name: String? = nil) throws -> MediaItem {

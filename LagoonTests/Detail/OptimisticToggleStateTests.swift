@@ -1,9 +1,7 @@
 import Testing
 @testable import Lagoon
 
-/// The transitions behind the watched and favourite toggles(A14):
-/// optimistic flip, refusal with feedback, and reconciliation with the
-/// server after an accepted change.
+/// Watched and favourite toggles: optimistic flip, refusal, reconciliation.
 @Suite("Optimistic toggle state")
 struct OptimisticToggleStateTests {
     @Test func aPressFlipsTheIconBeforeTheServerAnswers() {
@@ -48,8 +46,7 @@ struct OptimisticToggleStateTests {
         state.succeed(refreshed: true)
         #expect(!state.isInFlight)
         #expect(state.override == nil)
-        // The server is authoritative now, whatever it says: a change made
-        // on another client, or a server that accepted but disagreed, shows.
+        // The server is authoritative now, whatever it says.
         #expect(state.value(server: true) == true)
         #expect(state.value(server: false) == false)
     }

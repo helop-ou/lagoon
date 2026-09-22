@@ -2,15 +2,9 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// What Home is willing to call a collection, and what it draws it with.
-///
-/// Every rule under test exists because of one measurement against a real
-/// library: 173 collections, of which 35 hold anything at all and 18 hold
-/// more than one title, and 11 of those 18 have no landscape artwork of
-/// their own. Unfiltered and unillustrated, this row is a screen of empty
-/// franchises behind grey rectangles — which is what makes these worth
-/// pinning rather than eyeballing once against a library that happens to be
-/// tidy.
+/// What Home calls a collection, and what it draws it with. A real library
+/// measured 173 collections: 35 non-empty, 18 with more than one title, and
+/// 11 of those 18 with no landscape artwork.
 @Suite("Collection shelf")
 struct CollectionShelfTests {
     private func collection(
@@ -64,9 +58,7 @@ struct CollectionShelfTests {
     // MARK: - Which collections earn a card
 
     @Test func theFranchiseStubsAServerInventsAreNotCollections() throws {
-        // The shape of a real library: a scrape creates "The Dark Knight
-        // Collection" off one film you own, and most of what comes back holds
-        // nothing at all.
+        // A scrape creates a collection off one owned film; most hold nothing.
         let all = try [
             collection(id: "empty", name: "The Dark Knight Collection", childCount: 0),
             collection(id: "unknown", name: "Alien Collection", childCount: nil),
@@ -88,8 +80,7 @@ struct CollectionShelfTests {
     }
 
     @Test func equalSizedCollectionsHoldStillBetweenLoads() throws {
-        // Without the name tiebreak the row reshuffles on every load, which
-        // is the same jitter the daily rotation was built to avoid.
+        // Without the name tiebreak the row reshuffles on every load.
         let all = try [
             collection(id: "zombieland", name: "Zombieland Collection", childCount: 2),
             collection(id: "avp", name: "AVP Collection", childCount: 2),
@@ -127,10 +118,8 @@ struct CollectionShelfTests {
     }
 
     @Test func aBackdropCountsAsArtworkAndAPosterDoesNot() throws {
-        // Home's rows are 16:9. A collection's Primary is a poster, and 11 of
-        // the reference library's 18 real collections have one and nothing
-        // landscape — so treating a poster as usable would fill the row with
-        // artwork cropped to a strip through the middle of it.
+        // Home's rows are 16:9; a collection's Primary is a poster and would
+        // crop to a strip.
         let poster = try JellyfinClient.decoder.decode(
             MediaItem.self,
             from: Data(#"{"Id":"p","Type":"BoxSet","ImageTags":{"Primary":"x"}}"#.utf8)
@@ -164,8 +153,7 @@ struct CollectionShelfTests {
     }
 
     @Test func aCollectionNothingCanIllustrateStillGetsACard() throws {
-        // The card falls back to a gradient rather than the row losing an
-        // entry: the name and the count are the point, the picture is not.
+        // No artwork falls back to a gradient, not a missing card.
         let bare = try collection(id: "bare", name: "Despicable Me Collection", childCount: 2)
 
         let shelf = CollectionShelf.shelf([bare])
@@ -178,8 +166,7 @@ struct CollectionShelfTests {
     // MARK: - What the card and the page say
 
     @Test func theCountReadsAsProseAndNeverPromisesFilms() throws {
-        // A collection can hold series, and finding out costs a request the
-        // row has no reason to make.
+        // "Title", not "film": a collection can hold series.
         #expect(CollectionShelf.countLabel(1) == "1 title")
         #expect(CollectionShelf.countLabel(5) == "5 titles")
     }
@@ -206,8 +193,7 @@ struct CollectionShelfTests {
     }
 
     @Test func aCollectionWithoutGenresBorrowsThemFromWhatIsInside() throws {
-        // 7 of the 18 real collections on the reference library carry no
-        // genres, so the page would otherwise be title, count and white space.
+        // 7 of the reference library's 18 real collections carry no genres.
         let bare = try collection(name: "AVP Collection", childCount: 2)
         let contents = try [
             movie(id: "a", genres: ["Horror", "Action"]),
@@ -231,8 +217,7 @@ struct CollectionShelfTests {
     // MARK: - Search
 
     @Test func searchingAFranchiseNameDoesNotSurfaceItsStub() throws {
-        // "Alien" matches the films and the empty Alien Collection. Offering
-        // the stub puts a dead end above the thing being looked for.
+        // "Alien" matches the films and the empty Alien Collection stub.
         let results = try [
             movie(id: "film", name: "Alien"),
             collection(id: "stub", name: "Alien Collection", childCount: 0),

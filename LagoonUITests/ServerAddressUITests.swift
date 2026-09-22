@@ -17,8 +17,7 @@ final class ServerAddressUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = cleanLaunch(server: "")
         #if os(tvOS)
-        // tvOS uses its system text-entry overlay. Start at an interrupted
-        // sign-in and exercise remote focus; iOS types through actual setup.
+        // tvOS starts at an interrupted sign-in; iOS types through setup.
         app.launchArguments = cleanLaunch(server: jellyfin)
         #endif
         app.launch()
@@ -73,8 +72,8 @@ final class ServerAddressUITests: XCTestCase {
         #endif
         app.terminate()
 
-        // Disclosure follows the selected URL, including an interrupted
-        // HTTPS sign-in. This does not claim TLS validation of the HTTP fixture.
+        // Disclosure follows the URL, even for an interrupted HTTPS sign-in.
+        // The HTTP fixture does not test TLS.
         let https = jellyfin.replacingOccurrences(of: "http://", with: "https://")
         app.launchArguments = cleanLaunch(server: https)
         app.launchEnvironment = [:]

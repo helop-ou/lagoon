@@ -2,9 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The arithmetic behind staying in sync: how far out is far
-/// enough to act, what acting costs, and when a named server instant
-/// arrives on this clock.
+/// When to correct drift, how, and when a server instant arrives locally.
 @Suite("SyncPlay correction")
 struct SyncCorrectionPolicyTests {
     @Test func aDifferenceNobodyCanSeeIsLeftAlone() {
@@ -19,8 +17,7 @@ struct SyncCorrectionPolicyTests {
             Issue.record("expected a rate correction")
             return
         }
-        // Half a window behind: half again as fast, for one window, which
-        // is exactly the gap.
+        // Half a window behind: 1.5x for one window closes the gap exactly.
         #expect(abs(faster - 1.5) < 0.000_001)
         #expect(hold == .seconds(1.5))
 
@@ -59,8 +56,6 @@ struct SyncCorrectionPolicyTests {
         #expect(abs(expected - 132.5) < 0.000_001)
     }
 
-    /// A group start instant is in the future when it arrives; a pause
-    /// instant can already be gone by the time it is read.
     @Test func aServerInstantBecomesALocalWait() {
         // The server's clock runs 4 s ahead: its 1 004 is our 1 000.
         let waiting = SyncPlayCommandSchedule.delaySeconds(

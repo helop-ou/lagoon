@@ -104,8 +104,7 @@ struct PlaybackDegradationPolicyTests {
     }
 
     @Test func optingOutMakesSessionWideDegradationCountersIneligible() {
-        // These totals could all have accumulated during the opt-out gap.
-        // Comparing them with only the sampled playing time is misleading.
+        // These totals may include the opt-out gap, which sampled time does not.
         let counters = PlaybackDegradationPolicy.Counters(
             playedSeconds: 60, droppedFrames: 100, totalFrames: 10_000,
             stalls: 3, reprimes: 1, audioStarvation: 5

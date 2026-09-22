@@ -2,10 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The same ask as the audio memory, for the other track list. Subtitles
-/// carried within a sitting already; closing the player threw the choice
-/// away, so a show tagged badly — or simply watched with subtitles on — had
-/// to be corrected again every time.
+/// The audio memory's counterpart: the subtitle choice survives closing the player.
 @Suite("Subtitle track memory")
 struct SubtitleTrackMemoryTests {
     private func stream(
@@ -55,8 +52,7 @@ struct SubtitleTrackMemoryTests {
     @Test func offIsAnAnswerAndSurvivesAnyLayout() {
         let remembered = choice(off: true, ordinal: 0, layout: englishThreeWays)
         #expect(SubtitleTrackMemoryPolicy.ordinal(for: remembered, in: englishThreeWays) == 0)
-        // Off describes no track, so a layout it was never measured in
-        // cannot retire it — which is the whole point of the answer.
+        // Off names no track, so no layout change can retire it.
         #expect(SubtitleTrackMemoryPolicy.ordinal(for: remembered, in: []) == 0)
         #expect(
             SubtitleTrackMemoryPolicy.ordinal(
@@ -98,8 +94,7 @@ struct SubtitleTrackMemoryTests {
             ordinal: 3,
             layout: englishThreeWays
         )
-        // This episode's SDH track is gone; the position would now name the
-        // forced one, so it is refused and language alone answers instead.
+        // The SDH track is gone, so the position is refused and language answers.
         let shorter = [
             stream(language: "eng", title: "English"),
             stream(language: "eng", title: "English", forced: true),
@@ -108,9 +103,8 @@ struct SubtitleTrackMemoryTests {
         #expect(SubtitleTrackMemoryPolicy.ordinal(for: remembered, in: shorter) == 1)
     }
 
-    /// The flags are what make a layout's shape here. A release that gains
-    /// an SDH marking is a different layout, and a position measured before
-    /// it should no longer apply.
+    /// The flags are part of the layout: gaining an SDH marking retires a
+    /// stored position.
     @Test func fingerprintFollowsTheFlagsNotJustTheNames() {
         let tagged = [
             stream(language: "eng", title: "English"),
@@ -124,8 +118,7 @@ struct SubtitleTrackMemoryTests {
             SubtitleTrackMemoryPolicy.fingerprint(of: tagged)
                 != SubtitleTrackMemoryPolicy.fingerprint(of: untagged)
         )
-        // A sidecar and an embedded track of the same name are not the
-        // same track either.
+        // Nor are a sidecar and an embedded track of the same name.
         let external = [
             stream(language: "eng", title: "English"),
             stream(language: "eng", title: "English", external: true),
@@ -150,18 +143,14 @@ struct SubtitleTrackMemoryTests {
         #expect(SubtitleTrackMemoryPolicy.outcome(chosen: 3, automatic: 2) == .remember(ordinal: 3))
     }
 
-    /// Nil is policy naming no track, which is the engine starting with
-    /// subtitles off. Turning them off there overrides nothing; turning
-    /// them off against a server default that had them on is as deliberate
-    /// a choice as picking a track.
+    /// Nil means the engine starts with subtitles off, so choosing off there
+    /// overrides nothing. Off against a server default is a real choice.
     @Test func turningSubtitlesOffIsStoredOnlyWhereItOverrulesSomething() {
         #expect(SubtitleTrackMemoryPolicy.outcome(chosen: 0, automatic: nil) == .forget)
         #expect(SubtitleTrackMemoryPolicy.outcome(chosen: 0, automatic: 1) == .remember(ordinal: 0))
         #expect(SubtitleTrackMemoryPolicy.outcome(chosen: 1, automatic: nil) == .remember(ordinal: 1))
     }
 
-    /// Each test gets its own suite, removed afterwards so the test host's
-    /// container does not accumulate them.
     private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
         let name = "hel206.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
@@ -185,9 +174,7 @@ struct SubtitleTrackMemoryTests {
         }
     }
 
-    /// The two memories share a mechanism and must not share a key: a show
-    /// can have a remembered audio track and no remembered subtitle, and
-    /// one store reading the other's payload would decode nothing anyway.
+    /// The audio and subtitle memories share a mechanism but not a key.
     @MainActor
     @Test func subtitlesAndAudioAreStoredApart() throws {
         try withDefaults { defaults in

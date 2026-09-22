@@ -3,12 +3,9 @@ import Testing
 import LagoonEngine
 @testable import Lagoon
 
-/// The case behind the audio memory: The 100's season-one remux ships five
-/// audio
-/// tracks with no language, no title and no default flag — four of them
-/// reading "DTS-HD MA - 5.1" — and the first is Russian. Nothing in the
-/// metadata can pick the English one, so the viewer's own correction has to
-/// be what carries to the next episode.
+/// A real remux ships five audio tracks with no language, title or default
+/// flag, and the first is Russian. Only the viewer's own correction can carry
+/// the English one to the next episode.
 @Suite("Audio track memory")
 struct AudioTrackMemoryTests {
     private func stream(
@@ -27,7 +24,7 @@ struct AudioTrackMemoryTests {
         )
     }
 
-    /// The exact season-one layout, read off the server.
+    /// That layout, as read off the server.
     private var anonymousLayout: [AudioLayoutStream] {
         [
             stream(),
@@ -62,9 +59,7 @@ struct AudioTrackMemoryTests {
         ) == 3)
     }
 
-    /// Season two's single tagged track, against a position remembered from
-    /// season one. The ordinal is in range and must still be refused,
-    /// because the layout it was measured in is gone.
+    /// The ordinal is in range but must be refused: its layout is gone.
     @Test func aDifferentLayoutRefusesTheRememberedPosition() {
         let tagged = [
             stream(language: "rus", title: "Russian"),
@@ -74,13 +69,11 @@ struct AudioTrackMemoryTests {
         let remembered = choice(ordinal: 3, layout: anonymousLayout)
 
         #expect(AudioTrackMemoryPolicy.positionalOrdinal(for: remembered, in: tagged) == nil)
-        // Nor may it drift to a language rung it never had a claim on.
+        // Nor may it fall through to a language match.
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: tagged) == nil)
     }
 
-    /// A description that names one track wins outright: the position is
-    /// never consulted, even though the layout is unchanged and the stored
-    /// ordinal points somewhere else entirely.
+    /// A description that names one track wins over the stored position.
     @Test func anUnambiguousDescriptionOutranksTheRememberedPosition() {
         let layout = [
             stream(language: "rus", title: "Russian"),
@@ -94,8 +87,7 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: layout) == 2)
     }
 
-    /// One tagged track and three bare ones: the viewer's pick among the
-    /// bare three cannot be described, so position has to carry it.
+    /// A pick among bare tracks cannot be described, so position carries it.
     @Test func positionCarriesABareTrackAmongTaggedOnes() {
         let layout = [
             stream(language: "eng", title: "English", default: true),
@@ -108,9 +100,8 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: layout) == 3)
     }
 
-    /// Two tracks tagged identically. Description cannot separate them, so
-    /// without the positional rung the viewer's move to the second one
-    /// would silently snap back to the first on the next episode.
+    /// Identical tags cannot separate two tracks, so position must, or the
+    /// choice snaps back to the first.
     @Test func positionSeparatesIdenticallyTaggedTracks() {
         let layout = [
             stream(language: "eng", title: "English"),
@@ -121,8 +112,7 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: layout) == 2)
     }
 
-    /// Where the layout has changed and description is ambiguous, the right
-    /// language is the most that can be promised.
+    /// A changed layout with an ambiguous description gets the right language.
     @Test func anAmbiguousDescriptionFallsBackToTheRightLanguage() {
         let remembered = choice(
             language: "eng",
@@ -140,8 +130,7 @@ struct AudioTrackMemoryTests {
     }
 
     @Test func aChangedLayoutRetiresTheRememberedPosition() {
-        // An extra commentary track shifts everything below it, so the
-        // stored ordinal no longer names what the viewer picked.
+        // An extra track shifts the ordinals.
         let remembered = choice(ordinal: 3, layout: anonymousLayout)
         let withCommentary = anonymousLayout + [stream(channels: 2)]
 
@@ -163,10 +152,8 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: reordered) == 1)
     }
 
-    /// Jellyfin synthesizes a display title from codec and channel layout
-    /// when a file carries none, so four untagged tracks all "display" the
-    /// same. Matching on that would always land on the first — the bug that
-    /// made autoplay reinstate Russian even after a correction.
+    /// Jellyfin synthesizes a title from codec and channels when a file has
+    /// none, so untagged tracks share it. Matching on it always picks the first.
     @Test func aSharedTitleIdentifiesNothing() {
         let layout = [
             stream(title: "DTS-HD MA - 5.1"),
@@ -179,8 +166,7 @@ struct AudioTrackMemoryTests {
             title: "DTS-HD MA - 5.1",
             in: layout
         ) == nil)
-        // And the in-session carry, which has no fingerprint to fall back
-        // on, must not quietly answer with the first of them either.
+        // The in-session carry has no fingerprint, so it must refuse too.
         #expect(AudioTrackMemoryPolicy.descriptiveOrdinal(
             matchingLanguage: nil,
             title: "DTS-HD MA - 5.1",
@@ -198,9 +184,7 @@ struct AudioTrackMemoryTests {
         ) == 2)
     }
 
-    /// A layout that lost tracks since the choice was made. The fingerprint
-    /// already refuses it, but the range check is the backstop that keeps a
-    /// stale ordinal from indexing past the end.
+    /// A backstop behind the fingerprint: a stale ordinal never indexes past the end.
     @Test func anOrdinalPastTheEndIsRefused() {
         let shorter = Array(anonymousLayout.prefix(2))
         let remembered = RememberedAudioChoice(
@@ -215,9 +199,8 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: shorter) == nil)
     }
 
-    /// The separators are not sacred: a title may contain them, and two
-    /// different layouts hashing alike is the one way a position could be
-    /// applied to a layout it was never measured in.
+    /// A title may contain a separator; two layouts hashing alike would
+    /// apply a position to the wrong layout.
     @Test func fingerprintsSurviveSeparatorsInsideTitles() {
         let left = [stream(title: "a/b"), stream(title: "c")]
         let right = [stream(title: "a"), stream(title: "b/c")]
@@ -228,17 +211,14 @@ struct AudioTrackMemoryTests {
         )
     }
 
-    /// What a viewer's change does to the stored choice. Moving off the
-    /// automatic pick stores an override; landing back on it drops one,
-    /// because keeping it would freeze the show against a later change of
-    /// preferences.
+    /// Returning to the automatic pick drops the override, so a later
+    /// preference change still applies.
     @Test func onlyAMoveAwayFromAutomaticSelectionIsStored() {
         #expect(
             AudioTrackMemoryPolicy.outcome(chosen: 3, automatic: 1) == .remember(ordinal: 3)
         )
         #expect(AudioTrackMemoryPolicy.outcome(chosen: 1, automatic: 1) == .forget)
-        // No automatic choice at all: the engine starts such a layout on
-        // its first track, so that is what returning to it means.
+        // No automatic choice: the engine starts on the first track.
         #expect(AudioTrackMemoryPolicy.outcome(chosen: 1, automatic: nil) == .forget)
         #expect(
             AudioTrackMemoryPolicy.outcome(chosen: 2, automatic: nil) == .remember(ordinal: 2)
@@ -250,7 +230,7 @@ struct AudioTrackMemoryTests {
     }
 
     @Test func fingerprintFollowsShapeNotCountAlone() {
-        // Same count, different shape: the stereo track moved.
+        // The stereo track moved.
         let shuffled = [
             stream(codec: "ac3", channels: 2),
             stream(),
@@ -264,8 +244,6 @@ struct AudioTrackMemoryTests {
         )
     }
 
-    /// Each test gets its own suite, removed afterwards so the test host's
-    /// container does not accumulate them.
     private func withDefaults(_ body: (UserDefaults) throws -> Void) throws {
         let name = "hel184.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
@@ -283,21 +261,19 @@ struct AudioTrackMemoryTests {
             writing.configure(accountID: "account")
             writing.remember(remembered, for: scope)
 
-            // A new presentation builds a new store: the point of persisting.
+            // A new presentation builds a new store.
             let reading = AudioTrackMemoryStore(defaults: defaults)
             reading.configure(accountID: "account")
             #expect(reading.choice(for: scope) == remembered)
 
-            // And another account must not inherit it.
             let other = AudioTrackMemoryStore(defaults: defaults)
             other.configure(accountID: "other-account")
             #expect(other.choice(for: scope) == nil)
         }
     }
 
-    /// Two players open over one account, which Picture in Picture makes
-    /// ordinary. Each store writes the whole map, so one must not carry the
-    /// other's entries away with it.
+    /// Picture in Picture can open two players on one account. Each store
+    /// writes the whole map, so neither may drop the other's entries.
     @MainActor
     @Test func aSecondStoreDoesNotClobberTheFirstsEntries() throws {
         try withDefaults { defaults in
@@ -316,8 +292,7 @@ struct AudioTrackMemoryTests {
         }
     }
 
-    /// The oldest entries fall off, and never the one just written, however
-    /// the clock has behaved.
+    /// Evicts oldest first, but never the entry just written, whatever the clock says.
     @MainActor
     @Test func theStoreEvictsOldestFirstAndKeepsTheNewestWrite() throws {
         try withDefaults { defaults in
@@ -329,14 +304,12 @@ struct AudioTrackMemoryTests {
                 store.remember(entry, for: "series-\(index)")
             }
 
-            // Written with the oldest timestamp of all, so a naive eviction
-            // would drop exactly this one.
+            // The oldest timestamp of all.
             var newest = choice(ordinal: 4, layout: anonymousLayout)
             newest.updatedAt = 0
             store.remember(newest, for: "series-new")
 
             #expect(store.choice(for: "series-new")?.ordinal == 4)
-            // The genuinely oldest entry went instead.
             #expect(store.choice(for: "series-0") == nil)
             #expect(store.choice(for: "series-199")?.ordinal == 1)
         }
@@ -348,15 +321,13 @@ struct AudioTrackMemoryTests {
             AudioTrackMemoryStore.scope(seriesID: "series-1", itemID: "episode-1")
                 == AudioTrackMemoryStore.scope(seriesID: "series-1", itemID: "episode-2")
         )
-        // A film answers only for itself.
         #expect(
             AudioTrackMemoryStore.scope(seriesID: nil, itemID: "film-1")
                 != AudioTrackMemoryStore.scope(seriesID: nil, itemID: "film-2")
         )
     }
 
-    /// The other half of the same problem: four rows reading "DTS 5.1"
-    /// leave the viewer nothing to pick by, or to recognise afterwards.
+    /// Identical track names give the viewer nothing to pick by.
     @Test func collidingTrackNamesGainTheirPositionAndUniqueOnesDoNot() {
         let tracks = [
             PlayerTrack(engineID: 1, kind: .audio, displayName: "DTS 5.1", isSelected: false),
@@ -378,8 +349,7 @@ struct AudioTrackMemoryTests {
             "DTS 5.1 · Track 3",
             "Dolby Digital Stereo",
         ])
-        // Ordinals and selection are what the engine acts on: renaming must
-        // not disturb either.
+        // Renaming leaves ordinals and selection alone.
         #expect(named.map(\.engineID) == [1, 2, 3, 4])
         #expect(named.filter(\.isSelected).map(\.engineID) == [2])
     }

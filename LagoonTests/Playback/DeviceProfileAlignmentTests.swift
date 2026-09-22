@@ -5,17 +5,8 @@ import Testing
 @testable import LagoonEngine
 
 /// What the device profile offers a server, checked against what the engine
-/// can actually decode.
-///
-/// Split out of `ApplePlaybackAlignmentTests` when the engine moved to its
-/// own package: the tests that assert only on decoders went with it. These
-/// stayed because each one asserts that two sides agree — the envelope
-/// Jellyfin is sent, which is this side's, against the decoder that has to
-/// honour it, which is not.
-///
-/// That is why this file reaches into the engine and links libavcodec while
-/// the app itself does neither. A test that checks an agreement has to see
-/// both parties; the shipping code only ever sees its own side.
+/// can decode. Each test checks both sides agree, which is why this file
+/// reaches into the engine and links libavcodec when the app does neither.
 struct DeviceProfileAlignmentTests {
     @Test func vc1DirectPlayIsBoundedToTheSoftwareDecoderEnvelope() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first {
@@ -50,10 +41,7 @@ struct DeviceProfileAlignmentTests {
         ))
     }
 
-    /// WMV3 shares VC-1's decoder path and has always been in
-    /// `SoftwareVideoDecoder.supports`; only the profile omitted it, so every
-    /// WMV3 file took a server transcode for a decoder already present.
-    /// Same envelope as VC-1, for the same reasons.
+    /// WMV3 shares VC-1's decoder path, so it gets the same envelope.
     @Test func wmv3DirectPlayIsBoundedToTheSameEnvelopeAsVC1() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first {
             $0.type == "Video"
@@ -68,9 +56,7 @@ struct DeviceProfileAlignmentTests {
         let vc1Profile = DeviceProfile.everything.codecProfiles.first {
             $0.type == "Video" && $0.codec == "vc1"
         }
-        // Pinned as a pair rather than by repeating the literals: the two
-        // ride one decoder, so an envelope change to either that does not
-        // reach the other is the bug this catches.
+        // Compared as a pair: one decoder, so the envelopes must change together.
         #expect(wmv3Profile?.conditions.count == vc1Profile?.conditions.count)
         for property in ["Width", "Height", "IsInterlaced", "VideoBitDepth", "VideoRangeType"] {
             let wmv3Condition = wmv3Profile?.conditions.first { $0.property == property }
@@ -81,9 +67,7 @@ struct DeviceProfileAlignmentTests {
     }
 
     /// Both decode through `AudioDecoder`'s generic `avcodec_find_decoder`
-    /// path, so the only thing that kept them transcoding was the profile
-    /// not naming them. MP2 matters because the containers it
-    /// lives in — mpg, ts, vob — are all already advertised.
+    /// path. MP2 matters because mpg, ts and vob are already advertised.
     @Test func mp2AndALACAreOfferedInVideoContainers() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first {
             $0.type == "Video"
@@ -92,7 +76,6 @@ struct DeviceProfileAlignmentTests {
 
         #expect(audioCodecs.contains("mp2"))
         #expect(audioCodecs.contains("alac"))
-        // The containers that make MP2 worth advertising at all.
         let containers = directVideo?.container.split(separator: ",").map(String.init) ?? []
         #expect(containers.contains("mpg"))
         #expect(containers.contains("ts"))
@@ -122,8 +105,7 @@ struct DeviceProfileAlignmentTests {
             #expect(profile?.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
             } == true)
-            // AV1 reaches 4K on the software path now that dav1d is allowed
-            // more than one core; VP9 keeps the HD bound it was written with,
+            // Software AV1 (multi-core dav1d) reaches 4K; VP9 stays at HD,
             // since nothing has measured it above that.
             let bound = codec == "av1" ? ("3840", "2160") : ("1920", "1080")
             #expect(profile?.conditions.contains {
@@ -184,18 +166,16 @@ struct DeviceProfileAlignmentTests {
         #expect(mpeg4Profile?.conditions.contains {
             $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
         } == true)
-        // Anamorphic is deliberately NOT excluded — pixel aspect is carried
-        // through the format description now. See
+        // Anamorphic is not excluded; see
         // anamorphicSourcesAreNoLongerExcludedFromDirectPlay.
 
         #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_MPEG4))
-        // AC-3 beside software-decoded video already routes to local LPCM,
-        // so the pairing that made VC-1 stutter covers these files unchanged.
+        // AC-3 beside software-decoded video decodes to local LPCM.
         #expect(AudioDecodePolicy.requiresLocalPCM(
             codecID: AV_CODEC_ID_AC3,
             softwareVideoDecoded: true
         ))
-        // MP3 — what most of these rips carry — stays compressed passthrough.
+        // MP3, common in these rips, stays compressed passthrough.
         #expect(!AudioDecodePolicy.requiresLocalPCM(
             codecID: AV_CODEC_ID_MP3,
             softwareVideoDecoded: true
@@ -224,15 +204,12 @@ struct DeviceProfileAlignmentTests {
         #expect(mpeg2?.conditions.contains {
             $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "8"
         } == true)
-        // MPEG-2 no longer carries an interlace guard: the software path
-        // that decodes it deinterlaces what it decodes, so an interlaced DVD
-        // or off-air recording is Direct Play like any other.
+        // No interlace guard: the software path deinterlaces MPEG-2.
         #expect(mpeg2?.conditions.contains {
             $0.property == "IsInterlaced"
         } == false)
 
-        // Representative PCM variants cover ordinary little-endian files,
-        // big-endian sources, and Blu-ray LPCM. All reach AudioDecoder's
+        // Little-endian, big-endian and Blu-ray PCM all reach AudioDecoder's
         // generic libavcodec -> Float32 LPCM path.
         let advertisedPCM = [
             "pcm_s16le", "pcm_s24le", "pcm_s32le", "pcm_f32le", "pcm_f64le",
@@ -255,23 +232,18 @@ struct DeviceProfileAlignmentTests {
     }
 
     @Test func hardwareWithoutHEVCIsNeverOfferedHEVC() throws {
-        // The engine creates its HEVC session with
-        // RequireHardwareAcceleratedVideoDecoder, so on a device without one
-        // HEVC does not degrade — it fails outright with -12906. Claiming it
-        // anyway buys a guaranteed failure.
+        // The engine requires a hardware HEVC decoder; without one HEVC fails
+        // outright with -12906.
         let reduced = DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: false))
         let json = try String(
             decoding: JellyfinClient.encoder.encode(reduced),
             as: UTF8.self
         )
-        // The strongest form of the assertion: not one mention survives
-        // anywhere in what is sent, whichever section it was hiding in.
+        // No mention of hevc survives anywhere in the payload.
         #expect(!json.contains("hevc"))
 
-        // Nothing else may be collateral damage. H.264 in particular is NOT
-        // gated on hardware: it is handed to the renderer compressed and may
-        // be decoded in software — which is exactly how the simulator plays
-        // it while reporting no hardware support for any codec at all.
+        // Nothing else is dropped. H.264 is not gated on hardware: it may be
+        // decoded in software, which is how the simulator plays it.
         let directVideo = reduced.directPlayProfiles.first { $0.type == "Video" }
         let codecs = directVideo?.videoCodec?.split(separator: ",") ?? []
         #expect(codecs.contains("h264"))
@@ -285,16 +257,13 @@ struct DeviceProfileAlignmentTests {
         #expect(reduced.subtitleProfiles.count == DeviceProfile.everything.subtitleProfiles.count)
         #expect(reduced.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
 
-        // The transcode profile is the one that would otherwise undo all of
-        // this: listing hevc there lets the server answer a fallback request
-        // with the very format the device cannot decode.
+        // Otherwise the server could answer a fallback with HEVC.
         #expect(reduced.transcodingProfiles.first?.videoCodec == "h264")
     }
 
     @Test func aProfileLeftWithNoVideoCodecIsDroppedRatherThanBlanked() {
-        // Jellyfin reads both an absent and an empty codec list as "no
-        // constraint", so a profile whose every codec was HEVC cannot be
-        // blanked — that would offer strictly more than the full envelope.
+        // Jellyfin reads an empty codec list as "no constraint", so blanking
+        // an HEVC-only profile would offer everything.
         let hevcOnly = DeviceProfile.Profile(
             maxStreamingBitrate: 1,
             maxStaticBitrate: 1,
@@ -323,12 +292,9 @@ struct DeviceProfileAlignmentTests {
     }
 
     @Test func aDeviceWithoutHEVCIsNotAskedToPlay4KH264Instead() {
-        // Subtracting HEVC has a sharp edge without this: a 4K HEVC film stops
-        // direct-playing and the server is asked for H.264 at 4K, because
-        // nothing said otherwise — an enormous transcode for a device that
-        // cannot decode it either. Verified against Jellyfin 10.11: the
-        // conditions come back as MaxWidth=1920, MaxHeight=1080 on the
-        // transcode URL.
+        // Without this, a 4K HEVC film transcodes to 4K H.264, which the device
+        // cannot decode either. Jellyfin 10.11 turns these into MaxWidth=1920,
+        // MaxHeight=1080 on the transcode URL.
         let reduced = DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: false))
         let h264 = reduced.codecProfiles.first { $0.codec == "h264" }
         #expect(h264?.conditions.contains {
@@ -341,19 +307,15 @@ struct DeviceProfileAlignmentTests {
         #expect(h264?.conditions.contains { $0.property == "VideoLevel" } == true)
         #expect(h264?.conditions.contains { $0.property == "VideoProfile" } == true)
 
-        // Hardware that can decode HEVC keeps 4K H.264, which it can also
-        // decode: the ceiling belongs to the reduced profile alone.
+        // Hardware with HEVC keeps 4K H.264.
         let full = DeviceProfile.everything.codecProfiles.first { $0.codec == "h264" }
         #expect(full?.conditions.contains { $0.property == "Width" } == false)
     }
 
     @Test func hardwareWithHEVCIsOfferedTheWholeEnvelope() throws {
-        // Subtraction only. With the hardware present the profile must be the
-        // declared envelope exactly, not a rebuild that drifts from it.
-        //
-        // Compared as objects rather than bytes: the client's encoder uses a
-        // custom key strategy, which costs it stable key ordering, so two
-        // encodings of the same value are equal as JSON but not as data.
+        // With the hardware present the profile is the declared envelope
+        // exactly. Compared as objects: the encoder's key strategy loses
+        // stable key order, so equal values can differ as bytes.
         let full = try JSONSerialization.jsonObject(
             with: JellyfinClient.encoder.encode(
                 DeviceProfile.profile(
@@ -369,16 +331,13 @@ struct DeviceProfileAlignmentTests {
     }
 
     @Test func anamorphicSourcesAreNoLongerExcludedFromDirectPlay() {
-        // The engine now carries pixel aspect through, so the profile must
-        // not keep asking the server to transcode non-square sources.
+        // The engine carries pixel aspect through.
         for profile in DeviceProfile.everything.codecProfiles {
             #expect(!profile.conditions.contains { $0.property == "IsAnamorphic" })
         }
-        // Interlaced content still goes to the server for everything that
-        // decodes in hardware, where there is no deinterlacing stage. MPEG-2
-        // is the exception, because it decodes in software and that path
-        // deinterlaces, and so is H.264, whose interlaced streams
-        // the demuxer sends down the same software path.
+        // Hardware decoding cannot deinterlace, so interlaced content
+        // transcodes, except MPEG-2 and interlaced H.264, which decode in
+        // software.
         let guarded = DeviceProfile.everything.codecProfiles.filter { profile in
             profile.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
@@ -392,12 +351,8 @@ struct DeviceProfileAlignmentTests {
     }
 
     @Test func interlacedH264IsRoutedToTheSoftwareDecoderAndProgressiveIsNot() {
-        // A 1080i broadcast recording used to transcode because the
-        // H.264 profile carried an interlace guard, VideoToolbox having no
-        // deinterlacing stage. The guard is gone and the split is now the
-        // demuxer's own field-order check: interlaced H.264 decodes in
-        // software, where the deinterlacer lives, and progressive H.264 is
-        // exactly where it was.
+        // The demuxer's field-order check splits H.264: interlaced decodes in
+        // software, which deinterlaces; progressive stays on VideoToolbox.
         let capabilities = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
         #expect(FFmpegDemuxer.usesCompressedVideoPath(
             codecID: AV_CODEC_ID_H264, capabilities: capabilities, interlaced: false
@@ -406,16 +361,13 @@ struct DeviceProfileAlignmentTests {
             codecID: AV_CODEC_ID_H264, capabilities: capabilities, interlaced: true
         ))
         // The software decoder takes H.264 only on the interlaced route, so a
-        // hardware description that fails for progressive H.264 keeps
-        // failing the way it does today instead of quietly decoding on the
-        // CPU.
+        // hardware failure on progressive H.264 never falls back to the CPU.
         #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, interlaced: true))
         #expect(!SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264))
         #expect(!SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, interlaced: false))
 
-        // HEVC has no software route and interlaced HEVC is not something a
-        // library holds: it stays compressed whatever the field order says,
-        // and the profile keeps asking the server for it.
+        // HEVC has no software route: it stays compressed, and the profile
+        // keeps the interlace guard.
         #expect(FFmpegDemuxer.usesCompressedVideoPath(
             codecID: AV_CODEC_ID_HEVC, capabilities: capabilities, interlaced: true
         ))
@@ -425,18 +377,15 @@ struct DeviceProfileAlignmentTests {
             $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
         } == true)
 
-        // Every field order libavformat can report. Unknown is progressive:
-        // it is what a stream that never said reports, and sending that to
-        // the CPU would take ordinary H.264 off the hardware for nothing.
+        // Unknown counts as progressive, or ordinary H.264 would leave the
+        // hardware for nothing.
         for order in [AV_FIELD_TT, AV_FIELD_BB, AV_FIELD_TB, AV_FIELD_BT] {
             #expect(FFmpegDemuxer.isInterlaced(fieldOrder: order))
         }
         #expect(!FFmpegDemuxer.isInterlaced(fieldOrder: AV_FIELD_PROGRESSIVE))
         #expect(!FFmpegDemuxer.isInterlaced(fieldOrder: AV_FIELD_UNKNOWN))
 
-        // The profile no longer refuses it; AC-3 beside software-decoded
-        // video already goes local, which is what a broadcast recording
-        // pairs it with.
+        // AC-3, common in broadcast recordings, decodes locally beside it.
         let h264 = DeviceProfile.everything.codecProfiles.first { $0.codec == "h264" }
         #expect(h264?.conditions.contains { $0.property == "IsInterlaced" } == false)
         #expect(AudioDecodePolicy.requiresLocalPCM(
@@ -444,14 +393,5 @@ struct DeviceProfileAlignmentTests {
             softwareVideoDecoded: true
         ))
     }
-
-    /// Point `LAGOON_INTERLACED_H264_FIXTURE_URL` at an interlaced H.264 file
-    /// (a 1080i recording, or `ffmpeg -f lavfi -i testsrc2=size=1920x1080:rate=25
-    /// -vf tinterlace=interleave_top,setfield=tff -c:v libx264 -flags +ilme+ildct
-    /// -x264-params tff=1`) and this opens it the way the player does: the
-    /// demuxer must take the software route and every decoded frame must
-    /// come out progressive, not woven. `LAGOON_PROGRESSIVE_H264_FIXTURE_URL`
-    /// is the control: the same encoder without the interlace flags has to
-    /// stay on the compressed VideoToolbox path.
 
 }

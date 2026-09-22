@@ -2,10 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure decision coverage for offline downloads: which resume
-/// position wins when a title starts, and whether a stopped position counts
-/// as played through. Neither needs a server, a clock, or a download on
-/// disk.
+/// Offline downloads: which resume position wins at start, and whether a
+/// stopped position counts as played through.
 @Suite("Download playback resume")
 struct DownloadResumeStartSecondsTests {
     @Test func fallbackOverrideOutranksEverything() {
@@ -29,8 +27,7 @@ struct DownloadResumeStartSecondsTests {
     }
 
     @Test func startFromBeginningSkipsTheLocalResumeToo() {
-        // Starting from beginning starts at 0 for a downloaded title exactly
-        // as it does for a streamed one; only a fallback retry outranks it.
+        // Same as streaming: only a fallback retry outranks starting at 0.
         let seconds = PlaybackController.resumeStartSeconds(
             fallbackOverrideSeconds: nil,
             startFromBeginning: true,

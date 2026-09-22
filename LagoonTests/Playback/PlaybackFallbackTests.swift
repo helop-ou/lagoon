@@ -18,9 +18,8 @@ struct PlaybackFallbackTests {
     }
 
     @Test func anUndecodableStreamSkipsTheRemuxThatCouldNotHelp() {
-        // A remux hands the decoder the same bitstream in a new container,
-        // so spending a server-side rewrite to watch it fail again is pure
-        // latency. Straight to the rung that re-encodes.
+        // A remux hands the decoder the same bitstream, so go straight to the
+        // rung that re-encodes.
         #expect(
             PlaybackFallbackPolicy.next(after: .negotiated, cause: .undecodable) == .transcode
         )
@@ -30,10 +29,8 @@ struct PlaybackFallbackTests {
     }
 
     @Test func aBlurayImageIsRecognisedFromTheFieldsThatGiveItAway() throws {
-        // Jellyfin describes WALL·E's Blu-ray image as container `ts` with
-        // direct play available, then serves 64 GB of UDF. VideoType and
-        // IsoType are the only fields that say so, and both have to survive
-        // decoding.
+        // Jellyfin reports a Blu-ray image as container `ts` with direct play,
+        // then serves raw UDF. Only VideoType and IsoType give it away.
         let image = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
         {
           "Id":"disc", "Container":"ts", "VideoType":"Iso", "IsoType":"BluRay",
@@ -44,16 +41,13 @@ struct PlaybackFallbackTests {
         #expect(image.isoType == "BluRay")
         let layout = PlaybackSourceLayout(videoType: image.videoType, isoType: image.isoType)
         #expect(layout == .blurayImage)
-        // This one Lagoon opens itself, so the negotiated rung is where it
-        // belongs and there is nothing for the HUD to explain.
+        // Lagoon opens this itself.
         #expect(PlaybackFallbackPolicy.start(for: layout) == .negotiated)
         #expect(layout.directPlayRefusal == nil)
     }
 
     @Test func aDVDImageIsReadHereToo() {
-        // The same UDF reader mounts it, VIDEO_TS needs no playlist, and the
-        // software decode path deinterlaces what it decodes, so a DVD image
-        // no longer has to be rebuilt by the server either.
+        // The UDF reader mounts it and the software path deinterlaces it.
         let dvd = PlaybackSourceLayout(videoType: "Iso", isoType: "Dvd")
         #expect(dvd == .dvdImage)
         #expect(dvd.isReadableDisc)
@@ -62,10 +56,8 @@ struct PlaybackFallbackTests {
     }
 
     @Test func everyOtherDiscStartsAtTheRungTheServerRebuildsItFrom() {
-        // A rip is served as its folder, which Jellyfin gives no way to read
-        // inside of, and an image the server did not type is not assumed to
-        // be readable. Both belong to the server, and neither should cost a
-        // failed open to discover.
+        // Jellyfin gives no way to read inside a rip folder, and an untyped
+        // image is not assumed readable. Both start on the server's rung.
         let rip = PlaybackSourceLayout(videoType: "BluRay", isoType: nil)
         let untyped = PlaybackSourceLayout(videoType: "Iso", isoType: nil)
         #expect(rip == .discFolder)
@@ -82,9 +74,8 @@ struct PlaybackFallbackTests {
     @Test func onlyAPlainFileIsTriedAtTheNegotiatedRung() {
         #expect(PlaybackSourceLayout(videoType: nil, isoType: nil) == .file)
         #expect(PlaybackSourceLayout(videoType: "VideoFile", isoType: nil) == .file)
-        // An unrecognised value stays a file: one failed open and a rung of
-        // ladder is a smaller price than silently forcing a server transcode
-        // on something that might have played.
+        // An unknown value stays a file: one failed open costs less than
+        // forcing a transcode on something that might have played.
         #expect(PlaybackSourceLayout(videoType: "HoloDisc", isoType: nil) == .file)
         #expect(PlaybackFallbackPolicy.start(for: .file) == .negotiated)
         #expect(PlaybackSourceLayout.file.directPlayRefusal == nil)
@@ -92,9 +83,8 @@ struct PlaybackFallbackTests {
     }
 
     @Test func theLadderAlwaysTerminates() {
-        // Whatever the failure, following `next` from any rung has to reach
-        // nil: an engine that fails every way must end in the error overlay,
-        // never in a loop of restarts.
+        // Every path reaches nil, so repeated failure ends in the error
+        // overlay, never a restart loop.
         for start in PlaybackDelivery.allCases {
             for cause in [PlaybackEngineFailure.Cause.delivery, .undecodable] {
                 var delivery: PlaybackDelivery? = start
@@ -110,25 +100,22 @@ struct PlaybackFallbackTests {
     }
 
     @Test func eachRungWithdrawsExactlyOnePermissionFromJellyfin() throws {
-        // Jellyfin defaults all four flags to true, so the negotiated rung
-        // has to send what the server would have assumed on its own.
+        // Jellyfin defaults all four flags to true.
         #expect(PlaybackDelivery.negotiated.flags == PlaybackDeliveryFlags(
             enableDirectPlay: true,
             enableDirectStream: true,
             allowVideoStreamCopy: true,
             allowAudioStreamCopy: true
         ))
-        // Remux: direct play is refused, everything that avoids a re-encode
-        // stays on the table.
+        // Remux: refuse direct play only.
         #expect(PlaybackDelivery.remux.flags == PlaybackDeliveryFlags(
             enableDirectPlay: false,
             enableDirectStream: true,
             allowVideoStreamCopy: true,
             allowAudioStreamCopy: true
         ))
-        // Transcode: video stream copy has to go too, or the server can
-        // satisfy the request by copying the bitstream that just failed.
-        // Audio copy stays — undecodable audio never reaches the ladder.
+        // Transcode: refuse video copy too, or the server copies the bitstream
+        // that just failed. Audio copy stays; bad audio never reaches the ladder.
         #expect(PlaybackDelivery.transcode.flags == PlaybackDeliveryFlags(
             enableDirectPlay: false,
             enableDirectStream: false,
@@ -137,10 +124,8 @@ struct PlaybackFallbackTests {
         ))
     }
 
-    /// The whole feature is silent if these key names are wrong: Jellyfin
-    /// ignores what it does not recognize, would answer every rung with the
-    /// same direct play, and the ladder would descend to a transcode that is
-    /// also ignored.
+    /// Jellyfin silently ignores unknown keys, so a wrong name would make
+    /// every rung the same direct play.
     @Test func theRequestCarriesJellyfinsOwnFlagNames() throws {
         for delivery in PlaybackDelivery.allCases {
             let request = JellyfinClient.PlaybackInfoRequest(
@@ -158,8 +143,7 @@ struct PlaybackFallbackTests {
             #expect(json["EnableDirectStream"] as? Bool == flags.enableDirectStream)
             #expect(json["AllowVideoStreamCopy"] as? Bool == flags.allowVideoStreamCopy)
             #expect(json["AllowAudioStreamCopy"] as? Bool == flags.allowAudioStreamCopy)
-            // The profile still has to ride along on every rung — a retry
-            // that dropped it would let the server pick anything at all.
+            // Without the profile the server could pick anything.
             #expect(json["DeviceProfile"] != nil)
             #expect(json["MaxStreamingBitrate"] as? Int == 120_000_000)
         }
@@ -179,10 +163,8 @@ struct PlaybackFallbackTests {
         )
     }
 
-    /// Left unbounded the bottom rung inherits a direct-play envelope — 4K
-    /// at 120 Mbps — and asks an encoder to produce it. The reference server
-    /// answers that at 9.5 fps for a 30 fps source, so the rescue rung
-    /// rebuffers worse than the failure it was descended to rescue.
+    /// Unbounded, the transcode rung asks for 4K at 120 Mbps, which the
+    /// reference server encodes at 9.5 fps for a 30 fps source.
     @Test func theTranscodeRungAsksForSomethingAnEncoderCanKeepUpWith() {
         let bounded = DeviceProfile.boundedForRealtimeTranscode(DeviceProfile.everything)
         #expect(bounded.maxStreamingBitrate == DeviceProfile.realtimeTranscodeBitrateCeiling)
@@ -193,9 +175,8 @@ struct PlaybackFallbackTests {
         }
     }
 
-    /// Only the rung that re-encodes. `remux` stream-copies the video, so a
-    /// resolution condition there would force the very re-encode that rung
-    /// exists to avoid, and `negotiated` has to keep direct-playing 4K.
+    /// A resolution bound on `remux` would force a re-encode, and
+    /// `negotiated` must keep direct-playing 4K.
     @Test func theRungsThatDoNotReEncodeKeepTheFullEnvelope() {
         #expect(
             DeviceProfile.lagoon(for: .negotiated).maxStreamingBitrate
@@ -212,10 +193,8 @@ struct PlaybackFallbackTests {
         #expect(hdBound(DeviceProfile.lagoon(for: .remux), codec: "hevc").width == nil)
     }
 
-    /// vp9, vc1, wmv3, mpeg4 and mpeg2video are written with their own 1080p
-    /// ceiling, and a device without hardware AV1 gets one applied too. Two
-    /// transforms can now each ask for the same bound, and a codec that
-    /// collected both would send Jellyfin a duplicated condition list.
+    /// Several codecs already carry a 1080p ceiling; bounding again must not
+    /// duplicate the condition.
     @Test func aCodecTheEnvelopeAlreadyBoundsDoesNotCollectADuplicate() {
         let once = DeviceProfile.boundedForRealtimeTranscode(DeviceProfile.everything)
         let twice = DeviceProfile.boundedForRealtimeTranscode(once)
@@ -231,8 +210,6 @@ struct PlaybackFallbackTests {
     }
 }
 
-/// The profile advertised 120 Mbps on every path, so an 80 Mbps
-/// remux was offered as direct play over cellular.
 @Suite("Metered path cap")
 struct MeteredPathTests {
     private let cellular = NetworkPathCost(isExpensive: true, isConstrained: false)
@@ -268,8 +245,7 @@ struct MeteredPathTests {
         ) == MeteredPathPolicy.maxBitrate)
     }
 
-    /// Never raises a ceiling that was already lower — the transcode rung
-    /// asks for 20 Mbps and a metered path must not undo that.
+    /// Never raises a lower ceiling, such as the transcode rung's.
     @Test func theCapOnlyEverLowers() {
         #expect(MeteredPathPolicy.maxStreamingBitrate(
             unrestricted: 1_000_000,
@@ -278,9 +254,8 @@ struct MeteredPathTests {
         ) == 1_000_000)
     }
 
-    /// The static ceiling has to come down with the streaming one: it is
-    /// what the server checks before offering the original file, so leaving
-    /// it high would let an 89 Mbps remux direct-play over cellular anyway.
+    /// The server checks the static ceiling before offering the original
+    /// file, so it must come down too.
     @Test func theStaticCeilingComesDownToo() {
         let capped = DeviceProfile.cappedForMeteredPath(
             DeviceProfile.everything,
@@ -291,7 +266,7 @@ struct MeteredPathTests {
         #expect(capped.maxStreamingBitrate == MeteredPathPolicy.maxBitrate)
         #expect(capped.maxStaticBitrate <= MeteredPathPolicy.maxBitrate)
         #else
-        // tvOS is a wired appliance; the cap is deliberately not applied.
+        // tvOS is a wired appliance; no cap.
         #expect(capped.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
         #endif
     }
@@ -306,9 +281,8 @@ struct MeteredPathTests {
         #expect(same.maxStaticBitrate == DeviceProfile.everything.maxStaticBitrate)
     }
 
-    /// Two transforms can now each ask for a geometry bound and they no
-    /// longer ask for the same number. The tighter one has to survive, or a
-    /// metered 720p cap would be undone by a 1080p fallback bound.
+    /// The tighter bound wins, or a 1080p fallback bound would undo a
+    /// metered 720p cap.
     @Test func twoGeometryBoundsResolveToTheTighter() {
         let hd = DeviceProfile.boundedTo(
             DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }!,
@@ -322,7 +296,7 @@ struct MeteredPathTests {
         #expect(heights.count == 1)
         #expect(widths.first?.value == "1280")
         #expect(heights.first?.value == "720")
-        // And the order does not matter.
+        // In either order.
         let reversed = DeviceProfile.boundedTo(
             DeviceProfile.boundedTo(
                 DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }!,

@@ -294,8 +294,7 @@ private nonisolated final class DownloadProtocol: URLProtocol {
     }
     private func deliverResponse() {
         guard let url = request.url else { return }
-        // Without a MIME type Foundation may wait for body bytes to sniff
-        // content before forwarding the response to its session delegate.
+        // Without a MIME type Foundation may hold the response to sniff content.
         let headers = ["Content-Type": "application/octet-stream"].merging(fixture.headers) { _, supplied in supplied }
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: fixture.status, httpVersion: nil, headerFields: headers)!, cacheStoragePolicy: .notAllowed)
     }

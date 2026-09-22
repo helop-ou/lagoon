@@ -3,9 +3,7 @@ import Testing
 import LagoonEngine
 @testable import Lagoon
 
-/// The app's half of the two seams the engine is configured through. The
-/// engine states what it wants; these prove this app answers with what it
-/// used to read for itself.
+/// The app's side of the engine's two configuration seams.
 @Suite("Engine configuration")
 struct EngineConfigurationTests {
     @Test func everyKnobComesFromTheKeyThatUsedToBeReadInsideTheEngine() {
@@ -45,24 +43,20 @@ struct EngineConfigurationTests {
         #expect(tuning.buffersOnAudioStarvation)
         #expect(tuning.cachesSegmentedManifests)
         #expect(tuning.softwareDecodeOutputMode == "gpu-sdr-linear")
-        // Set-to-false is a decision; absent is not. The engine tells them
-        // apart, so the source has to as well.
+        // Set-to-false differs from absent, and the engine tells them apart.
         #expect(tuning.softwareDecodeCompressedOutput == false)
         #expect(tuning.rendererRetirementDelaySeconds == 2.5)
     }
 
     @Test func everyEngineDiagnosticMapsToItsOwnStableCode() {
-        // The switches are exhaustive by compilation; what a compiler cannot
-        // catch is two engine events landing on one app code, which would
-        // silently merge two things in every dashboard query.
+        // The compiler cannot catch two engine events sharing one app code,
+        // which would merge them in every dashboard query.
         let eventCodes = EngineDiagnosticEvent.allCases.map(EngineDiagnosticsBridge.code(for:))
         #expect(Set(eventCodes).count == EngineDiagnosticEvent.allCases.count)
 
         let incidentCodes = EngineDiagnosticIncident.allCases.map(EngineDiagnosticsBridge.code(for:))
         #expect(Set(incidentCodes).count == EngineDiagnosticIncident.allCases.count)
 
-        // The engine's cache demotion is the one the app used to declare a
-        // code for and never emit.
         #expect(EngineDiagnosticsBridge.code(for: .playbackCacheFallback) == .playbackCacheFallback)
         #expect(EngineDiagnosticsBridge.level(for: .warning) == .warning)
     }

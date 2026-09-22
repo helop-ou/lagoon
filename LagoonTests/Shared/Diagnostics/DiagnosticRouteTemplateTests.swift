@@ -15,9 +15,7 @@ struct DiagnosticRouteTemplateTests {
         #expect(APIDiagnostics.routeToken(.string("Users/{id}/Items/{id}/PlaybackInfo")) == "Users.id.Items.id.PlaybackInfo")
     }
 
-    /// Seerr mounts every route under `api/v1`, and a version segment that
-    /// blanked to `{id}` made `search`, `request` and `movie/{id}` all read
-    /// `api/{id}/…` on the dashboard.
+    /// Seerr mounts every route under `api/v1`; blanking `v1` to `{id}` merges them.
     @Test func versionSegmentsSurviveSoSeerrRoutesStayDistinct() {
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/search") == "api/v1/search")
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/movie/603") == "api/v1/movie/{id}")
@@ -25,9 +23,8 @@ struct DiagnosticRouteTemplateTests {
         #expect(APIDiagnostics.routeToken(.string("api/v1/search")) == "api.v1.search")
     }
 
-    /// The exception is only ever `v` and digits. Everything that could name
-    /// the viewer or what they are watching still blanks, and the schema has
-    /// to agree with the template or the route field is dropped on the way out.
+    /// Only `v` plus digits survives, and the schema must agree or the route
+    /// field is dropped.
     @Test func onlyVersionSegmentsSurviveAndTheSchemaAgrees() {
         #expect(!DiagnosticRouteTemplate.isVersionSegment("v"))
         #expect(!DiagnosticRouteTemplate.isVersionSegment("v1beta"))

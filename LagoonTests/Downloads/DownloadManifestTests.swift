@@ -49,8 +49,7 @@ struct DownloadManifestTests {
     }
 
     @Test func pauseClearsAStaleFailureString() {
-        // A late progress or failure callback for the attempt being paused
-        // must not leave old error text sitting under a fresh pause.
+        // A late callback must not leave old error text under a fresh pause.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry())
         manifest.markStarted("item1", taskIdentifier: 1, attemptToken: "token1")
@@ -61,9 +60,7 @@ struct DownloadManifestTests {
     }
 
     @Test func failureAfterPauseStaysPaused() {
-        // A cancel's own didCompleteWithError callback can still land after
-        // the pause it caused has already been applied; it must not flip a
-        // deliberate pause into a failure.
+        // The cancel's didCompleteWithError can land after the pause.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry())
         manifest.markStarted("item1", taskIdentifier: 1, attemptToken: "token1")
@@ -97,9 +94,7 @@ struct DownloadManifestTests {
     }
 
     @Test func recordProgressIsANoOpOncePausedOrComplete() {
-        // A progress callback queued before a pause (or a delete-and-restart
-        // that finishes fast) can still land after the state moved on; it
-        // must not resurrect a byte count or un-pause the entry.
+        // A progress callback queued before a pause can land after it.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry(id: "paused"))
         manifest.markStarted("paused", taskIdentifier: 1, attemptToken: "token1")
@@ -148,10 +143,8 @@ struct DownloadManifestTests {
     }
 
     @Test func reconcilePromotesAFinishedFileToComplete() {
-        // A `didFinishDownloadingTo` that landed while the process was dead
-        // wrote the file and the manifest, but the process only sees the
-        // task gone when it comes back; the file on disk still says the
-        // transfer actually finished, so it must not be declared lost.
+        // A transfer that finished while the process was dead left its file;
+        // the file proves it finished.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry(id: "finishedOffline"))
         manifest.markStarted("finishedOffline", taskIdentifier: 1, attemptToken: "token1")
@@ -196,17 +189,14 @@ struct DownloadManifestTests {
     }
 
     @Test func attemptTokenDecodesAsNilFromAManifestSavedBeforeItExisted() throws {
-        // `attemptToken` postdates the first
-        // shipped manifest schema; a file written before it must still
-        // decode, with the field simply absent.
+        // Manifests written before `attemptToken` must still decode.
         let json = """
         {"entries":[{"itemID":"item1","type":"Movie","title":"Old Entry",
         "runTimeTicks":36000000000,"requestedQuality":"original","quality":"original",
         "fileName":"item1.mp4","mediaSourceID":"source1","receivedBytes":0,"state":"queued",
         "artworkFiles":{},"createdAt":"2024-01-01T00:00:00Z"}],"pendingReports":[]}
         """
-        // `DownloadStore` itself is iOS only; decoding directly here keeps
-        // this test running on every platform the manifest type does.
+        // `DownloadStore` is iOS only; decoding directly runs everywhere.
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(DownloadManifest.self, from: Data(json.utf8))

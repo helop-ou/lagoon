@@ -10,9 +10,8 @@ struct SyncPlayAccountTests {
         client.configure(serverURL: try #require(URL(string: "https://second.syncplay.test")))
         client.activateSession(token: "second-token", userId: "second-user")
 
-        // SessionStore reconfigures the shared client before telling the
-        // feature about the account switch. Work for the previous group
-        // must still use its previous server and credentials in that window.
+        // SessionStore reconfigures the shared client before announcing the
+        // switch; the old group's work must keep its old server and credentials.
         await store.refreshGroups()
         let outgoing = try #require(SyncPlayAccountProtocol.lastRequest)
         #expect(outgoing.url?.host == "first.syncplay.test")

@@ -3,9 +3,8 @@ import Testing
 import LagoonEngine
 @testable import Lagoon
 
-/// The Subtitles tab is either choosing a track or browsing search
-/// results. These pin the coordinator half of that — the panel can only be as
-/// honest about which state it is in as the state it reads.
+/// The Subtitles tab is either choosing a track or browsing search results.
+/// These pin the coordinator's side of that state.
 @Suite("Subtitle search browse state", .serialized)
 struct SubtitleSearchBrowseStateTests {
     @Test @MainActor func searchingOpensTheResultsBrowser() async throws {
@@ -45,8 +44,7 @@ struct SubtitleSearchBrowseStateTests {
 
         #expect(coordinator.phase == .idle)
         #expect(!coordinator.isBrowsingResults)
-        // The abandoned search must not surface its answer after the viewer
-        // has gone back to the track list.
+        // An abandoned search must not surface its answer later.
         try await Task.sleep(for: .milliseconds(300))
         #expect(coordinator.phase == .idle)
         #expect(coordinator.results.isEmpty)
@@ -67,8 +65,7 @@ struct SubtitleSearchBrowseStateTests {
 
         coordinator.closeResults()
 
-        // The status line lives above the track list now, so it is the only
-        // thing left that can explain what happened to the chosen result.
+        // The status line is the only place left to explain the failure.
         guard case .downloadFailed = coordinator.phase else {
             Issue.record("Closing the browser must not erase a download failure")
             return
@@ -124,8 +121,7 @@ struct SubtitleSearchBrowseStateTests {
         coordinator.startDownload(good)
         try await waitUntil { coordinator.phase == .downloaded }
 
-        // The chosen result is a track now; the viewer belongs back in the
-        // list where it is selected, with the status line explaining it.
+        // The result is a track now, so return to the list where it is selected.
         #expect(!coordinator.isBrowsingResults)
         #expect(coordinator.results.isEmpty)
         #expect(engine.subtitleTracks.contains { $0.isSelected && $0.source == .downloaded })
@@ -188,9 +184,8 @@ struct SubtitleSearchBrowseStateTests {
     }
 }
 
-/// Minimal Jellyfin stand-in for the browse-state flow: one language with two
-/// results (one downloadable, one the provider refuses), one with a single
-/// result, and the permission probe every remote call makes first.
+/// Fake Jellyfin: one language with a good and a refused result, one with a
+/// single result, and the permission probe.
 private nonisolated final class BrowseStateURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recorded: [String] = []
@@ -264,8 +259,7 @@ private nonisolated final class BrowseStateURLProtocol: URLProtocol, @unchecked 
             """#.utf8)
             status = 200
         case ("GET", "/Providers/Subtitles/Subtitles/broken"):
-            // A hard client error: fails immediately and never reaches
-            // Jellyfin's save fallback, so the test does not wait on retries.
+            // A 400 skips Jellyfin's save fallback, so no retries to wait on.
             payload = Data()
             status = 400
         case ("POST", "/Videos/item-1/Subtitles"):

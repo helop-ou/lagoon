@@ -3,15 +3,10 @@ import Testing
 @testable import LagoonEngine
 @testable import Lagoon
 
-/// An acceptance criterion, as a test: drive the production
-/// reporting paths (the API helper both clients call, and the playback
-/// monitor the controller owns) with synthetic sensitive values, then
-/// assert none of them reach the bytes that would leave the device.
-///
-/// The token charset is a backstop, not the guarantee: a bare hostname
-/// such as `nas.local` would pass it. The guarantee is that these entry
-/// points only ever hand the schema identifiers, which is what this test
-/// pins.
+/// Drives the production reporting paths with synthetic sensitive values and
+/// asserts none reach the outgoing bytes. The token charset is only a
+/// backstop (`nas.local` passes it); the guarantee is that these paths hand
+/// the schema identifiers only.
 @MainActor
 @Suite("Diagnostic privacy")
 struct DiagnosticPrivacyTests {
@@ -59,9 +54,7 @@ struct DiagnosticPrivacyTests {
         do { _ = try JSONDecoder().decode(Probe.self, from: Data("{\"Name\":\"demo-user\"}".utf8)) } catch { decodeError = error }
         APIDiagnostics.decodeFailed(try #require(decodeError), request: Self.request(), serverURL: server, client: "seerr", hub: hub)
 
-        // The playback monitor, with a media source full of names and
-        // paths, an engine failure quoting the server, and a start failure
-        // carrying the server's own sentence.
+        // The playback monitor, fed names, paths and server sentences.
         let monitor = PlaybackIncidentMonitor(hub: hub)
         let source = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
         {"Id":"12c4","Name":"The Film Nobody Should See","Path":"/media/secret/The Film.mkv","Container":"mkv",
@@ -118,8 +111,7 @@ struct DiagnosticPrivacyTests {
     }
 
     @Test func aCallerMistakeIsDroppedAndCounted() throws {
-        // A title or a hostname handed to a token key never reaches the
-        // envelope, and the drop is visible in the report.
+        // A title or hostname under a token key is dropped, visibly.
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
         hub.report(.playbackFailed, level: .error, fields: [

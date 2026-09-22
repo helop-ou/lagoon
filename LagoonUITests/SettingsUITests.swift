@@ -52,15 +52,13 @@ final class SettingsUITests: XCTestCase {
         choose("Smart", for: "settings.subtitles.default", page: "Subtitles", in: app)
         XCTAssertTrue(control("settings.subtitles.preferred", in: app).exists)
         XCTAssertTrue(control("settings.subtitles.fallback", in: app).exists)
-        // Availability may say available, denied, or unavailable; the server
-        // permission result must not replace the page that owns its task.
+        // Whatever the permission result, it must not replace the page.
         let availability = control("settings.subtitles.search", in: app)
         reveal(availability, in: app)
         attach("settings-subtitles")
         openAppearance(in: app)
-        // Establish the baseline through the UI. The tvOS regression flag
-        // resets appearance whenever the Settings root reappears, which
-        // would erase the value this journey needs to verify persists.
+        // Set the baseline through the UI: the tvOS regression flag resets
+        // appearance whenever the Settings root reappears.
         let reset = app.buttons["settings.subtitles.reset"]
         reveal(reset, in: app)
         reset.tap()
@@ -146,8 +144,7 @@ final class SettingsUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["About"].waitForExistence(timeout: 5))
         goBack(to: "Settings", in: app)
         openCategory("appearance", title: "Appearance", in: app)
-        // Keep the selected theme visible for screenshot review after a
-        // full navigation round trip, then restore the default for peers.
+        // Screenshot the theme after the round trip, then restore the default.
         attach("baby-pink-appearance-return")
         app.staticTexts["Lagoon"].firstMatch.tap()
     }
@@ -160,8 +157,7 @@ final class SettingsUITests: XCTestCase {
             "-debug.regressionResetState", "YES",
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
             "-UIPreferredContentSizeCategoryName", contentSize,
-            // A report toggle exercised by this test must not submit to
-            // the production diagnostics project.
+            // Keep report toggles away from the production diagnostics project.
             "-diagnostics.sentryDSN", "http://key@127.0.0.1:9/1",
         ]
         for key in ["LAGOON_REGRESSION_SERVER", "LAGOON_REGRESSION_USER", "LAGOON_REGRESSION_PASS"] {
@@ -233,8 +229,7 @@ final class SettingsUITests: XCTestCase {
 
     private func tapToggle(_ row: XCUIElement, in app: XCUIApplication) {
         reveal(row, in: app)
-        // SwiftUI can expose both the identified full-width row and an
-        // unnamed native switch. The row's center is only its label area.
+        // The row's centre is its label, not the switch.
         let rowFrame = row.frame
         let target = app.switches.allElementsBoundByIndex
             .filter { rowFrame.contains($0.frame) && $0.isHittable }

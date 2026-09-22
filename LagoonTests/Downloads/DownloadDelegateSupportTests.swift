@@ -2,12 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure coverage for the background session delegate's supporting logic:
-/// the task-description wire format, the finished-vs-failed
-/// classification a download's HTTP status and byte count decide, and the
-/// short copy a transport error is mapped to. None of these touch a session,
-/// a manifest or a clock, so a delegate callback and the store's own
-/// reporting path can both be pinned down without either.
+/// The background delegate's pure logic: task-description format, finished
+/// vs failed classification, and transport-error copy.
 @Suite("Download task description")
 struct DownloadTaskDescriptionTests {
     @Test func parsesAllFourFields() {
@@ -29,9 +25,7 @@ struct DownloadTaskDescriptionTests {
     }
 
     @Test func returnsNilWhenAFieldIsMissing() {
-        // The earlier wire format carried only three fields; a
-        // task that survived a relaunch from before this change must not be
-        // misparsed into a bogus attempt token.
+        // A three-field description from an older task must not parse.
         #expect(DownloadTaskDescription.parse("item1|item1.mp4|accountkey") == nil)
     }
 
@@ -75,8 +69,7 @@ struct DownloadCompletionTests {
     }
 
     @Test func transcodeCompletesAtAnySizeOnceStatusIsGood() {
-        // A progressive transcode's expected size is only ever an estimate;
-        // it must never fail a finished download over a mismatch.
+        // A transcode's expected size is only an estimate.
         let outcome = DownloadCompletion.outcome(status: 200, bytesOnDisk: 1, expectedBytes: 999_999, quality: .high)
         #expect(outcome == .complete(bytes: 1))
     }

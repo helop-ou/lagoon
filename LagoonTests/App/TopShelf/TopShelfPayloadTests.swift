@@ -5,12 +5,8 @@ import TVServices
 #endif
 @testable import Lagoon
 
-/// The two facts the Top Shelf carousel derives rather than receives.
-///
-/// Both matter because the extension cannot compute them: it has no library
-/// access and no credentials, so whatever the app writes into the App Group
-/// snapshot is all the shelf will ever know. A wrong badge or a missing
-/// episode number is not recoverable on the other side.
+/// The facts the Top Shelf derives. The extension has no library access or
+/// credentials, so the App Group snapshot is all it will ever know.
 @Suite("Top Shelf payload")
 struct TopShelfPayloadTests {
     #if os(tvOS)
@@ -27,8 +23,7 @@ struct TopShelfPayloadTests {
          "UserData":{"PlayedPercentage":50.0}}
         """)
 
-        // railTitle is the *series* for an episode, so without this the shelf
-        // could not say which episode you were part way through.
+        // railTitle is the *series* for an episode.
         #expect(episode.railTitle == "Slow Horses")
         #expect(episode.topShelfContext == "Continue Watching · S1 E5")
     }
@@ -53,8 +48,7 @@ struct TopShelfPayloadTests {
     }
 
     @Test func withoutAResumePositionTheFramingStandsAlone() throws {
-        // playbackProgress ignores anything at or above 95%, so a nearly
-        // finished title must not claim "0 min left".
+        // playbackProgress ignores anything at or above 95%.
         let almostDone = try item("""
         {"Id":"m","Type":"Movie","Name":"Dune","RunTimeTicks":72000000000,
          "UserData":{"PlayedPercentage":99.0}}
@@ -82,8 +76,7 @@ struct TopShelfPayloadTests {
         #expect(badges.contains(.videoResolution4K))
         #expect(badges.contains(.videoColorSpaceDolbyVision))
         #expect(badges.contains(.audioDolbyAtmos))
-        // Dolby Vision is a colour space of its own, not HDR as well: the
-        // header says only one colour-space value should be provided.
+        // Dolby Vision is its own colour space: provide only one.
         #expect(!badges.contains(.videoColorSpaceHDR))
         #expect(!badges.contains(.videoResolutionHD))
     }
@@ -106,8 +99,7 @@ struct TopShelfPayloadTests {
     }
 
     @Test func standardDefinitionEarnsNoResolutionBadgeAtAll() throws {
-        // Apple offers only HD and 4K. A DVD rip must claim neither rather
-        // than being rounded up to HD.
+        // Apple offers only HD and 4K; a DVD rip claims neither.
         let movie = try item("""
         {"Id":"m","Type":"Movie","MediaSources":[{"Id":"s","MediaStreams":[
             {"Type":"Video","Width":720,"VideoRangeType":"SDR"}
@@ -136,8 +128,7 @@ struct TopShelfPayloadTests {
     }
 
     @Test func aServerThatSentNoStreamsYieldsNoBadgesRatherThanEmptyOnes() throws {
-        // Nil, not zero: an empty option set would read as "checked, and it is
-        // plain SDR stereo", which is a claim the server never made.
+        // Nil, not empty: empty would claim "plain SDR stereo".
         let bare = try item(#"{"Id":"m","Type":"Movie","Name":"Dune"}"#)
         let sourceWithoutStreams = try item("""
         {"Id":"m","Type":"Movie","MediaSources":[{"Id":"s"}]}
@@ -151,9 +142,7 @@ struct TopShelfPayloadTests {
 
     @Test func theSnapshotDecodesIntoTheShapeTheExtensionMirrors() throws {
         // LagoonTopShelf/ContentProvider.swift redeclares these fields by
-        // hand, because an app extension cannot import the app's module.
-        // Nothing but this test and that comment holds the two in step, so it
-        // pins the key names the extension reads.
+        // hand, so pin the key names it reads.
         let encoded = try JSONEncoder().encode(
             TopShelfStore.Item(
                 id: "abc",

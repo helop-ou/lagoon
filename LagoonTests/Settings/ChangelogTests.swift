@@ -4,15 +4,9 @@ import Testing
 
 @Suite("Changelog")
 struct ChangelogTests {
-    /// The release-hygiene guard. LagoonTests is app-hosted, so `Bundle.main`
-    /// here is Lagoon.app and these are the values the project actually
-    /// declares — meaning a build cannot reach TestFlight without someone
-    /// having written what changed in it.
-    ///
-    /// This is only a real gate because Lagoon owns its build number rather
-    /// than letting Xcode assign one at upload — see docs/release.md. If that
-    /// checkbox is ever re-enabled, `CURRENT_PROJECT_VERSION` stops matching
-    /// what ships and this passes on a number nobody uploaded.
+    /// `Bundle.main` is Lagoon.app here, so no build ships without notes.
+    /// Only a real gate while Xcode never manages the build number at upload
+    /// (docs/release.md).
     @Test @MainActor func theBuildThisProjectDeclaresHasChangelogNotes() {
         let version = Changelog.version()
         let build = Changelog.build()
@@ -26,8 +20,7 @@ struct ChangelogTests {
         )
     }
 
-    /// House style, enforced here because a style rule
-    /// nobody checks is a style rule that decays. See docs/release.md.
+    /// House style; see docs/release.md.
     @Test @MainActor func notesAvoidEmDashes() {
         let emDash = "\u{2014}"
         for entry in Changelog.entries {
@@ -44,8 +37,7 @@ struct ChangelogTests {
     }
 
     @Test func anEntryIsIdentifiedByVersionAndBuildTogether() {
-        // One marketing version spans many builds, so the version alone
-        // cannot identify an entry.
+        // One marketing version spans many builds.
         let first = ChangelogEntry(
             version: "1.0", build: "1", released: "January 2027",
             headline: "First.",
@@ -71,8 +63,7 @@ struct ChangelogTests {
             #expect(!entry.build.isEmpty)
             #expect(!entry.released.isEmpty)
             #expect(!entry.headline.isEmpty)
-            // An entry with no notes is worse than no entry: it claims the
-            // build was documented when it was not.
+            // An empty entry claims a build is documented when it is not.
             #expect(!entry.changes.isEmpty, "\(entry.id) has no notes")
             #expect(entry.changes.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
             #expect(!entry.sections.isEmpty, "\(entry.id) has no sections")
@@ -94,15 +85,12 @@ struct ChangelogTests {
     }
 
     @Test func aBuildWithNoEntryIsReportedRatherThanHidden() throws {
-        // The panel and the About row both surface this state, because a list
-        // that silently omits the build someone is running is worse than one
-        // that admits the gap.
+        // The panel and the About row both admit an unlisted build.
         let firstEntry: ChangelogEntry? = Changelog.entries.first
         let known = try #require(firstEntry)
         #expect(Changelog.isListed(version: known.version, build: known.build))
 
-        // A build number nobody has written notes for — the normal state
-        // between uploading a build and documenting it.
+        // A build uploaded but not yet documented.
         #expect(!Changelog.isListed(version: known.version, build: "999999"))
         // And a marketing version alone is not enough to count as listed.
         #expect(!Changelog.isListed(version: "99.0", build: known.build))

@@ -2,14 +2,11 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The one place a Jellyfin wall clock becomes a number, so the
-/// cases that broke `ISO8601DateFormatter` are pinned here: .NET's seventh
-/// fractional digit, and the fact that the digit count varies between two
-/// responses a millisecond apart.
+/// Cases that break `ISO8601DateFormatter`: .NET's seventh fractional digit,
+/// and a digit count that varies between responses.
 @Suite("Jellyfin timestamp")
 struct JellyfinTimestampTests {
-    /// Both spellings came back from the fixture server, 12.0.0 in the same response:
-    /// six digits on the reception time, seven on the transmission time.
+    /// One 12.0.0 response carried six digits on reception, seven on transmission.
     @Test func parsesSixAndSevenFractionalDigitsAlike() throws {
         let six = try #require(JellyfinTimestamp.seconds("2026-09-14T11:42:21.280578Z"))
         let seven = try #require(JellyfinTimestamp.seconds("2026-09-14T11:42:21.2805781Z"))
@@ -30,8 +27,7 @@ struct JellyfinTimestampTests {
         #expect(try #require(JellyfinTimestamp.seconds("2026-09-14T11:42:21")) == plain)
     }
 
-    /// A real offset is refused rather than read as UTC: a group scheduled
-    /// an hour out is worse than one that visibly could not read the time.
+    /// A non-UTC offset is refused rather than read as UTC.
     @Test func refusesWhatItCannotReadHonestly() {
         #expect(JellyfinTimestamp.seconds("2026-09-14T11:42:21+02:00") == nil)
         #expect(JellyfinTimestamp.seconds("2026-09-14 11:42:21Z") == nil)
@@ -49,8 +45,7 @@ struct JellyfinTimestampTests {
         #expect(JellyfinTimestamp.seconds("1970-01-01T00:00:00Z") == 0)
     }
 
-    /// What goes back to the server in `SyncPlay/Ready`: always seven
-    /// digits and a `Z`, whatever came in.
+    /// `SyncPlay/Ready` always sends seven digits and a `Z`.
     @Test func writesTheDotNetSpelling() {
         #expect(JellyfinTimestamp.string(0) == "1970-01-01T00:00:00.0000000Z")
         #expect(JellyfinTimestamp.string(1_789_386_141.25) == "2026-09-14T11:42:21.2500000Z")
@@ -63,8 +58,6 @@ struct JellyfinTimestampTests {
         #expect(abs(again - seconds) < 1e-5)
     }
 
-    /// Rounding the fraction up must carry into the second rather than
-    /// print a tenth digit that does not exist.
     @Test func aFractionThatRoundsUpCarries() {
         #expect(JellyfinTimestamp.string(0.99999999) == "1970-01-01T00:00:01.0000000Z")
     }

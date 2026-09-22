@@ -2,13 +2,10 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The arithmetic SyncPlay scheduling rests on. A group's command
-/// says "unpause at 11:44:21.356 by my clock", so an offset that is wrong by
-/// a tenth of a second is a tenth of a second of desync on every device.
+/// SyncPlay commands name server-clock instants, so any offset error is desync.
 @Suite("Server clock estimate")
 struct ServerClockTests {
-    /// A symmetric 100 ms round trip against a server five seconds ahead:
-    /// the two halves cancel and the offset comes out exactly.
+    /// A symmetric 100 ms round trip against a server five seconds ahead.
     @Test func aSymmetricRoundTripRecoversTheOffsetExactly() {
         let sample = ServerClockSample(
             requestSent: 1_000.0,
@@ -20,9 +17,7 @@ struct ServerClockTests {
         #expect(abs(sample.roundTrip - 0.1) < 1e-9)
     }
 
-    /// Server-side processing is not wire time and must not be counted as
-    /// latency: the same trip with 40 ms spent inside the server has the
-    /// same offset and a shorter round trip.
+    /// 40 ms spent inside the server: same offset, shorter round trip.
     @Test func theServersOwnProcessingIsNotLatency() {
         let sample = ServerClockSample(
             requestSent: 1_000.0,
@@ -34,9 +29,8 @@ struct ServerClockTests {
         #expect(abs(sample.roundTrip - 0.06) < 1e-9)
     }
 
-    /// An asymmetric trip — 90 ms out, 10 ms back — misreads the offset by
-    /// half the asymmetry. This is the error the estimate is built to
-    /// avoid, and the reason it keeps the fastest sample instead of a mean.
+    /// 90 ms out, 10 ms back. This error is why the estimate keeps the
+    /// fastest sample, not a mean.
     @Test func anAsymmetricTripMisreadsTheOffsetByHalfTheAsymmetry() {
         let sample = ServerClockSample(
             requestSent: 1_000.0,
@@ -66,8 +60,6 @@ struct ServerClockTests {
         #expect(estimate.ping == nil)
     }
 
-    /// The window forgets a measurement taken before the network changed,
-    /// however good it was.
     @Test func theWindowHoldsEightSamplesAndDropsTheOldest() {
         var estimate = ServerClockEstimate()
         estimate.record(sample(offset: 1, roundTrip: 0.001))
@@ -78,8 +70,7 @@ struct ServerClockTests {
         #expect(abs((estimate.offset ?? 0) - 2) < 1e-9)
     }
 
-    /// Builds a sample with a chosen offset and round trip, symmetric about
-    /// the midpoint so the arithmetic above returns exactly those two.
+    /// A symmetric sample with exactly this offset and round trip.
     private func sample(offset: Double, roundTrip: Double) -> ServerClockSample {
         let sent = 1_000.0
         let received = sent + roundTrip

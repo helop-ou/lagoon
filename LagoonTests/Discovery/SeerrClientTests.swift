@@ -46,8 +46,7 @@ struct SeerrClientTests {
         #expect(requests[0].body?.contains(#""secret":"secret-1""#) == true)
         #expect(requests[1].cookie == "connect.sid=s%3Asession.signature")
         #expect(requests.allSatisfy { !$0.handlesCookies })
-        // Configuration without an active cookie must not use the process's
-        // automatic cookie jar, even after another account authenticated.
+        // Without an active cookie, never fall back to the process cookie jar.
         client.clear()
         client.configure(serverURL: URL(string: "https://seerr.test/base")!)
         _ = try await client.status()
@@ -71,8 +70,7 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.isEmpty)
         #expect(!store.isLoading)
         #expect(store.configuredURL == nil)
-        // The proxy's own root ends in /api/v1; only the final API suffix
-        // supplied by the user should be removed, once.
+        // The proxy's own path ends in /api/v1; strip the user's suffix once.
         try await store.connect(to: "seerr.test/proxy%2Fname/api/v1/api/v1/")
         let root = "http://seerr.test:5055/proxy%2Fname/api/v1"
         #expect(store.configuredURL?.absoluteString == root)
@@ -105,11 +103,8 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.first?.query?.contains("mediaType=movie") == true)
     }
 
-    /// Jellyseerr's `search` is a TMDB multi-search: alongside movie, tv and
-    /// person it answers with `collection`, and a later release may add more.
-    /// A type this build has never heard of must cost that one result its
-    /// type, not the whole page — decoding the page used to throw
-    /// `dataCorrupted` on `mediaType` and empty the search screen.
+    /// TMDB multi-search also returns `collection` and may add more types;
+    /// an unknown one costs that result its type, not the whole page.
     @Test func searchSurvivesMediaTypesThisBuildDoesNotKnow() throws {
         let payload = #"""
         {"page":1,"totalPages":1,"totalResults":4,"results":[
@@ -125,14 +120,11 @@ struct SeerrClientTests {
         #expect(page.results.map(\.displayTitle) == [
             "Arrival", "Harry Potter Collection", "From A Later Jellyseerr", "Severance",
         ])
-        // The unknown types land typeless rather than guessed at, which is
-        // what the movie/show filters on the search screen already drop.
+        // Unknown types land typeless, which the search filters already drop.
         #expect(page.results.map(\.mediaType) == [.movie, nil, nil, .tv])
         #expect(page.results.filter { $0.mediaType == .movie || $0.mediaType == .tv }.count == 2)
     }
 
-    /// The same leniency one level down: a result's `mediaInfo` carries its
-    /// own `mediaType`, and an unknown one there must not fail the result.
     @Test func nestedMediaInfoToleratesAnUnknownMediaType() throws {
         let payload = #"""
         {"id":5,"mediaType":"movie","title":"Arrival",
@@ -146,9 +138,7 @@ struct SeerrClientTests {
         #expect(result.mediaInfo?.tmdbId == 329865)
     }
 
-    /// A request whose type is unknown still resolves to something routable:
-    /// `resolvedMediaType` falls back through the media's own type and then
-    /// the tvdb id, so the requests list keeps rendering it.
+    /// `resolvedMediaType` falls back to the media's own type, then the tvdb id.
     @Test func requestWithUnknownTypeStillResolvesAndDecodes() throws {
         let payload = #"""
         {"id":41,"status":2,"type":"holotape",
@@ -310,8 +300,8 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             return
         }
 
-        // Deliberately never finishes. The client must enforce an absolute
-        // deadline instead of relying only on URLSession's inactivity timer.
+        // Never finishes: the client needs an absolute deadline, not just
+        // URLSession's inactivity timer.
         if url.path == "/api/v1/search" {
             return
         }
@@ -366,8 +356,7 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             return (200, ["Content-Type": "application/json"], userJSON)
         case ("GET", "/base/api/v1/status"):
             return (200, ["Content-Type": "application/json"], #"{"version":"test"}"#)
-        // Cloudflare Access and friends answer in front of Seerr: the redirect
-        // to their login page is followed, so this succeeds with 200 and HTML.
+        // An auth proxy in front of Seerr: the followed redirect gives 200 and HTML.
         case ("GET", "/access/api/v1/status"):
             return (200, ["Content-Type": "text/html; charset=utf-8"], "<html><body>Sign in</body></html>")
         case ("GET", "/api/v1/discover/trending"):

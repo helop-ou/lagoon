@@ -2,10 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The numbers here are Jellyseerr's `MediaRequestStatus` and `MediaStatus`
-/// from `server/constants/media.ts`. They are the wire contract, so they are
-/// asserted literally: getting one wrong is invisible until someone reads a
-/// badge that is quietly lying.
+/// The numbers are Jellyseerr's `MediaRequestStatus` and `MediaStatus` from
+/// `server/constants/media.ts`, asserted literally as the wire contract.
 @Suite("Seerr request and media status")
 struct SeerrRequestStatusTests {
     @Test @MainActor func requestStatusNumbersMatchJellyseerr() {
@@ -16,8 +14,7 @@ struct SeerrRequestStatusTests {
         #expect(SeerrRequestStatus(apiValue: 5) == .completed)
     }
 
-    /// The original bug: 4 and 5 were unknown to the enum and fell back to
-    /// `.pending`, so a completed request said "Pending Approval" forever.
+    /// An unknown status falling back to `.pending` shows "Pending Approval" forever.
     @Test @MainActor func anUnrecognisedRequestStatusIsNeverReportedAsPending() {
         #expect(SeerrRequestStatus(apiValue: 99) == .unknown)
         #expect(SeerrRequestStatus(apiValue: 0) == .unknown)
@@ -30,13 +27,11 @@ struct SeerrRequestStatusTests {
         #expect(SeerrAvailabilityStatus(apiValue: 3) == .processing)
         #expect(SeerrAvailabilityStatus(apiValue: 4) == .partiallyAvailable)
         #expect(SeerrAvailabilityStatus(apiValue: 5) == .available)
-        // 6 used to be read as "deleted". It is blocklisted; deleted is 7.
+        // 6 is blocklisted; deleted is 7.
         #expect(SeerrAvailabilityStatus(apiValue: 6) == .blocklisted)
         #expect(SeerrAvailabilityStatus(apiValue: 7) == .deleted)
     }
 
-    /// Offering a Request button for a blocklisted title only earns a
-    /// rejection from the server; a deleted one really can be asked for again.
     @Test @MainActor func onlyUnknownAndDeletedMediaCanBeRequested() {
         #expect(SeerrAvailabilityStatus.unknown.allowsRequesting)
         #expect(SeerrAvailabilityStatus.deleted.allowsRequesting)
@@ -49,8 +44,6 @@ struct SeerrRequestStatusTests {
 
     // MARK: - Combined progress
 
-    /// The reported symptom: approved-and-in-the-library must read
-    /// "Available", not "Pending" and not "Approved".
     @Test @MainActor func anApprovedRequestThatHasArrivedReadsAsAvailable() {
         #expect(SeerrRequestProgress.resolve(request: .approved, availability: .available) == .available)
         #expect(SeerrRequestProgress.resolve(request: .completed, availability: .available) == .available)
@@ -69,9 +62,6 @@ struct SeerrRequestStatusTests {
         )
     }
 
-    /// Availability must not overrule the approval state before approval:
-    /// a pending request for a title that happens to be in the library is
-    /// still pending.
     @Test @MainActor func approvalStateWinsUntilTheRequestIsGranted() {
         #expect(SeerrRequestProgress.resolve(request: .pending, availability: .available) == .pending)
         #expect(SeerrRequestProgress.resolve(request: .declined, availability: .available) == .declined)
@@ -102,8 +92,7 @@ struct SeerrRequestStatusTests {
         #expect(decoded.progress.title == "Available")
     }
 
-    /// A 4K request is satisfied by the 4K copy. Reading `status` instead of
-    /// `status4k` would call it available because the 1080p copy is there.
+    /// Reading `status` instead of `status4k` would count the 1080p copy.
     @Test @MainActor func aFourKRequestReadsTheFourKAvailability() throws {
         let decoded = try request(status: 5, mediaStatus: 5, mediaStatus4k: 3, is4k: true)
         #expect(decoded.progress == .processing)
@@ -117,8 +106,6 @@ struct SeerrRequestStatusTests {
         #expect(decoded.progress == .processing)
     }
 
-    /// A request whose media object is missing entirely must not claim the
-    /// title has arrived.
     @Test @MainActor func aRequestWithoutMediaIsNotReportedAsAvailable() throws {
         let decoded = try JSONDecoder().decode(
             SeerrMediaRequest.self,
@@ -127,17 +114,13 @@ struct SeerrRequestStatusTests {
         #expect(decoded.progress == .processing)
     }
 
-    /// A granted request whose media was removed or blocked afterwards is
-    /// finished, not still arriving. These used to fall into a `default:` and
-    /// report "Processing" forever — the same shape as the original bug.
     @Test @MainActor func aGrantedRequestWhoseMediaWentAwaySaysSo() {
         #expect(SeerrRequestProgress.resolve(request: .completed, availability: .deleted) == .removed)
         #expect(SeerrRequestProgress.resolve(request: .approved, availability: .deleted) == .removed)
         #expect(SeerrRequestProgress.resolve(request: .completed, availability: .blocklisted) == .blocked)
     }
 
-    /// Lifting a block is gated on MANAGE_BLOCKLIST, and the admin flag is an
-    /// override, matching Jellyseerr's own permission check.
+    /// Matches Jellyseerr's own check: MANAGE_BLOCKLIST, or admin.
     @Test @MainActor func onlyBlocklistManagersAndAdminsCanUnblock() {
         func user(permissions: Int) -> SeerrUser {
             try! JSONDecoder().decode(
@@ -152,8 +135,6 @@ struct SeerrRequestStatusTests {
         #expect(!user(permissions: 0).canManageBlocklist)
     }
 
-    /// Only states that are still going somewhere animate. A finished or
-    /// refused request is a fact, and a fact that wobbles reads as an error.
     @Test @MainActor func onlyUnsettledStatesAnimate() {
         #expect(SeerrRequestProgress.processing.motion == .rotate)
         #expect(SeerrRequestProgress.pending.motion == .pulse)
@@ -178,9 +159,8 @@ struct SeerrRequestStatusTests {
 
 @Suite("Seerr quality profiles")
 struct SeerrQualityProfileTests {
-    /// `MediaRequest` carries the profile as a number; the names come from
-    /// `service/{radarr,sonarr}/{id}`. Both have to decode defensively,
-    /// because neither is guaranteed to be present on an older server.
+    /// Profile names come from `service/{radarr,sonarr}/{id}`; older servers
+    /// may omit either side.
     @Test @MainActor func aRequestCarriesTheProfileAndServerItWasMadeAgainst() throws {
         let request = try JSONDecoder().decode(
             SeerrMediaRequest.self,
@@ -210,8 +190,7 @@ struct SeerrQualityProfileTests {
         #expect(details.profiles.first { $0.id == 7 }?.name == "HD/UHD")
     }
 
-    /// The shape `service/radarr` returns, used to find the default server
-    /// when a request does not name one.
+    /// Used to find the default server when a request names none.
     @Test @MainActor func theServiceListDecodesAndMarksTheDefault() throws {
         let json = """
         [{"id":0,"name":"Radarr","is4k":false,"isDefault":true,"activeProfileId":7,"activeTags":[]}]

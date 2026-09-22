@@ -3,12 +3,8 @@ import Testing
 @testable import Lagoon
 
 /// The wait between leaving the player and re-fetching what it played.
-/// Timing assertions use generous bounds: the point is the
-/// ordering, not the milliseconds. The upper bounds sit far below the
-/// settle timeout and far above anything a loaded test host has produced
-/// (a 100 ms close once took over two seconds to be observed while the
-/// full suite ran in parallel); they prove the wait ended because the
-/// session closed, not because the timeout fired.
+/// Timing bounds are generous: far below the settle timeout, far above a
+/// loaded test host, so they prove the close ended the wait, not the timeout.
 @Suite("Playback report ledger")
 struct PlaybackReportLedgerTests {
     @Test @MainActor func settlingWithNothingOpenReturnsAtOnce() async {
@@ -37,8 +33,7 @@ struct PlaybackReportLedgerTests {
         #expect(!ledger.hasOpenSessions)
     }
 
-    /// A report that never returns must not hang the screen underneath; it
-    /// re-fetches after the timeout exactly as it did before the ledger.
+    /// A report that never returns must not hang the screen underneath.
     @Test @MainActor func settlingGivesUpAfterTheTimeout() async {
         let ledger = PlaybackReportLedger()
         _ = ledger.open()
@@ -58,8 +53,7 @@ struct PlaybackReportLedgerTests {
         await Task.yield()
         ledger.close(first)
         #expect(ledger.hasOpenSessions)
-        // The waiter can only have finished through the second close or the
-        // five-second timeout, so yielding here proves it is still waiting.
+        // Only the second close or the timeout can finish the waiter.
         await Task.yield()
         ledger.close(second)
         await waiter.value
@@ -103,8 +97,7 @@ struct PlaybackReportLedgerTests {
         _ = await (a, b)
         let completedAt = clock.now
         let closedAt = await close.value
-        // Measure the wake-up after close, excluding main-actor contention
-        // before the scheduled close. Both waiters must beat their timeout.
+        // Measured from the close, excluding main-actor contention before it.
         #expect(completedAt >= closedAt)
         #expect(completedAt - closedAt < .seconds(10))
         #expect(!ledger.hasOpenSessions)

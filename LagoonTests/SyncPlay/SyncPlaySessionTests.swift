@@ -2,11 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The rules a Watch Together member follows, against the same fixture-server
-/// 12.0.0 payloads the wire tests decode. Every one of these is a
-/// rule that, got wrong, shows up as two televisions playing different
-/// things — which is why they live in a pure reducer and not inside an
-/// `async` method of a store.
+/// The rules a Watch Together member follows, against the fixture-server
+/// 12.0.0 payloads the wire tests decode.
 @Suite("SyncPlay session")
 struct SyncPlaySessionTests {
     static let groupID = "ea9615382d214f9c9313c26fbd3bad89"
@@ -23,8 +20,7 @@ struct SyncPlaySessionTests {
         #expect(session.participants == ["Alex"])
         #expect(session.state == .idle)
         #expect(effects == [.notice(.joined(group: "Film night"))])
-        // The join instant is what later decides which commands are older
-        // than this membership.
+        // The join instant decides which commands predate this membership.
         #expect(session.joinedAtServerSeconds == JellyfinTimestamp.seconds("2026-09-14T11:44:16.1864573Z"))
     }
 
@@ -48,8 +44,6 @@ struct SyncPlaySessionTests {
         #expect(left == [.notice(.userLeft("Alex"))])
     }
 
-    /// The dashed spelling of the group id has to be recognised as ours, or
-    /// the member never notices it has been removed.
     @Test func theDashedGroupLeftEndsTheMembership() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
@@ -61,8 +55,6 @@ struct SyncPlaySessionTests {
         #expect(session.lastCommand == nil)
     }
 
-    /// A refusal names no group, and dropping it would leave the session
-    /// convinced it is still a member.
     @Test func aRefusalWithNoGroupIdStillEndsTheMembership() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
@@ -99,8 +91,7 @@ struct SyncPlaySessionTests {
         #expect(session.startSeconds == 120)
     }
 
-    /// The same item arriving again — a reorder, a second member joining —
-    /// must not restart what is on screen.
+    /// A reorder or a member joining resends the same item.
     @Test func aQueueUpdateThatDoesNotChangeTheItemLoadsNothing() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
@@ -125,8 +116,6 @@ struct SyncPlaySessionTests {
         #expect(session.currentPlaylistItemId == Self.playlistItemID)
     }
 
-    /// Queueing something behind the current item is not a reason to
-    /// reload the current item.
     @Test func queueingSomethingBehindTheCurrentItemLoadsNothing() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
@@ -167,8 +156,7 @@ struct SyncPlaySessionTests {
         #expect(session.lastCommand == command)
     }
 
-    /// The greeting a freshly created group sends: nothing is queued, so
-    /// there is nothing to stop.
+    /// A new group greets with a `Stop` while nothing is queued.
     @Test func theAllZeroStopThatGreetsANewGroupIsIgnored() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
@@ -210,8 +198,7 @@ struct SyncPlaySessionTests {
         #expect(session.accepts(command))
         session.record(command)
         #expect(!session.accepts(command))
-        // A genuine re-send differs in `EmittedAt` alone and is still the
-        // same instruction.
+        // A re-send differs only in `EmittedAt`.
         let resent = try Self.command(
             kind: "Pause",
             positionTicks: 600_000_000,
@@ -227,12 +214,8 @@ struct SyncPlaySessionTests {
         #expect(session.accepts(later))
     }
 
-    /// The server answers a `Ready` that names a position more than half a
-    /// second from the group's with a `Seek` built out of the group's own
-    /// state — the same `When`, the same `PositionTicks`, only `EmittedAt`
-    /// moved on. Taking that for a re-send is what left a member sitting
-    /// where it was, with nothing more to report, and the group waiting on
-    /// it past thirty seconds.
+    /// A `Ready` more than 0.5 s off makes the server resend the group's `Seek`
+    /// with only `EmittedAt` moved; ignoring it stalls the group.
     @Test func aResentSeekIsACorrectionAndIsTakenAgain() throws {
         var session = try Self.joinedWithQueue()
         let seek = try Self.command(kind: "Seek", positionTicks: 1_200_000_000)
@@ -258,18 +241,15 @@ struct SyncPlaySessionTests {
 
     // MARK: - Where the group is
 
-    /// What a member coming back to the player has to open at: the group
-    /// has been watching all the while, and opening where the last command
-    /// left it makes the server drag this member forward — with everyone
-    /// else held up until it arrives.
+    /// A returning member opens where the group is now, not at the last
+    /// command, or the whole group waits for it.
     @Test func aRunningGroupHasMovedOnSinceItsLastCommand() throws {
         var session = try Self.joinedWithQueue()
         let started = "2026-09-14T11:46:30.0000000Z"
         session.record(try Self.command(kind: "Unpause", positionTicks: 1_000_000_000, when: started))
         let when = try #require(JellyfinTimestamp.seconds(started))
         #expect(session.positionSeconds(atServerSeconds: when + 90) == 190)
-        // Before the instant it names, an unpause is a position, not a
-        // clock that has been running.
+        // Before its instant, an unpause is still just a position.
         #expect(session.positionSeconds(atServerSeconds: when - 1) == 100)
     }
 
@@ -282,8 +262,6 @@ struct SyncPlaySessionTests {
         #expect(session.positionSeconds(atServerSeconds: when + 90) == 300)
     }
 
-    /// Nothing has been commanded yet: the queue's own start is the only
-    /// answer there is.
     @Test func aGroupThatHasNotBeenToldAnythingIsAtItsQueueStart() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())

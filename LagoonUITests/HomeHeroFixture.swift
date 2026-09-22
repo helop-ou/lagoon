@@ -1,12 +1,7 @@
 import XCTest
 
-/// Home's hero is built from the libraries' "latest" rails, so a server whose
-/// recently-added lists are empty — the public demo between its periodic
-/// resets, as seen on September 8 with a full library and no hero — offers
-/// nothing to focus. That is a missing fixture, not a product failure, so on
-/// the public demo the journeys that need a hero skip and say why; a
-/// supplied fixture server is expected to have one, and its absence there
-/// stays a failure.
+/// The hero comes from the "latest" rails, which the public demo can have
+/// empty. There a missing hero skips; on a supplied fixture server it fails.
 extension XCTestCase {
     func requireHomeHero(
         in app: XCUIApplication,

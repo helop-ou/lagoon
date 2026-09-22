@@ -106,8 +106,7 @@ struct TopShelfPublisherTests {
     private func owner(_ account: String) -> String { TopShelfPublisher.accountOwner(account) }
 
     private func payload(_ stage: URL, title: String) throws -> [TopShelfStore.Item] {
-        // Deliberately recreate even a deleted directory, like work that
-        // ignores cancellation. The publisher must still discard its result.
+        // Work that ignores cancellation; the publisher must still discard it.
         try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: true)
         for name in ["same-item@1x.jpg", "same-item@2x.jpg"] {
             try Data(title.utf8).write(to: stage.appendingPathComponent(name))

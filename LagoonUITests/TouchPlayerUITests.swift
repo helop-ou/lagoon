@@ -1,23 +1,16 @@
 #if os(iOS)
 import XCTest
 
-/// The iOS touch journey: the player's touch grammar has no
-/// remote to drive it, so this exercises the surface gestures directly —
-/// single tap to toggle the transport, double-tap either half of the video
-/// to seek ±10 s (with the `player.seekFeedback` glyph), and the centre
-/// play/pause/skip cluster that took over the toolbar's old play/pause
-/// identifier (`PlayerTouchTransportCluster` in
-/// `Lagoon/Features/Playback/Views/PlayerTouchControls.swift`). tvOS keeps its own
-/// `XCUIRemote`-based suites (`PlayerRegressionUITests` and friends); this
-/// file exists only on iOS, where those gestures do.
+/// The iOS touch gestures: tap toggles the transport, double-tap either
+/// half seeks ±10 s, and the centre play/pause/skip cluster
+/// (`PlayerTouchTransportCluster`).
 final class TouchPlayerUITests: PlayerUITestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
     }
 
     func testTouchGrammarSeeksAndTogglesPlayback() throws {
-        // The public demo's Pioneer One, resolved the way the tvOS handoff
-        // journey resolves it: an H.264 episode the simulator direct-plays.
+        // An H.264 episode the simulator direct-plays.
         let app = launchPlayer(
             title: "touch-grammar-regression",
             extraArguments: [
@@ -34,11 +27,8 @@ final class TouchPlayerUITests: PlayerUITestCase {
         let surface = app.windows.allElementsBoundByIndex.first { $0.frame.width > 100 && $0.frame.height > 100 }!
         let playPause = app.buttons["player.playPause"]
 
-        // Reveals the centre cluster / toolbar when the 4 s auto-hide has
-        // already fired. The single tap that shows them is delayed ~0.3 s by
-        // the double-tap recognizer racing it, hence the short poll instead
-        // of an immediate assertion. XCTest still exposes opacity-hidden
-        // buttons and their frames, even with accessibilityHidden applied.
+        // The double-tap recognizer delays a single tap ~0.3 s, hence the poll.
+        // XCTest still sees opacity-hidden buttons, so check the probe instead.
         func revealTransportIfNeeded() {
             guard state(in: app).int("transport") != 1 else { return }
             surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
@@ -46,9 +36,8 @@ final class TouchPlayerUITests: PlayerUITestCase {
         }
 
         revealTransportIfNeeded()
-        // A slow simulator may finish delivering a tap after auto-hide.
-        // Retry only if playback is still running, so a successful pause
-        // can never be toggled back to play by the retry.
+        // A slow simulator can land a tap after auto-hide. Retry only while
+        // still playing, so a retry never undoes the pause.
         for _ in 0..<3 {
             if state(in: app).int("paused") == 1 { break }
             revealTransportIfNeeded()
@@ -58,28 +47,22 @@ final class TouchPlayerUITests: PlayerUITestCase {
         snapshot(app, name: "transport")
 
 
-        // Double-tap the right half: seeks +10 s and flashes the glyph.
         let beforeForwardSeek = state(in: app).double("time")
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).doubleTap()
         snapshot(app, name: "double-tap")
-        // XCTest waits for SwiftUI animations to settle after delivering a
-        // double-tap; the 0.7-second glyph can already be gone by then.
-        // Assert the actual seek, and retain screenshots as visual evidence.
+        // The 0.7 s glyph may be gone before XCTest returns, so assert the seek.
         waitForState(in: app, timeout: 5) { $0.double("time") >= beforeForwardSeek + 8 }
 
-        // Double-tap the left half: seeks −10 s. Playback keeps running
-        // during the wait, so the landing check allows slack both ways.
         let beforeBackwardSeek = state(in: app).double("time")
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5)).doubleTap()
         waitForState(in: app, timeout: 5) { $0.double("time") <= beforeBackwardSeek - 6 }
 
-        // Paused seeks keep playback paused; resume lets the clock run again.
+        // Seeking while paused stays paused.
         XCTAssertEqual(state(in: app).int("paused"), 1)
         let pausedTime = state(in: app).double("time")
         Thread.sleep(forTimeInterval: 1.5)
         XCTAssertLessThan(abs(state(in: app).double("time") - pausedTime), 0.8)
 
-        // Skip buttons mirror the same ±10 s as the double-tap gesture.
         revealTransportIfNeeded()
         let beforeSkipForward = state(in: app).double("time")
         tapCenter(of: app.buttons["player.skipForward"])
@@ -90,7 +73,6 @@ final class TouchPlayerUITests: PlayerUITestCase {
         tapCenter(of: app.buttons["player.skipBack"])
         waitForState(in: app, timeout: 5) { $0.double("time") <= beforeSkipBack - 6 }
 
-        // A real drag commits a scrub through the same rail as tvOS.
         revealTransportIfNeeded()
         let rail = app.descendants(matching: .any)["player.seek"]
         let start = rail.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
@@ -100,7 +82,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         revealTransportIfNeeded()
         snapshot(app, name: "after-scrub")
 
-        // VoiceOver names: the icon-only buttons must still speak.
+        // Icon-only buttons still need VoiceOver labels.
         let playPauseLabel = playPause.label
         XCTAssertTrue(
             playPauseLabel == "Play" || playPauseLabel == "Pause",
@@ -109,17 +91,15 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertEqual(app.buttons["player.skipBack"].label, "Back 10 seconds")
         XCTAssertEqual(app.buttons["player.skipForward"].label, "Forward 10 seconds")
 
-        // Paused playback keeps the transport available beyond the normal
-        // four-second dwell; resuming must arm auto-hide again.
+        // Paused, the transport outlasts the 4 s dwell; resuming re-arms auto-hide.
         Thread.sleep(forTimeInterval: 4.5)
         XCTAssertTrue(playPause.isHittable, "paused transport should remain available")
         tapCenter(of: playPause)
         waitForState(in: app, timeout: 5) { $0.int("paused") == 0 }
 
         func assertTransportAutoHides() throws {
-            // The toolbar must not recenter the cluster as auto-hide begins.
-            // One snapshot reads visibility and position atomically. Asking
-            // XCTest for a fading button's hit point can itself raise a failure.
+            // The cluster must not move as it fades. One snapshot reads both
+            // visibility and position; a fading button's hit point can fail.
             let centerY = playPause.frame.midY
             let fadeDeadline = Date().addingTimeInterval(6)
             while Date() < fadeDeadline {
@@ -135,9 +115,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
             waitForState(in: app, timeout: 1) {
                 $0.int("transport") == 0 && $0.int("paused") == 0 && $0.int("panel") == 0
             }
-            // The native toolbar really leaves the hierarchy. This checks
-            // rendered UI alongside the state driving the center/timeline fade;
-            // screen captures retain evidence for those opacity-based overlays.
+            // The toolbar leaves the hierarchy; the opacity overlays do not.
             for identifier in ["player.close", "player.info"] {
                 XCTAssertTrue(app.buttons[identifier].waitForNonExistence(timeout: 1),
                               "\(identifier) should auto-hide during playback")
@@ -148,15 +126,13 @@ final class TouchPlayerUITests: PlayerUITestCase {
         try assertTransportAutoHides()
         snapshot(app, name: "auto-hidden")
 
-        // A fresh surface tap must bring back all controls and start another
-        // dwell, even though the previous auto-hide task already completed.
+        // A tap after a completed auto-hide must reveal and hide again.
         revealTransportIfNeeded()
         XCTAssertTrue(app.buttons["player.skipBack"].isHittable)
         XCTAssertTrue(app.buttons["player.skipForward"].isHittable)
         snapshot(app, name: "revealed-again")
         try assertTransportAutoHides()
 
-        // Close lives in the toolbar, which follows transport visibility too.
         revealTransportIfNeeded()
         app.buttons["player.close"].tap()
         let probe = app.descendants(matching: .any)["player.regression.state"]
@@ -167,10 +143,8 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertFalse(probe.exists, "Close should dismiss the player and its probe")
     }
 
-    /// The iPhone swipe grammar(feedback): swipe up over free video
-    /// opens the options panel, Close closes outright, and a swipe down
-    /// minimizes — into Picture in Picture on a phone, and where PiP is not
-    /// possible, as on the simulator, it closes instead.
+    /// Swipe up opens the options panel; swipe down minimizes into Picture
+    /// in Picture, or closes where PiP is unavailable (the simulator).
     func testSwipesOpenThePanelAndMinimize() throws {
         let app = launchPlayer(
             title: "swipe-grammar-regression",
@@ -183,8 +157,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         waitForState(in: app, timeout: 45) { $0.int("ready") == 1 && $0.int("buffering") == 0 }
         let surface = app.windows.allElementsBoundByIndex.first { $0.frame.width > 100 && $0.frame.height > 100 }!
 
-        // Up: the panel. Start low on the screen, away from the toolbar and
-        // the centre cluster, and travel most of the height.
+        // Start low, clear of the toolbar and centre cluster.
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
             .press(forDuration: 0.05, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
         let tabs = app.descendants(matching: .any)["player.panel.tabs"]
@@ -193,20 +166,15 @@ final class TouchPlayerUITests: PlayerUITestCase {
         app.buttons["player.panel.close"].tap()
         XCTAssertTrue(tabs.waitForNonExistence(timeout: 5))
 
-        // Down: minimize. No PiP on the simulator, so the player closes.
         let probe = app.descendants(matching: .any)["player.regression.state"]
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
             .press(forDuration: 0.05, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)))
         XCTAssertTrue(probe.waitForNonExistence(timeout: 10), "a swipe down should minimize, which closes without PiP")
     }
 
-    /// A player started from a pushed detail page closed itself about
-    /// a second after opening, on every title reached through Library, Search
-    /// or Discover. The bench journeys above never saw it because they present
-    /// from the tab root. Presenting from inside a `NavigationStack`
-    /// destination made the stack briefly show its root, a view update in
-    /// that window dropped the destination, and its teardown closed the
-    /// player; every screen now requests playback from the tab root's host.
+    /// Presenting from inside a `NavigationStack` destination let the stack
+    /// drop the destination and close the player a second later, so every
+    /// screen requests playback from the tab root's host.
     func testPlayerStartedFromDetailPageStaysOpen() throws {
         let app = launchSignedIn()
         // iPad's adaptive tab controls are buttons outside a TabBar node.
@@ -233,20 +201,16 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertTrue(probe.waitForExistence(timeout: 30), "the player should present")
         waitForState(in: app, timeout: 45) { $0.int("ready") == 1 && $0.int("buffering") == 0 }
         let startTime = state(in: app).double("time")
-        // Long enough for the presentation transition to end and for the old
-        // teardown to have happened several times over.
+        // Several times longer than the teardown took to fire.
         Thread.sleep(forTimeInterval: 6)
         XCTAssertTrue(probe.exists, "the player should still be up after its presentation settles")
         XCTAssertGreaterThan(state(in: app).double("time"), startTime, "playback should still be advancing")
         snapshot(app, name: "detail-page-player")
     }
 
-    /// Writes a PNG of the app to `LAGOON_UI_SCREENSHOT_DIR` when that
-    /// environment variable is set, so a scripted run can look at the
-    /// touch chrome afterwards; a plain test run writes nothing.
+    /// Also writes a PNG to `LAGOON_UI_SCREENSHOT_DIR` when it is set.
     private func snapshot(_ app: XCUIApplication, name: String) {
-        // App-bounds capture can crop the landscape player to portrait bounds
-        // after its orientation request. Capture the rendered display instead.
+        // An app capture can crop the landscape player to portrait bounds.
         let screenshot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = "touch-\(name)"
@@ -261,8 +225,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
     // MARK: - Helpers
 
     private func tapCenter(of button: XCUIElement) {
-        // XCTest can choose an activation point near a bounding-box corner,
-        // outside a circular button's Circle contentShape. Use its center.
+        // XCTest's activation point can fall outside a circular contentShape.
         button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 

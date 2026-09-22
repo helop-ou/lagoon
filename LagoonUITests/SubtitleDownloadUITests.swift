@@ -73,8 +73,7 @@ final class SubtitleDownloadUITests: XCTestCase {
         expect(probe) { ($0.value as? String)?.contains("panel=1") == true }
         let tab = app.buttons["player.tab.subtitles"]
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
-        // tvOS switches tab content as focus moves; Select is unnecessary
-        // and can activate a track if the native focus engine enters the card.
+        // Focus alone switches tabs; Select could activate a track.
         let tracks = app.buttons["player.track.subtitle-off"]
         for _ in 0..<4 where !tracks.exists { XCUIRemote.shared.press(.right) }
         XCTAssertTrue(tracks.waitForExistence(timeout: 5))
@@ -138,10 +137,8 @@ final class SubtitleDownloadUITests: XCTestCase {
     private func hasFocus(_ element: XCUIElement, in app: XCUIApplication) -> Bool {
         guard element.exists else { return false }
         if element.hasFocus { return true }
-        // XCTest reports false for this conditionally inserted SwiftUI
-        // button even while the player's FocusState says it owns focus.
-        // Read the existing observation-only probe; the subsequent Select,
-        // caption and fixture-request assertions verify the real action.
+        // XCTest reports no focus for this conditionally inserted button, so
+        // read the probe; the assertions after Select check the real action.
         guard element.identifier == "player.subtitleLoad.retry" else { return false }
         let value = app.descendants(matching: .any)["player.regression.state"].value as? String ?? ""
         return value.split(separator: " ").contains("focus=track-subtitle-retry")

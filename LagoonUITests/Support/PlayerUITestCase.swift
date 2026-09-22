@@ -1,14 +1,12 @@
 import XCTest
 
 /// Shared launch and probe support for the touch and Siri Remote journeys.
-/// Platform gestures and assertions belong to the concrete test suites.
 class PlayerUITestCase: XCTestCase {
     private var playbackHUDEnabled: Bool {
         #if os(tvOS)
         true
         #else
-        // HUD animation idle waits can consume the touch transport's
-        // four-second visibility window before XCTest delivers a gesture.
+        // Idle waits can use up the transport's 4 s window before a gesture lands.
         false
         #endif
     }
@@ -30,9 +28,8 @@ class PlayerUITestCase: XCTestCase {
         return launchSignedIn(simulatorTranscode: simulatorTranscode, extraArguments: arguments + extraArguments)
     }
 
-    /// The same regression launch without a bench fixture: the app lands on
-    /// Home signed into the lane's server, and the test drives the screens
-    /// itself. For journeys where the way *into* the player is the subject.
+    /// Launches signed in on Home with no fixture, for journeys that test the
+    /// way into the player.
     func launchSignedIn(
         simulatorTranscode: Bool = true,
         extraArguments: [String] = []
@@ -61,10 +58,9 @@ class PlayerUITestCase: XCTestCase {
         return app
     }
 
-    /// Distinguishes a player failure from a server that simply lacks the
-    /// specialized media fixture. The public Jellyfin demo currently has no
-    /// subtitle, multi-audio, chapter, or intro-segment item; those journeys
-    /// run when a fixture server is supplied through LAGOON_REGRESSION_*.
+    /// Skips when the server lacks the fixture, rather than failing. The demo
+    /// has no subtitle, multi-audio, chapter or intro item; supply a server
+    /// through LAGOON_REGRESSION_*.
     func requireRegressionFixture(
         in app: XCUIApplication,
         timeout: TimeInterval = 25
@@ -77,19 +73,13 @@ class PlayerUITestCase: XCTestCase {
             return nil
         }
 
-        // A cold simulator launch has two independent network handshakes:
-        // authenticate the ephemeral regression account, then resolve the
-        // requested media. A transient failure in the first handshake leaves
-        // the app on Sign In, where neither player probe exists. Retry that
-        // launch once instead of reporting a player failure for work that
-        // never reached the player. Explicit fixture/API results remain
-        // terminal so a real regression is never hidden by the retry.
+        // A transient sign-in failure on a cold launch leaves the app on Sign
+        // In with no probe, so retry once. Explicit fixture or API results
+        // are final, so the retry never hides a regression.
         for launchAttempt in 0..<2 {
             let deadline = Date().addingTimeInterval(timeout)
             repeat {
-                // Resolution is replaced by the player during startup. Read
-                // both probes from one snapshot so it cannot disappear
-                // between an existence check and a separate value lookup.
+                // One snapshot, so a probe cannot vanish between exists and value.
                 if let hierarchy = try? app.snapshot() {
                     if probe("player.regression.state", in: hierarchy) != nil { return }
                     let value = probe("player.regression.resolution", in: hierarchy)?.value as? String ?? ""

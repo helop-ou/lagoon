@@ -2,17 +2,12 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Renders `DeviceProfile.everything` as the published codec table.
-///
-/// Generated rather than written by hand. `docs/release.md` forbids
-/// overstating supported formats, and a list maintained by hand drifts from
-/// the profile the moment someone adds a codec. What gets published is by
-/// construction the same envelope Lagoon sends Jellyfin in `PlaybackInfo`, so
-/// the table cannot promise a direct play the server was never offered.
+/// Renders `DeviceProfile.everything` as the published codec table, so it is
+/// the same envelope Lagoon sends in `PlaybackInfo` (`docs/release.md` forbids
+/// overstating formats).
 ///
 /// `scripts/generate-codec-support.sh` runs this and copies the result into
-/// `docs/codec-support.md`. Its `--check` mode fails instead of copying, so
-/// drift is caught rather than shipped.
+/// `docs/codec-support.md`; `--check` fails on drift instead.
 @Suite("Codec support document")
 struct CodecSupportDocTests {
     @Test func writesTheCodecSupportDocument() throws {
@@ -24,8 +19,7 @@ struct CodecSupportDocTests {
         print("CODEC_SUPPORT_DOC \(url.path)")
     }
 
-    /// Guards the renderer, not the profile: a formatting change that quietly
-    /// dropped a codec would otherwise publish a shorter table and pass.
+    /// Guards the renderer against silently dropping a codec.
     @Test func everyDeclaredVideoCodecReachesTheTable() throws {
         let markdown = CodecSupportDocument.render(DeviceProfile.everything)
         let declared = DeviceProfile.everything.directPlayProfiles

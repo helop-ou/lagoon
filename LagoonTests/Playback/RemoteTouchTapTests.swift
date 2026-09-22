@@ -27,9 +27,8 @@ struct RemoteTouchTapTests {
         controller.remoteTouchTapRecognized()
         #expect(count == 1)
 
-        // UIViewControllerRepresentable refreshes this closure as SwiftUI
-        // state changes; the recognizer must not retain the first render's
-        // handler.
+        // The representable refreshes this closure on state changes; the
+        // recognizer must not keep the first render's handler.
         controller.onRemoteTouchTap = { count += 10 }
         controller.remoteTouchTapRecognized()
         #expect(count == 11)
@@ -50,8 +49,7 @@ struct PlaybackFinishTests {
         #expect(finish.timeIntervalSince(now) == 1800)
     }
 
-    /// The behaviour the ticket actually asks for: holding playback does not
-    /// change how much is left, so the finish keeps sliding later.
+    /// Pausing does not change what is left, so the finish slides later.
     @Test func aPausedItemFinishesLaterTheLongerItIsHeld() throws {
         let atPause = try #require(PlaybackFinish.date(from: now, remaining: 1200, rate: 1))
         let aMinuteLater = try #require(
@@ -60,8 +58,7 @@ struct PlaybackFinishTests {
         #expect(aMinuteLater.timeIntervalSince(atPause) == 60)
     }
 
-    /// Playing does not move it, because the clock and the remaining time
-    /// advance against each other.
+    /// Playing does not move it: clock and remaining time cancel out.
     @Test func playingAtNormalSpeedHoldsTheFinishStill() throws {
         let first = try #require(PlaybackFinish.date(from: now, remaining: 1200, rate: 1))
         let later = try #require(
@@ -81,8 +78,7 @@ struct PlaybackFinishTests {
         #expect(PlaybackFinish.date(from: now, remaining: remaining, rate: 1) == nil)
     }
 
-    /// A live stream reports a duration nothing can project against, so the
-    /// label falls back to the time left rather than inventing an answer.
+    /// A live stream's duration cannot be projected, so the label shows time left.
     @Test func aDurationBeyondADayHasNoFinish() {
         let tooFar = PlaybackFinish.longestProjection + 1
         #expect(PlaybackFinish.date(from: now, remaining: tooFar, rate: 1) == nil)

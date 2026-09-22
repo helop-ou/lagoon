@@ -3,8 +3,7 @@ import os
 import Testing
 @testable import Lagoon
 
-/// Intercepts the transport's URLSession so the queue, the opt-out and
-/// the rate-limit handling can be observed without a network.
+/// Intercepts the transport's URLSession; no network.
 final class SentryMockURLProtocol: URLProtocol {
     private nonisolated struct State: Sendable {
         var responder: @Sendable (URLRequest) -> (status: Int, headers: [String: String]) = { _ in (200, [:]) }
@@ -101,8 +100,7 @@ struct SentryTransportTests {
         transport.submit(Self.incident())
         await Self.wait { SentryMockURLProtocol.requests.count == 1 }
         #expect(Self.pendingCount(directory) == 1)
-        // Opt out: a foreground flush must neither send nor keep it, and a
-        // new incident must not be queued either.
+        // Opt out: a flush neither sends nor keeps it, and nothing new queues.
         enabled.withLock { $0 = false }
         SentryMockURLProtocol.responder = { _ in (200, [:]) }
         transport.flush()

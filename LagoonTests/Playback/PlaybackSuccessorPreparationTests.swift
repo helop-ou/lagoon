@@ -24,8 +24,7 @@ struct PlaybackSuccessorPreparationTests {
         #expect(result.source.id == "ready")
         #expect(negotiations == 1)
         #expect(!subject.hasPreparation)
-        // Handing the result over must not open a second scope for it: the
-        // one staged during negotiation is what the next engine promotes.
+        // No second scope: the next engine promotes the one staged during negotiation.
         #expect(staging.staged.count == 1)
         #expect(staging.discarded.isEmpty)
     }
@@ -51,8 +50,7 @@ struct PlaybackSuccessorPreparationTests {
         release.open()
 
         #expect(await handoff.value?.source.id == "warming")
-        // The scope is still opened — the handoff wants what it can get —
-        // but the warm-up it would have queued ahead of the handoff is not.
+        // The scope still opens, but without the warm-up ahead of the handoff.
         #expect(staging.staged.map(\.warms) == [false])
         #expect(staging.discarded.isEmpty)
     }
@@ -106,9 +104,8 @@ struct PlaybackSuccessorPreparationTests {
         oldRelease.open()
         #expect(await oldHandoff.value == nil)
         #expect(subject.isPreparing)
-        // The abandoned generation may finish at any point after its cancel.
-        // It staged nothing on its way out, and discarded only once — on the
-        // cancel itself, before the replacement could stage anything.
+        // The abandoned generation stages nothing and discards once, on the
+        // cancel, before the replacement stages anything.
         #expect(staging.staged.isEmpty)
         #expect(staging.discarded == [old.mediaID])
         newRelease.open()
@@ -173,9 +170,7 @@ struct PlaybackSuccessorPreparationTests {
     }
 }
 
-/// Stands in for the engine. Every cache decision the preparation used to
-/// make now travels through this brief, so the generation rules can be
-/// tested without a player.
+/// Stands in for the engine, so the generation rules test without a player.
 @MainActor
 private final class StagingSpy {
     private(set) var staged: [(id: String, url: URL, warms: Bool)] = []

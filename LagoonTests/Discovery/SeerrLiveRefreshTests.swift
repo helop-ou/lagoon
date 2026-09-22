@@ -51,8 +51,7 @@ struct SeerrLiveRefreshTests {
         )
     }
 
-    /// Jellyseerr can briefly leave old queue rows attached after import.
-    /// Availability is authoritative, so that stale row must not poll forever.
+    /// Jellyseerr can leave old queue rows after import; availability wins.
     @Test func terminalMediaStopsEvenWithAStaleQueueRow() throws {
         let loaded = try JSONDecoder().decode(
             SeerrMediaDetails.self,
@@ -128,14 +127,10 @@ struct SeerrLiveRefreshTests {
     }
 }
 
-/// What a poll actually does over the wire, and what it does to the page when
-/// the server is briefly unreachable. Serialized because the stub protocol
-/// holds its script and its recording in shared state.
+/// Serialized: the stub protocol keeps its script and recording in shared state.
 @Suite("Seerr request detail polling", .serialized)
 @MainActor
 struct SeerrRequestDetailRefreshTests {
-    /// The whole point is observing state the server has just
-    /// changed, so a cached body is the one answer that must never come back.
     @Test func everySeerrCallBypassesTheHTTPCache() async throws {
         let clients = makeClients(request: Fixtures.downloadingRequest)
         _ = try await clients.seerr.request(id: 41)
@@ -144,8 +139,7 @@ struct SeerrRequestDetailRefreshTests {
         #expect(recorded.cachePolicy == .reloadIgnoringLocalCacheData)
     }
 
-    /// Title, artwork and genres cannot change while a request is watched, so
-    /// a poll that re-reads TMDB is two thirds wasted traffic.
+    /// Title, artwork and genres do not change while a request is watched.
     @Test func aPollReadsOnlyTheRequestItself() async throws {
         let clients = makeClients(request: Fixtures.downloadingRequest)
         let model = SeerrRequestDetailModel(request: try decodedRequest(Fixtures.pendingRequest))
@@ -162,9 +156,7 @@ struct SeerrRequestDetailRefreshTests {
         #expect(model.details?.displayTitle == "Arrival")
     }
 
-    /// The one thing on the TMDB payload that is not static: the Jellyfin id
-    /// arrives with the title. It is worth exactly one extra fetch, and never
-    /// a fetch per cadence afterwards.
+    /// The Jellyfin id is the one non-static TMDB field: one extra fetch, once.
     @Test func availabilityResolvesTheJellyfinItemOnceAndThenStopsAsking() async throws {
         let clients = makeClients(request: Fixtures.downloadingRequest)
         let model = SeerrRequestDetailModel(request: try decodedRequest(Fixtures.pendingRequest))
@@ -204,10 +196,7 @@ struct SeerrRequestDetailRefreshTests {
         #expect(model.currentRequest.downloadProgress?.percentText == "62%")
     }
 
-    /// A request whose media carries no TMDB id has no details to load, so
-    /// "have we ever rendered anything" cannot be answered by asking whether
-    /// `details` is nil — that read the good page as a blank one and painted
-    /// the error over it on every transient failure.
+    /// With no TMDB id, `details` stays nil, so it cannot mean "never rendered".
     @Test func aFailedPollKeepsAPageThatNeverHadTMDBMetadata() async throws {
         let clients = makeClients(request: Fixtures.requestWithoutTMDBID)
         let model = SeerrRequestDetailModel(
@@ -226,8 +215,6 @@ struct SeerrRequestDetailRefreshTests {
         #expect(model.currentRequest.requestStatus == .pending)
     }
 
-    /// Retention is not silence: a page that has never loaded still owes the
-    /// viewer the reason it is empty.
     @Test func aFailureBeforeAnyGoodSnapshotStillReachesTheViewer() async throws {
         let clients = makeClients(request: Fixtures.downloadingRequest)
         let model = SeerrRequestDetailModel(request: try decodedRequest(Fixtures.pendingRequest))
@@ -290,8 +277,8 @@ private nonisolated struct RecordedDetailRequest: Sendable {
     let cachePolicy: URLRequest.CachePolicy
 }
 
-/// Serves one Seerr request/TMDB pair and the Jellyfin item behind it, and can
-/// go dark on command so a poll fails the way a brief outage does.
+/// Serves one Seerr request, its TMDB details and Jellyfin item; can go dark
+/// on command to simulate an outage.
 private nonisolated final class SeerrDetailURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recorded: [RecordedDetailRequest] = []

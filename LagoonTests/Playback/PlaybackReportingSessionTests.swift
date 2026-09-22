@@ -73,8 +73,7 @@ struct PlaybackReportingSessionTests {
         let reporter = makeReporter(client: client)
         let calls = ProgressCalls()
         let lifetime = installProgress(on: reporter, calls: calls)
-        // Let the loop start its sleep before stopping. Callback release,
-        // rather than a ten-second wall-clock assertion, proves it exited.
+        // Let the loop start its sleep. Callback release proves it exited.
         await Task.yield()
         let stop = try #require(reporter.stop(at: 18))
         await stop.value
@@ -111,8 +110,7 @@ struct PlaybackReportingSessionTests {
         ReportingURLProtocol.release("/Sessions/Playing")
         try await start.value
 
-        // Even a caller trying to continue after this late response cannot
-        // re-arm progress on the session it already stopped.
+        // A late response cannot re-arm progress on a stopped session.
         let calls = ProgressCalls()
         let lifetime = installProgress(on: reporter, calls: calls)
         #expect(lifetime.value == nil)

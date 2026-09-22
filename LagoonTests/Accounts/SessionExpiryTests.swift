@@ -18,10 +18,8 @@ struct SessionExpiryTests {
             Issue.record("A revoked token must fail")
         } catch JellyfinError.sessionExpired {
         } catch is CancellationError {
-            // A concurrent permission/profile refresh may receive the same
-            // 401 first and expire this session. The later request is then
-            // cancelled by identity; the account assertions below must still
-            // prove the exact expiry and credential cleanup behavior.
+            // A concurrent profile refresh may hit the 401 first and expire
+            // the session; the assertions below still hold either way.
         }
         #expect(store.phase == .needsSignIn)
         #expect(store.reauthenticationAccount == fixture.first)
@@ -39,8 +37,8 @@ struct SessionExpiryTests {
         let store = fixture.store()
         SessionExpiryProtocol.setReply(.http(401, ""))
         _ = try? await store.client.currentUser()
-        // Simulates a failed Keychain deletion or a stale credential restored
-        // by the OS. The persistent rejection marker still prevents activation.
+        // A stale credential restored by the OS: the rejection marker still
+        // prevents activation.
         try KeychainStore.set("first-token", for: fixture.first.keychainAccount)
         let relaunched = fixture.store()
         #expect(relaunched.phase == .needsSignIn)
@@ -144,10 +142,8 @@ struct SessionExpiryTests {
         #expect(store.reauthenticationAccount == nil)
     }
 
-    /// Changing server from the re-authentication form is the only route a
-    /// viewer has out of an expired account, and it used to leave the entry
-    /// in the picker: `forgetServer` looked at `activeAccount`, which
-    /// `beginReauthentication` has already cleared.
+    /// `beginReauthentication` clears `activeAccount`, so `forgetServer`
+    /// must not rely on it.
     @Test func changingServerWhileReauthenticatingStillForgetsThatAccount() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
@@ -166,9 +162,6 @@ struct SessionExpiryTests {
         #expect(KeychainStore.string(for: fixture.second.keychainAccount) == "second-token")
     }
 
-    /// Signing out of the last account cleared the stored server too, so
-    /// asking for a password next stranded the viewer on a form naming no
-    /// server at all.
     @Test func signingOutOfTheLastAccountAsksForAServerNotAPassword() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }

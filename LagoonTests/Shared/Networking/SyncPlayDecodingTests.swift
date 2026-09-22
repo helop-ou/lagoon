@@ -2,11 +2,9 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The SyncPlay wire, pinned against payloads captured from the fixture server, 12.0.0
-/// on 2026-09-14. Every group update means something different by
-/// its `Type`, so each one gets a fixture; the two decoding rules that carry
-/// the feature — an unknown enumeration never fails a message, and a group
-/// id compares across Jellyfin's two spellings of it — get their own.
+/// The SyncPlay wire, against payloads captured from a 12.0.0 fixture server.
+/// An unknown enum never fails a message, and a group id matches across
+/// Jellyfin's two spellings.
 @Suite("SyncPlay decoding")
 struct SyncPlayDecodingTests {
     // MARK: - Group updates
@@ -80,16 +78,12 @@ struct SyncPlayDecodingTests {
         #expect(denied.text == "Movies")
     }
 
-    /// A type this build has never heard of still decodes, so the update is
-    /// ignored rather than taking the socket's message with it.
     @Test func anUnknownUpdateTypeDecodesAsUnknown() throws {
         let update = try groupUpdate(#"{"GroupId":"ea96","Type":"SomethingNew","Data":{"Whatever":1}}"#)
         #expect(update.type == .unknown)
         #expect(update.payload == .none)
     }
 
-    /// A payload that is not the shape its type promises loses the detail,
-    /// not the update.
     @Test func aPayloadOfTheWrongShapeDegradesToNone() throws {
         let update = try groupUpdate(#"{"GroupId":"ea96","Type":"GroupJoined","Data":"not a group"}"#)
         #expect(update.type == .groupJoined)
@@ -99,8 +93,7 @@ struct SyncPlayDecodingTests {
 
     // MARK: - Commands
 
-    /// The `Stop` a brand new group is greeted with: no queue yet, so the
-    /// playlist item is an all-zero GUID.
+    /// A new group's `Stop` has an all-zero playlist item GUID.
     @Test func theEmptyPlaylistItemOnANewGroupsStopIsRecognised() throws {
         let command = try decode(SyncPlayCommand.self, """
         {"GroupId":"ea9615382d214f9c9313c26fbd3bad89","PlaylistItemId":"00000000000000000000000000000000",
@@ -143,8 +136,7 @@ struct SyncPlayDecodingTests {
         #expect(group.participants.isEmpty)
     }
 
-    /// `SyncPlayAccess` rides on the user policy the client already reads,
-    /// and an unrecognised value is not a denial.
+    /// An unrecognised `SyncPlayAccess` value is not a denial.
     @Test func theUserPolicyCarriesSyncPlayAccess() throws {
         let allowed = try decode(UserPolicy.self, #"{"SyncPlayAccess":"CreateAndJoinGroups"}"#)
         #expect(allowed.syncPlayAccess == .createAndJoinGroups)
@@ -170,12 +162,10 @@ struct SyncPlayDecodingTests {
 
     // MARK: - Encoding
 
-    /// The readiness report goes back up PascalCase, through the client's
-    /// global key strategy and with no CodingKeys of its own.
+    /// PascalCase via the client's key strategy, never CodingKeys.
     @Test func theReadinessReportEncodesWithPascalCaseKeys() throws {
         let report = SyncPlayReadinessReport(
-            // A fraction a Double holds exactly; the seventh digit is
-            // JellyfinTimestampTests' business, not this test's.
+            // A fraction a Double holds exactly; digits are tested elsewhere.
             when: JellyfinTimestamp.string(1_789_386_256.25),
             positionTicks: 600_000_000,
             isPlaying: true,

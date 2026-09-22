@@ -1,7 +1,6 @@
 import XCTest
 
-// Siri Remote journeys: tvOS only. The target also builds for iOS,
-// where these are compiled out.
+// Siri Remote journeys, compiled out on iOS.
 #if os(tvOS)
 
 final class ServerSyncUITests: XCTestCase {
@@ -24,8 +23,7 @@ final class ServerSyncUITests: XCTestCase {
 
         XCUIRemote.shared.press(.menu)
         if !app.wait(for: .runningBackground, timeout: 2) {
-            // Depending on where tvOS restored focus, the first Menu press
-            // can return from content to the tab chrome before leaving.
+            // The first Menu press may only move focus back to the tab bar.
             XCUIRemote.shared.press(.menu)
         }
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
@@ -65,13 +63,9 @@ final class ServerSyncUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(homeTab.hasFocus)
-        // Measured only now, with focus on the tab bar: initial focus lands on
-        // the hero, and a focused hero is scaled about its centre (1600 →
-        // 1640 pt wide), which pulls its leading edge 20 pt left of the grid
-        // line the resting layout shares with Refresh. The chrome aligns to
-        // the resting geometry, so that is what the assertion compares
-        // against (audit A18). UIKit's focus frame extends
-        // 4 pt beyond the rendered glass, hence the offset.
+        // Measured with focus on the tab bar: a focused hero scales to 1640 pt
+        // and shifts its edge 20 pt left of the resting grid line that Refresh
+        // aligns to. UIKit's focus frame extends 4 pt past the glass.
         XCTAssertEqual(
             refresh.frame.minX + 4,
             hero.frame.minX,
@@ -193,9 +187,7 @@ final class ServerSyncUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.15)
         }
         XCTAssertTrue(hero.hasFocus)
-        // The first two optional shelves can be direct-play rows. Moving
-        // further reaches the fixture's discovery shelves, whose cards open
-        // details, and leaves the native top chrome well offscreen.
+        // Past the first shelves, cards open details and the top chrome is offscreen.
         for _ in 0..<12 {
             remote.press(.down)
             Thread.sleep(forTimeInterval: 0.2)
@@ -261,18 +253,16 @@ final class ServerSyncUITests: XCTestCase {
         )
         XCTAssertFalse(app.buttons["server.refresh.home"].exists)
 
-        // Allow any tick already crossing the tab boundary to settle, then
-        // prove that the hidden Home task remains cancelled for two periods.
+        // Let an in-flight tick settle, then prove hidden Home stays cancelled
+        // for two periods.
         Thread.sleep(forTimeInterval: 1.2)
         let hiddenCount = integerValue(of: periodicProbe)
         Thread.sleep(forTimeInterval: 2.2)
         XCTAssertEqual(integerValue(of: periodicProbe), hiddenCount)
     }
 
-    /// A foreground bump that lands while a destination is hidden has to be
-    /// honoured when it becomes visible again. It used to be dropped, so a tab
-    /// the viewer was not on when the app resumed kept pre-background content
-    /// until its own five-minute cadence came round.
+    /// A foreground bump that arrives while a tab is hidden is applied when
+    /// the tab becomes visible, not at its next five-minute refresh.
     func testAForegroundBumpReachesATabThatWasHiddenWhenItArrived() {
         let app = launch(interval: 600)
         let homeTab = app.tabBars.buttons["Home"]
@@ -282,7 +272,6 @@ final class ServerSyncUITests: XCTestCase {
         let foregroundProbe = app.descendants(matching: .any)["server.sync.foreground.home"]
         XCTAssertTrue(foregroundProbe.waitForExistence(timeout: 20))
 
-        // Leave Home so the bump arrives while it is hidden.
         focusTabBar(app, tab: settingsTab, stepping: .right)
         remote.press(.select)
         XCTAssertTrue(
@@ -316,8 +305,7 @@ final class ServerSyncUITests: XCTestCase {
         )
     }
 
-    /// Walks focus up into the tab bar and then along it until `tab` is
-    /// focused. Focusing a tab does not select it; the caller presses Select.
+    /// Focuses `tab` in the tab bar without selecting it.
     private func focusTabBar(
         _ app: XCUIApplication,
         tab: XCUIElement,

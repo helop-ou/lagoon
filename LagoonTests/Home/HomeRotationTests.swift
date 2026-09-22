@@ -2,12 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The Home genre and decade spotlights.
-///
-/// Worth pinning because "it changes sometimes" cannot be verified by looking
-/// at the screen once, and the two failure modes are opposites: a rotation
-/// that never moves is a fixed row wearing a costume, and one that moves on
-/// every appearance makes Home rearrange itself while you are looking at it.
+/// The Home genre and decade spotlights: they must move daily, but never
+/// while you are looking.
 @Suite("Home rotation")
 struct HomeRotationTests {
     private let utc = {
@@ -43,8 +39,7 @@ struct HomeRotationTests {
     }
 
     @Test func itMovesOnAtMidnight() {
-        // Not an assertion that consecutive days always differ — with five
-        // candidates they cannot all — but that a week is not one long day.
+        // Not every day differs with five candidates, but a week must vary.
         let week = (0..<7).map { date("2026-08-2\($0 + 1) 12:00") }
         let picks = week.map { HomeRotation.genre(rankedByWatchHistory: genres, for: $0, calendar: utc) }
 
@@ -55,16 +50,14 @@ struct HomeRotationTests {
         let days = (0..<5).map { date("2026-08-2\($0 + 1) 12:00") }
         let picks = days.compactMap { HomeRotation.genre(rankedByWatchHistory: genres, for: $0, calendar: utc) }
 
-        // Five candidates stepped one day at a time is a full cycle, so a
-        // repeat inside it would mean the seed is not advancing evenly.
+        // Five days over five candidates is a full cycle with no repeats.
         #expect(Set(picks).count == 5)
     }
 
     // MARK: - What it picks from
 
     @Test func itChoosesOnlyFromTheGenresYouActuallyWatch() {
-        // The tail is one film someone finished once, and is not "theirs" in
-        // any sense worth naming a row after.
+        // The tail is one-off viewing, not a taste worth a row.
         let ranked = genres + ["Documentary", "Western", "Musical"]
         let year = (0..<40).map { date("2026-08-25 12:00").addingTimeInterval(Double($0) * 86_400) }
         let picks = Set(year.compactMap {
@@ -91,8 +84,7 @@ struct HomeRotationTests {
     // MARK: - Decades
 
     @Test func decadesStopBeforeTheCurrentOne() {
-        // Recently Added already covers the current decade, and a "Movies
-        // from the 2020s" row beside it would be the same films twice.
+        // Recently Added already covers the current decade.
         let year = (0..<40).map { date("2026-08-25 12:00").addingTimeInterval(Double($0) * 86_400) }
         let picks = Set(year.compactMap { HomeRotation.decade(for: $0, calendar: utc) })
 
@@ -119,8 +111,7 @@ struct HomeRotationTests {
     }
 
     @Test func tiesBreakOnNameSoTheRankingDoesNotJumpBetweenLoads() throws {
-        // Dictionary iteration order is not stable, so without an explicit
-        // tiebreak the spotlight could change on a reload with no new viewing.
+        // Dictionary order is not stable, so ties need an explicit break.
         let items = try [
             #"{"Id":"1","Type":"Movie","Genres":["Western","Action","Musical"]}"#,
         ].map { try JellyfinClient.decoder.decode(MediaItem.self, from: Data($0.utf8)) }
@@ -135,10 +126,7 @@ struct HomeRotationTests {
     // MARK: - What "Because You Watched" is willing to name itself after
 
     @Test func demoReelsAreNotSomethingYouWatched() throws {
-        // The first run against a real library seeded the row from
-        // "Dolby: Core Universe" and recommended five unrelated films off it.
-        // A self-hosted library is full of these: demo discs, test patterns,
-        // trailers, home video.
+        // Demo discs, test patterns and trailers must not seed recommendations.
         let demo = try seed(runTimeMinutes: 6)
         let film = try seed(runTimeMinutes: 118)
         let comedyEpisode = try seed(runTimeMinutes: 22)
@@ -150,8 +138,7 @@ struct HomeRotationTests {
     }
 
     @Test func anUnknownRuntimeIsGivenTheBenefitOfTheDoubt() throws {
-        // Servers do not always report one, and refusing every title with a
-        // gap in its metadata is a harsher filter than the one intended.
+        // Servers do not always report a runtime; unknown is not short.
         let unknown = try JellyfinClient.decoder.decode(
             MediaItem.self,
             from: Data(#"{"Id":"x","Type":"Movie","Name":"Untimed"}"#.utf8)

@@ -5,13 +5,8 @@ import UIKit
 #endif
 @testable import Lagoon
 
-/// The composite has to survive being turned into a JPEG.
-///
-/// This is the whole output of the feature: the extension draws nothing of
-/// its own, it points tvOS at these files. A composite that renders fine and
-/// then will not encode is indistinguishable from no artwork at all, which is
-/// exactly how it presented — "no artwork could be built for any of 8 titles"
-/// on an Apple TV while every simulator managed all eight.
+/// The composite has to survive JPEG encoding: the extension only points
+/// tvOS at these files, so a composite that will not encode means no artwork.
 @Suite("Top Shelf artwork")
 struct TopShelfArtworkTests {
     #if os(tvOS)
@@ -41,15 +36,10 @@ struct TopShelfArtworkTests {
     }
 
     @Test func theRendererNeverAsksTheScreenWhatFormatToUse() {
-        // `UIGraphicsImageRendererFormat.preferred()` reads the main screen's
-        // configuration, per Apple's own header, for both the scale and the
-        // extended-range setting. On an Apple TV attached to an HDR
-        // television that yields a wide-range bitmap; the simulator's screen
-        // is SDR, so it never showed there.
-        //
-        // Pinning the composite's own scale is the observable half of that:
-        // a preferred format would apply the screen scale on top of a size
-        // already given in pixels.
+        // `UIGraphicsImageRendererFormat.preferred()` takes scale and
+        // extended range from the screen, which gives a wide-range bitmap on
+        // an HDR TV (never on the SDR simulator). Pinning scale 1 is the
+        // observable half: the size is already in pixels.
         let composed = TopShelfArtwork.compose(
             backdrop: backdrop(),
             logo: nil,
@@ -62,23 +52,17 @@ struct TopShelfArtworkTests {
     }
 
     @Test func artworkLivesSomewhereTvOSWillLetItBeWritten() {
-        // An Apple TV allows an app 500 KB of persistent local storage and
-        // requires the rest to be purgeable, so writing composites at the
-        // container root is refused on device while every simulator, whose
-        // container is a plain directory on a Mac, accepts them. Build 60
-        // reported "could not write to the shared container" for all eight.
+        // Apple TV allows 500 KB of persistent storage and the rest must be
+        // purgeable; the container root is refused on device, not in the sim.
         #expect(TopShelfArtwork.containerSubpath.hasPrefix("Library/Caches/"))
 
-        // LagoonTopShelf/ContentProvider.swift resolves this same path by
-        // hand against its own container, because an app extension cannot
-        // import the app's module. This is the only thing holding the two in
-        // step, so it pins the literal rather than the shape.
+        // LagoonTopShelf/ContentProvider.swift hard-codes this path, so pin
+        // the literal.
         #expect(TopShelfArtwork.containerSubpath == "Library/Caches/TopShelf")
     }
 
     @Test func artworkIsThrownAwayWhenTheLayoutChanges() {
-        // The cache is keyed by item id and reused forever, so the version is
-        // the only thing that can invalidate a redraw.
+        // The cache is keyed by item id forever; only the version invalidates it.
         let suite = "TopShelfArtworkTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }

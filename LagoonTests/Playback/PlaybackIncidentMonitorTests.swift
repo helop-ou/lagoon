@@ -60,9 +60,8 @@ struct PlaybackIncidentMonitorTests {
         sourceLocation: SourceLocation = #_sourceLocation,
         _ condition: @MainActor () -> Bool
     ) async throws {
-        // This waits for executor scheduling, not the monitor's interval:
-        // SamplingClock controls that explicitly. Parallel decoder suites
-        // can occupy the simulator for longer than two wall-clock seconds.
+        // Waits on scheduling, not the interval (SamplingClock drives that).
+        // Parallel decoder suites can hog the simulator for seconds.
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while !condition(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(1))
@@ -98,8 +97,7 @@ struct PlaybackIncidentMonitorTests {
         monitor.endAttempt(engine: nil, outcome: "fallback")
         #expect(sink.incidents.isEmpty)
 
-        // The remux rung fails too: the fallback resolves as failed, then
-        // the ladder is spent.
+        // Remux fails too: the fallback resolves as failed and the ladder is spent.
         monitor.beginAttempt(delivery: .remux, method: .transcode, source: try Self.source(), cached: false, disc: false, resumeSeconds: 42)
         monitor.engineFailed(Self.failure(.read), delivery: .remux, next: nil, engine: nil)
         #expect(sink.incidents.map(\.code) == [.playbackFallback, .playbackFailed])
@@ -164,8 +162,7 @@ struct PlaybackIncidentMonitorTests {
         #expect(incident.fields["httpStatus"] == .int(500))
         #expect(incident.fields["errorDomain"] == .string("JellyfinError.server"))
         #expect(incident.fingerprint == ["playback.startFailed", "negotiate", "JellyfinError.server", "500"])
-        // No attempt exists yet at the negotiate stage: the token is left
-        // out rather than sent empty and rejected by the schema.
+        // No attempt exists yet, so the token is omitted, not sent empty.
         #expect(incident.fields["attempt"] == nil)
         #expect(incident.fields["schemaRejected"] == nil)
     }
@@ -210,8 +207,8 @@ struct PlaybackIncidentMonitorTests {
         enabled.withLock { $0 = true }
         notifications.post(name: UserDefaults.didChangeNotification, object: nil)
         try await Self.waitUntil { clock.requests == 4 }
-        // The canceled timer returns after opt-in. It must neither write
-        // the old window's third tick nor cancel the new timer.
+        // The cancelled timer returns after opt-in; it must not write a tick
+        // or cancel the new timer.
         clock.advance()
         clock.advance()
         try await Self.waitUntil { clock.requests == 5 }
@@ -301,8 +298,8 @@ struct PlaybackIncidentMonitorTests {
         monitor.playbackReady(engine: outgoing)
         try await Self.waitUntil { clock.requests == 1 }
 
-        // The preference callback is queued on MainActor. Complete the
-        // handoff and opt back in before yielding to that callback.
+        // The preference callback is queued on MainActor; opt back in before
+        // it runs.
         enabled.withLock { $0 = false }
         notifications.post(name: UserDefaults.didChangeNotification, object: nil)
         monitor.endAttempt(engine: outgoing, outcome: "handoff")
@@ -311,8 +308,8 @@ struct PlaybackIncidentMonitorTests {
         monitor.playbackReady(engine: successor)
         let successorAttempt = monitor.attempt
         try await Self.waitUntil { clock.requests == 2 }
-        // Drain the old timer and drive the successor to its first sample.
-        // The late callback must preserve its cadence and summary eligibility.
+        // The late callback must keep the successor's cadence and summary
+        // eligibility.
         clock.advance()
         for expectedRequests in 3...5 {
             clock.advance()

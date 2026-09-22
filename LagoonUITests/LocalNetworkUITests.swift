@@ -1,7 +1,7 @@
 import XCTest
 
-/// Tests Lagoon's response to a denial diagnosis. The system prompt and
-/// Network.framework's real denial require physical iPhone/iPad acceptance.
+/// Lagoon's response to a local-network denial. The real system prompt
+/// needs a device.
 @MainActor
 final class LocalNetworkUITests: XCTestCase {
     func testDeniedConnectionKeepsAddressAndCanRetryAfterSettings() async throws {
@@ -30,8 +30,7 @@ final class LocalNetworkUITests: XCTestCase {
         settings.tap()
         let settingsApp = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         XCTAssertTrue(settingsApp.wait(for: .runningForeground, timeout: 10))
-        // No privacy toggle exists on Simulator. Restore the fixture and
-        // return exactly as a viewer does after enabling access on a device.
+        // The simulator has no privacy toggle; restore the fixture instead.
         try await control(server, path: "connectivity?drop=0")
         app.activate()
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -64,8 +63,8 @@ final class LocalNetworkUITests: XCTestCase {
         XCTAssertFalse(settings.exists)
         attach(app, name: "seerr-local-network-recovered")
 
-        // Reopen with the actual remembered account and Seerr server. This
-        // also covers retry when restoration finishes after initial prefill.
+        // Reopen with the remembered account and Seerr server; also covers
+        // restoration finishing after the initial prefill.
         app.terminate()
         try await control(server, path: "connectivity?drop=1")
         app.launchArguments = ["-debug.regressionBootstrapPublicDemo", "NO"]

@@ -3,22 +3,10 @@ import Testing
 @testable import Lagoon
 
 /// Renders `Changelog.entries` as the published `CHANGELOG.md`.
-///
-/// `Changelog.swift` stays the source of truth and everything else is a
-/// rendering of it: the About screen, this file, and the notes on a GitHub
-/// release. Moving the data to Markdown instead would lose the checks that
-/// keep it honest, because `ChangelogTests` gates that the declared build has
-/// an entry, enforces category order and bans em dashes, and none of that
-/// survives as prose in a document nobody parses.
-///
-/// Reading the Swift source with a regular expression would be the other way
-/// to produce this, and it would drift the first time somebody formatted the
-/// file differently. Rendering the real `entries` array cannot disagree with
-/// what the app displays.
+/// `Changelog.swift` is the source of truth, checked by `ChangelogTests`.
 ///
 /// `scripts/generate-changelog.sh` runs this and copies the result into
-/// `CHANGELOG.md`. Its `--check` mode fails instead of copying, so drift is
-/// caught rather than shipped.
+/// `CHANGELOG.md`; `--check` fails on drift instead.
 @Suite("Changelog document")
 struct ChangelogDocTests {
     @Test func writesTheChangelogDocument() throws {
@@ -30,8 +18,7 @@ struct ChangelogDocTests {
         print("CHANGELOG_DOC \(url.path)")
     }
 
-    /// Guards the renderer, not the entries: a formatting change that quietly
-    /// dropped a build would otherwise publish a shorter changelog and pass.
+    /// Guards the renderer against silently dropping a build.
     @Test func everyBuildAndEveryNoteReachesTheDocument() {
         let markdown = ChangelogDocument.render(Changelog.entries)
         #expect(!Changelog.entries.isEmpty)
@@ -47,8 +34,7 @@ struct ChangelogDocTests {
         }
     }
 
-    /// The section headings are what `--notes` splits on, so a build heading
-    /// has to be distinguishable from a category heading by depth alone.
+    /// `--notes` splits on heading depth alone.
     @Test func buildHeadingsAreTheOnlyLevelTwoHeadings() {
         let markdown = ChangelogDocument.render(Changelog.entries)
         let levelTwo = markdown
@@ -76,8 +62,8 @@ enum ChangelogDocument {
         entries.reduce(into: header()) { out, entry in out += section(entry) }
     }
 
-    /// One build. Also what `scripts/generate-changelog.sh --notes` lifts out
-    /// for a GitHub release, which is why it stands on its own.
+    /// One build; `scripts/generate-changelog.sh --notes` lifts it out for a
+    /// GitHub release.
     static func section(_ entry: ChangelogEntry) -> String {
         var out = "## \(entry.displayVersion)\n\n"
         out += "\(entry.released)\n\n"

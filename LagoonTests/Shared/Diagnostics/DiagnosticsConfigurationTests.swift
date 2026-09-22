@@ -2,10 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// The DSN is injected at build time instead of tracked in source,
-/// so "no DSN" is now an ordinary state rather than a mistake. Every way a
-/// build can arrive without one has to resolve to `nil`, because the
-/// alternative is an app that tries to report to a half-substituted address.
+/// The DSN is injected at build time, so every way of missing it must
+/// resolve to `nil`, never a half-substituted address.
 @Suite("Diagnostics configuration")
 struct DiagnosticsConfigurationTests {
     static let dsn = "https://abc123@o1.ingest.de.sentry.io/2"
@@ -26,9 +24,7 @@ struct DiagnosticsConfigurationTests {
         #expect(DiagnosticsConfiguration.resolveDSN(override: nil, injected: nil) == nil)
     }
 
-    /// An undeclared build setting leaves the Info.plist value empty, and a
-    /// target that never declared one leaves the reference unexpanded. Both
-    /// mean the same thing, and neither is a DSN.
+    /// An undeclared setting leaves the Info.plist value empty or unexpanded.
     @Test("An empty or unexpanded build setting resolves to none",
           arguments: ["", "   ", "\n", "$(LAGOON_SENTRY_DSN)"])
     func emptyOrUnexpanded(value: String) {

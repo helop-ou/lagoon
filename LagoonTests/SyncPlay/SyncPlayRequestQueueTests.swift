@@ -30,8 +30,7 @@ struct SyncPlayRequestQueueTests {
         var events: [String] = []
         let first = queue.enqueue {
             started.open()
-            // Deliberately ignores cancellation, like work already handed
-            // to an external service. Pending successors must still stop.
+            // Ignores cancellation; pending successors must still stop.
             await release.wait()
             #expect(Task.isCancelled)
         }

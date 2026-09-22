@@ -2,10 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Why `MediaItem` compares by value: SwiftUI drops a `@State`
-/// write whose new value compares equal to the old one, and the id-only `==`
-/// the model used to have made a re-fetched item with a new resume point
-/// "equal" to the stale one, so the detail page never re-rendered.
+/// `MediaItem` compares by value: SwiftUI drops a `@State` write that
+/// compares equal, so an id-only `==` hides a re-fetched resume point.
 @Suite("MediaItem equality")
 struct MediaItemEqualityTests {
     private func item(position: Int64) throws -> MediaItem {
@@ -21,8 +19,7 @@ struct MediaItemEqualityTests {
         #expect(try item(position: 100) == item(position: 100))
     }
 
-    /// The navigation stack still treats every copy of an item as one
-    /// destination, however stale its user data.
+    /// Navigation still treats every copy of an item as one destination.
     @Test func theSameItemIsTheSameDestinationWhateverItsResumePoint() throws {
         let before = ContentNavigationRoute.item(try item(position: 100))
         let after = ContentNavigationRoute.item(try item(position: 200))

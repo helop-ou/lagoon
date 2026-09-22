@@ -2,9 +2,8 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Pure coverage for what a download would cost and which quality is
-/// actually fetched, plus the artwork URL parser that backs the
-/// offline artwork match in `ImageCache`.
+/// Download size estimates, the effective quality, and the artwork URL
+/// parser behind `ImageCache`'s offline match.
 @Suite("Download quality estimates")
 struct DownloadQualityTests {
     @Test func originalEstimateReturnsTheSourceSize() {
@@ -23,8 +22,7 @@ struct DownloadQualityTests {
     }
 
     @Test func effectiveTakesTheOriginalWhenATranscodeWouldNotBeSmaller() {
-        // An already-efficient small source: the high transcode's estimate
-        // would exceed it, so the fast path takes the original directly.
+        // The high transcode would be bigger than this source, so take the original.
         let effective = DownloadQuality.high.effective(sourceSize: 500_000_000, runTimeTicks: Ticks.ticks(7_200))
         #expect(effective == .original)
     }

@@ -1,7 +1,6 @@
 import XCTest
 
-// Siri Remote journeys: tvOS only. The target also builds for iOS,
-// where these are compiled out.
+// Siri Remote journeys, compiled out on iOS.
 #if os(tvOS)
 
 final class LibraryBrowseUITests: XCTestCase {
@@ -29,9 +28,7 @@ final class LibraryBrowseUITests: XCTestCase {
         if summary.exists { try chooseFilter(app, title: "Clear Filters") }
         XCTAssertTrue(app.staticTexts["library.count"].waitForExistence(timeout: 35), "The demo catalogue must finish loading before testing its genre filters")
 
-        // The decades the public demo's catalogue normally offers; when a
-        // catalogue lacks one the journey skips with the reason (see
-        // `chooseFilter`) rather than failing on a missing fixture.
+        // Decades the demo normally has; a missing one skips (see `chooseFilter`).
         let firstDecade = "2000–2009"
         let secondDecade = "2010–2019"
 
@@ -95,8 +92,7 @@ final class LibraryBrowseUITests: XCTestCase {
         move(to: picker, direction: .left)
         capture(app, name: "Native Media Type Picker Focused")
 
-        // Merely exploring another menu option, then pressing Back, must
-        // leave Movies selected. A native menu picker commits on Select.
+        // Browsing another option and pressing Back must leave Movies selected.
         remote.press(.select)
         let shows = menuCell(app, title: "Shows")
         XCTAssertTrue(shows.waitForExistence(timeout: 5))
@@ -125,8 +121,7 @@ final class LibraryBrowseUITests: XCTestCase {
         remote.press(.select)
         let unwatched = menuCell(app, title: "Unwatched Only")
         XCTAssertTrue(unwatched.waitForExistence(timeout: 5))
-        // The demo has one Movies library: the media-type control already
-        // makes that choice, so neither the old Source nor Library is useful.
+        // With one Movies library, the media-type control is the only choice.
         XCTAssertFalse(menuCell(app, title: "Source").exists)
         XCTAssertFalse(menuCell(app, title: "Library").exists)
         XCTAssertTrue(menuCell(app, title: "4K Only").exists)
@@ -147,7 +142,7 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertTrue(summary.label.contains("4K"), "Crossing the controls must preserve the movie-only filter")
         XCTAssertEqual(filters.value as? String, "2 active")
 
-        // Clearing returns the complete collection without resetting sort.
+        // Clearing the filter keeps the sort.
         remote.press(.select)
         let clear = menuCell(app, title: "Clear Filters")
         XCTAssertTrue(clear.waitForExistence(timeout: 5))
@@ -192,9 +187,7 @@ final class LibraryBrowseUITests: XCTestCase {
         capture(app, name: "Library Restored")
     }
 
-    /// The first launch of each case starts from a clean slate
-    /// (`-debug.regressionResetState`); the relaunch must not, because what
-    /// the relaunch checks is exactly what the first launch persisted.
+    /// Relaunches without resetting state, to check what the first launch persisted.
     private func relaunchKeepingState(_ app: XCUIApplication) {
         app.terminate()
         var arguments = app.launchArguments
@@ -264,12 +257,8 @@ final class LibraryBrowseUITests: XCTestCase {
             }
         }
         if !option.exists {
-            // Decade and genre options are derived from the catalogue, so a
-            // missing one is a missing fixture, not a broken menu — the
-            // public demo shrinks between its periodic resets (one series and
-            // eleven films on the evening of September 8) and a private
-            // server has its own shape (audit A18). The fixed
-            // options are the menu itself, and their absence is a failure.
+            // Decades and genres come from the catalogue, so a missing one
+            // skips. A missing fixed option is a failure.
             if submenu != nil {
                 throw XCTSkip("Fixture server required: the catalogue offers no \"\(title)\" option under \(submenu ?? "")")
             }
@@ -291,8 +280,7 @@ final class LibraryBrowseUITests: XCTestCase {
     }
 
     private func ownsFocus(_ element: XCUIElement) -> Bool {
-        // SwiftUI Menu puts its identifier on a wrapper and focus on an
-        // inner accessibility element. Other controls own focus directly.
+        // A SwiftUI Menu's identifier is on a wrapper; focus is on a child.
         element.hasFocus || element.descendants(matching: .any)
             .allElementsBoundByIndex.contains(where: \.hasFocus)
     }

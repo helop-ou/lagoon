@@ -4,24 +4,21 @@ import Testing
 import LagoonEngine
 @testable import Lagoon
 
-/// Pins `PlayerEngineRef`: a copied player view struct must not
-/// keep a drained engine alive, and once it's gone every read is a no-op.
+/// Player views hold the engine through `PlayerEngineRef`, never strongly:
+/// a copied view must not keep a drained engine alive, and once it is gone
+/// every read is a no-op.
 @Suite("Player engine handle")
 @MainActor
 struct PlayerEngineRefTests {
-    /// Stands in for a player chrome view: a struct holding the wrapper,
-    /// the way `CustomPlayerView` and its gesture-closure copies do. The
-    /// wrapper's backing storage is private to the struct, so it answers
-    /// `isAttached` itself.
+    /// A player view holding the wrapper, like `CustomPlayerView`. The backing
+    /// storage is private, so the struct answers `isAttached` itself.
     private struct ChromeStandIn {
         @PlayerEngineRef var engine: any PlayerEngine
         var isAttached: Bool { _engine.isAttached }
     }
 
-    // Test 4: the memberwise initializer still takes the engine directly
-    // (`ChromeStandIn(engine: engine)` below), which is what keeps every
-    // existing `CustomPlayerView(engine:)` call site unchanged. Tests 1
-    // and 2 both exercise it implicitly.
+    // The memberwise initializer still takes the engine directly, which keeps
+    // `CustomPlayerView(engine:)` call sites unchanged; the tests below use it.
 
     @Test func attachedEngineReadsThroughToTheOwner() {
         let engine = TestEngine()
@@ -75,10 +72,7 @@ struct PlayerEngineRefTests {
     }
 }
 
-/// Minimal `PlayerEngine` conformance for the tests above: stored state for
-/// every requirement without a default implementation, empty bodies for
-/// every method — mirroring `DetachedPlayerEngine`'s shape against the same
-/// protocol.
+/// Minimal `PlayerEngine` conformance, shaped like `DetachedPlayerEngine`.
 @Observable
 private final class TestEngine: PlayerEngine {
     var timePosition: Double = 0

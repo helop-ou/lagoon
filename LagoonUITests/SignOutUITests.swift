@@ -1,12 +1,10 @@
 #if os(tvOS)
 import XCTest
 
-/// The Sign Out row lives on the pushed Account page, while the confirmation
-/// that the row arms is attached to the settings root behind it. This pins
-/// the row to actually producing its confirmation.
+/// The Sign Out row is on the pushed Account page, but its confirmation is
+/// attached to the settings root. This pins that the row shows it.
 ///
-/// The test never confirms the sign-out: it runs against whatever account the
-/// simulator is signed in to, and completing it would revoke that session.
+/// Never confirms: it would revoke the simulator's real session.
 @MainActor
 final class SignOutUITests: XCTestCase {
     func testSignOutRowPresentsItsConfirmation() {
@@ -22,9 +20,8 @@ final class SignOutUITests: XCTestCase {
 
         select(app.buttons["settings.account.signOut"])
 
-        // Assert on Cancel: tvOS does not expose the dialog's title as a
-        // static text, and "Sign Out" also names the row behind the dialog,
-        // so Cancel is the only label that means the dialog is up.
+        // Only Cancel proves the dialog: tvOS hides its title and the row
+        // behind is also "Sign Out".
         let appeared = app.buttons["Cancel"].waitForExistence(timeout: 5)
         attach(app, name: appeared ? "signout-confirmation" : "signout-no-confirmation")
         XCTAssertTrue(appeared, "Sign Out armed no confirmation, so the row does nothing")

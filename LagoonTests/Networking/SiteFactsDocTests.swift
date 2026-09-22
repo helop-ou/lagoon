@@ -2,20 +2,12 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Renders the facts the website states about the app, as JSON for it to read.
-///
-/// The website is a separate repository and restates what Lagoon plays. Copied
-/// by hand, those claims go stale the moment `DeviceProfile` changes, and
-/// `docs/release.md` forbids overstating format support because it is exactly
-/// what a reviewer checks. Generating them means the site cannot claim a codec
-/// the app never offers the server.
-///
-/// The version and build come from `Bundle.main`, which in an app-hosted test
-/// is Lagoon.app, so they are what the project actually declares rather than
-/// what somebody remembered to type into the site.
+/// Renders what the website states about the app, as JSON, from
+/// `DeviceProfile` so the site cannot overstate formats (`docs/release.md`).
+/// Version and build come from `Bundle.main`, which here is Lagoon.app.
 ///
 /// `scripts/generate-site-facts.sh` runs this and copies the result into the
-/// website checkout. Its `--check` mode fails instead of copying.
+/// website checkout; `--check` fails on drift instead.
 @Suite("Site facts document")
 struct SiteFactsDocTests {
     @Test @MainActor func writesTheSiteFactsDocument() throws {
@@ -31,10 +23,7 @@ struct SiteFactsDocTests {
         print("SITE_FACTS_DOC \(url.path)")
     }
 
-    /// The point of the whole arrangement. Adding a codec to `DeviceProfile`
-    /// without deciding what to call it in public fails here, rather than
-    /// quietly dropping it from the site or printing a raw identifier at a
-    /// reader.
+    /// A codec added to `DeviceProfile` without a public name fails here.
     @Test func everyDeclaredIdentifierHasAPublicName() {
         let profile = DeviceProfile.everything
         for id in SiteFacts.declaredVideoCodecs(profile) {
@@ -69,8 +58,6 @@ struct SiteFactsDocTests {
         }
     }
 
-    /// A row that lost its separator or came out empty would publish as a
-    /// blank spec line rather than an obvious mistake.
     @Test func rowsAreSeparatedLists() throws {
         let json = try SiteFacts.render(DeviceProfile.everything, version: "1.0", build: "1")
         let facts = try #require(
@@ -81,7 +68,7 @@ struct SiteFactsDocTests {
             #expect(value.contains(SiteFacts.separator), "\(key) is not a list: \(value)")
             #expect(!value.contains("  "), "\(key) has a doubled space")
         }
-        // SDR is a range the profile accepts but not something to advertise.
+        // SDR is accepted but not advertised.
         #expect(facts["hdr"]?.contains("SDR") == false)
     }
 }
@@ -93,10 +80,8 @@ enum SiteFacts {
 
     // MARK: - Public names
     //
-    // What Lagoon calls each identifier in front of a reader. Editorial, and
-    // deliberately here rather than in the website: the repository that
-    // decides a codec is supported is the one that should decide what it is
-    // called. A name missing from these maps fails the suite above.
+    // Editorial names, kept here beside the profile that decides support.
+    // A missing name fails the suite above.
 
     static let videoNames: [String: String] = [
         "hevc": "HEVC", "h264": "H.264", "av1": "AV1", "vp9": "VP9",
@@ -119,8 +104,7 @@ enum SiteFacts {
         "pgs": "PGS", "pgssub": "PGS", "dvdsub": "VobSub", "dvbsub": "DVB",
     ]
 
-    /// Dolby Vision arrives as a family of range types rather than a profile
-    /// number, so the profile numbers a reader recognises are named here.
+    /// Dolby Vision arrives as range types; name them by profile number.
     /// `DOVIWithEL` is the dual-layer profile 7 converted in flight.
     static let rangeNames: [String: String] = [
         "SDR": "", // Accepted, never advertised.
@@ -194,9 +178,7 @@ enum SiteFacts {
 
     static let dolbyVision = "Dolby Vision profile "
 
-    /// Names in the order the profile declares them, with duplicates dropped:
-    /// several PCM identifiers are all just "PCM" to a reader, and four range
-    /// types are all profile 8.
+    /// Names in profile order, duplicates dropped (several PCM ids are "PCM").
     private static func names(_ ids: [String], _ map: [String: String]) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
@@ -208,9 +190,6 @@ enum SiteFacts {
     }
 
     /// Folds a family of names into one phrase, in place of the first of them.
-    /// A row reading "Dolby Vision profile 5 · Dolby Vision profile 8 · Dolby
-    /// Vision profile 7" is accurate and unreadable; three profiles of one
-    /// thing belong in one entry.
     private static func collapse(
         _ list: [String],
         matching isMember: (String) -> Bool,
@@ -225,8 +204,7 @@ enum SiteFacts {
         return out
     }
 
-    /// "Dolby Vision profiles 5, 8 and 7", keeping the profile order the
-    /// device profile declares rather than sorting it.
+    /// "Dolby Vision profiles 5, 8 and 7", in profile order, unsorted.
     private static func dolbyVisionPhrase(_ members: [String]) -> String {
         let numbers = members.map { $0.replacingOccurrences(of: dolbyVision, with: "") }
         guard let last = numbers.last else { return "" }
@@ -238,8 +216,7 @@ enum SiteFacts {
         ordered(values.flatMap { $0.split(separator: ",").map(String.init) })
     }
 
-    /// First-seen order, so the rendered row follows the profile rather than
-    /// an alphabet, and a reordering in `DeviceProfile` shows up as a diff.
+    /// First-seen order, so a reordering in `DeviceProfile` shows as a diff.
     private static func ordered(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.filter { seen.insert($0).inserted }

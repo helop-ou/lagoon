@@ -232,9 +232,8 @@ struct HomeRowPreferenceTests {
 
     // MARK: Reconciling an arrangement with the rows that exist now
 
-    /// A row a later Lagoon build adds has a designed place in the order, and
-    /// an existing arrangement should receive it there rather than at the
-    /// bottom under the server's plugin rows.
+    /// A row added in a later build lands at its designed place, not at the
+    /// bottom under the plugin rows.
     @Test func aNewNativeRowIsInsertedWhereItWasDesignedToGo() {
         var layout = HomeSectionPreferenceResolver.defaultLayout
         layout.removeAll { $0.id == HomeCuratedRows.ID.topMovies }
@@ -267,8 +266,7 @@ struct HomeRowPreferenceTests {
         #expect(reconciled.first { $0.id == "MyList" }?.isEnabled == true)
     }
 
-    /// An account that had only hidden a native row beforehand never
-    /// arranged a plugin row, so the catalogue still arrives shown.
+    /// Hiding a native row says nothing about plugin rows, so they arrive shown.
     @Test func theCatalogueArrivesShownWhenNoPluginRowWasEverArranged() {
         let reconciled = HomeSectionPreferenceResolver.reconciled(
             HomeSectionPreferenceResolver.defaultLayout,
@@ -278,9 +276,8 @@ struct HomeRowPreferenceTests {
         #expect(reconciled.first { $0.id == "MyList" }?.isEnabled == true)
     }
 
-    /// `homeSections()` answers a failed request with an empty catalogue. A
-    /// reconcile that pruned unknown rows would take the viewer's arrangement
-    /// with it the first time the server was slow.
+    /// A failed `homeSections()` returns an empty catalogue, so reconciling
+    /// must not prune unknown rows.
     @Test func anEmptyCatalogueNeverDropsARememberedPluginRow() {
         var layout = HomeSectionPreferenceResolver.defaultLayout
         layout.append(HomeSectionPreferenceRow(id: "MyList", isEnabled: true))
@@ -322,8 +319,8 @@ struct HomeRowPreferenceTests {
         #expect(selected.map(\.section) == ["Recommendations"])
     }
 
-    /// A section Lagoon draws itself is never offered, so an arrangement that
-    /// still names one cannot resurrect a duplicate of a native row.
+    /// A section Lagoon draws itself stays out even when an arrangement names
+    /// it, so it cannot duplicate a native row.
     @Test func aNativelyCoveredSectionStaysOutEvenWhenTheArrangementNamesIt() throws {
         var layout = HomeSectionPreferenceResolver.defaultLayout
         layout.insert(HomeSectionPreferenceRow(id: "ContinueWatching", isEnabled: true), at: 0)
@@ -358,8 +355,7 @@ struct HomeRowPreferenceTests {
         #expect(order(values).first == HomeRowID.continueWatching)
     }
 
-    /// Hiding a row was never a choice about order, so the new default order
-    /// applies with that row still hidden.
+    /// Hiding a row is not a choice about order, so the default order applies.
     @Test func aLegacyHiddenRowSurvivesIntoTheNewDefaultOrder() throws {
         let values = try decoded(
             #"{"isConfigured":false,"rows":[],"nativeRows":[{"id":"lagoon.movieGenres","isEnabled":false}]}"#
@@ -370,8 +366,7 @@ struct HomeRowPreferenceTests {
         #expect(values.layout.map(\.id) == HomeSectionPreferenceResolver.defaultLayout.map(\.id))
     }
 
-    /// One toggle governed all three Recently Added rows before they became
-    /// individually placeable, so all three inherit its answer.
+    /// The old single Recently Added toggle carries to all three rows.
     @Test func theSingleLegacyRecentlyAddedToggleHidesAllThreeRowsItBecame() throws {
         let values = try decoded(
             #"{"nativeRows":[{"id":"lagoon.recentlyAdded","isEnabled":false}]}"#
@@ -431,9 +426,7 @@ struct HomeRowPreferenceTests {
         #expect(choices.map(\.title).contains("Show Genres"))
     }
 
-    /// Recently Added is three placeable rows rather than one toggle over all
-    /// of them, which is what lets the movie one sit third and the show one
-    /// fifth.
+    /// Recently Added is three separately placeable rows.
     @Test func recentlyAddedIsOfferedOncePerKindOfLibrary() {
         let titles = Dictionary(
             HomeSectionPreferenceResolver.nativeChoices.map { ($0.id, $0.title) },
@@ -446,13 +439,9 @@ struct HomeRowPreferenceTests {
         #expect(titles[HomeRowID.legacyRecentlyAdded] == nil)
     }
 
-    /// The one that catches the next row someone adds.
-    ///
-    /// A Home row that never reaches this list is a row nobody can turn off or
-    /// move, and the mistake is invisible: the row renders, Settings simply
-    /// never mentions it. Asserting against the identifier constants rather
-    /// than a hand-copied list means a new row fails here the moment it has an
-    /// id and before it has a screen.
+    /// Catches a new Home row that Settings never lists, which nobody could
+    /// hide or move. Uses the identifier constants, not a copied list, so it
+    /// fails as soon as the row has an id.
     @Test func everyRowWithAnIdentifierIsOfferedInSettings() {
         let offered = Set(HomeSectionPreferenceResolver.nativeChoices.map(\.id))
         let owned = [
@@ -483,9 +472,7 @@ struct HomeRowPreferenceTests {
         #expect(offered.count == owned.count)
     }
 
-    /// And the mirror of it. Home resolves a row by its identifier now, so an
-    /// id offered in Settings that no branch draws is a row someone can move
-    /// around an order it never appears in.
+    /// The mirror: every id Settings offers must be drawn by Home.
     @Test func everyRowSettingsOffersIsOneHomeCanDraw() {
         let drawnByName: Set<String> = [
             HomeRowID.continueWatching,
@@ -520,9 +507,7 @@ struct HomeRowPreferenceTests {
     }
 
     @Test func noTwoRowsShareAnIdentifier() {
-        // Two rows on one id is one control governing both, and the row list
-        // is identified in SwiftUI — a duplicate is a runtime problem there
-        // as well as a preferences one.
+        // A shared id means one control for two rows and a SwiftUI identity clash.
         let ids = HomeSectionPreferenceResolver.nativeChoices.map(\.id)
 
         #expect(Set(ids).count == ids.count)
@@ -597,8 +582,7 @@ struct HomeRowPreferenceTests {
         #expect(store.choices.map(\.id) == before)
     }
 
-    /// Settings lists hidden rows too: it is the only place one is brought
-    /// back, so filtering the list to what Home draws would strand it.
+    /// Settings lists hidden rows too; it is the only way to bring one back.
     @Test @MainActor func settingsKeepsListingARowAfterItIsHidden() {
         let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -678,8 +662,7 @@ struct HomeGenreDiscoveryTests {
 
         #expect(shelf.map(\.name) == ["Action", "Drama", "Comedy"])
         #expect(shelf.first(where: { $0.name == "Action" })?.artwork?.id == "action-best")
-        // The absolute top Drama item has no landscape art, so the next
-        // highest-rated suitable title supplies the tile background.
+        // The top Drama item has no landscape art, so the next one supplies it.
         #expect(shelf.first(where: { $0.name == "Drama" })?.artwork?.id == "drama-art")
     }
 

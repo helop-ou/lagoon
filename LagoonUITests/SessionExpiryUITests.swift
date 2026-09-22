@@ -1,7 +1,7 @@
 import XCTest
 
-/// Controlled local fixture: scripts/jellyfin-regression-fixture.py. Public
-/// demo credentials must never be revoked by a regression test.
+/// Runs against scripts/jellyfin-regression-fixture.py so it never revokes
+/// the public demo's credentials.
 @MainActor
 final class SessionExpiryUITests: XCTestCase {
     func testDirectPlaybackRecoversAfterRemoteRevocation() async throws {
@@ -25,8 +25,7 @@ final class SessionExpiryUITests: XCTestCase {
             "-debug.playerRegression", "YES", "-debug.regressionBootstrapPublicDemo", "YES",
             "-debug.benchSearchTerm", "Session fixture movie", "-debug.regressionFindPlayable", "YES",
             "-debug.playbackHUD", "YES", "-playback.autoplayMode", "off",
-            // Each case starts without a restored identity. Only this app's
-            // launch-domain defaults are overridden; no user account is touched.
+            // No restored identity; only launch-argument defaults change.
             "-accounts", "()", "-session.activeAccountId", "",
         ]
         app.launchEnvironment = ["LAGOON_REGRESSION_SERVER": address,

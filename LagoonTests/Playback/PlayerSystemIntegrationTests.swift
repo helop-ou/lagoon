@@ -73,13 +73,12 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func subtitleFailuresKeepTheCauseTheViewerCanActOn() {
-        // The whole point: a 403 is a server permission, not an
-        // exhausted provider quota, and the two need different answers.
+        // A 403 is a server permission, not an exhausted quota.
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 403)) == .notPermitted)
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 401)) == .sessionExpired)
         #expect(SubtitleDownloadError.classify(JellyfinError.unauthorized) == .sessionExpired)
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 429)) == .rateLimited)
-        // No body: nothing better to say than our own wording.
+        // No body: use our own wording.
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 502)) == .providerUnavailable)
         #expect(SubtitleDownloadError.classify(JellyfinError.server(status: 404)) == .server(404))
         #expect(SubtitleDownloadError.classify(URLError(.timedOut)) == .timedOut)
@@ -95,11 +94,8 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func theServersOwnExplanationBeatsOneInventedHere() {
-        // The reported case: an admin who could search but whose download
-        // failed got "the provider could not supply this file — it may have
-        // been removed or the limit reached", which is two guesses. Jellyfin
-        // wraps the provider's exception into a 500 and puts the real reason
-        // in the body; it was being discarded.
+        // Jellyfin wraps a provider exception in a 500 with the real reason
+        // in the body. Show that instead of guessing.
         let quota = JellyfinError.server(
             status: 500,
             message: "OpenSubtitles download limit reached for today"
@@ -107,11 +103,9 @@ struct PlayerSystemIntegrationTests {
         let classified = SubtitleDownloadError.classify(quota)
         #expect(classified == .reported(status: 500, message: "OpenSubtitles download limit reached for today"))
         #expect(classified.localizedDescription.contains("download limit reached"))
-        // Not the hedge it used to be.
         #expect(classified != .providerUnavailable)
 
-        // Statuses we understand keep our wording, which is better than the
-        // server's terse one and is actionable.
+        // Statuses we understand keep our own, actionable wording.
         #expect(SubtitleDownloadError.classify(
             JellyfinError.server(status: 403, message: "Forbidden")) == .notPermitted)
         #expect(SubtitleDownloadError.classify(
@@ -123,9 +117,8 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func aBodyCarryingResponseIsStillRecognisedByItsStatus() {
-        // The compatibility fallback and the item-missing branch key off 404.
-        // Once a 404 can carry a message it is no longer `.server(404)`, so
-        // they have to branch on the status instead of on case equality.
+        // A 404 with a body is not `.server(404)`, so callers that key off 404
+        // must branch on the status, not on case equality.
         let bare = SubtitleDownloadError.classify(JellyfinError.server(status: 404))
         let withBody = SubtitleDownloadError.classify(
             JellyfinError.server(status: 404, message: "Item not found"))
@@ -141,8 +134,7 @@ struct PlayerSystemIntegrationTests {
         let plain = Data("  Download limit reached\n".utf8)
         #expect(JellyfinClient.serverMessage(from: plain) == "Download limit reached")
 
-        // The 403 from a real Jellyfin is an HTML page — chrome, not an
-        // explanation, and it must not be pasted into the UI.
+        // A real Jellyfin 403 is an HTML page; never show it.
         #expect(JellyfinClient.serverMessage(from: Data("<html><body>no</body></html>".utf8)) == nil)
         #expect(JellyfinClient.serverMessage(from: Data()) == nil)
 
@@ -187,15 +179,12 @@ struct PlayerSystemIntegrationTests {
         #expect(try !decode(#"{"IsAdministrator": false, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
         #expect(try !decode(#"{"EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
 
-        // Administrators pass regardless of the flag. Jellyfin hides the
-        // checkbox for them because the permission is implied, so an admin's
-        // stored value is routinely false — reading that as a denial locked
-        // administrators out of their own servers.
+        // Administrators pass regardless. Jellyfin hides the checkbox for
+        // them, so their stored value is often false.
         #expect(try decode(#"{"IsAdministrator": true, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": true}"#).allowsSubtitleManagement)
 
-        // Unknown is not a denial: the server is the authority and answers
-        // 403 if it disagrees, which is reported properly.
+        // Unknown is not a denial; the server answers 403 if it disagrees.
         #expect(try decode(#"{}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": false}"#).allowsSubtitleManagement)
     }
@@ -308,9 +297,7 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test @MainActor func everyContentIconResolvesToARealSymbol() {
-        // A symbol that does not exist on this OS renders as nothing at all —
-        // no crash, no warning, just a hole in the tab bar. Naming them in one
-        // place is only half the fix; this is the other half.
+        // A missing SF Symbol renders as nothing, with no crash or warning.
         for name in [
             ContentIcon.home,
             ContentIcon.discover,
@@ -341,18 +328,14 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func playbackRateStepsAndRendersFromOnePlace() {
-        // The panel's rows, the readout beside the player's title and the UI
-        // test's accessibility queries all read from these, so they cannot
-        // drift apart.
+        // The panel, the title readout and the UI tests all read these.
         #expect(PlaybackRatePolicy.title(1) == "1×")
         #expect(PlaybackRatePolicy.title(1.25) == "1.25×")
         #expect(PlaybackRatePolicy.title(0.5) == "0.5×")
-        // Remote Command Center can hand the engine a value outside the set;
-        // it is still rendered, and still clamped.
+        // Remote Command Center can send a rate outside the set; it renders clamped.
         #expect(PlaybackRatePolicy.title(99) == "2×")
 
-        // Stepping is clamped, not wrapped: a plus at 2x that landed on 0.5x
-        // would read as a bug.
+        // Stepping clamps, never wraps.
         #expect(PlaybackRatePolicy.stepped(from: 1, by: 1) == 1.25)
         #expect(PlaybackRatePolicy.stepped(from: 1, by: -1) == 0.75)
         #expect(PlaybackRatePolicy.stepped(from: 2, by: 1) == 2)
@@ -367,32 +350,26 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func aSyncCorrectionRidesOnTheViewersRateWithoutLeavingTheEnvelope() {
-        // A group nudge multiplies the viewer's speed rather than replacing
-        // it, and no correction leaves it exactly alone — which is
-        // every session outside a SyncPlay group.
+        // A group nudge multiplies the viewer's rate; no correction leaves it alone.
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1, correction: 1) == 1)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.5, correction: 1) == 1.5)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1, correction: 1.05) == 1.05)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 2, correction: 0.5) == 1)
 
-        // The product stays inside the envelope the engine scales every
-        // media-time cushion and demux watermark by, at both ends.
+        // The product stays inside the engine's rate envelope.
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 2, correction: 4) == PlaybackRatePolicy.maximum)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 0.5, correction: 0.1) == PlaybackRatePolicy.minimum)
-        // A rate outside the envelope is clamped before the correction, so
-        // Remote Command Center's 99 cannot be rescued by a small multiplier.
+        // The viewer's rate is clamped before the correction applies.
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 99, correction: 0.5) == 1)
 
-        // A nonsense multiplier is no multiplier: a stopped clock is `pause`,
-        // never a correction of zero.
+        // A nonsense multiplier is ignored; stopping is `pause`, never a zero correction.
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.25, correction: 0) == 1.25)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.25, correction: -1) == 1.25)
         #expect(PlaybackRatePolicy.effectiveRate(userRate: 1.25, correction: .nan) == 1.25)
     }
 
     @Test @MainActor func aCorrectionRateLeavesTheViewersChosenRateAlone() {
-        // The panel's speed row and Now Playing both publish `rate`; a group
-        // nudge that moved it would tell the viewer they had changed speed.
+        // The speed row and Now Playing show `rate`, so a nudge must not move it.
         let engine = SampleBufferPlayerEngine()
         engine.setRate(1.25)
         engine.setCorrectionRate(1.05)
@@ -419,12 +396,8 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test @MainActor func everyAudioRendererSpatializesStereoTheWayAVPlayerDoes() {
-        // Apple's two players disagree on the default, and the sample-buffer
-        // one is the stingier: `AVPlayerItem` documents
-        // `monoStereoAndMultichannel` for video content, while
-        // `AVSampleBufferAudioRenderer` documents `multichannel` alone. The
-        // first expectation pins that difference — if a future SDK closes it,
-        // this test says so and the override becomes redundant.
+        // `AVSampleBufferAudioRenderer` defaults to `multichannel` only, unlike
+        // `AVPlayerItem`. The first check fails if a future SDK changes that.
         #expect(AVSampleBufferAudioRenderer().allowedAudioSpatializationFormats == .multichannel)
         #expect(
             SampleBufferPlayerEngine.makeAudioRenderer().allowedAudioSpatializationFormats
@@ -434,9 +407,7 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func assResetOnlyClearsTheOverridesBeforeIt() throws {
-        // Override tags apply left to right, so where the reset sits decides
-        // what survives it. Reading style tags from the whole block made
-        // `{\i1\r}` italic, which is the one thing it cannot be.
+        // Override tags apply left to right, so `{\i1\r}` ends up plain.
         let resetLast = try #require(ASSSubtitleTextParser.cue(
             from: #"0,0,Default,,0,0,0,,{\b1\i1\r}Plain"#
         ))
@@ -448,8 +419,7 @@ struct PlayerSystemIntegrationTests {
         #expect(resetFirst.runs.first?.isItalic == true)
         #expect(resetFirst.runs.first?.isBold == false)
 
-        // Placement is not part of the inline style table, so a reset in the
-        // same block must not take the alignment with it.
+        // A reset keeps the alignment; placement is not an inline style.
         let placed = try #require(ASSSubtitleTextParser.cue(
             from: #"0,0,Default,,0,0,0,,{\an8\b1\r}Top"#
         ))
@@ -467,12 +437,9 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test @MainActor func aShutDownEngineCannotBeBroughtBackToLife() async {
-        // SwiftUI re-mounts the player surface after a failed playback, and
-        // `makeUIView` attaches unconditionally. `finishRendererShutdown`
-        // nils the renderer, so an emptiness check alone let a retired engine
-        // pass: it re-registered a renderer set that could never detach — its
-        // `shutdown` early-returns once requested — and started a second
-        // demux loop that reopened the stream, server transcode and all.
+        // SwiftUI re-mounts the player surface after a failure and `makeUIView`
+        // attaches unconditionally. A shut-down engine must ignore it, or it
+        // registers renderers that never detach and reopens the stream.
         let before = PlaybackLifecycleDiagnostics.snapshot()
         let engine = SampleBufferPlayerEngine()
         engine.prepare(
@@ -483,8 +450,7 @@ struct PlayerSystemIntegrationTests {
         engine.shutdown()
         engine.attach(displayLayer: AVSampleBufferDisplayLayer())
 
-        // Nothing was registered, so nothing is left needing an asynchronous
-        // AVFoundation completion to balance it.
+        // Nothing registered, so nothing waits on an AVFoundation completion.
         let after = PlaybackLifecycleDiagnostics.snapshot()
         #expect(after.attachedRendererSets == before.attachedRendererSets)
         #expect(after.activeDemuxLoops == before.activeDemuxLoops)
@@ -492,30 +458,24 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test func onlyAMediaServicesResetLeavesThePlayerPaused() {
-        // Apple requires an app to wait for an explicit viewer action after a
-        // media-services reset, so that replacement stays paused. A renderer
-        // that failed on its own is nothing the viewer did or can fix, and
-        // resuming is the whole point of replacing it.
+        // Apple requires waiting for the viewer after a media-services reset.
+        // A renderer that failed on its own is replaced and resumes.
         #expect(AudioRendererReplacement.mediaServicesReset.staysPaused)
         #expect(!AudioRendererReplacement.rendererFailed.staysPaused)
     }
 
     @Test func aFailedAudioRendererReportsItsOwnReasonWhenItCannotBeReplaced() {
-        // Reached only when the replacement itself fails, which leaves
-        // playback with no audio path at all — so the message has to carry
-        // whatever AVFoundation said rather than a guess of ours.
+        // Reached only when replacement fails, so show AVFoundation's reason.
         #expect(
             AudioRendererReplacement.rendererFailed
                 .failureMessage(detail: "The operation could not be completed")
                 .contains("The operation could not be completed")
         )
-        // No error attached is the common case: say what happened, without a
-        // dangling empty parenthetical.
+        // No error: no empty parenthetical.
         let bare = AudioRendererReplacement.rendererFailed.failureMessage(detail: nil)
         #expect(!bare.contains("("))
         #expect(AudioRendererReplacement.rendererFailed.failureMessage(detail: "") == bare)
-        // A reset says why it happened; the renderer's own error is noise
-        // next to "the media service restarted".
+        // A reset states its cause; the renderer's error is noise.
         #expect(
             AudioRendererReplacement.mediaServicesReset.failureMessage(detail: "ignored")
                 == "Playback audio could not recover after the media service restarted."
@@ -545,12 +505,8 @@ struct PlayerSystemIntegrationTests {
         ) == .reprime)
     }
 
-    /// The credential travels as a header
-    /// (`MediaRequestAuthorization`) rather than in the URL for every media
-    /// consumer, so none of the URLs Lagoon resolves here — direct play,
-    /// direct stream, transcode, subtitle sidecar, trickplay sheet — may
-    /// carry `ApiKey` or `api_key`, even when the server itself stamped a
-    /// legacy token into the value it handed back.
+    /// The credential travels as a header (`MediaRequestAuthorization`), so no
+    /// resolved media URL carries `ApiKey` or `api_key`, even when the server put one in.
     @Test func playbackURLResolutionNeverCarriesTheCredentialInTheQuery() throws {
         let client = JellyfinClient(deviceId: "stream-resolution-test")
         client.configure(serverURL: URL(string: "https://media.test/jellyfin")!)
@@ -589,12 +545,9 @@ struct PlayerSystemIntegrationTests {
         """#)
         let transcodeResult = try client.streamURL(itemId: "item", source: transcode)
         #expect(transcodeResult.method == .transcode)
-        // A server-relative TranscodingUrl keeps the reverse-proxy base path:
-        // resolving it against the origin alone sent every
-        // transcode on a base-path server to a route that does not exist.
+        // A server-relative TranscodingUrl keeps the reverse-proxy base path.
         #expect(transcodeResult.url.path == "/jellyfin/Videos/item/master.m3u8")
-        // The server's own legacy token is stripped, but its other query
-        // items (here PlaySessionId) survive untouched.
+        // The legacy token is stripped; other query items survive.
         #expect(queryValue("PlaySessionId", in: transcodeResult.url) == "session")
         #expect(queryValue("ApiKey", in: transcodeResult.url) == nil)
         #expect(queryValue("api_key", in: transcodeResult.url) == nil)
@@ -606,8 +559,7 @@ struct PlayerSystemIntegrationTests {
         #expect(queryValue("ApiKey", in: sidecar) == nil)
         #expect(queryValue("api_key", in: sidecar) == nil)
 
-        // A foreign origin is never touched at all — not even to strip a
-        // token it never had.
+        // A foreign origin is left untouched.
         let externalSidecar = try #require(client.externalSubtitleURL(
             deliveryUrl: "https://subtitles.example.test/item.srt"
         ))
@@ -625,8 +577,7 @@ struct PlayerSystemIntegrationTests {
         let sheet = try #require(trickplay.sheetURLs.first)
         #expect(queryValue("ApiKey", in: sheet) == nil)
         #expect(queryValue("api_key", in: sheet) == nil)
-        // The sheet fetch still authenticates: the credential rides with the
-        // source as the header the loader applies per request.
+        // The sheet fetch authenticates through the source's header.
         let sheetAuthorization = try #require(trickplay.authorization)
         #expect(sheetAuthorization.applies(to: sheet))
         #expect(sheetAuthorization.headerValue.contains("Token=\"token\""))
@@ -774,16 +725,14 @@ struct PlayerSystemIntegrationTests {
             onTrackAdded: { addedStreams.streams.append($0) }
         )
 
-        // This is the same search/download sequence triggered by the
-        // in-player Find Subtitles result button.
+        // The same sequence as the in-player Find Subtitles button.
         coordinator.startSearch()
         try await waitUntil { !coordinator.results.isEmpty }
         let result = try #require(coordinator.results.first)
         coordinator.startDownload(result)
         try await waitUntil { coordinator.phase == .downloaded }
-        // The direct path has no server stream yet; the controller still
-        // needs one entry per engine track to carry the choice into the
-        // next episode.
+        // No server stream exists yet, but the controller needs one entry per
+        // engine track to carry the choice into the next episode.
         let added = try #require(addedStreams.streams.first)
         #expect(addedStreams.streams.count == 1)
         #expect(added.type == "Subtitle")
@@ -889,8 +838,7 @@ struct PlayerSystemIntegrationTests {
         try await waitUntil { coordinator.phase != .searching }
 
         // Jellyfin answers 403 to every remote subtitle endpoint without this
-        // permission. Asking once means the viewer is told what is actually
-        // wrong, and no provider request is spent discovering it.
+        // permission, so check once and spend no provider request.
         #expect(coordinator.phase == .notPermitted)
         #expect(coordinator.results.isEmpty)
         #expect(!SubtitleDownloadURLProtocol.requests.contains {
@@ -931,9 +879,8 @@ struct PlayerSystemIntegrationTests {
         coordinator.startDownload(SubtitleCandidate(forbidden))
         try await waitUntil { coordinator.phase == .notPermitted }
 
-        // Jellyfin's save path fetches from the provider a second time, so it
-        // must not run for a failure no retry could fix: that only spends the
-        // provider's download quota on the way to the same 403.
+        // Jellyfin's save path refetches from the provider; after a 403 that
+        // only spends quota.
         #expect(!SubtitleDownloadURLProtocol.requests.contains {
             $0.method == "POST" && $0.path.contains("RemoteSearch")
         })
@@ -968,8 +915,7 @@ struct PlayerSystemIntegrationTests {
         )
         coordinator.startSearch()
         try await waitUntil { coordinator.results.count == 2 }
-        // Candidate ids are namespaced by source now that results can come
-        // from Jellyfin or the provider directly.
+        // Candidate ids are namespaced by source, so match on providerID.
         let missing = try #require(coordinator.results.first { $0.providerID == "missing-provider-file" })
         coordinator.startDownload(missing)
         try await waitUntil {
@@ -1023,9 +969,8 @@ private nonisolated struct RecordedSubtitleRequest: Sendable {
     let body: String?
 }
 
-/// A deterministic Jellyfin transport for the complete user download flow.
-/// PlaybackInfo deliberately remains stale so the coordinator must fetch and
-/// parse the provider's real subtitle bytes before activating the track.
+/// Fake Jellyfin transport. PlaybackInfo stays stale, so the coordinator must
+/// fetch and parse the provider's bytes before activating the track.
 private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recordedRequests: [RecordedSubtitleRequest] = []
@@ -1036,8 +981,6 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
         return recordedRequests
     }
 
-    /// Mirrors Jellyfin's own default: a non-administrator has subtitle
-    /// management switched off unless someone turns it on.
     private nonisolated(unsafe) static var userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": true } }"#
 
     static func reset(subtitleManagement: Bool = true) {
@@ -1169,9 +1112,8 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
     }
 }
 
-/// The starvation half: an audio queue at zero used to produce no
-/// stall, no buffering state and no counter movement, so a film played on
-/// with the picture running and no sound while every indicator read healthy.
+/// Empty audio must count as starvation, or a film plays silent while every
+/// indicator reads healthy.
 @Suite("Playback starvation")
 struct PlaybackStarvationTests {
     private func healthy(
@@ -1193,9 +1135,8 @@ struct PlaybackStarvationTests {
         #expect(PlaybackStarvationPolicy.starvation(healthy()) == .none)
     }
 
-    /// The reported shape: video full off its own buffer, but AVFoundation
-    /// has consumed every audio sample it was handed. App queue depth is not
-    /// part of this decision.
+    /// Video is full but the renderer has consumed every audio sample. App
+    /// queue depth plays no part.
     @Test func exhaustedRendererAudioLeadIsStarvationEvenWithVideoFull() {
         let snapshot = healthy {
             $0.videoQueueCount = 30
@@ -1204,8 +1145,7 @@ struct PlaybackStarvationTests {
         #expect(PlaybackStarvationPolicy.starvation(snapshot) == .audio)
     }
 
-    /// Lead is measured after enqueueing to the renderer. Lagoon's own queue
-    /// may be at zero in both assertions and is deliberately absent here.
+    /// Lead is measured at the renderer; Lagoon's own queue is ignored.
     @Test func audioIsJudgedOnRendererDeliveryLead() {
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.audioDeliveryLeadSeconds = PlaybackStarvationPolicy.audioFloorSeconds + 0.01
@@ -1258,8 +1198,6 @@ struct PlaybackStarvationTests {
         }) == .audio)
     }
 
-    /// Nothing is starving while paused, buffering, finished, or within a
-    /// second of the end.
     @Test func statesThatCannotStarve() {
         #expect(PlaybackStarvationPolicy.starvation(healthy {
             $0.isPaused = true
@@ -1281,10 +1219,8 @@ struct PlaybackStarvationTests {
 
     // MARK: - Why audio does not stop the clock
 
-    /// The revert, pinned so it is not re-introduced: with the defaults
-    /// these calls use, audio gates recovery only through renderer
-    /// delivery lead, and only when the engine asks for it via
-    /// `audioRequired`. Left unset, as here, video decides alone.
+    /// Audio gates recovery only when the engine sets `audioRequired`.
+    /// Unset, video decides alone.
     @Test func recoveryDependsOnVideoAlone() {
         #expect(StallRecoveryPolicy.decision(
             elapsed: .seconds(1),
@@ -1298,8 +1234,8 @@ struct PlaybackStarvationTests {
         ) == .wait)
     }
 
-    /// Audio starvation is still *detected* — the counter and the HUD line
-    /// depend on it — it simply is not a reason to stop the picture.
+    /// Audio starvation is still detected for the counter and HUD, but never
+    /// stops the picture.
     @Test func audioStarvationIsStillReportedEvenThoughItNeverStopsTheClock() {
         let snapshot = healthy {
             $0.videoQueueCount = 30
@@ -1464,20 +1400,12 @@ struct PlaybackStarvationTests {
 struct UncachedDeliveryCushionTests {
 }
 
-/// Reopened once the app-side queue was cleared as a suspect: a
-/// Jellyfin HLS fragment's `mdat` is one contiguous video block followed by
-/// one contiguous audio block, so `primeAndStart` fills the decoded video
-/// queue to its hard limit and starts the clock before any of that
-/// fragment's audio has even been read, and the one-slot pacing at the hard
-/// limit then only reaches a fragment's audio after its last video frame.
-/// Hardware measurement moved the fix into the existing hard-limit branch
-/// itself rather than a separate renderer-side-lead gate: once the decoded
-/// video queue is full and `audioCanCoverDrain` is false, the loop now
-/// reads on for audio anyway — holding what it reads as compressed packets
-/// in an intake rather than decoded frames — as long as the app-side audio
-/// queue has not itself reached its own high water and the intake has not
-/// reached its own count and byte bounds. Any of those failing falls back
-/// to the one-slot-below-the-hard-limit pacing this branch always had.
+/// A Jellyfin HLS fragment's `mdat` holds all its video before its audio, so
+/// the decoded video queue fills before any audio is read. When that queue is
+/// full and `audioCanCoverDrain` is false, the loop reads on for audio into a
+/// compressed-packet intake, until the audio queue reaches high water or the
+/// intake hits its count or byte bound. Then it falls back to pacing one slot
+/// below the hard limit.
 @Suite("Demux read-ahead for a starving audio track")
 struct DemuxReadAheadPolicyTests {
 }

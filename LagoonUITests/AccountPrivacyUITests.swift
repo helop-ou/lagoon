@@ -19,8 +19,7 @@ final class AccountPrivacyUITests: XCTestCase {
             XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 20))
         }
         app.terminate()
-        // The stored accounts and Keychain credentials are now real. Start
-        // at the normal picker without the bootstrap running again.
+        // Start at the picker without re-running the bootstrap.
         app.launchArguments = ["-debug.regressionBootstrapPublicDemo", "NO", "-session.activeAccountId", ""]
         app.launchEnvironment = [:]
         app.launch()
@@ -71,8 +70,7 @@ final class AccountPrivacyUITests: XCTestCase {
     private func selectTab(_ title: String, in app: XCUIApplication) {
         let tab = app.tabBars.buttons[title]
         #if !os(tvOS)
-        // The iOS search role collapses the other tabs into the previous
-        // destination. Tapping that destination restores the full tab bar.
+        // The iOS search role collapses the other tabs; tapping restores them.
         if !tab.exists, app.tabBars.buttons.firstMatch.exists {
             app.tabBars.buttons.firstMatch.tap()
         }

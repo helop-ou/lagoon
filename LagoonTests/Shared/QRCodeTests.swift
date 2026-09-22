@@ -7,21 +7,14 @@ import Testing
 import UniformTypeIdentifiers
 @testable import Lagoon
 
-/// Reads a generated code back the way a camera would.
-///
-/// A QR code is the one component whose correctness cannot be judged by
-/// looking at it: it either decodes or it does not, and the difference between
-/// a code that scans from the sofa and one that does not is invisible on
-/// screen. So these decode rather than inspect, and the centre-mark test
-/// covers the code the way the view does instead of trusting the arithmetic in
-/// `QRCode.markShare`.
+/// Reads a generated code back the way a camera would: a QR code either
+/// decodes or it does not, and that is invisible on screen.
 @Suite("QR codes")
 @MainActor
 struct QRCodeTests {
     private let address = "https://lagoon.helop.dev/privacy/"
 
-    /// Scaled the way the view scales it, so what the test decodes is the
-    /// number of pixels a television actually puts on the glass.
+    /// Scaled the way the view scales it, to the pixels a TV actually shows.
     private func rendered(
         _ code: CGImage,
         side: CGFloat,
@@ -39,8 +32,7 @@ struct QRCodeTests {
         ))
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: side, height: side))
-        // The view's `.interpolation(.none)`: smoothing is what blurs the
-        // modules into each other and stops a camera finding their edges.
+        // Matches the view's `.interpolation(.none)`; smoothing blurs modules.
         context.interpolationQuality = .none
         context.draw(code, in: CGRect(x: 0, y: 0, width: side, height: side))
 
@@ -57,9 +49,8 @@ struct QRCodeTests {
         return try #require(context.makeImage())
     }
 
-    /// Core Image rather than Vision: Vision's barcode request answers
-    /// "Could not create inference context" on the tvOS simulator, where this
-    /// suite runs. `CIDetector` is plain Core Image and works there.
+    /// `CIDetector`, not Vision: Vision fails with "Could not create inference
+    /// context" on the tvOS simulator.
     private func decoded(_ image: CGImage) -> [String] {
         let detector = CIDetector(
             ofType: CIDetectorTypeQRCode,
@@ -76,9 +67,7 @@ struct QRCodeTests {
         #expect(decoded(try rendered(code, side: Metrics.qrCodeSize)) == [address])
     }
 
-    /// The branding claim, checked rather than asserted. If someone grows the
-    /// mark past what correction level H can restore, this fails instead of
-    /// the code quietly becoming one that only scans from two feet away.
+    /// Fails if the mark grows past what correction level H can restore.
     @Test func theCentreMarkStillLeavesACodeThatDecodes() throws {
         let code = try #require(QRCode.image(for: address))
 
@@ -91,13 +80,8 @@ struct QRCodeTests {
         #expect(decoded(covered) == [address])
     }
 
-    /// The margin around the code is the quiet zone, and a code drawn hard
-    /// against other content is one a camera has to hunt for.
-    ///
-    /// The first version of this fixed the margin at 32 points and failed
-    /// here, which is the reason it is measured from the code instead: a
-    /// shorter address makes fewer, wider modules and therefore needs a wider
-    /// margin, so no single constant is right for every address.
+    /// The quiet zone is measured in modules, not points: a shorter address
+    /// makes wider modules, so no fixed margin fits every address.
     @Test func theQuietZoneIsAlwaysAtLeastTheSpecifiedFourModules() throws {
         for text in [
             "https://lagoon.helop.dev",
@@ -117,15 +101,8 @@ struct QRCodeTests {
         #expect(QRCode.quietZone(side: Metrics.qrCodeSize, modulesAcross: 0) > 0)
     }
 
-    /// The finished component, drawn the way the sheet draws it and read back
-    /// the way a camera would.
-    ///
-    /// The other tests approximate the centre mark with a filled square. This
-    /// one renders the real view — white plate, dark tile, jellyfish, quiet
-    /// zone and all — so the thing under test is the thing on screen. It also
-    /// writes the image into the simulator's temporary directory and prints
-    /// the path, which is how the mark's proportions get looked at without
-    /// waiting for a television.
+    /// Renders the real view, not a filled-square stand-in for the mark, and
+    /// prints the path of the PNG it writes so the result can be looked at.
     @Test func theRenderedComponentStillDecodes() throws {
         let renderer = ImageRenderer(content: QRCodeView(text: address))
         renderer.scale = 1

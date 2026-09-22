@@ -3,9 +3,8 @@ import Testing
 import LagoonEngine
 @testable import Lagoon
 
-/// Skip and Up Next timing off the engine's clock: the decisions
-/// the overlays used to make in their own bodies, now made where a locked
-/// phone can still reach them.
+/// Skip and Up Next timing, driven by the engine's clock rather than the
+/// overlays, so it still runs on a locked phone.
 @Suite("Playback automation")
 @MainActor
 struct PlaybackAutomationTests {
@@ -13,9 +12,8 @@ struct PlaybackAutomationTests {
     /// Long enough after `countdown` to be sure nothing fired.
     private static let settled: Duration = .milliseconds(160)
 
-    /// A countdown that should fire is waited for, not slept past: the
-    /// main actor is shared with every other suite in the run, so a fixed
-    /// sleep after a 40 ms countdown is a flake under load.
+    /// Wait for a countdown rather than sleeping past it: the main actor is
+    /// shared with every suite, so a fixed sleep flakes under load.
     private func eventually(_ condition: () -> Bool) async {
         let deadline = ContinuousClock.now + .seconds(3)
         while !condition(), ContinuousClock.now < deadline {
@@ -103,9 +101,8 @@ struct PlaybackAutomationTests {
 
     // MARK: - Buffering
 
-    /// The countdown runs on wall time so that a locked phone can still
-    /// reach it, which means it comes due during a stall — where seeking
-    /// spends the very buffer the stall is waiting on.
+    /// The countdown runs on wall time, so it can come due during a stall,
+    /// where seeking would spend the buffer the stall is waiting on.
     @Test func aSkipThatComesDueWhileBufferingWaits() async throws {
         let automation = automation()
         var landed: Double?
@@ -116,21 +113,17 @@ struct PlaybackAutomationTests {
         #expect(automation.activeSegment?.id == "intro")
         try await Task.sleep(for: Self.settled)
         #expect(landed == nil)
-        // The offer is still standing; only the seek is held.
+        // Only the seek is held.
         #expect(automation.activeSegment?.id == "intro")
 
-        // Waited for rather than slept past: the countdown may not have
-        // come due yet on a loaded run, and then it is the release that
-        // lets it through rather than the hold that takes it up.
+        // Waited for: on a loaded run the countdown may not be due yet.
         automation.isBuffering = false
         await eventually { landed == 70 }
         #expect(landed == 70)
         #expect(automation.activeSegment == nil)
     }
 
-    /// Held, not lost: if the picture caught up past the segment while the
-    /// skip waited, honouring it would drag the viewer backwards through an
-    /// intro they have now watched.
+    /// A held skip the playhead has passed would drag the viewer backwards.
     @Test func aHeldSkipIsDroppedOnceThePlayheadHasPassedIt() async throws {
         let automation = automation()
         var landed: Double?
@@ -149,8 +142,7 @@ struct PlaybackAutomationTests {
         #expect(automation.activeSegment == nil)
     }
 
-    /// Select and a tap are the viewer asking for this now. Only the clock
-    /// waits.
+    /// Select and a tap act now; only the clock waits.
     @Test func theViewerSkipsWhileBufferingAllTheSame() {
         let automation = automation(skip: .button)
         var landed: Double?
@@ -200,9 +192,8 @@ struct PlaybackAutomationTests {
     }
 
     @Test func nothingArmsBeforeTheFirstTick() async throws {
-        // A recap that covers zero must not arm from the phantom position
-        // a new item starts at, or a slow open lets it fire before the
-        // clock has ever ticked.
+        // A recap from zero must not arm on a new item's initial position,
+        // or a slow open fires it before the clock ticks.
         let recap = MediaSegment(id: "recap", kind: .recap, start: 0, end: 40)
         let automation = automation(segments: [recap])
         var landed: Double?
@@ -276,7 +267,7 @@ struct PlaybackAutomationTests {
 
         automation.tick(position: 1_300, duration: 1_320)
         #expect(!automation.showsNextUp)
-        // The end of the file must not undo the answer either.
+        // Nor at the end of the file.
         #expect(!automation.autoplaysOnFinish)
     }
 
