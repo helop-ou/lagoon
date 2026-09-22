@@ -2,7 +2,9 @@ Little-CMS (lcms2) 2.17
 Source: https://github.com/mm2/Little-CMS/tree/lcms2.17
 Copyright (c) 2023 Marti Maria Saguer
 
-Prebuilt by MPVKit's lcms2-build release 2.17.0.
+Built by the lagoon-engine package from this release's source tarball
+(scripts/build-lcms2.sh in https://github.com/helop-ou/lagoon-engine),
+without the GPL-3.0 fast_float and threaded plugins.
 
 MIT License
 
