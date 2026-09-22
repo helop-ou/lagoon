@@ -223,6 +223,15 @@ struct SeerrClientTests {
         }
     }
 
+    @Test func anAuthProxyAnsweringWithAWebPageIsNotBlamedOnSeerr() async throws {
+        let client = makeClient()
+        client.configure(serverURL: URL(string: "https://seerr.test/access")!)
+
+        await #expect(throws: SeerrError.webPageResponse) {
+            _ = try await client.status()
+        }
+    }
+
     private func makeClient(requestTimeout: TimeInterval = 20) -> SeerrClient {
         SeerrMockURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -357,6 +366,10 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             return (200, ["Content-Type": "application/json"], userJSON)
         case ("GET", "/base/api/v1/status"):
             return (200, ["Content-Type": "application/json"], #"{"version":"test"}"#)
+        // Cloudflare Access and friends answer in front of Seerr: the redirect
+        // to their login page is followed, so this succeeds with 200 and HTML.
+        case ("GET", "/access/api/v1/status"):
+            return (200, ["Content-Type": "text/html; charset=utf-8"], "<html><body>Sign in</body></html>")
         case ("GET", "/api/v1/discover/trending"):
             return (200, ["Content-Type": "application/json"], #"{"page":1,"totalPages":1,"totalResults":1,"results":[{"id":329865,"mediaType":"movie","title":"Arrival","releaseDate":"2016-11-11","mediaInfo":{"id":8,"tmdbId":329865,"status":3,"jellyfinMediaId":"jellyfin-arrival","requests":[{"id":9,"status":2}]}}]}"#)
         case ("GET", "/api/v1/request"):
