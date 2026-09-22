@@ -1,12 +1,11 @@
-uavs3d (AVS3 video decoder)
-Upstream: https://github.com/uavs3/uavs3d
+uavs3d (AVS3 video decoder) 1.2, commit 0e20d2c
+Source: https://github.com/uavs3/uavs3d/tree/0e20d2c291853f196c68922a264bcd8471d75b68
 Copyright (c) 2018-2022 Peking University Shenzhen Graduate School, Peng
 Cheng Laboratory, and Guangdong Bohua UHD Innovation Corporation
 
-Prebuilt by MPVKit's libuavs3d-build release "1.2.1-fix"
-(https://github.com/mpvkit/libuavs3d-build/releases/tag/1.2.1-fix), which
-points at the upstream uavs3d repository above rather than a signed
-upstream tag.
+Built by the lagoon-engine package from the upstream repository at the commit
+above (scripts/build-uavs3d.sh in https://github.com/helop-ou/lagoon-engine).
+uavs3d has not tagged a release since 1.2.
 
 Copyright (c) 2018-2022 ["Peking University Shenzhen Graduate School", "Peng Cheng Laboratory", and "Guangdong Bohua UHD Innovation Corporation"]
 
