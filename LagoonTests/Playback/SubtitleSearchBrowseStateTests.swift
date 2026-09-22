@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import LagoonEngine
+import LagoonEngine
 @testable import Lagoon
 
 /// The Subtitles tab is either choosing a track or browsing search

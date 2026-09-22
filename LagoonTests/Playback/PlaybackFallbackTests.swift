@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import LagoonEngine
+import LagoonEngine
 @testable import Lagoon
 
 @Suite("Playback fallback")

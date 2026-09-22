@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import LagoonEngine
+import LagoonEngine
 @testable import Lagoon
 
 /// The case behind the audio memory: The 100's season-one remux ships five

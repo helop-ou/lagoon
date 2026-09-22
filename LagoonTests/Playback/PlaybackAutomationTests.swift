@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import LagoonEngine
+import LagoonEngine
 @testable import Lagoon
 
 /// Skip and Up Next timing off the engine's clock: the decisions
