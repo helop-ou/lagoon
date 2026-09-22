@@ -1,6 +1,5 @@
 import Foundation
 import LagoonEngine
-import Libavformat
 
 /// App-owned wiring: which backend stands behind
 /// `Diagnostics.shared`.
@@ -53,10 +52,9 @@ nonisolated enum DiagnosticsConfiguration {
         return DiagnosticsProcessObserver(hub: Diagnostics.shared)
     }
 
-    /// The linked libavformat, as `lavf<major>.<minor>.<micro>`: the one
-    /// component of the engine that is versioned independently of the app.
-    static var engineVersion: String {
-        let version = avformat_version()
-        return "lavf\(version >> 16).\((version >> 8) & 0xFF).\(version & 0xFF)"
-    }
+    /// The playback package's version and the FFmpeg it was built against.
+    /// Both, because the engine is versioned independently of this app now
+    /// and can be rebuilt against a different libavformat without changing
+    /// its own number.
+    static var engineVersion: String { EngineVersion.summary }
 }
