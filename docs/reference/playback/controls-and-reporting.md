@@ -318,3 +318,142 @@ Platform limits, all verified on device rather than inferred:
   the player wraps in `.restoresFocusAfterPlayer(isPresented:)`
   (`Lagoon/Shared/UI/FocusRestoration.swift`: focus scope + `resetFocus` timed
   past the dismissal transition).
+
+### Player panel performance
+
+The Debug-only Player Panel component preview carries a
+deterministic 30-track subtitle fixture.
+`PlayerRegressionUITests.testPlayerPanelPreviewPerformance` sweeps
+Info → Subtitles → Info five times while XCTest records app CPU,
+retired instructions, memory, wall-clock time, and animation
+hitches, and walks focus through every stress-fixture row so lazy
+construction cannot silently break Siri Remote navigation. Two
+deterministic gates sit beside those figures: a single six-tab sweep
+has a 1.75-second hard ceiling, and the complete sweep plus 30-row
+walk may grow the app footprint by at most 12 MB. Wall time does not
+move between builds (about 1.3 s, remote-input-bound) and peak
+memory sits in a 64-80 MB band, so treat movement inside that band
+as noise unless it crosses XCTest's 10% tolerance. The CPU and
+instruction counts are where panel work shows up, and narrowing
+`GlassEffectContainer` from the whole panel tree to the four sibling
+tab controls is the change that moved them most.
+
+Release builds also emit a `Player Panel Reveal` interval in the
+existing `ee.helop.lagoon/PlaybackPerformance` signpost category. Use
+that interval and the Animation Hitches instrument for
+physical-Apple-TV validation, where GPU composition cost is more
+representative than Simulator timing.
+
+`testLivePlayerPanelSweepPerformance` is the same sweep over **live**
+playback rather than the Debug gallery's static preview. The gallery
+has no engine behind it, so it cannot show what the player's own
+per-tick work costs the panel's focus animations. It carries no
+timing assertion on purpose. The presses are remote-input-bound, so
+wall time is a constant and only the CPU figures move.
+
+The public Jellyfin demo is sufficient for navigation, generic
+playback, lifecycle, and panel tests, but exposes no subtitle,
+multi-audio, chapter, or intro-segment fixture, and rich-media UI
+tests report an explicit skip rather than timing out when those
+assets are absent. To run every fixture-backed journey against a
+private regression library without committing credentials:
+
+```sh
+TEST_RUNNER_LAGOON_REGRESSION_SERVER='https://example.test' \
+TEST_RUNNER_LAGOON_REGRESSION_USER='Regression' \
+TEST_RUNNER_LAGOON_REGRESSION_PASS='…' \
+xcodebuild test -project Lagoon.xcodeproj -scheme LagoonHardwareRegression \
+  -destination 'platform=tvOS Simulator,name=Apple TV,OS=latest'
+```
+
+**The `TEST_RUNNER_` prefix is not decoration.** `xcodebuild` does
+not hand its own environment to the XCTest runner process. It
+forwards exactly the variables prefixed this way, stripping the
+prefix on the way in. Without it the runner sees nothing,
+`launchPlayer` forwards nothing, and the app quietly falls back to
+the public demo. So the fixture-backed tests run against a server
+that has no fixtures and fail as though the player were broken. This
+page documented the unprefixed form until 2026-08-26, which cost an
+afternoon of chasing four "player" failures that were one missing
+prefix. The runner passes these values to the DEBUG-only bootstrap
+through the app launch environment. They are never persisted or
+compiled into a Release build.
+
+#### The player's Observation scope
+
+`CustomPlayerView` had one flat Observation scope. Because
+Observation tracks property reads **per body**, a single
+`engine.timePosition` read anywhere in `playerContent` re-evaluated
+the whole player ten times a second. That included the video surface,
+subtitle overlay, skip and Up Next overlays, the transport with its
+nested `GeometryReader`s, and the panel host. On tvOS that tree is
+built inside `MenuPressGate.updateUIViewController`, so every tick
+also reassigned the hosting controller's `rootView` and re-diffed its
+tree. On an Apple TV the `CPUTrace` line showed `main=229–267 ms` per
+two-second window during plain playback with no chrome on screen.
+That is the work that was competing with the panel's focus
+animations.
+
+The fix is a scope split, not new machinery. Everything that follows
+the playhead is now its own view and reads the tick-rate properties
+in its own body: `PlayerTransportOverlay` (whose `PlayerScrubber` and
+`PlayerTimelineLabels` are the two leaves that legitimately tick),
+`PlayerSubtitleOverlay`, `PlayerSkipOverlay`, `PlayerNextUpOverlay`,
+and the launch-gated `PlayerRegressionValue`. That is a
+`ViewModifier` precisely because a modifier has a body of its own,
+and the tvOS probe has to decorate the focusable video surface rather
+than a sibling element that would steal arrow focus. The per-view
+`@State` moved with them: `autoSkipFill` into the skip overlay,
+`nextUpFill` into the Up Next overlay, each armed by a `.task(id:)`
+keyed on its own transition *and* on `playbackIdentity`, so autoplay
+cannot inherit the outgoing episode's fill. The parent hears about
+real transitions through closures (`onSkip`, `onPlayNext`, …), never
+per tick.
+
+Two rules keep it that way, and both are easy to break by accident:
+
+- **Nothing in `body`/`playerContent`, and nothing in the
+  `id:`/`value:` argument of a modifier on them, may touch
+  `timePosition`, the `currentSubtitle*` properties, or any other
+  property the engine writes at tick rate.** `isPaused`,
+  `isBuffering`, `duration`, `subtitleLoadState` and `videoSize`
+  change per item or per viewer action and are fine. The computed
+  properties that do read the position, `activeSegment` and
+  `showsNextUp`, survive only for `handleMenu`, `onTapGesture`,
+  `onMoveCommand` and `onPlayPauseCommand`. Reads in a closure that
+  runs later are not body reads.
+- **A leaf that can answer without the position must not read it.**
+  `PlayerSkipOverlay` returns nil before touching `timePosition`
+  when the item has no skippable segment, and `PlayerNextUpOverlay`
+  before touching it when there is no successor or autoplay is off,
+  which is every movie. The subscription is the read.
+
+`PlayerControlPanelHost`'s `Equatable` boundary is unrelated and
+still needed. It stops the panel's *interior* from re-rendering when
+the player above it does re-render.
+
+The split cut main-thread CPU during plain playback with no chrome
+visible, two runs each. On the tvOS simulator it fell from 79 ms to
+54 ms average per two-second window and 61 ms to 34 ms median (the
+mean is dominated by an unrelated periodic spike present in both, so
+the median is the honest number). On the Apple TV 4K (3rd
+generation), Release, a Dolby Vision title with CC on, it fell from
+259 ms to 186 ms median per window.
+
+The hidden transport was the next cut. `CustomPlayerView` keeps the
+transport mounted at opacity 0 so the fade can animate, and its
+scrubber and timeline leaves kept following the tick while nobody
+could see them. They now take an `isVisible` flag and read
+`engine.timePosition` only on the visible branch. Observation
+registers reads that happen, so the un-taken branch drops the
+subscription. This renders the last shown position while hidden.
+Same hands-off simulator measurement: median main-thread ms per 2 s
+window 32.5 → 16.5, mean 49.4 → 36.7.
+
+The live panel sweep moved much less (app CPU 0.384 s → 0.375 s,
+cycles −4.5%, wall time unchanged because the presses are
+remote-input-bound). This is expected: with the panel open the skip
+and Up Next overlays are suppressed and the panel's interior is
+already behind its `Equatable` boundary, so only the player's own
+body was left to save. The win this change is for is the one above,
+during ordinary playback, where the competing work actually lives.
