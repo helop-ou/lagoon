@@ -1,9 +1,10 @@
 # Lagoon — session notes
 
 Jellyfin client for tvOS 26 and iOS 26: one multiplatform SwiftUI app target,
-with unit and multiplatform UI test targets. Playback runs on Lagoon's own
-sample-buffer engine over vendored FFmpeg static libraries. There is no
-AVPlayer path and no third-party Swift dependency.
+with unit and multiplatform UI test targets. Playback runs on the
+`LagoonEngine` package — Lagoon's own sample-buffer engine over vendored
+FFmpeg, now maintained in its own repository. There is no AVPlayer path and no
+third-party Swift dependency.
 
 ## Where the rules live
 
@@ -22,7 +23,7 @@ guide is right and this file needs fixing.
 | [Architecture](docs/architecture.md) | Ownership, navigation, refresh and invalidation, the tvOS focus invariants |
 | [Design system](docs/design-system.md) | Tokens, brand colors, native controls, focus, image loading |
 | [Jellyfin API](docs/jellyfin-api.md) | Authentication, endpoints, wire formats, decoding rules, server compatibility |
-| [Playback](docs/playback.md) | Engine boundaries, transport, lifecycle, controls, diagnostics, regression checks |
+| [Playback](docs/playback.md) | Negotiation, the delivery ladder, controls, reporting, regression checks. Engine internals live with the engine. |
 | [Release](docs/release.md) | Build numbers, changelog, acknowledgements, licence, TestFlight, release gates |
 | [Roadmap](docs/roadmap.md) | Remaining product work and device acceptance |
 
@@ -49,10 +50,10 @@ clean" in docs/README.md.
 - Build numbers belong to the repo. Never let Xcode manage them at upload; see
   [Release](docs/release.md). A change a viewer would notice gets a line in
   `Lagoon/Features/Settings/Changelog.swift`. An invisible one does not.
-- The only dependency is the local `Packages/LagoonFFmpeg` package. Do not add
-  another without serious deliberation. When you do, add its acknowledgement
-  and licence text as [Release](docs/release.md) describes, or
-  `AcknowledgementsTests` fails the unit suite.
+- The only dependency is the `LagoonEngine` package, which carries the native
+  libraries with it. Do not add another without serious deliberation. When you
+  do, add its acknowledgement and licence text as [Release](docs/release.md)
+  describes, or `AcknowledgementsTests` fails the unit suite.
 - Verify UI changes in the simulator before calling them done. Build, then
   `simctl install/launch`, then drive focus with `osascript -e 'tell
   application "System Events" to key code …'` — 125/126/123/124 are the
@@ -85,29 +86,25 @@ longer than doing it. Never claim an agent's result before it has come back.
 Each one is explained, with its evidence, in the guide named. This list exists
 so you know to read that guide before touching the area.
 
-- **Playback** — [Playback](docs/playback.md), with notes in
-  `docs/reference/playback/`. All playback goes through the sample-buffer
-  engine behind the `PlayerEngine` protocol, and the player UI only talks to
-  the protocol. Player views hold the engine through `@PlayerEngineRef`, never
-  a strong reference, and closures handed to SwiftUI never capture an engine.
-  A renderer's request block is armed only while its queue has something to
-  give. A light Siri Remote touch-surface tap and a Select press are different
-  inputs and never share a path. Software-decoded 10-bit video reaches the
-  renderer through the asynchronous `MetalFrameConverter`. The delivery ladder
-  descends only on a verdict about the samples: a lost VideoToolbox session is
-  rebuilt rather than transcoded, and while video output is suspended it is
-  ignored outright.
-- **Vendored FFmpeg** — [Playback](docs/playback.md). libavformat is built in
-  this repo without its network stack, and every HTTP open goes through
-  `FFmpegNetworkTransport` over URLSession; keep the build script and the
-  artifact in sync. dav1d is also built here and must keep its arm64 assembly.
-  Run `scripts/build-dav1d.sh --verify-only` after touching it, because
-  without the assembly nothing fails — everything just decodes ten times
-  slower. libdovi is vendored rather than built, for the Dolby Vision profile
-  7 → 8.1 conversion.
-- **Measurement** — [Playback](docs/playback.md), "Regression checks". Never
-  trust a casual frame-loss comparison. Same scene, same media-time window,
-  simulator untouched, three or more runs, using the Frame-Loss Bench and
+- **Playback** — [Playback](docs/playback.md). All playback goes through the
+  engine package behind the `PlayerEngine` protocol, and the player UI only
+  talks to the protocol. Player views hold the engine through
+  `@PlayerEngineRef`, never a strong reference, and closures handed to SwiftUI
+  never capture an engine — that one the engine cannot enforce for us, and it
+  has regressed most often. A light Siri Remote touch-surface tap and a Select
+  press are different inputs and never share a path. The delivery ladder
+  descends only on the engine's verdict about the samples, and a `.delivery`
+  verdict is never a reason to re-encode.
+- **The engine package** — its own repository, and its own
+  [guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md)
+  and [standards](https://github.com/helop-ou/lagoon-engine/blob/main/docs/standards.md).
+  Demux, decode, render, queues, the byte-source cache and the vendored FFmpeg
+  build all live there, along with the rules that keep them working. Change
+  them there, not by reaching around the package.
+- **Measurement** — [Playback](docs/playback.md), "Regression checks", and
+  `docs/reference/playback/frame-loss-bench.md` for the harness. Never trust a
+  casual frame-loss comparison. Same scene, same media-time window, simulator
+  untouched, three or more runs, using the Frame-Loss Bench and
   `scripts/framedrop-bench.sh`. Two fixes that skipped this were later
   retracted.
 - **Models and API** — [Jellyfin API](docs/jellyfin-api.md) and

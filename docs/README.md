@@ -8,11 +8,18 @@ you are changing. The six guides below describe how the code works today.
 | [Architecture](architecture.md) | Ownership, project layout, navigation, and refactoring priorities |
 | [Design system](design-system.md) | Shared components, tokens, focus, accessibility, and artwork |
 | [Jellyfin API](jellyfin-api.md) | Authentication, endpoints, wire formats, and server compatibility |
-| [Playback](playback.md) | Engine boundaries, lifecycle, transport, controls, and regression checks |
+| [Playback](playback.md) | Negotiation, the delivery ladder, lifecycle ownership, controls, and regression checks |
 | [Release](release.md) | Build numbers, changelog, licence, TestFlight, website, and release gates |
 | [Roadmap](roadmap.md) | Remaining product work and device acceptance |
 
 ## Supporting material
+
+Playback's engine is a separate package in its own repository, and its
+internals are documented there: [the engine
+guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md) and
+its [engineering
+notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/README.md).
+What stays here is what Lagoon negotiates, presents and reports.
 
 `reference/` holds the longer engineering notes behind the guides:
 [playback](reference/playback/README.md),
