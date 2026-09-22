@@ -38,7 +38,7 @@ struct SeerrClientTests {
         #expect(client.sessionCookie == "s%3Asession.signature")
 
         let current = try await client.currentUser()
-        #expect(current.name == "Jaagop")
+        #expect(current.name == "Alex")
 
         let requests = SeerrMockURLProtocol.requests
         #expect(requests.count == 2)
@@ -360,7 +360,7 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
         case ("GET", "/api/v1/discover/trending"):
             return (200, ["Content-Type": "application/json"], #"{"page":1,"totalPages":1,"totalResults":1,"results":[{"id":329865,"mediaType":"movie","title":"Arrival","releaseDate":"2016-11-11","mediaInfo":{"id":8,"tmdbId":329865,"status":3,"jellyfinMediaId":"jellyfin-arrival","requests":[{"id":9,"status":2}]}}]}"#)
         case ("GET", "/api/v1/request"):
-            return (200, ["Content-Type": "application/json"], #"{"pageInfo":{"page":1,"pages":1,"pageSize":20,"results":1},"results":[{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"requestedBy":{"id":7,"username":"jaagop","permissions":32},"seasons":[{"id":1,"seasonNumber":1}]}]}"#)
+            return (200, ["Content-Type": "application/json"], #"{"pageInfo":{"page":1,"pages":1,"pageSize":20,"results":1},"results":[{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"requestedBy":{"id":7,"username":"alex","permissions":32},"seasons":[{"id":1,"seasonNumber":1}]}]}"#)
         case ("POST", "/api/v1/request"):
             return (201, ["Content-Type": "application/json"], #"{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"seasons":[{"id":1,"seasonNumber":1}]}"#)
         case ("POST", "/api/v1/request/41/approve"):
@@ -371,6 +371,6 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
     }
 
     private var userJSON: String {
-        #"{"id":7,"username":"jaagop","displayName":"Jaagop","permissions":32}"#
+        #"{"id":7,"username":"alex","displayName":"Alex","permissions":32}"#
     }
 }

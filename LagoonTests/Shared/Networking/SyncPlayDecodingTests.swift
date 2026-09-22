@@ -15,23 +15,23 @@ struct SyncPlayDecodingTests {
         let update = try groupUpdate("""
         {"GroupId":"ea9615382d214f9c9313c26fbd3bad89","Type":"GroupJoined",
          "Data":{"GroupId":"ea9615382d214f9c9313c26fbd3bad89","GroupName":"Film night",
-                 "State":"Idle","Participants":["Jaagop"],"LastUpdatedAt":"2026-09-14T11:44:16.1864573Z"}}
+                 "State":"Idle","Participants":["Alex"],"LastUpdatedAt":"2026-09-14T11:44:16.1864573Z"}}
         """)
         #expect(update.type == .groupJoined)
         let group = try #require(update.group)
         #expect(group.groupName == "Film night")
         #expect(group.state == .idle)
-        #expect(group.participants == ["Jaagop"])
+        #expect(group.participants == ["Alex"])
         #expect(group.id == "ea9615382d214f9c9313c26fbd3bad89")
     }
 
     @Test func userJoinedAndUserLeftCarryANameNotAnId() throws {
-        let joined = try groupUpdate(#"{"GroupId":"ea96","Type":"UserJoined","Data":"Jaagop"}"#)
+        let joined = try groupUpdate(#"{"GroupId":"ea96","Type":"UserJoined","Data":"Alex"}"#)
         #expect(joined.type == .userJoined)
-        #expect(joined.text == "Jaagop")
-        let left = try groupUpdate(#"{"GroupId":"ea96","Type":"UserLeft","Data":"Jaagop"}"#)
+        #expect(joined.text == "Alex")
+        let left = try groupUpdate(#"{"GroupId":"ea96","Type":"UserLeft","Data":"Alex"}"#)
         #expect(left.type == .userLeft)
-        #expect(left.text == "Jaagop")
+        #expect(left.text == "Alex")
     }
 
     /// The one place the server uses the dashed spelling of the group id.

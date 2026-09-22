@@ -20,7 +20,7 @@ struct SyncPlaySessionTests {
         let effects = session.apply(try Self.groupJoined())
         #expect(session.isJoined)
         #expect(session.groupName == "Film night")
-        #expect(session.participants == ["Jaagop"])
+        #expect(session.participants == ["Alex"])
         #expect(session.state == .idle)
         #expect(effects == [.notice(.joined(group: "Film night"))])
         // The join instant is what later decides which commands are older
@@ -35,17 +35,17 @@ struct SyncPlaySessionTests {
         {"GroupId":"0000000000000000000000000000ffff","Type":"UserJoined","Data":"Someone"}
         """)
         #expect(session.apply(other).isEmpty)
-        #expect(session.participants == ["Jaagop"])
+        #expect(session.participants == ["Alex"])
     }
 
     @Test func membersComeAndGo() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
-        _ = session.apply(try Self.update(#"{"GroupId":"\#(Self.groupID)","Type":"UserJoined","Data":"Sam"}"#))
-        #expect(session.participants == ["Jaagop", "Sam"])
-        let left = session.apply(try Self.update(#"{"GroupId":"\#(Self.groupID)","Type":"UserLeft","Data":"Jaagop"}"#))
-        #expect(session.participants == ["Sam"])
-        #expect(left == [.notice(.userLeft("Jaagop"))])
+        _ = session.apply(try Self.update(#"{"GroupId":"\#(Self.groupID)","Type":"UserJoined","Data":"Robin"}"#))
+        #expect(session.participants == ["Alex", "Robin"])
+        let left = session.apply(try Self.update(#"{"GroupId":"\#(Self.groupID)","Type":"UserLeft","Data":"Alex"}"#))
+        #expect(session.participants == ["Robin"])
+        #expect(left == [.notice(.userLeft("Alex"))])
     }
 
     /// The dashed spelling of the group id has to be recognised as ours, or
@@ -305,7 +305,7 @@ struct SyncPlaySessionTests {
         try update("""
         {"GroupId":"\(groupID)","Type":"GroupJoined",
          "Data":{"GroupId":"\(groupID)","GroupName":"Film night","State":"Idle",
-                 "Participants":["Jaagop"],"LastUpdatedAt":"2026-09-14T11:44:16.1864573Z"}}
+                 "Participants":["Alex"],"LastUpdatedAt":"2026-09-14T11:44:16.1864573Z"}}
         """)
     }
 

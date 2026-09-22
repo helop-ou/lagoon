@@ -238,7 +238,7 @@ struct DeveloperSettingsView: View {
                 .accessibilityIdentifier("settings.developer.preview.buffering")
         case .watchTogetherToast:
             SyncPlayToastLabel(
-                text: String(localized: "Jaagop joined"),
+                text: String(localized: "Alex joined"),
                 accessibilityIdentifier: "settings.developer.preview.watchTogetherToast"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -545,8 +545,8 @@ private struct PlayerPanelComponentPreview: View {
 
     private var previewTogether: PlayerTogetherState {
         PlayerTogetherState(
-            groupName: "Jaagop's room",
-            participants: ["Jaagop", "Development", "Sam"],
+            groupName: "Alex's room",
+            participants: ["Alex", "Development", "Robin"],
             state: .playing,
             ignoresWait: ignoresWait
         )
