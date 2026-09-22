@@ -75,7 +75,11 @@ struct DiagnosticPrivacyTests {
             PlaybackEngineFailure(
                 cause: .delivery,
                 message: "The stream could not be opened (https://lagoonfix.example.eu/Videos/12c4/stream?api_key=secret-token-9f8e7d: It was the best of times).",
-                detail: DemuxError.openFailed("Server returned 5XX for The Film Nobody Should See", code: -1094995529).diagnosticDetail
+                detail: PlaybackFailureDetail(stage: .open, error: NSError(
+                    domain: "LagoonEngine.Demux", code: -1094995529,
+                    userInfo: [NSLocalizedDescriptionKey:
+                        "Server returned 5XX for The Film Nobody Should See"]
+                ))
             ),
             delivery: .negotiated, next: nil, engine: nil
         )

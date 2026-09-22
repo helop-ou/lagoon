@@ -553,7 +553,7 @@ final class SubtitleSearchCoordinator {
                 let file = try await Self.retrying {
                     try await client.remoteSubtitleFile(subtitleId: subtitleID)
                 }
-                _ = try await ExternalSubtitleLoader.parse(file.data, language: candidate.language)
+                try await ExternalSubtitleLoader.validate(file.data, language: candidate.language)
                 try Task.checkCancellation()
                 guard generation == downloadGeneration else { return }
                 guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }

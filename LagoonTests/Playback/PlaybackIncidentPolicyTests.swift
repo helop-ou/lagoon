@@ -125,9 +125,5 @@ struct PlaybackFailureDetailTests {
         let detail = PlaybackFailureDetail(stage: .open, error: error)
         #expect(detail.fields == ["stage": .string("open"), "errorDomain": .string("NSURLErrorDomain"), "errorCode": .int(-1200)])
         #expect(detail.fingerprint == ["open", "NSURLErrorDomain", "-1200"])
-        let demux = DemuxError.openFailed("moov atom not found", code: -1094995529).diagnosticDetail
-        #expect(demux.stage == .open)
-        #expect(demux.code == -1094995529)
-        #expect(DemuxError.seekFailed("demuxer not open").diagnosticDetail.code == nil)
     }
 }

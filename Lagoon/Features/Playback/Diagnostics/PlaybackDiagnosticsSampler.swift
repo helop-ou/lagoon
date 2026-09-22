@@ -230,7 +230,7 @@ final class PlaybackDiagnosticsSampler {
                     width: width,
                     height: height,
                     bitDepth: bitDepth,
-                    frames: DemuxBackpressurePolicy.videoHardLimit(videoIsDecoded: true)
+                    frames: engine.decodedVideoQueueCeiling
                 )) / 1_048_576
                 negotiated.append(String(
                     format: "Surface: %.1f MB/frame · %.0f MB app hard queue",
