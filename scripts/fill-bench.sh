@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
 #
-# Background-fill bench: plays one title hands-off on a simulator
-# with the decode trace on and reports how the direct-play cache filled over
-# time, so two builds can be compared on the same asset, media-time window
-# and link. It reads the `cacheMB=` / `netMB=` fields the decode trace prints
-# every two seconds and the engine's stall/drop counters on the same line.
+# Background-fill bench: plays one title hands-off on a simulator with the
+# decode trace on and reports how the direct-play cache filled, to compare
+# builds on the same asset, window and link.
 #
 #   scripts/fill-bench.sh <simulator-udid> <app-path> "<exact title>" [seconds] [runs]
 #
-# Environment: LAGOON_REGRESSION_SERVER / _USER / _PASS select the server
-# (default: the public demo). The app is installed fresh on the simulator
-# each run and launched through the bench hook (`-debug.benchSearchTerm`),
-# which plays from the beginning; `-debug.regressionResetState` is passed,
-# so never point this at a simulator whose sign-in you want to keep.
+# Defaults: 120 seconds, 3 runs. LAGOON_REGRESSION_SERVER / _USER / _PASS pick
+# the server (default: the public demo). Each run reinstalls the app, plays
+# from the start and resets its state, so never use a simulator whose sign-in
+# you want to keep.
 #
-# Output per run: one line per checkpoint (30/60/90/… s) with cached MB,
-# network MB, request count, stalls and dropped frames, then a summary with
-# the average fill rate over the window in MiB/s.
+# Output per run: cached MB, network MB, requests, stalls and dropped frames
+# at 30/60/90/… s, then the average fill rate in MiB/s.
 set -euo pipefail
 
 udid="${1:?simulator udid}"

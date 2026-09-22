@@ -2,15 +2,11 @@
 #
 # Strips attribution trailers from the commit message.
 #
-# Lagoon's history carries the ticket key and nothing else — no Co-Authored-By,
-# no tool attribution. Agents and editors add those on their own, so relying on
-# remembering not to has already put 153 of them in the published history. This
-# removes them at the point the message is written instead.
+# Lagoon commits carry no Co-Authored-By or tool attribution. Agents and
+# editors add them on their own, so this hook removes them. It covers `-m`,
+# `--amend`, squashes and editor commits; `--no-verify` skips it.
 #
-# Runs as git's commit-msg hook, so it covers `-m`, `--amend`, squashes and
-# editor commits alike. `git commit --no-verify` skips it, as with any hook.
-#
-# Installed by pointing the repository at this directory:
+# Install:
 #
 #   git config core.hooksPath scripts/git-hooks
 #
@@ -19,8 +15,7 @@ set -euo pipefail
 message="${1:-}"
 [ -n "$message" ] && [ -f "$message" ] || exit 0
 
-# Trailers to drop, matched case-insensitively at the start of a line. Git's own
-# trailer syntax allows leading whitespace, so tolerate it.
+# Matched case-insensitively at line start; leading whitespace allowed, as in git.
 patterns=(
     'co-authored-by:'
     'claude-session:'
@@ -28,8 +23,7 @@ patterns=(
 
 before="$(cat "$message")"
 
-# A hook must never be the reason a commit fails. If the interpreter is missing
-# the message goes through unchanged, with a warning, rather than blocking work.
+# A hook must never fail a commit: without python3, pass the message through.
 if ! command -v python3 >/dev/null 2>&1; then
     echo "commit-msg: python3 not found, leaving the message alone" >&2
     exit 0
@@ -42,8 +36,8 @@ import sys
 path, patterns = sys.argv[1], sys.argv[2:]
 text = open(path, encoding="utf-8").read()
 
-# Drop whole trailer lines. Comment lines are left alone: git strips them later,
-# and the instructions git writes into the template mention these names.
+# Leave comment lines alone: git strips them later, and its template text
+# mentions these names.
 trailer = re.compile(
     r"^[ \t]*(?:%s)[^\n]*\n?" % "|".join(re.escape(p) for p in patterns),
     re.IGNORECASE | re.MULTILINE,
@@ -54,8 +48,7 @@ for line in text.splitlines(keepends=True):
         kept.append(line)
 text = "".join(kept)
 
-# Removing a trailer block leaves the blank line that separated it from the
-# body. Collapse runs of blank lines and re-terminate the file.
+# Collapse the blank lines a removed trailer block leaves behind.
 text = re.sub(r"\n{3,}", "\n\n", text)
 text = text.rstrip("\n")
 if text:

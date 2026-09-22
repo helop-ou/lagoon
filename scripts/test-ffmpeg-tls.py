@@ -38,9 +38,7 @@ class Fixtures:
         self.work = work
         self.servers = []
         self.requests = []
-        # Names of servers reached only by following a redirect issued by a
-        # different origin (never as a fixture's own direct target) — see
-        # violations().
+        # Servers reached only via another origin's redirect; see violations().
         self.redirect_targets = set()
         self.cases = []
         self.roots()
@@ -148,11 +146,9 @@ class Fixtures:
                     if target_name != name:
                         owner.redirect_targets.add(target_name)
                     self.send_response(302)
-                    # Trust, not token placement, is what the redirect cases
-                    # exercise: Lagoon's own credential now travels as a
-                    # header scoped to its issuing origin (see
-                    # MediaRequestAuthorization), so a redirect target never
-                    # needs the legacy query token to be reachable.
+                    # Redirect cases test trust, not token placement: the
+                    # credential is a header scoped to its origin (see
+                    # MediaRequestAuthorization).
                     self.send_header("Location", owner.urls[target_name] + "/body")
                     self.send_header("Content-Length", "0")
                     self.end_headers()
@@ -173,11 +169,10 @@ class Fixtures:
                 if path.startswith("/hls/"):
                     _, _, kind, cert, file = path.split("/")
                     good, child = owner.urls["valid"], owner.urls[cert]
-                    # The synthetic token rides only on same-origin children: the
-                    # app must strip it into a header there, which the log guard
-                    # proves. Children on other origins are trust probes, and a
-                    # token in their URL would only show up in CFNetwork's own
-                    # failure log, which is not the app's leak.
+                    # Token only on same-origin children, where the app must
+                    # move it into a header (the log guard checks). Other-origin
+                    # children are trust probes; a token there would only reach
+                    # CFNetwork's own failure log, not an app leak.
                     def credential(base, separator="?"):
                         return f"{separator}api_key=synthetic-tls-test-token" if base == good else ""
                     if file == "master.m3u8":
@@ -221,10 +216,8 @@ class Fixtures:
     def violations(self):
         invalid = [r for r in self.requests if r["server"] in ("self-signed", "expired", "wrong-host")]
         reconnect = [r for r in self.requests if r["server"] == "reconnect-invalid"]
-        # A request that only exists because a different origin redirected
-        # it here must not still carry that origin's credential header —
-        # MediaRequestAuthorization's redirect delegate is what is supposed
-        # to strip it.
+        # A cross-origin redirect must drop the credential header
+        # (MediaRequestAuthorization's redirect delegate strips it).
         leaked_header = [
             r for r in self.requests if r["server"] in self.redirect_targets and r.get("authorization")
         ]

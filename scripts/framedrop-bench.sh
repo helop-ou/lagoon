@@ -1,44 +1,44 @@
 #!/bin/bash
-# Frame-loss bench harness.
-#
-# Runs the in-app frame-loss bench (Settings → Debug → Frame-Loss Bench)
-# against one movie at one pinned start position, N times, in the tvOS
-# simulator — and prints the per-run results plus a summary. This encodes
-# the measurement discipline that caught two false positives:
-#
-#   * same title, same pinned start position, same media-time window every
-#     run;
-#   * the simulator is left completely untouched during a window
-#     (screenshots force render captures and corrupt the numbers);
-#   * 3+ runs, because single runs are meaningless at this effect size.
-#
-# The app side does the measuring (10 s warmup + 60 s window keyed on
-# media time, result as a "Bench Result" signpost + HUD line); this script
-# just launches, waits, and reads the signpost back out of the unified
-# log. `DeepLinkRouter` only accepts `lagoon://` links
-# carrying an `?owner=&generation=` pair matching the current Top Shelf
-# publication, so the old `lagoon://play/{id}` link this script used to
-# open is now silently dropped. Instead this drives `MainTabView`'s
-# launch-time bench hook (`launchBenchItemIfRequested()`): it force-quits
-# the app, writes `debug.benchSearchTerm` / `debug.benchStartSeconds` (and
-# optionally `debug.benchProductionYear`) via `defaults write` on the
-# simulator, then relaunches so the app's own startup task resolves the
-# title against the MOVIES library and jumps straight into playback at
-# that position. **The title must exactly match a movie's name**
-# (case/diacritic-insensitive) — the hook only searches
-# `includeTypes: [.movie]`, so TV episodes cannot be benched this way.
-# `--year` disambiguates remakes/re-releases that share a title. A/B
-# experiments toggle app defaults between runs with --set, e.g.:
+# Frame-loss bench: runs the in-app Frame-Loss Bench N times on one movie at
+# one pinned start position in the tvOS simulator, then prints each run and a
+# summary.
 #
 #   scripts/framedrop-bench.sh --title "Deadgirl" --position 600 --runs 3 \
 #       --set debug.simulatorTranscode=true
 #
-# The app must already be installed on the target simulator and signed
-# in — playback no longer needs server credentials from this script.
-# Every default this script writes is deleted again once the runs are
-# done, leaving the simulator's defaults as they were found. Real-hardware
-# runs can't be scripted this way — there, read the same result from the
-# HUD's Bench line after leaving the scene untouched.
+# Options:
+#   --title <name>   required. Must exactly match a movie's name
+#                    (case/diacritic-insensitive). Movies only, not episodes.
+#   --year <year>    picks between movies that share a title
+#   --position <s>   start position in seconds (default 300)
+#   --runs <n>       number of runs (default 3)
+#   --udid <udid>    target simulator (default: booted)
+#   --set key=bool   app default to write before each run, for A/B tests
+#   --window <s>     seconds to wait for the window (default 60). The app
+#                    owns the real window; this only sets the wait.
+#
+# Measurement rules:
+#   * same title, start position and media-time window every run;
+#   * leave the simulator untouched during a window (screenshots force render
+#     captures and corrupt the numbers);
+#   * 3+ runs, because single runs mean nothing at this effect size.
+#
+# The app does the measuring (10 s warmup + 60 s window on media time) and
+# logs a "Bench Result" signpost. Each run force-quits the app, writes the
+# bench defaults (`debug.benchSearchTerm`, `debug.benchStartSeconds`, and
+# `debug.benchProductionYear` with --year), and relaunches, so
+# `MainTabView.launchBenchItemIfRequested()` finds the movie and starts
+# playback. It also forces `debug.frameLossBench`, `debug.playbackHUD` and
+# `debug.benchAutoExit` on. A `lagoon://` deep link cannot do this: the
+# router drops links without the current Top Shelf `?owner=&generation=`
+# pair.
+#
+# The app must already be installed and signed in on the simulator. Every
+# default written is deleted afterwards. On hardware, read the HUD's Bench
+# line instead, after leaving the scene untouched.
+#
+# Output: each run's dropped/percent fields, then the mean, min and max
+# loss percent.
 
 set -euo pipefail
 
@@ -74,9 +74,7 @@ done
 [[ -n "$title" ]] || { echo "--title \"<exact movie title>\" is required" >&2; usage; }
 
 # --- defaults this script owns -----------------------------------------------
-# Tracked so every one of them can be deleted again once the runs are done —
-# the simulator's app defaults should come out of a bench run exactly as
-# they went in.
+# Tracked so they can all be deleted after the runs.
 declare -a written_keys=(
     debug.frameLossBench
     debug.playbackHUD
@@ -97,9 +95,8 @@ results=()
 for run in $(seq 1 "$runs"); do
     xcrun simctl terminate "$udid" "$BUNDLE_ID" >/dev/null 2>&1 || true
 
-    # The bench itself, the HUD, and a clean auto-exit are always forced
-    # on: without them there is no result to read and the last run leaves
-    # the player on screen.
+    # Without these there is no result to read, and the last run leaves the
+    # player on screen.
     xcrun simctl spawn "$udid" defaults write "$BUNDLE_ID" debug.frameLossBench -bool true >/dev/null
     xcrun simctl spawn "$udid" defaults write "$BUNDLE_ID" debug.playbackHUD -bool true >/dev/null
     xcrun simctl spawn "$udid" defaults write "$BUNDLE_ID" debug.benchAutoExit -bool true >/dev/null
@@ -120,8 +117,7 @@ for run in $(seq 1 "$runs"); do
     echo "run $run/$runs: \"$title\"${year:+ ($year)} at ${position}s — hands off the simulator for ${wait_seconds}s"
     sleep "$wait_seconds"
 
-    # The simulator keeps its own log store — the host's `log show` never
-    # sees these signposts.
+    # The simulator has its own log store; the host's `log show` misses these.
     line=$(xcrun simctl spawn "$udid" log show --last "$((wait_seconds + 30))s" --signpost \
         --predicate "subsystem == \"$SUBSYSTEM\" AND category == \"PlaybackPerformance\"" 2>/dev/null \
         | grep "Bench Result" \

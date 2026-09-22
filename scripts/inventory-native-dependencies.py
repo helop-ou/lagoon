@@ -37,13 +37,9 @@ def sha256(path):
 
 
 def output(*args):
-    # Some vendored static archives (Libdovi's Rust-built libdovi.a: the
-    # `dolby_vision` crate is built with a newer LLVM than Xcode's bundled
-    # nm) contain a handful of object members nm cannot parse ("Unknown
-    # attribute kind") and exits 1 over, even though it still printed every
-    # other member's symbols to stdout. Trust the exit code only when it
-    # left us nothing to read; otherwise keep the partial output and say so,
-    # rather than silently dropping a target's required-reason scan.
+    # nm exits 1 on a few members of Rust-built libdovi.a (newer LLVM than
+    # Xcode's nm: "Unknown attribute kind") but still prints the rest. Fail
+    # only when stdout is empty; otherwise keep the partial output and warn.
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode != 0:
         if not result.stdout.strip():
@@ -94,9 +90,8 @@ def main():
                 "required_reason_imports": {category: sorted(symbols & values) for category, values in API_SYMBOLS.items() if symbols & values},
             })
         targets.append(target)
-    # Eight added libdovi: libavcodec, libavformat, libavutil,
-    # libswresample, dav1d, lcms2, uavs3d, libdovi. The GnuTLS stack left
-    # with libavformat's network stack.
+    # libavcodec, libavformat, libavutil, libswresample, dav1d, lcms2,
+    # uavs3d, libdovi.
     if len(targets) != 8:
         raise ValueError(f"Native target set changed ({len(targets)}); review the inventory before regenerating")
     report = {"scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",

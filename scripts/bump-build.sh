@@ -2,14 +2,10 @@
 #
 # Bumps CURRENT_PROJECT_VERSION in the Xcode project.
 #
-# Lagoon owns its build number rather than letting Xcode assign one at upload,
-# so that the repository can say what shipped as what, the changelog entry can
-# be written before the build goes out, and ChangelogTests can actually gate on
-# it. Turning that off is a checkbox in Xcode's upload sheet — "Automatically
-# manage version and build number" must stay unchecked.
-#
-# The setting lives at project level, so one value covers the app and the Top
-# Shelf extension, which App Store Connect requires to match.
+# The repository owns the build number, so in Xcode's upload sheet
+# "Automatically manage version and build number" must stay unchecked. One
+# project-level value covers the app and the Top Shelf extension, which App
+# Store Connect requires to match.
 #
 #   scripts/bump-build.sh            # next build
 #   scripts/bump-build.sh --set 60   # jump to a specific number
@@ -32,9 +28,7 @@ case "${1:-}" in
     --set)
         next="${2:?usage: bump-build.sh --set <number>}"
         [[ "$next" =~ ^[0-9]+$ ]] || { echo "error: --set needs a number" >&2; exit 1; }
-        # App Store Connect rejects a build number that does not increase, and
-        # only per platform — so going backwards locally is a mistake that only
-        # surfaces at upload.
+        # App Store Connect rejects a build number that does not increase.
         if [ "$next" -le "$current" ]; then
             echo "error: $next is not above the current $current" >&2
             exit 1

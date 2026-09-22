@@ -14,7 +14,7 @@
 // --topshelf  optional wide banner. Without it, composed from the palette
 //             background and the icon.
 //
-// Everything is aspect-filled and centred, never squashed.
+// Art is scaled to fill or fit, centred, never squashed.
 
 import AppKit
 
@@ -58,14 +58,12 @@ guard let icon = source("icon") ?? source("back") else {
     exit(1)
 }
 
-/// The supplied artwork's edge colour, used to extend it into frames of a
-/// different aspect ratio.
+/// The artwork's corner colour, used to extend it into wider frames.
 let frameColor: NSColor = {
     guard let icon = source("icon") ?? source("back"),
           let tiff = icon.tiffRepresentation,
           let rep = NSBitmapImageRep(data: tiff),
-          // The corner, not the mid-edge: mid-edge lands inside the
-          // artwork's own field, which framed a dark icon in bright blue.
+          // Not the mid-edge: that lands inside the artwork's own field.
           let corner = rep.colorAt(x: 2, y: 2) else {
         return rgb(0x06_1A_28)
     }
@@ -85,9 +83,6 @@ func render(width: Int, height: Int, opaque: Bool, _ draw: (CGSize) -> Void) -> 
     NSGraphicsContext.current = context
     let size = CGSize(width: width, height: height)
     if opaque {
-        // Sampled from the artwork's own corner rather than assumed, so the
-        // 5:3 tvOS frame extends the supplied art instead of framing it in a
-        // palette that may have nothing to do with it.
         context.cgContext.setFillColor(frameColor.cgColor)
         context.cgContext.fill(CGRect(origin: .zero, size: size))
     }
@@ -108,8 +103,8 @@ func fill(_ image: NSImage, _ frame: CGSize) {
     )
 }
 
-/// Aspect-fit: show all of it, centred, leaving the frame's own background
-/// visible. Used for the 5:3 tvOS frame so a square icon is not cropped.
+/// Aspect-fit: show all of it, centred. Keeps a square icon uncropped in the
+/// 5:3 tvOS frame.
 func fit(_ image: NSImage, _ frame: CGSize, inset: CGFloat = 1.0) {
     let source = image.size
     let scale = min(frame.width / source.width, frame.height / source.height) * inset
@@ -147,8 +142,8 @@ writeJSON([
     "info": ["author": "import-artwork", "version": 1],
 ], "\(catalog)/AppIcon.appiconset/Contents.json")
 
-// tvOS: layered stacks at 5:3. Only Back is opaque; the others must carry
-// alpha or they would hide everything beneath them.
+// tvOS: layered stacks at 5:3. Only Back is opaque, or upper layers would
+// hide everything beneath them.
 let layerArt: [(name: String, image: NSImage?, opaque: Bool)] = [
     ("Back", source("back") ?? icon, true),
     ("Middle", source("middle"), false),
@@ -162,8 +157,6 @@ func emitStack(_ stack: String, _ w: Int, _ h: Int) {
         for (suffix, scale) in [("", 1), ("@2x", 2)] {
             let data = render(width: w * scale, height: h * scale, opaque: layer.opaque) { size in
                 guard let image = layer.image else { return }
-                // The Back layer fills its frame; the parallax layers sit on
-                // top and are fitted so nothing is cropped away.
                 fit(image, size)
             }
             write(data, "\(imageset)/\(file)\(suffix).png")
@@ -181,9 +174,8 @@ func emitStack(_ stack: String, _ w: Int, _ h: Int) {
 emitStack("App Icon", 400, 240)
 emitStack("App Icon - App Store", 1280, 768)
 
-/// Without a supplied banner, compose one: the mark lifted out of the icon —
-/// clipped to a circle so the icon's own rounded-square edge does not read as
-/// a card floating on the background — beside the wordmark.
+/// Default banner: the icon's mark, clipped to a circle so its rounded-square
+/// edge does not read as a card, beside the wordmark.
 func drawLockup(_ image: NSImage, _ size: CGSize) {
     let mark = size.height * 0.74
     let fontSize = size.height * 0.30

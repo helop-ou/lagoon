@@ -1,27 +1,16 @@
 #!/usr/bin/env bash
 #
-# Regenerates CHANGELOG.md from Changelog.entries.
+# Regenerates CHANGELOG.md from Changelog.entries, the source of truth.
 #
-# The in-app changelog is the source of truth and this file is a rendering of
-# it. They serve different readers, which is why the data does not simply move
-# here: the About screen is curated product copy, and ChangelogTests gates
-# that the declared build has an entry, enforces category order and bans em
-# dashes. None of that survives in a Markdown file nobody parses, and parsing
-# Swift source to render a settings screen would be worse.
-#
-# The renderer lives in the test target because that is the only place with
-# access to Changelog, and a simulator test cannot write into the repository,
-# so it writes to its own tmp and prints the path for us to copy.
+# The renderer is a test (ChangelogDocTests), the only place with access to
+# Changelog. It writes to its own tmp and prints the path; this copies it.
 #
 #   scripts/generate-changelog.sh             # regenerate the document
 #   scripts/generate-changelog.sh --check     # fail if it is out of date
 #   scripts/generate-changelog.sh --notes 107 # print one build's notes
 #
-# --notes reads the committed CHANGELOG.md rather than rebuilding it, so it
-# needs no simulator and returns at once. That is only trustworthy because
-# --check can prove the file is current, which is what publish-release.sh runs
-# first. It prints to stdout for pasting into a release body, and defaults to
-# the newest build.
+# --notes reads the committed CHANGELOG.md, so it needs no simulator. Run
+# --check first to trust it. It defaults to the newest build.
 #
 # Override the simulator with LAGOON_CHANGELOG_DOC_DESTINATION.
 set -euo pipefail
@@ -42,9 +31,8 @@ esac
 
 if [ "$notes" = true ]; then
     [ -f "$target" ] || { echo "error: $target does not exist yet" >&2; exit 1; }
-    # Build headings are the only level-two headings, which a test pins, so
-    # splitting on them cannot catch a category by accident. Trims the blank
-    # lines off both ends, because this is pasted into a release body.
+    # Build headings are the only level-two headings (a test pins this).
+    # Blank lines are trimmed off both ends for the release body.
     body="$(awk -v want="$build" '
         /^## / {
             inside = (want == "" && !seen) || index($0, "(" want ")") > 0
@@ -57,8 +45,7 @@ if [ "$notes" = true ]; then
               last = NR; while (last >= first && lines[last] == "") last--
               for (i = first; i <= last; i++) print lines[i] }')"
 
-    # An unknown build would otherwise print nothing and succeed, which is a
-    # silent empty release body rather than a mistake somebody notices.
+    # Otherwise an unknown build gives a silent empty release body.
     if [ -z "$body" ]; then
         echo "error: no changelog entry for build ${build:-(newest)}" >&2
         exit 1

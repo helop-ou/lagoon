@@ -2,16 +2,10 @@
 #
 # Regenerates the website's app-facts.json from this repository.
 #
-# The website is a separate repository that restates what Lagoon plays and
-# which build is current. Copied by hand those claims go stale, and
-# docs/release.md forbids overstating format support because a reviewer checks
-# it. Generating them from DeviceProfile and the declared version means the
-# site cannot claim a codec the app never offers the server, and cannot name a
-# build nobody shipped.
-#
-# What stays hand-written in the site: the Jellyfin floor and tested versions,
-# availability, and every prose block. Those are judgements, not facts this
-# repository owns.
+# Generated from DeviceProfile and the declared version, so the site cannot
+# claim a codec the app never offers or name a build nobody shipped
+# (docs/release.md forbids overstating format support). The Jellyfin versions,
+# availability and prose stay hand-written in the site.
 #
 #   scripts/generate-site-facts.sh           # regenerate the file
 #   scripts/generate-site-facts.sh --check   # fail if it is out of date

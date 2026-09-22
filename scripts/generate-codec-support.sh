@@ -2,15 +2,10 @@
 #
 # Regenerates docs/codec-support.md from DeviceProfile.everything.
 #
-# The table is generated rather than written because docs/release.md forbids
-# overstating supported formats, and a hand-maintained list drifts from the
-# profile the moment someone adds a codec. Generating it means the published
-# table is by construction the same envelope Lagoon sends Jellyfin, so it
-# cannot promise a direct play the server was never offered.
-#
-# The renderer lives in the test target because that is the only place with
-# access to DeviceProfile, and a simulator test cannot write into the
-# repository, so it writes to its own tmp and prints the path for us to copy.
+# Generated so the table matches the profile Lagoon sends Jellyfin
+# (docs/release.md forbids overstating supported formats). The renderer is a
+# test (CodecSupportDocTests); it writes to its own tmp and prints the path,
+# and this copies it.
 #
 #   scripts/generate-codec-support.sh           # regenerate the document
 #   scripts/generate-codec-support.sh --check   # fail if it is out of date

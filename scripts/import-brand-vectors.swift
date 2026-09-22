@@ -3,16 +3,13 @@
 //
 //   scripts/import-brand-vectors.swift ../lagoon-branding
 //
-// Companion to import-artwork.swift, which does the raster icon and Top Shelf
-// assets. This one handles the vectors Lagoon draws inside the app: the
-// onboarding lockup and the jellyfish accent.
+// Covers the in-app vectors (onboarding lockup, jellyfish accent);
+// import-artwork.swift does the raster icon and Top Shelf assets.
 //
-// Beyond copying, it crops each PDF to its ink. The package's pages carry
-// unequal padding — 81pt above the symbol, 58pt below — so `.frame(height:)`
-// on the raw page sizes the padding, not the mark. Cropped to ink, frame
-// height *is* mark height and `LagoonLockup` states the authored ratios
-// directly. The crop redraws the page into a PDF context whose media box is
-// the ink rect, so the result stays vector.
+// Each PDF is cropped to its ink, still as vector. The package pages have
+// unequal padding (81pt above the symbol, 58pt below), so without the crop
+// `.frame(height:)` would size the padding, not the mark, and `LagoonLockup`'s
+// ratios would be off.
 
 import AppKit
 import CoreGraphics
@@ -33,8 +30,7 @@ let catalogue = "Lagoon/Assets.xcassets"
 /// name in the catalogue, source path, whether it is tinted at the call site
 let marks: [(name: String, source: String, template: Bool)] = [
     ("LagoonSymbol", "01_Master_Vector/Lagoon_Primary_Symbol_Color.pdf", false),
-    // The Light wordmark, not the color one: Lagoon's backgrounds are black
-    // and the color wordmark is Ink (#07161D), which vanishes on them.
+    // Light, not color: the color wordmark is Ink (#07161D), invisible on black.
     ("LagoonWordmark", "01_Master_Vector/Lagoon_Wordmark_Light.pdf", false),
     ("LagoonJellyfish", "07_Secondary_Accent/Lagoon_Jellyfish_Accent.pdf", true),
 ]
@@ -75,8 +71,7 @@ func inkRect(of page: CGPDFPage) -> CGRect {
     }
     guard maxX >= minX, maxY >= minY else { return box }
 
-    // The bitmap's row 0 is the bottom of the page: CGContext bitmaps and PDF
-    // user space share a bottom-left origin.
+    // Bitmap row 0 is the page bottom: both use a bottom-left origin.
     return CGRect(
         x: box.origin.x + CGFloat(minX) / scale,
         y: box.origin.y + CGFloat(minY) / scale,

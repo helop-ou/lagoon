@@ -113,8 +113,8 @@ func drawWaves(_ cg: CGContext, _ size: CGSize) {
     }
 }
 
-/// The lagoon itself, aerial view: a bright shallow pool sheltered by a
-/// pale sand crescent, open at the upper-trailing edge like a real inlet.
+/// Aerial lagoon: a bright pool inside a sand crescent, open at the upper
+/// trailing edge.
 func drawLagoonMark(_ cg: CGContext, _ size: CGSize, center: CGPoint, diameter: CGFloat) {
     let radius = diameter / 2
     let sand = rgb(0xF2_E3_BE)

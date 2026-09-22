@@ -27,8 +27,7 @@ def media(directory, duration, embedded_subtitles=False):
         str(directory / "movie.mp4"),
     ], check=True)
     if embedded_subtitles:
-        # A real embedded track, so the engine lists it from the container
-        # rather than from anything the fixture claims in PlaybackInfo.
+        # Real embedded track, so the engine lists it from the container.
         def stamp(seconds):
             return f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d},000"
 
@@ -157,9 +156,7 @@ def main():
                 text = "Recovered captions" if path.endswith("retry.vtt") else "Working captions"
                 return self.reply(f"WEBVTT\n\n00:00:00.000 --> 00:05:00.000\n{text}\n".encode(), kind="text/vtt")
             if args.subtitle_provider:
-                # The provider search, the provider file, and the upload that
-                # attaches it to the item — the three calls a real download
-                # makes.
+                # Search, file and attach: the three calls a real download makes.
                 if re.fullmatch(r"/Items/fixture/RemoteSearch/Subtitles/[a-z]{2,3}", path):
                     with lock:
                         state["searches"] += 1

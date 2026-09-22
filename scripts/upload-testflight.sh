@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
 #
-# Archives and uploads an internal-TestFlight build without the Organizer.
-#
-# The Organizer's preset tiles ("Use recommended settings…") skip the options
-# pages, and the default there rewrites the version and build number on the way
-# out — which is how the project came to say build 1 while ~43 tvOS builds
-# existed. ExportOptions.plist pins that off in a committed file instead of
-# leaving it to a checkbox someone has to remember.
+# Archives and uploads an internal TestFlight build without the Organizer.
+# ExportOptions.plist stops the upload renumbering the version and build.
 #
 #   scripts/upload-testflight.sh both --dry-run      # print the commands only
 #   scripts/upload-testflight.sh both --archive-only # archive, upload in Xcode
@@ -14,15 +9,12 @@
 #   scripts/upload-testflight.sh both
 #
 # --archive-only needs no App Store Connect key. It archives with the Sentry
-# DSN and leaves both archives in the Organizer to upload by hand, which is
-# the way to use the Organizer without shipping a build whose diagnostics are
-# dead. Archiving in Xcode directly cannot do this: LAGOON_SENTRY_DSN defaults
-# to empty in the project, so a GUI archive silently reports nothing.
+# DSN and leaves the archives in the Organizer to upload by hand. Archive here,
+# not in Xcode: LAGOON_SENTRY_DSN is empty in the project, so a GUI archive
+# reports nothing.
 #
-# Authentication uses an App Store Connect API key, since xcodebuild cannot
-# reuse Xcode's signed-in account non-interactively. Create one under
-# App Store Connect → Users and Access → Integrations → App Store Connect API
-# and export:
+# Uploading needs an App Store Connect API key (App Store Connect → Users and
+# Access → Integrations → App Store Connect API), exported or in .env:
 #
 #   ASC_KEY_ID=XXXXXXXXXX
 #   ASC_ISSUER_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
@@ -30,13 +22,9 @@
 #
 # Keep the .p8 out of the repository. It is a credential for the whole account.
 #
-# The Sentry DSN is injected the same way rather than tracked in source,
-# so an upload also needs:
+# Every run except --dry-run also needs the Sentry DSN:
 #
 #   LAGOON_SENTRY_DSN=https://<key>@<org>.ingest.de.sentry.io/<project>
-#
-# It is required, not optional: a build archived without it reports nothing,
-# and a silent diagnostics channel is exactly the failure nobody notices.
 #
 set -euo pipefail
 
@@ -76,16 +64,10 @@ shift || true
 
 dry_run=""
 archive_only=false
-# Every argument is read, in any order. Taking the flag from $2 alone meant a
-# misplaced --dry-run was ignored in silence and the run archived for real,
-# which is the opposite of what the flag is for.
+# Read every argument, in any order, so a misplaced --dry-run is never ignored.
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) dry_run="--dry-run" ;;
-        # Archiving needs the Sentry DSN but no App Store Connect key: that is
-        # only used by the export. Splitting them lets the upload happen in the
-        # Organizer without the archive losing its DSN, which is what a GUI
-        # archive does silently.
         --archive-only) archive_only=true ;;
         *) echo "error: unknown option $1" >&2; usage ;;
     esac
@@ -102,9 +84,8 @@ esac
 version="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-9.]*$')"
 build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0-9]*$')"
 
-# Pre-flight, because an archive takes minutes and a missing changelog entry is
-# the easy thing to forget. ChangelogTests enforces the same rule, but only
-# once something has been built.
+# Checked before the slow archive. ChangelogTests enforces the same rule, but
+# only after a build.
 changelog="$root/Lagoon/Features/Settings/Changelog.swift"
 if ! grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${build}\""; then
     cat >&2 <<EOF
@@ -140,9 +121,7 @@ run() {
     fi
 }
 
-# The Organizer lists whatever is under its own archive directory, so putting
-# it there is what makes an archive-only run show up in Xcode without anyone
-# having to find a file.
+# The Organizer lists what is in its own archive directory.
 organizer_dir="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)"
 [ "$archive_only" = true ] && [ "$dry_run" != "--dry-run" ] && mkdir -p "$organizer_dir"
 
@@ -168,8 +147,7 @@ for platform in $targets; do
         continue
     fi
 
-    # With destination=upload in the plist this uploads rather than writing an.
-    # ipa, so there is nothing to hand off afterwards.
+    # destination=upload in the plist makes this upload instead of writing an .ipa.
     run xcodebuild -exportArchive \
         -archivePath "$archive" \
         -exportOptionsPlist "$options" \

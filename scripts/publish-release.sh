@@ -2,24 +2,17 @@
 #
 # Creates the GitHub release for a build that has already gone out.
 #
-# This is the last step of a release, not the first. It runs after the build is
-# uploaded and accepted, and it records a binary that exists rather than
-# announcing one about to be made. A tag on its own only reaches the Tags tab;
-# the release object is what appears under Releases, and GitHub attaches the
-# source archive to it, which is how someone holding a binary obtains the
-# corresponding source for the vendored FFmpeg libraries.
+# Run it last, after the build is uploaded and accepted. The release (not just
+# a tag) is what carries GitHub's source archive, which is how someone with a
+# binary gets the corresponding source for the vendored FFmpeg libraries.
 #
 #   scripts/publish-release.sh 108              # tags 0.2.0-108
 #   scripts/publish-release.sh 108 --dry-run    # print what it would do
 #   scripts/publish-release.sh 108 --rev a1b2c3d
 #
-# Everything before the release itself is a guard, because the mistakes here
-# are silent and permanent: a tag on whatever main has drifted to rather than
-# the revision that was archived, notes that do not match the build, or a
-# release nobody notices is missing. A published tag is hard to take back.
-#
-# --no-prerelease marks it as a full release. Otherwise anything below 1.0 is
-# a pre-release, which is what external testing is.
+# --rev tags a revision other than HEAD: use the one the archive was built from.
+# --no-prerelease marks a full release. Otherwise anything below 1.0 is a
+# pre-release.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -51,9 +44,7 @@ warn() { printf '  ! %s\n' "$1"; }
 note() { printf '  - %s\n' "$1"; }
 die() { printf '\n  error: %s\n' "$1" >&2; exit 1; }
 
-# Tags read as <version>-<build>, so the Tags list says which version a build
-# shipped as. The build number keeps them unique: it never repeats, while one
-# marketing version spans many builds.
+# Tags read <version>-<build>. The build number keeps them unique.
 version="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-9.]*$')"
 tag="${version}-${want_build}"
 
@@ -61,7 +52,7 @@ echo
 echo "Publishing ${tag}"
 echo
 
-# 1. The tooling, before anything slow runs.
+# 1. Tooling, before anything slow.
 command -v gh >/dev/null 2>&1 || die "gh is not installed"
 gh auth status --hostname github.com >/dev/null 2>&1 \
     || die "gh is not authenticated for github.com. Run: gh auth login"
@@ -73,9 +64,8 @@ ok "gh authenticated for ${slug}"
 [ -z "$(git -C "$root" status --porcelain)" ] || die "working tree is not clean"
 ok "working tree clean"
 
-# 3. The build number has to be the one the project declares, or the tag names
-#    a binary nobody built. bump-build.sh guarantees one value across
-#    configurations; this catches being asked for a different build entirely.
+# 3. The build must be the one the project declares, or the tag names a binary
+#    nobody built.
 values="$(grep -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0-9]*$' | sort -u)"
 [ "$(printf '%s\n' "$values" | wc -l | tr -d ' ')" = "1" ] \
     || die "CURRENT_PROJECT_VERSION differs across configurations: $(echo $values)"
@@ -83,14 +73,12 @@ values="$(grep -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0-9]
     || die "the project declares build ${values}, not ${want_build}"
 ok "project declares ${version} (${want_build})"
 
-# 4. Same rule the upload script and ChangelogTests enforce, restated here
-#    because this is the last chance to catch it before it is public.
+# 4. Same rule as the upload script and ChangelogTests; last chance before public.
 grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${want_build}\"" \
     || die "no Changelog entry for ${version} (${want_build})"
 ok "changelog entry exists for ${version} (${want_build})"
 
-# 5. The release body is read straight out of CHANGELOG.md, so it is only
-#    trustworthy if that file still matches Changelog.swift.
+# 5. The release body comes from CHANGELOG.md, so it must match Changelog.swift.
 "$root/scripts/generate-changelog.sh" --check >/dev/null \
     || die "CHANGELOG.md is out of date. Run scripts/generate-changelog.sh"
 ok "CHANGELOG.md is current"
@@ -99,8 +87,7 @@ notes="$("$root/scripts/generate-changelog.sh" --notes "$want_build")" \
     || die "could not read the notes for build ${want_build}"
 ok "release notes read for build ${want_build}"
 
-# 6. Re-tagging a published release is the one thing that cannot be undone
-#    cleanly, because anyone who already fetched keeps the old revision.
+# 6. A re-tag cannot be undone: anyone who fetched keeps the old revision.
 if git -C "$root" rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
     die "${tag} already exists locally"
 fi
@@ -109,8 +96,7 @@ if [ -n "$(git -C "$root" ls-remote --tags origin "refs/tags/${tag}" 2>/dev/null
 fi
 ok "${tag} is unused"
 
-# 7. gh creates the tag through the API, so the revision has to be one the
-#    remote already has. This is the guard that catches an unpushed main.
+# 7. gh creates the tag through the API, so the remote must have the revision.
 sha="$(git -C "$root" rev-parse --verify "${rev}^{commit}")" \
     || die "cannot resolve revision ${rev}"
 git -C "$root" fetch --quiet origin || die "could not reach origin"
@@ -119,12 +105,9 @@ if ! git -C "$root" merge-base --is-ancestor "$sha" origin/main 2>/dev/null; the
 fi
 ok "${sha:0:9} is on origin/main"
 
-# 8. The website restates the version and what Lagoon plays, and it is a
-#    separate repository that deploys on its own schedule. Leaving it behind is
-#    not a reason to refuse a release the App Store already has, so this warns
-#    rather than stopping. Distinguishing "behind" from "could not check"
-#    matters: reporting a check that never ran as passing is the one outcome
-#    worse than either.
+# 8. The website (a separate repository) restates the version and formats.
+#    Warn, do not stop, if it is behind. Never report a check that could not
+#    run as passing.
 site_out=""
 site_status=0
 site_out="$("$root/scripts/generate-site-facts.sh" --check 2>&1)" || site_status=$?
@@ -138,15 +121,13 @@ elif printf '%s' "$site_out" | grep -q "out of date\|does not exist"; then
     echo "      lagoon-website. The site keeps serving the old version until"
     echo "      it is redeployed. Releasing anyway."
 else
-    # Not the failure output: a missing simulator prints every candidate
-    # destination, which buries the point. The release is not blocked on it.
+    # Not the raw output: a missing simulator prints every destination.
     warn "could not check the website's facts, so they may be behind"
     echo "      Run scripts/generate-site-facts.sh --check to see why."
 fi
 
-# 9. Which revision was archived is not recorded anywhere, so the best we can
-#    do is point at the commit that set this build number and let a human say
-#    whether the archive came from further along.
+# 9. The archived revision is not recorded, so show the commits since the
+#    build-number bump and let a human confirm.
 bump="$(git -C "$root" log --format=%H -S"CURRENT_PROJECT_VERSION = ${want_build};" \
     --pickaxe-regex -1 -- Lagoon.xcodeproj/project.pbxproj 2>/dev/null || true)"
 if [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
@@ -166,8 +147,7 @@ if [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
     fi
 fi
 
-# Anything below 1.0 is a pre-release. External testing is exactly that, and
-# the badge keeps it from being served as Latest.
+# The pre-release badge keeps it from being served as Latest.
 if [ -z "$prerelease" ]; then
     case "$version" in 0.*) prerelease="yes" ;; *) prerelease="no" ;; esac
 fi

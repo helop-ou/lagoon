@@ -76,8 +76,8 @@ def main():
                 command = ["xcodebuild", "build-for-testing", "-scheme", "LagoonHardwareRegression",
                            "-destination", destination, "-derivedDataPath", str(derived)]
                 if platform == "iOS":
-                    # The existing UI target otherwise contains tvOS-only
-                    # remote tests. Keep its checked-in platform scope intact.
+                    # The UI target also holds tvOS-only remote tests; keep
+                    # its checked-in platform scope.
                     command += ["SUPPORTED_PLATFORMS=iphonesimulator", "SDKROOT=iphonesimulator",
                                 "TARGETED_DEVICE_FAMILY=1,2", "IPHONEOS_DEPLOYMENT_TARGET=26.0",
                                 "EXCLUDED_SOURCE_FILE_NAMES=PlayerRegressionUITests.swift ServerSyncUITests.swift LibraryBrowseUITests.swift"]
