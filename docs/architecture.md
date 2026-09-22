@@ -1,13 +1,13 @@
 # Architecture
 
-Lagoon is one SwiftUI app target for tvOS 26 and iOS 26, with a tvOS Top Shelf
-extension, unit tests, and UI tests. Its filesystem-synced app group adds new
-Swift files automatically. Its one dependency is the `LagoonEngine` package,
-resolved from its own repository at a tagged version and pinned in
-`Package.resolved`, so a build records which engine it carries.
+Lagoon is one SwiftUI app target for tvOS 26 and iOS 26, plus a tvOS Top
+Shelf extension, unit tests and UI tests. The filesystem-synced app group picks
+up new Swift files automatically. The only dependency is the `LagoonEngine`
+package, pinned to a tagged version in `Package.resolved` so each build records
+its engine.
 
-Follow [Coding standards](standards.md) for folder conventions and rules for
-new code.
+[Coding standards](standards.md) owns folder conventions and rules for new
+code.
 
 ## Project layout
 
@@ -29,28 +29,28 @@ new code.
 | `LagoonTopShelf/` | Credential-free Top Shelf extension |
 | `LagoonTests/`, `LagoonUITests/` | Pure logic, integration, platform journeys and shared UI-test support |
 
-Feature-owned state stays with its feature, even when another feature presents
-its controls. Settings, for example, binds to playback and Home preference
-stores instead of owning a second copy.
+Feature-owned state stays with its feature, even when another feature shows
+its controls. Settings binds to the playback and Home preference stores rather
+than keeping a copy.
 
-Home's row order is data, not the order its body happens to be written in.
-`HomeSectionPreferenceResolver` owns the default order, the viewer's
-arrangement that replaces it, and which rows either one hides; `HomeView`
-resolves that to a list of identifiers and draws one row per identifier. A new
-Home row is added to the resolver's list at the place it belongs and given a
-branch to draw it, and the unit suite fails if it has only one of the two. See
-[Home Screen Sections](jellyfin-api.md#home-screen-sections-plugin) for how
-the server's plugin rows join the same arrangement.
+Home's row order is data. `HomeSectionPreferenceResolver` owns the default
+order, the viewer's arrangement and which rows are hidden; `HomeView` draws
+one row per resolved identifier. A new row needs both an entry in the
+resolver's list and a branch to draw it, and the unit suite fails if either is
+missing. Server plugin rows join the same arrangement: see [Home Screen
+Sections](jellyfin-api.md#home-screen-sections-plugin).
 
 ## State and ownership
 
-Use `@Observable` stores, owned with `@State` where their lifetime begins. The
-project defaults to `MainActor` isolation; DTOs and other off-actor values
-declare `nonisolated`. Drive async loading from stable `.task(id:)` roots so
-loading-state changes do not cancel their own work, and invalidate late
-results on account, query, or filter changes. `SessionStore` owns the active
-account and its `SeerrSessionStore`. `RootView` switches among connection
-phases; these are states, not pushed navigation destinations:
+- `@Observable` stores are owned with `@State` where their lifetime begins.
+  The default isolation is `MainActor`; DTOs and other off-actor values are
+  `nonisolated`.
+- Async loading runs from stable `.task(id:)` roots, so a loading-state change
+  never cancels its own work. Late results are dropped on account, query or
+  filter changes.
+- `SessionStore` owns the active account and its `SeerrSessionStore`.
+  `RootView` switches between connection phases, which are states, not pushed
+  destinations:
 
 ```text
 needsServer → needsSignIn → signedIn
@@ -58,60 +58,65 @@ needsServer → needsSignIn → signedIn
                  choosingAccount
 ```
 
-Accounts are server/user pairs, identified by `{serverURL}|{userId}`.
-UserDefaults stores account metadata and the active account ID; Keychain
-stores each account's token and the install's device ID. Restore the last
-usable account on launch, and preserve the idempotent legacy token migration.
-Add Account uses a separate draft session seeded with the current server,
-without copying credentials; a successful, current verification commits and
-activates it, and cancel leaves the active Jellyfin and Seerr sessions intact.
-Sign-out revokes and forgets the account and clears its owned local data.
-Seerr sessions stay scoped to the Jellyfin account and Seerr origin.
+Accounts:
 
-`SyncPlayStore` is owned by `SessionStore` beside `SeerrSessionStore`, pointed
-at the active account by `synchronizeAccountContext()`. A group belongs to the
-account that joined it, so switching accounts or signing out leaves it.
-`RootView` injects it; the iOS UIKit player host re-injects because that
-presentation rebuilds the environment. The store owns membership — socket,
-clock, group, queue — and `GroupPlaybackDriver` owns playback, holding
-`PlaybackController` weakly and never an engine. See [Watch
+- An account is a server/user pair, keyed `{serverURL}|{userId}`.
+  UserDefaults holds account metadata and the active account ID; Keychain
+  holds each token and the install's device ID.
+- Launch restores the last usable account. Keep the idempotent legacy token
+  migration.
+- Add Account uses a separate draft session seeded with the current server
+  but no credentials. A successful, current verification commits and
+  activates it; cancel leaves the active Jellyfin and Seerr sessions intact.
+- Sign-out revokes and forgets the account and clears its local data.
+- Seerr sessions are scoped to the Jellyfin account and the Seerr origin.
+
+`SyncPlayStore` sits in `SessionStore` beside `SeerrSessionStore` and follows
+the active account through `synchronizeAccountContext()`. A group belongs to
+the account that joined it, so switching accounts or signing out leaves it.
+`RootView` injects the store, and the iOS UIKit player host injects it again
+because that presentation rebuilds the environment. The store owns membership
+(socket, clock, group, queue); `GroupPlaybackDriver` owns playback and holds
+`PlaybackController` weakly, never an engine. See [Watch
 Together](playback.md#watch-together-syncplay).
 
-`DownloadStore.shared` (iOS only) is the one owner of offline downloads: the
-per-account manifest, the background `URLSession`, and the artwork beside each
-file. `SessionStore` activates it on restore, switch and sign-out, and removing
-an account removes its downloads. The delegate uses `OperationQueue.main`, so
-commands and callbacks share MainActor ownership: completing a download checks
-the attempt, preserves the temporary file and persists the manifest before the
-callback returns. The active account uses its observed manifest, inactive ones
-their stored manifest, and generation and attempt checks protect anything that
-suspends. `DownloadArtworkIndex` is the separate lock-protected snapshot
-background image loaders read.
+`DownloadStore.shared` (iOS only) is the single owner of offline downloads:
+the per-account manifest, the background `URLSession` and each file's artwork.
+
+- `SessionStore` activates it on restore, switch and sign-out. Removing an
+  account removes its downloads.
+- The delegate runs on `OperationQueue.main`, so commands and callbacks share
+  MainActor ownership. Completion checks the attempt, keeps the temporary file
+  and persists the manifest before the callback returns.
+- The active account uses its observed manifest, inactive ones their stored
+  manifest. Generation and attempt checks guard anything that suspends.
+- `DownloadArtworkIndex` is a separate lock-protected snapshot for background
+  image loaders.
 
 ## Refresh and navigation
 
-`RootView` alone observes foreground transitions and advances the shared
-`ServerSyncState.generation`; screens reconcile their own data. The
-`ServerRefreshModifier` adds manual refresh and a five-minute cadence to
-visible, active root browse destinations. `MainTabView` gates it by selected
-tab and navigation path, and Home also suspends it while presenting playback.
-Keep existing content, focus, loaded page depth, and the last good snapshot
-when a refresh fails. Hidden tabs and content behind details must not poll.
-
-Seerr's detail refresh is separate: pending approval waits 30 seconds, active
-download/import waits 10 seconds. Requests are sequential, stop when the
-detail becomes inactive or reaches a terminal state, and reconcile immediately
-after foregrounding or moderation. Static metadata stays out of that loop.
-
-Home, Discover, Library, Search, and Settings are stable tabs. Route identity
-belongs to `ContentNavigationRoute`, and `MediaItem` retains value equality so
-updated progress and metadata reach SwiftUI. Playback dismissal waits for
-`client.playbackReports.settle()` before refreshing the underlying screen, but
-the dismissal itself never waits for that network report.
+- Only `RootView` observes foreground transitions. It advances the shared
+  `ServerSyncState.generation`, and each screen reconciles its own data.
+- `ServerRefreshModifier` adds manual refresh and a five-minute cadence to the
+  visible, active root browse destination. `MainTabView` gates it by selected
+  tab and navigation path; Home also suspends it while playback is presented.
+  Hidden tabs and content behind details never poll.
+- A failed refresh keeps existing content, focus, loaded page depth and the
+  last good snapshot.
+- Seerr's detail refresh is separate: 30 seconds while pending approval,
+  10 seconds while downloading or importing. Requests are sequential, stop
+  when the detail goes inactive or terminal, and reconcile at once after
+  foregrounding or moderation. Static metadata stays out of that loop.
+- Home, Discover, Library, Search and Settings are stable tabs. Route identity
+  belongs to `ContentNavigationRoute`. `MediaItem` keeps value equality so
+  updated progress and metadata reach SwiftUI.
+- After playback dismissal, the underlying screen refreshes only once
+  `client.playbackReports.settle()` returns, but the dismissal itself never
+  waits for that report.
 
 ## Reusable components
 
-Use the existing shared boundaries before adding another screen-specific copy:
+Use these before writing a screen-specific copy:
 
 | Need | Existing implementation |
 | --- | --- |
@@ -124,41 +129,38 @@ Use the existing shared boundaries before adding another screen-specific copy:
 | Foreground/manual refresh | `ServerSyncState`, `ServerRefreshModifier` |
 | Shared playback with platform presentation | `PlayerEngine`, `playerPresentation`, player overlay views |
 
-Keep a component local to its feature until multiple callers need the same
-behavior; shared business state belongs in an owner or service, not a generic
-view wrapper. See [Design system](design-system.md) for visual rules.
+Keep a component in its feature until several callers need the same
+behavior. Shared business state belongs in an owner, not a generic view
+wrapper. [Design system](design-system.md) owns the visual rules.
 
 ## tvOS invariants (violating these regresses real bugs)
 
-- Every screen needs a focusable element; otherwise Menu can exit the app.
-- Preserve `.scrollClipDisabled()` and rail focus padding. Keep episode rails
-  mounted while switching seasons so focus and layout survive loading.
-- The hero's focused navigation control stays outside its transitioning,
-  `.id()`-keyed artwork, so Left/Right changes content without replacing
-  focus.
-- Put `.searchable` on Search's content, never on the navigation stack or a
+- Every screen needs a focusable element, or Menu can exit the app.
+- Keep `.scrollClipDisabled()` and rail focus padding. Episode rails stay
+  mounted while seasons switch, so focus and layout survive loading.
+- The hero's focused control sits outside its `.id()`-keyed, transitioning
+  artwork, so Left/Right changes content without replacing focus.
+- `.searchable` goes on Search's content, never on the navigation stack or a
   browse screen.
-- Refresh moves with the native tab chrome. Keep its measuring control mounted
-  but inert over pushed details, retain the offset at tab scope, and route
-  Down from Refresh to Home's hero; it must not remain hittable over lower
-  rails.
-- Top Shelf consumes a sanitized local snapshot and artwork. The extension
-  gets no credentials and does no network fetching. Preserve its extension
-  product type and `_NSExtensionMain` entry point when changing the project.
+- Refresh moves with the native tab chrome. Its measuring control stays
+  mounted but inert over pushed details, the offset lives at tab scope, and
+  Down from Refresh goes to Home's hero. It must never stay hittable over
+  lower rails.
+- Top Shelf reads a sanitized local snapshot and artwork. The extension gets
+  no credentials and makes no network calls. Keep its extension product type
+  and `_NSExtensionMain` entry point.
 
-See [Playback](playback.md#controls-and-presentation) for the separate touch
-and remote input rules, and the [engineering notes](reference/architecture.md)
-for Top Shelf composition, Seerr status interpretation, and Discover's
-server-defined rail layout.
+Touch and remote input rules are in
+[Playback](playback.md#controls-and-presentation). Top Shelf composition, Seerr
+status and Discover's rail layout are in the [engineering
+notes](reference/architecture.md).
 
 ## Refactoring priorities
 
-Further engine and cache extractions should follow queue and resource
-ownership. Line counts alone do not justify splitting a coupled implementation
-into extensions.
-
-Preserve the [playback invariants](playback.md#lifecycle-and-memory), and
-validate an ownership change with dismissal/replay, episode handoff, PiP and
-physical performance checks as well as both platform builds and tests. The
-[roadmap](roadmap.md#awaiting-device-or-deployment-verification) records the
-remaining acceptance.
+- Extractions follow queue and resource ownership. Line count alone never
+  justifies splitting a coupled implementation.
+- Keep the [playback invariants](playback.md#lifecycle-and-memory). Validate
+  an ownership change with dismissal and replay, episode handoff, PiP and
+  hardware performance, plus both builds and the tests.
+- Remaining acceptance is in the
+  [roadmap](roadmap.md#awaiting-device-or-deployment-verification).

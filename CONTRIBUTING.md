@@ -1,32 +1,29 @@
 # Contributing to Lagoon
 
 Lagoon is one multiplatform SwiftUI app target for tvOS 26 and iOS 26, plus a
-Top Shelf extension, test targets, and a single local Swift package that pins
-the native media libraries.
+Top Shelf extension and test targets. Its only dependency is the
+`LagoonEngine` package, which carries the native media libraries.
 
-The licence is **MPL-2.0** for Lagoon's own code, in [LICENSE](LICENSE), with
-the Lagoon name and brand assets carved out of the grant by
-[TRADEMARKS.md](TRADEMARKS.md). Contributions are made under those terms.
-Bugs go through the issue form; anything with security or privacy impact
-follows [SECURITY.md](SECURITY.md) instead of an issue. Everyone taking part
-keeps to the [Code of Conduct](CODE_OF_CONDUCT.md), which is reported to
-support@helop.dev.
+- Lagoon's own code is **MPL-2.0** ([LICENSE](LICENSE)), with the name and
+  brand assets carved out by [TRADEMARKS.md](TRADEMARKS.md). Contributions are
+  made under those terms.
+- Bugs go through the issue form. Anything with security or privacy impact
+  follows [SECURITY.md](SECURITY.md) instead.
+- Everyone keeps to the [Code of Conduct](CODE_OF_CONDUCT.md); report
+  breaches to support@helop.dev.
 
 ## Prerequisites
 
 macOS 26 and Xcode 26.6 (17F113) or newer, with an Apple TV 4K (3rd
-generation) and an iPhone simulator. Xcode 26.6 built the vendored native
-artifacts and older versions are untested. Nothing else is needed for a normal
-build; rebuilding the native artifacts needs more, see [Native
+generation) and an iPhone simulator. Older Xcode versions are untested.
+Nothing else is needed; rebuilding native libraries is covered under [Native
 artifacts](#native-artifacts).
 
 ## Clone, open, build
 
-Clone the repository, open `Lagoon.xcodeproj`, and run the `Lagoon` scheme on
-an Apple TV or iOS destination. The first build resolves the `LagoonEngine`
-package from its own repository at the version pinned in `Package.resolved`,
-which brings the native media libraries with it. Both destinations must stay
-green:
+Open `Lagoon.xcodeproj` and run the `Lagoon` scheme on an Apple TV or iOS
+destination. The first build resolves `LagoonEngine` at the version pinned in
+`Package.resolved`. Both destinations must stay green:
 
 ```sh
 xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
@@ -43,12 +40,11 @@ xcodebuild test -scheme Lagoon \
   -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
 ```
 
-UI journeys live in the `LagoonHardwareRegression` scheme. It runs against the
-public demo by default and against a private library when you export
+UI journeys live in the `LagoonHardwareRegression` scheme. They run against
+the public demo by default, or a private library via
 `LAGOON_REGRESSION_SERVER`, `LAGOON_REGRESSION_USER` and
-`LAGOON_REGRESSION_PASS`. `xcodebuild` forwards only variables carrying the
-`TEST_RUNNER_` prefix to the test runner, stripping the prefix on the way in,
-so use that form:
+`LAGOON_REGRESSION_PASS`. `xcodebuild` forwards only `TEST_RUNNER_`-prefixed
+variables (and strips the prefix), so use that form:
 
 ```sh
 TEST_RUNNER_LAGOON_REGRESSION_SERVER='https://example.test' \
@@ -58,78 +54,71 @@ xcodebuild test -scheme LagoonHardwareRegression \
   -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
 ```
 
-Fixture-backed tests skip explicitly when the server has no matching media.
-The [regression lane reference](docs/reference/regression-lane.md) lists the
-three fixture tiers, the resolver flags, and the state-reset rules; run the
-lane only on a simulator kept for it, because the reset wipes stored accounts.
+Fixture-backed tests skip when the server has no matching media. The
+[regression lane reference](docs/reference/regression-lane.md) lists the
+fixture tiers, resolver flags and state-reset rules. Run the lane only on a
+simulator kept for it: the reset wipes stored accounts.
 
 ## Pointing the app at a server
 
-Start with the public Jellyfin demo: address `demo.jellyfin.org/stable`, user
-`demo`, empty password. It covers sign-in, browsing, detail pages and
-playback. It has no 4K or HDR media and no multi-audio, subtitle or chapter
-fixtures, so format work needs your own server.
+Use the public Jellyfin demo: `demo.jellyfin.org/stable`, user `demo`, empty
+password. It covers sign-in, browsing, detail pages and playback, but has no
+4K, HDR, multi-audio, subtitle or chapter fixtures, so format work needs your
+own server.
 
 ## Documentation and standards
 
 [`docs/README.md`](docs/README.md) is the index and
 [`docs/standards.md`](docs/standards.md) holds the rules. Read the guide for
-the area you are changing before changing it: architecture, design system,
-Jellyfin API, playback, release, roadmap. Longer engineering notes live in
-`docs/reference/`. Update the guide that owns a contract you change rather
-than adding session history to it.
+the area you are changing first. Update the guide that owns a contract you
+change; do not add session history to it.
 
-Verify UI changes visually in the simulator on the platforms they affect,
-including tvOS focus paths, not just the landing state.
+Verify UI changes in the simulator on each affected platform, including tvOS
+focus paths, not just the landing state.
 
 ## Commits
 
-Work goes straight to `main`. Subjects are conventional and lowercase
-imperative — `feat: add app icon and top shelf artwork`, `fix:`, `chore:`,
-`docs:` — with no scope parentheses. The house style is many small thematic
-commits, usually one file each, ordered so every intermediate state builds. A
-substantial `fix:` earns a body explaining the mechanism; a mechanical one
-stays subject-only. Keep structural moves separate from behaviour changes.
+- Work goes straight to `main`.
+- Subjects are conventional, lowercase imperative, with no scope:
+  `feat: add app icon and top shelf artwork`, `fix:`, `chore:`, `docs:`.
+- Many small thematic commits, usually one file each, ordered so every
+  intermediate state builds.
+- A substantial `fix:` gets a body explaining the mechanism; a mechanical one
+  is subject-only.
+- Keep structural moves separate from behaviour changes.
 
 ## Dependencies
 
-The `LagoonEngine` package is the only dependency, and that is deliberate. A
-new one needs a real argument. If you add one, add its entry to
+`LagoonEngine` is deliberately the only dependency; a new one needs a real
+argument. If you add one, add its entry to
 [`Acknowledgements.swift`](Lagoon/Features/Settings/Acknowledgements.swift)
 and its licence text under `Lagoon/Resources/Licenses`, or
-`AcknowledgementsTests` fails the unit suite. That test also checks every
-binary target the engine package declares is covered by an entry.
+`AcknowledgementsTests` fails. The test also checks that every binary target
+the engine declares has an entry.
 
 ## Native artifacts
 
-The native media libraries are not in this repository. They belong to the
-[`lagoon-engine`](https://github.com/helop-ou/lagoon-engine) package, which
-carries them with it and which this app resolves at a tagged version pinned in
-`Package.resolved`. Rebuild recipes, provenance and the `--verify-only` checks
-all live there, beside the artifacts, and its `CONTRIBUTING.md` is the guide to
-them.
+The native media libraries live in the
+[`lagoon-engine`](https://github.com/helop-ou/lagoon-engine) package, with
+their rebuild recipes, provenance and `--verify-only` checks; its
+`CONTRIBUTING.md` is the guide. Resolving the package fetches everything the
+app needs.
 
-Nothing here needs to be built to build the app: resolving the package fetches
-what it needs. Changing a native library means a change in that repository and
-a new version tagged there, then moving the pin here — not editing anything
-under this checkout.
-
-`docs/reference/native-dependency-inventory.json` and
-`scripts/inventory-native-dependencies.py` are the exception that has not been
-sorted out yet: the script still expects the libraries to be in this
-repository, so it cannot run as written. Where the inventory should live is an
-open question tracked on HEL-195.
+To change a native library, change it there, tag a new engine version, then
+move the pin here. After the pin moves, regenerate
+`docs/reference/native-dependency-inventory.json` with
+`scripts/inventory-native-dependencies.py`, pointed at the resolved engine
+checkout (see the script's header).
 
 ## Signing and assets
 
 Simulator builds need no signing setup. `project.pbxproj` hardcodes the
-maintainer's development team with automatic signing, bundle identifiers
+maintainer's team with automatic signing, bundle identifiers
 `ee.helop.lagoon`, `.topshelf`, `.tests` and `.uitests`, and the app group
-`group.ee.helop.lagoon`. To build on a device, change the team, the bundle
-identifiers and the app group to your own, and keep those local changes out of
-what you submit.
+`group.ee.helop.lagoon`. To build on a device, change the team, bundle
+identifiers and app group to your own, and keep those changes out of what you
+submit.
 
-The brand asset sources in `art/` are gitignored and not published. The PNG
-and PDF assets tracked in the repository are Lagoon's branding. They sit
-outside the source licence, and [TRADEMARKS.md](TRADEMARKS.md) describes what
-that means for a fork.
+Brand asset sources in `art/` are gitignored. The tracked PNG and PDF assets
+are Lagoon's branding and sit outside the source licence; see
+[TRADEMARKS.md](TRADEMARKS.md).

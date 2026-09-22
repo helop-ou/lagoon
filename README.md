@@ -64,9 +64,8 @@ keeps each one's provenance and rebuild instructions beside it.
 ## Documentation
 
 Start with the [documentation index](docs/README.md) and [coding
-standards](docs/standards.md). The current guides cover architecture, design,
-Jellyfin API, playback, release, and roadmap, with detailed engineering notes
-and dated validation evidence linked separately.
+standards](docs/standards.md). The guides cover architecture, design, the
+Jellyfin API, playback, release and the roadmap.
 
 [Contributing](CONTRIBUTING.md) has the prerequisites, build and test
 commands, and repository conventions; [security reports](SECURITY.md) go
@@ -76,7 +75,7 @@ to the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## Compatibility
 
 Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
-Lagoon works against 10.8 through current. Jellyfin 10.11.11 and 12.0.0, 12.1 have been tested thorougly.
+Lagoon works against 10.8 through current. Jellyfin 10.11.11, 12.0.0 and 12.1 have been tested thoroughly.
 
 ## AI Disclaimer
 

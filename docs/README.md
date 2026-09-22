@@ -1,7 +1,7 @@
 # Documentation
 
 Start with [Coding standards](standards.md), then read the guide for the area
-you are changing. The six guides below describe how the code works today.
+you are changing. The guides describe the code as it is today.
 
 | Guide | Use it for |
 | --- | --- |
@@ -14,56 +14,35 @@ you are changing. The six guides below describe how the code works today.
 
 ## Supporting material
 
-Playback's engine is a separate package in its own repository, and its
-internals are documented there: [the engine
-guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md) and
-its [engineering
-notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/README.md).
-What stays here is what Lagoon negotiates, presents and reports.
+- **The engine** is a separate package with its own docs: [the engine
+  guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md)
+  and its [engineering
+  notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/README.md).
+  This repository documents what Lagoon negotiates, presents and reports.
+- **`reference/`** holds the reasoning and measurements behind the guides:
+  [playback](reference/playback/README.md),
+  [architecture](reference/architecture.md), [design](reference/design-system.md)
+  and the [regression lane](reference/regression-lane.md). Some describe
+  experiments on a specific build; the code may have moved on.
 
-`reference/` holds the longer engineering notes behind the guides:
-[playback](reference/playback/README.md),
-[architecture](reference/architecture.md),
-[design](reference/design-system.md) and [regression
-lane](reference/regression-lane.md). Read them for the reasoning and the
-measurements behind a particular implementation. Some describe experiments on
-a specific build, and the code may have moved on since.
+Generated files. Each script takes `--check` to fail on drift instead of
+writing:
 
-[Codec support](codec-support.md) is generated from `DeviceProfile.everything`
-by [the codec script](../scripts/generate-codec-support.sh), so the published
-table is the same envelope the app sends Jellyfin and cannot overstate what
-direct plays. Run it with `--check` to fail on drift rather than ship it.
-
-The [native dependency inventory](reference/native-dependency-inventory.json)
-is generated. Regenerate it with [the inventory
-script](../scripts/inventory-native-dependencies.py), pointed at the resolved
-engine checkout, whenever the engine pin moves.
-
-[CHANGELOG.md](../CHANGELOG.md) is generated from `Changelog.swift` by [the
-changelog script](../scripts/generate-changelog.sh), which also prints one
-build's notes for a release body. The in-app changelog stays the source of
-truth, so what a release says and what About shows cannot diverge. Run it with
-`--check` to fail on drift.
-
-The website's `app-facts.json` is generated too, by [the site-facts
-script](../scripts/generate-site-facts.sh), from the declared version and
-`DeviceProfile`. The site lives in its own repository and used to restate what
-Lagoon plays by hand, which is how it came to promise formats the app had
-changed underneath it. Prose, the Jellyfin floor and availability stay written
-there; the version, build and format rows come from here. `--check` fails on
-drift.
+| File | Generated from | By |
+| --- | --- | --- |
+| [Codec support](codec-support.md) | `DeviceProfile.everything`, the envelope the app sends Jellyfin, so it cannot overstate direct play | [`generate-codec-support.sh`](../scripts/generate-codec-support.sh) |
+| [CHANGELOG.md](../CHANGELOG.md) | `Changelog.swift`, the source of truth for About and release bodies (`--notes <build>` prints one build) | [`generate-changelog.sh`](../scripts/generate-changelog.sh) |
+| The website's `app-facts.json` | The declared version and `DeviceProfile`. The site's prose, Jellyfin floor and availability stay hand-written there | [`generate-site-facts.sh`](../scripts/generate-site-facts.sh) |
+| [Native dependency inventory](reference/native-dependency-inventory.json) | The resolved engine checkout; regenerate whenever the engine pin moves (no `--check`) | [`inventory-native-dependencies.py`](../scripts/inventory-native-dependencies.py) |
 
 ## Keeping this clean
 
-Update the guide that owns a contract when you change it. Give each rule one
-home and link to it from anywhere else it matters. Long technical
-investigations go in `reference/`.
-
-Validation evidence — the revision, the environment, the result, and what is
-still owed — belongs wherever the work is tracked, not appended to a guide as
-a session transcript. Unresolved release gates go in
-[Release](release.md#public-release).
-
-[Changelog.swift](../Lagoon/Features/Settings/Changelog.swift) owns release
-history, and published website copy lives in the separate `lagoon-website`
-repository. Neither needs a second copy here.
+- Update the guide that owns a contract when you change it. Give each rule one
+  home and link to it from elsewhere.
+- Long technical investigations go in `reference/`.
+- Validation evidence (revision, environment, result, what is owed) belongs
+  where the work is tracked, not in a guide. Unresolved release gates go in
+  [Release](release.md#public-release).
+- [Changelog.swift](../Lagoon/Features/Settings/Changelog.swift) owns release
+  history, and website copy lives in the `lagoon-website` repository. Neither
+  needs a copy here.
