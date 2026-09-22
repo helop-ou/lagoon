@@ -48,6 +48,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.2.0",
+            build: "108",
+            released: "September 2026",
+            headline: "Clearer about a Seerr server you cannot reach.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "When a Seerr server sits behind a sign in proxy such as Cloudflare Access or Authelia, Lagoon now says so instead of reporting an unreadable response. Connecting through one is not supported yet.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.2.0",
             build: "107",
             released: "September 2026",
             headline: "The privacy policy and support pages are a scan away.",
