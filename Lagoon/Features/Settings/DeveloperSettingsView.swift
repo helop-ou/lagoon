@@ -43,9 +43,8 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
     }
 }
 
-/// Development-build gallery for approving player chrome without finding a
-/// particular media item and waiting for the matching playback condition.
-/// Its views are the same shared components used by CustomPlayerView.
+/// Development-build gallery of the real player components, so chrome can be
+/// approved without finding media that triggers each state.
 struct DeveloperSettingsView: View {
     let subtitleStyle: SubtitleRenderStyle
 
@@ -314,17 +313,14 @@ struct DeveloperSettingsView: View {
         }
     }
 
-    /// `MediaItem` is decode-only by design, so the gallery builds one
-    /// the way the server would. It exists to give the sheet an argument;
-    /// nothing the sheet draws reads it.
+    /// `MediaItem` is decode-only, so build one from JSON. The sheet only
+    /// needs an argument; nothing it draws reads it.
     static let previewMediaItem: MediaItem? = {
         let json = Data(#"{"Id":"developer-preview","Name":"Rick and Morty","Type":"Episode"}"#.utf8)
         return try? JellyfinClient.decoder.decode(MediaItem.self, from: json)
     }()
 
-    /// The address the gallery scans. A real one rather than example.com, so
-    /// what a phone opens is the length and shape of the published article and
-    /// the code carries the number of modules it will carry in the end.
+    /// A real address, so the QR code has its final size.
     private static let previewLegalAddressURL = URL(string: "https://lagoon.helop.dev/privacy/")!
 
     #if os(tvOS)
@@ -374,9 +370,8 @@ struct DeveloperSettingsView: View {
     }
 }
 
-/// Deterministic full-screen playback state for evaluating the production
-/// transport over varied luminance. Right/left enters the real tvOS scrub
-/// interaction; touch platforms exercise the same bar with a drag.
+/// The production transport over varied luminance. Right/Left enters the real
+/// tvOS scrub; touch platforms drag the same bar.
 private struct PlayerTransportComponentPreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var engine = PlayerPanelPreviewEngine()
@@ -421,8 +416,7 @@ private struct PlayerTransportComponentPreviewScreen: View {
     }
 
     private var previewSurface: some View {
-        // Decorative shapes must not propose their intrinsic 760pt width
-        // to the player or shift its controls and touch coordinates.
+        // Keep the shapes' 760pt width from shifting the player's controls.
         Color.black.overlay {
         ZStack {
             LinearGradient(
@@ -458,9 +452,7 @@ private struct PlayerTransportComponentPreviewScreen: View {
     }
 }
 
-/// Representative state around the production player panel. Actions stay
-/// local to this Debug-only harness, but every rendered control and focus
-/// identifier belongs to the same `PlayerControlPanel` used in playback.
+/// The production `PlayerControlPanel` with representative state and local actions.
 private struct PlayerPanelComponentPreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -490,8 +482,7 @@ private struct PlayerPanelComponentPreview: View {
     @State private var engine = PlayerPanelPreviewEngine()
     @State private var isPictureInPictureActive = false
     @State private var ignoresWait = false
-    // Opens on the results browser so the Subtitles tab shows the state that
-    // needs approving; Done in the panel reveals the track list behind it.
+    // Opens on the subtitle results browser; Done reveals the track list.
     @State private var subtitleSearch = SubtitleSearchCoordinator
         .previewingResults(PlayerPanelComponentPreview.subtitleResults)
     @FocusState private var panelFocus: PlayerControlFocus?
@@ -508,8 +499,7 @@ private struct PlayerPanelComponentPreview: View {
             onTogglePictureInPicture: {
                 isPictureInPictureActive.toggle()
             },
-            // A group, so the fifth tab is there to walk to and approve
-            // without having to join one first.
+            // A group, so the Watch Together tab shows without joining one.
             together: previewTogether,
             onLeaveGroup: {},
             onSetIgnoreWait: { ignoresWait = $0 },
@@ -535,8 +525,7 @@ private struct PlayerPanelComponentPreview: View {
             }
         }
         .task {
-            // Match the live panel's post-mount focus claim. A full-screen
-            // preview is a fresh scene, so no settings-row focus competes.
+            // Match the live panel's post-mount focus claim.
             try? await Task.sleep(for: .milliseconds(225))
             guard !Task.isCancelled else { return }
             panelFocus = .tab(.info)
@@ -563,9 +552,8 @@ private struct PlayerPanelComponentPreview: View {
         )
     }
 
-    /// A representative page of results: several providers and formats, a hash
-    /// match, an SDH and a forced entry, and download counts spread wide
-    /// enough to show how long the detail line really gets.
+    /// Varied providers, formats, flags and download counts, to show the
+    /// longest detail line.
     static let subtitleResults: [SubtitleCandidate] = [
         SubtitleCandidate(
             id: "preview-1",
@@ -637,8 +625,8 @@ private struct PlayerPanelComponentPreview: View {
     ]
 }
 
-/// Local production-host fixture: performance and focus tests exercise the
-/// same Observation boundary as playback without relying on a media server.
+/// Local fixture with playback's Observation boundary, for performance and
+/// focus tests without a media server.
 @Observable
 private final class PlayerPanelPreviewEngine: PlayerEngine {
     var timePosition = 0.0
@@ -664,9 +652,7 @@ private final class PlayerPanelPreviewEngine: PlayerEngine {
         ),
     ]
     var subtitleTracks: [PlayerTrack] = {
-        // Deliberately match the unusually large libraries that expose the
-        // panel's worst case on Apple TV. This remains local and deterministic
-        // so the UI performance test never depends on a Jellyfin server.
+        // As large as the libraries that show the panel's worst case on Apple TV.
         let languages = [
             ("English", "eng"), ("Estonian", "est"), ("Spanish", "spa"),
             ("French", "fra"), ("German", "deu"), ("Italian", "ita"),

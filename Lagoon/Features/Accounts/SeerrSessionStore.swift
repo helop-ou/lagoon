@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 
-/// Keeps Seerr identity aligned with Lagoon's active Jellyfin account. The
-/// server address is shared by users of a Jellyfin server, while the opaque
-/// Seerr session cookie is stored separately for every account.
+/// Follows the active Jellyfin account. The Seerr address is shared per
+/// Jellyfin server; the session cookie is stored per account.
 @Observable
 final class SeerrSessionStore {
     private(set) var configuredURL: URL?
@@ -21,8 +20,7 @@ final class SeerrSessionStore {
     private var activeAccount: StoredAccount?
     private var activationToken = UUID()
     private var activationTask: Task<Void, Never>?
-    /// One attempt per activation. A server with Quick Connect off would
-    /// otherwise be re-asked every time Discover appears.
+    /// One attempt per activation, so a server with Quick Connect off is not re-asked.
     private var hasAttemptedJellyfinSignIn = false
 
     init(client: SeerrClient = SeerrClient(), defaults: UserDefaults = .standard,
@@ -40,9 +38,7 @@ final class SeerrSessionStore {
         return "Not Configured"
     }
 
-    /// What the address field starts with. Only this account's own configured
-    /// Seerr server is ever suggested; Lagoon never proposes an address the
-    /// viewer has not given it.
+    /// Only ever suggests this account's own configured Seerr server.
     func suggestedServerAddress(for account: StoredAccount?) -> String {
         if let configuredURL { return configuredURL.absoluteString }
         #if DEBUG
@@ -52,10 +48,8 @@ final class SeerrSessionStore {
     }
 
     #if DEBUG
-    /// Saves retyping a fixture server's Seerr address across the simulator
-    /// resets the regression lane does, supplied through the launch
-    /// environment the same way `LAGOON_REGRESSION_*` credentials are. Never
-    /// compiled into a shipping build.
+    /// Regression lane: a fixture Seerr address from the launch environment,
+    /// like `LAGOON_REGRESSION_*`. Never in a shipping build.
     private static func developmentPairing(for account: StoredAccount?) -> String? {
         let environment = ProcessInfo.processInfo.environment
         guard let host = environment["LAGOON_SEERR_PAIRED_HOST"]?.lowercased(),
@@ -71,8 +65,8 @@ final class SeerrSessionStore {
         await activationTask?.value
     }
 
-    /// SessionStore calls this synchronously before the next account can be
-    /// observed. Pending authentication cannot reinstall an outgoing cookie.
+    /// Called synchronously before the next account is observable, so pending
+    /// authentication cannot reinstall an outgoing cookie.
     func select(_ account: StoredAccount?) {
         activationTask?.cancel()
         let token = UUID()
@@ -127,9 +121,7 @@ final class SeerrSessionStore {
                 guard resolvedSettings.initialized else {
                     throw SeerrError.server(409, "Finish setting up this Seerr server before connecting Lagoon.")
                 }
-                // Lagoon accounts are Jellyfin identities. Connecting them
-                // to a Plex-only Seerr instance would silently create the
-                // wrong authorization boundary.
+                // Lagoon accounts are Jellyfin identities; refuse a Plex Seerr.
                 if let mediaServerType = resolvedSettings.mediaServerType, mediaServerType != 2 {
                     throw SeerrError.server(409, "This Seerr server is not configured for Jellyfin.")
                 }
@@ -182,14 +174,8 @@ final class SeerrSessionStore {
         return true
     }
 
-    /// Signs in to Seerr using the Jellyfin session Lagoon already holds, so
-    /// a viewer who is signed in to Jellyfin never sees a Seerr login at all.
-    ///
-    /// Jellyseerr's Jellyfin login takes a plaintext password, and Lagoon does
-    /// not keep one — only an access token. Quick Connect closes that gap
-    /// without a password: Jellyseerr asks Jellyfin for a code, and Lagoon,
-    /// being an authenticated Jellyfin client, approves that code itself. It
-    /// is the viewer's own account on both ends.
+    /// Signs in to Seerr with the Jellyfin session. Lagoon keeps no password,
+    /// so Jellyseerr requests a Quick Connect code and Lagoon approves it.
     func signInUsingJellyfin(_ jellyfin: JellyfinClient) async throws {
         guard isConfigured else { throw SeerrError.invalidServerURL }
         guard jellyfin.serverURL == activeAccount?.serverURL, jellyfin.userId == activeAccount?.userId else {
@@ -200,8 +186,7 @@ final class SeerrSessionStore {
         let accountID = activeAccount?.id
         errorMessage = nil
 
-        // Quick Connect is a server setting and may be off, in which case
-        // there is nothing to fall back on but the manual paths.
+        // Quick Connect may be off; only the manual paths remain.
         guard (try? await jellyfin.quickConnectEnabled()) == true else {
             throw SeerrError.quickConnectUnavailable
         }
@@ -213,8 +198,7 @@ final class SeerrSessionStore {
         guard activationToken == token, activeAccount?.id == accountID else { throw CancellationError() }
         _ = try await jellyfin.authorizeQuickConnect(code: handshake.code)
 
-        // Jellyseerr verifies the code against Jellyfin on its own schedule,
-        // so the approval is not always visible on the first check.
+        // Jellyseerr may not see the approval on the first check.
         for delay in Self.quickConnectConfirmationDelays {
             try await Task.sleep(for: delay)
             guard activationToken == token, activeAccount?.id == accountID else {
@@ -225,9 +209,7 @@ final class SeerrSessionStore {
         throw SeerrError.unauthenticated
     }
 
-    /// The automatic path. Silent when there is nothing to do, and attempted
-    /// only once per activation so a server without Quick Connect is not
-    /// re-asked on every appearance.
+    /// The automatic path; silent when there is nothing to do.
     func signInUsingJellyfinIfNeeded(_ jellyfin: JellyfinClient) async {
         guard isConfigured, !isConnected, !isLoading, !hasAttemptedJellyfinSignIn else { return }
         hasAttemptedJellyfinSignIn = true
@@ -237,9 +219,7 @@ final class SeerrSessionStore {
         } catch is CancellationError {
         } catch {
             guard activationToken == token else { return }
-            // The manual paths remain, so this is a fallback rather than a
-            // failure: say what happened without turning Discover into an
-            // error screen.
+            // A fallback, not a failure: note it without an error screen.
             errorMessage = error.localizedDescription
         }
     }

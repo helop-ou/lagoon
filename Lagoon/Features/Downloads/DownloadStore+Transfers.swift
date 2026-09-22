@@ -2,20 +2,12 @@
 import Foundation
 import os
 
-// The background session and the transfer commands it carries:
-// starting, pausing, resuming and deleting a download, and routing the
-// delegate's reports back into whichever account's manifest they belong to.
+// Routes background session reports into the right account's manifest.
 extension DownloadStore {
-    /// Moves a finished file into place and reports back to the store, all
-    /// from the task's own description, parsed by `DownloadTaskDescription`.
-    /// Everything the delegate needs rides on the task, so an event for a
-    /// task that finished while the process was dead still finds its
-    /// destination in the relaunched process, for whichever account it
-    /// belongs to, including an account that is not currently active.
-    /// The session uses `OperationQueue.main` as its delegate queue. Keeping
-    /// completion validation, file replacement and manifest persistence on
-    /// that same serial executor makes the token check and delete/move one
-    /// operation relative to MainActor commands such as delete and restart.
+    /// Everything it needs rides on the task description, so an event after
+    /// a relaunch still finds its destination, for any account. Runs on
+    /// `OperationQueue.main`, so the token check and file move are one
+    /// operation relative to delete and restart.
     nonisolated final class SessionDelegate: NSObject, URLSessionDownloadDelegate {
         func urlSession(
             _ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
@@ -30,9 +22,8 @@ extension DownloadStore {
             }
         }
 
-        /// URLSession keeps the app running until its background events are
-        /// acknowledged. Persist both the file and manifest before returning
-        /// this callback so relaunch recovery never depends on a queued Task.
+        /// Persists file and manifest before returning, so relaunch recovery
+        /// never depends on a queued Task.
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
             guard let info = DownloadTaskDescription.parse(downloadTask.taskDescription) else { return }
             let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
@@ -63,14 +54,8 @@ extension DownloadStore {
 
     // MARK: - Reconciliation
 
-    /// After a relaunch or an account switch: tasks the system kept running
-    /// are re-adopted by their description; an active entry with no live
-    /// task but a finished file on disk (its `didFinishDownloadingTo`
-    /// landed while the process was dead, between the write and this
-    /// process getting a chance to run) is promoted to complete instead of
-    /// being declared lost. Anything left over
-    /// becomes paused if it holds resume data, otherwise failed. Guards
-    /// against a second switch completing first while this awaits.
+    /// After a relaunch or account switch. See `DownloadManifest.reconcile`.
+    /// Guards against a second switch finishing first while this awaits.
     func reconcileLiveTasks(accountKey: String) {
         let generation = accountGeneration
         Task { @MainActor in
@@ -108,21 +93,14 @@ extension DownloadStore {
 
     func reportProgress(accountKey: String, itemID: String, token: String, received: Int64, expected: Int64) {
         guard accountKey == self.accountKey else { return }
-        // A delete-then-restart routes a stale progress callback to the
-        // entry's new attempt; without this check it would resurrect a
-        // byte count for a transfer that no longer exists.
+        // Drop progress from an attempt a delete-then-restart replaced.
         guard manifest.entry(for: itemID)?.attemptToken == token else { return }
         manifest.recordProgress(itemID, received: received, expected: expected > 0 ? expected : nil)
         saveProgressThrottled()
     }
 
-    /// Maps a transport error to short copy for the viewer and records it,
-    /// skipping the manifest write entirely when the mapping says there is
-    /// nothing to show: a cancellation is just the echo of a `pause` or
-    /// `delete` that already recorded the real state. Resume data is only
-    /// ever meaningful for an original download; a transcode has no
-    /// byte-range support to resume into, so it always restarts from the
-    /// beginning.
+    /// Cancellation is skipped: it echoes a pause or delete already
+    /// recorded. Resume data is kept only for originals.
     func reportTransportFailure(accountKey: String, itemID: String, token: String, error: NSError, resumeData: Data?) {
         guard let reason = DownloadTransportFailure.failureDescription(domain: error.domain, code: error.code) else { return }
         if accountKey == self.accountKey {
@@ -143,10 +121,8 @@ extension DownloadStore {
         }
     }
 
-    /// Uses the active manifest directly. Loading a second copy from disk
-    /// here would discard progress or playback positions still in memory.
-    /// Inactive accounts persist through the same synchronous completion
-    /// operation, including a background relaunch before any account loads.
+    /// Uses the in-memory manifest for the active account; a fresh copy from
+    /// disk would discard unsaved progress and positions.
     func reportFinished(info: DownloadTaskDescription, status: Int, location: URL) {
         if info.accountKey == accountKey, let accountDirectory {
             DownloadFileCompletion.apply(
@@ -166,12 +142,8 @@ extension DownloadStore {
 
     // MARK: - Playback reports
 
-    /// Retries stop reports a server couldn't take earlier, in order, oldest
-    /// first; stops at the first failure rather than reordering the queue.
-    /// The account can change while an await here is in flight (a sign-out
-    /// mid-flush), so the account is captured up front and checked again
-    /// after every await: the manifest must never be mutated for an account
-    /// this call did not start out flushing.
+    /// Oldest first; stops at the first failure. Rechecks the account after
+    /// every await so a sign-out mid-flush never touches another manifest.
     func flushPendingReports(client: JellyfinClient) async {
         let account = accountKey
         let generation = accountGeneration

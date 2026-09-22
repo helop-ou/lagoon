@@ -4,16 +4,12 @@ import Foundation
 import Observation
 import os
 
-/// Owns offline downloads on iPhone and iPad: the per-account
-/// manifest on disk, the one background `URLSession` that carries every
-/// transfer, the item snapshot and artwork saved beside each file, and the
-/// stop reports kept for a server that could not be reached.
+/// Owns offline downloads on iPhone and iPad: the per-account manifest, the
+/// one background `URLSession`, the item snapshot and artwork beside each
+/// file, and stop reports queued for an unreachable server.
 ///
-/// Files live under Application Support, excluded from backup, in a
-/// directory per account keyed by `accountKey(for:)`, so removing an
-/// account removes its downloads (`removeAll(forAccountKey:)`, called from
-/// `AccountLocalData.beginRemoval`). tvOS has no persistent storage
-/// guarantee and no downloads.
+/// Files live in Application Support, excluded from backup, one directory
+/// per account. tvOS has no persistent storage guarantee and no downloads.
 @MainActor
 @Observable
 final class DownloadStore {
@@ -21,19 +17,15 @@ final class DownloadStore {
     static let sessionIdentifier = "ee.helop.lagoon.downloads"
     nonisolated static let log = Logger(subsystem: "ee.helop.lagoon", category: "downloads")
 
-    /// Local playback of a finished download: the file, the item as the
-    /// server described it at download time and the media source whose
-    /// streams the file carries.
+    /// A finished download: the file, the item as saved at download time and
+    /// the media source the file carries.
     struct LocalPlayback {
         let url: URL
         let item: MediaItem
         let source: MediaSource
-        /// Original carries the source's streams as described; a transcode
-        /// is a different file (H.264 or HEVC, E-AC-3 or AAC, no external
-        /// subtitles), so its track metadata comes from probing, not the
-        /// source.
+        /// Original carries the source's streams; a transcode is a different
+        /// file, so its track metadata comes from probing, not the source.
         let quality: DownloadQuality
-        /// The position recorded by local playback, if any.
         let resumeTicks: Int64?
     }
 
@@ -45,60 +37,44 @@ final class DownloadStore {
         let effectiveQuality: DownloadQuality
         let bytes: Int64?
         let freeBytes: Int64?
-        /// The estimate does not fit in the free space at all.
         var exceedsFreeSpace: Bool {
             guard let bytes, let freeBytes else { return false }
             return bytes >= freeBytes
         }
-        /// The estimate takes more than half of what is free: worth a
-        /// confirmation before it starts.
+        /// More than half the free space: confirm before starting.
         var isLarge: Bool {
             guard let bytes, let freeBytes else { return false }
             return bytes * 2 > freeBytes
         }
     }
 
-    /// The active account's manifest; empty while signed out. Not
-    /// `private(set)`: the transfer and file-handling extensions in this
-    /// folder mutate it directly through `DownloadManifest`'s transition
-    /// methods, then call `save()`.
+    /// Empty while signed out. Not `private(set)`: the extensions in this
+    /// folder mutate it through `DownloadManifest`'s transitions, then `save()`.
     var manifest = DownloadManifest()
-    /// The account whose downloads are loaded, as `StoredAccount.id`.
+    /// `StoredAccount.id` of the loaded account.
     private(set) var accountID: String?
     @ObservationIgnored private var activeOwner: ObjectIdentifier?
-    /// `accountKey(for:)` of the active account; nil while signed out.
     private(set) var accountKey: String?
-    /// The active account's downloads directory; nil while signed out.
     private(set) var accountDirectory: URL?
     @ObservationIgnored private(set) var accountGeneration = 0
-    /// The commands extension owns preparation until URLSession takes over.
     /// A newer start or delete invalidates an older start across its awaits.
     @ObservationIgnored var preparationTokens: [String: UUID] = [:]
-    /// Whether the active account may download at all, as last learned from
-    /// the server; nil until asked. Observable state of the store rather
-    /// than `DownloadControl`'s own, because a control with nothing to show
-    /// renders no view and a task attached to no view never runs: left to
-    /// itself the control could never resolve the permission that would
-    /// make it appear. Refreshed on activation and each detail page load.
+    /// Whether the account may download; nil until asked. Lives here, not in
+    /// `DownloadControl`: a control with nothing to show renders no view, so
+    /// its own task would never run to resolve the permission.
     private(set) var permitted: Bool?
-    /// Every account's downloads: `Application Support/Lagoon/Downloads`.
+    /// `Application Support/Lagoon/Downloads`.
     let baseDirectory: URL
-    /// The one background session that carries every transfer, for every
-    /// account, for the life of the process.
+    /// Shared by every account for the life of the process.
     let session: URLSession
     let delegate: SessionDelegate
 
-    /// `snapshotItem(for:)` decodes a saved item from disk; a row body reads
-    /// it on every draw, so results are kept here until the item they
-    /// belong to changes.
+    /// Row bodies call `snapshotItem(for:)` on every draw; decoding from disk
+    /// each time is too slow.
     @ObservationIgnored var snapshotCache: [String: MediaItem] = [:]
-    /// The last time a progress-only save reached disk, so `saveProgressThrottled`
-    /// can coalesce the callbacks a fast transfer produces.
     @ObservationIgnored var lastProgressSaveDate: Date?
-    /// Resumed once `urlSessionDidFinishEvents` reports every background
-    /// callback delivered, or after a timeout if it never does, so the
-    /// app's background task can wait for on-disk state to catch up before
-    /// the OS suspends it.
+    /// Lets the app's background task wait for on-disk state before the OS
+    /// suspends it.
     @ObservationIgnored private var backgroundEventsContinuation: CheckedContinuation<Void, Never>?
 
     var entries: [DownloadEntry] { manifest.entries }
@@ -124,25 +100,21 @@ final class DownloadStore {
         // encode; the resource timeout must outlast a film.
         configuration.timeoutIntervalForResource = 12 * 60 * 60
         configuration.timeoutIntervalForRequest = 10 * 60
-        // Keep delegate callbacks on the main executor. DownloadStore is MainActor-owned,
-        // and completion must validate the attempt and move its file as one
-        // serialized operation with delete/start commands.
+        // Main-queue callbacks: completion must validate and move its file
+        // serialized with delete/start commands.
         let delegateQueue = OperationQueue.main
         session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegateQueue)
     }
 
     // MARK: - Settings
 
-    /// The quality picked by default; Original is never the default. A
-    /// stored property (not computed over `UserDefaults`) so `@Observable`
-    /// can track reads of it: a computed property is invisible to
-    /// Observation, and the settings page never redrew when it changed.
+    /// Original is never the default. Stored, not computed over
+    /// `UserDefaults`, so Observation sees changes.
     var defaultQuality: DownloadQuality {
         didSet { UserDefaults.standard.set(defaultQuality.rawValue, forKey: Self.defaultQualityKey) }
     }
 
-    /// Whether new transfers may use cellular and other expensive paths.
-    /// Stored for the same reason as `defaultQuality` above.
+    /// Whether new transfers avoid cellular and other expensive paths.
     var wifiOnly: Bool {
         didSet { UserDefaults.standard.set(wifiOnly, forKey: Self.wifiOnlyKey) }
     }
@@ -152,18 +124,14 @@ final class DownloadStore {
 
     // MARK: - Account
 
-    /// Loads the manifest for an account, or clears it for nil. Called by
-    /// `SessionStore` whenever the active account changes.
+    /// Loads the manifest for an account, or clears it for nil.
     func activate(accountID: String?) {
         activate(accountID: accountID, owner: nil)
     }
 
-    /// `owner` identifies the session store making the call. SwiftUI can
-    /// construct a root view's state object more than once and keep only
-    /// the first, and every extra `SessionStore` restores nothing and
-    /// announces a nil account: such a call must not clear downloads the
-    /// real store activated, so a nil activation only counts from the
-    /// owner that activated the current account.
+    /// SwiftUI can construct extra `SessionStore`s that announce a nil
+    /// account, so a nil activation only counts from the owner that
+    /// activated the current account.
     func activate(accountID: String?, owner: ObjectIdentifier?) {
         if accountID == nil, let activeOwner, owner != activeOwner { return }
         if accountID != nil { activeOwner = owner }
@@ -173,7 +141,6 @@ final class DownloadStore {
         save()
         self.accountID = accountID
         permitted = nil
-        // Every cached snapshot belongs to the account that is leaving.
         snapshotCache.removeAll()
 
         guard let accountID else {
@@ -195,19 +162,15 @@ final class DownloadStore {
         reconcileLiveTasks(accountKey: key)
     }
 
-    /// The filesystem-safe key of an account id (`StoredAccount.id` embeds a
-    /// URL): the first 32 hex characters of its SHA-256 digest.
+    /// Filesystem-safe key for an account id, which embeds a URL.
     nonisolated static func accountKey(for accountID: String) -> String {
         let digest = SHA256.hash(data: Data(accountID.utf8))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
         return String(hex.prefix(32))
     }
 
-    /// Deletes every download and manifest of an account. Safe to call for
-    /// an account that never downloaded anything. Cancels every live
-    /// transfer for the account first: the session is shared across
-    /// accounts and outlives this call, so a task left running would keep
-    /// writing into a directory that is about to disappear.
+    /// Deletes an account's downloads. Cancels its transfers first: the
+    /// shared session would otherwise keep writing into the deleted directory.
     func removeAll(forAccountKey key: String) {
         if accountKey == key {
             accountGeneration &+= 1
@@ -220,9 +183,7 @@ final class DownloadStore {
             }
             let directory = Self.downloadsRootDirectory().appending(path: key, directoryHint: .isDirectory)
             try? FileManager.default.removeItem(at: directory)
-            // The account being wiped might still be the active one if this
-            // runs ahead of `SessionStore`'s own nil-activation; drop the
-            // in-memory manifest too so nothing still points at deleted files.
+            // This can run before `SessionStore`'s nil-activation.
             guard self.accountKey == key else { return }
             self.manifest = DownloadManifest()
             self.snapshotCache.removeAll()
@@ -240,12 +201,8 @@ final class DownloadStore {
         manifest.isComplete(itemID)
     }
 
-    /// The item as the server described it at download time, for a detail
-    /// page reached from the Downloads screen without a server. Memoized:
-    /// a row body calls this on every draw, and decoding from disk each
-    /// time showed up as real cost in a long downloads list. The cache is
-    /// cleared wherever the item on disk can change: `activate`, `delete`,
-    /// `start`.
+    /// The item as saved at download time, for offline detail pages.
+    /// Memoized; `activate`, `delete` and `start` clear the cache.
     func snapshotItem(for itemID: String) -> MediaItem? {
         if let cached = snapshotCache[itemID] { return cached }
         guard let accountDirectory else { return nil }
@@ -256,7 +213,6 @@ final class DownloadStore {
         return item
     }
 
-    /// A finished download that is still on disk, ready to play.
     func localPlayback(for itemID: String) -> LocalPlayback? {
         guard let entry = manifest.entry(for: itemID), entry.isComplete,
               let accountDirectory else { return nil }
@@ -268,37 +224,29 @@ final class DownloadStore {
         return LocalPlayback(url: fileURL, item: item, source: source, quality: entry.quality, resumeTicks: entry.localPositionTicks)
     }
 
-    /// A poster or backdrop saved beside a download, matched against the
-    /// server image URL a view would otherwise fetch, so every card and
-    /// page shows a downloaded title's artwork offline.
+    /// Saved artwork matching a server image URL, so downloaded titles show
+    /// artwork offline.
     nonisolated static func localArtworkURL(matching serverURL: URL) -> URL? {
         guard let key = DownloadArtworkKey.parse(serverURL) else { return nil }
         return DownloadArtworkIndex.shared.url(imageItemID: key.imageItemID, type: key.type)
     }
 
-    /// Whether the signed-in user may download at all: the server's
-    /// "Allow media downloading" policy. Hides the control rather than
-    /// letting the server refuse.
+    /// The server's "Allow media downloading" policy.
     func canDownload(client: JellyfinClient) async -> Bool {
         await client.canDownloadContent()
     }
 
-    /// Re-asks the server whether the account may download, for a
-    /// permission an administrator could have turned on after sign-in, and
-    /// publishes the answer for every `DownloadControl`. Unreachable and
-    /// never learned both mean no, as `canDownloadContent()` reasons.
+    /// Re-asks the server, since an admin can grant the permission after
+    /// sign-in. Unreachable counts as no.
     func refreshPermission(client: JellyfinClient) async {
         let generation = accountGeneration
         let account = accountKey
         let value = await client.refreshContentDownloadingPermission() ?? false
-        // A permission response belongs to the account that requested it;
-        // never publish it after a switch or sign-out, even if that switch
-        // briefly returned to the same account key.
+        // Drop a reply that outlived an account switch, even back to the same key.
         guard generation == accountGeneration, account == accountKey else { return }
         permitted = value
     }
 
-    /// Bytes free for user content on the device volume.
     func freeSpace() -> Int64? {
         guard let directory = accountDirectory ?? baseDirectory as URL? else { return nil }
         let values = try? directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
@@ -325,19 +273,11 @@ final class DownloadStore {
         case unsupportedItem
     }
 
-    // `start`, `pause`, `resume`, `delete` and `deleteAll` are implemented
-    // in `DownloadStore+Transfers.swift`, along with the background session
-    // delegate that drives them.
-
     // MARK: - Background session lifecycle
 
-    /// Waits for every callback the background session already queued for
-    /// this launch to reach the manifest on disk, so `LagoonApp`'s
-    /// `.backgroundTask(.urlSession(...))` body has something durable to
-    /// show before the OS can suspend the app.
-    /// Falls back to a timeout: a background relaunch that never calls
-    /// `urlSessionDidFinishEvents` must not hang the background task
-    /// forever.
+    /// Waits until the session's queued callbacks reach the manifest on
+    /// disk, before the OS suspends the app. Times out, because a relaunch
+    /// may never call `urlSessionDidFinishEvents`.
     func finishBackgroundEvents() async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             if let existing = backgroundEventsContinuation {
@@ -352,7 +292,6 @@ final class DownloadStore {
         }
     }
 
-    /// Called from `SessionDelegate.urlSessionDidFinishEvents`.
     func resumeBackgroundEventsContinuationIfNeeded() {
         guard let backgroundEventsContinuation else { return }
         self.backgroundEventsContinuation = nil
@@ -372,7 +311,5 @@ final class DownloadStore {
         manifest.enqueue(report)
         save()
     }
-
-    // `flushPendingReports` is implemented in `DownloadStore+Transfers.swift`.
 }
 #endif

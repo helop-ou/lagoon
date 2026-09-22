@@ -82,10 +82,8 @@ struct LibraryView: View {
     }
 
     #if os(iOS)
-    /// A card above the filters that opens the offline Downloads list.
-    /// Shown once something has been taken offline, or once the
-    /// server itself can't be reached, so a viewer with no downloads never
-    /// sees an entry into an empty list.
+    /// Opens Downloads. Shown when something is downloaded or the server is
+    /// unreachable, never as an entry into an empty list.
     @ViewBuilder
     private var downloadsEntry: some View {
         if !DownloadStore.shared.entries.isEmpty || serverSync.serverUnreachable {
@@ -116,9 +114,7 @@ struct LibraryView: View {
 
     private var downloadsSubtitle: String {
         let store = DownloadStore.shared
-        // The card only shows with no entries at all when the server is
-        // unreachable (see `downloadsEntry`), so an empty manifest here
-        // always means that case.
+        // Empty here means the server is unreachable (see `downloadsEntry`).
         guard !store.entries.isEmpty else {
             return String(localized: "Available without the server")
         }
@@ -185,8 +181,7 @@ struct LibraryView: View {
             }
         }
         #if os(tvOS)
-        // Menu choices commit on Select, so moving past this control to
-        // Sort or Filters never changes the media type or clears 4K.
+        // Commits on Select, so moving focus past it changes nothing.
         .pickerStyle(.menu)
         .buttonStyle(.glass)
         .accessibilityLabel("Media Type")

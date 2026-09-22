@@ -30,9 +30,8 @@ struct ItemDetailView: View {
             #if os(iOS)
             await DownloadStore.shared.refreshPermission(client: session.client)
             #endif
-            // Asked here for the reason the download permission is: the
-            // control renders nothing until the answer is in, and a task
-            // on a view that renders nothing never runs.
+            // The control renders nothing until this answers, so it cannot
+            // run the task itself.
             await syncPlay.refreshAvailability()
         }
         .onChange(of: serverSync.generation) { _, _ in
@@ -41,8 +40,7 @@ struct ItemDetailView: View {
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .playerPresentation(item: $playerItem, onDismiss: {
             Task {
-                // The stop report that moves the resume point is still in
-                // flight here; read the item back only once it has landed.
+                // Read the item back only once the stop report has landed.
                 await session.client.playbackReports.settle()
                 if let fresh = try? await session.client.item(id: item.id) {
                     detail = fresh
@@ -51,9 +49,8 @@ struct ItemDetailView: View {
         })
     }
 
-    /// Refreshing in place preserves the detail and recommendation rail when
-    /// a foreground request fails. A successful response replaces the whole
-    /// value, including watch progress changed in another client.
+    /// A failed refresh keeps what is on screen; a successful one replaces
+    /// the whole value, including progress from other clients.
     private func loadFromServer() async {
         let generation = serverSync.generation
         async let refreshedDetail = try? session.client.item(id: item.id)
@@ -71,18 +68,16 @@ struct ItemDetailView: View {
                includeTypes: [.movie],
                limit: 10
            ) {
-            // The public demo's recommendation endpoint is intentionally
-            // sparse. Use different real catalog items so the regression can
-            // always exercise Detail -> Detail -> Back ordering.
+            // The demo server's recommendations are sparse; real catalog items
+            // let the regression exercise Detail -> Detail -> Back.
             return Array(page.items.filter { $0.id != item.id }.prefix(6))
         }
         #endif
         return try? await session.client.similarItems(itemId: item.id)
     }
 
-    /// Where Resume would start. A downloaded title's own recorded position
-    /// outranks the server's, which may be stale or unreachable;
-    /// the controller applies the same order.
+    /// A downloaded title's own position outranks the server's, which may be
+    /// stale or unreachable; the controller applies the same order.
     private var resumeTicks: Int64? {
         #if os(iOS)
         if let local = DownloadStore.shared.entry(for: displayed.id)?.localPositionTicks, local > 0 {
@@ -93,10 +88,8 @@ struct ItemDetailView: View {
         return ticks
     }
 
-    /// The actions and, once there is a resume point, where Resume starts
-    /// from. Wide compositions keep that caption under the row; on a phone
-    /// it belongs to the Resume pill and sits centred under it in
-    /// both orientations.
+    /// The resume caption sits under the row on wide layouts and under the
+    /// Resume pill on a phone.
     @ViewBuilder
     private var playButtons: some View {
         #if os(iOS)
@@ -132,21 +125,15 @@ struct ItemDetailView: View {
     }
     #endif
 
-    /// Play first everywhere it shares a row, so it takes first focus:
-    /// stacked above the play buttons the toggles also took *first focus*,
-    /// so arriving and pressing Select marked the film watched instead of
-    /// playing it. On a phone the resume caption belongs to the pill;
-    /// the shared layout puts the pill where each composition
-    /// wants it.
+    /// Play leads so it takes first focus; otherwise Select on arrival marks
+    /// the film watched instead of playing it.
     private var actions: some View {
         DetailActionLayout {
             #if os(iOS)
             if usesLeadingColumn {
                 playButton
             } else {
-                // The circles align with the pill's centre, not the centre
-                // of the pill plus its caption, so the caption hangs under
-                // the pill alone and the row itself stays level.
+                // The caption hangs under the pill alone so the row stays level.
                 VStack(spacing: Metrics.Space.xs) {
                     playButton
                         .alignmentGuide(.detailPillCenter) { $0[VerticalAlignment.center] }
@@ -171,8 +158,7 @@ struct ItemDetailView: View {
 
     private var actionRow: some View {
         ItemActionRow(item: displayed) {
-            // A failed re-read keeps the detail on screen; the row keeps the
-            // viewer's choice until a later read succeeds.
+            // On failure the row keeps the viewer's choice until a later read.
             guard let fresh = try? await session.client.item(id: item.id) else { return false }
             detail = fresh
             return true
@@ -192,9 +178,8 @@ struct ItemDetailView: View {
         #endif
     }
 
-    /// A labelled pill beside Play on the TV and a wide iPad; a glass
-    /// circle in the phone's row of secondary controls, where a pill made
-    /// the row fold into a column once four controls shared it.
+    /// A pill beside Play on TV and wide iPad; a circle on a phone, where a
+    /// pill folds the four-control row into a column.
     @ViewBuilder
     private var fromBeginningButton: some View {
         if resumeTicks != nil {

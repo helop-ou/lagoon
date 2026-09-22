@@ -13,9 +13,7 @@ struct ServerConnectView: View {
         ZStack {
             GroundBackground()
 
-            // Onboarding shares one surface and one school of jellyfish, so
-            // the three screens read as one place rather than three that
-            // happen to use the same colours.
+            // All onboarding screens share this backdrop, so they read as one place.
             JellyfishSwimLayer()
 
             #if os(iOS)
@@ -71,10 +69,8 @@ struct ServerConnectView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                // Legal information without an account: this is the first
-                // screen a new viewer sees, and the only one they see if they
-                // have no server yet. Last in the column, so the
-                // address field keeps the initial focus.
+                // Legal information before any account. Last, so the address
+                // field keeps the initial focus.
                 AboutLagoonButton()
                     .padding(.top, Metrics.Space.xl)
             }

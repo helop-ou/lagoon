@@ -1,14 +1,8 @@
 import Foundation
 import LagoonEngine
 
-/// App-owned wiring of the playback package: where its tuning knobs come
-/// from, and where its diagnostics go.
-///
-/// The engine used to reach into `UserDefaults.standard` for keys spelled
-/// `debug.…` and record diagnostics against an enum only this app had a
-/// schema for. Both were the package knowing things about its host. Now the
-/// engine states what it wants and discards what nobody collects, and this
-/// is the one place that answers.
+/// Where the engine's tuning knobs come from and where its diagnostics go.
+/// The engine knows nothing about the host's defaults keys or schemas.
 nonisolated enum EngineConfiguration {
     /// Called once from the app's initialiser, before anything plays.
     static func install() {
@@ -16,9 +10,8 @@ nonisolated enum EngineConfiguration {
         EngineDiagnostics.use(EngineDiagnosticsBridge())
     }
 
-    /// Read afresh each time the engine asks, not snapshotted at launch:
-    /// several of these are read at the start of each playback, and a
-    /// tester toggling one in Settings expects the next playback to differ.
+    /// Read afresh on each request, so a Settings toggle affects the next
+    /// playback.
     static func tuning(from defaults: UserDefaults) -> EngineTuning {
         var tuning = EngineTuning()
         tuning.stripsDolbyVisionEnhancementLayer = defaults.bool(forKey: "debug.stripDoviEL")
@@ -33,8 +26,7 @@ nonisolated enum EngineConfiguration {
         tuning.rendererRetirementDelaySeconds = defaults.double(
             forKey: "debug.regressionRendererRetirementDelaySeconds"
         )
-        // Absent means "let the decoder choose", which is not the same as
-        // false — so these two stay nil unless someone set them.
+        // Absent means "let the decoder choose", not false; keep nil unless set.
         tuning.softwareDecodeOutputMode = defaults.string(forKey: "debug.softwareDecodeOutputMode")
         if defaults.object(forKey: "debug.softwareDecodeCompressedOutput") != nil {
             tuning.softwareDecodeCompressedOutput = defaults.bool(
@@ -42,21 +34,15 @@ nonisolated enum EngineConfiguration {
             )
         }
         #if DEBUG
-        // Forcing a small cache cap is a debug-build affordance, as it was
-        // when the engine read the key itself. The engine honours the value
-        // in any build; this is the app declining to offer it in Release.
+        // Debug builds only; the engine would honour it in any build.
         tuning.cacheCapacityMegabytes = defaults.integer(forKey: "debug.playbackCacheCapMB")
         #endif
         return tuning
     }
 }
 
-/// Carries the engine's diagnostics into the app's own history and reports.
-///
-/// The engine names events in its own vocabulary; this maps them to the
-/// stable codes every dashboard query and grouping rule already uses. The
-/// hub decides what reporting is on and what a report costs — the engine
-/// never knows either.
+/// Maps engine diagnostics onto the app's stable codes, which dashboard
+/// queries and grouping rules depend on.
 struct EngineDiagnosticsBridge: EngineDiagnosticSink {
     func record(_ event: EngineDiagnosticEvent, _ fields: [String: DiagnosticValue]) {
         Diagnostics.shared.record(Self.code(for: event), fields)

@@ -2,9 +2,8 @@ import Foundation
 import Observation
 import UIKit
 
-/// What the group wants played, for the presentation layer to turn into a
-/// `PlayerItem`. The store never presents anything itself: the
-/// player is owned by `MainTabView`, and this is the request it answers.
+/// What the group wants played. The store never presents; `MainTabView`
+/// owns the player and answers this request.
 nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
     let media: MediaItem
@@ -12,25 +11,16 @@ nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
     let playlistItemId: String
 }
 
-/// Watch Together: membership in a SyncPlay group, and the bridge between it
-/// and this app's player.
+/// Watch Together: SyncPlay group membership (socket, clock, group, queue,
+/// notices). Playback is `GroupPlaybackDriver`; decisions are the pure,
+/// tested `SyncPlayGroupSession`.
 ///
-/// Owned by `SessionStore` beside `seerr`, pointed at the active account by
-/// `synchronizeAccountContext()`, injected from `RootView` and from the iOS
-/// UIKit player host, which rebuilds the environment from scratch.
-///
-/// Membership lives here: socket, clock, group, queue, what the viewer is
-/// told. Playback is `GroupPlaybackDriver`; the decisions are
-/// `SyncPlayGroupSession`, which is pure and carries the tests.
-///
-/// Socket and clock open on the first join and close on the last leave.
-/// Jellyfin's own clients hold one for the whole session; an account that
-/// never uses Watch Together never opens one.
+/// Owned by `SessionStore`. The iOS UIKit player host rebuilds the
+/// environment, so it injects this store too. Socket and clock open on
+/// join and close on leave.
 @Observable
 final class SyncPlayStore {
-    /// What this account may do with groups, as far as the server has been
-    /// asked. `unknown` is "not asked yet, or could not be asked" — never a
-    /// denial.
+    /// `unknown` means not asked or could not ask, never a denial.
     enum Availability: Equatable, Sendable {
         case unknown
         case unavailable
@@ -41,14 +31,11 @@ final class SyncPlayStore {
         var canCreate: Bool { self == .createAndJoin }
     }
 
-    /// A notice with an identity, so a future toast can animate one in and
-    /// out without repeating itself.
     nonisolated struct Entry: Identifiable, Equatable, Sendable {
         let id: Int
         let notice: SyncPlayNotice
     }
 
-    /// Enough to say what just happened, not a log.
     static let noticeCapacity = 8
 
     private(set) var availability: Availability = .unknown
@@ -56,23 +43,16 @@ final class SyncPlayStore {
     private(set) var groups: [SyncPlayGroup] = []
     private(set) var session = SyncPlayGroupSession()
     private(set) var notices: [Entry] = []
-    /// How far this member is from where the group says it should be, in
-    /// milliseconds; positive means behind. Nil when nothing is being
-    /// measured. The playback HUD shows it.
+    /// Positive means behind the group.
     private(set) var driftMilliseconds: Int?
-    /// Whether this member has taken itself out of the group's readiness
-    /// accounting. Set when the player closes and cleared on the way back
-    /// in; the player panel's Together tab offers it as a switch.
+    /// Out of the group's readiness accounting. Set when the player closes.
     private(set) var ignoresWait = false
-    /// A player is attached to this group. Home offers a way back only
-    /// while there is nothing on screen to come back to.
     private(set) var isPlayerOpen = false
-    /// The group moved to an item and there is no player showing it.
+    /// The group moved to an item and no player is showing it.
     var pendingPlayRequest: SyncPlayPlayRequest?
 
     var isJoined: Bool { session.isJoined }
-    /// The group is holding because some member is not ready — this one
-    /// included. The player labels its spinner with it.
+    /// Some member, possibly this one, is not ready.
     var isWaitingForGroup: Bool { session.isJoined && session.state == .waiting }
 
     @ObservationIgnored private var client: JellyfinClient?
@@ -90,18 +70,15 @@ final class SyncPlayStore {
 
     // MARK: - Account
 
-    /// Called from `SessionStore.synchronizeAccountContext()`. A group
-    /// belongs to the account that joined it, so switching accounts or
-    /// signing out leaves it — silently, since nobody is watching a screen
-    /// that is being torn down.
+    /// A group belongs to the account that joined it, so switching accounts
+    /// or signing out leaves it silently.
     func configure(client: JellyfinClient, accountID: String?) {
         guard self.accountID != accountID || sourceSession != client.sessionIdentity else { return }
         contextGeneration &+= 1
         let leaving = session.isJoined ? self.client : nil
         teardown()
-        // SessionStore reuses and reconfigures its client before notifying
-        // us. Keep this account's credentials independent, including the
-        // best-effort Leave sent after an account switch.
+        // SessionStore reconfigures its shared client before calling this;
+        // snapshot so this account's credentials, and the Leave, stay its own.
         self.client = accountID == nil ? nil : client.sessionSnapshot()
         sourceSession = client.sessionIdentity
         self.accountID = accountID
@@ -109,8 +86,7 @@ final class SyncPlayStore {
         errorMessage = nil
         groups = []
         notices = []
-        // Best effort, and deliberately not awaited: the account is
-        // already gone as far as the rest of the app is concerned.
+        // Best effort, not awaited.
         if let leaving {
             Task { try? await leaving.syncPlayLeave() }
         }
@@ -151,9 +127,8 @@ final class SyncPlayStore {
 
     // MARK: - Membership
 
-    /// Creates a group and joins it in one step. The group's id is learned
-    /// from the `GroupJoined` update the socket delivers, which is why the
-    /// socket is opened first.
+    /// The group id arrives in a `GroupJoined` socket update, so the socket
+    /// opens first.
     @discardableResult
     func createGroup(named name: String) async -> Bool {
         guard let client else { return false }
@@ -176,16 +151,9 @@ final class SyncPlayStore {
         }
     }
 
-    /// Creates a group and puts one item in its queue: the whole of what a
-    /// viewer standing on a detail page with nobody else's group to join
-    /// is asking for.
-    ///
-    /// The two steps cannot be collapsed. `SyncPlay/New` answers 204 and
-    /// the group's id arrives separately, over the socket, so there is
-    /// nothing to set a queue on until that `GroupJoined` update lands.
-    /// The queue update the server sends back is then what opens the
-    /// player — here through `pendingPlayRequest`, and on every other
-    /// member the same way.
+    /// Creates a group and queues one item. Two steps: `SyncPlay/New`
+    /// answers 204 and the group id arrives later over the socket. The
+    /// server's queue update then opens the player on every member.
     @discardableResult
     func startGroup(named name: String, playing item: MediaItem, startPositionTicks: Int64) async -> Bool {
         guard let client else { return false }
@@ -198,9 +166,7 @@ final class SyncPlayStore {
         return await play(item, startPositionTicks: startPositionTicks)
     }
 
-    /// Puts an item in front of the whole group — "play this here". The
-    /// same call `startGroup` finishes with, for a member that is already
-    /// in a room.
+    /// "Play this here" for the whole group.
     @discardableResult
     func play(_ item: MediaItem, startPositionTicks: Int64) async -> Bool {
         guard let client, session.isJoined else { return false }
@@ -247,10 +213,8 @@ final class SyncPlayStore {
         }
     }
 
-    /// Leaves the group and closes everything opened for it.
     func leave() async {
-        // Invalidate item loads, socket waits and capability posts already in
-        // flight. Their responses belong to the old membership.
+        // Invalidates in-flight work from the old membership.
         contextGeneration &+= 1
         let client = self.client
         let wasJoined = session.isJoined
@@ -267,16 +231,13 @@ final class SyncPlayStore {
         }
     }
 
-    /// Comes back to a group whose player was closed. `SetIgnoreWait(false)`
-    /// puts this member back into the readiness accounting it took itself
-    /// out of on the way out.
+    /// Reopens the player for a group and rejoins its readiness accounting.
     func rejoinPlayback() async {
         guard let client, session.isJoined, let item = session.queue?.playingItem else { return }
         let generation = contextGeneration
         errorMessage = nil
         do {
-            // Resolve the item before opting back into readiness accounting:
-            // an unavailable title must not leave the whole room waiting.
+            // Resolve first: an unavailable title must not leave the room waiting.
             let media = try await client.item(id: item.itemId)
             guard isCurrent(generation, client: client),
                   session.currentPlaylistItemId == item.playlistItemId else { return }
@@ -300,18 +261,14 @@ final class SyncPlayStore {
 
     // MARK: - Playback
 
-    /// Called by `VideoPlayerView` once its controller exists. Outside a
-    /// group this does nothing at all, which is what keeps every ordinary
-    /// playback session exactly as it was.
+    /// A no-op outside a group, so ordinary playback is untouched.
     func attach(_ controller: PlaybackController) {
         guard session.isJoined, let driver else { return }
         driver.attach(controller)
         isPlayerOpen = true
     }
 
-    /// Opts this member out of holding the group up, or back in. The
-    /// player's Together tab is bound to it; closing the player uses the
-    /// same serialized request and acknowledgement path.
+    /// Opts this member out of holding the group up, or back in.
     @discardableResult
     func setIgnoreWait(_ ignore: Bool) async -> Bool {
         guard let client, session.isJoined else { return false }
@@ -321,8 +278,7 @@ final class SyncPlayStore {
             guard let self, self.isCurrent(generation, client: client), self.session.isJoined else { return }
             try await client.syncPlaySetIgnoreWait(ignore)
             guard self.isCurrent(generation, client: client) else { return }
-            // Publish only the acknowledged value; a refused toggle must
-            // not say this member has opted out of waiting when it hasn't.
+            // Publish only the acknowledged value.
             self.ignoresWait = ignore
             succeeded = true
         }, onFailure: { [weak self] in
@@ -338,9 +294,7 @@ final class SyncPlayStore {
         return succeeded
     }
 
-    /// The HUD's `Sync:` line (`-debug.playbackHUD`), assembled here
-    /// because this is the object that knows the group, the last command
-    /// and the drift.
+    /// The HUD's `Sync:` line (`-debug.playbackHUD`).
     var hudLines: [String] {
         guard let group = session.group else { return [] }
         var line = "Sync:    \(session.state.rawValue.lowercased()) · \(group.participants.count) member"
@@ -396,9 +350,7 @@ final class SyncPlayStore {
                 self.receive(message)
             }
         }
-        // The estimate is stale after a spell in the background, and a
-        // group start instant is only as good as the offset it is turned
-        // into. tvOS has the same notification and the same problem.
+        // The clock offset goes stale in the background.
         foregroundObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.willEnterForegroundNotification,
             object: nil,
@@ -408,17 +360,10 @@ final class SyncPlayStore {
         }
     }
 
-    /// Waits for the socket to be carrying messages before asking to join.
-    ///
-    /// Not caution: the server announces a join over the socket at the
-    /// instant it happens, and a handshake still in flight misses it.
-    /// Measured on the fixture server, 12.0.0 — joining ~50 ms after `connect()` lost
-    /// both the `GroupJoined` and the `PlayQueue` update, and the member
-    /// then sat in a group it never heard another word from. The socket
-    /// counts as open once the server's first `ForceKeepAlive` lands,
-    /// which is the same moment the session's connection is registered.
-    /// A failed handshake leaves the sheet open for retry; joining without
-    /// receiving messages can lose the group's initial queue permanently.
+    /// Join only once the socket is open: the server announces the join over
+    /// the socket at once, and a handshake in flight misses `GroupJoined`
+    /// and `PlayQueue` for good (joining ~50 ms after `connect()` did, on
+    /// 12.0.0). Open means the first `ForceKeepAlive` has landed.
     private func socketReady() async -> Bool {
         guard let socket else { return false }
         let deadline = ContinuousClock.now + .seconds(5)
@@ -428,10 +373,7 @@ final class SyncPlayStore {
         return !Task.isCancelled && self.socket === socket && socket.state == .open
     }
 
-    /// Waits for the `GroupJoined` update that carries the id of the group
-    /// just created. The same five-second budget `socketReady()` allows,
-    /// and for the same reason: past it, whatever went wrong is not going
-    /// to be fixed by waiting longer.
+    /// Waits for the `GroupJoined` update of a group just created.
     private func joinedGroupArrived() async -> Bool {
         let deadline = ContinuousClock.now + .seconds(5)
         while !session.isJoined, ContinuousClock.now < deadline {
@@ -480,8 +422,6 @@ final class SyncPlayStore {
             session.record(command)
             driver?.perform(command)
         default:
-            // Every other server message belongs to a feature that is not
-            // this one.
             break
         }
     }
@@ -490,16 +430,14 @@ final class SyncPlayStore {
         for effect in session.apply(update) {
             switch effect {
             case .loadItem(let itemId, let playlistItemId, let positionSeconds):
-                // Before the item is even resolved: the group waits for
-                // this member from the moment it is told to play something,
-                // not from whenever a stream finishes negotiating.
+                // Report loading before resolving, so the group waits from now.
                 driver?.reportLoading(positionSeconds: positionSeconds)
                 let generation = contextGeneration
                 let client = self.client
                 let previousLoad = itemLoad
                 previousLoad?.cancel()
                 itemLoad = Task { [weak self] in
-                    // A cancelled restart must retire before its successor
+                    // A cancelled restart must finish before its successor
                     // enters PlaybackController's stop/start boundary.
                     await previousLoad?.value
                     guard !Task.isCancelled, let self else { return }
@@ -541,9 +479,7 @@ final class SyncPlayStore {
         } catch {
             guard isCurrent(generation, client: client),
                   session.currentPlaylistItemId == playlistItemId else { return }
-            // Buffering was already reported when the queue arrived. A
-            // missing/unreachable item must release this member's wait and
-            // offer a deliberate retry instead of stranding the room.
+            // Release this member's wait rather than strand the room.
             pendingPlayRequest = nil
             driver?.closePlayer()
             _ = await setIgnoreWait(true)
@@ -552,7 +488,6 @@ final class SyncPlayStore {
             post(.requestFailed)
             return
         }
-        // The queue or account can move again while the item is being fetched.
         guard !Task.isCancelled, generation == contextGeneration,
               self.client === client,
               session.currentPlaylistItemId == playlistItemId else { return }
@@ -569,8 +504,7 @@ final class SyncPlayStore {
 
     private func announceCapabilities() {
         guard let client else { return }
-        // Not required for command delivery; it is what makes the session
-        // show up in Jellyfin's dashboard as a controllable video client.
+        // Makes the session show as controllable in Jellyfin's dashboard.
         Task { try? await client.reportCapabilities() }
     }
 

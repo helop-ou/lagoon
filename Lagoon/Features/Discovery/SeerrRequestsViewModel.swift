@@ -18,9 +18,7 @@ final class SeerrRequestsViewModel {
         reset: Bool = false
     ) async {
         if reset {
-            // A filter/scope change owns a new generation. Let it supersede
-            // an older request whose task is still unwinding after SwiftUI
-            // cancelled it.
+            // Supersedes an older request still unwinding after cancellation.
             loadGeneration += 1
             requests = []
             page = 0

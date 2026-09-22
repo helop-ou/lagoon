@@ -2,11 +2,8 @@
 import Foundation
 import os
 
-/// A nonisolated lookup from a saved download's artwork key to its file on
-/// disk. `DownloadStore` rebuilds it on the main actor whenever
-/// the active manifest changes; `ImageCache` reads it off the main actor,
-/// before ever touching the network, so a downloaded title's poster and
-/// backdrop still show up with the account offline.
+/// Artwork key to saved file. Rebuilt on the main actor, read by
+/// `ImageCache` off it before any network fetch, so artwork shows offline.
 nonisolated final class DownloadArtworkIndex: Sendable {
     static let shared = DownloadArtworkIndex()
 
@@ -14,9 +11,7 @@ nonisolated final class DownloadArtworkIndex: Sendable {
 
     private init() {}
 
-    /// Replaces the whole index with the active account's artwork. Called
-    /// when account membership or entry artwork changes; progress-only
-    /// saves leave the index alone.
+    /// Progress-only saves leave the index alone.
     func rebuild(entries: [DownloadEntry], directory: URL) {
         var map: [String: URL] = [:]
         for entry in entries {
@@ -24,8 +19,7 @@ nonisolated final class DownloadArtworkIndex: Sendable {
                 map[key.lowercased()] = directory.appending(path: fileName)
             }
         }
-        // Publish a value snapshot; the only shared mutable state is held
-        // inside OSAllocatedUnfairLock, which provides its Sendable contract.
+        // The lock holds the only shared mutable state.
         let snapshot = map
         lock.withLock { $0 = snapshot }
     }

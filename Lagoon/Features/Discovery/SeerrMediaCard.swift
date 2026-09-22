@@ -72,10 +72,7 @@ struct SeerrMediaCard: View {
         .media(id: item.id, type: mediaType)
     }
 
-    /// No badge for a title nobody has asked for yet — including one whose
-    /// media record was deleted, which reads the same way to a viewer. A
-    /// blocklisted title *does* get one, since "you cannot have this" is
-    /// worth saying.
+    /// No badge for unrequested or deleted titles; blocklisted ones get one.
     private var visibleStatus: SeerrAvailabilityStatus? {
         let status = item.mediaInfo?.availability ?? .unknown
         return status.allowsRequesting ? nil : status
@@ -85,9 +82,7 @@ struct SeerrMediaCard: View {
 struct SeerrMediaRail: View {
     let title: String
     let items: [SeerrDiscoverResult]
-    /// When the rail is backed by a paged list, a card at the end of it opens
-    /// the full list. Every Discover rail is backed by a paged list; the
-    /// search result rails are not.
+    /// Set for rails backed by a paged list: a last card opens the full list.
     var destination: SeerrNavigationRoute?
 
     var body: some View {
@@ -129,10 +124,8 @@ struct SeerrMediaRail: View {
     }
 }
 
-/// Ends a rail rather than sitting above it. A focusable heading put a stop
-/// between every pair of rails, so moving down the page meant passing through
-/// one for each — clunky on a remote. Here it is just the last thing
-/// in the row you were already scrolling.
+/// Ends a rail rather than heading it: a focusable heading adds a focus
+/// stop between every pair of rails.
 struct RailSeeAllCard<Route: Hashable>: View {
     let destination: Route
     let title: String
@@ -154,14 +147,12 @@ struct RailSeeAllCard<Route: Hashable>: View {
                 .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
             }
-            // The system card treatment, like every other card in the rail:
-            // the focus visual is never ours to draw.
+            // The system draws the focus visual, never us.
             .cardButtonStyle()
             .accessibilityLabel("See all \(title)")
             .accessibilityIdentifier(identifier)
 
-            // Keeps the row's baseline: the poster cards below reserve this
-            // much for their title and year.
+            // Matches the poster cards' caption space to keep the baseline.
             Color.clear
                 .frame(width: layout.width, height: layout.captionHeight)
         }

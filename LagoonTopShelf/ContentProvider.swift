@@ -1,30 +1,20 @@
 import OSLog
 import TVServices
 
-/// Shares `ee.helop.lagoon`/`topshelf` with the app, so one predicate on a
-/// real Apple TV shows the app publishing and this process reading:
+/// Shared with the app, so one predicate on a real Apple TV shows both sides.
+/// Every failure here returns nil, which looks like an empty shelf, so log it.
 ///
 ///     log stream --predicate 'subsystem == "ee.helop.lagoon"'
-///
-/// Permanent rather than debug scaffolding. This process has no UI, runs only
-/// when the Home screen asks, and every failure path here returns nil — which
-/// looks exactly like an empty Continue Watching from the sofa.
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
 /// Full-screen Top Shelf carousel for Continue Watching.
 ///
-/// **No networking, no credentials.** The app writes a snapshot and composed
-/// JPEGs into the shared App Group container after each Home refresh and this
-/// reads them back. Hence no keychain access group: sharing a token with an
-/// extension is a bigger trust boundary than this needs.
+/// No networking and no credentials (so no keychain access group): the app
+/// writes a snapshot and composed JPEGs to the App Group container, and this
+/// reads them. The title is drawn into the artwork.
 ///
-/// **The carousel draws no title.** `TVTopShelfCarouselItem` has no `title`
-/// property, so the name is part of the composed artwork — as in the Apple TV
-/// app.
-///
-/// The item shape is duplicated from `TopShelfStore.Item`: an extension cannot
-/// import the app's module. Both are `Codable` over the same keys — change
-/// one, change the other.
+/// Mirrors `TopShelfStore.Item`, since an extension cannot import the app
+/// module. Change both.
 private struct TopShelfItem: Codable {
     let id: String
     let title: String
@@ -48,22 +38,17 @@ private struct TopShelfSnapshot: Decodable {
 class ContentProvider: TVTopShelfContentProvider {
     private let appGroupID = "group.ee.helop.lagoon"
     private let snapshotName = "snapshot-v2.json"
-    /// Mirrors `TopShelfArtwork.containerSubpath`, which explains why it is
-    /// under Caches: tvOS gives an app 500 KB of persistent local storage and
-    /// requires everything else to be purgeable, so a real Apple TV refuses
-    /// the write anywhere else. Change one, change the other.
+    /// Mirrors `TopShelfArtwork.containerSubpath` (which says why Caches).
+    /// Change both.
     private let artworkDirectory = "Library/Caches/TopShelf"
 
     override func loadTopShelfContent() async -> (any TVTopShelfContent)? {
-        // First line, so the log distinguishes "the extension never ran" from
-        // "it ran and had nothing" — the whole of debugging turned on that.
+        // Tells "never ran" apart from "ran and had nothing".
         log.info("loadTopShelfContent")
 
         guard let snapshot = loadSnapshot() else { return nil }
         let items = snapshot.items
-        // Returning nil leaves the static brand image in place, which is the
-        // right look for a signed-out or freshly installed app and better
-        // than an empty carousel.
+        // Nil keeps the static brand image, better than an empty carousel.
         guard !items.isEmpty else {
             log.info("no snapshot: signed out, or the app has not published yet")
             return nil
@@ -76,11 +61,9 @@ class ContentProvider: TVTopShelfContentProvider {
         }
         log.info("returning \(carouselItems.count) of \(items.count) items")
 
-        // `.details` over `.actions`: Lagoon has a summary, a genre and a
-        // runtime to show, and withholding them to keep the frame clean
-        // would be throwing away the reason someone pauses on a title.
-        // Recheck after assembling file URLs so a clear/commit in the other
-        // process cannot make a snapshot we already read current again.
+        // `.details` shows the summary, genre and runtime. Recheck the
+        // generation after building URLs, in case the app cleared or
+        // replaced the snapshot meanwhile.
         guard loadSnapshot()?.generation == snapshot.generation else { return nil }
         return TVTopShelfCarouselContent(style: .details, items: carouselItems)
     }
@@ -95,29 +78,20 @@ class ContentProvider: TVTopShelfContentProvider {
         let directory = container.appending(path: artworkDirectory)
 
         let entry = TVTopShelfCarouselItem(identifier: "\(snapshot.owner):\(snapshot.generation):\(item.id)")
-        // The line above the title. The app composes it, because which
-        // episode this is and how much of it is left are library facts and
-        // this process deliberately has no library.
         entry.contextTitle = item.context
         entry.summary = item.summary
         entry.genre = item.genre
         if let duration = item.duration, duration > 0 {
             entry.duration = duration
         }
-        // 4K, HDR, Dolby Vision, Atmos. tvOS draws these itself; the app
-        // resolved them from the media streams.
         if let options = item.mediaOptions {
             entry.mediaOptions = TVTopShelfCarouselItem.MediaOptions(rawValue: options)
         }
 
-        // File URLs resolved against this process's own container: an
-        // absolute path handed over by another process is not something to
-        // trust, and the container id differs per install anyway.
-        //
-        // Existence is checked rather than assumed. The app writes the
-        // snapshot and the images separately, so a run interrupted between
-        // the two leaves a name pointing at nothing, and handing tvOS a URL
-        // to a missing file draws a blank frame instead of falling back.
+        // Resolve names against this process's own container, never an
+        // absolute path from the app. Check each file exists: the snapshot
+        // and images are written separately, and a URL to a missing file
+        // draws a blank frame.
         var hasImage = false
         for (name, scale) in [
             (item.artwork2x, TVTopShelfItem.ImageTraits.screenScale2x),
@@ -134,12 +108,10 @@ class ContentProvider: TVTopShelfContentProvider {
             entry.setImageURL(url, for: scale)
             hasImage = true
         }
-        // Without artwork there is no title either, since the title lives in
-        // the image. An entry like that is worse than one fewer.
+        // No artwork means no title either; drop the entry.
         guard hasImage else { return nil }
 
-        // Two buttons, two different things. Play resumes; More Info opens
-        // the detail page, which is what the carousel's second button is for.
+        // Play resumes; More Info opens the detail page.
         if let play = actionURL("play", item: item, snapshot: snapshot) {
             entry.playAction = TVTopShelfAction(url: play)
         }

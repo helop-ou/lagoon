@@ -1,16 +1,14 @@
 import Foundation
 import Observation
 
-/// Owns the connection lifecycle: which server, which user, which token.
-/// The server address and user identity live in UserDefaults; the access
-/// token and device id live in the keychain.
+/// Owns which server, user and token are active. Server and user live in
+/// UserDefaults; the token and device id live in the keychain.
 @Observable
 final class SessionStore {
     enum Phase {
         case needsServer
         case needsSignIn
-        /// More than one account is remembered and none is active — the
-        /// "who's watching?" picker.
+        /// Several accounts remembered, none active: the profile picker.
         case choosingAccount
         case signedIn
     }
@@ -18,7 +16,7 @@ final class SessionStore {
     private(set) var phase: Phase = .needsServer
     private(set) var serverName: String?
     private(set) var userName: String?
-    /// Every remembered server+user pair, in the order they were added.
+    /// In the order they were added.
     private(set) var accounts: [StoredAccount] = []
     private(set) var activeAccount: StoredAccount? {
         didSet { synchronizeAccountContext() }
@@ -28,9 +26,7 @@ final class SessionStore {
     var isAddingAccount = false
     let client: JellyfinClient
     let seerr: SeerrSessionStore
-    /// Watch Together. Owned here beside `seerr` and pointed at
-    /// the active account below, because a SyncPlay group belongs to the
-    /// account that joined it; `RootView` injects it into the environment.
+    /// Owned here because a SyncPlay group belongs to the account that joined it.
     let syncPlay = SyncPlayStore()
     let recentSearches: RecentSearchStore
     var cleanupErrorMessage: String?
@@ -50,9 +46,8 @@ final class SessionStore {
     #endif
 
     private enum DefaultsKey {
-        /// The server being connected to *right now* — the sign-in screen's
-        /// subject. Distinct from the accounts list, which only gains an
-        /// entry once credentials actually work.
+        /// The server being connected to now. The accounts list gains an
+        /// entry only once credentials work.
         static let serverURL = "server.url"
         static let serverName = "server.name"
         static let accounts = "accounts"
@@ -94,10 +89,8 @@ final class SessionStore {
         client.onSessionExpired = { [weak self] identity in self?.sessionExpired(identity) }
         if !accountDraft {
             #if DEBUG
-            // The regression lane's clean slate: drop what an
-            // earlier run left on this simulator before restore() can
-            // re-activate any of it. Once per process — the account-draft
-            // store constructed while adding an account skips this block.
+            // Regression lane: clear what an earlier run left before restore()
+            // re-activates it. Once per process, so the account-draft store skips it.
             if RegressionStateReset.isRequested(), !Self.didResetStateForRegression {
                 Self.didResetStateForRegression = true
                 let removed = RegressionStateReset.run(defaults: defaults, credentials: credentials)
@@ -107,8 +100,7 @@ final class SessionStore {
             #endif
             retryCredentialCleanup()
             restore()
-            // Sweep any stored state left by the retired direct
-            // OpenSubtitles integration (builds 87–91).
+            // Sweep state left by the retired direct OpenSubtitles integration.
             RetiredSubtitleProviderCleanup.run(
                 defaults: defaults,
                 credentials: credentials,
@@ -121,17 +113,13 @@ final class SessionStore {
     private func synchronizeAccountContext() {
         guard !isAccountDraft else { return }
         recentSearches.configure(accountID: activeAccount?.id)
-        // The theme also follows an account that is only waiting to sign in
-        // again, so an expired session's sign-in screen keeps its look.
+        // Include the re-authenticating account so its sign-in screen keeps its theme.
         ThemeStore.shared.configure(accountID: (activeAccount ?? reauthenticationAccount)?.id, owner: ObjectIdentifier(self))
         TopShelfStore.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
-        // Leaves whatever group the previous account was in and forgets
-        // the socket and clock opened for it.
+        // Leaves the previous account's group, socket and clock.
         syncPlay.configure(client: client, accountID: activeAccount?.id)
         #if os(iOS)
-        // Downloads follow the account the same way: restore,
-        // sign-in, switch, sign-out and removal all land here.
         DownloadStore.shared.activate(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
         if activeAccount != nil {
             Task { await DownloadStore.shared.refreshPermission(client: client) }
@@ -154,9 +142,7 @@ final class SessionStore {
         migrateLegacySessionIfNeeded()
         accounts = loadAccounts()
 
-        // Resume the last account rather than asking every launch. A single
-        // profile shouldn't have to be picked before every session; the
-        // picker is reachable from Settings whenever it is wanted.
+        // Resume the last account; the picker is in Settings.
         if let id = defaults.string(forKey: DefaultsKey.activeAccountId),
            let account = accounts.first(where: { $0.id == id }) {
             if !activate(account) { beginReauthentication(account) }
@@ -168,8 +154,7 @@ final class SessionStore {
             return
         }
 
-        // No accounts: fall back to whatever server was mid-connect, so an
-        // interrupted sign-in resumes where it left off.
+        // No accounts: resume an interrupted sign-in.
         guard let urlString = defaults.string(forKey: DefaultsKey.serverURL),
               let url = URL(string: urlString) else {
             phase = .needsServer
@@ -182,9 +167,8 @@ final class SessionStore {
 
     // MARK: - Accounts
 
-    /// Points the client at a remembered account. Fails only when its token
-    /// has gone or has been rejected. Restore never probes the server, so
-    /// offline startup preserves usable remembered sessions.
+    /// Fails only when the token is gone or rejected. Never probes the
+    /// server, so offline startup keeps remembered sessions usable.
     @discardableResult
     private func activate(_ account: StoredAccount) -> Bool {
         guard !expiredAccountIDs.contains(account.id),
@@ -202,11 +186,8 @@ final class SessionStore {
         return true
     }
 
-    /// Activation never waits on the server, so the picture or name a user
-    /// changed on the web since the last sign-in is caught up here, after
-    /// the account is already usable. An unreachable server
-    /// leaves the stored record as it was; a switch or sign-out while the
-    /// read is in flight discards the answer.
+    /// Catches up a changed name or picture after activation. An unreachable
+    /// server keeps the stored record; a switch or sign-out mid-read discards it.
     private func refreshProfile(of account: StoredAccount) {
         let generation = connectionGeneration
         Task { [weak self] in
@@ -230,18 +211,14 @@ final class SessionStore {
         }
     }
 
-    /// Switches to another remembered account without re-entering
-    /// credentials. Every Jellyfin call is user-scoped, so Continue
-    /// Watching and the rest follow on their own.
+    /// Every Jellyfin call is user-scoped, so the rest follows on its own.
     func switchTo(_ account: StoredAccount) {
         connectionGeneration += 1
-        // The shelf still shows the outgoing user's viewing until Home
-        // refreshes; on a TV anyone in the room can read it.
+        // Otherwise the shelf shows the outgoing user's viewing until Home refreshes.
         TopShelfStore.clear()
         client.clearSession()
         guard !activate(account) else { return }
-        // The account outlived its token. Send them to sign-in for *that*
-        // server rather than leaving a dead entry in the picker.
+        // Token gone: sign in again to that server.
         beginReauthentication(account)
     }
 
@@ -262,8 +239,8 @@ final class SessionStore {
     private func sessionExpired(_ identity: JellyfinClient.SessionIdentity) {
         guard !isAccountDraft, let account = activeAccount,
               account.serverURL == identity.serverURL, account.userId == identity.userId else { return }
-        // Persist rejection before attempting Keychain deletion. A temporary
-        // Keychain failure must not reactivate this token on the next launch.
+        // Persist rejection before Keychain deletion, so a Keychain failure
+        // cannot reactivate this token next launch.
         expiredAccountIDs.insert(account.id)
         try? credentials.delete(account.keychainAccount)
         TopShelfStore.clear()
@@ -285,13 +262,11 @@ final class SessionStore {
         phase = .needsSignIn
     }
 
-    /// Starts adding a server+user alongside the ones already remembered.
     func addAccount() {
         isAddingAccount = true
     }
 
-    /// Reuse only the active server's address and name, never its user or
-    /// credentials. With no active account, setup still asks for a server.
+    /// Reuses the active server's address and name, never its user or credentials.
     func makeAccountDraft() -> SessionStore {
         let draft = SessionStore(accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration, credentials: credentials, publicInfo: publicInfo)
         if let account = activeAccount {
@@ -302,9 +277,8 @@ final class SessionStore {
         return draft
     }
 
-    /// Setup uses a separate client and never persists a server or token
-    /// until the parent accepts a completed sign-in. Cancel leaves the
-    /// active account, its requests, and its Seerr connection untouched.
+    /// Setup uses a separate client and persists nothing until the parent
+    /// accepts a sign-in, so cancel leaves the active account untouched.
     func cancelAccountDraft() {
         guard isAccountDraft else { return }
         draftCancelled = true
@@ -327,7 +301,6 @@ final class SessionStore {
         guard !draftCancelled, generation == connectionGeneration else { throw CancellationError() }
     }
 
-    /// Forgets an account from the picker, token and all.
     func remove(_ account: StoredAccount) throws {
         localData.beginRemoval(accountID: account.id)
         expiredAccountIDs.remove(account.id)
@@ -364,12 +337,8 @@ final class SessionStore {
         }
     }
 
-    /// Libraries last seen for the active account, so the tab bar can draw
-    /// at launch instead of popping in when the fetch lands.
-    ///
-    /// Keyed by account on purpose: servers have different libraries, and
-    /// showing the previous account's tabs for a moment after a switch would
-    /// be worse than showing none.
+    /// Lets the tab bar draw at launch. Keyed by account so a switch never
+    /// flashes the previous account's libraries.
     func cachedLibraries() -> [LibraryTab] {
         guard let key = libraryCacheKey, let data = defaults.data(forKey: key) else { return [] }
         return (try? JSONDecoder().decode([LibraryTab].self, from: data)) ?? []
@@ -394,9 +363,7 @@ final class SessionStore {
         defaults.set(try? JSONEncoder().encode(list), forKey: DefaultsKey.accounts)
     }
 
-    /// One-time move off the single-slot layout. Without it the upgrade
-    /// silently signs every existing install out, which is the one thing
-    /// this feature must not do.
+    /// One-time move off the single-slot layout; without it an upgrade signs everyone out.
     private func migrateLegacySessionIfNeeded() {
         guard defaults.data(forKey: DefaultsKey.accounts) == nil,
               let urlString = defaults.string(forKey: DefaultsKey.serverURL),
@@ -416,8 +383,7 @@ final class SessionStore {
                 throw KeychainStore.StoreError.verificationFailed
             }
         } catch {
-            // The old slot remains the source of truth. Never turn a failed
-            // migration into a silent sign-out.
+            // Keep the old slot; a failed migration must not sign out.
             return
         }
         save(accounts: [account])
@@ -462,9 +428,8 @@ final class SessionStore {
         throw lastError
     }
 
-    /// Expands what the user typed into URLs worth probing. Schemeless input
-    /// tries https and http, plus Jellyfin's default port 8096 when none was
-    /// given; LAN-looking hosts probe http first so https can't stall them.
+    /// Schemeless input tries https and http, plus port 8096 when none is
+    /// given. LAN-looking hosts try http first so https can't stall them.
     nonisolated static func candidateURLs(for input: String) -> [URL] {
         ServerAddress.candidateURLs(for: input, service: .jellyfin)
     }
@@ -480,18 +445,11 @@ final class SessionStore {
     }
 
     #if DEBUG
-    /// Makes the UI regression suite runnable on a clean simulator. The
-    /// public Jellyfin demo is the zero-configuration default. A richer
-    /// private fixture server can be supplied through test-process launch
-    /// environment without putting its credentials in the project or
-    /// command-line arguments; this hook cannot ship in Release builds.
+    /// Lets the UI regression suite run on a clean simulator, against the
+    /// public demo or a fixture server from the launch environment. Not in Release.
     func bootstrapPublicDemoForRegressionIfRequested() async {
-        // Deliberately not gated on `phase`: `restore()` has already
-        // re-activated whatever account the simulator last used, and the
-        // regression lane must run against the server it was told about,
-        // never a developer's own library that happened to be signed in.
-        // Nothing below persists, so the next ordinary
-        // launch restores that account untouched.
+        // Not gated on `phase`: the lane must replace whatever account
+        // restore() activated. Nothing here persists.
         guard UserDefaults.standard.bool(forKey: "debug.playerRegression"),
               UserDefaults.standard.bool(forKey: "debug.regressionBootstrapPublicDemo") else { return }
         let environment = ProcessInfo.processInfo.environment
@@ -504,15 +462,12 @@ final class SessionStore {
             let result = try await client.authenticateByName(username: username, password: password)
             guard let url = client.serverURL else { return }
             if UserDefaults.standard.bool(forKey: "debug.accountPrivacyRegression"), url.host == "127.0.0.1" {
-                // Synthetic UI fixture only: exercise normal credential and
-                // account persistence, then let tests drive the real picker.
+                // Fixture only: persist normally so tests drive the real picker.
                 try completeSignIn(with: result)
                 if let term = environment["LAGOON_REGRESSION_SEARCH"] { recentSearches.record(term) }
                 return
             }
-            // UI tests run in an ephemeral simulator session. Activating the
-            // documented demo token directly avoids making the regression
-            // harness depend on keychain entitlements or persisted accounts.
+            // Activate directly so the harness needs no keychain or stored accounts.
             let account = StoredAccount(
                 serverURL: url,
                 serverName: serverName,
@@ -538,8 +493,7 @@ final class SessionStore {
         try await client.initiateQuickConnect()
     }
 
-    /// One poll step; returns true once the user has approved the code
-    /// on another device and the session is active.
+    /// One poll step; true once the code is approved and the session is active.
     func pollQuickConnect(secret: String) async throws -> Bool {
         let generation = connectionGeneration
         try checkConnection(generation)
@@ -567,8 +521,7 @@ final class SessionStore {
             try persistSignIn(result, account: account)
         }
 
-        // Sign-in already carries the account's policy; taking it here saves
-        // the extra Users/Me round trip a restored token has to make.
+        // Sign-in carries the policy, saving a Users/Me round trip.
         client.activateSession(
             token: result.accessToken,
             userId: result.user.id,
@@ -596,25 +549,22 @@ final class SessionStore {
 
     // MARK: - Sign-out
 
-    /// Signs out and *forgets* the active account — the token is revoked
-    /// server-side, so keeping the entry would only offer a dead session.
-    /// Any other remembered account survives, and the picker takes over.
+    /// Forgets the active account, since its token is revoked. Other
+    /// accounts survive and the picker takes over.
     func signOut() async {
         connectionGeneration += 1
         let account = activeAccount ?? reauthenticationAccount
         let remote = client.sessionSnapshot()
         let linkedRemote = seerr.client.sessionSnapshot()
-        // Privacy cleanup precedes network suspension. Even offline logout
-        // immediately drops local access; late responses affect only copies.
+        // Clean up locally before suspending the network, so offline logout
+        // drops access at once.
         if let account { try? remove(account) }
         client.clearSession()
         activeAccount = nil
         reauthenticationAccount = nil
         userName = nil
         defaults.removeObject(forKey: DefaultsKey.activeAccountId)
-        // `remove` has already cleared the stored server, so there is nothing
-        // left to sign in to — asking for a password on the last account
-        // stranded the viewer on a form naming no server.
+        // `remove` cleared the stored server, so there is nothing to sign in to.
         phase = accounts.isEmpty ? .needsServer : .choosingAccount
         async let jellyfinLogout: Void? = try? remote.logout()
         async let seerrLogout: Void? = linkedRemote.sessionCookie == nil ? nil : try? linkedRemote.logout()
@@ -623,10 +573,8 @@ final class SessionStore {
 
     func forgetServer() async {
         connectionGeneration += 1
-        // An account waiting to re-authenticate is never the active one —
-        // `beginReauthentication` clears that — so hold on to it before the
-        // reset. Dropping it here left the entry in the picker with its
-        // credential intact and no route to remove it.
+        // A re-authenticating account is never the active one; keep it past
+        // the reset or it stays in the picker with no way to remove it.
         let reauthenticating = reauthenticationAccount
         reauthenticationAccount = nil
         if isAccountDraft {
@@ -638,8 +586,7 @@ final class SessionStore {
             phase = .needsServer
             return
         }
-        // Invalidate immediately, and do not touch a later account after
-        // waiting for revocation of this one.
+        // Invalidate now; after revocation, leave any later account alone.
         let remote = client.sessionSnapshot()
         let linkedRemote = seerr.client.sessionSnapshot()
         if let account = activeAccount ?? reauthenticating { try? remove(account) }

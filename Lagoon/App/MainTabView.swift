@@ -18,11 +18,9 @@ struct MainTabView: View {
     @State private var librariesLoaded = false
     @State private var playerItem: PlayerItem?
     #if os(iOS)
-    /// The one iOS player host; every screen's `playerPresentation`
-    /// requests through it. See `PlayerPresentationHub`.
+    /// The one iOS player host; every screen's `playerPresentation` goes through it.
     @State private var playerHub = PlayerPresentationHub()
-    /// Guards the offline-launch tab switch below so it happens at most
-    /// once per app session, not on every failed retry.
+    /// The offline-launch tab switch happens once per session, not on every retry.
     @State private var hasSwitchedToLibraryForOfflineDownloads = false
     #endif
     @State private var deepLinkError: String?
@@ -31,12 +29,9 @@ struct MainTabView: View {
     @State private var lifecycleReplaysScheduled = 0
     @State private var homeNavigationPath: [ContentNavigationRoute] = []
     @State private var libraryNavigationPath: [ContentNavigationRoute] = []
-    // Discover owns both Jellyfin and Seerr results, so its stack needs to
-    // carry both route types. NavigationPath keeps those identities separate
-    // while still allowing a local result and a Seerr result to share a page.
+    // Discover and Search push both Jellyfin and Seerr routes, so their
+    // stacks are heterogeneous `NavigationPath`s.
     @State private var discoverNavigationPath = NavigationPath()
-    // Search presents the same two result sets, so its stack is heterogeneous
-    // for the same reason.
     @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
     @State private var selectedTab: MainTabSelection = .home
@@ -51,22 +46,18 @@ struct MainTabView: View {
         #if os(tvOS)
         .overlay(alignment: .topLeading) {
             if hasMountedServerRefresh || serverSync.activeTarget != nil {
-                // Bound to its declared isolation before it leaves this view.
-                // Passed inline as an argument, the same closure reaches the
-                // button as a bare function value the compiler cannot tell
-                // apart from one another actor might call; it is only ever
-                // called from UIKit's focus handling, on the main actor.
+                // Bound to its isolation here: passed inline, the compiler
+                // treats it as callable from any actor. UIKit focus calls it
+                // on the main actor.
                 let moveDown: (@MainActor @Sendable () -> Void)? = activeRefreshMoveDownAction
                 ServerRefreshButton(
                     target: serverSync.activeTarget,
                     moveDownAction: moveDown,
                     topChromeOffset: $refreshTopChromeOffset
                 )
-                    // Put the visible circle on the same leading grid line as
-                    // the hero and rails. UIKit's focus frame extends a little
-                    // beyond the rendered glass, which the alignment UI test
-                    // accounts for; the overlay itself shares the content's
-                    // leading origin, so it needs no horizontal correction.
+                    // Aligns the circle with the hero and rails. The focus
+                    // frame overhangs the glass slightly; the alignment UI
+                    // test allows for it.
                     .padding(.leading, Metrics.screenGutter)
                     .offset(y: -Metrics.Space.m)
                     .onAppear { hasMountedServerRefresh = true }
@@ -78,9 +69,8 @@ struct MainTabView: View {
         }
         .onChange(of: session.activeAccount?.id) { oldAccountID, newAccountID in
             guard oldAccountID != newAccountID else { return }
-            // Content values belong to the account that fetched them. This
-            // also dismisses an old user's detail if accounts are switched
-            // without rebuilding MainTabView.
+            // Content belongs to the account that fetched it; drop the old
+            // user's stacks even if MainTabView is not rebuilt.
             homeNavigationPath.removeAll()
             libraryNavigationPath.removeAll()
             libraries = session.cachedLibraries()
@@ -90,10 +80,8 @@ struct MainTabView: View {
             playerItem = nil
             deepLinks.clear()
         }
-        // Headless hardware harness: resolve a named library item through
-        // the app's existing signed-in client, then present the same player
-        // path a user selection would. There is intentionally no Settings
-        // UI for this launch-only diagnostic hook.
+        // Launch-only harness hooks: resolve a named item with the signed-in
+        // client and present it the way a user selection would.
         .task {
             await launchBenchItemIfRequested()
             #if DEBUG
@@ -104,10 +92,8 @@ struct MainTabView: View {
             #endif
             #endif
         }
-        // A SyncPlay group decides what plays for everyone in it, and it
-        // can decide while nothing is on screen. Presented from here for
-        // the same reason a Top Shelf selection is: the player belongs to
-        // the tab root, not to whichever screen happens to be showing.
+        // A SyncPlay group can start playback while any screen is showing,
+        // so the player is presented from the tab root.
         .onChange(of: syncPlay.pendingPlayRequest?.id) { _, request in
             guard request != nil, let play = syncPlay.pendingPlayRequest else { return }
             syncPlay.pendingPlayRequest = nil
@@ -118,8 +104,7 @@ struct MainTabView: View {
                 groupPlaylistItemId: play.playlistItemId
             )
         }
-        // Presented from the TabView rather than a screen, so a Top Shelf
-        // selection resumes playback whichever tab happens to be showing.
+        // On the TabView so a Top Shelf selection plays from any tab.
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .playerPresentation(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded)
         #if os(iOS)
@@ -146,9 +131,8 @@ struct MainTabView: View {
             }
         }
         #endif
-        // Runs once the session exists: on a cold launch the request is
-        // made before there is a client to fetch with, so it waits here
-        // instead of being dropped.
+        // On a cold launch the link arrives before the client exists; it
+        // waits here instead of being dropped.
         .task(id: "\(deepLinks.pendingItemID ?? ""):\(deepLinkRetry)") {
             guard let id = deepLinks.pendingItemID else { return }
             guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
@@ -168,9 +152,7 @@ struct MainTabView: View {
                 deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
             }
         }
-        // The carousel's More Info button, which has to open the detail page
-        // rather than start playback. Home owns the stack because
-        // that is where Continue Watching lives.
+        // Top Shelf More Info opens the detail page on Home's stack.
         .task(id: "\(deepLinks.pendingDetailItemID ?? ""):\(deepLinkRetry)") {
             guard let id = deepLinks.pendingDetailItemID else { return }
             guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
@@ -268,9 +250,8 @@ struct MainTabView: View {
                 }
             }
 
-            // Search is a destination of its own, not a fixture on a browse
-            // screen: on tvOS `.searchable` draws a resident keyboard and
-            // expects to own the screen.
+            // Search is its own tab: on tvOS `.searchable` draws a resident
+            // keyboard and expects to own the screen.
             Tab(
                 "Search",
                 systemImage: ContentIcon.search,
@@ -302,11 +283,8 @@ struct MainTabView: View {
     }
 
     #if os(iOS)
-    /// Settings > Downloads > Show Downloads lands on the Library tab's
-    /// downloads list rather than pushing a copy into the Settings stack
-    /// (see `EnvironmentValues.showDownloadsList`). The list replaces
-    /// whatever Library had open: the viewer asked for the list, not for
-    /// it on top of a film page they left behind.
+    /// Settings > Downloads > Show Downloads switches to Library and replaces
+    /// its stack with the downloads list.
     private func showDownloadsList() {
         selectedTab = .library
         if libraryNavigationPath != [.downloads] {
@@ -315,12 +293,9 @@ struct MainTabView: View {
     }
     #endif
 
-    /// Keep source choices available through transient failures.
-    /// Library itself is now a stable tab, independent of this request.
+    /// Retries with backoff; the cached list stands in until a fetch succeeds.
     private func loadLibraries() async {
         let accountID = session.activeAccount?.id
-        // Populate the source filter from this account's cache while the
-        // server wakes; reconcile saved selections only after a success.
         if libraries.isEmpty {
             libraries = session.cachedLibraries()
         }
@@ -329,9 +304,8 @@ struct MainTabView: View {
         while !Task.isCancelled {
             if let views = try? await session.client.userViews() {
                 guard !Task.isCancelled, accountID == session.activeAccount?.id else { return }
-                // Assigning only on success is what distinguishes an empty
-                // library from a failed fetch: an empty result here really
-                // is empty, and clears the cache with it.
+                // Only a success assigns, so an empty result really is empty
+                // and clears the cache.
                 let tabs = views
                     .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
                     .map(LibraryTab.init)
@@ -347,9 +321,7 @@ struct MainTabView: View {
             if isFirstAttempt {
                 isFirstAttempt = false
                 serverSync.serverUnreachable = true
-                // A server that can't be reached yet still has whatever was
-                // taken offline; land on Library rather than an empty Home,
-                // so those titles are the first thing seen.
+                // Offline with downloads: land on Library, not an empty Home.
                 #if os(iOS)
                 if !hasSwitchedToLibraryForOfflineDownloads, !DownloadStore.shared.entries.isEmpty {
                     hasSwitchedToLibraryForOfflineDownloads = true
@@ -363,21 +335,16 @@ struct MainTabView: View {
     }
 
     #if DEBUG
-    /// Hands-off simulator runs: `-debug.openDetailItemID <id>` pushes the
-    /// item's detail page on Home the way a Top Shelf link would, without
-    /// the ownership token a real link carries or the system's "Open in
-    /// Lagoon?" prompt that `simctl openurl` raises.
+    /// `-debug.openDetailItemID <id>` pushes the item's detail page on Home,
+    /// skipping the "Open in Lagoon?" prompt `simctl openurl` raises.
     private func openDetailIfRequested() async {
         guard let itemID = UserDefaults.standard.string(forKey: "debug.openDetailItemID"), !itemID.isEmpty,
               let item = try? await session.client.item(id: itemID) else { return }
         homeNavigationPath.append(ContentNavigationRoute.item(item))
     }
 
-    /// Hands-off SyncPlay runs: `-debug.syncPlayJoinGroup <name>` joins the
-    /// group with that name once the regression bootstrap has signed in,
-    /// and lets the group's queue drive playback from there. The
-    /// group is usually created by the other member a moment later, so the
-    /// list is polled rather than read once.
+    /// `-debug.syncPlayJoinGroup <name>` joins that group. The other member
+    /// usually creates it a moment later, so the list is polled.
     private func joinSyncPlayGroupIfRequested() async {
         guard let name = UserDefaults.standard.string(forKey: "debug.syncPlayJoinGroup")?
             .trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return }
@@ -397,12 +364,9 @@ struct MainTabView: View {
     }
 
     #if os(iOS)
-    /// Hands-off simulator runs: `-debug.downloadItemID <id>` starts a
-    /// download without walking the detail page, so the transfer pipeline
-    /// can be exercised headlessly. `-debug.downloadQuality`
-    /// picks `original`, `high` or `standard` (default `high`);
-    /// `-debug.downloadRestart YES` deletes a matching entry first so the
-    /// same launch arguments can be replayed.
+    /// `-debug.downloadItemID <id>` starts a download headlessly.
+    /// `-debug.downloadQuality` is `original`, `high` (default) or
+    /// `standard`; `-debug.downloadRestart YES` deletes an existing entry first.
     private func downloadItemIfRequested() async {
         guard let itemID = UserDefaults.standard.string(forKey: "debug.downloadItemID"), !itemID.isEmpty else { return }
         let store = DownloadStore.shared
@@ -448,12 +412,9 @@ struct MainTabView: View {
            UserDefaults.standard.bool(forKey: "debug.regressionFindVC1InSeries"),
            let requestedSeries,
            !requestedSeries.isEmpty {
-            // "This server has no such series" and "the request failed" are
-            // different answers and the harness treats them differently:
-            // `missing:` skips the journey, `error:` fails it. Collapsing
-            // them reported a library without the fixture as a broken
-            // player, which is the most expensive kind of wrong a test
-            // suite can be.
+            // Keep "no such series" (`missing:`, skips the journey) apart
+            // from "request failed" (`error:`, fails it), or a server without
+            // the fixture reads as a broken player.
             guard let seriesPage = try? await session.client.items(
                 includeTypes: [.series],
                 searchTerm: requestedSeries,
@@ -533,11 +494,9 @@ struct MainTabView: View {
                 }
                 episodeItems = page.items
             }
-            // Select the earliest of at least two catalogue episodes in one
-            // series. This keeps resolution to one list request plus usually
-            // one PlaybackInfo request; calling `episodeAfter` for every item
-            // made a fixture-less public demo slow enough for XCTest's tvOS
-            // runner watchdog. The actual player still exercises that API.
+            // Pick the earliest episode of any series with two or more.
+            // Calling `episodeAfter` per item was slow enough to trip the
+            // XCTest watchdog on the demo server.
             let candidates = Dictionary(
                 grouping: episodeItems.filter { $0.seriesId != nil },
                 by: { $0.seriesId! }
@@ -614,11 +573,8 @@ struct MainTabView: View {
                 regressionResolution = "error:playable library scan failed"
                 return
             }
-            // Journeys written for the public demo's direct-play catalogue
-            // ask for a direct-play source explicitly, so a fixture server
-            // whose first playable title transcodes hands them a matching
-            // title or an explicit missing-fixture skip instead of a
-            // timeout (audit A18).
+            // Journeys that need direct play ask for it, so a server whose
+            // first title transcodes yields a skip, not a timeout.
             let requireDirectPlay = UserDefaults.standard.bool(forKey: "debug.regressionRequireDirectPlay")
             let requireAudio = UserDefaults.standard.bool(forKey: "debug.regressionRequireAudio")
             for item in page.items {
@@ -649,9 +605,8 @@ struct MainTabView: View {
                 regressionResolution = "error:multi-audio library scan failed"
                 return
             }
-            // Ask the server which sources are direct-playable under the
-            // simulator profile. That preserves every embedded audio stream
-            // and avoids baking a private-library title into the regression.
+            // Direct play keeps every embedded audio stream; asking the
+            // server avoids hard-coding a private-library title.
             for item in page.items {
                 guard let info = try? await session.client.playbackInfo(itemId: item.id),
                       let source = info.mediaSources.first(where: { $0.supportsDirectPlay == true }) else {
@@ -759,9 +714,8 @@ struct MainTabView: View {
 }
 
 #if DEBUG
-/// Non-focusable XCTest probe shown only for the launch-gated lifecycle run.
-/// A periodic view is used because teardown completes off-main and therefore
-/// does not otherwise invalidate SwiftUI when a counter reaches zero.
+/// XCTest probe for the lifecycle run. Polls, because teardown finishes
+/// off-main and would not otherwise invalidate SwiftUI.
 private struct PlaybackLifecycleRegressionProbe: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.2)) { _ in

@@ -1,8 +1,7 @@
 import Foundation
 
-/// One paged list of Seerr results, named by where it comes from. Every rail
-/// on Discover is one of these, so every rail has a "see all" that shows the
-/// same list rather than a nearest-equivalent.
+/// One paged list of Seerr results. Every Discover rail is one, so its
+/// "see all" shows the same list.
 nonisolated enum SeerrCatalogSource: Hashable {
     case trending
     case popular(SeerrMediaType)
@@ -20,8 +19,7 @@ nonisolated enum SeerrCatalogSource: Hashable {
         }
     }
 
-    /// Stable across launches, so it can key a rail's identity and its
-    /// accessibility identifier.
+    /// Stable across launches; keys rail identity and accessibility ids.
     var id: String {
         switch self {
         case .trending: "trending"
@@ -49,22 +47,16 @@ nonisolated enum SeerrDiscoverRow: Hashable, Identifiable {
     var title: String {
         switch self {
         case .media(let source): source.title
-        // Home names its equivalent shelves the same way.
         case .genres(let type): type == .movie ? "Movie Genres" : "Show Genres"
         }
     }
 }
 
-/// Turns the server owner's own Discover arrangement into Lagoon's rows.
-///
-/// `settings/discover` returns bare type numbers in a chosen order, which is
-/// exactly what their Jellyseerr web page is built from — so mirroring it
-/// means Lagoon agrees with the server instead of inventing a second layout,
-/// and re-ordering sliders there re-orders Discover here.
+/// Mirrors the server's `settings/discover` slider order, the same list
+/// Jellyseerr's web page is built from.
 nonisolated enum SeerrDiscoverLayout {
-    /// Jellyseerr's own default arrangement, minus the types below. Used when
-    /// the server will not say — an older build without the endpoint, a
-    /// permission that hides it, or a reply with nothing renderable in it.
+    /// Jellyseerr's default, minus the skipped types. Used when the server
+    /// lacks the endpoint, hides it, or returns nothing renderable.
     static let fallback: [SeerrDiscoverRow] = [
         .media(.watchlist),
         .media(.trending),
@@ -84,14 +76,9 @@ nonisolated enum SeerrDiscoverLayout {
         return rows.isEmpty ? fallback : rows
     }
 
-    /// Types Lagoon has no renderer for return nil and are simply left out,
-    /// which is also what keeps a newer Jellyseerr's additions harmless.
-    ///
-    /// Four are skipped deliberately rather than for want of a renderer:
-    /// `recentlyAdded` and `recentRequests` duplicate Home's own rails and
-    /// the Requests chip, and `studios`/`networks` are curated brand-logo
-    /// shelves in Jellyseerr's web client rather than anything the API
-    /// serves.
+    /// Unknown types return nil, so newer Jellyseerr additions are harmless.
+    /// Skipped on purpose: `recentlyAdded` and `recentRequests` duplicate Home
+    /// and the Requests chip; `studios`/`networks` are web-client-only logos.
     private static func row(for slider: SeerrDiscoverSlider) -> SeerrDiscoverRow? {
         switch slider.type {
         case .watchlist: .media(.watchlist)

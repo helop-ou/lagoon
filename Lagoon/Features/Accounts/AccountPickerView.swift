@@ -1,20 +1,13 @@
 import SwiftUI
 
-/// "Who's watching?" — the remembered server+user pairs, plus a way to add
-/// another.
-///
-/// Not shown at every launch: `SessionStore.restore()` resumes the last
-/// account, so a single-profile install never sees this. It appears when no
-/// account can be resumed, and whenever Settings asks for it.
+/// "Who's watching?" Shown only when no account can be resumed, or from Settings.
 struct AccountPickerView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.displayScale) private var displayScale
     @State private var errorMessage: String?
     @State private var accountToForget: StoredAccount?
 
-    /// The server line only earns its place when accounts actually span more
-    /// than one server; on the common single-server setup it is noise under
-    /// every avatar.
+    /// Only when accounts span more than one server.
     private var showsServer: Bool {
         Set(session.accounts.map(\.serverURL)).count > 1
     }
@@ -41,8 +34,7 @@ struct AccountPickerView: View {
                         }
                         addButton
                     }
-                    // The focus lift needs room inside the scroller, same
-                    // rule as every other rail (see docs/design-system.md).
+                    // Room for the focus lift (see docs/design-system.md).
                     .padding(.horizontal, Metrics.screenGutter)
                     .padding(.vertical, Metrics.railTopPadding)
                 }
@@ -130,13 +122,10 @@ struct AccountPickerView: View {
         .accessibilityIdentifier("account.add")
     }
 
-    /// The user's picture when Jellyfin has one; initials while it
-    /// loads and for the many users who have none, because an empty avatar
-    /// frame reads worse than a letter.
+    /// The user's picture, or initials while loading and when there is none.
     private func avatar(for account: StoredAccount) -> some View {
         let pixels = ArtworkSizing.pixels(for: Metrics.accountTileSize, displayScale: displayScale)
-        // The tile fill stays under the picture: Jellyfin serves whatever
-        // was uploaded, and a transparent PNG would otherwise float.
+        // Keep the fill under the picture; a transparent PNG would float.
         return ZStack {
             RoundedRectangle(cornerRadius: Metrics.cardArtRadius)
                 .fill(.white.opacity(0.12))
@@ -163,8 +152,7 @@ struct AccountPickerView: View {
         do {
             try session.remove(account)
         } catch {
-            // SessionStore removes access immediately and RootView presents
-            // the persistent, retryable cleanup failure even if this unmounts.
+            // RootView shows cleanup failures even if this view unmounts.
             if session.cleanupErrorMessage == nil { errorMessage = error.localizedDescription }
         }
     }

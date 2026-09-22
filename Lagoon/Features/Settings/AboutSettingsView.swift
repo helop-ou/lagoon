@@ -3,7 +3,6 @@ import SwiftUI
 import UIKit
 #endif
 
-/// What this build is, what it is talking to, and what changed in it.
 struct AboutSettingsView: View {
     @Environment(SessionStore.self) private var session
     @State private var showingChangelog = false
@@ -38,9 +37,7 @@ struct AboutSettingsView: View {
                 .accessibilityIdentifier("settings.about.changelog")
             }
 
-            // Legal information also has to be reachable without signing in,
-            // so this section is a view of its own and the sign-in screens'
-            // About sheet shows the same one.
+            // Shared with the sign-in screens' About sheet; legal info must not need an account.
             LegalSettingsSection()
 
             TVSettingsSection("Server") {
@@ -56,18 +53,9 @@ struct AboutSettingsView: View {
             }
         }
         .sheet(isPresented: $showingChangelog) {
-            // A modal rather than another pushed page: the changelog is
-            // something you glance at and dismiss.
-            //
-            // No NavigationStack on tvOS. Its title has no background of its
-            // own, so the notes scrolled visibly behind it, and it was also
-            // what squeezed the sheet to roughly half its natural width. The
-            // panel draws its own header and footer bars instead.
-            //
-            // `presentationSizing` has no effect on a tvOS sheet with custom
-            // content — .form and .page render identically — so the sheet
-            // takes the size it wants. Narrowing it would mean drawing panel
-            // chrome by hand, which is not worth it.
+            // No NavigationStack on tvOS: its title has no background and it
+            // halves the sheet's width. `presentationSizing` has no effect on
+            // a tvOS sheet with custom content.
             ChangelogView()
                 .frame(
                     width: Metrics.modalPanelSize.width,
@@ -162,12 +150,8 @@ struct ChangelogView: View {
 
     var body: some View {
         #if os(tvOS)
-        // A plain three-part stack — title, scrolling notes, Done — rather
-        // than safeAreaInset overlays. Insets draw *over* the content, so the
-        // button sat on top of the notes, and giving the bars their own
-        // material to hide that painted two darker rectangles across the
-        // sheet's single blurred surface. Laid out in sequence, each part
-        // gets its own space and the whole panel shares one background.
+        // A plain stack, not safeAreaInset overlays: insets draw over the
+        // content, and giving them a material breaks the single background.
         VStack(spacing: 0) {
             Text("Changelog")
                 .font(.title3.bold())
@@ -194,8 +178,7 @@ struct ChangelogView: View {
         #endif
     }
 
-    /// Builds start collapsed except the one you are running, which is what
-    /// you opened this to read.
+    /// Only the running build starts expanded.
     @State private var expanded: Set<String> = Set(
         Changelog.entries.filter { Changelog.isRunning($0) }.map(\.id)
     )
@@ -231,8 +214,6 @@ struct ChangelogView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                // The headline stays visible while collapsed: it is the one
-                // line that says whether this build is worth opening.
                 Text(entry.headline)
                     .font(.callout.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
@@ -245,8 +226,7 @@ struct ChangelogView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 if !Changelog.runningBuildIsListed() {
-                    // A development build may not have its notes yet.
-                    // Say so rather than silently omitting it.
+                    // A development build may have no entry yet.
                     Text("You're running \(Changelog.version()) (\(Changelog.build())), which has no changelog entry yet.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -255,9 +235,6 @@ struct ChangelogView: View {
 
                 ForEach(Changelog.entries) { entry in
                     VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                        // The header is the control: focus a build, press, and
-                        // it opens. Collapsed, the whole history is a short
-                        // list you can scan instead of a wall of notes.
                         Button {
                             toggle(entry)
                         } label: {
@@ -285,9 +262,7 @@ struct ChangelogView: View {
                                             .foregroundStyle(.secondary)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                             #if os(tvOS)
-                                            // tvOS scrolls by moving focus, so a panel
-                                            // of plain text cannot be scrolled at all;
-                                            // each note remains its own focus target.
+                                            // tvOS scrolls by focus; unfocusable text cannot scroll.
                                             .focusable()
                                             #endif
                                         }

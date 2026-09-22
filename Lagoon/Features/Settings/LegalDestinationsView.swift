@@ -1,15 +1,8 @@
 import SwiftUI
 
-/// The Legal section: what Lagoon ships from other projects, and where its
-/// privacy policy and support pages live (audit A06).
-///
-/// One view rather than two copies, because it appears twice: under
-/// Settings → About, and in the About sheet the sign-in screens offer. Legal
-/// information has to be reachable without a Jellyfin account, so both places
-/// show the same rows, wording and identifiers.
-///
-/// A destination with no published page has no row. Pointing a viewer at an
-/// address that does not answer is worse than not offering it.
+/// The Legal section, shown in Settings → About and in the sign-in screens'
+/// About sheet, since it must be reachable without an account. An unpublished
+/// destination has no row.
 struct LegalSettingsSection: View {
     @State private var showingAcknowledgements = false
     #if os(tvOS)
@@ -59,9 +52,7 @@ struct LegalSettingsSection: View {
         }
     }
 
-    /// tvOS has no browser to hand a URL to, so pressing one of these shows
-    /// the address itself, large enough to read from the sofa and type
-    /// somewhere else.
+    /// tvOS has no browser, so this shows the address to scan or type elsewhere.
     private func addressButton(
         _ title: LocalizedStringKey,
         url: URL,
@@ -88,8 +79,7 @@ struct LegalSettingsSection: View {
                 LabeledContent("Acknowledgements", value: Self.componentsValue)
             }
             .accessibilityIdentifier("settings.about.acknowledgements")
-            // On the Button rather than the Section: a modifier applied to a
-            // Section stops the List treating it as one.
+            // On the Button: a modifier on a Section stops the List treating it as one.
             .sheet(isPresented: $showingAcknowledgements) {
                 NavigationStack { AcknowledgementsView() }
             }
@@ -115,16 +105,13 @@ struct LegalSettingsSection: View {
 }
 
 #if os(tvOS)
-/// A published address and the row that offered it, so the sheet can name
-/// what the viewer asked for.
 struct LegalAddress: Identifiable {
     let id: String
     let title: LocalizedStringKey
     let url: URL
 }
 
-/// Internal rather than private so the DEBUG component gallery can open it
-/// without a published page behind the row.
+/// Internal so the DEBUG gallery can open it.
 struct LegalAddressSheet: View {
     @Environment(\.dismiss) private var dismiss
     let address: LegalAddress
@@ -134,10 +121,7 @@ struct LegalAddressSheet: View {
             Text(address.title)
                 .font(.title3.bold())
 
-            // The code first, then the address under it. Scanning is the
-            // quick way out of this sheet; typing is the fallback for a
-            // viewer with no phone to hand, or a camera that will not focus,
-            // so neither replaces the other.
+            // The code to scan, with the address to type as a fallback.
             QRCodeView(text: address.url.absoluteString)
 
             Text(LegalDestinations.displayAddress(address.url))
@@ -161,8 +145,7 @@ struct LegalAddressSheet: View {
 }
 #endif
 
-/// What Lagoon is and what it carries, for someone who has not signed in —
-/// the same Legal rows Settings → About shows, over the onboarding screens.
+/// Settings → About's Legal rows, for someone who has not signed in.
 struct AboutLagoonSheet: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -248,9 +231,7 @@ struct AboutLagoonSheet: View {
     }
 }
 
-/// The onboarding screens' way in: unobtrusive, last in the column, and
-/// never the initial focus — the server address or the username field stays
-/// the thing you land on.
+/// Last in the onboarding column, never the initial focus.
 struct AboutLagoonButton: View {
     @State private var showingAbout = false
 

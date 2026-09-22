@@ -1,44 +1,32 @@
 import Foundation
 import LagoonEngine
 
-/// Drives one player session from a SyncPlay group, and the group from that
-/// player's viewer.
+/// The playback side of a SyncPlay group; `SyncPlayStore` is membership.
 ///
-/// `SyncPlayStore` is membership — socket, group, queue, UI. This is the part
-/// that touches playback. It holds the controller **weakly** and the engine
-/// not at all; transport goes through `PlaybackController`'s group entry
-/// points, so a handoff or fallback carries the group onto a successor engine
-/// without this object knowing.
+/// Holds the controller **weakly** and the engine not at all. Transport goes
+/// through `PlaybackController`'s group entry points, so a handoff or
+/// fallback carries the group onto a successor engine.
 ///
 /// - **Down**: a server command becomes a scheduled transport call, and
 ///   readiness is reported back.
-/// - **Up**: the viewer's play, pause, seek and skip become requests to the
-///   group and do nothing locally. The server's echo moves this player.
+/// - **Up**: the viewer's play, pause, seek and skip become group requests
+///   and do nothing locally. The server's echo moves this player.
 @MainActor
 final class GroupPlaybackDriver: GroupTransportRequests {
-    /// Re-seek before a group start when the member is further than this
-    /// from the position the group is starting at. Below it the start
-    /// anchor alone is enough, and a seek would re-prime the pipeline for
-    /// nothing.
+    /// Seconds off target before a group start re-seeks. Below it the start
+    /// anchor absorbs the difference; a seek would re-prime for nothing.
     static let resyncThreshold = 0.5
-    /// The same idea at a pause, where the member is stopping rather than
-    /// starting and has no anchor to absorb the difference. A tenth of a
-    /// second is two to three frames.
+    /// Same at a pause, which has no anchor. 0.1 s is two to three frames.
     static let pauseThreshold = 0.1
-    /// Settings › Playback owns this as "Correct sync drift", on by
-    /// default. Off, the drift is still measured and still reaches the
-    /// HUD; nothing acts on it.
+    /// "Correct sync drift" in Settings, on by default. Off, drift is still
+    /// measured and shown in the HUD.
     nonisolated static let correctionDefaultsKey = "syncplay.correction"
 
-    /// The drift measured at the last evaluation, in milliseconds, or nil
-    /// when there is nothing to measure against.
+    /// Milliseconds, or nil when there is nothing to measure.
     var onDrift: ((Int?) -> Void)?
-    /// The group's handle for the item on screen. Read from the store
-    /// rather than copied, so a queue update cannot leave two answers.
+    /// Read from the store, not copied, so a queue update cannot leave two answers.
     var currentPlaylistItemId: (() -> String?)?
-    /// The player session ended — the viewer left, or the group stopped.
     var onPlayerClosed: (() -> Void)?
-    /// Group state for the playback HUD, supplied by the store.
     var hudLines: (() -> [String])?
     var onRequestFailure: (() -> Void)?
 
@@ -46,20 +34,16 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     private let clock: ServerClock
     private weak var controller: PlaybackController?
 
-    /// The command being acted on. Kept here as well as in the session
-    /// because the drift loop measures against it every 1.5 s.
+    /// The drift loop measures against this.
     private var command: SyncPlayCommand?
     private var scheduledCommand: Task<Void, Never>?
-    /// Outgoing requests, one at a time and in order. A seek followed by
-    /// an unpause must reach the server in that order or the group starts
-    /// at the position the viewer just left.
+    /// In order: an unpause that overtakes a seek starts the group at the
+    /// position the viewer just left.
     private let requests = SyncPlayRequestQueue()
     private var driftLoop: Task<Void, Never>?
     private var correctionHold: Task<Void, Never>?
     private var isCorrecting = false
-    /// What the server was last told. Buffering and Ready are a state, not
-    /// events: re-sending the one it already has only adds latency to the
-    /// group.
+    /// Last state sent; re-sending it only adds group latency.
     private var reportedReady: Bool?
 
     init(client: JellyfinClient, clock: ServerClock) {
@@ -71,8 +55,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
 
     // MARK: - The player
 
-    /// Called once the player exists. Reports Buffering at once: from here
-    /// the group waits for this member.
+    /// Reports Buffering at once, so the group waits for this member.
     func attach(_ controller: PlaybackController) {
         guard self.controller !== controller else { return }
         detachHooks()
@@ -88,9 +71,8 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         report(ready: false)
     }
 
-    /// The group moved to another item while the player is open. The same
-    /// stop-then-start an episode handoff does, so the player surface and
-    /// the session survive it instead of a second player being presented.
+    /// A new item while the player is open: stop-then-start like an episode
+    /// handoff, so no second player is presented.
     func restart(media: MediaItem, positionSeconds: Double) async {
         guard let controller else { return }
         cancelTransport()
@@ -129,10 +111,8 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         onDrift?(nil)
     }
 
-    /// The viewer closed the player while still in the group. Staying in
-    /// the group but holding it up would be the worst of both: ignore-wait
-    /// takes this member out of the readiness accounting until it comes
-    /// back through `SyncPlayStore.rejoinPlayback()`.
+    /// The store then sets ignore-wait so a closed player doesn't hold the
+    /// group up until `rejoinPlayback()`.
     private func playerClosed() {
         detach()
         onPlayerClosed?()
@@ -164,25 +144,17 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         }
     }
 
-    /// A group start is not "play now": the server names an instant every
-    /// member presents `positionTicks` at, far enough ahead (now + twice
-    /// the slowest member's ping, at least half a second) for all of them
-    /// to get there.
-    ///
-    /// Nothing waits here. `playGroup(atHostTime:)` is called immediately,
-    /// even with the seek below still priming, because the engine
-    /// remembers the instant and anchors on it when the first frame is
-    /// ready — whereas a seek issued *after* the start call drops that
-    /// instant. Order matters, and this is the order.
+    /// A group start names a future instant for every member to present
+    /// `positionTicks` at. Nothing waits: seek first, then
+    /// `playGroup(atHostTime:)` at once. The engine anchors on the instant
+    /// when the first frame is ready; a seek issued *after* the start call
+    /// drops it. Keep this order.
     private func unpause(_ command: SyncPlayCommand, at when: Double) {
         guard let controller else { return }
         restoreRate()
-        // An instant already behind us is a group that is running, not
-        // one about to start: the server re-states its last Unpause to a
-        // member that reported Ready mid-play, with the position the group
-        // started *from*. Comparing against that would seek this member
-        // back to the start; the group is wherever that position has
-        // advanced to since.
+        // A past instant means the group is already running: the server
+        // re-sends its last Unpause, with the start position, to a member
+        // that turned Ready mid-play. Target where the group is now.
         let now = clock.serverSeconds()
         let target = when > now
             ? command.positionSeconds
@@ -198,8 +170,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         beginDriftLoop()
     }
 
-    /// A pause *is* waited for: there is no anchor to schedule against, so
-    /// the member sleeps until the named instant arrives on its own clock.
+    /// A pause has no anchor, so it sleeps until the instant.
     private func pause(_ command: SyncPlayCommand, at when: Double) {
         stopDriftLoop()
         let delay = SyncPlayCommandSchedule.delay(
@@ -214,9 +185,6 @@ final class GroupPlaybackDriver: GroupTransportRequests {
             guard !Task.isCancelled, let self, let controller = self.controller else { return }
             self.restoreRate()
             controller.pauseGroup()
-            // Only when it matters: a seek re-primes the pipeline, and a
-            // paused member three frames out is a member nobody can tell
-            // is out.
             if abs(controller.clockPosition - command.positionSeconds) > Self.pauseThreshold {
                 controller.seekGroup(to: command.positionSeconds)
             }
@@ -228,13 +196,10 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         stopDriftLoop()
         restoreRate()
         controller.seekGroup(to: seconds)
-        // The group is waiting on this member from here until the engine
-        // anchors at the new position.
         report(ready: false, position: seconds)
     }
 
-    /// Stop closes the player and keeps the membership: the group is still
-    /// a group, it simply has nothing playing.
+    /// Stop closes the player but keeps the membership.
     func closePlayer() {
         controller?.close()
     }
@@ -249,9 +214,8 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         report(ready: !buffering)
     }
 
-    /// Buffering and Ready are the same body; only the route differs.
-    /// `position` overrides the controller's for the window where the
-    /// player does not exist yet or is being restarted.
+    /// `position` overrides the controller's while the player is missing or
+    /// restarting.
     private func report(ready: Bool, position: Double? = nil) {
         guard let playlistItemId = currentPlaylistItemId?(), !playlistItemId.isEmpty else { return }
         if reportedReady == ready { return }
@@ -260,8 +224,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
             guard let self,
                   self.currentPlaylistItemId?() == playlistItemId,
                   self.reportedReady == ready else { return }
-            // Refresh the timestamp and clock position on the retry. A
-            // newer queue/readiness state supersedes the failed report.
+            // Built per attempt so a retry sends a fresh timestamp.
             let report = SyncPlayReadinessReport(
                 when: JellyfinTimestamp.string(self.clock.serverSeconds()),
                 positionTicks: Ticks.ticks(position ?? self.controller?.clockPosition ?? 0),
@@ -276,9 +239,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         }
     }
 
-    /// Reports Buffering for an item whose player has not opened yet, so
-    /// the group waits from the moment the queue update lands rather than
-    /// from whenever this device finishes negotiating a stream.
+    /// Buffering before the player opens, so the group waits from the queue update.
     func reportLoading(positionSeconds: Double) {
         reportedReady = nil
         report(ready: false, position: positionSeconds)
@@ -311,9 +272,8 @@ final class GroupPlaybackDriver: GroupTransportRequests {
             return
         }
         let now = clock.serverSeconds()
-        // Only a running clock can be measured, and only after the anchor
-        // has settled. A buffering member is not drifting, it is stalled,
-        // and the Buffering report is what the group needs from it.
+        // Measure only a running clock after the anchor settles; a
+        // buffering member is stalled, not drifting.
         guard now > when + SyncCorrectionPolicy.settleSeconds,
               controller.isClockRunning else { return }
         let expected = SyncCorrectionPolicy.expectedPosition(
@@ -380,10 +340,8 @@ final class GroupPlaybackDriver: GroupTransportRequests {
         let ticks = Ticks.ticks(max(seconds, 0))
         enqueue { client in
             try await client.syncPlaySeek(positionTicks: ticks)
-            // Deliberately after the seek and on the same serialized
-            // chain: the tvOS commit grammar is "land here *and* play on",
-            // and an unpause that overtook the seek would start the group
-            // where the viewer no longer is.
+            // After the seek on the same chain, or the group starts where
+            // the viewer no longer is.
             try Task.checkCancellation()
             if resume { try await client.syncPlayUnpause() }
         }
@@ -396,9 +354,8 @@ final class GroupPlaybackDriver: GroupTransportRequests {
 
     // MARK: - Requests
 
-    /// Serializes everything this driver sends. Ordering is the whole
-    /// point; a failure is not, since the group's own state is the truth
-    /// and the next command re-states it.
+    /// Serializes every request. A failure is tolerable: the next group
+    /// command re-states the truth.
     private func enqueue(
         retryDelay: Duration? = nil,
         _ work: @escaping (JellyfinClient) async throws -> Void

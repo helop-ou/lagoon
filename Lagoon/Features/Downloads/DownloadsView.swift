@@ -1,11 +1,8 @@
 import SwiftUI
 
 #if os(iOS)
-/// The offline downloads list: every title taken off the server,
-/// grouped so a downloaded series reads as one section instead of a loose
-/// pile of episodes. Every row's listing text comes from the entry itself,
-/// so the screen renders with no server reachable at all; only the poster
-/// thumb and the tap destination need the saved item snapshot.
+/// Downloads grouped by series. Row text comes from the entry, so the
+/// screen renders with no server; only thumbs and taps need the snapshot.
 struct DownloadsView: View {
     private var store: DownloadStore { .shared }
     @Environment(SessionStore.self) private var session
@@ -177,10 +174,8 @@ struct DownloadsView: View {
     private func trailing(for entry: DownloadEntry) -> some View {
         switch entry.state {
         case .queued, .downloading:
-            // iOS ignores `value` for the circular style and always spins,
-            // so a known fraction gets its own thin bar under the subtitle
-            // instead; this spot keeps the spinner only while the size (and
-            // so the fraction) isn't known yet.
+            // iOS ignores `value` for the circular style, so a known fraction
+            // gets a bar under the subtitle instead.
             if entry.fractionComplete == nil {
                 ProgressView()
                     .progressViewStyle(.circular)
@@ -217,9 +212,6 @@ struct DownloadsView: View {
             }
             return String(localized: "Downloading…")
         case .paused:
-            // A high/standard download is a transcode the server rebuilds on
-            // resume rather than one it can continue byte-for-byte, so it
-            // restarts from the beginning of the file.
             return entry.resumesFromStart
                 ? String(localized: "Paused, resumes from the start")
                 : String(localized: "Paused")

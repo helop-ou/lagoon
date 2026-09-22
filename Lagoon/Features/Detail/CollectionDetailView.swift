@@ -12,9 +12,8 @@ final class CollectionDetailViewModel {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
-        // The collection's own record carries the overview and artwork that
-        // the list response leaves out, and is never worth failing the page
-        // over — the contents are what someone came here for.
+        // The collection's own record adds overview and artwork; its
+        // failure never fails the page.
         async let detailTask = try? await client.item(id: collectionId)
         do {
             items = try await client.collectionItems(collectionId: collectionId)
@@ -27,20 +26,15 @@ final class CollectionDetailViewModel {
         isLoading = false
     }
 
-    /// After a watched or favourite toggle from a poster's menu: the flags
-    /// live on the titles, so only the grid can have moved.
+    /// After a poster-menu toggle only the grid can have moved.
     func refreshItems(client: JellyfinClient, collectionId: String) async {
         guard let refreshed = try? await client.collectionItems(collectionId: collectionId) else { return }
         items = refreshed
     }
 }
 
-/// A collection's page: what is in it, in release order.
-///
-/// Deliberately without a Play button. "Play" on a franchise has no honest
-/// answer — the first film, the first unwatched one, and the one you are
-/// part-way through are three different intentions — and the grid answers
-/// all three in one press.
+/// A collection's page, in release order. No Play button on purpose:
+/// "play a franchise" is ambiguous, and the grid answers it in one press.
 struct CollectionDetailView: View {
     let item: MediaItem
 
@@ -88,8 +82,7 @@ struct CollectionDetailView: View {
         if viewModel.items.isEmpty, viewModel.isLoading {
             LoadingView()
         } else if viewModel.items.isEmpty {
-            // Also the page's only focusable element when it is empty, which
-            // is what keeps Menu from quitting the app instead of going back.
+            // The only focusable element when empty; without it Menu quits the app.
             InlineRetryView(message: viewModel.errorMessage ?? "There's nothing in this collection.") {
                 Task { await viewModel.load(client: session.client, collectionId: item.id) }
             }
@@ -109,10 +102,7 @@ struct CollectionDetailView: View {
         }
     }
 
-    /// The collection's own backdrop where the scrape supplied one, and the
-    /// first title's where it did not — 14 of the reference library's 18 real
-    /// collections have no backdrop of their own, and a franchise page behind
-    /// flat black is a worse page than one behind its first film.
+    /// Falls back to the first title's backdrop; most collections have none.
     private var backdropURL: URL? {
         let source = displayed.backdropImageTags?.isEmpty == false
             ? displayed
@@ -122,8 +112,7 @@ struct CollectionDetailView: View {
         }
     }
 
-    /// How much is here and when it ran. Both are counted from the contents
-    /// rather than read off the collection, which carries neither.
+    /// Counted from the contents; the collection record carries neither.
     private var factTokens: [String] {
         var parts: [String] = []
         if !viewModel.items.isEmpty {

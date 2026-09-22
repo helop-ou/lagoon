@@ -3,14 +3,9 @@ import SwiftUI
 import UIKit
 #endif
 
-/// What the hero needs of a title, independent of where the title came from.
-///
-/// Home builds these from Jellyfin items and Discover from Seerr results;
-/// `route` is generic so each keeps its own navigation identity
-/// rather than both being flattened into one erased value. Seerr has no logo
-/// artwork anywhere in its API, so `logoURL` is nil there and the panel falls
-/// back to the title in type — the same fallback `TitleArtView` already makes
-/// for a Jellyfin item without a logo.
+/// What the hero needs of a title, from Jellyfin (Home) or Seerr (Discover).
+/// `route` is generic so each keeps its own navigation identity. Seerr has no
+/// logos, so `logoURL` is nil there and the title is set in type.
 nonisolated struct HeroItem<Route: Hashable>: Identifiable {
     let id: String
     let title: String
@@ -20,9 +15,8 @@ nonisolated struct HeroItem<Route: Hashable>: Identifiable {
     let route: Route
 }
 
-/// Contained hero panel with native touch paging and tvOS remote commands.
-/// Auto-advances every 7s while visible and idle; manual selection keeps the
-/// whole banner's detail link and native tvOS focus treatment intact.
+/// Hero panel with touch paging on iOS and remote paging on tvOS.
+/// Auto-advances every 7s while visible, idle and unfocused.
 struct HeroSection<Route: Hashable>: View {
     let items: [HeroItem<Route>]
     let isActive: Bool
@@ -118,26 +112,24 @@ struct HeroSection<Route: Hashable>: View {
                 }
             }
         }
-        // Run even for an empty result, so a later load cannot resurrect a
-        // stale selection. Keeping the same ID preserves it across reorders.
+        // Runs even when empty, so a later load cannot restore a stale
+        // selection. The same id survives reorders.
         .onChange(of: itemIDs, initial: true) { _, ids in
             selection.reconcile(with: ids)
         }
     }
 
     private func heroBody(for current: HeroItem<Route>, width: CGFloat) -> some View {
-        // Resolved here, in the body, so a theme change re-renders the glow
-        // whether or not an artwork palette is sampled.
+        // Resolved in the body so a theme change re-renders the glow.
         let glowPalette = Theme.glow(for: palette)
         return ZStack {
             AmbientGlowView(palette: glowPalette)
-                // Negative gutter: the glow is meant to bleed past the
-                // hero panel rather than sit inside it.
+                // The glow bleeds past the panel.
                 .padding(-Metrics.screenGutter)
 
             #if os(tvOS)
-            // Keep one native card mounted while its label changes, so
-            // directional paging never recreates the focused control.
+            // One card stays mounted while its label changes, so paging
+            // never recreates the focused control.
             heroLink(for: current, width: width)
                 .focused(focus ?? $fallbackFocus)
                 .onMoveCommand { direction in
@@ -197,11 +189,8 @@ struct HeroSection<Route: Hashable>: View {
         ZStack(alignment: .leading) {
             Color.clear.background(.thinMaterial)
 
-            // Identity per item, so a slide change is an insertion the
-            // crossfade can animate. Without the `.id`, SwiftUI keeps one
-            // image view and swaps its contents — nothing animatable happens
-            // and the picture just cuts, which is what `Motion.crossfade`
-            // below was silently failing to do.
+            // `.id` per item makes a slide change an insertion the crossfade
+            // can animate; without it the picture just cuts.
             backdrop(for: item)
                 .frame(width: width, height: panelHeight)
                 #if os(tvOS)
@@ -241,13 +230,11 @@ struct HeroSection<Route: Hashable>: View {
                 ))
                 #endif
             }
-            // Card button labels receive an unbounded width. Keep the text
-            // inside the panel, and cap its line length on iPad and tvOS.
+            // Card button labels get unbounded width; keep text in the panel.
             .frame(maxWidth: max(0, min(textColumnWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
             #if os(iOS)
-            // Anchor the copy low in the shorter banner, leaving artwork
-            // above and a dedicated strip below for the page indicator.
+            // Text sits low, above a strip for the page dots.
             .frame(maxHeight: .infinity, alignment: .bottomLeading)
             .padding(.bottom, Metrics.Space.xxl)
             #endif
@@ -262,9 +249,8 @@ struct HeroSection<Route: Hashable>: View {
         #endif
     }
 
-    /// tvOS darkens only the left column the text occupies and leaves the
-    /// rest of the still vivid. On a phone the text spans the full width, so
-    /// the wash has to as well — it just never gets as heavy on the right.
+    /// tvOS darkens only the text column; on a phone the text spans the full
+    /// width, so the wash does too.
     private static var washStops: [Gradient.Stop] {
         #if os(tvOS)
         [
@@ -292,11 +278,6 @@ struct HeroSection<Route: Hashable>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        // The artwork now runs the full width of the panel. What used to be
-        // here was a *mask* fading its leading third into flat material, which
-        // read as a grey wash over a third of the image. What's left
-        // is the detail page's answer instead: darken only the column the
-        // text occupies, and let the rest of the still be itself.
         .overlay(
             LinearGradient(
                 stops: Self.washStops,
@@ -331,8 +312,7 @@ struct HeroSection<Route: Hashable>: View {
 
     private func cycle() async {
         guard canCycle else { return }
-        // Selection and interaction are part of this task's identity. A swipe
-        // cancels the pending advance and gives the new slide a full interval.
+        // A swipe changes the task id, so the new slide gets a full interval.
         do {
             try await Task.sleep(for: .seconds(7))
         } catch {

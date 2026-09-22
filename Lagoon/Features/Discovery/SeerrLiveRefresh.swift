@@ -1,9 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// A detail page changes quickly while Radarr/Sonarr is transferring media,
-/// but a request waiting for a person to approve it does not justify the same
-/// network cadence.
+/// Transfers poll faster than requests waiting for approval.
 nonisolated enum SeerrLiveRefreshCadence: Hashable {
     case waitingForApproval
     case transferring
@@ -14,8 +12,7 @@ nonisolated enum SeerrLiveRefreshCadence: Hashable {
     static func mediaDetails(_ details: SeerrMediaDetails?) -> Self? {
         guard let media = details?.mediaInfo else { return nil }
 
-        // Once the title is wholly available (or definitively unavailable),
-        // old request/queue rows in the payload must not keep the page alive.
+        // Terminal availability wins over stale request/queue rows.
         switch media.availability {
         case .available, .blocklisted, .deleted:
             return nil
@@ -42,8 +39,7 @@ nonisolated enum SeerrLiveRefreshCadence: Hashable {
         case .processing:
             return .transferring
         case .partiallyAvailable where request.requestStatus == .approved:
-            // Some requested seasons may still be arriving even though the
-            // show is already playable to a degree.
+            // Requested seasons may still be arriving.
             return .transferring
         case .declined, .failed, .partiallyAvailable, .available,
              .removed, .blocked, .unknown:
@@ -64,9 +60,8 @@ nonisolated enum SeerrLiveRefreshCadence: Hashable {
     }
 }
 
-/// The loop is deliberately tiny and injectable: production sleeps on the
-/// continuous clock, while tests can advance it instantly and prove that one
-/// refresh always finishes before the next interval begins.
+/// Injectable sleep so tests can prove each refresh finishes before the
+/// next interval begins.
 @MainActor
 enum SeerrLiveRefreshLoop {
     static func run(
@@ -87,11 +82,10 @@ enum SeerrLiveRefreshLoop {
     }
 }
 
-/// Runs a single sequential refresh loop only while its detail page is both
-/// visible and foreground-active. SwiftUI cancels the structured task when
-/// any part of the task id changes, so pushed routes and background scenes do
-/// not retain an unowned poller. Foregrounding gets one immediate refresh;
-/// normal appearance uses the page's own initial load and starts with a delay.
+/// One sequential refresh loop, only while the detail page is visible and
+/// active. Changing the task id cancels it, so pushed routes and background
+/// scenes never keep a poller. Foregrounding refreshes at once; appearing
+/// waits one interval after the page's own load.
 private struct SeerrLiveRefreshModifier: ViewModifier {
     let cadence: SeerrLiveRefreshCadence?
     let isPaused: Bool

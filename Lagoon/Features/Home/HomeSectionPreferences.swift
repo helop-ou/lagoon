@@ -7,10 +7,8 @@ nonisolated struct HomeSectionPreferenceRow: Codable, Equatable, Identifiable {
     var isEnabled: Bool
 }
 
-/// Identifiers for the Home rows that are not curated rows, which carry their
-/// own in `HomeCuratedRows.ID`. Stable strings for the same reason: they are
-/// persisted per account, and renaming one would silently restore a row
-/// someone had hidden or moved.
+/// Ids for the non-curated Home rows (curated ones are in `HomeCuratedRows.ID`).
+/// Persisted per account: renaming one would restore a row someone hid.
 nonisolated enum HomeRowID {
     static let continueWatching = "lagoon.continueWatching"
     static let nextUp = "lagoon.nextUp"
@@ -21,16 +19,14 @@ nonisolated enum HomeRowID {
     static let movieGenres = "lagoon.movieGenres"
     static let showGenres = "lagoon.showGenres"
 
-    /// One toggle governed all three Recently Added rows before they became
-    /// individually placeable. Only read, never written.
+    /// The old single toggle for all three Recently Added rows. Read only.
     static let legacyRecentlyAdded = "lagoon.recentlyAdded"
 
-    /// Every native row's identifier begins with this. A plugin row is
-    /// identified by its server-defined section name, which does not.
+    /// Native row ids start with this; plugin rows use the server's section name.
     static let nativePrefix = "lagoon."
 
-    /// `HomeViewModel.LibraryRail` namespaces plugin rails so a section named
-    /// after a library id cannot collide with a Recently Added rail.
+    /// Keeps a plugin section named like a library id from colliding with a
+    /// Recently Added rail.
     static let pluginRailPrefix = "plugin-"
 
     static func isNative(_ id: String) -> Bool { id.hasPrefix(nativePrefix) }
@@ -45,13 +41,11 @@ nonisolated enum HomeRowID {
 }
 
 nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
-    /// Every Home row, native and plugin alike, in the order Home draws them.
+    /// Every Home row, native and plugin, in draw order.
     ///
-    /// Empty until the viewer arranges something, and that emptiness is load
-    /// bearing: it is what lets a Lagoon update change the default order, and
-    /// introduce rows into the middle of it, for everyone who has never opened
-    /// the screen. Once it holds an arrangement, the arrangement wins and new
-    /// rows are reconciled into it instead.
+    /// Stays empty until the viewer arranges something, so an update can
+    /// change the default order for everyone else. Once set, it wins and new
+    /// rows are reconciled into it.
     var layout: [HomeSectionPreferenceRow] = []
 
     init(layout: [HomeSectionPreferenceRow] = []) {
@@ -62,8 +56,7 @@ nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
         case layout
     }
 
-    /// The legacy shape: a plugin-only ordered list, plus hide-only
-    /// overrides for native rows that had no order of their own.
+    /// Legacy shape: ordered plugin rows plus hide-only native overrides.
     private enum LegacyCodingKeys: String, CodingKey {
         case isConfigured
         case rows
@@ -84,8 +77,8 @@ nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
         )
     }
 
-    /// Rows absent from an arrangement are shown, which is what keeps a row
-    /// added by a later Lagoon build visible before Settings has reconciled it.
+    /// Rows missing from the arrangement are shown, so a newly added row
+    /// appears before Settings reconciles it.
     func isEnabled(_ id: String) -> Bool {
         layout.first(where: { $0.id == id })?.isEnabled ?? true
     }
@@ -106,14 +99,8 @@ nonisolated struct HomeSectionChoice: Identifiable, Equatable, Sendable {
 }
 
 nonisolated enum HomeSectionPreferenceResolver {
-    /// Every row Lagoon draws itself, in the order it draws them by default.
-    ///
-    /// This list is the default layout, not a description of one written
-    /// somewhere else: Home renders whatever order it resolves to, so a row
-    /// moved here moves on screen. The shape is the one settled on —
-    /// what you were watching, then what each library just gained and what is
-    /// popular in it, then a movie block and a show block each closing with
-    /// its genre shelf, then the exits that belong to no single subject.
+    /// Every native row, in default order. This list is the default layout:
+    /// moving a row here moves it on screen.
     static let nativeChoices: [HomeSectionChoice] = [
         HomeSectionChoice(
             id: HomeRowID.continueWatching,
@@ -244,13 +231,8 @@ nonisolated enum HomeSectionPreferenceResolver {
         HomeRowID.recentlyAddedOther,
     ]
 
-    /// Folds a legacy layout into the single ordered list.
-    ///
-    /// Hidden rows are carried over and the plugin rows keep the order they
-    /// were given, after the native block, which is where they rendered. The
-    /// native order deliberately is *not* carried over: it was never a choice
-    /// anyone made, so an account that had only hidden a row adopts the new
-    /// default order with that row still hidden.
+    /// Folds a legacy layout into the single ordered list. Hidden rows and
+    /// plugin order carry over; native order does not, since nobody chose it.
     static func migratedLayout(
         isConfigured: Bool,
         pluginRows: [HomeSectionPreferenceRow],
@@ -273,9 +255,8 @@ nonisolated enum HomeSectionPreferenceResolver {
         return recentlyAddedIDs.contains(id) && hidden.contains(HomeRowID.legacyRecentlyAdded)
     }
 
-    /// The plugin catalogue is server-owned input. Keep the first copy of a
-    /// section when a server returns duplicate identifiers so neither the
-    /// dictionary lookup nor SwiftUI's identified rows can trap on them.
+    /// Keeps the first of any duplicate sections the server returns, so
+    /// dictionaries and identified SwiftUI rows cannot trap on them.
     static func orderedUniqueCatalog(
         _ catalog: [JellyfinClient.HomeSection]
     ) -> [JellyfinClient.HomeSection] {
@@ -289,12 +270,9 @@ nonisolated enum HomeSectionPreferenceResolver {
         return ordered.filter { seen.insert($0.section).inserted }
     }
 
-    /// Brings an arrangement up to date with the rows that exist now.
-    ///
-    /// A row is never dropped, only ever added. `homeSections()` answers a
-    /// failed request with an empty catalogue, and a reconcile that pruned
-    /// unknown rows would take a viewer's arrangement with it the first time
-    /// the server was slow.
+    /// Brings an arrangement up to date. Only ever adds rows: a failed
+    /// `homeSections()` returns an empty catalogue, and pruning would wipe
+    /// the viewer's arrangement.
     static func reconciled(
         _ layout: [HomeSectionPreferenceRow],
         sections: [String]
@@ -303,8 +281,7 @@ nonisolated enum HomeSectionPreferenceResolver {
         var seen = Set<String>()
         var rows = layout.filter { seen.insert($0.id).inserted }
 
-        // A row a Lagoon update added belongs where it was designed to go,
-        // not at the bottom under the server's plugin rows.
+        // New native rows go to their default position, not the bottom.
         for (index, choice) in nativeChoices.enumerated() where !seen.contains(choice.id) {
             let preceding = nativeChoices[..<index].reversed().first { seen.contains($0.id) }
             let destination = preceding
@@ -313,12 +290,8 @@ nonisolated enum HomeSectionPreferenceResolver {
             seen.insert(choice.id)
         }
 
-        // An arrangement that has never held a plugin row has never arranged
-        // one, so the server's sections arrive shown — that is an account that
-        // had only hidden a native row previously, and every plugin row it
-        // was showing keeps showing. Once one has been arranged, a section the
-        // server gained later arrives hidden instead: an arrangement is a
-        // decision, and a row appearing in the middle of one was nobody's.
+        // New plugin sections arrive shown until the viewer has arranged a
+        // plugin row; after that they arrive hidden.
         let hasArrangedPluginRows = rows.contains { !HomeRowID.isNative($0.id) }
         for section in sections where seen.insert(section).inserted {
             rows.append(HomeSectionPreferenceRow(id: section, isEnabled: !hasArrangedPluginRows))
@@ -326,9 +299,8 @@ nonisolated enum HomeSectionPreferenceResolver {
         return rows
     }
 
-    /// Every row this account can place, in the order Home draws them,
-    /// including the ones it is hiding. The default order stands in until the
-    /// viewer has arranged anything of their own.
+    /// Every placeable row in draw order, hidden ones included; the default
+    /// order until the viewer arranges their own.
     static func arrangement(
         preferences: HomeSectionPreferenceValues,
         pluginSections: [String]
@@ -354,10 +326,8 @@ nonisolated enum HomeSectionPreferenceResolver {
             .compactMap { $0.isEnabled ? byID[$0.id] : nil }
     }
 
-    /// The identifiers Home draws, in order.
-    ///
-    /// `pluginSections` are the sections that resolved to a rail, already in
-    /// the order `sections(from:preferences:nativelyCovered:)` chose.
+    /// The ids Home draws, in order. `pluginSections` are those that resolved
+    /// to a rail.
     static func renderOrder(
         preferences: HomeSectionPreferenceValues,
         pluginSections: [String]
@@ -368,10 +338,8 @@ nonisolated enum HomeSectionPreferenceResolver {
     }
 }
 
-/// The viewer's Home layout: which rows appear and in what order, across both
-/// Lagoon's own rows and the optional Home Screen Sections plugin's. The
-/// account id already combines server URL and Jellyfin user id, which prevents
-/// choices leaking between servers or profiles.
+/// The viewer's Home layout, native and plugin rows alike, stored per account
+/// (server and user).
 @MainActor
 @Observable
 final class HomeSectionPreferencesStore {
@@ -406,9 +374,7 @@ final class HomeSectionPreferencesStore {
         reconcile()
     }
 
-    /// Sections Lagoon already draws itself are not offered: the native row is
-    /// the one that is placeable and toggleable, and a second entry naming the
-    /// same content would be two controls over one row.
+    /// Sections Lagoon draws natively are not offered twice.
     private static func offerable(
         _ catalog: [JellyfinClient.HomeSection]
     ) -> [JellyfinClient.HomeSection] {
@@ -416,11 +382,8 @@ final class HomeSectionPreferencesStore {
             .filter { !HomeViewModel.nativelyCoveredSections.contains($0.section) }
     }
 
-    /// Every row the viewer can place, in the order Home draws them, hidden
-    /// ones included — this screen is where a hidden row is brought back.
-    ///
-    /// A remembered row whose plugin section this server no longer offers has
-    /// no title to show, so it is held in the arrangement but left out here.
+    /// Rows for the settings screen, hidden ones included. A remembered plugin
+    /// row the server no longer offers stays in the arrangement but not here.
     var choices: [HomeSectionChoice] {
         let nativeTitles = Dictionary(
             HomeSectionPreferenceResolver.nativeChoices.map { ($0.id, $0.title) },
@@ -456,8 +419,7 @@ final class HomeSectionPreferencesStore {
         guard let source = visibleIDs.firstIndex(of: id) else { return }
         let destination = source + offset
         guard visibleIDs.indices.contains(destination) else { return }
-        // `IndexSet` moves insert *before* the destination, so a downward move
-        // has to clear the row it is passing.
+        // `IndexSet` moves insert before the destination, so moving down needs +1.
         move(
             fromOffsets: IndexSet(integer: source),
             toOffset: offset > 0 ? destination + 1 : destination
@@ -466,9 +428,7 @@ final class HomeSectionPreferencesStore {
 
     func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
         adoptArrangement()
-        // A remembered row this server cannot name is still in the
-        // arrangement, but has no index in the visible List. Reorder only the
-        // rows its move action represents, and leave the rest where they sit.
+        // Reorder only the visible rows; unnamed remembered rows stay put.
         var visibleIDs = choices.map(\.id)
         guard offsets.allSatisfy({ visibleIDs.indices.contains($0) }),
               (0...visibleIDs.count).contains(destination) else { return }
@@ -501,8 +461,6 @@ final class HomeSectionPreferencesStore {
         return decoded
     }
 
-    /// Every row in the order Home draws it, standing in the default order for
-    /// an account that has never arranged one of its own.
     private var arrangement: [HomeSectionPreferenceRow] {
         HomeSectionPreferenceResolver.arrangement(
             preferences: values,
@@ -510,10 +468,8 @@ final class HomeSectionPreferencesStore {
         )
     }
 
-    /// Writes the order this screen is showing into the account's own
-    /// arrangement, so a move or a toggle acts on the rows the viewer can see.
-    /// Until this runs, a never-arranged account holds no layout at all and
-    /// the default is free to change under it.
+    /// Saves the shown order as the account's own before a move or toggle.
+    /// Until then the account has no layout and follows the default.
     private func adoptArrangement() {
         let adopted = arrangement
         guard adopted != values.layout else { return }
@@ -543,8 +499,7 @@ final class HomeSectionPreferencesStore {
     #if DEBUG
     private static var settingsRegressionCatalog: [JellyfinClient.HomeSection] {
         struct Page: Decodable { let items: [JellyfinClient.HomeSection] }
-        // MyList is deliberately duplicated to keep the real-server crash
-        // path covered by the tvOS navigation regression test.
+        // MyList is duplicated on purpose: real servers do this, and it crashed.
         let data = Data(#"{"Items":[{"Section":"ContinueWatching","DisplayText":"Continue Watching","OrderIndex":0},{"Section":"MyList","DisplayText":"My List","OrderIndex":1},{"Section":"MyList","DisplayText":"Duplicate My List","OrderIndex":2},{"Section":"Recommendations","DisplayText":"Recommendations","OrderIndex":3}]}"#.utf8)
         return (try? JellyfinClient.decoder.decode(Page.self, from: data).items) ?? []
     }

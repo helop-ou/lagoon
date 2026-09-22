@@ -1,14 +1,9 @@
 import SwiftUI
 
 #if os(iOS)
-/// The download action beside Play on a movie or episode's detail page:
-/// a glass circle in the same family as `ItemActionRow`'s watched and favorite
-/// toggles (`DetailCircleMenu`), its glyph and menu following the entry's
-/// state. State reads through symbol weight and opacity, never color.
-///
-/// Hidden entirely while the account can't download and there is nothing
-/// already on disk for this item, so a server that disallows downloads
-/// never shows a control that would only refuse.
+/// The download circle beside Play on a detail page. State reads through
+/// symbol weight and opacity, never color. Hidden when the account can't
+/// download and nothing is on disk.
 struct DownloadControl: View {
     let item: MediaItem
 
@@ -30,9 +25,8 @@ struct DownloadControl: View {
 
     private var entry: DownloadEntry? { store.entry(for: item.id) }
 
-    /// The item to read media sources from: a detail read already carries
-    /// them; a rail item or context-menu caller does not, so this control
-    /// fetches its own copy the first time it needs one.
+    /// A rail or context-menu item has no media sources, so the control
+    /// fetches its own copy.
     private var sourceItem: MediaItem {
         item.mediaSources != nil ? item : (fetchedItem ?? item)
     }
@@ -46,10 +40,7 @@ struct DownloadControl: View {
             }
         }
         .task(id: item.id) {
-            // The download permission is the store's, resolved before this
-            // control has anything to render (a task on a view that renders
-            // nothing never runs). Only the quality menu's transcoding
-            // answer is needed here, once there is a control to hold it.
+            // The store owns the download permission; see `permitted`.
             transcodingAllowed = await session.client.canTranscodeForDownload()
         }
         .task(id: item.id) {
@@ -84,10 +75,7 @@ struct DownloadControl: View {
 
     // MARK: - No entry yet
 
-    /// Quality choices with the default first, so the common case is the
-    /// menu's first tap. High and Standard are transcodes the server has to
-    /// build, so they only appear when the account may ask for one; Original
-    /// is always offered once downloading itself is permitted.
+    /// Default first. Transcode qualities only when the account may transcode.
     private var orderedQualities: [DownloadQuality] {
         let allowed: [DownloadQuality] = transcodingAllowed == true ? DownloadQuality.allCases : [.original]
         guard allowed.contains(store.defaultQuality) else { return allowed }
@@ -238,8 +226,7 @@ struct DownloadControl: View {
     }
 }
 
-/// The queued/downloading glyph's progress ring: a determinate arc once the
-/// expected size is known, an indeterminate spin before it.
+/// Determinate once the size is known, spinning before.
 private struct DownloadProgressRing: View {
     let fraction: Double?
 
@@ -265,11 +252,8 @@ private struct DownloadProgressRing: View {
     }
 }
 
-/// Starts a download from a lighter-weight caller than `DownloadControl`,
-/// such as the item context menu: no size estimate, no large- or
-/// free-space confirmation, just the quality the viewer picked. Failures are
-/// returned for the caller to log rather than shown, since a context menu
-/// has no room for an alert.
+/// Starts a download from a context menu: no estimate or confirmation.
+/// Returns the failure for the caller to log, since a menu has no alert.
 enum DownloadActions {
     @discardableResult
     static func start(item: MediaItem, quality: DownloadQuality, session: SessionStore) async -> String? {

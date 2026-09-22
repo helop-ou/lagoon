@@ -35,17 +35,10 @@ struct HomeView: View {
                             .padding(.top, Metrics.Space.s)
                             .padding(.bottom, Metrics.Space.xl)
 
-                        // A group whose player has been closed, above the
-                        // rails and below the hero: the one thing on Home
-                        // that is about right now rather than about the
-                        // library. It draws nothing otherwise.
+                        // Shown only while in a group whose player is closed.
                         WatchTogetherHomeCard()
 
-                        // The order is the viewer's, or Lagoon's default when
-                        // they have not arranged one. Neither lives
-                        // here: see `HomeSectionPreferenceResolver`, which
-                        // owns the default order, the arrangement that
-                        // replaces it, and which rows either one hides.
+                        // Order and visibility: `HomeSectionPreferenceResolver`.
                         ForEach(rowOrder, id: \.self) { id in
                             row(id)
                         }
@@ -81,14 +74,9 @@ struct HomeView: View {
             )
         }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
-        // `refreshProgress` is documented as running on returning from
-        // playback, and `onAppear` above was assumed to deliver that. It does
-        // not: dismissing a `fullScreenCover` never re-appears the view
-        // underneath it, so the one moment Continue Watching is most likely
-        // to have changed — you just watched something — was the one moment
-        // neither the rail nor the Top Shelf refreshed. The stop
-        // report is still in flight when this fires; `settle()` waits for
-        // it so the rails read the new position, not the old.
+        // Dismissing a `fullScreenCover` does not fire `onAppear`, so refresh
+        // here. `settle()` waits for the stop report so the rails read the
+        // new position.
         .playerPresentation(item: $playerItem, onDismiss: {
             Task {
                 await session.client.playbackReports.settle()
@@ -97,15 +85,10 @@ struct HomeView: View {
         })
     }
 
-    /// Marking something watched or favourited from a card menu can move it
-    /// between Continue Watching, Next Up and Favorites, so all three are
-    /// re-fetched rather than guessing which one moved.
     private func refreshUserData() async {
         await viewModel.refreshProgress(client: session.client)
     }
 
-    /// Jellyfin's half of the shared hero: artwork and logo resolve through
-    /// the session's client, and the route keeps the item's own identity.
     private var heroItems: [HeroItem<ContentNavigationRoute>] {
         viewModel.heroItems.map { item in
             HeroItem(
@@ -127,9 +110,7 @@ struct HomeView: View {
         HomeSectionPreferencesStore.savedValues(accountID: session.activeAccount?.id)
     }
 
-    /// The rows to draw, in order, already stripped of the ones this account
-    /// hides. Plugin rails are placed by the section they came from, so an
-    /// arrangement can put one between two of Lagoon's own rows.
+    /// Visible row ids in order; plugin rails can sit between native rows.
     private var rowOrder: [String] {
         HomeSectionPreferenceResolver.renderOrder(
             preferences: savedHomePreferences,
@@ -139,11 +120,7 @@ struct HomeView: View {
         )
     }
 
-    /// One row of Home, whichever kind it turns out to be.
-    ///
-    /// Every branch may still draw nothing: a rail with no items hides itself,
-    /// which is what lets one arrangement serve a library that has everything
-    /// and one that has almost nothing.
+    /// Any branch may draw nothing: an empty rail hides itself.
     @ViewBuilder
     private func row(_ id: String) -> some View {
         switch id {
@@ -205,14 +182,9 @@ struct HomeView: View {
         }
     }
 
-    /// The Recently Added rails belonging to one kind of library, so each one
-    /// lands where the arrangement puts that kind rather than in a run of its
-    /// own.
-    ///
-    /// A nil `collectionType` collects whatever is neither movies nor shows.
-    /// `load` only keeps those two today, so it draws nothing — but a rail
-    /// silently vanishing is a worse way to find that out than a rail
-    /// appearing in an odd place.
+    /// Recently Added rails for one library kind. Nil collects anything that
+    /// is neither movies nor shows (nothing today, since `load` keeps only
+    /// those two).
     @ViewBuilder
     private func recentlyAddedRails(collectionType: String?) -> some View {
         let rails = viewModel.latestRails.filter {
@@ -230,9 +202,6 @@ struct HomeView: View {
         }
     }
 
-    /// A row the server's Home Screen Sections plugin contributed.
-    /// Nothing at all without the plugin, and nothing for a section whose
-    /// items came back empty.
     @ViewBuilder
     private func pluginRail(_ section: String) -> some View {
         if let rail = viewModel.pluginRails.first(
@@ -247,20 +216,8 @@ struct HomeView: View {
         }
     }
 
-    /// One curated row, or nothing at all.
-    ///
-    /// The view model only publishes a rail once it has enough items to look
-    /// deliberate, so absence here means "this server had nothing worth a
-    /// row" and the block simply closes up. That is what keeps the order
-    /// readable on a small library, where several of these will never appear.
-    ///
-    /// **No `playAction`.** These are discovery rails, and every one of them
-    /// selects into the item's detail page. Handing them the resume rails'
-    /// play action — which is how they first shipped — was wrong twice over:
-    /// a movie you have never seen started playing instead of telling you
-    /// what it was, and a series has no stream at all, so "Series You
-    /// Haven't Started" answered the click with the server's 500 from
-    /// PlaybackInfo on a folder.
+    /// No `playAction`: discovery rails open the detail page. A series has
+    /// no stream, and playing one gets a 500 from PlaybackInfo.
     @ViewBuilder
     private func curatedRail(_ id: String) -> some View {
         if let rail = viewModel.curatedRails[id] {

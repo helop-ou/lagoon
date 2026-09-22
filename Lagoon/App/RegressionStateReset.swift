@@ -1,14 +1,11 @@
 #if DEBUG
 import Foundation
 
-/// `-debug.regressionResetState YES`, honoured only alongside
-/// `-debug.regressionBootstrapPublicDemo YES`: drop every account- and
-/// server-scoped record a previous run left, so the lane starts identical.
-///
-/// Goes: stored accounts, the mid-connect server, per-account preferences, the
-/// Seerr server and its bookkeeping, and every keychain item except the device
-/// id. Stays: app-wide settings the lane sets by launch argument, and the
-/// debug switches — the argument domain, which `removeObject` never touches.
+/// `-debug.regressionResetState YES`, honoured only with
+/// `-debug.regressionBootstrapPublicDemo YES`: drops every account- and
+/// server-scoped record and keychain item except the device id, so each run
+/// starts identical. Launch arguments survive (`removeObject` never touches
+/// that domain).
 ///
 /// This wipes real sign-ins. Only the public-demo lane passes the flag.
 nonisolated enum RegressionStateReset {
@@ -27,8 +24,7 @@ nonisolated enum RegressionStateReset {
         "seerr.",
     ]
 
-    /// The device id is what Jellyfin knows this simulator as; a fresh one
-    /// per run would leave a trail of devices on the server for nothing.
+    /// A fresh device id per run would litter the server with devices.
     static let preservedCredentialNames: Set<String> = ["deviceId"]
 
     static func isRequested(arguments: UserDefaults = .standard) -> Bool {

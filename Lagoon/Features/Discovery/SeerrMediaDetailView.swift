@@ -1,10 +1,8 @@
 import SwiftUI
 
-/// A Seerr title's page: the same composition as a library title's
-/// (`DetailPageScaffold`, `DetailMetadataHeader`, `DetailActionLayout`,
-/// `CastStrip`), with Seerr's request state where a library title has
-/// Play. The artwork is TMDB's: posters and backdrops through Seerr,
-/// the Jellyfin server's own logo once the title is in the library.
+/// A Seerr title's page, composed like a library title's, with request
+/// state where Play would be. TMDB artwork via Seerr; the Jellyfin logo once
+/// the title is in the library.
 struct SeerrMediaDetailView: View {
     let mediaID: Int
     let mediaType: SeerrMediaType
@@ -97,8 +95,7 @@ struct SeerrMediaDetailView: View {
         .accessibilityIdentifier("seerr.detail.\(mediaType.rawValue).\(mediaID)")
     }
 
-    /// The title as artwork when Jellyfin has a stored logo, and in type
-    /// otherwise — the same fallback a library title makes.
+    /// The Jellyfin logo when there is one, else the title in type.
     private func titleArt(_ details: SeerrMediaDetails) -> some View {
         #if os(iOS)
         let alignment = DetailLayout.titleAlignment(horizontalSizeClass, verticalSizeClass)
@@ -120,8 +117,7 @@ struct SeerrMediaDetailView: View {
         return nil
     }
 
-    /// Actors in billing order, then the crew TMDB lists; the strip itself
-    /// drops anyone without a picture.
+    /// Cast in billing order, then crew; the strip drops anyone without a picture.
     private func castCredits(_ details: SeerrMediaDetails) -> [CastCredit] {
         guard let credits = details.credits else { return [] }
         let portraitWidth = Int(Metrics.castPortraitSize * 2)
@@ -146,9 +142,7 @@ struct SeerrMediaDetailView: View {
         return cast + crew
     }
 
-    /// What the page is for: opening the title in the library when it is
-    /// there, asking for it when it is not, and otherwise saying where the
-    /// request has got to. Styled as the library page styles Play.
+    /// Open in Lagoon, Request, or the request's status, styled like Play.
     @ViewBuilder
     private func primaryAction(_ details: SeerrMediaDetails) -> some View {
         switch availability {
@@ -163,8 +157,7 @@ struct SeerrMediaDetailView: View {
                 )
             }
         case .pending, .processing:
-            // When the server knows how far the download has got, the button
-            // says so rather than a bare "Processing".
+            // Show download progress when the server knows it.
             if availability == .processing, let progress = details.mediaInfo?.downloadProgress() {
                 statusButton(
                     title: progress.isImporting ? String(localized: "Importing") : progress.percentText,
@@ -193,10 +186,8 @@ struct SeerrMediaDetailView: View {
                 partiallyAvailableStatusButton
             }
         case .blocklisted:
-            // An administrator who can lift the block should be able to do it
-            // here rather than reaching for the web UI. Jellyseerr
-            // drops the media row along with the blocklist entry, so the
-            // reload afterwards shows the ordinary Request button.
+            // Jellyseerr drops the media row with the block, so the reload
+            // shows the ordinary Request button.
             if seerr.user?.canManageBlocklist == true {
                 Button {
                     popup = Popup(
@@ -262,8 +253,7 @@ struct SeerrMediaDetailView: View {
         }
     }
 
-    /// Beside Open in Lagoon on a partly available show: the way to ask
-    /// for the rest of it, or the fact that only some of it is here.
+    /// On a partly available show: request the rest, or say only part is here.
     @ViewBuilder
     private func secondaryActions(_ details: SeerrMediaDetails) -> some View {
         if availability == .partiallyAvailable, jellyfinItem != nil {
@@ -288,8 +278,7 @@ struct SeerrMediaDetailView: View {
         mediaType == .tv && seerr.user?.canRequest(.tv) == true
     }
 
-    /// The page's one big button when nothing is playable yet; a plain
-    /// glass pill beside Open in Lagoon otherwise.
+    /// The primary button when nothing is playable yet; a pill otherwise.
     @ViewBuilder
     private func requestMoreSeasonsButton(_ details: SeerrMediaDetails, isPrimary: Bool = false) -> some View {
         let button = Button {
@@ -346,9 +335,7 @@ struct SeerrMediaDetailView: View {
             if !isRefresh { isLoading = false }
         }
         do {
-            // Recommendations describe the title, not its request state, so
-            // the first load fetches them alongside the details and the live
-            // refresh leaves them alone.
+            // Static metadata: the live refresh leaves recommendations alone.
             async let loadedRecommendations: [SeerrDiscoverResult]? = isRefresh
                 ? nil
                 : (try? await seerr.client.recommendations(id: mediaID, mediaType: mediaType))?.results
@@ -367,9 +354,8 @@ struct SeerrMediaDetailView: View {
                 loadedJellyfinItem = nil
             }
             let newRecommendations = await loadedRecommendations
-            // Commit one coherent snapshot. If changing cadence cancels the
-            // polling task, the page has already received every value from
-            // this response rather than half of a terminal transition.
+            // Commit one coherent snapshot, never half of a terminal transition
+            // that cancels the polling task.
             guard !Task.isCancelled else { return }
             details = loaded
             jellyfinItem = loadedJellyfinItem
@@ -379,8 +365,7 @@ struct SeerrMediaDetailView: View {
             errorMessage = nil
         } catch is CancellationError {
         } catch {
-            // A transient poll failure is not a page state. Keep the last
-            // useful percentage/ETA and try again on the next cadence.
+            // A failed poll keeps the last progress and retries next interval.
             if details == nil { errorMessage = error.localizedDescription }
         }
     }
@@ -391,8 +376,6 @@ struct SeerrMediaDetailView: View {
             defer { isRequesting = false }
             do {
                 try await seerr.client.removeFromBlocklist(tmdbID: mediaID, mediaType: mediaType)
-                // The media row goes with the block, so re-reading is what
-                // turns the page back into an ordinary requestable title.
                 reloadID += 1
             } catch {
                 popup = Popup(

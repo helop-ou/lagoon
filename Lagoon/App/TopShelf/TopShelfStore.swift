@@ -6,50 +6,34 @@ import TVServices
 import UIKit
 #endif
 
-/// Both halves of the Top Shelf log to `ee.helop.lagoon`/`topshelf`, so one
-/// predicate on a real Apple TV shows the app publishing and the extension
-/// reading. This is not debug scaffolding: the shelf is only observable on
-/// hardware, in a process with no UI, and three rounds of debugging were spent
-/// guessing at silent nil returns.
+/// The app and the extension both log here, so one predicate on a real Apple
+/// TV shows publishing and reading. The shelf is only observable on hardware.
 ///
 ///     log stream --predicate 'subsystem == "ee.helop.lagoon"'
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
-/// Publishes a Continue Watching snapshot for the Top Shelf extension,
-/// now as a full-screen carousel.
-///
-/// The extension holds **no credentials and does no networking** — it draws
-/// whatever the app last wrote here. That was true when the payload carried
-/// remote image URLs and is more true now: the app composes finished JPEGs
-/// into the shared container and the extension only reads files.
+/// Publishes a Continue Watching snapshot for the Top Shelf carousel. The
+/// extension holds no credentials and does no networking; it only reads the
+/// files written here.
 enum TopShelfStore {
-    /// Mirrored by `TopShelfItem` in `LagoonTopShelf/ContentProvider.swift`.
-    /// An app extension cannot import the app's module, and a framework
-    /// target for a handful of fields would cost more than it saves, so both
-    /// sides encode the same key names instead. **Change one, change the
-    /// other.**
+    /// Mirrored by `TopShelfItem` in `LagoonTopShelf/ContentProvider.swift`,
+    /// since the extension cannot import the app module. Change both.
     nonisolated struct Item: Codable, Equatable {
         let id: String
-        /// What the artwork says. The extension never draws it — the title is
-        /// burned into the image — but a payload of nothing but hashes is
-        /// unreadable when something goes wrong, and this is the field that
-        /// says which title a row is.
+        /// Burned into the artwork; kept so the payload is readable when debugging.
         let title: String
-        /// The line above the title: why this is on the shelf, and which
-        /// episode or how much is left.
+        /// The line above the title: why it is here, and which episode or how
+        /// much is left.
         let context: String?
-        /// File name inside the shared container's `TopShelf` directory, at
-        /// @2x. The extension resolves it against its own container URL
-        /// rather than trusting an absolute path from another process.
+        /// File name relative to the shared `TopShelf` directory, never an
+        /// absolute path from another process.
         let artwork2x: String?
         let artwork1x: String?
         let summary: String?
         let genre: String?
         /// Seconds, for the carousel's duration badge.
         let duration: Double?
-        /// Raw `TVTopShelfCarouselItem.MediaOptions`. Resolved here because
-        /// the extension has no library access and no business deciding what
-        /// counts as 4K.
+        /// Raw `TVTopShelfCarouselItem.MediaOptions`, resolved by the app.
         let mediaOptions: UInt?
     }
 
@@ -77,8 +61,8 @@ enum TopShelfStore {
     #if os(tvOS)
     private static let limit = 8
 
-    /// Capture URLs, metadata and session identity before the first await.
-    /// No renderer consults the mutable active Jellyfin client.
+    /// Captured before the first await, so rendering never reads the mutable
+    /// active client.
     private struct Source {
         let item: MediaItem
         let backdrop: URL?
@@ -208,15 +192,8 @@ enum TopShelfStore {
 
 #if os(tvOS)
 extension MediaItem {
-    /// The carousel's one line of app-supplied text, above the title that
-    /// lives in the artwork.
-    ///
-    /// `contextTitle` is documented as "why this item is being shown", so the
-    /// framing stays and the identifying detail is appended. Episodes name the
-    /// episode, because `railTitle` is the *series* for an episode and without
-    /// this the shelf cannot say which one you are part way through. Anything
-    /// else says how much is left, which is the fact a resume shelf exists to
-    /// answer.
+    /// The carousel's `contextTitle`: the framing, then the episode (the
+    /// artwork only names the series) or else the time left.
     var topShelfContext: String {
         let framing = "Continue Watching"
         if let episodeLabel { return "\(framing) · \(episodeLabel)" }
@@ -232,20 +209,15 @@ extension MediaItem {
         return "\(minutes) min left"
     }
 
-    /// The capability badges tvOS draws for a carousel item, from the same
-    /// stream facts the detail page and the player's Info panel read, so all
-    /// three agree on what counts as 4K or Dolby Vision.
-    ///
-    /// Nil rather than zero when the server told us nothing about the streams,
-    /// so an empty set is never mistaken for "checked, and it is plain SDR".
+    /// Capability badges, from the same stream facts the detail page and
+    /// player Info read. Nil, not empty, when the server sent no streams.
     var topShelfMediaOptions: UInt? {
         guard let streams = mediaSources?.first?.mediaStreams, !streams.isEmpty else { return nil }
         var options: TVTopShelfCarouselItem.MediaOptions = []
 
         if let video = streams.first(where: { $0.type == "Video" }) {
             if let width = video.width {
-                // Apple offers only HD and 4K, so 720p and 1080p both land on
-                // HD and anything below earns no badge at all.
+                // Apple offers only HD and 4K; below 720p gets no badge.
                 switch MediaQuality.resolutionClass(width: width) {
                 case "4K": options.insert(.videoResolution4K)
                 case "1080p", "720p": options.insert(.videoResolutionHD)

@@ -1,10 +1,8 @@
 import SwiftUI
 import Observation
 
-/// Discover's own state is now only the two things the page as a whole
-/// needs: which rows to draw, and what fills the hero. Every rail fetches
-/// itself (`SeerrDiscoverRail`), so a slow or dead endpoint no longer holds
-/// up or discards the rest of the screen.
+/// Only the rows to draw and the hero. Each rail fetches itself
+/// (`SeerrDiscoverRail`), so one dead endpoint cannot sink the page.
 @Observable
 private final class DiscoverViewModel {
     var rows: [SeerrDiscoverRow] = []
@@ -22,15 +20,12 @@ private final class DiscoverViewModel {
     private func loadPage(client: SeerrClient) async {
         errorMessage = nil
 
-        // The layout is the server owner's own arrangement where they have
-        // one. It is never worth failing the page over: a server that will
-        // not answer still gets Jellyseerr's default order.
+        // The server's own arrangement, else Jellyseerr's default order.
         if let sliders = try? await client.discoverSliders() {
             guard !Task.isCancelled else { return }
             rows = SeerrDiscoverLayout.rows(for: sliders)
         } else if rows.isEmpty {
-            // A transient refresh failure must not replace the server
-            // owner's chosen ordering with Lagoon's fallback ordering.
+            // A failed refresh must not replace the server's ordering.
             rows = SeerrDiscoverLayout.fallback
         }
 
@@ -45,8 +40,7 @@ private final class DiscoverViewModel {
             )
         } catch is CancellationError {
         } catch {
-            // Trending is also the hero's source, so failing it is the one
-            // fetch that leaves the page with nothing to show at the top.
+            // Trending feeds the hero, so this failure is the one to show.
             errorMessage = error.localizedDescription
         }
     }
@@ -81,8 +75,6 @@ struct DiscoverView: View {
                     ErrorStateView(message: error) { reloadID += 1 }
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
-                    // Artwork first, like Home. The title used to be the
-                    // whole top of the screen.
                     HeroSection(items: heroItems, isActive: isActive)
                         .padding(.top, Metrics.Space.s)
                         .padding(.bottom, Metrics.Space.xl)
@@ -118,10 +110,8 @@ struct DiscoverView: View {
             refreshGeneration &+= 1
             await viewModel.load(client: seerr.client)
         }
-        // A viewer already signed in to Jellyfin should not meet a second
-        // login. This uses the Jellyfin session Lagoon holds to sign in to
-        // Seerr without a password; it is silent when there is nothing to do
-        // and gives up after one attempt per activation.
+        // Signs in to Seerr with the Jellyfin session, no password. Silent
+        // when there is nothing to do; one attempt per activation.
         .task(id: "seerr-auto-signin:\(seerr.configuredURL?.absoluteString ?? "")") {
             await seerr.signInUsingJellyfinIfNeeded(session.client)
         }
@@ -161,8 +151,7 @@ struct DiscoverView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 700)
-            // Signing in automatically is the normal path, so when it does
-            // not work the reason belongs here rather than only in Settings.
+            // Automatic sign-in is the normal path, so its failure shows here.
             if seerr.isConfigured, let message = seerr.errorMessage {
                 Text(message)
                     .font(.caption)
@@ -179,15 +168,8 @@ struct DiscoverView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Movies, Shows and Requests as destinations, kept above the rails
-    /// where they are reachable without scrolling past eight of them.
-    ///
-    /// One row on every screen. They used to fall into a column on a phone
-    /// once their labels outgrew the width, which read as three unrelated
-    /// buttons rather than one set of destinations. On a phone the
-    /// row scrolls, the way the Requests page's own filter row does, and
-    /// drops the glyphs so all three fit at the default text size; the TV
-    /// keeps its fixed row and focus geometry.
+    /// Movies, Shows and Requests, above the rails. Always one row: on a
+    /// phone it scrolls and drops the glyphs; the TV keeps a fixed row.
     private var chips: some View {
         #if os(tvOS)
         HStack(spacing: Metrics.Space.m) {
@@ -202,8 +184,8 @@ struct DiscoverView: View {
             }
             .padding(.vertical, Metrics.Space.xs)
         }
-        // The gutter is a content margin, so the first chip lands on the
-        // gutter and the row still runs edge to edge as it scrolls.
+        // A content margin keeps the first chip on the gutter while the row
+        // scrolls edge to edge.
         .contentMargins(.horizontal, Metrics.screenGutter, for: .scrollContent)
         .scrollClipDisabled()
         .padding(.bottom, Metrics.Space.xl)

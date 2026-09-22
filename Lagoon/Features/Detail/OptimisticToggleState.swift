@@ -1,38 +1,29 @@
 import Foundation
 
 /// One optimistic server toggle, such as watched or favourite. The icon flips
-/// on press, because waiting on a round trip feels broken. What follows:
+/// on press.
 ///
-/// - **Refusal** reverts the icon and records which value the server refused,
-///   so the row can say so instead of silently snapping back.
-/// - **Acceptance** hands authority back. Once the page re-fetches, the local
-///   override is dropped and the icon shows what the server says, so a change
-///   from another client reaches the screen. If the re-fetch failed the
-///   override stays — the server did accept.
-/// - **A press during a request** is ignored rather than sent, so two
-///   overlapping requests cannot leave icon and server disagreeing.
+/// - **Refusal** reverts and records the refused value so the row can say so.
+/// - **Acceptance** drops the override once the page re-fetches, so changes
+///   from other clients show. If the re-fetch failed, the override stays.
+/// - **A press during a request** is dropped, so overlapping requests cannot
+///   leave icon and server disagreeing.
 ///
-/// Pure, so the transitions are pinned in `OptimisticToggleStateTests`.
+/// Pinned in `OptimisticToggleStateTests`.
 nonisolated struct OptimisticToggleState: Equatable, Sendable {
-    /// The value the viewer asked for, shown in place of the server's until
-    /// the server has either refused it or been re-read after accepting it.
+    /// The viewer's value, shown until refused or re-read after acceptance.
     private(set) var override: Bool?
-    /// The value of the request in flight, nil when none is.
     private(set) var pendingTarget: Bool?
-    /// The value the server refused most recently, for the row's feedback;
-    /// cleared by `dismissFailure()` or the next press.
+    /// Cleared by `dismissFailure()` or the next press.
     private(set) var refusedTarget: Bool?
 
     var isInFlight: Bool { pendingTarget != nil }
 
-    /// What the icon shows: the viewer's pending or unreconciled choice, else
-    /// the server's flag, else off.
     func value(server: Bool?) -> Bool {
         override ?? server ?? false
     }
 
-    /// The viewer pressed. Returns the value to send, or nil when a request
-    /// is already in flight and the press is dropped.
+    /// Returns the value to send, or nil when a request is in flight.
     mutating func begin(server: Bool?) -> Bool? {
         guard !isInFlight else { return nil }
         let target = !value(server: server)
@@ -42,8 +33,7 @@ nonisolated struct OptimisticToggleState: Equatable, Sendable {
         return target
     }
 
-    /// The server accepted. `refreshed` says whether the page then re-read
-    /// the item from the server; only then is the override dropped.
+    /// The override drops only when `refreshed`: the page re-read the item.
     mutating func succeed(refreshed: Bool) {
         pendingTarget = nil
         if refreshed {
@@ -51,8 +41,7 @@ nonisolated struct OptimisticToggleState: Equatable, Sendable {
         }
     }
 
-    /// The server refused or the request failed: revert, and remember what
-    /// was refused so the row can say so.
+    /// Refused or failed: revert and remember the refused value.
     mutating func fail() {
         refusedTarget = pendingTarget
         pendingTarget = nil
@@ -63,9 +52,7 @@ nonisolated struct OptimisticToggleState: Equatable, Sendable {
         refusedTarget = nil
     }
 
-    /// The row now shows a different item: nothing carried over applies.
-    /// The caller ignores the outcome of any request still in flight for the
-    /// old item.
+    /// The caller ignores any request still in flight for the old item.
     mutating func itemChanged() {
         self = OptimisticToggleState()
     }

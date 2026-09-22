@@ -1,10 +1,7 @@
 import SwiftUI
 
 #if os(iOS)
-/// Downloads preferences: the quality newly started downloads
-/// default to, whether transfers wait for Wi-Fi, how much space they use on
-/// this device, how many titles are on it with a way to the list, and a way
-/// to clear all of them at once.
+/// Default quality, Wi-Fi only, storage used, and delete all.
 struct DownloadsSettingsView: View {
     private var store: DownloadStore { .shared }
 

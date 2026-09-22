@@ -5,33 +5,20 @@ import UIKit
 
 /// Builds the full-screen images the Top Shelf carousel shows.
 ///
-/// **The carousel has no title to set.** `TVTopShelfCarouselItem` has no
-/// `title` property the way `TVTopShelfSectionedItem` does, so the name has to
-/// be part of the artwork — as in the Apple TV app.
-///
-/// The app composes and the extension only reads, keeping the extension free
-/// of credentials and networking: these are finished JPEGs in the shared
-/// container, addressed by file URL.
+/// `TVTopShelfCarouselItem` has no `title`, so the name is drawn into the
+/// artwork. The app composes finished JPEGs into the shared container; the
+/// extension only reads them, so it needs no credentials or network.
 nonisolated enum TopShelfArtwork {
     /// Full screen at @2x. tvOS lays out in 1920x1080 points.
     static let scale2x = CGSize(width: 3840, height: 2160)
     static let scale1x = CGSize(width: 1920, height: 1080)
 
-    // Composed images live in their own directory, so the whole set can be
-    // replaced on each publish without touching anything else shared. See
-    // `containerSubpath` for where that directory is and why.
-
-    /// Bumped whenever `compose` would draw the same inputs differently.
-    ///
-    /// Artwork is cached by item id and reused forever, so without this a
-    /// viewer upgrading from a build with a different layout keeps the old
-    /// pictures indefinitely — the file name never changes, only what is
-    /// inside it. 1 was the bottom-left title; 2 is the top-left one.
+    /// Bump whenever `compose` would draw the same inputs differently.
+    /// Artwork is cached by item id, so without a bump upgraders keep the old
+    /// pictures forever.
     static let layoutVersion = 2
     private static let layoutVersionKey = "topShelf.artworkLayoutVersion"
 
-    /// Throws away everything composed by an earlier layout. A no-op on the
-    /// common path, since the version matches after the first publish.
     static func discardArtworkFromEarlierLayouts(defaults: UserDefaults, appGroupID: String) {
         guard defaults.integer(forKey: layoutVersionKey) != layoutVersion else { return }
         removeArtwork(notIn: [], appGroupID: appGroupID)
@@ -39,13 +26,8 @@ nonisolated enum TopShelfArtwork {
     }
 
     #if os(tvOS)
-    /// Composes one carousel image: the backdrop, a scrim heavy enough for
-    /// text to survive over any still, and the title as artwork.
-    ///
-    /// Jellyfin's logo art is preferred where a title has it, because it is
-    /// the treatment the studio intended and it is what Home's hero already
-    /// uses. Where there is none, the title is set in type instead, which is
-    /// the same fallback `TitleArtImage` makes.
+    /// Composes one carousel image: backdrop, scrim, and the title as logo
+    /// art, or as type when there is no logo (as `TitleArtImage` does).
     static func compose(
         backdrop: UIImage,
         logo: UIImage?,
@@ -60,33 +42,21 @@ nonisolated enum TopShelfArtwork {
         }
     }
 
-    /// A format that depends on nothing outside this function.
-    ///
-    /// `UIGraphicsImageRendererFormat.preferred()` reads the main screen's
-    /// current configuration for both `scale` and extended range. On an Apple
-    /// TV attached to an HDR television that returns an extended-range format,
-    /// and **`jpegData` returns nil for an extended-range image** — every
-    /// composite failed with "no artwork could be built for any of 8 titles".
-    /// The simulator's screen is SDR, which is why it never showed there.
-    /// Reading the main screen from `render`'s background thread was a second
-    /// problem in the same call.
-    ///
-    /// Nothing was gained by asking: `scale` and `opaque` were overridden
-    /// immediately, and the output is a JPEG in a shared container, not
-    /// something drawn to this screen.
+    /// Never `.preferred()`: on an HDR television that returns an
+    /// extended-range format, and `jpegData` returns nil for extended-range
+    /// images (the SDR simulator hides this). It also reads the main screen
+    /// off the main thread.
     private static func opaqueFormat() -> UIGraphicsImageRendererFormat {
         let format = UIGraphicsImageRendererFormat()
-        // The renderer is already working in pixels; letting it apply the
-        // screen scale again would quadruple a 3840x2160 bitmap.
+        // Sizes are already pixels; screen scale would quadruple the bitmap.
         format.scale = 1
         format.opaque = true
         format.preferredRange = .standard
         return format
     }
 
-    /// Aspect-fill, centred. A backdrop is 16:9 like the screen, so this is
-    /// usually a straight resize, but a source that is not must crop rather
-    /// than letterbox: bars on the Top Shelf look broken.
+    /// Aspect-fill, centred: crop rather than letterbox, since bars on the
+    /// Top Shelf look broken.
     private static func draw(backdrop: UIImage, in size: CGSize) {
         let imageSize = backdrop.size
         guard imageSize.width > 0, imageSize.height > 0 else {
@@ -104,9 +74,7 @@ nonisolated enum TopShelfArtwork {
         ))
     }
 
-    /// Darkens the top-left corner the title occupies and leaves the rest of
-    /// the still alone, the same reasoning as the hero's wash: the picture is
-    /// the point, the scrim only has to make the text legible.
+    /// Darkens only the top-left corner the title occupies.
     private static func drawScrim(in size: CGSize, context: CGContext) {
         let colors = [
             UIColor.black.withAlphaComponent(0.85).cgColor,
@@ -118,8 +86,7 @@ nonisolated enum TopShelfArtwork {
             colors: colors,
             locations: [0, 0.45, 1]
         ) else { return }
-        // The renderer's context is UIKit-oriented, so y grows downwards and
-        // the top of the image is y = 0.
+        // UIKit-oriented context: y = 0 is the top.
         context.drawLinearGradient(
             gradient,
             start: CGPoint(x: 0, y: 0),
@@ -129,9 +96,8 @@ nonisolated enum TopShelfArtwork {
     }
 
     private static func drawTitle(logo: UIImage?, title: String, in size: CGSize) {
-        // The tvOS title-safe area is 5% in from every edge. The title hangs
-        // from the top edge rather than sitting on the bottom one, which also
-        // keeps it clear of the carousel's own buttons.
+        // Inside the 5% title-safe area, and at the top to stay clear of the
+        // carousel's buttons.
         let inset = size.width * 0.06
         let maxWidth = size.width * 0.5
         let top = size.height * 0.08
@@ -177,23 +143,15 @@ nonisolated enum TopShelfArtwork {
 
     /// Where composed artwork lives inside the App Group container.
     ///
-    /// **`Library/Caches`, because tvOS allows nothing else.** An Apple TV
-    /// gives 500 KB of persistent storage through `NSUserDefaults`; everything
-    /// beyond must be purgeable. Sixteen 4K-class JPEGs at the container root
-    /// is not, and a device refuses the write — build 60 reported "could not
-    /// write to the shared container" for all eight titles while simulators
-    /// wrote them happily.
+    /// Must be under `Library/Caches`: a real Apple TV allows only 500 KB of
+    /// persistent storage and refuses the write elsewhere (simulators do not).
+    /// `publishIfEmpty` redraws the artwork if the system purges it.
     ///
-    /// Purgeable is honest anyway: the artwork is derived, keyed by item id,
-    /// and `publishIfEmpty` redraws it when the directory comes back empty.
-    ///
-    /// **Mirrored by `ContentProvider.artworkDirectory`** — change one, change
-    /// the other.
+    /// Mirrored by `ContentProvider.artworkDirectory`; change both.
     static let containerSubpath = "Library/Caches/TopShelf"
 
     /// The shared directory, created on demand. Nil when the App Group is not
-    /// provisioned or the directory cannot be made, both of which leave
-    /// `TopShelfStore` on its no-op path with something to report.
+    /// provisioned or the directory cannot be made.
     static func directoryURL(appGroupID: String) -> URL? {
         guard let container = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupID
@@ -205,17 +163,13 @@ nonisolated enum TopShelfArtwork {
                 withIntermediateDirectories: true
             )
         } catch {
-            // Swallowed with `try?` until now, which meant a container that
-            // could not be written to still handed back a usable-looking URL
-            // and failed one layer further down.
             return nil
         }
         return directory
     }
 
-    /// Removes composed images that no longer belong to any published item.
-    /// The shared container is not a cache the system will trim, so stale
-    /// 4K JPEGs would accumulate for every title ever resumed.
+    /// Removes composed images that no longer belong to any published item,
+    /// so stale 4K JPEGs do not pile up.
     static func removeArtwork(notIn keep: Set<String>, appGroupID: String) {
         guard let directory = directoryURL(appGroupID: appGroupID),
               let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)

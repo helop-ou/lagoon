@@ -4,8 +4,7 @@ struct SeerrSettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
 
-    /// TMDB's attribution, required by its API terms: Discover's artwork is
-    /// relayed by Seerr.
+    /// Includes TMDB's attribution, required by its API terms.
     static let serverFooter: LocalizedStringKey = "Seerr and Jellyseerr instances using the standard /api/v1 API are supported. Artwork comes from TMDB through Seerr. This product uses the TMDB API but is not endorsed or certified by TMDB."
 
     @State private var serverAddress = ""
@@ -198,9 +197,7 @@ struct SeerrSettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, Metrics.Space.l)
         } else {
-            // The password-free path: Lagoon approves a Quick Connect code
-            // for the account it is already signed in as, so nothing has to
-            // be typed or approved elsewhere.
+            // Password-free: Lagoon approves a Quick Connect code itself.
             Button("Use This Jellyfin Account", action: signInUsingJellyfin)
                 #if os(tvOS)
                 .buttonStyle(.glass)
@@ -272,8 +269,7 @@ struct SeerrSettingsView: View {
 
     private func connect() {
         guard !isWorking else { return }
-        // A saved connection can finish restoring after this view's initial
-        // address prefill. Retry that saved endpoint when the field is empty.
+        // A saved connection may restore after the prefill; retry it when the field is empty.
         let input = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         let address = input.isEmpty ? seerr.configuredURL?.absoluteString ?? "" : input
         isWorking = true

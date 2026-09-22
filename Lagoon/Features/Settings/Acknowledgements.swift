@@ -1,15 +1,9 @@
 import Foundation
 import LagoonEngine
 
-/// One third-party component Lagoon ships, as shown under Settings → About →
-/// Acknowledgements and from the sign-in screen (audit A06).
-///
-/// Curated by hand, like the changelog: each entry names the exact version
-/// and source the shipped binaries were built from, the licence that governs
-/// them, and where the licence text lives in the bundle. Adding a native
-/// dependency means adding an entry here and its licence text under
-/// `Resources/Licenses`; `AcknowledgementsTests` checks that every binary
-/// target in the engine package's `Package.swift` is covered.
+/// One third-party component Lagoon ships, curated by hand. A new native
+/// dependency needs an entry here and its licence under `Resources/Licenses`;
+/// `AcknowledgementsTests` checks every engine binary target is covered.
 nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -21,8 +15,7 @@ nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     let copyright: String
     /// The exact upstream tag or release the shipped build came from.
     let sourceURL: URL
-    /// Provenance the viewer may care about: built by this repository, or
-    /// prebuilt by whom, from what.
+    /// Built by this repository, or prebuilt by whom, from what.
     let notes: String?
     /// Resource name without extension under `Resources/Licenses`.
     let licenseFile: String
@@ -31,8 +24,7 @@ nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
 }
 
 nonisolated enum Acknowledgements {
-    /// In display order: the media engine's libraries first, then the
-    /// smaller pieces they pull in.
+    /// In display order.
     static let components: [ThirdPartyComponent] = [
         ThirdPartyComponent(
             id: "ffmpeg",
@@ -105,8 +97,7 @@ nonisolated enum Acknowledgements {
     these projects or companies.
     """
 
-    /// The full licence text for a component, from the bundle; nil only if
-    /// the resource is missing, which the unit tests treat as a failure.
+    /// nil only if the resource is missing, which the unit tests fail on.
     static func licenseText(for component: ThirdPartyComponent) -> String? {
         guard let url = Bundle.main.url(
             forResource: component.licenseFile,

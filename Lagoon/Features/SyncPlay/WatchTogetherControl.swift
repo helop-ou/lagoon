@@ -1,18 +1,14 @@
 import SwiftUI
 
-/// The Watch Together action in a detail page's secondary row: a glass circle
-/// on a phone, a labelled pill wherever there is width.
+/// The Watch Together action on a detail page.
 ///
-/// The store answers whether the account may use groups, and the detail page
-/// asks — never this control. It renders nothing until allowed, and a task on
-/// a view that renders nothing never runs, so a control resolving its own
-/// permission could never appear (the trap `DownloadControl` documents).
+/// The detail page resolves the permission, never this control: it renders
+/// nothing until allowed, so its own task would never run.
 ///
-/// The symbol is `person.2.fill`, never `shareplay`: SharePlay is Apple's
-/// GroupActivities, which this does not use.
+/// The symbol is `person.2.fill`, never `shareplay`: this is not Apple's
+/// GroupActivities.
 struct WatchTogetherControl: View {
     let item: MediaItem
-    /// Where a group started here begins — the page's resume point.
     let startPositionTicks: Int64
 
     @Environment(SyncPlayStore.self) private var syncPlay
@@ -61,8 +57,7 @@ struct WatchTogetherControl: View {
         .accessibilityIdentifier("detail.watchTogether")
     }
 
-    /// Membership reads through weight and opacity, not colour: a tinted
-    /// label disappears inside the tvOS focused lozenge.
+    /// Weight and opacity, not colour: a tint vanishes in the tvOS focus lozenge.
     private var glyph: some View {
         Image(systemName: "person.2.fill")
             .fontWeight(syncPlay.isJoined ? .bold : .regular)

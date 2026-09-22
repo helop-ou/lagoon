@@ -5,24 +5,17 @@ struct SettingsView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(\.displayScale) private var displayScale
 
-    // Deliberately visible in Release too: TestFlight is the only way to
-    // exercise Atmos/HDR on real hardware, and that needs these switches.
+    // Visible in Release: TestFlight is the only way to test Atmos/HDR on hardware.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
     @AppStorage(DiagnosticsPreference.reportingEnabledKey) private var diagnosticReports = DiagnosticsPreference.defaultReportingEnabled
     @AppStorage("debug.frameLossBench") private var frameLossBench = false
     @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
-    /// A debug lever, on a device that cannot be paired to Xcode: the only
-    /// way to A/B libavcodec's thread count against the performance cluster
-    /// is to ship the switch. Read once when the decoder opens.
     @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     #if DEBUG
     /// One-shot, timed fault injections scheduled after playback starts.
-    /// Debug-only: the exact same experiment runs in the simulator and,
-    /// from a Debug build, on the paired Apple TV.
     @AppStorage("debug.simulateAudioStarvation") private var simulateAudioStarvation = false
     @AppStorage("debug.simulateDeliveryStall") private var simulateDeliveryStall = false
-    /// Read once when an engine is created; off until the hardware pass
-    /// sets the floor.
+    /// Read once when an engine is created.
     @AppStorage("debug.bufferOnAudioStarvation") private var bufferOnAudioStarvation = false
     #endif
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
@@ -87,9 +80,7 @@ struct SettingsView: View {
         .task(id: session.activeAccount?.id) {
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
             #if DEBUG
-            // Keep the remote-navigation regression deterministic between
-            // launches. The test intentionally changes this value and tvOS
-            // otherwise restores that changed state on the next run.
+            // The regression test changes this value; reset it so runs stay deterministic.
             if UserDefaults.standard.bool(forKey: "debug.settingsRegression") {
                 subtitlePreferences.resetAppearanceToSystem()
             }
@@ -151,11 +142,8 @@ struct SettingsView: View {
         #endif
     }
 
-    /// Attach to whatever is on screen when Sign Out is pressed, never to the
-    /// settings root. On iOS that anchors the native popover to the button
-    /// rather than the hidden root. On tvOS the account actions sit on a
-    /// pushed page, and a dialog left on the root behind it armed without
-    /// ever presenting, so the row did nothing at all.
+    /// Attach to the visible screen, never the settings root: on tvOS a
+    /// dialog on the root behind a pushed page never presents.
     private func confirmingAccountActions<Content: View>(
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -190,9 +178,7 @@ struct SettingsView: View {
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // Matches `TVSettingsPage`, so the settings root and every page
-        // pushed from it sit on the app's black rather than the system's
-        // lifted grey.
+        // Matches `TVSettingsPage`: the app's background, not the system grey.
         .background(Theme.background.ignoresSafeArea())
     }
 
@@ -366,13 +352,10 @@ struct SettingsView: View {
 
     // MARK: - Identity avatar (both platforms)
 
-    /// The signed-in user's picture when Jellyfin has one;
-    /// initials while it loads and for users without one, because an empty
-    /// avatar frame reads worse than a letter.
+    /// The user's picture, or initials while loading and when there is none.
     private func identityAvatar(size: CGFloat, font: Font) -> some View {
         let pixels = ArtworkSizing.pixels(for: size, displayScale: displayScale)
-        // The circle fill stays under the picture so a transparent upload
-        // still reads as an avatar.
+        // Keep the fill under the picture; a transparent upload would float.
         return ZStack {
             Circle().fill(.white.opacity(0.12))
             CachedAsyncImage(url: session.activeAccount?.avatarURL(maxWidth: pixels), maxPixelSize: pixels) { image in
@@ -397,8 +380,7 @@ struct SettingsView: View {
     // MARK: - iOS: category list and native settings pages
 
     #if !os(tvOS)
-    /// Keep the same categories as tvOS, but let native navigation and
-    /// grouped Forms do the work on a touch-sized screen.
+    /// The tvOS categories, as native navigation and grouped Forms.
     private var touchForm: some View {
         ThemedForm {
             Section {
@@ -551,15 +533,8 @@ private enum AccountAction {
 }
 
 private extension Bundle {
-    /// Marketing version with the build in brackets — "0.1 (13)".
-    ///
-    /// Deliberately separate from `JellyfinClient.appVersion`, which stays
-    /// the marketing version alone: that one goes in the auth header and the
-    /// server records it as the client version, so its format is not ours to
-    /// decorate.
-    ///
-    /// The build is dropped when it adds nothing — absent, or identical to
-    /// the marketing version, where "0.1 (0.1)" would just be noise.
+    /// "0.1 (13)"; the build is dropped when absent or equal to the version.
+    /// Not `JellyfinClient.appVersion`, which goes in the auth header as-is.
     var displayVersion: String {
         let short = object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1"
         guard let build = object(forInfoDictionaryKey: "CFBundleVersion") as? String,

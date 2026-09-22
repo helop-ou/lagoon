@@ -8,15 +8,12 @@ nonisolated enum ContentNavigationRoute: Hashable {
     case genre(name: String, includeTypes: [MediaItemType])
     case search(String)
     #if os(iOS)
-    /// The offline downloads list. iOS only: tvOS has no
-    /// persistent storage guarantee and no downloads.
+    /// The offline downloads list (tvOS has no downloads).
     case downloads
     #endif
 
-    // A route carries whatever copy of the item a rail had, and the detail
-    // page re-fetches the rest. Two routes to the same item are the same
-    // destination however stale one copy's user data is, so identity here is
-    // the item's id; `MediaItem` itself compares by value.
+    // Route identity is the item id, however stale the carried copy is; the
+    // detail page re-fetches. `MediaItem` itself still compares by value.
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.item(a), .item(b)):
@@ -76,8 +73,7 @@ private struct ContentNavigationDestination: View {
 
 extension View {
     /// Register once at each NavigationStack root, never inside a lazy rail or
-    /// grid. Descendant details (including More Like This) then append to the
-    /// same ordered path and Back always removes exactly one route.
+    /// grid, so every push appends to one path and Back pops exactly one.
     func contentNavigationDestinations() -> some View {
         navigationDestination(for: ContentNavigationRoute.self) { route in
             ContentNavigationDestination(route: route)
@@ -87,11 +83,9 @@ extension View {
 
 #if os(iOS)
 extension EnvironmentValues {
-    /// Shows the downloads list where it lives, on the Library tab.
-    /// Settings > Downloads offers it too, but cannot push it: the Settings
-    /// stack is built from destination-owned links and the list's rows are
-    /// value-owned routes, and mixing the two in one stack lost pushes and
-    /// popped past the list on the phone. `MainTabView` provides the action.
+    /// Shows the downloads list on the Library tab. Settings cannot push it:
+    /// its stack uses destination-owned links, and mixing in value routes
+    /// lost pushes. `MainTabView` provides the action.
     @Entry var showDownloadsList: (@MainActor () -> Void)?
 }
 #endif

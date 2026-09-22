@@ -26,9 +26,8 @@ nonisolated enum LibraryMediaKind: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Movies / Shows already chooses a media type. A library filter only
-    /// adds a choice when that type has multiple libraries, such as Cinema
-    /// and Kids' Movies. Keep all matching libraries available in that case.
+    /// A library filter only adds a choice when the media type spans
+    /// several libraries.
     func libraryChoices(in libraries: [LibraryTab]) -> [LibraryTab] {
         let matching = libraries.filter { includes($0) }
         let groups = Dictionary(grouping: matching, by: \.collectionType)
@@ -73,8 +72,7 @@ nonisolated struct LibraryDecade: RawRepresentable, Codable, Equatable, Hashable
     var title: String { "\(rawValue)–\(rawValue + 9)" }
     var years: [Int] { Array(rawValue..<(rawValue + 10)) }
 
-    /// Only decades represented in the complete server catalogue, newest
-    /// first. Missing years and gaps between decades don't create choices.
+    /// Only decades present in the server catalogue, newest first.
     static func choices(years: [Int]) -> [Self] {
         Set(years.filter { (1...9999).contains($0) }
             .compactMap { Self(rawValue: $0 - $0 % 10) })
@@ -135,9 +133,8 @@ nonisolated struct LibrarySelection: Codable, Equatable, Hashable {
         }
         if let library = libraries.first(where: { $0.id == libraryID }),
            kind.libraryChoices(in: libraries).isEmpty {
-            // Older builds could save a redundant library constraint. Turn
-            // it into the equivalent media type before hiding the menu, so
-            // the results stay the same and no invisible filter remains.
+            // Turn a saved redundant library constraint into its media type,
+            // so no invisible filter remains.
             if kind == .all {
                 kind = library.collectionType == "movies" ? .movies : .shows
             }

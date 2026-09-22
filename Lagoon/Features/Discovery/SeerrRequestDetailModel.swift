@@ -1,10 +1,9 @@
 import Foundation
 import Observation
 
-/// The request detail's data and its refresh rules, kept out of the view
-/// because these are behaviour — poll only what can change, and hold the
-/// last good snapshot through a transient failure — and behaviour that
-/// exists only inside a `View`'s private `@State` cannot be tested.
+/// The request detail's data and refresh rules: poll only what can change,
+/// and keep the last good snapshot through a failure. Outside the view so
+/// it can be tested.
 @Observable
 final class SeerrRequestDetailModel {
     var currentRequest: SeerrMediaRequest
@@ -13,10 +12,8 @@ final class SeerrRequestDetailModel {
     private(set) var qualityProfile: String?
     private(set) var isLoading = true
     var errorMessage: String?
-    /// Whether the page has ever rendered a good snapshot. Not the same
-    /// question as `details == nil`: a request whose media carries no TMDB id
-    /// has no details to load at all, so asking about `details` painted the
-    /// error state over a perfectly good page on every transient poll failure.
+    /// Not `details == nil`: a request without a TMDB id never has details,
+    /// and that check showed the error state on every failed poll.
     private(set) var hasLoadedOnce = false
     private var didResolveQualityProfile = false
     private var didResolveAvailableMedia = false
@@ -52,8 +49,8 @@ final class SeerrRequestDetailModel {
             } else {
                 loadedQualityProfile = await qualityProfile(for: loadedRequest, client: client)
             }
-            // The cadence can change as this assignment lands. Publish one
-            // complete snapshot before SwiftUI replaces the polling task.
+            // Publish one complete snapshot before a cadence change replaces
+            // the polling task.
             guard !Task.isCancelled else { return }
             currentRequest = loadedRequest
             details = loadedDetails
@@ -65,21 +62,15 @@ final class SeerrRequestDetailModel {
             errorMessage = nil
         } catch is CancellationError {
         } catch {
-            // Live refresh is reconciliation, not a new page load. A brief
-            // Seerr/Radarr outage must not erase a useful percentage or ETA.
+            // A failed poll must not erase the last percentage or ETA.
             if !isRefresh || !hasLoadedOnce {
                 errorMessage = error.localizedDescription
             }
         }
     }
 
-    /// Everything this page shows live — status, percentage, ETA — rides on
-    /// the request itself. TMDB supplies title, overview, genres, artwork and
-    /// year, none of which change while a request is being watched, so a poll
-    /// re-reads TMDB only when it must: `jellyfinMediaId` lands on the media
-    /// row when the title reaches the library, and that gates "Open in Lagoon".
-    /// Availability flipping therefore buys exactly one more fetch, not one
-    /// every ten seconds.
+    /// Live state rides on the request; TMDB data is static. A poll re-reads
+    /// TMDB only when `jellyfinMediaId` appears, which gates "Open in Lagoon".
     private func mediaDetails(
         for request: SeerrMediaRequest,
         client: SeerrClient,
@@ -93,13 +84,8 @@ final class SeerrRequestDetailModel {
         return try await client.details(id: tmdbID, mediaType: request.resolvedMediaType)
     }
 
-    /// Names the quality profile the request was made against. `MediaRequest`
-    /// carries only a `profileId`, so the name comes from the Radarr/Sonarr
-    /// service; when the request does not say which server, the default one
-    /// is the server that would have taken it.
-    ///
-    /// Best-effort throughout: a missing profile is one absent token, never
-    /// an error on a page that is about the request.
+    /// The profile name comes from the Radarr/Sonarr service, since the
+    /// request carries only an id. Best-effort: a miss is just an absent token.
     private func qualityProfile(
         for request: SeerrMediaRequest,
         client: SeerrClient
@@ -110,16 +96,13 @@ final class SeerrRequestDetailModel {
         }
         let services = (try? await client.services(mediaType)) ?? []
         let wants4k = request.is4k == true
-        // The server the request names, else the default one for its
-        // resolution, which is the server that would have taken it.
+        // The named server, else the default for its resolution.
         let service = services.first { $0.id == request.serverId }
             ?? services.first { $0.isDefault && $0.is4k == wants4k }
             ?? services.first(where: \.isDefault)
 
-        // `profileId` is only set when the requester explicitly chose one,
-        // which needs REQUEST_ADVANCED and is rare. Everything else inherits
-        // the server's active profile, and *that* is what an approver is
-        // agreeing to fetch.
+        // `profileId` is set only by an explicit choice (REQUEST_ADVANCED);
+        // otherwise the server's active profile applies.
         guard let profileID = request.profileId ?? service?.activeProfileId,
               let serverID = service?.id
         else {
@@ -129,11 +112,8 @@ final class SeerrRequestDetailModel {
         return profiles.first { $0.id == profileID }?.name
     }
 
-    /// A request whose title has arrived should be playable from here rather
-    /// than only removable — the same match `SeerrMediaDetailView` makes, and
-    /// on the same terms: the Jellyfin id Seerr recorded when it can, an
-    /// exact TMDB lookup when it cannot. Once matched, the item is
-    /// as static as the artwork, so a poll keeps the one it already has.
+    /// Matches like `SeerrMediaDetailView`: Seerr's recorded Jellyfin id,
+    /// else an exact TMDB lookup. Once matched, polls keep it.
     private func jellyfinItem(
         for request: SeerrMediaRequest,
         details: SeerrMediaDetails?,
@@ -153,8 +133,6 @@ final class SeerrRequestDetailModel {
         return nil
     }
 
-    /// Whether the title is playable to any degree, which is what makes the
-    /// Jellyfin id worth resolving.
     private nonisolated static func isInLibrary(_ request: SeerrMediaRequest) -> Bool {
         request.progress == .available || request.progress == .partiallyAvailable
     }

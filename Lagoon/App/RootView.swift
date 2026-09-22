@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Switches between onboarding and the main UI off the session phase —
-/// connection states are states, not screens you navigate to.
+/// Switches between onboarding and the main UI off the session phase.
 struct RootView: View {
     @State private var session = SessionStore()
     private var seerr: SeerrSessionStore { session.seerr }
@@ -24,11 +23,8 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: Motion.standard), value: session.phase)
-        // The theme follows the profile; `SessionStore` points the
-        // store at the account with the other per-account stores. iOS
-        // controls take its tint from here, and the bloom sits over
-        // everything so a choice made deep in Settings is announced across
-        // the whole screen.
+        // The theme is per profile. The bloom sits over everything so a
+        // change in Settings shows across the whole screen.
         .themedControls()
         .overlay { ThemeBloomOverlay() }
         .environment(session)
@@ -50,18 +46,14 @@ struct RootView: View {
         } message: {
             Text(session.cleanupErrorMessage ?? "Some saved credentials could not be deleted.")
         }
-        // Returning from the device's home screen does not re-run `onAppear`
-        // or `task` on the navigation tree SwiftUI kept mounted. Advance one
-        // shared generation here so each server-backed screen can reconcile
-        // the state it owns.
+        // The only place foreground invalidation happens: mounted trees do
+        // not re-run `task` on return, so advance the shared generation.
         .onChange(of: scenePhase, initial: true) { _, phase in
             guard phase == .active, session.phase == .signedIn else { return }
             serverSync.requestRefresh()
             #if os(tvOS)
-            // The Top Shelf's safety net. Publishing otherwise happens only
-            // as a side effect of Home loading successfully, so one failed
-            // load on a cold start left the shelf empty with nothing to retry
-            // it.
+            // Safety net: otherwise only a successful Home load publishes,
+            // and one failed cold-start load leaves the shelf empty.
             TopShelfStore.publishIfEmpty(client: session.client)
             #endif
         }

@@ -1,9 +1,8 @@
 #if os(tvOS)
 import SwiftUI
 
-/// A consistent tvOS settings destination. Every detail page owns both a
-/// visible Back button and the remote's Menu/Escape command, so navigation
-/// never depends on an implicit focus state.
+/// A tvOS settings page with a visible Back button and a Menu handler, so
+/// navigation never depends on implicit focus.
 struct TVSettingsPage<Content: View>: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -17,10 +16,8 @@ struct TVSettingsPage<Content: View>: View {
         _ title: LocalizedStringKey,
         backTitle: LocalizedStringKey = "Settings",
         description: String? = nil,
-        // Two lines suit the multi-word titles. A long *single* word would be
-        // hyphenated mid-word in this narrow column instead — SwiftUI prefers
-        // hyphenating over scaling whenever the line limit still allows a
-        // wrap — so those pages ask for one line and let the text scale.
+        // Single long-word titles pass 1: with room to wrap, SwiftUI
+        // hyphenates rather than scales.
         titleLineLimit: Int = 2,
         @ViewBuilder content: () -> Content
     ) {
@@ -55,17 +52,11 @@ struct TVSettingsPage<Content: View>: View {
                         .accessibilityIdentifier("settings.detail.description")
                 }
             }
-            // The focus section must occupy the page's full height, not only
-            // the intrinsic Back/title/description height. Account begins
-            // with non-focusable connection information, so its actions sit
-            // below that old region and Left had no candidate to return to.
+            // Full height, so Left from low controls finds Back.
             .frame(width: Metrics.settingsIdentityWidth, alignment: .leading)
             .frame(maxHeight: .infinity, alignment: .topLeading)
             .padding(.top, Metrics.Space.l)
-            // Expand the Back button's directional focus region to the full
-            // identity column. Without a matching section on this side, a
-            // control low in the scrolling column could move right but had
-            // no leftward candidate on the same horizontal ray.
+            // Makes the whole identity column Back's focus region.
             .focusSection()
 
             ScrollView {
@@ -76,20 +67,14 @@ struct TVSettingsPage<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollClipDisabled()
-            // Treat the whole controls column as a focus target. Some pages
-            // begin with non-focusable preview content, which otherwise
-            // leaves no geometric candidate directly right of Back.
+            // Some pages start with unfocusable content; this keeps a target right of Back.
             .focusSection()
             .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // The same black the rest of the app plays content against. Without
-        // it a settings page inherits the system's default backing, which is
-        // a lifted grey, so Settings read as a different app from every other
-        // tab. Every settings screen routes through here, so this and the
-        // list's own background cover the whole hierarchy.
+        // The app's background; otherwise Settings inherits the system grey.
         .background(Theme.background.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .onExitCommand { dismiss() }
@@ -188,9 +173,8 @@ struct TVSettingsOption<Value: Hashable>: Identifiable {
     var id: Value { value }
 }
 
-/// A pull-down row whose label remains a normal full-width settings row.
-/// SwiftUI's tvOS `.menu` Picker style otherwise collapses custom labels to
-/// a small value-only pill, which hides what is being configured.
+/// A full-width pull-down row. The tvOS `.menu` Picker collapses custom
+/// labels to a value-only pill.
 struct TVSettingsMenuPicker<Value: Hashable>: View {
     let title: LocalizedStringKey
     let valueTitle: String
@@ -214,8 +198,7 @@ struct TVSettingsMenuPicker<Value: Hashable>: View {
             TVSettingsValueLabel(title: title, value: valueTitle)
         }
         .buttonStyle(.glass)
-        // Keep UI automation, VoiceOver, and the focus engine attached to
-        // the actual Menu button instead of its synthesized label children.
+        // Keep automation, VoiceOver and focus on the Menu button, not its label children.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
         .accessibilityValue(valueTitle)

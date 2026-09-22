@@ -1,8 +1,7 @@
 import Foundation
 
-/// Ordered group requests owned by one playback attachment. Every task is
-/// retained so detaching cancels the in-flight request and all its followers;
-/// cancelling only the tail of a chain does not propagate to earlier Tasks.
+/// Ordered group requests. Every task is retained so cancel reaches the whole
+/// chain; cancelling the tail does not propagate to earlier Tasks.
 @MainActor
 final class SyncPlayRequestQueue {
     private var tail: Task<Void, Never>?
@@ -21,25 +20,22 @@ final class SyncPlayRequestQueue {
         let task = Task { [weak self] in
             defer { self?.pending[id] = nil }
             await previous?.value
-            // Awaiting another task's value does not observe cancellation.
-            // Without this guard cancelled commands still reach the server.
+            // Awaiting another task's value ignores cancellation.
             guard !Task.isCancelled else { return }
             do {
                 do {
                     try await work()
                 } catch {
                     try Task.checkCancellation()
-                    // Readiness is idempotent and may retry once after a
-                    // transient failure. Viewer transport never opts in:
-                    // repeating a seek/next request could move the group twice.
+                    // Only idempotent readiness retries; a repeated seek or
+                    // next could move the group twice.
                     guard let retryDelay, !(error is CancellationError) else { throw error }
                     try await Task.sleep(for: retryDelay)
                     try Task.checkCancellation()
                     try await work()
                 }
             } catch {
-                // The server remains authoritative. Failure must release
-                // the next request, never move the local player on its own.
+                // Release the next request; never move the local player.
                 if !Task.isCancelled, !(error is CancellationError) { onFailure?() }
             }
         }

@@ -1,11 +1,6 @@
 import SwiftUI
 
-/// What a Watch Together notice says to the viewer.
-///
-/// Separate from `SyncPlayNotice` itself, which is pure and carries the
-/// tests: the reducer decides *that* something happened, and this decides
-/// how to say it. Returning nil is a real answer — a state the picture
-/// already reports is not worth a toast over it.
+/// The viewer-facing text of a notice; nil when the picture already says it.
 extension SyncPlayNotice {
     var message: String? {
         switch self {
@@ -16,12 +11,8 @@ extension SyncPlayNotice {
         case .userLeft(let name):
             String(localized: "\(name) left")
         case .state(let state, _):
-            // "Playing" arrives at the same moment the picture starts
-            // moving, and "Nothing playing" at the moment it stops, so
-            // neither is worth saying. Neither is "Waiting": the transport
-            // already carries that line under its spinner, and it stays up
-            // for as long as it is true instead of for two seconds.
-            // "Paused" is the one state nothing else explains.
+            // Only "Paused": the picture shows playing and stopping, and the
+            // transport spinner already says "Waiting".
             switch state {
             case .paused: String(localized: "Paused by the group")
             case .waiting, .playing, .idle, .unknown: nil
@@ -40,22 +31,15 @@ extension SyncPlayNotice {
     }
 }
 
-/// The player's transient line about the group: someone joined or left, the
-/// group paused, the library is out of reach.
+/// The player's transient group notice.
 ///
-/// An overlay leaf shaped like `PlayerSkipOverlay`: it reads the store in its
-/// own body, so the player root never re-renders for a notice. Top of screen,
-/// clear of the transport and skip shelf, never hit-tested — on tvOS a
-/// focusable overlay would take the remote from the video surface.
-///
-/// Plain material and semantic text, no dynamic-range lift: SDR chrome over a
-/// possibly HDR frame, like every other notice the player draws.
+/// Reads the store in its own body, so the player root never re-renders for
+/// a notice. Never hit-tested: on tvOS a focusable overlay would take the
+/// remote from the video surface. SDR chrome, no dynamic-range lift.
 struct SyncPlayNoticeToast: View {
     let store: SyncPlayStore
     var reduceMotion = false
 
-    /// How long a line stays. Long enough to read six words, short enough
-    /// that the next one is not queued behind it.
     private static let dwell = Duration.seconds(2)
 
     @State private var shown: SyncPlayStore.Entry?
@@ -71,15 +55,12 @@ struct SyncPlayNoticeToast: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.top, Metrics.Space.xl)
-        // Value-driven, like every other animation over the player: a
-        // withAnimation transaction does not survive tvOS's MenuPressGate
-        // hosting boundary.
+        // Value-driven: a withAnimation transaction does not survive tvOS's
+        // MenuPressGate hosting boundary.
         .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: shown?.id)
         .allowsHitTesting(false)
         .task(id: latest?.id) {
-            // A notice with nothing to say still counts as the latest, so
-            // it clears whatever is on screen rather than letting the
-            // previous line outstay it.
+            // A silent notice still clears the previous line.
             shown = latest
             guard latest?.notice.message != nil else { return }
             do { try await Task.sleep(for: Self.dwell) } catch { return }
@@ -88,8 +69,7 @@ struct SyncPlayNoticeToast: View {
     }
 }
 
-/// The line itself, shared with the Debug component gallery so what is
-/// approved there is what ships.
+/// Shared with the Debug component gallery.
 struct SyncPlayToastLabel: View {
     let text: String
     var accessibilityIdentifier = "player.together.toast"

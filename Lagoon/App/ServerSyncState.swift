@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 
-/// A top-level destination that can reconcile its own server-backed content.
-/// The library id keeps two mounted Jellyfin libraries from sharing refresh
-/// state merely because both happen to draw the same kind of grid.
+/// A top-level destination that reconciles its own server-backed content.
+/// The library id keeps two libraries from sharing refresh state.
 nonisolated enum ServerSyncTarget: Hashable {
     case home
     case discover
@@ -24,8 +23,7 @@ nonisolated enum ServerRefreshTrigger: String {
     case manual
 }
 
-/// Production refreshes use a quiet five-minute cadence. UI tests can shorten
-/// it without changing the shipping behavior or waiting five real minutes.
+/// Five minutes; debug builds let UI tests shorten it.
 nonisolated enum ServerRefreshPolicy {
     static let standardIntervalSeconds = 5 * 60.0
 
@@ -42,13 +40,11 @@ nonisolated enum ServerRefreshPolicy {
     }
 }
 
-/// One app-wide invalidation clock for content read from Jellyfin.
+/// One app-wide invalidation clock for Jellyfin content.
 ///
-/// SwiftUI keeps the tab and navigation trees mounted while the app is in the
-/// background, so their ordinary `task` and `onAppear` work does not run again
-/// when the scene becomes active. RootView advances this clock at that
-/// boundary; visible server-backed screens observe it and reconcile their own
-/// state without the root needing to know what they have loaded.
+/// Mounted trees do not re-run `task` or `onAppear` on foregrounding. Only
+/// `RootView` advances `generation`; visible screens observe it and
+/// reconcile their own state.
 @Observable
 final class ServerSyncState {
     private(set) var generation = 0
@@ -56,10 +52,8 @@ final class ServerSyncState {
     private(set) var manualRefreshGeneration = 0
     private(set) var manualRefreshTarget: ServerSyncTarget?
     private var refreshingTargets: Set<ServerSyncTarget> = []
-    /// Set by `MainTabView` (iOS only) once the libraries load fails to
-    /// reach the server, cleared on the next success. Library reads this to
-    /// show the offline banner and to know a downloaded title still plays
-    /// with nothing else reachable.
+    /// Set by `MainTabView` when loading libraries fails, cleared on success.
+    /// Library shows the offline banner from it.
     var serverUnreachable = false
 
     #if DEBUG

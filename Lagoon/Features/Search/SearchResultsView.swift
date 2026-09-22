@@ -44,9 +44,7 @@ final class SearchResultsViewModel {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
 
-    /// Puts the cursor back at the start so a retry re-runs the search rather
-    /// than resuming one that has already reached its end — which is what a
-    /// retry offered beside an empty page means.
+    /// Rewinds the cursor so a retry re-runs the search from the start.
     func restart() {
         items = []
         nextOffset = 0
@@ -103,9 +101,8 @@ struct SearchResultsView: View {
                 .environment(\.posterCardWidth, grid.cardWidth)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                 if model.isLoading, model.items.isEmpty {
-                    // Focusable, unlike a bare spinner: the first page is the
-                    // stretch where this screen has nothing else to hold
-                    // focus, and Menu with nowhere to go quits the app.
+                    // Focusable, unlike a bare spinner: with nothing to focus,
+                    // Menu quits the app.
                     LoadingView()
                 } else if model.isLoading {
                     ProgressView("Loading Results")
@@ -117,11 +114,8 @@ struct SearchResultsView: View {
                         .buttonStyle(.glass)
                         .accessibilityIdentifier("search.results.more")
                 } else if model.items.isEmpty {
-                    // The page's only focusable element when a search comes
-                    // back empty, which is what keeps Menu going back instead
-                    // of quitting the app. The cursor is spent by
-                    // now, so the retry rewinds it rather than asking for a
-                    // page past the end.
+                    // The only focusable element when empty; without it Menu
+                    // quits the app. The cursor is spent, so retry rewinds it.
                     InlineRetryView(message: "No matching movies or shows.") {
                         model.restart()
                         loadID += 1

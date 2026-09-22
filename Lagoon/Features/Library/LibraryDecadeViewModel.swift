@@ -13,9 +13,8 @@ final class LibraryDecadeViewModel {
     private var revision = 0
 
     func load(scope: LibraryYearScope, fetch: FetchYears) async {
-        // A cancelled view task may still be unwinding when its replacement
-        // starts. Supersede even a same-scope request instead of dropping the
-        // replacement behind isLoading and then discarding the old response.
+        // A cancelled task may still be unwinding when its replacement starts;
+        // supersede it even for the same scope rather than skip on isLoading.
         guard !Task.isCancelled else { return }
         revision &+= 1
         let revision = revision
@@ -30,16 +29,14 @@ final class LibraryDecadeViewModel {
             decades = LibraryDecade.choices(years: years)
         } catch {
             guard self.revision == revision, !Task.isCancelled else { return }
-            // A failed refresh keeps the last successful list for this
-            // scope. Never substitute another library's years.
+            // Keep this scope's last good list; never another library's years.
             loadFailed = true
         }
     }
 
     func choices(for scope: LibraryYearScope, selected: LibraryDecade?) -> [LibraryDecade] {
         let available = self.scope == scope ? decades ?? [] : []
-        // A saved selection must remain visible and clearable while offline
-        // or loading. Only a successful response can invalidate it.
+        // Keep a saved selection visible and clearable until a successful response.
         return Set(available + [selected].compactMap { $0 })
             .sorted { $0.rawValue > $1.rawValue }
     }

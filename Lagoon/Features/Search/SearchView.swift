@@ -47,19 +47,15 @@ final class SearchViewModel {
         }
     }
 
-    /// Drops the collections not worth offering.
-    ///
-    /// Searching a franchise name matches the collection *and* every film in
-    /// it, so the stubs a metadata scrape leaves behind would otherwise put a
-    /// dead end at the top of the results — a library holds far more empty
-    /// collections than real ones. The same floor Home's row uses.
+    /// Drops near-empty collection stubs, which would otherwise top franchise
+    /// searches. The same floor Home's row uses.
     nonisolated static func presentable(_ items: [MediaItem]) -> [MediaItem] {
         items.filter { $0.type != .boxSet || ($0.childCount ?? 0) >= CollectionShelf.minimumTitles }
     }
 
     #if DEBUG
-    /// The navigation regression harness needs results without driving the
-    /// on-screen keyboard, which XCUITest can only do one glyph at a time.
+    /// Results for the regression harness without typing, which XCUITest
+    /// does one glyph at a time.
     func loadNavigationRegressionResults(client: JellyfinClient) async {
         guard results.isEmpty else { return }
         isSearching = true
@@ -77,16 +73,12 @@ final class SearchViewModel {
     #endif
 }
 
-/// Terms people searched before, so the next search is a click rather than a
-/// spell-out. The tvOS HIG asks for this directly: "People typically don't
-/// want to do a lot of typing in tvOS."
+/// Past search terms, per account, since typing on tvOS is slow.
 @Observable
 final class RecentSearchStore {
     private(set) var terms: [String] = []
     private(set) var accountID: String?
 
-    /// Long enough to cover a viewing session's worth of titles, short enough
-    /// that the row stays scannable from the couch.
     static let limit = 10
 
     private let defaults: UserDefaults
@@ -94,8 +86,7 @@ final class RecentSearchStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // Legacy history has no attributable owner. Never assign it to the
-        // next viewer merely because that viewer happens to launch first.
+        // Legacy history has no owner; never hand it to whoever launches first.
         defaults.removeObject(forKey: "search.recents")
     }
 
@@ -104,15 +95,9 @@ final class RecentSearchStore {
         terms = Self.decode(key.flatMap { defaults.data(forKey: $0) })
     }
 
-    /// Records a term that actually ran. Most recent first, folded against
-    /// case and surrounding space so "Dune" typed twice is one entry.
-    ///
-    /// The terms it was spelled through go with it. On tvOS a search is
-    /// entered a letter at a time against an on-screen keyboard, and every
-    /// prefix is a search that genuinely ran, so one "dune" otherwise leaves
-    /// "d", "du", "dun" and "dune" sitting in the row. Folding here rather
-    /// than leaning on the debounce is what makes it hold: the gap between
-    /// two presses on a remote is far longer than any debounce worth having.
+    /// Records a term that ran, most recent first, folding case and padding.
+    /// Drops the prefixes it was typed through ("d", "du", "dun"): remote
+    /// key presses are slower than any useful debounce, so each one ran.
     func record(_ term: String) {
         guard accountID != nil else { return }
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -144,19 +129,14 @@ final class RecentSearchStore {
 }
 
 extension String {
-    /// Two searches are the same search when only case or padding differ.
     func matchesSearchTerm(_ other: String) -> Bool {
         let lhs = trimmingCharacters(in: .whitespacesAndNewlines)
         let rhs = other.trimmingCharacters(in: .whitespacesAndNewlines)
         return lhs.compare(rhs, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
 
-    /// Whether this term is one somebody typed through on the way to
-    /// `other` — "du" against "dune" — folded the same way
-    /// `matchesSearchTerm` folds it, so "DU" counts as well.
-    ///
-    /// One-directional on purpose: recording "the" must not evict an earlier
-    /// "the matrix", because a short term is a legitimate search of its own.
+    /// "du" against "dune", folded like `matchesSearchTerm`. One-directional:
+    /// recording "the" must not evict "the matrix".
     func isSearchPrefix(of other: String) -> Bool {
         let lhs = trimmingCharacters(in: .whitespacesAndNewlines)
         let rhs = other.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -168,10 +148,8 @@ extension String {
     }
 }
 
-/// The app's one search screen. On tvOS `.searchable` is not a bar you summon:
-/// the system draws the field and a full keyboard and expects to own the
-/// screen, which is why this is a tab of its own rather than a fixture on
-/// Discover.
+/// A tab of its own: on tvOS `.searchable` draws a full keyboard and owns
+/// the screen.
 struct SearchView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
@@ -184,16 +162,12 @@ struct SearchView: View {
     @State private var searchError: String?
     @State private var searchRetryID = 0
 
-    /// How long a term has to stand still before it counts as a search worth
-    /// running against Seerr and worth remembering.
+    /// Before a term runs against Seerr and is remembered.
     private static let debounceMilliseconds = 350
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                // Results win over recents whenever there are any, so the
-                // row of past terms is what fills the screen only when
-                // nothing has been searched yet.
                 if normalizedSearch.isEmpty, librarySearch.results.isEmpty {
                     recentSearches
                 } else {
@@ -205,16 +179,15 @@ struct SearchView: View {
         }
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
-        // Scoped to the content, not the NavigationStack — otherwise the
-        // search field stays overlaid on pushed detail pages.
+        // On the content, never the NavigationStack, or the field overlays
+        // pushed detail pages.
         .searchable(text: $searchText, prompt: "Search your library and Seerr")
         .onChange(of: searchText) { _, newValue in
             librarySearch.search(newValue, client: session.client)
         }
         .onChange(of: serverSync.generation) { _, _ in
-            // An open result list carries user data too; repeat only the
-            // Jellyfin half, keeping Seerr's separate session lifecycle out
-            // of a Jellyfin foreground sync.
+            // Only the Jellyfin half: Seerr stays out of Jellyfin's
+            // foreground sync.
             librarySearch.search(searchText, client: session.client)
         }
         .task(id: "\(seerr.user?.id ?? -1):\(normalizedSearch):\(searchRetryID)") {
@@ -225,10 +198,8 @@ struct SearchView: View {
             if UserDefaults.standard.bool(forKey: "debug.navigationRegression") {
                 await librarySearch.loadNavigationRegressionResults(client: session.client)
             }
-            // `-debug.searchRegressionQuery <term>`: the empty-results lane
-            // needs a term nothing matches, and XCUITest can only reach the
-            // tvOS keyboard one glyph at a time. Seeding the field runs the
-            // real search, debounce and all — only the typing is skipped.
+            // `-debug.searchRegressionQuery <term>` seeds the field for the
+            // empty-results lane; the real search and debounce still run.
             if let seeded = UserDefaults.standard.string(forKey: "debug.searchRegressionQuery"),
                !seeded.isEmpty, searchText.isEmpty {
                 searchText = seeded
@@ -246,17 +217,13 @@ struct SearchView: View {
                 Image(systemName: "magnifyingglass")
                     .font(Typography.largeGlyph)
                     .foregroundStyle(.tertiary)
-                // Not a second copy of the field's own prompt: this space
-                // says what will fill it once someone has searched.
                 Text("Recent searches will appear here")
                     .font(.title3.bold())
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
         } else {
-            // Built like MediaRail rather than reusing it: the same shelf
-            // shape and the same focus-lift headroom, over terms instead of
-            // artwork.
+            // MediaRail's shape and focus-lift headroom, over terms.
             VStack(alignment: .leading, spacing: 0) {
                 Text("Recent")
                     .font(.headline)
@@ -268,9 +235,7 @@ struct SearchView: View {
                                 .buttonStyle(.glass)
                                 .accessibilityIdentifier("search.recent")
                         }
-                        // The HIG asks for a way to clear search history; a
-                        // button on the row it clears beats a Settings page
-                        // nobody would look in.
+                        // The HIG asks for a way to clear search history.
                         Button("Clear", systemImage: "trash") { recents.clear() }
                             .buttonStyle(.glass)
                             .accessibilityIdentifier("search.recent.clear")
@@ -299,13 +264,10 @@ struct SearchView: View {
             ) {
                 librarySearch.search(searchText, client: session.client)
             }
-            // No "See All" beside an empty section. The rail is a
-            // preview of the same query the full page runs, so when the
-            // preview is empty the page behind the link is empty too: it
-            // repeats the message, and on tvOS a page of nothing but text
-            // has no focus to hold, so Menu quits the app instead of going
-            // back. The status block stays unfocusable, which is what lets
-            // Down from the field carry straight on to the Seerr section.
+            // No "See All" beside an empty section: the page behind it is
+            // empty too, has nothing to focus, and Menu would quit the app.
+            // The status block stays unfocusable so Down from the field
+            // reaches the Seerr section.
         }
     }
 
@@ -341,9 +303,7 @@ struct SearchView: View {
             ) {
                 searchRetryID += 1
             }
-            // The library section's twin, dropped for the same reason:
-            // this rail is a preview of page one, so an empty
-            // preview opens a page that is empty as well.
+            // No "See All" when empty, as in the library section.
         }
     }
 
@@ -395,9 +355,7 @@ struct SearchView: View {
             searchResults = []
             searchError = nil
             isSearching = false
-            // The library half still ran, so the term was still a search --
-            // but wait out the same debounce the Seerr path does rather than
-            // writing an entry on every keystroke.
+            // The library half ran, so record the term after the same debounce.
             try? await Task.sleep(for: .milliseconds(Self.debounceMilliseconds))
             guard !Task.isCancelled, normalizedSearch == term, accountID == session.activeAccount?.id else { return }
             recents.record(term)
@@ -412,9 +370,6 @@ struct SearchView: View {
             let page = try await seerr.client.search(query: term)
             guard !Task.isCancelled, normalizedSearch == term, accountID == session.activeAccount?.id else { return }
             searchResults = page.results
-            // The debounce only keeps this off every keystroke; folding in
-            // RecentSearchStore is what makes "dune" one entry rather than
-            // "d", "du", "dun", "dune".
             recents.record(term)
         } catch is CancellationError {
         } catch {

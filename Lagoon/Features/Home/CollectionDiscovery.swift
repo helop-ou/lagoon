@@ -1,60 +1,38 @@
 import SwiftUI
 
-/// One collection as Home draws it: the collection itself, how much is in it,
-/// and the artwork the card should use.
+/// One collection as Home draws it.
 nonisolated struct CollectionShelfItem: Identifiable, Equatable {
-    /// The collection's own id, so the card routes to its page.
     var id: String { collection.id }
     let collection: MediaItem
     let titleCount: Int
-    /// What the card paints. The collection's own artwork where it has some,
-    /// and otherwise one of the titles inside it — see `artworkSource`.
+    /// The collection's own artwork, or a title's from inside (see `artworkSource`).
     let artwork: MediaItem?
 
     var name: String { collection.name ?? "" }
 }
 
-/// Which collections are worth a row, in what order, and what they look like.
+/// Which collections get a card, in what order, and with what artwork.
 ///
-/// **A library's collection list is mostly stubs.** Jellyfin's metadata
-/// scrape creates a collection for a film's whole franchise the moment you
-/// own one entry in it, so the reference library reports 173 collections of
-/// which 35 hold anything and 18 hold more than one title. Every rule here
-/// exists because of that shape: unfiltered, this row is a hundred and
-/// seventy-three empty franchises in alphabetical order.
+/// Most collections are stubs: Jellyfin creates one per franchise as soon as
+/// you own one film in it (173 on the reference library, 18 with more than
+/// one title). These rules filter that down.
 nonisolated enum CollectionShelf {
-    /// Settings, Home Rows. A stable string for the same reason the curated
-    /// rows use them: it is persisted per account, and renaming it would
-    /// silently re-enable a row someone had turned off.
+    /// Persisted per account; renaming would re-enable a hidden row.
     static let rowID = "lagoon.collections"
 
-    /// A collection holding one title is that title with a longer name — the
-    /// card would open a page listing the film you were already looking at.
-    /// Two is the point at which "collection" starts meaning something.
+    /// A one-title collection is just that title.
     static let minimumTitles = 2
 
-    /// Same ceiling as the curated rows. Beyond a screen or two of sideways
-    /// scrolling a shelf stops being browsable and the Collections tab this
-    /// row stands in for would be the honest answer.
     static let maximumVisible = 16
 
-    /// Whether a card can be painted from this item without borrowing.
-    ///
-    /// Landscape specifically: Home's rows are 16:9 and a collection's poster
-    /// is not one. Collections are far likelier to have a poster than a thumb
-    /// — 11 of the reference library's 18 real collections have a Primary and
-    /// only 7 have anything landscape — which is exactly why the fallback
-    /// below exists rather than a poster-shaped exception to the row.
+    /// Landscape only, since Home's cards are 16:9. Most collections have a
+    /// poster but no landscape art, hence the borrowed-artwork fallback.
     static func hasLandscapeArtwork(_ item: MediaItem) -> Bool {
         item.imageTags?["Thumb"] != nil || item.backdropImageTags?.isEmpty == false
     }
 
-    /// The collections that earn a card, biggest first.
-    ///
-    /// Size order rather than alphabetical: a five-film franchise is a more
-    /// interesting thing to be offered than the first collection whose name
-    /// begins with A, and the name breaks ties so the row does not reshuffle
-    /// between loads.
+    /// Collections that earn a card, biggest first, name breaking ties so
+    /// the row is stable between loads.
     static func ranked(_ collections: [MediaItem], limit: Int = maximumVisible) -> [MediaItem] {
         collections
             .filter { ($0.childCount ?? 0) >= minimumTitles }
@@ -68,19 +46,13 @@ nonisolated enum CollectionShelf {
             .map { $0 }
     }
 
-    /// The title inside a collection whose artwork can stand in for it.
-    ///
-    /// The first one in release order that has any: a franchise's first film
-    /// is the one whose artwork reads as the franchise. Nil when nothing
-    /// inside has landscape artwork either, and the card falls back to type
-    /// on a gradient.
+    /// The first title in release order with landscape art, or nil (the
+    /// card then uses a gradient).
     static func artworkSource(from contents: [MediaItem]) -> MediaItem? {
         contents.first(where: hasLandscapeArtwork)
     }
 
-    /// Assembles the shelf. `borrowedArtwork` is keyed by collection id and
-    /// only consulted for the collections that need it, so a caller that
-    /// fetched nothing still gets a usable row.
+    /// `borrowedArtwork` is keyed by collection id and may be empty.
     static func shelf(
         _ collections: [MediaItem],
         borrowedArtwork: [String: MediaItem] = [:]
@@ -96,27 +68,20 @@ nonisolated enum CollectionShelf {
         }
     }
 
-    /// "5 titles". Deliberately not "5 movies": a collection can hold series
-    /// as well, and counting the contents is not worth a request to find out
-    /// what to call them.
+    /// "5 titles", not "movies": a collection can hold series too.
     static func countLabel(_ count: Int) -> String {
         count == 1 ? "1 title" : "\(count) titles"
     }
 
-    /// "2011 – 2024", or a single year when a franchise landed in one, or
-    /// nothing at all when the server dated none of it.
+    /// "2011 – 2024", a single year, or nil when nothing is dated.
     static func yearsLabel(_ items: [MediaItem]) -> String? {
         let years = items.compactMap(\.productionYear).sorted()
         guard let first = years.first, let last = years.last else { return nil }
         return first == last ? String(first) : "\(first) – \(last)"
     }
 
-    /// The genres a collection is about, from its own metadata where the
-    /// scrape supplied any and from its contents where it did not — 7 of the
-    /// reference library's 18 real collections carry no genres of their own.
-    ///
-    /// Ordered by how much of the collection shares them, so the first two
-    /// describe the franchise rather than one entry in it.
+    /// The collection's own genres, or else its contents' genres, most
+    /// shared first. Many collections carry none of their own.
     static func genres(of collection: MediaItem, contents: [MediaItem], limit: Int = 3) -> [String] {
         if let own = collection.genres, !own.isEmpty {
             return Array(own.prefix(limit))
@@ -132,13 +97,8 @@ nonisolated enum CollectionShelf {
     }
 }
 
-/// The Collections row.
-///
-/// Its own view rather than a `MediaRail` because a collection card needs to
-/// say what it is. The artwork is often borrowed from one film inside, so an
-/// unlabelled *Greenland Collection* card is indistinguishable from the film
-/// *Greenland* — but the label goes underneath, not across (see
-/// `CollectionCard`).
+/// The Collections row. Not a `MediaRail`, because a card with borrowed
+/// artwork needs a label to tell the collection from the film.
 struct CollectionRail: View {
     let title: String
     let collections: [CollectionShelfItem]
@@ -166,21 +126,14 @@ struct CollectionRail: View {
     }
 }
 
-/// The name sits **under** the artwork, for the reason a poster's does: a
-/// headline across the bottom of the picture covers the part its designer
-/// cared about.
-///
-/// Collections make the case twice. Where the artwork is the collection's own,
-/// a metadata provider has usually painted the name into it already, so an
-/// overlay lands a second title on the first. And a caption can wrap, where an
-/// overlay truncated "Spider-Man (MCU) Colle…" in a card with room to spare.
+/// The name sits under the artwork, not over it: collection art often has
+/// the name painted in already, and a caption can wrap instead of truncating.
 private struct CollectionCard: View {
     let collection: CollectionShelfItem
     @Environment(SessionStore.self) private var session
 
     var body: some View {
-        // Same gap a poster leaves: the `.card` focus lift scales the artwork
-        // about a tenth, and a tighter caption gets landed on.
+        // Room for the `.card` focus lift, which scales the art about 10%.
         VStack(alignment: .leading, spacing: Metrics.Space.xl) {
             NavigationLink(value: ContentNavigationRoute.item(collection.collection)) {
                 background
@@ -196,8 +149,7 @@ private struct CollectionCard: View {
         .frame(width: Metrics.landscapeWidth)
     }
 
-    /// Fixed height so a one-line name and a two-line one leave every card in
-    /// the row sitting on the same baseline.
+    /// Fixed height keeps one- and two-line names on the same baseline.
     private var caption: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.hair) {
             Text(collection.name)
@@ -237,12 +189,7 @@ private struct CollectionCard: View {
         }
     }
 
-    /// A collection with no artwork anywhere gets a colour of its own rather
-    /// than one more grey rectangle in a row of them — the same trick the
-    /// genre cards use. Those still write their name across the tile, because
-    /// a genre's picture is a film that says nothing about the genre; a
-    /// collection's says the collection.
-
+    /// No artwork anywhere: a gradient picked from the name, not plain grey.
     private var fallbackGradient: some View {
         let palettes: [(Color, Color)] = [
             (Theme.accent.opacity(0.9), Theme.ground),

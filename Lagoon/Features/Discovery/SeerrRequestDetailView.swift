@@ -25,12 +25,8 @@ struct SeerrRequestDetailView: View {
             if model.isLoading, !model.hasLoadedOnce {
                 LoadingView()
             } else {
-                // The same scaffold every other detail page uses. Hand-rolling
-                // one here is what produced the narrow centred box: nothing
-                // claimed the page width, so the ScrollView hugged its
-                // content and the background was sized to that. The scaffold
-                // pins the page to the screen it belongs to — its own comment
-                // records this being fixed once already.
+                // Use the shared scaffold: a hand-rolled page hugs its content
+                // and renders as a narrow centred box.
                 DetailPageScaffold(
                     backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: 1280)
                 ) {
@@ -92,8 +88,7 @@ struct SeerrRequestDetailView: View {
         .accessibilityIdentifier("seerr.request.detail.\(request.id)")
     }
 
-    /// What the one-line subtitle has no room for: how many downloads the
-    /// title is spread across, and what the server is actually fetching.
+    /// Download count and what the server is fetching.
     private var progressDetailMessage: String {
         guard let progress = currentRequest.downloadProgress else {
             return String(localized: "This title has been approved and is being added to your library.")
@@ -105,8 +100,7 @@ struct SeerrRequestDetailView: View {
         return lines.joined(separator: " ")
     }
 
-    /// The short form. The subtitle above already carries the full sentence,
-    /// and repeating it here put the same words on screen twice.
+    /// Short form; the subtitle carries the full sentence.
     private var processingBadgeTitle: String {
         guard let progress = currentRequest.downloadProgress else {
             return currentRequest.progress.title
@@ -144,26 +138,20 @@ struct SeerrRequestDetailView: View {
                 : String(localized: "Seasons \(numbers)"))
         }
         if currentRequest.is4k == true { tokens.append("4K") }
-        // What an approver is actually agreeing to fetch.
         if let qualityProfile { tokens.append(qualityProfile) }
         if let year = details?.year { tokens.append(year) }
         return tokens
     }
 
-    /// A request that is not pending used to render no actions at all, so an
-    /// approved or declined one was a dead end. Jellyseerr allows removing a
-    /// request in any state, and a manager looking at their own pending
-    /// request previously got Approve/Decline with no way to cancel it,
-    /// because the first branch won.
+    /// Jellyseerr allows removing a request in any state, including a
+    /// manager's own pending one alongside Approve/Decline.
     @ViewBuilder
     private var actions: some View {
         if isMutating {
             ProgressView()
         } else {
             AdaptiveActionStack {
-                // A title still on its way has nothing to act on, so this is
-                // the one thing worth focusing — and the glyph animates while
-                // it is.
+                // Nothing to act on while processing, so this takes focus.
                 if currentRequest.progress == .processing {
                     Button {
                         isShowingProgressDetail = true
@@ -177,8 +165,7 @@ struct SeerrRequestDetailView: View {
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("seerr.request.progress")
                 }
-                // Watching it is the point of having requested it, so this
-                // leads.
+                // Leads when the title is watchable.
                 if let jellyfinItem {
                     NavigationLink(value: SeerrNavigationRoute.jellyfinItem(jellyfinItem)) {
                         Label("Open in Lagoon", systemImage: "play.fill")
@@ -215,9 +202,7 @@ struct SeerrRequestDetailView: View {
         canModerate || isOwnRequest
     }
 
-    /// Withdrawing something still awaiting approval is a cancellation;
-    /// removing one already decided is not. The confirmation has to agree
-    /// with the button that opened it.
+    /// Must match the button that opened the confirmation.
     private var removeTitle: LocalizedStringKey {
         currentRequest.requestStatus == .pending ? "Cancel Request" : "Remove Request"
     }
@@ -275,8 +260,7 @@ struct SeerrRequestDetailView: View {
         }
     }
 
-    /// A moderation action changes the very state the page is watching, so it
-    /// gets an immediate reconcile rather than waiting out the cadence.
+    /// Moderation reconciles at once rather than waiting for the cadence.
     private func reconcile() async {
         await model.load(client: seerr.client, jellyfin: session.client, isRefresh: true)
     }

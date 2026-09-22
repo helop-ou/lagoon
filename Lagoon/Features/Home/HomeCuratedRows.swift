@@ -2,16 +2,10 @@ import Foundation
 
 /// The curated Home rows and the rotation that keeps two of them fresh.
 ///
-/// Home's order follows the one settled on for Discover, because the
-/// same thing was wrong with both screens: browse shelves sitting in the
-/// middle of content, and movies and shows interleaved so the screen never
-/// settles on a subject. The order is personal, then new, then a whole movie
-/// block, then a whole show block, then anything — and each block closes with
-/// its own genre shelf, which is the "none of these, go look yourself" exit.
+/// Order: personal, then new, then a movie block, then a show block (each
+/// ending with its genre shelf), then mixed rows.
 nonisolated enum HomeCuratedRows {
-    /// Identifiers for Settings, Home Rows. Stable strings rather than an
-    /// enum's `rawValue`, because they are persisted per account and renaming
-    /// a case must not silently re-enable a row someone hid.
+    /// Persisted per account; renaming one would re-enable a hidden row.
     enum ID {
         static let becauseYouWatched = "lagoon.becauseYouWatched"
         static let highlyRated = "lagoon.highlyRated"
@@ -25,45 +19,28 @@ nonisolated enum HomeCuratedRows {
         static let surpriseMe = "lagoon.surpriseMe"
     }
 
-    /// Below this a rail is a stub rather than a row, and hides itself. Three
-    /// posters on a 16:9 screen reads as "we found almost nothing", which is
-    /// worse than the row not being there.
+    /// Fewer items than this looks like a stub, so the row hides.
     static let minimumItems = 4
 
-    /// What "Highly Rated" is willing to call highly rated. Deliberately not
-    /// 8: on a personal library that empties the row on most servers.
+    /// Not 8: that empties the row on most personal libraries.
     static let minimumCommunityRating = 7.5
 
-    /// The shortest thing "Because You Watched" will name itself after.
-    ///
-    /// A self-hosted library is full of things that are played but are not
-    /// viewing: Dolby and DTS demo reels, test patterns, trailers, home
-    /// video. The first run against a real library seeded the row from
-    /// *Dolby: Core Universe* and recommended five unrelated films off the
-    /// back of it. Fifteen minutes clears that out while keeping a
-    /// twenty-two minute comedy, which is the shortest thing anyone actually
-    /// sits down to.
+    /// Seconds. Filters out demo reels, trailers and test patterns while
+    /// keeping a 22-minute sitcom episode.
     static let minimumSeedRuntime: Double = 15 * 60
 
-    /// How many recently played titles to try before giving up on the row. A
-    /// seed can be perfectly real and still have no similar items on a small
-    /// library, and one dud should not cost the row.
+    /// Recent titles to try; a real seed can still have no similar items.
     static let seedAttempts = 4
 
-    /// Whether a played title is worth naming a recommendation row after.
-    ///
-    /// An unknown runtime passes: servers do not always report one, and
-    /// refusing every title with a gap in its metadata would be a harsher
-    /// filter than the one intended.
+    /// An unknown runtime passes; servers do not always report one.
     static func isSubstantialSeed(_ item: MediaItem) -> Bool {
         guard let ticks = item.runTimeTicks else { return true }
         return Ticks.seconds(ticks) >= minimumSeedRuntime
     }
 }
 
-/// Resolves Seerr's ranked catalogue back to playable Jellyfin records.
-/// Keeping this bridge pure makes the provider-ID contract explicit and
-/// testable without a network client.
+/// Matches Seerr's ranked results to playable Jellyfin items by TMDB id.
+/// Pure, so it is testable without a network.
 nonisolated enum TopTenResolver {
     static func resolve(
         discoveries: [SeerrDiscoverResult],
@@ -90,9 +67,8 @@ nonisolated enum TopTenResolver {
 
         var seen = Set<Int>()
         let matches: [MediaItem] = discoveries.compactMap { result in
-            // Typed discover endpoints may omit mediaType; trending includes
-            // it. An explicit conflicting type must never borrow an ID from
-            // the other TMDB catalogue.
+            // Discover may omit mediaType. Movie and TV TMDB ids overlap, so
+            // a conflicting type must never match.
             guard result.mediaType == nil || result.mediaType == mediaType,
                   seen.insert(result.id).inserted else { return nil }
             return byTMDB[String(result.id)]
@@ -101,42 +77,30 @@ nonisolated enum TopTenResolver {
     }
 }
 
-/// Picks the genre and the decade that Home spotlights today.
-///
-/// **Seeded by the day, not by the launch.** Re-rolling on every appearance
-/// makes Home feel jittery rather than curated — you glance away, look back,
-/// and the screen has rearranged itself. A day is long enough to feel chosen
-/// and short enough to stay alive.
+/// Picks the genre and decade Home spotlights today. Seeded by the day, not
+/// the launch, so Home does not reshuffle every time it appears.
 nonisolated enum HomeRotation {
-    /// Days since the epoch, in the viewer's own timezone so the row turns
-    /// over at their midnight rather than at UTC's.
+    /// Days since the epoch in the local timezone, so rows turn over at
+    /// local midnight.
     static func daySeed(for date: Date, calendar: Calendar = .current) -> Int {
         let start = calendar.startOfDay(for: date)
         return Int(start.timeIntervalSince1970 / 86_400)
     }
 
-    /// The genre to spotlight, chosen from the viewer's own most-watched
-    /// first. "More Horror" earns its place where a fixed "Horror" out of
-    /// nowhere does not, so a ranked list is the input and the rotation only
-    /// decides which of their favourites gets today.
-    ///
-    /// Ranked order is preserved, so this rotates through what they actually
-    /// watch rather than sampling the whole library.
+    /// Rotates daily through the viewer's most-watched genres.
     static func genre(
         rankedByWatchHistory genres: [String],
         for date: Date,
         calendar: Calendar = .current
     ) -> String? {
         guard !genres.isEmpty else { return nil }
-        // Only the top handful are theirs in any meaningful sense; below that
-        // it is one film they finished once.
+        // Below the top five it is one film they finished once.
         let candidates = Array(genres.prefix(5))
         return candidates[abs(daySeed(for: date, calendar: calendar)) % candidates.count]
     }
 
-    /// The decade to spotlight, as its first year. Stops at the 1970s because
-    /// a personal library thins out fast before then, and excludes the
-    /// current decade, which "Recently Added" already covers.
+    /// First year of the decade. From the 1970s (libraries thin out before)
+    /// up to but not including the current decade (Recently Added covers it).
     static func decade(
         for date: Date,
         calendar: Calendar = .current
@@ -148,18 +112,12 @@ nonisolated enum HomeRotation {
         return candidates[abs(daySeed(for: date, calendar: calendar)) % candidates.count]
     }
 
-    /// "Movies from the 1990s". Spelled in full rather than as "90s", which
-    /// is ambiguous once a library holds anything from the 1890s or 2090s.
     static func decadeTitle(startingIn year: Int) -> String {
         "Movies from the \(year)s"
     }
 
-    /// The genres this viewer actually watches, most first.
-    ///
-    /// Counts genres across their played items rather than the whole library,
-    /// so a shelf full of unwatched documentaries does not decide what Home
-    /// recommends. Ties break on the genre name so the ranking is stable
-    /// between loads and the rotation does not jump.
+    /// Genres across played items, most first; ties break on name so the
+    /// rotation is stable between loads.
     static func rankGenres(byWatchHistory items: [MediaItem]) -> [String] {
         var counts: [String: Int] = [:]
         for genre in items.flatMap({ $0.genres ?? [] }) {

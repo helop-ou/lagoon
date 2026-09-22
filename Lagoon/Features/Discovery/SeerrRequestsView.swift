@@ -18,16 +18,13 @@ struct SeerrRequestsView: View {
             }
         }
         .background(Theme.background.ignoresSafeArea())
-        // Keep the fetch on the stable screen root. Putting it on the
-        // ScrollView/LoadingView branches made each isLoading transition
-        // remove and cancel the task, producing an endless spinner.
+        // Keep the fetch on the stable root: on the loading branches, each
+        // isLoading change cancels the task and spins forever.
         .task(id: seerr.user.map(loadID) ?? "signed-out") {
             guard let user = seerr.user else { return }
             await reload(user: user)
         }
-        // Returning from a moderation/detail screen should reconcile the
-        // row that may have changed there without tying refresh to a child
-        // view that is replaced during loading.
+        // Reconcile rows changed on a detail screen, on the stable root.
         .onAppear {
             guard !viewModel.requests.isEmpty else { return }
             refreshID += 1
@@ -189,18 +186,14 @@ struct SeerrRequestsView: View {
     }
 }
 
-/// One request as a poster card, the same shape the rest of the app uses for
-/// media. It replaced a full-width glass slab holding a small poster in a lot
-/// of empty space, which made a handful of requests fill the screen and
-/// matched nothing else in the app.
+/// One request as a poster card, the shape the rest of the app uses.
 private struct SeerrRequestCard: View {
     let request: SeerrMediaRequest
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var details: SeerrMediaDetails?
     let layout = PosterLayout()
 
-    /// "Processing" says nothing about whether anything is happening. When
-    /// the server knows how far the download has got, say that instead.
+    /// Download progress in place of "Processing" when the server knows it.
     private var badgeTitle: String {
         guard request.progress == .processing, let progress = request.downloadProgress else {
             return request.progress.title
@@ -215,8 +208,7 @@ private struct SeerrRequestCard: View {
         return progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle"
     }
 
-    /// A transfer that is actually moving gets the falling arrow; everything
-    /// else takes the state's own motion.
+    /// A moving transfer gets the falling arrow.
     private var badgeMotion: SeerrStatusMotion {
         guard request.progress == .processing, request.downloadProgress != nil else {
             return request.progress.motion
@@ -246,9 +238,7 @@ private struct SeerrRequestCard: View {
                     .frame(width: layout.width, height: layout.height)
                     .clipped()
 
-                    // One word, like the availability badges on the Discover
-                    // cards. The full "Pending Approval" wrapped to two lines
-                    // and covered a third of the artwork.
+                    // One word: longer labels wrap and cover the artwork.
                     SeerrStatusLabel(title: badgeTitle, symbol: badgeSymbol, motion: badgeMotion)
                         .font(.caption2.bold())
                         .labelStyle(.titleAndIcon)

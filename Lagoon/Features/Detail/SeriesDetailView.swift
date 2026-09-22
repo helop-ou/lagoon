@@ -16,11 +16,8 @@ final class SeriesDetailViewModel {
     /// unwatched. Nil once the show is finished.
     var upNext: MediaItem?
 
-    /// The episode Play starts when nothing is up next: the first of the
-    /// visible season. A finished show has no next episode, and a page with
-    /// no Play button read as broken rather than as "you've seen it all".
-    /// Starting the season over is the one obvious thing to offer, and it
-    /// moves with the season picker.
+    /// Play's fallback once the show is finished, so the page always has a
+    /// Play button. Follows the season picker.
     var firstEpisode: MediaItem? { episodes.first }
 
     func load(client: JellyfinClient, seriesId: String) async {
@@ -55,10 +52,8 @@ final class SeriesDetailViewModel {
         await loadEpisodes(client: client, seriesId: seriesId)
     }
 
-    /// Where the page opens: the season holding the episode that's up next,
-    /// so the rail shows what surrounds it rather than season one every
-    /// time. A finished show opens on its first regular season; the server
-    /// sorts Specials first, and they are the wrong place to start a rewatch.
+    /// The up-next episode's season. A finished show opens on its first
+    /// regular season, skipping Specials, which the server sorts first.
     private var openingSeasonId: String? {
         if let seasonId = upNextSeasonId { return seasonId }
         return (seasons.first { ($0.indexNumber ?? 0) > 0 } ?? seasons.first)?.id
@@ -70,9 +65,8 @@ final class SeriesDetailViewModel {
         return seasonId
     }
 
-    /// After playback: a session can end seasons away from where it started,
-    /// so the rail follows the episode that is now up next. Nothing
-    /// changes when it is already in view, or the show is finished.
+    /// After playback, move the rail to the season now up next; a session
+    /// can end seasons away from where it started.
     func followUpNext(client: JellyfinClient, seriesId: String) async {
         guard let seasonId = upNextSeasonId else { return }
         await selectSeason(seasonId, client: client, seriesId: seriesId)
@@ -88,11 +82,8 @@ final class SeriesDetailViewModel {
         await loadEpisodes(client: client, seriesId: seriesId)
     }
 
-    /// After a watched/favourite toggle or a playback session: the show's own
-    /// flags, the episode rail, and *which episode is up next* can all have
-    /// moved — marking one watched advances it to the following one.
-    /// Returns whether every part the action row acts on was re-read: the
-    /// show's own flags, the up-next episode, and the episode rail.
+    /// Re-reads the show's flags, the up-next episode and the rail, which a
+    /// toggle or playback can all move. Returns whether all three were re-read.
     @discardableResult
     func reloadUserData(client: JellyfinClient, seriesId: String) async -> Bool {
         let generation = loadGeneration
@@ -132,9 +123,7 @@ final class SeriesDetailViewModel {
         // An A → B → A selection must reject the first A response too.
         guard generation == episodeGeneration, identity == client.sessionIdentity,
               self.selectedSeasonId == selectedSeasonId, !Task.isCancelled else { return false }
-        // A foreground sync is opportunistic. Preserve the visible rail
-        // when the server is asleep rather than turning a full season
-        // into an empty one.
+        // Keep the visible rail when the server fails to answer.
         if let loaded { episodes = loaded }
         return loaded != nil
     }
@@ -148,22 +137,16 @@ struct SeriesDetailView: View {
     @Environment(SyncPlayStore.self) private var syncPlay
     @State private var viewModel = SeriesDetailViewModel()
     @State private var playerItem: PlayerItem?
-    /// The episode the rail last put focus on. Deliberately *not* cleared
-    /// when focus leaves the rail: having browsed to E5, moving up to Play
-    /// should start E5, not snap back to whatever was up next.
+    /// The episode the rail last focused. Not cleared when focus leaves the
+    /// rail, so moving up to Play starts the browsed episode.
     @State private var highlighted: MediaItem?
-    /// The episode at the rail's leading edge. The page sets it when the
-    /// rail's content changes hands (a load, a season pick, a finished
-    /// playback session) so the episode Play names is in view; browsing the
-    /// rail leaves it to the scroll view, which would otherwise yank the row
-    /// under a moving focus.
+    /// Set only when the rail's content changes (load, season pick, end of
+    /// playback). Setting it while browsing would yank the row under focus.
     @State private var railPosition: String?
 
     private var displayed: MediaItem { viewModel.detail ?? item }
 
-    /// What the header describes and the buttons act on: the episode you're
-    /// looking at, the one that would play if you haven't looked yet, or the
-    /// first of the visible season once the show is finished.
+    /// What the header describes and the buttons act on.
     private var subject: MediaItem? { highlighted ?? viewModel.upNext ?? viewModel.firstEpisode }
 
     var body: some View {
@@ -181,9 +164,8 @@ struct SeriesDetailView: View {
             #if os(iOS)
             await DownloadStore.shared.refreshPermission(client: session.client)
             #endif
-            // The Watch Together control renders nothing until the server
-            // has answered, and a task on a view that renders nothing never
-            // runs, so the page asks.
+            // The Watch Together control renders nothing until this answers,
+            // so it cannot run the task itself.
             await syncPlay.refreshAvailability()
         }
         .onChange(of: serverSync.generation) { _, _ in
@@ -195,16 +177,11 @@ struct SeriesDetailView: View {
         .onChange(of: viewModel.selectedSeasonId) { _, _ in highlighted = nil }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .playerPresentation(item: $playerItem, onDismiss: {
-            // Watching an episode moves the show on, so this reloads what's
-            // up next as well as the rail — once the stop report that moves
-            // it has landed.
+            // Reload up next once the stop report has landed.
             Task {
                 await session.client.playbackReports.settle()
                 await viewModel.reloadUserData(client: session.client, seriesId: item.id)
-                // The page is about wherever the session ended, not the
-                // card picked before it: a binge from S1 E1 can stop in
-                // S3, and the server's answer for what's up next is the
-                // only one that knows.
+                // Follow where the session ended, not the card picked before it.
                 highlighted = nil
                 await viewModel.followUpNext(client: session.client, seriesId: item.id)
                 railPosition = subject?.id
@@ -212,19 +189,14 @@ struct SeriesDetailView: View {
         })
     }
 
-    /// A season the viewer picked: its rail starts at the beginning. Picking
-    /// the season already showing leaves the rail where it is.
+    /// A picked season's rail starts at its first episode.
     private func showSeason(_ seasonId: String) async {
         guard seasonId != viewModel.selectedSeasonId else { return }
         await viewModel.selectSeason(seasonId, client: session.client, seriesId: item.id)
         railPosition = viewModel.firstEpisode?.id
     }
 
-    /// Play the episode that's up next, then the toggles, then the season
-    /// picker. Play leads so it takes first focus — the same reason the movie
-    /// page orders it that way. The season picker is the layout's accessory:
-    /// in the row with the circles on a phone, under the row where there is
-    /// width.
+    /// Play leads so it takes first focus.
     private var actions: some View {
         DetailActionLayout {
             if let episode = subject {
@@ -237,9 +209,6 @@ struct SeriesDetailView: View {
                 DownloadControl(item: episode)
             }
             #endif
-            // A group started from a show is a group watching the episode
-            // Play would start, from where that episode was left — the same
-            // subject every other control on this row acts on.
             if let episode = subject {
                 WatchTogetherControl(
                     item: episode,
@@ -267,16 +236,13 @@ struct SeriesDetailView: View {
         #endif
     }
 
-    /// The checkmark acts on the episode you're looking at or the one up
-    /// next, and on the show itself once every episode is watched, where
-    /// Play offers a rewatch from episode one but the check should clear
-    /// the whole show, not just that episode. The star favourites the show.
+    /// The checkmark acts on the show itself once every episode is watched,
+    /// so it clears the whole show rather than episode one.
     private var actionRow: some View {
         ItemActionRow(item: displayed, playedItem: highlighted ?? viewModel.upNext) {
             let refreshed = await viewModel.reloadUserData(client: session.client, seriesId: item.id)
-            // A hand-picked episode lives in this view's state, which no
-            // reload touches: re-match it from the refreshed rail so its
-            // watched flag is the server's, not the pick's.
+            // Reloads never touch this view's state: re-match the picked
+            // episode so its watched flag is the server's.
             if let picked = highlighted {
                 guard let fresh = viewModel.episodes.first(where: { $0.id == picked.id }) else { return false }
                 highlighted = fresh
@@ -312,19 +278,14 @@ struct SeriesDetailView: View {
                                 Task { await showSeason(season.id) }
                             }
                             .buttonStyle(.glass)
-                            // Weight alone marks the selected season: a colored
-                            // label fought the focused lozenge, and `.primary`
-                            // under this screen's dark scheme is white — so the
-                            // selected chip went invisible when focused.
+                            // Weight alone marks the selection: a label color
+                            // turns invisible on the focused chip.
                             .font(.callout.weight(season.id == viewModel.selectedSeasonId ? .bold : .regular))
                         }
                     }
-                    // Focused glass chips scale past their bounds, and a
-                    // ScrollView clips at its own edges: the gutter has to live
-                    // *inside* the scroll content so the first chip has room to
-                    // grow into, exactly as the episode rail below does. Without
-                    // the escape below, the scroll view starts at the gutter and
-                    // slices the focused chip's leading end flat.
+                    // The gutter lives inside the scroll content, with the
+                    // negative padding below, so a focused chip's lift is not
+                    // clipped at the scroll view's edge.
                     .padding(.horizontal, Metrics.screenGutter)
                     .padding(.vertical, Metrics.Space.l)
                 }
@@ -340,7 +301,7 @@ struct SeriesDetailView: View {
                 .font(.title3.bold())
                 .padding(.leading, Metrics.screenGutter)
 
-            // Stays mounted across season switches — swapping it for a spinner
+            // Stays mounted across season switches; a spinner in its place
             // collapses the layout and makes focus jump.
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Metrics.cardSpacing) {
@@ -359,10 +320,8 @@ struct SeriesDetailView: View {
                 .padding(.top, Metrics.railTopPadding)
                 .padding(.bottom, Metrics.railBottomPadding)
             }
-            // The gutter is a content margin rather than padding so that
-            // scrolling to an episode lands it at the gutter, not flush with
-            // the screen edge; the viewport still spans the whole width, so
-            // a focused card's lift is not clipped at the edge.
+            // A content margin, not padding: scrolling lands an episode at
+            // the gutter, and the full-width viewport keeps focus lift unclipped.
             .contentMargins(.horizontal, Metrics.screenGutter, for: .scrollContent)
             .scrollPosition(id: $railPosition, anchor: .leading)
             .opacity(viewModel.isLoadingEpisodes ? 0.4 : 1)
@@ -373,8 +332,7 @@ struct SeriesDetailView: View {
 
 struct EpisodeCard: View {
     let episode: MediaItem
-    /// Fires as focus arrives, so the series header can describe whatever
-    /// episode you're looking at.
+    /// Fires on focus so the series header can describe this episode.
     var onFocus: (() -> Void)?
     let action: () -> Void
 

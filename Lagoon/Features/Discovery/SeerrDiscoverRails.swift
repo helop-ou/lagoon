@@ -1,9 +1,7 @@
 import Observation
 import SwiftUI
 
-/// One rail's worth of state. Each rail owns its own, so a dead endpoint
-/// costs that rail and nothing else — the whole page used to be discarded on
-/// any single failure, which does not survive having eight of them.
+/// Per-rail state, so a dead endpoint costs only that rail.
 @Observable
 private final class SeerrRailLoader {
     var items: [SeerrDiscoverResult] = []
@@ -28,10 +26,8 @@ private final class SeerrRailLoader {
     }
 }
 
-/// A poster shelf fed by one `SeerrCatalogSource`, fetching itself when it is
-/// built rather than as part of one page-wide load. Inside a `LazyVStack`
-/// that means a rail below the fold costs nothing until it is scrolled near,
-/// so adding rows does not slow the screen down.
+/// A poster shelf that fetches itself when built, so inside a `LazyVStack`
+/// a rail below the fold costs nothing until scrolled near.
 struct SeerrDiscoverRail: View {
     let source: SeerrCatalogSource
     let refreshGeneration: Int
@@ -50,15 +46,11 @@ struct SeerrDiscoverRail: View {
             } else if let message = loader.errorMessage {
                 placeholder { InlineRetryView(message: message) { retryID += 1 } }
             } else if !loader.didLoad {
-                // Covers "loading" *and* "not started yet". A rail that draws
-                // nothing has no height, and a zero-height row inside a
-                // LazyVStack is never realised — so its `.task` never runs and
-                // it stays empty forever. The placeholder is what gives the
-                // row enough size to be built in the first place.
+                // Also covers "not started": a zero-height row in a LazyVStack
+                // is never built, so its `.task` would never run.
                 placeholder { ProgressView().accessibilityLabel("Loading \(source.title)") }
             }
-            // A rail that loaded and came back empty draws nothing at all.
-            // An empty watchlist is the ordinary case, not a fault.
+            // Loaded but empty draws nothing; an empty watchlist is normal.
         }
         .task(id: "\(source.id):\(seerr.user?.id ?? -1):\(retryID):\(refreshGeneration)") {
             await loader.load(
@@ -82,9 +74,7 @@ struct SeerrDiscoverRail: View {
 
 }
 
-/// The genre browse shelf, built like Home's `GenreRail` but over Seerr's own
-/// genre list, which ships its own TMDB backdrops rather than needing a
-/// representative picked out of the library.
+/// Like Home's `GenreRail`, over Seerr's genre list and its TMDB backdrops.
 struct SeerrGenreRail: View {
     let mediaType: SeerrMediaType
     let title: String
@@ -96,8 +86,7 @@ struct SeerrGenreRail: View {
     var body: some View {
         Group {
             if genres.isEmpty, !didLoad {
-                // Same reason as the poster rails: a row with no height is
-                // never built, so its `.task` never runs.
+                // A zero-height row is never built, so its `.task` never runs.
                 VStack(alignment: .leading, spacing: Metrics.Space.l) {
                     Text(title)
                         .font(.headline)
@@ -127,8 +116,7 @@ struct SeerrGenreRail: View {
         }
         .task(id: "genres:\(mediaType.rawValue):\(seerr.user?.id ?? -1):\(refreshGeneration)") {
             guard refreshGeneration > 0 || !didLoad else { return }
-            // A genre shelf that will not load is not worth a retry control
-            // on a browse screen; the rail simply does not appear.
+            // No retry control: a failed genre shelf just does not appear.
             do {
                 let refreshed = try await seerr.client.genres(mediaType)
                 guard !Task.isCancelled else { return }
@@ -136,8 +124,7 @@ struct SeerrGenreRail: View {
                 didLoad = true
             } catch is CancellationError {
             } catch {
-                // Preserve an existing shelf during an opportunistic refresh.
-                // The first load keeps the old no-row failure behavior.
+                // A failed refresh keeps the existing shelf.
                 if genres.isEmpty { didLoad = true }
             }
         }
@@ -185,9 +172,7 @@ private struct SeerrGenreCard: View {
 }
 
 private extension SeerrGenreCard {
-    /// Deterministic rather than random: the same genre keeps the same
-    /// picture between launches, so the shelf does not reshuffle itself
-    /// every time Discover is opened.
+    /// Deterministic, so the shelf does not reshuffle on every visit.
     var backdropURL: URL? {
         guard !genre.backdrops.isEmpty else { return nil }
         let path = genre.backdrops[abs(genre.id) % genre.backdrops.count]

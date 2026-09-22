@@ -1,10 +1,8 @@
 import Foundation
 import os
 
-/// What a viewer asks for when taking a title off the server.
-/// Original is the file as stored; the other two are the server's
-/// progressive transcode under a bitrate and size cap, so a 30 GB 4K remux
-/// never lands on a phone unless asked for by name.
+/// Original is the stored file; the others are a capped server transcode, so
+/// a 30 GB 4K remux never lands on a phone unless asked for by name.
 nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, Sendable {
     case original
     case high
@@ -28,7 +26,6 @@ nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, S
         }
     }
 
-    /// The transcode's video bitrate cap; nil for the original.
     var videoBitrate: Int? {
         switch self {
         case .original: nil
@@ -45,12 +42,9 @@ nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, S
         }
     }
 
-    /// The transcode's audio bitrate, part of every estimate.
     static let audioBitrate = 256_000
 
-    /// Bytes the download is expected to take: the stored size for the
-    /// original, bitrate times runtime for a transcode. Nil when the source
-    /// carries neither.
+    /// Stored size for the original, bitrate times runtime for a transcode.
     func estimatedBytes(sourceSize: Int64?, runTimeTicks: Int64?) -> Int64? {
         guard let videoBitrate else { return sourceSize }
         guard let runTimeTicks, runTimeTicks > 0 else { return nil }
@@ -58,9 +52,8 @@ nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, S
         return Int64(Double(videoBitrate + Self.audioBitrate) / 8 * seconds)
     }
 
-    /// The quality that is actually fetched: a transcode whose estimate is
-    /// no smaller than the original is pointless, so the original is taken
-    /// directly (the fast path). Original stays original.
+    /// A transcode no smaller than the original is pointless, so the
+    /// original is fetched instead (the fast path).
     func effective(sourceSize: Int64?, runTimeTicks: Int64?) -> DownloadQuality {
         guard self != .original, let sourceSize, sourceSize > 0,
               let estimate = estimatedBytes(sourceSize: sourceSize, runTimeTicks: runTimeTicks) else {
@@ -70,8 +63,7 @@ nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, S
     }
 }
 
-/// One title on disk, or on its way there: what was asked for, where it
-/// lives and how far it got. Enough listing metadata rides here for the
+/// One title on disk or on its way. Carries enough metadata for the
 /// Downloads screen to render without decoding the item snapshot.
 nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     enum State: String, Codable, Sendable {
@@ -92,7 +84,6 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     let episodeNumber: Int?
     let productionYear: Int?
     let runTimeTicks: Int64?
-    /// What the viewer chose.
     let requestedQuality: DownloadQuality
     /// What is fetched, after the original fast path.
     let quality: DownloadQuality
@@ -105,50 +96,39 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     var failure: String?
     /// Set while a task is in flight so a relaunch can re-adopt it.
     var taskIdentifier: Int?
-    /// A fresh UUID set on every `start`/`resume`, carried in the task
-    /// description so a delegate report for an attempt that was replaced
-    /// by a newer one (delete-then-restart, or a stale resume) is dropped
-    /// instead of landing on the current attempt. Optional so a manifest
-    /// saved before this field existed decodes.
+    /// New on every `start`/`resume` and carried in the task description,
+    /// so reports from a replaced attempt are dropped. Optional for older
+    /// manifests.
     var attemptToken: String?
-    /// `resumeData` from a pause or a transport failure, kept as its own
-    /// file because it can be megabytes. Only ever set for `.original`:
-    /// the transcode endpoint has no range support, so resume data would
-    /// append a second encode onto the file.
+    /// Its own file because it can be megabytes. Only for `.original`: the
+    /// transcode endpoint has no range support, so resuming would append a
+    /// second encode.
     var resumeDataFile: String?
-    /// The resume point recorded by local playback, authoritative for a
-    /// downloaded title until the server hears about it.
+    /// Authoritative until the server hears about it.
     var localPositionTicks: Int64?
-    /// Artwork saved beside the file, keyed "imageItemID/ImageType" (the
-    /// id and type in the server image URL, so an episode's series poster
-    /// is keyed by the series), valued by file name in the account folder.
+    /// "imageItemID/ImageType" from the server image URL (an episode's
+    /// series poster is keyed by the series) to file name.
     var artworkFiles: [String: String] = [:]
     let createdAt: Date
     var completedAt: Date?
 
     var isComplete: Bool { state == .complete }
     var isActive: Bool { state == .queued || state == .downloading }
-    /// Whether a resume of this entry has to start over from byte zero: a
-    /// transcode has no resume data to fall back on, so the paused caption
-    /// can say so up front.
+    /// A transcode has no resume data, so resuming starts from byte zero.
     var resumesFromStart: Bool { quality != .original }
 
-    /// Progress in 0...1 while the size is known, else nil.
     var fractionComplete: Double? {
         guard let expectedBytes, expectedBytes > 0 else { return nil }
         return min(1, Double(receivedBytes) / Double(expectedBytes))
     }
 
-    /// "S1 E3" for an episode, nil otherwise.
     var episodeLabel: String? {
         guard type == .episode, let seasonNumber, let episodeNumber else { return nil }
         return "S\(seasonNumber) E\(episodeNumber)"
     }
 }
 
-/// A stop report the server could not be given at the time, kept until it
-/// can: the resume position of an offline session reaches the server on
-/// reconnect.
+/// An offline session's stop report, sent on reconnect.
 nonisolated struct PendingPlaybackReport: Codable, Hashable, Sendable {
     let itemID: String
     let mediaSourceID: String
@@ -156,9 +136,8 @@ nonisolated struct PendingPlaybackReport: Codable, Hashable, Sendable {
     let createdAt: Date
 }
 
-/// The per-account list of downloads and its transitions, kept pure so the
-/// state machine is unit-tested without a session, a disk or a clock. The
-/// store persists it and drives the transfers.
+/// The per-account download state machine, pure so it is unit-tested
+/// without a session, disk or clock.
 nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     var entries: [DownloadEntry] = []
     var pendingReports: [PendingPlaybackReport] = []
@@ -171,7 +150,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
         entry(for: itemID)?.isComplete ?? false
     }
 
-    /// Bytes on disk, counting partial transfers.
+    /// Counts partial transfers.
     var storageUsed: Int64 {
         entries.reduce(0) { $0 + $1.receivedBytes }
     }
@@ -180,7 +159,6 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
         entries.filter(\.isComplete).count
     }
 
-    /// Adds an entry, replacing any earlier one for the same item.
     mutating func insert(_ entry: DownloadEntry) {
         entries.removeAll { $0.itemID == entry.itemID }
         entries.append(entry)
@@ -210,10 +188,8 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
         }
     }
 
-    /// A no-op once the entry is paused or complete: a progress callback
-    /// queued before a pause or a delete can still land after it, and must
-    /// not un-pause the entry or resurrect a byte count for a title that
-    /// no longer exists.
+    /// A no-op unless active: a callback queued before a pause or delete can
+    /// land after it and must not un-pause or resurrect the entry.
     mutating func recordProgress(_ itemID: String, received: Int64, expected: Int64?) {
         guard let entry = entry(for: itemID), entry.isActive else { return }
         update(itemID) {
@@ -229,8 +205,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
             $0.taskIdentifier = nil
             $0.resumeDataFile = resumeDataFile
             $0.state = .paused
-            // A late failure callback for the same cancel must not leave a
-            // stale error string sitting under a deliberate pause.
+            // Clear any error a late cancel callback left.
             $0.failure = nil
         }
     }
@@ -240,8 +215,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
         update(itemID) {
             $0.taskIdentifier = nil
             if let resumeDataFile { $0.resumeDataFile = resumeDataFile }
-            // A failed resume can report its error while leaving the
-            // transfer paused; delegate errors are filtered by the store.
+            // A failed resume reports its error but stays paused.
             if $0.state != .paused { $0.state = .failed }
             $0.failure = reason
         }
@@ -263,16 +237,10 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
         update(itemID) { $0.localPositionTicks = ticks }
     }
 
-    /// After a relaunch: entries whose task the system kept running are
-    /// re-adopted; an entry whose file is already on disk under
-    /// `completedFiles` finished while the process was suspended before it
-    /// could record that itself, so it is promoted straight to `.complete`
-    /// with the file's own byte count rather than demoted to failed; the
-    /// store computes this set from the account directory, keeping this
-    /// method free of disk access. The rest of the in-flight entries
-    /// become paused when they hold resume data, otherwise failed.
-    /// Returns the ids that were actually lost, not the ones recovered as
-    /// complete.
+    /// After a relaunch: live tasks are re-adopted; a file already in
+    /// `completedFiles` finished while suspended and becomes `.complete`;
+    /// the rest become paused if they hold resume data, else failed.
+    /// Returns only the lost ids.
     @discardableResult
     mutating func reconcile(
         liveTasks: [String: Int], completedFiles: [String: Int64] = [:],
@@ -280,8 +248,7 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     ) -> [String] {
         var lost: [String] = []
         for entry in entries where entry.isActive {
-            // The URLSession task snapshot predates starts/resumes that ran
-            // while it was awaited. Those attempts need no reconciliation.
+            // Skip attempts started after the task snapshot was taken.
             if let queriedAttempts, queriedAttempts[entry.itemID] != (entry.attemptToken ?? "") { continue }
             if let taskIdentifier = liveTasks[entry.itemID] {
                 update(entry.itemID) { $0.taskIdentifier = taskIdentifier }
@@ -316,16 +283,12 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
     }
 }
 
-/// Where a server image URL points, for matching a downloaded title's saved
-/// artwork back to whatever a view would otherwise fetch over the network.
-/// Pure and platform-independent so the parser is pinned down by
-/// a test without an iOS-only store.
+/// Matches a server image URL to saved artwork. Platform-independent so it
+/// is testable without the iOS-only store.
 nonisolated enum DownloadArtworkKey {
-    /// Reads `Items/{imageItemID}/Images/{Type}`. `Type` can itself carry a
-    /// slash (a backdrop's is `Backdrop/0`), so everything after "Images"
-    /// is taken as one value rather than a single path component; the query
-    /// string is ignored, since a viewer can ask for the same image at any
-    /// size.
+    /// Reads `Items/{imageItemID}/Images/{Type}`. `Type` can contain a slash
+    /// (`Backdrop/0`), so everything after "Images" is one value. The query
+    /// (image size) is ignored.
     static func parse(_ url: URL) -> (imageItemID: String, type: String)? {
         let parts = url.pathComponents.filter { $0 != "/" }
         guard let itemsIndex = parts.firstIndex(of: "Items"),
@@ -335,19 +298,16 @@ nonisolated enum DownloadArtworkKey {
         return (parts[itemsIndex + 1], type)
     }
 
-    /// The key `DownloadEntry.artworkFiles` and the artwork index agree on:
-    /// case-insensitive, since a saved file and a freshly built server URL
-    /// only need to agree on spelling, not case.
+    /// Case-insensitive key shared by `DownloadEntry.artworkFiles` and the
+    /// artwork index.
     static func indexKey(imageItemID: String, type: String) -> String {
         "\(imageItemID)/\(type)".lowercased()
     }
 }
 
-/// The four fields threaded through a background download task's
-/// `taskDescription`: everything a delegate callback needs to find a
-/// finished transfer's destination and confirm the report still belongs
-/// to the attempt that is current, even for an event delivered after a
-/// relaunch or for a different account than the one active in the process.
+/// Carried in a task's `taskDescription` so a callback can find its
+/// destination and current attempt, even after a relaunch or for an
+/// inactive account.
 nonisolated struct DownloadTaskDescription: Equatable, Sendable {
     let itemID: String
     let fileName: String
@@ -364,20 +324,16 @@ nonisolated struct DownloadTaskDescription: Equatable, Sendable {
     }
 }
 
-/// Whether a finished download task actually succeeded, decided once so
-/// the delegate's synchronous write (which can run without the store
-/// active) and the store's own reporting path always agree.
+/// Decided in one place so the delegate's synchronous write and the store's
+/// reporting always agree.
 nonisolated enum DownloadCompletion {
     enum Outcome: Equatable {
         case complete(bytes: Int64)
         case failed(reason: String)
     }
 
-    /// An HTTP 403 means the server refused the permission mid-transfer,
-    /// any other non-2xx is a plain failure, and an original whose size
-    /// does not match what was expected is an incomplete file; a
-    /// transcode has no reliable expected size to compare against, so any
-    /// size is accepted once the status is good.
+    /// Only an original is size-checked: a transcode has no reliable
+    /// expected size.
     static func outcome(status: Int, bytesOnDisk: Int64, expectedBytes: Int64?, quality: DownloadQuality) -> Outcome {
         guard (200...299).contains(status) else {
             return .failed(reason: status == 403 ? "Not permitted by the server" : "HTTP \(status)")
@@ -390,15 +346,11 @@ nonisolated enum DownloadCompletion {
     }
 }
 
-/// Short, localized copy for a transport failure a viewer might see next
-/// to a stalled download, in place of raw `NSError` text like "NSURLErrorDomain
-/// -1005".
+/// Short localized text for a transport failure, instead of raw `NSError`.
 nonisolated enum DownloadTransportFailure {
     private static let log = Logger(subsystem: "ee.helop.lagoon", category: "downloads")
 
-    /// `cancelled` deliberately maps to no text at all: it is always the
-    /// tail end of a pause or a delete the store already recorded, never a
-    /// failure in its own right.
+    /// Cancelled maps to nil: it is always a pause or delete already recorded.
     static func failureDescription(domain: String, code: Int) -> String? {
         log.error("transport failure \(domain, privacy: .public) \(code)")
         switch (domain, code) {

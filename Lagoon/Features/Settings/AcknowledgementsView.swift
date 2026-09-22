@@ -1,24 +1,11 @@
 import SwiftUI
 
-/// What Lagoon ships that it did not write: every third-party component, the
-/// licence that governs it, and the names that belong to other projects
-/// (audit A06).
-///
-/// Modelled on `ChangelogView`, and for its reasons: a modal you read and
-/// dismiss rather than a pushed page, no `NavigationStack` on tvOS — its
-/// title has no background of its own, so content scrolls visibly behind it,
-/// and it squeezes the sheet to roughly half its natural width — and every
-/// paragraph focusable, because tvOS scrolls by moving focus and a panel of
-/// plain text cannot be scrolled at all.
-///
-/// The licence text is a second screen. On iOS that is a push; on tvOS,
-/// without a navigation stack, the panel swaps its own scrolling content and
-/// offers Back beside Done.
+/// Third-party components, their licences, and trademark notices. Built like
+/// `ChangelogView` and for the same tvOS reasons. On tvOS the licence text
+/// swaps into the panel with Back beside Done, as there is no navigation stack.
 struct AcknowledgementsView: View {
     @Environment(\.dismiss) private var dismiss
 
-    /// Entries start collapsed: the list of names is what this was opened to
-    /// show, and each entry's provenance is three lines you can ask for.
     @State private var expanded: Set<String> = []
 
     #if os(tvOS)
@@ -37,9 +24,7 @@ struct AcknowledgementsView: View {
 
     #if os(tvOS)
     private var tvBody: some View {
-        // The same three-part stack as the changelog — title, scrolling
-        // content, footer — rather than safeAreaInset overlays, which draw
-        // over the content and need their own material to hide it.
+        // A plain stack, not safeAreaInset overlays, as in the changelog.
         VStack(spacing: 0) {
             Text(panelTitle)
                 .font(.title3.bold())
@@ -61,8 +46,7 @@ struct AcknowledgementsView: View {
             }
             .padding(Metrics.Space.l)
         }
-        // Menu leaves the licence text the way Back does, and only then the
-        // sheet: one press should never skip a level.
+        // Menu leaves the licence text first; one press never skips a level.
         .onExitCommand {
             if readingLicense == nil { dismiss() } else { closeLicense() }
         }
@@ -78,8 +62,6 @@ struct AcknowledgementsView: View {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 ForEach(Acknowledgements.components) { component in
                     VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                        // The header is the control, as in the changelog:
-                        // focus a component, press, and its provenance opens.
                         Button {
                             toggle(component)
                         } label: {
@@ -108,12 +90,8 @@ struct AcknowledgementsView: View {
                     .font(.callout.weight(.medium))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Focusable for the same reason the changelog's notes are: on
-                // tvOS the scroll view follows focus, and text that cannot be
-                // focused cannot be scrolled. Nothing pins the first
-                // paragraph: the engine already opens the licence at its top,
-                // and Down walks the text and then leaves it for the Back and
-                // Done buttons below, which is the whole way out by remote.
+                // Focusable so tvOS can scroll it. Down walks the text, then
+                // reaches Back and Done.
                 ForEach(Array(Self.paragraphs(of: component).enumerated()), id: \.offset) { _, paragraph in
                     Text(paragraph)
                         .font(.callout)
@@ -221,8 +199,7 @@ struct AcknowledgementsView: View {
     private func entryHeader(_ component: ThirdPartyComponent) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.m) {
             #if os(tvOS)
-            // iOS gets its chevron from `DisclosureGroup`; the tvOS panel
-            // draws its own, as the changelog does.
+            // iOS gets its chevron from `DisclosureGroup`.
             Image(systemName: expanded.contains(component.id) ? "chevron.down" : "chevron.forward")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.secondary)
@@ -240,8 +217,6 @@ struct AcknowledgementsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                // What the component does stays visible while collapsed: it
-                // is the line that says why Lagoon carries it at all.
                 Text(component.summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -259,8 +234,7 @@ struct AcknowledgementsView: View {
             if let notes = component.notes {
                 detailLine(notes)
             }
-            // A viewer on Apple TV cannot follow a link, so the address is
-            // what the screen gives them to type on another device.
+            // Apple TV cannot follow a link, so show an address to type elsewhere.
             detailLine(String(localized: "Source: \(LegalDestinations.displayAddress(component.sourceURL))"))
 
             Button("License Text") {
@@ -322,11 +296,8 @@ struct AcknowledgementsView: View {
             .accessibilityIdentifier("settings.acknowledgements.trademarks")
     }
 
-    /// Licence files are hard-wrapped to a terminal width they were never
-    /// going to keep here: at ten feet those columns either re-wrap raggedly
-    /// or force type too small to read. Each blank-line-separated paragraph
-    /// is reflowed into one block instead, which is also what makes it a
-    /// focus target the scroll view can follow.
+    /// Reflows hard-wrapped licence text into paragraphs, each a focus target
+    /// the scroll view can follow.
     static func paragraphs(of component: ThirdPartyComponent) -> [String] {
         guard let text = Acknowledgements.licenseText(for: component) else {
             return [

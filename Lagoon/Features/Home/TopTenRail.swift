@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// A ranked Home shelf with an oversized number beside each title, so the
-/// order is visible at a glance instead of being hidden in the row's data.
+/// A ranked Home shelf with a large number beside each title.
 struct TopTenRail: View {
     let title: String
     let items: [MediaItem]

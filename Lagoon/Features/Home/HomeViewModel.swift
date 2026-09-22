@@ -7,19 +7,13 @@ final class HomeViewModel {
         let id: String
         let title: String
         let items: [MediaItem]
-        /// The Jellyfin collection type this rail came from, so Home can file
-        /// it under movies or shows. Nil for rails that are neither
-        /// — the curated rows carry their own placement, and a plugin rail is
-        /// whatever the server decided it is.
+        /// Files the rail under movies or shows. Nil for curated and plugin rails.
         var collectionType: String?
     }
 
-    /// Plugin sections whose content Lagoon already draws with a rail of its
-    /// own. Rendering these as well is the failure mode the
-    /// catalogue invites: a real server offers `ContinueWatching`,
-    /// `NextUp` *and* `ContinueWatchingNextUp` at once, plus `Latest*`
-    /// alongside `RecentlyAdded*` — Home would show the same films three
-    /// times over. `MyMedia` is the library list, which is the tab bar here.
+    /// Plugin sections Lagoon already draws natively. Servers offer several
+    /// overlapping ones at once, so showing them would repeat the same titles.
+    /// `MyMedia` is the tab bar here.
     static let nativelyCoveredSections: Set<String> = [
         "ContinueWatching", "NextUp", "ContinueWatchingNextUp", "MyMedia",
         "LatestMovies", "LatestShows", "RecentlyAddedMovies", "RecentlyAddedShows",
@@ -28,26 +22,18 @@ final class HomeViewModel {
     var resume: [MediaItem] = []
     var nextUp: [MediaItem] = []
     var favorites: [MediaItem] = []
-    /// Extra rails contributed by the Home Screen Sections plugin, already
-    /// deduped and stripped of empties. Empty on servers without it.
+    /// Rails from the Home Screen Sections plugin, deduped, empties removed.
     var pluginRails: [LibraryRail] = []
     var latestRails: [LibraryRail] = []
-    /// Native movie and show discovery shelves. Keeping their catalogues and
-    /// artwork samples separate prevents a shared genre name from opening a
-    /// mixed Movie/Series grid.
+    /// Kept separate so a genre name shared by movies and shows never opens
+    /// a mixed grid.
     var movieGenreShelf: [GenreShelfItem] = []
     var showGenreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
-    /// The library's own random sample, fetched once per load and only when
-    /// every other hero source came back empty; kept so a refresh
-    /// can keep those hero items on screen rather than roll the dice again.
+    /// Random library sample, fetched only when every other hero source is
+    /// empty; kept so a refresh does not reshuffle the hero.
     private var librarySample: [MediaItem] = []
-    /// The curated rows, each carrying its own title because two of
-    /// them name what they are about: the title they are similar to, and the
-    /// genre or decade the rotation landed on today.
     var curatedRails: [String: LibraryRail] = [:]
-    /// The collections worth showing. Empty on a library with no
-    /// collections, and on one whose collections are all franchise stubs.
     var collections: [CollectionShelfItem] = []
     var isLoading = true
     var errorMessage: String?
@@ -56,9 +42,8 @@ final class HomeViewModel {
     private var loadedAccountID: String?
     private var loadGeneration = 0
     private var isRefreshing = false
-    /// Discovery rails are intentionally loaded after the primary Home
-    /// content, but they still belong to this model so an account switch can
-    /// cancel their work instead of leaving requests running in the background.
+    /// Discovery rails load after the primary content; held here so an
+    /// account switch can cancel them.
     private var discoveryTasks: [Task<Void, Never>] = []
 
     func load(
@@ -90,8 +75,7 @@ final class HomeViewModel {
 
             async let resumeItems = try? client.resumeItems()
             async let nextUpItems = try? client.nextUp()
-            // Never fatal to the screen: a server that dislikes the filter
-            // should cost you the rail, not the whole of Home.
+            // A failure costs the rail, not the screen.
             async let favoriteItems = try? client.favorites()
             async let movieGenreCatalog = try? client.genres(includeTypes: [.movie])
             async let showGenreCatalog = try? client.genres(includeTypes: [.series])
@@ -142,10 +126,8 @@ final class HomeViewModel {
             pluginRails = resolvedPluginRails
             heroItems = HeroSelection.select(tiers: heroTiers)
             if heroItems.isEmpty {
-                // Nothing recently added, in progress, favourited or
-                // contributed by a plugin: sample the library itself so a
-                // full but dormant server still opens on a hero.
-                // One query, and only on this path.
+                // No other hero source: sample the library so a dormant
+                // server still opens on a hero.
                 let sample = (try? await client.items(
                     includeTypes: [.movie, .series],
                     sortBy: "Random",
@@ -155,11 +137,8 @@ final class HomeViewModel {
                 librarySample = sample
                 heroItems = HeroSelection.select(tiers: heroTiers)
             }
-            // Deliberately not awaited. These are discovery rather than the
-            // reason anyone opened Lagoon, and awaiting them here would hold
-            // `isLoading` — and so the entire screen, hero included — behind
-            // eight queries for rows that are below the fold anyway. They
-            // appear as they resolve.
+            // Not awaited: holding `isLoading` for below-the-fold discovery
+            // rows would delay the whole screen. They appear as they resolve.
             cancelDiscoveryTasks()
             discoveryTasks = [
                 Task { [weak self] in
@@ -204,10 +183,8 @@ final class HomeViewModel {
         )
     }
 
-    /// Cheap re-fetch of the user-data-driven rails: on returning from
-    /// playback, and after a card's context menu marks something watched or
-    /// favourited. All three rails are derived from user data, so
-    /// any one of those mutations can move an item between them.
+    /// Re-fetches the user-data rails after playback or a watched/favourite
+    /// change, which can move an item between them.
     func refreshProgress(client: JellyfinClient) async {
         guard hasLoaded, !isLoading else { return }
         let generation = loadGeneration
@@ -226,16 +203,13 @@ final class HomeViewModel {
         if let refreshedFavorites {
             favorites = refreshedFavorites
         }
-        // These three rails are hero tiers too: keep what is on
-        // screen with its fresh record, fill anything that fell out.
+        // These are hero tiers too: refresh what is shown, fill gaps.
         heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
     }
 
-    /// Reconciles everything on Home that can visibly change while Lagoon is
-    /// in the background. Existing content stays mounted while these requests
-    /// run, and the primary progress/latest rails keep their last good value
-    /// when a request fails; foregrounding on a sleeping server must not turn
-    /// a full Home screen into an error page.
+    /// Reconciles Home after a foreground or refresh. Content stays mounted,
+    /// and failed requests keep their last good value: a sleeping server must
+    /// not turn Home into an error page.
     func refreshServerContent(
         client: JellyfinClient,
         homeSectionPreferences: HomeSectionPreferenceValues,
@@ -244,8 +218,7 @@ final class HomeViewModel {
         guard hasLoaded, !isLoading, !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        // Any optional discovery work launched by the initial load now owns
-        // an older generation and cannot land over this newer snapshot.
+        // Older discovery work must not land over this newer snapshot.
         cancelDiscoveryTasks()
         loadGeneration &+= 1
         let generation = loadGeneration
@@ -296,23 +269,18 @@ final class HomeViewModel {
         let refreshed = await loadLatestRails(libraries: libraries, client: client)
         guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
 
-        // A single failed library request keeps that rail's last good value;
-        // a successful empty response is still authoritative and clears it.
+        // A failed request keeps the rail's last value; a successful empty
+        // one clears it.
         let freshByID = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, $0) })
         let previousByID = Dictionary(uniqueKeysWithValues: latestRails.map { ($0.id, $0) })
         latestRails = libraries.compactMap { freshByID[$0.id] ?? previousByID[$0.id] }
 
-        // Keep the hero's order stable across a foreground hop, but replace
-        // its values with fresh server records and fill vacancies from the
-        // leading tier — Recently Added when it has anything, otherwise
-        // whichever tier the hero came from.
+        // Keep the hero's order, with fresh records and vacancies filled.
         heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
     }
 
-    /// Hero sources in priority order. The first tier with an
-    /// eligible item supplies the hero; see `HeroSelection`. Collections are
-    /// deliberately absent: their cards route to a collection page, and the
-    /// hero routes to an item.
+    /// Hero sources in priority order; see `HeroSelection`. No collections:
+    /// the hero routes to an item, not a collection page.
     private var heroTiers: [[MediaItem]] {
         [
             latestRails.flatMap(\.items),
@@ -358,19 +326,14 @@ final class HomeViewModel {
         }
     }
 
-    /// The curated rows, fetched together and published together.
-    ///
-    /// Every one of these is discovery: nice to have, never the reason
-    /// someone opened Lagoon. They are fetched concurrently and applied in
-    /// one assignment after the rails that matter are already on screen, and
-    /// any that fails simply does not appear — an unreachable row must cost a
-    /// row, not the screen.
+    /// Fetches the curated rows concurrently and publishes them in one
+    /// assignment. A failed row just does not appear.
     private func loadCuratedRails(
         client: JellyfinClient,
         generation: Int
     ) async {
         let identity = client.sessionIdentity
-        // What they actually watch, which decides the genre spotlight.
+        // Watch history decides the genre spotlight.
         let played = (try? await client.items(
             includeTypes: [.movie, .series],
             sortBy: "DatePlayed",
@@ -428,8 +391,7 @@ final class HomeViewModel {
             filters: ["IsUnplayed"],
             seriesStatus: "Ended"
         )
-        // The one row that is deliberately both, which is why it sits below
-        // the movie and show blocks rather than inside either.
+        // Mixes movies and shows, so it sits below both blocks.
         async let surprise = rail(
             id: HomeCuratedRows.ID.surpriseMe,
             title: "Surprise Me",
@@ -450,8 +412,7 @@ final class HomeViewModel {
             surprise,
         ].compactMap(\.self)
         guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
-        // Top 10 has an independent owner so its external scan never delays
-        // these shelves. Preserve its last snapshot when replacing our rows.
+        // Top 10 loads separately so its scan never delays these; keep its rows.
         let topTen = curatedRails.filter {
             $0.key == HomeCuratedRows.ID.topMovies || $0.key == HomeCuratedRows.ID.topShows
         }
@@ -459,16 +420,14 @@ final class HomeViewModel {
             resolved.map { ($0.id, $0) },
             uniquingKeysWith: { current, _ in current }
         ).merging(topTen, uniquingKeysWith: { current, _ in current })
-        // A hero that found nothing above this tier at load time can still
-        // be filled by the curated rows arriving now.
+        // An empty hero can still fill from the curated rows.
         if heroItems.isEmpty {
             heroItems = HeroSelection.select(tiers: heroTiers)
         }
 
     }
 
-    /// This optional external popularity scan publishes independently
-    /// of the native shelves, while sharing their cancellation generation.
+    /// Publishes independently of the other shelves but shares their generation.
     private func loadTopTenRails(
         client: JellyfinClient, seerr: SeerrClient?,
         preferences: HomeSectionPreferenceValues, generation: Int
@@ -487,15 +446,9 @@ final class HomeViewModel {
         if heroItems.isEmpty { heroItems = HeroSelection.select(tiers: heroTiers) }
     }
 
-    /// The Collections row.
-    ///
-    /// Two passes: one is not enough and one per collection is far too many.
-    /// The first asks for every collection and keeps those holding more than a
-    /// single title — `ChildCount` rides along in the list response, so
-    /// filtering 173 franchise stubs to 18 costs nothing. The second fetches
-    /// contents only for survivors with no landscape artwork, to borrow a card
-    /// picture from the first film inside: 11 small concurrent requests on the
-    /// reference library, none at all where collections are illustrated.
+    /// The Collections row, in two passes. The list response carries
+    /// `ChildCount`, so single-title stubs are dropped for free. Contents are
+    /// fetched only for survivors without landscape art, to borrow a picture.
     private func loadCollections(client: JellyfinClient, generation: Int) async {
         let identity = client.sessionIdentity
         guard let all = try? await client.collections() else { return }
@@ -528,14 +481,12 @@ final class HomeViewModel {
         collections = CollectionShelf.shelf(ranked, borrowedArtwork: borrowed)
     }
 
-    /// Today's genre, or nothing when the viewer has watched too little for
-    /// the rotation to have an opinion.
+    /// Nil when there is too little watch history to pick a genre.
     private func spotlightRail(genre: String?, client: JellyfinClient) async -> LibraryRail? {
         guard let genre else { return nil }
         return await rail(
             id: HomeCuratedRows.ID.genreSpotlight,
-            // Named for what it holds rather than "More Comedy": Home draws
-            // no block headings, so a row title is all the context there is.
+            // Home has no block headings, so the title says what it holds.
             title: "\(genre) Movies",
             client: client,
             includeTypes: [.movie],
@@ -545,8 +496,7 @@ final class HomeViewModel {
         )
     }
 
-    /// Movies only: a decade of television is a different proposition, and
-    /// mixing them makes the row about nothing in particular.
+    /// Movies only; mixing in television blurs the row.
     private func spotlightRail(decade year: Int?, client: JellyfinClient) async -> LibraryRail? {
         guard let year else { return nil }
         return await rail(
@@ -559,13 +509,8 @@ final class HomeViewModel {
         )
     }
 
-    /// "Because You Watched X". The title names its own reason, which is the
-    /// whole point of the row — an unexplained shelf of vaguely related films
-    /// is what every other client already has.
-    ///
-    /// Seeds are tried in the order they were watched, skipping anything too
-    /// short to have been a viewing, and the first that returns a full rail
-    /// wins. See `minimumSeedRuntime` for what that filter is really for.
+    /// "Because You Watched X". Tries seeds most recent first, skipping ones
+    /// too short to count (see `minimumSeedRuntime`); the first full rail wins.
     private func similarRail(seeds: [MediaItem], client: JellyfinClient) async -> LibraryRail? {
         let identity = client.sessionIdentity
         let candidates = seeds
@@ -587,8 +532,7 @@ final class HomeViewModel {
         return nil
     }
 
-    /// Nil rather than an empty rail when a query fails or returns too little
-    /// to look deliberate, so the caller never has to decide what counts.
+    /// Nil when the query fails or returns too few items to look deliberate.
     private func rail(
         id: String,
         title: String,
@@ -618,9 +562,8 @@ final class HomeViewModel {
         return LibraryRail(id: id, title: title, items: page.items)
     }
 
-    /// Builds the Top 10 fallback from Seerr's public discovery catalogue.
-    /// TMDB ids are only used as a bridge; every displayed card is resolved
-    /// back to an item the current Jellyfin user can actually play.
+    /// Top 10 from Seerr's trending and discover lists, matched by TMDB id
+    /// to items this Jellyfin user can play.
     private func topTenRails(
         client: JellyfinClient,
         seerr: SeerrClient?,
@@ -645,12 +588,8 @@ final class HomeViewModel {
         ].filter { $0.items.count >= HomeCuratedRows.minimumItems }
     }
 
-    /// Reads a bounded portion of the library for the provider-ID
-    /// intersection. Jellyfin installations commonly cap a single `Limit`
-    /// lower than requested, so this advances by the number actually returned
-    /// and uses `TotalRecordCount` when the server supplies it. The bound keeps
-    /// an optional discovery shelf from turning into an unbounded scan; very
-    /// large libraries may therefore omit a matching title outside the bound.
+    /// Reads up to 20,000 library items for the provider-id match. Servers
+    /// often cap `Limit`, so it advances by the count actually returned.
     private func topTenLibraryItems(client: JellyfinClient) async -> [MediaItem]? {
         let identity = client.sessionIdentity
         let pageSize = 500
@@ -745,8 +684,7 @@ final class HomeViewModel {
         latestRails = []
         heroItems = []
         librarySample = []
-        // Otherwise the previous account's "Because You Watched" survives the
-        // switch, which names a title on someone else's screen.
+        // Or the old account's "Because You Watched" shows on the new one.
         curatedRails = [:]
         collections = []
         errorMessage = nil

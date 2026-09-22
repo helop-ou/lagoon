@@ -3,29 +3,18 @@ import Foundation
 import LagoonEngine
 import os
 
-// Directories, manifest persistence and artwork files. Reading and
-// writing the manifest is split from the transfer logic in
-// `DownloadStore+Transfers.swift` so a relaunch, an account switch and a
-// background delegate callback for a non-active account can all go through
-// the same small set of helpers.
+// Directories, manifest persistence and artwork files.
 extension DownloadStore {
-    /// Persists the active account's manifest. Every mutation goes through
-    /// a `DownloadManifest` transition method, then this. Does not touch
-    /// the artwork index: rebuilding it decodes every entry's files back
-    /// into a lookup table, which is wasted work on the frequent saves a
-    /// progress callback triggers, so callers that add, remove or activate
-    /// entries call `rebuildArtworkIndex()` themselves.
+    /// Persists the active account's manifest. Does not rebuild the artwork
+    /// index, which is too costly per progress save: callers that add,
+    /// remove or activate entries call `rebuildArtworkIndex()` themselves.
     func save() {
         guard let accountDirectory else { return }
         Self.saveManifest(manifest, at: accountDirectory.appending(path: "manifest.json"))
     }
 
-    /// Saves at most once per second: a fast transfer's `didWriteData`
-    /// callback can fire many times a second, and encoding and writing the
-    /// whole manifest on every one of them was measurable cost for no
-    /// benefit the viewer could see. Real state
-    /// changes (start, pause, resume, complete, fail) always call `save()`
-    /// directly instead, so they are never delayed by this throttle.
+    /// At most once per second, for progress callbacks. State changes call
+    /// `save()` directly and are never delayed.
     func saveProgressThrottled() {
         let now = Date()
         if let lastProgressSaveDate, now.timeIntervalSince(lastProgressSaveDate) < 1 {
@@ -87,15 +76,8 @@ extension DownloadStore {
         }
     }
 
-    /// Loads another account's manifest, lets the caller mutate it, and
-    /// saves it back: for a transfer that reports in while a different
-    /// account is active, whose in-memory manifest must not change. Never
-    /// creates the account directory: an account that was removed while a
-    /// transfer for it was in flight has no directory to write into, and
-    /// this must not recreate one for files that will never arrive. A
-    /// missing directory still loads an
-    /// empty manifest, so `mutate` can check for that itself when it
-    /// matters.
+    /// Mutates an inactive account's manifest on disk. Never creates the
+    /// directory: a removed account must not be recreated by a late transfer.
     static func withStoredManifest(
         atAccountKey key: String,
         _ mutate: (inout DownloadManifest, URL) -> Void
@@ -108,8 +90,7 @@ extension DownloadStore {
         saveManifest(manifest, at: manifestURL)
     }
 
-    /// Writes resume data beside the other account files, returning the
-    /// file name to record on the entry (nil clears any existing one).
+    /// Returns the file name to record on the entry.
     @discardableResult
     static func storeResumeData(_ data: Data?, itemID: String, directory: URL?) -> String? {
         guard let data, let directory else { return nil }
@@ -125,18 +106,14 @@ extension DownloadStore {
 
     // MARK: - Artwork
 
-    /// Saves the item's poster and backdrop beside the download, before the
-    /// transfer starts, so a downloaded title has offline artwork the
-    /// moment it appears in the Downloads list. Failures are logged, not
-    /// fatal: a title with no saved artwork still downloads and plays.
+    /// Saves poster and backdrop before the transfer starts. Failures are
+    /// logged, not fatal.
     func saveArtwork(
         for item: MediaItem, client: JellyfinClient, authorization: MediaRequestAuthorization,
         directory: URL, checkPreparation: () throws -> Void
     ) async throws -> [String: String] {
         var files: [String: String] = [:]
-        // Matches the widths the detail page requests live, so a
-        // downloaded title's offline artwork is never a visibly softer
-        // copy of the one the viewer saw online.
+        // Same widths the detail page requests online.
         let kinds: [(ItemImageKind, Int)] = [(.poster, Metrics.detailPosterRequestWidth), (.backdrop, 1920)]
         for (kind, maxWidth) in kinds {
             guard let url = client.imageURL(for: item, kind: kind, maxWidth: maxWidth),

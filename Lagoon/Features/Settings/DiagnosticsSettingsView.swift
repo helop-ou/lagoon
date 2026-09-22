@@ -60,10 +60,7 @@ struct DiagnosticsSettingsView: View {
             let status = TopShelfStore.status()
             TVSettingsSection(
                 "Top Shelf",
-                // The result carries an underlying error where there is one,
-                // and a row truncates to a single line — which is how "could
-                // not write to the shared container" reached us without the
-                // reason attached to it. A footer wraps.
+                // A footer wraps; a row would truncate the underlying error.
                 footer: """
                 Last result: \(status.lastResult ?? "not run yet").
 
@@ -128,7 +125,6 @@ struct DiagnosticsSettingsView: View {
     }
     #endif
 
-    /// What a report contains, stated the way it is collected.
-    /// Kept in one string so both platforms make the same promise.
+    /// One string, so both platforms make the same promise.
     private static let diagnosticReportsFooter: LocalizedStringKey = "When playback or a server request fails unexpectedly, Lagoon sends a technical report to the developer: app build, device model and OS version, codec and delivery details, error codes, and about a minute of playback measurements. Reports never include your account, server address, media titles, subtitles, or screenshots. Reports are kept for 30 days."
 }

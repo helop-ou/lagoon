@@ -41,8 +41,7 @@ final class LibraryViewModel {
             guard self.revision == revision, !Task.isCancelled else { return }
             var seen = Set(items.map(\.id))
             items.append(contentsOf: page.items.filter { seen.insert($0.id).inserted })
-            // Offsets count server rows, including duplicates from a library
-            // changing between requests, rather than the deduplicated grid.
+            // Offsets count server rows, duplicates included, not the deduplicated grid.
             nextStartIndex += page.items.count
             totalCount = page.totalRecordCount
             hasMore = !page.items.isEmpty && (totalCount.map { nextStartIndex < $0 } ?? true)

@@ -5,8 +5,7 @@ import os
 
 // The viewer-facing commands: start, pause, resume, delete.
 extension DownloadStore {
-    /// Takes a title off the server: saves the item snapshot and artwork,
-    /// then hands the transfer to the background session. `item` must
+    /// Saves the snapshot and artwork, then starts the transfer. `item` must
     /// carry media sources (a detail read does; a rail item does not).
     func start(item: MediaItem, source: MediaSource, quality: DownloadQuality, client: JellyfinClient) async throws {
         guard let authorization = client.mediaRequestAuthorization(),
@@ -19,8 +18,7 @@ extension DownloadStore {
         defer {
             if preparationTokens[item.id] == preparation { preparationTokens.removeValue(forKey: item.id) }
         }
-        // Keep credentials stable through snapshot/artwork requests even if
-        // SessionStore reconfigures its shared client during an await.
+        // Keeps credentials stable if SessionStore reconfigures mid-await.
         let client = client.sessionSnapshot()
         func stillActive() -> Bool {
             generation == accountGeneration
@@ -57,9 +55,7 @@ extension DownloadStore {
             throw StartError.unsupportedItem
         }
 
-        // A snapshot is required for local playback. Refuse a download
-        // whose metadata cannot be fetched/decoded rather than reporting a
-        // finished file that still needs the server to become playable.
+        // Local playback needs the snapshot, so refuse without one.
         let snapshotData = try await client.itemData(id: item.id)
         try checkPreparation()
         let snapshot = try JellyfinClient.decoder.decode(MediaItem.self, from: snapshotData)
@@ -116,8 +112,6 @@ extension DownloadStore {
         Self.log.info("started \(item.id, privacy: .public) quality \(effectiveQuality.rawValue, privacy: .public)")
     }
 
-    /// The original file or a fresh progressive-transcode URL, for a first
-    /// attempt and for a `resume` that has no resume data to fall back on.
     fileprivate func transferURL(itemID: String, source: MediaSource, quality: DownloadQuality, client: JellyfinClient) throws -> URL {
         if quality == .original {
             return try client.downloadURL(itemId: itemID)
@@ -130,19 +124,13 @@ extension DownloadStore {
         )
     }
 
-    /// Cancels the transfer. An original download's server response
-    /// supports byte-range requests, so the system's resume data lets
-    /// `resume` pick up where it left off; a transcode is a progressive
-    /// stream the server builds as it goes, with no range support, so
-    /// asking for resume data would only save bytes that can never be
-    /// replayed into the same file, and `resume` always restarts a
-    /// transcode from the beginning.
+    /// Keeps resume data only for originals; a progressive transcode has no
+    /// range support, so it restarts from the beginning.
     func pause(_ itemID: String) {
         guard let entry = manifest.entry(for: itemID), let taskIdentifier = entry.taskIdentifier,
               let accountKey, let attemptToken = entry.attemptToken else { return }
         let resumable = entry.quality == .original
-        // Persist the intent before waiting for URLSession's cancellation
-        // data. A background suspension must never lose the pause itself.
+        // Persist the pause before waiting, so a suspension cannot lose it.
         manifest.markPaused(itemID, resumeDataFile: entry.resumeDataFile)
         save()
         session.getAllTasks { tasks in
@@ -182,11 +170,8 @@ extension DownloadStore {
         }
     }
 
-    /// Restarts a paused or failed download: from resume data when there is
-    /// some (only ever stored for an original; see `pause`), otherwise a
-    /// fresh request built from the saved item snapshot. Always gets a new
-    /// attempt token, so any report still in flight for the previous
-    /// attempt is dropped rather than applied to this one.
+    /// From resume data if any, else a fresh request from the snapshot. A
+    /// new attempt token drops late reports from the previous attempt.
     func resume(_ itemID: String, client: JellyfinClient) {
         guard let entry = manifest.entry(for: itemID), let accountKey,
               entry.state == .paused || entry.state == .failed,
@@ -227,9 +212,8 @@ extension DownloadStore {
         task.resume()
     }
 
-    /// Cancels any live transfer and removes every file the entry owns.
-    /// Artwork is shared by name (two episodes of one series save the same
-    /// series poster), so a file another entry still lists stays.
+    /// Artwork can be shared (episodes of one series), so files another
+    /// entry lists stay.
     func delete(_ itemID: String) {
         preparationTokens.removeValue(forKey: itemID)
         removeEntry(itemID)

@@ -1,40 +1,19 @@
 import SwiftUI
 
-/// The jellyfish accent, swimming.
-///
-/// A jellyfish contracts its bell in a quick squeeze, and that squeeze is the
-/// propulsion. Translating the artwork along a path reads as a dragged
-/// sticker, so the mark is rebuilt as a parametric path from the same geometry
-/// as `Lagoon_Jellyfish_Accent.svg` and deformed per frame.
-///
-/// - Lift takes the shape of the contraction: rises squeezing, sinks between.
-/// - Lift and sink cancel over a beat; a separate slower drift is where it
-///   actually goes, so it hovers rather than climbing away.
-/// - The bell deforms rather than scales — narrows, draws taller, tucks the
-///   rim inward.
-/// - The tentacles answer a slightly earlier moment, so they stream behind a
-///   surge and curl under during the sink.
-///
-/// All closed-form in time, nothing integrated frame to frame, so it cannot
-/// drift or desynchronise.
+/// The jellyfish accent, swimming. The mark is rebuilt as a path from
+/// `Lagoon_Jellyfish_Accent.svg` and deformed per frame, because moving the
+/// artwork whole reads as a dragged sticker. Closed-form in time, so it
+/// cannot drift.
 struct JellyfishSwimLayer: View {
-    /// Which stretch of water is free. Every onboarding screen shows the same
-    /// three animals, but they cannot hover in the same places: the connect
-    /// and sign-in forms are a narrow centred column with both flanks open,
-    /// while the account picker's rail owns the middle band and grows
-    /// rightwards as accounts are added.
+    /// Which stretch of water is free on the current onboarding screen.
     enum School {
         /// Flanking a narrow centred column.
         case flanking
         /// Clear of a horizontal rail across the middle.
         case besideTheRail
 
-        /// Placement obeys two constraints in every case. Nothing crosses the
-        /// screen's own content — an animal surfacing from behind a button
-        /// reads as a glitch, not as depth — and every drift stays inside the
-        /// 5% a TV may swallow to overscan, body width and a beat's lift
-        /// included, because a jellyfish half-eaten by the bezel is worse than
-        /// no jellyfish.
+        /// Nothing crosses the screen's content, and every drift, lift
+        /// included, stays inside the 5% TV overscan margin.
         var swimmers: [Swimmer] {
             switch self {
             case .flanking:
@@ -68,10 +47,7 @@ struct JellyfishSwimLayer: View {
                     ),
                 ]
             case .besideTheRail:
-                // The rail sits across roughly the middle third and may run
-                // the full width once enough accounts exist, so nothing hovers
-                // at that height — these keep to the band above it and the
-                // floor below.
+                // The rail may span the middle third's full width; keep above and below it.
                 [
                     Swimmer(
                         home: CGPoint(x: 0.15, y: 0.20),
@@ -111,8 +87,7 @@ struct JellyfishSwimLayer: View {
 
     var body: some View {
         if reduceMotion {
-            // Motion is the entire point of this layer, so there is nothing to
-            // slow down — it steps back to the supplied artwork, still.
+            // Reduce Motion: show the artwork still.
             VStack {
                 Spacer()
                 HStack {
@@ -123,9 +98,8 @@ struct JellyfishSwimLayer: View {
                 }
             }
         } else {
-            // Read here, in the body, so the theme is registered with
-            // Observation; the Canvas closure below only ever sees the
-            // already-resolved color, never `Theme` itself.
+            // Read in the body so Observation tracks the theme; the Canvas
+            // closure only sees the resolved color.
             let ink = Theme.accent
             TimelineView(.animation) { timeline in
                 Canvas { context, size in
@@ -141,14 +115,12 @@ struct JellyfishSwimLayer: View {
     }
 }
 
-/// One animal: where it hovers, how fast it beats, and how big it is.
 struct Swimmer {
     /// Centre of its slow drift, in unit coordinates.
     let home: CGPoint
     /// Half-extent of that drift, in unit coordinates.
     let wander: CGSize
-    /// Seconds for a full drift on each axis. Deliberately long and mutually
-    /// prime-ish, so the animal never retraces the same figure.
+    /// Seconds per drift on each axis; long and roughly coprime so it never retraces.
     let wanderPeriod: CGSize
     /// Seconds per bell beat.
     let period: Double
@@ -159,13 +131,11 @@ struct Swimmer {
 
     /// How far one beat lifts the animal, as a share of its own height.
     private var liftShare: Double { 0.55 }
-    /// The lift peaks a moment after the squeeze does — the body carries
-    /// upward before gravity takes it back.
+    /// The lift peaks just after the squeeze.
     private var liftLag: Double { 0.06 }
     /// How far behind the bell the tentacles answer, in beats.
     private var tentacleLag: Double { 0.16 }
-    /// Share of the beat spent contracting. A real bell squeezes fast and
-    /// reopens slowly, which is what makes the motion read as alive.
+    /// Share of the beat spent contracting: squeeze fast, reopen slowly.
     private var squeeze: Double { 0.3 }
     /// How far the body may lean out of upright, either way.
     private var maximumTilt: Double { 0.22 }
@@ -179,12 +149,8 @@ struct Swimmer {
         let side = min(size.width, size.height)
         let drawn = side * 0.115 * scale
 
-        // The beat is the propulsion, and it pushes *up*. The lift takes the
-        // shape of the contraction, so it rises quickly on the squeeze and
-        // sinks back slowly while the bell reopens — the animal only holds
-        // height while it is working for it, and gravity has it the rest of
-        // the time. Over a beat the two cancel, so it treads water rather than
-        // climbing off the screen; where it actually goes is the slow drift.
+        // Lift follows the contraction and cancels over a beat, so it treads
+        // water; the slow drift is where it actually goes.
         let lift = drawn * liftShare * Self.contraction(of: beat - liftLag, squeeze: squeeze)
 
         let sway = seconds / wanderPeriod.width * .pi * 2 + phase * .pi * 2
@@ -194,10 +160,8 @@ struct Swimmer {
             y: (home.y + wander.height * sin(rise)) * size.height - lift
         )
 
-        // Upright, always, leaning only into the sideways drift — the rate of
-        // that drift is its cosine. A bell turned fully into its heading swims
-        // flat on its side, which reads as a dead one, and at that angle the
-        // accent stops being recognisable as the mark at all.
+        // Stay upright, leaning only into the sideways drift (its rate is the
+        // cosine). Turned fully sideways it reads as dead.
         let tilt = maximumTilt * cos(sway)
 
         var body = context
@@ -214,8 +178,7 @@ struct Swimmer {
         )
     }
 
-    /// 0 relaxed, 1 fully contracted. Two cosine halves, so the rate is zero
-    /// at both ends of the beat and the loop never shows a seam.
+    /// 0 relaxed, 1 contracted. Two cosine halves, so the loop has no seam.
     static func contraction(of phase: Double, squeeze: Double) -> Double {
         var phase = phase.truncatingRemainder(dividingBy: 1)
         if phase < 0 { phase += 1 }
@@ -225,8 +188,7 @@ struct Swimmer {
         return 0.5 + 0.5 * cos(.pi * (phase - squeeze) / (1 - squeeze))
     }
 
-    /// How hard the bell is pushing right now, 0...1. Only the contracting
-    /// half of the beat produces any.
+    /// 0...1, non-zero only while contracting.
     static func thrust(of phase: Double, squeeze: Double) -> Double {
         var phase = phase.truncatingRemainder(dividingBy: 1)
         if phase < 0 { phase += 1 }
@@ -235,19 +197,14 @@ struct Swimmer {
     }
 }
 
-/// The mark's geometry, rebuilt so it can be deformed.
-///
-/// Coordinates are the SVG's own 256x280 space and the control points are its
-/// control points, so a still frame at rest is the supplied artwork rather than
-/// a lookalike.
+/// The mark's geometry in the SVG's own 256x280 space and control points,
+/// so a frame at rest is the supplied artwork.
 enum JellyfishGeometry {
-    /// The artwork's own canvas: what a context must be scaled to before
-    /// `stroke` draws into it.
+    /// Scale a context to this before calling `stroke`.
     static let canvas = CGSize(width: 256, height: 280)
 
-    /// Strokes the whole animal, bell and tentacles, into a context already
-    /// placed and scaled to `canvas`. The swim layer and the theme bloom
-    /// both draw it this way, so the mark has one line weight everywhere.
+    /// Shared by the swim layer and the theme bloom, so the mark has one
+    /// line weight everywhere.
     static func stroke(
         in context: inout GraphicsContext,
         contraction: Double,
@@ -283,8 +240,7 @@ enum JellyfishGeometry {
 
     static func bell(contraction: Double) -> Path {
         let d = { deform($0, contraction: contraction) }
-        // The rim tucks further in than the body narrows — the lip curls under
-        // the bell on a squeeze instead of simply shrinking with it.
+        // The rim tucks in further than the body narrows, so the lip curls under.
         let tuck = 14 * contraction
         let leftRim = CGPoint(x: d(CGPoint(x: 88, y: rim)).x + tuck, y: d(CGPoint(x: 88, y: rim)).y)
         let rightRim = CGPoint(x: d(CGPoint(x: 168, y: rim)).x - tuck, y: d(CGPoint(x: 168, y: rim)).y)
@@ -316,11 +272,8 @@ enum JellyfishGeometry {
         return path
     }
 
-    /// The four tentacles, as the SVG draws them, plus the two things that
-    /// make them look attached to a living animal: they hang from wherever the
-    /// deformed rim now is, and they answer the *previous* moment's thrust —
-    /// streaming out straight behind a surge, gathering and curling under while
-    /// the animal coasts.
+    /// Tentacles hang from the deformed rim and follow the previous moment's
+    /// thrust: straight behind a surge, curled while coasting.
     static func tentacles(contraction: Double, trail: Double) -> Path {
         let strands: [(start: CGFloat, c1: CGPoint, c2: CGPoint, end: CGPoint)] = [
             (76, CGPoint(x: 76, y: 220), CGPoint(x: 61, y: 226), CGPoint(x: 61, y: 254)),
@@ -332,8 +285,6 @@ enum JellyfishGeometry {
         var path = Path()
         for strand in strands {
             let anchor = deform(CGPoint(x: strand.start, y: rim), contraction: contraction)
-            // Streamlined and stretched behind on thrust; shorter, wider and
-            // more curled on the coast.
             let stretch = 1 + 0.22 * trail
             let curl = 1 - 0.55 * trail
             let splay = 1 + 0.18 * (1 - trail)

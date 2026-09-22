@@ -1,22 +1,15 @@
 import SwiftUI
 
-/// Watch Together's one screen: the groups this server is
-/// running, a way to start another, and — once this device is in one —
-/// who else is there and what to do about it.
+/// Watch Together: server groups, starting one, and the joined group.
 ///
-/// Always presented from a film or episode's page, so there is an item in
-/// hand: starting a group sets that item as its queue, and so does "Play
-/// This Here". A group with an empty queue is a room nobody can see into,
-/// and Jellyfin has no way to tell the other members what it was for.
+/// Presented from a detail page, so starting a group always queues that
+/// item; an empty queue tells other members nothing.
 ///
-/// **Nothing here is private.** Every group on the server is listed to
-/// every account that may join one, under the name whoever made it chose.
-/// The footer says so rather than letting a name imply otherwise.
+/// **Nothing here is private.** Every group is listed to every account that
+/// may join; the footer says so.
 struct WatchTogetherSheet: View {
     let item: MediaItem
-    /// Where a group started from this page begins: the same resume point
-    /// Play would use, so starting a group does not silently restart a
-    /// film the host was halfway through.
+    /// The resume point Play would use, so a group doesn't restart the film.
     let startPositionTicks: Int64
 
     @Environment(\.dismiss) private var dismiss
@@ -26,19 +19,15 @@ struct WatchTogetherSheet: View {
     @State private var name = ""
     @State private var isWorking = false
 
-    /// Long enough to be a name, short enough to read in a list of them.
     static let nameLimit = 50
-    /// The group list is server-wide and other people are changing it.
-    /// The socket only carries the group this client is in, so polling is
-    /// the only way to see one appear.
+    /// The socket only carries this client's own group, so other groups
+    /// need polling.
     private static let listCadence = Duration.seconds(5)
 
     var body: some View {
         page
             .task { await pollGroups() }
             .task(id: syncPlay.isJoined) {
-                // A fresh sheet, and a sheet whose group just ended, both
-                // want the default name back rather than a half-typed one.
                 guard !syncPlay.isJoined else { return }
                 name = defaultName
             }
@@ -58,13 +47,8 @@ struct WatchTogetherSheet: View {
     @ViewBuilder
     private var page: some View {
         #if os(tvOS)
-        // A modal panel, not a settings page. This once wore
-        // `TVSettingsPage`, which is the full-screen Settings *destination*
-        // — a 460pt identity column, a page-sized title, a Back button and
-        // its own opaque background — and inside a sheet that shrink-wraps
-        // to its content it read as a page someone had squeezed into a card.
-        // The changelog's three-part stack is the shape a tvOS
-        // modal takes here: title, scrolling content, Done.
+        // A modal panel (title, scrolling content, Done), not
+        // `TVSettingsPage`, which is a full-screen destination.
         VStack(spacing: 0) {
             header
 
@@ -85,11 +69,8 @@ struct WatchTogetherSheet: View {
                 .padding(Metrics.Space.l)
                 .accessibilityIdentifier("watchTogether.close")
         }
-        // A sheet with custom content ignores `presentationSizing` on tvOS,
-        // so a panel states its own size (`Metrics.modalPanelSize`). Fixed
-        // rather than fitted because the group list polls every few seconds:
-        // a panel sized to its content would resize under the viewer's focus
-        // the moment somebody else on the server started a group.
+        // tvOS ignores `presentationSizing` for custom content. Fixed size,
+        // because the polled group list would resize a fitted panel under focus.
         .frame(
             width: Metrics.modalPanelSize.width,
             height: Metrics.modalPanelSize.height
@@ -120,10 +101,7 @@ struct WatchTogetherSheet: View {
     }
 
     #if os(tvOS)
-    /// What the feature is, for whoever has not used it. It goes once the
-    /// group exists: a member watching the panel for who else has arrived
-    /// does not need the pitch again, and the room's own state is what the
-    /// space is better spent on.
+    /// The explainer hides once joined.
     private var header: some View {
         VStack(spacing: Metrics.Space.s) {
             Text("Watch Together")
@@ -157,10 +135,8 @@ struct WatchTogetherSheet: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("watchTogether.currentGroup")
 
-            // Whoever the server names, this viewer included. A group's
-            // creator is sometimes handed an empty participant list and no
-            // `UserJoined` of its own, so an empty list is still a room
-            // with you in it.
+            // A creator can get an empty participant list and no
+            // `UserJoined`, so empty still means "you".
             if syncPlay.session.participants.isEmpty {
                 Text("Just you so far.")
                     .font(.callout)
@@ -203,10 +179,7 @@ struct WatchTogetherSheet: View {
             }
         }
 
-        // `joinOnly` is a real Jellyfin permission, not a corner case: an
-        // account may be allowed into other people's groups without being
-        // allowed to make one. Offering a control the server would refuse
-        // is worse than not offering it.
+        // Jellyfin can allow joining without creating.
         if syncPlay.availability.canCreate {
             section("Start a Group", footer: "The group starts on this title, where you left off.") {
                 TextField("Group name", text: $name)
@@ -263,9 +236,6 @@ struct WatchTogetherSheet: View {
         return "\(state) · \(group.participants.joined(separator: ", "))"
     }
 
-    /// The signed-in profile's name, so the others recognise the room
-    /// without anyone having to type one. A profile with no name falls back
-    /// to the feature's own.
     private var defaultName: String {
         guard let user = session.userName, !user.isEmpty else {
             return String(localized: "Watch Together")
@@ -299,7 +269,6 @@ struct WatchTogetherSheet: View {
 
     // MARK: - Platform shapes
 
-    /// One section, in whichever container this platform's page is made of.
     @ViewBuilder
     private func section<Content: View>(
         _ title: LocalizedStringKey,
@@ -321,9 +290,8 @@ struct WatchTogetherSheet: View {
         #endif
     }
 
-    /// A labelled action whose work is asynchronous: glass on the TV, a
-    /// borderless form row on touch, where several controls share a row
-    /// and an automatic button would fire its neighbour.
+    /// Borderless on touch: in a shared form row, an automatic button fires
+    /// its neighbour.
     private func actionButton(
         _ title: LocalizedStringKey,
         systemImage: String,
@@ -365,18 +333,13 @@ struct WatchTogetherSheet: View {
     }
 }
 
-/// The group's state in the viewer's words, shared by every screen that
-/// shows it so the sheet, the player's Together tab and the
-/// toast never disagree about what "Waiting" means.
+/// Shared so every screen words the group state the same way.
 nonisolated enum SyncPlayStateCopy {
     static func title(for state: SyncPlayGroupState) -> String {
         switch state {
         case .waiting: String(localized: "Waiting for the group")
         case .paused: String(localized: "Paused")
         case .playing: String(localized: "Playing")
-        // Both mean the same thing to a viewer: a room with nothing in it
-        // yet. There is no useful distinction to draw for a state this
-        // client did not recognise.
         case .idle, .unknown: String(localized: "Nothing playing")
         }
     }

@@ -1,9 +1,8 @@
 import Foundation
 import os
 
-/// Commits a finished transfer on the same actor as the store's commands.
-/// The temporary file must be consumed before URLSession's delegate returns;
-/// no suspension is allowed between checking the attempt and replacing its file.
+/// The temp file must be consumed before the delegate returns, with no
+/// suspension between checking the attempt and replacing its file.
 @MainActor
 enum DownloadFileCompletion {
     private static let log = Logger(subsystem: "ee.helop.lagoon", category: "downloads")

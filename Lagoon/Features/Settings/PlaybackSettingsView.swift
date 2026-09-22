@@ -6,8 +6,7 @@ struct PlaybackSettingsView: View {
     @Binding var allowFullQualityOnMetered: Bool
     @Binding var correctsSyncDrift: Bool
 
-    /// Why a Watch Together member's picture might nudge, said once for
-    /// both platforms.
+    /// Why a Watch Together picture might nudge; shared by both platforms.
     private static let syncDriftFooter = LocalizedStringKey(
         "In a Watch Together group, Lagoon nudges the speed by a fraction to bring this device back in step, and jumps when it is a long way out. Turn it off if you would rather it left the picture alone."
     )

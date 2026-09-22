@@ -1,24 +1,15 @@
 import SwiftUI
 
-/// Watched and favourite toggles above the play buttons.
-///
-/// Both are genuine toggles, not one-way actions. Marking something watched
-/// you never started is the point — it is how a film leaves Continue Watching,
-/// and how you tell the server you saw it elsewhere. Unmarking puts it back.
-///
-/// State is optimistic and `OptimisticToggleState` owns what follows.
+/// Watched and favourite toggles above the play buttons. State is optimistic;
+/// see `OptimisticToggleState`.
 struct ItemActionRow: View {
-    /// What the checkmark acts on. On a series page this is the episode you
-    /// are about to play, not the show — marking "watched" next to a Play
-    /// button that starts S1 E1 can only sensibly mean that episode.
+    /// What the checkmark acts on: on a series page, the episode Play starts.
     let playedItem: MediaItem
-    /// What the star acts on — the show on a series page, since favouriting
-    /// a single episode is nearly useless.
+    /// What the star acts on: on a series page, the show.
     let favoriteItem: MediaItem
-    /// Called after the server has accepted a change, so the page can
-    /// re-fetch and the rails behind it can catch up. Returns whether the
-    /// re-fetch reached the screen: only then does the row let the server's
-    /// flag replace the viewer's choice.
+    /// Re-fetches after the server accepts a change. Returns whether the
+    /// re-fetch reached the screen; only then does the server's flag replace
+    /// the viewer's choice.
     let onChange: () async -> Bool
 
     init(item: MediaItem, playedItem: MediaItem? = nil, onChange: @escaping () async -> Bool) {
@@ -70,14 +61,12 @@ struct ItemActionRow: View {
             }
         }
         .animation(.easeOut(duration: Motion.fast), value: failureMessage)
-        // A fresh item carries fresh server state; drop the local override so
-        // the row doesn't keep showing the last page's answer.
+        // A new item drops the local override.
         .onChange(of: playedItem.id) { _, _ in playedState.itemChanged() }
         .onChange(of: favoriteItem.id) { _, _ in favoriteState.itemChanged() }
     }
 
-    /// How long a refusal stays on screen. Long enough to read, short enough
-    /// that the row is back to being a row before the next press.
+    /// How long a refusal stays on screen.
     private static let failureMessageSeconds: Double = 4
 
     private var failureMessage: String? {
@@ -150,8 +139,7 @@ struct ItemActionRow: View {
 
     private func toggleGlyph(on: Bool, symbol: String) -> some View {
         Image(systemName: symbol)
-            // Set state reads through weight, not colour: a tinted label
-            // would vanish inside the focused lozenge.
+            // Weight, not colour: a tinted label vanishes when focused.
             .fontWeight(on ? .bold : .regular)
             .opacity(on ? 1 : 0.55)
     }

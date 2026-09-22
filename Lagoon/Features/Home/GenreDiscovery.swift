@@ -7,9 +7,8 @@ nonisolated struct GenreShelfItem: Identifiable {
     let artwork: MediaItem?
 }
 
-/// Turns Jellyfin's genre catalogue and one ranked sample of the library
-/// into a compact Home shelf. The representative is the highest-rated item
-/// in that genre that can actually fill a landscape card.
+/// Builds the genre shelf from the genre catalogue and a rating-ranked
+/// sample. Each genre's card uses its top-rated item with landscape art.
 nonisolated enum GenreShelfResolver {
     static let maximumVisibleGenres = 24
 
@@ -61,11 +60,9 @@ nonisolated enum GenreShelfResolver {
         }
 
         return byKey.values
-            // The ranked sample proves the genre has playable Movie/Series
-            // content. This also protects Home from stale catalogue rows.
+            // Drops stale catalogue genres with no items in the sample.
             .filter { $0.itemCount > 0 }
-            // Put the genres that are best represented in this library
-            // first, then use a predictable name order to break ties.
+            // Best represented first, name breaking ties.
             .sorted {
                 if $0.itemCount != $1.itemCount { return $0.itemCount > $1.itemCount }
                 return $0.name.localizedStandardCompare($1.name) == .orderedAscending
@@ -273,10 +270,8 @@ struct GenreLibraryView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                         #if os(tvOS)
-                        // A navigation title becomes a floating overlay on
-                        // tvOS as the grid scrolls. Keeping the heading in
-                        // the scroll content makes it leave with the first
-                        // row instead of covering later posters.
+                        // A tvOS navigation title floats over the grid;
+                        // in the content it scrolls away with the first row.
                         Text(genre)
                             .font(.largeTitle.bold())
                             .accessibilityIdentifier("genre.library.title")
