@@ -975,20 +975,20 @@ struct PlayerControlPanelHost: View, Equatable {
             playbackRate: engine.rate,
             subtitleSearch: subtitleSearch,
             subtitleLoadState: engine.subtitleLoadState,
-            onRetrySubtitleLoad: engine.retrySubtitleLoad,
+            onRetrySubtitleLoad: { engine.retrySubtitleLoad() },
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
             onTogglePictureInPicture: onTogglePictureInPicture,
             together: together,
             onLeaveGroup: onLeaveGroup,
             onSetIgnoreWait: onSetIgnoreWait,
-            onSelectAudioTrack: engine.selectAudioTrack,
+            onSelectAudioTrack: { engine.selectAudioTrack(id: $0) },
             onSelectSubtitleTrack: { id in
                 subtitleSearch?.cancelDownload()
                 engine.selectSubtitleTrack(id: id)
             },
-            onSetAudioDelay: engine.setAudioDelay,
-            onSetPlaybackRate: engine.setRate,
+            onSetAudioDelay: { engine.setAudioDelay($0) },
+            onSetPlaybackRate: { engine.setRate($0) },
             onDismiss: onDismiss
         )
     }
