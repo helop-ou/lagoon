@@ -23,10 +23,10 @@ artifacts](#native-artifacts).
 ## Clone, open, build
 
 Clone the repository, open `Lagoon.xcodeproj`, and run the `Lagoon` scheme on
-an Apple TV or iOS destination. The first build resolves
-`Packages/LagoonFFmpeg`, which downloads the checksum-pinned MPVKit binary
-targets and uses the vendored xcframeworks for the rest. Both destinations
-must stay green:
+an Apple TV or iOS destination. The first build resolves the `LagoonEngine`
+package from its own repository at the version pinned in `Package.resolved`,
+which brings the native media libraries with it. Both destinations must stay
+green:
 
 ```sh
 xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build

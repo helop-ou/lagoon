@@ -55,7 +55,6 @@ Lagoon/
 LagoonTests/                    Unit/integration tests, grouped by subject
 LagoonUITests/                  Platform journeys and shared test support
 LagoonTopShelf/                 Separate extension target
-Packages/LagoonFFmpeg/          Existing native package and build provenance
 ```
 
 Do not create empty folders just to resemble the diagram. Keep small features

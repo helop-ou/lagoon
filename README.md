@@ -34,9 +34,10 @@ xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
 ```
 
 The app is one multiplatform target with tvOS/iOS 26.0 deployment targets,
-plus tvOS Top Shelf and test targets. `Packages/LagoonFFmpeg` is the single
-local package dependency and pins the FFmpeg libraries used by the custom
-sample-buffer player.
+plus tvOS Top Shelf and test targets. The
+[`LagoonEngine`](https://github.com/helop-ou/lagoon-engine) package is the
+single dependency, resolved at a tagged version and carrying the FFmpeg
+libraries the custom sample-buffer player decodes with.
 
 To try it without a home server, connect to the public Jellyfin demo:
 `demo.jellyfin.org/stable`, user `demo`, empty password.
@@ -56,10 +57,9 @@ and why.
 The native libraries Lagoon links carry their own licences. The bundled texts
 are in [`Lagoon/Resources/Licenses`](Lagoon/Resources/Licenses), and the app
 shows the same list under Settings → About → Acknowledgements with the version
-and source each binary was built from. The vendored artifacts keep their
-provenance and rebuild instructions beside them, in
-[`Libavformat.README.md`](Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md)
-and [`Libdovi.README.md`](Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md).
+and source each binary was built from. The artifacts themselves belong to the
+[`LagoonEngine`](https://github.com/helop-ou/lagoon-engine) package, which
+keeps each one's provenance and rebuild instructions beside it.
 
 ## Documentation
 
