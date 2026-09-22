@@ -12,12 +12,11 @@ details.
 PlaybackController
   ├─ Jellyfin negotiation, subtitles and system media
   ├─ PlaybackReportingSession → start/progress/stop and report ledger
-  ├─ PlaybackSuccessorPreparation → next episode negotiation and warm-up
+  ├─ PlaybackSuccessorPreparation → next episode negotiation
   ├─ PlaybackDiagnosticsSampler → optional HUD and decode trace
   ├─ PlaybackIncidentMonitor → opt-in incident sampling
-  ├─ PlaybackCacheCoordinator → scoped file/range cache
   └─ PlayerEngine (LagoonEngine package)
-       → a picture, a clock, and a verdict when it fails
+       → a picture, a clock, a byte cache, and a verdict when it fails
 ```
 
 Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift`
@@ -184,9 +183,15 @@ engine guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md
   handoff. This is the rule the engine cannot enforce for us, and the one that
   has regressed most often.
 - Network reporting never blocks dismissal.
-- There is one active cache scope and at most one staged successor. Exit,
-  failure, account replacement, and handoff cancel and remove the appropriate
-  scopes. The cache is transient playback storage, not an offline library.
+- The byte cache belongs to the engine, not to this repository. `prepare`
+  takes an item ID and a delivery and decides for itself whether to cache;
+  `stageSuccessor` warms the next episode; `bufferState` is what a scrub bar
+  reads back. Nothing here builds a cache session or runs a fill loop — every
+  input that paces one is engine state. There is still one active scope and at
+  most one staged successor, and the engine enforces it across engine
+  replacements: exit, failure, account replacement and handoff retire the
+  appropriate scopes. The cache is transient playback storage, not an offline
+  library.
 - Do not replace queue ownership with unstructured tasks as part of a file
   reorganization.
 
@@ -197,8 +202,9 @@ asks `DownloadStore` whether the item is a finished download. When one exists,
 playback never touches the network to start: negotiation, `playbackInfo` and
 `streamURL` are skipped outright, the method is direct play, and the stream is
 the file on disk. This keeps the existing rule that a local file needs no
-cache in front of it. A downloaded title plays with no
-`PlaybackCacheCoordinator` scope at all, the same as any other file URL.
+cache in front of it: the engine opens no scope for a file URL, so a
+downloaded title plays with nothing in front of it, the same as any other
+file on disk.
 
 Track metadata depends on what was downloaded. An original-quality download is
 the stored file, so its source's stream list still describes it and drives
