@@ -4,10 +4,9 @@ import Symbols
 import UIKit
 #endif
 
-/// Adds all refresh entry points owned by a visible top-level destination:
-/// foreground reconciliation, a five-minute active-session cadence, and the
-/// platform's explicit manual affordance. The task is tied to visibility and
-/// scene activity, so a mounted but hidden tab never polls in the background.
+/// Refresh for a visible top-level destination: foreground reconciliation,
+/// a five-minute cadence, and the manual control. Tied to visibility and
+/// scene activity, so a hidden tab never polls.
 private struct ServerRefreshModifier: ViewModifier {
     let target: ServerSyncTarget
     let isActive: Bool
@@ -19,9 +18,8 @@ private struct ServerRefreshModifier: ViewModifier {
     @Environment(ServerSyncState.self) private var serverSync
     @State private var isVisible = false
     @State private var isRefreshing = false
-    // Baselined on first appearance so a bump that arrives while this
-    // destination is hidden is replayed when it comes back, rather than
-    // leaving the tab on pre-background content until its own cadence.
+    // Baselined on first appearance, so a bump that arrives while hidden
+    // is replayed when the tab comes back.
     @State private var handledGeneration: Int?
 
     private var canRefresh: Bool {
@@ -100,16 +98,13 @@ private struct ServerRefreshModifier: ViewModifier {
 }
 
 #if os(tvOS)
-/// The manual action sits in MainTabView's full-screen coordinate space, not
-/// in a NavigationStack toolbar. A native toolbar adds a second horizontal
-/// bar below tvOS's tabs and puts Refresh directly in the hero's Down path.
-/// This separate control shares the top chrome without changing layout.
+/// The manual Refresh sits in MainTabView's full-screen space, not a
+/// NavigationStack toolbar: on tvOS a toolbar adds a second bar and puts
+/// Refresh in the hero's Down path.
 struct ServerRefreshButton: View {
     let target: ServerSyncTarget?
-    /// Handed straight to the UIKit control below. The action itself is main
-    /// actor work — its type says so, and the coordinator only ever calls it
-    /// from a focus callback — but the value passing through this view is
-    /// immutable and belongs to no actor, so the storage is nonisolated.
+    /// Nonisolated storage for an immutable value passed to the UIKit
+    /// control; the action itself runs on the main actor.
     nonisolated let moveDownAction: (@MainActor @Sendable () -> Void)?
     @Binding var topChromeOffset: CGFloat
     @Environment(ServerSyncState.self) private var serverSync
@@ -129,26 +124,20 @@ struct ServerRefreshButton: View {
                 serverSync.requestManualRefresh(for: target)
             }
         )
-        // Keep the UIKit control mounted while a detail is pushed so it can
-        // retain and follow the native tab bar's presentation offset. Merely
-        // removing it here loses that measurement and recreates Refresh at
-        // offset zero over the root content when Back is pressed.
+        // Stay mounted while a detail is pushed, or the tab bar offset is
+        // lost and Refresh comes back at zero over the content on Back.
         .opacity(target == nil ? 0 : 1)
         .allowsHitTesting(target != nil)
         .accessibilityHidden(target == nil)
-        // TabView scrolls its native tab bar out with the content. The
-        // separate Refresh overlay mirrors that movement instead of staying
-        // pinned over whichever rail the user reaches.
+        // Follows the tab bar as TabView scrolls it out with the content.
         .offset(y: topChromeOffset)
-        // The 64pt base grows to roughly the tab capsule's visual height when
-        // tvOS applies its native focus expansion.
+        // Grows to about the tab capsule's height under focus expansion.
         .frame(
             width: Metrics.Space.xxl + Metrics.Space.xl,
             height: Metrics.Space.xxl + Metrics.Space.xl
         )
         .task {
-            // Let the selected tab receive launch focus before this separate
-            // overlay joins the focus graph.
+            // Let the selected tab take launch focus first.
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             allowsFocus = true
@@ -241,17 +230,10 @@ private final class DelayedFocusButton: UIButton {
     var moveDownAction: (@MainActor @Sendable () -> Void)?
     var topChromeOffsetChanged: (@MainActor @Sendable (CGFloat) -> Void)?
 
-    /// Installs the Down override only where the destination actually has a
-    /// hero to move to. A wrapper closure that merely forwards to an absent
-    /// coordinator action still reads as non-nil to `shouldUpdateFocus`,
-    /// which then cancels the move and returns focus to nowhere — Discover
-    /// and the library tabs have no hero binding.
-    ///
-    /// Defensive rather than a fix for a reachable bug: Refresh sits left of
-    /// Home, tab selection follows focus, so focus cannot arrive here without
-    /// having selected Home on the way and made `.home` the active target.
-    /// A UI test for the trap was written and removed for that reason. This
-    /// keeps the override honest if the control ever moves.
+    /// Installs the Down override only where the destination has a hero. A
+    /// forwarding closure to an absent action still reads as non-nil to
+    /// `shouldUpdateFocus`, which then cancels the move and strands focus.
+    /// Defensive: unreachable while Refresh sits left of Home.
     func installMoveDownAction(
         from coordinator: TVServerRefreshControl.Coordinator,
         isAvailable: Bool
@@ -266,10 +248,8 @@ private final class DelayedFocusButton: UIButton {
                 discoverTabBarIfNeeded()
                 startTrackingTabBar()
             } else {
-                // NavigationStack briefly restores the tab bar's own frame
-                // while replacing the root with a detail. Freeze Refresh at
-                // the root's last scroll offset during that transition; the
-                // control is hidden and inert until the root is active again.
+                // NavigationStack briefly restores the tab bar's frame while
+                // pushing a detail. Freeze at the root's last offset.
                 stopTrackingTabBar()
             }
         }
@@ -297,9 +277,8 @@ private final class DelayedFocusButton: UIButton {
             return super.shouldUpdateFocus(in: context)
         }
 
-        // TabView normally resolves this move to its own tab bar. Cancel only
-        // that Down update and let SwiftUI's FocusState select the current
-        // hero. Up from the hero remains wholly owned by the tab hierarchy.
+        // Cancel only this Down move (TabView would pick its tab bar) and
+        // let FocusState select the hero. Up stays with the tab hierarchy.
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isFocused else { return }
             self.moveDownAction?()
@@ -398,10 +377,8 @@ private final class DelayedFocusButton: UIButton {
 
     private func startTrackingTabBar() {
         guard tracksTopChrome, tabBar != nil, tabBarRestingMinY != nil else { return }
-        // Focus-driven scrolling can begin after the focus notification and
-        // runs as an animation. Sample its presentation frame briefly so the
-        // SwiftUI overlay follows the actual chrome rather than jumping to
-        // the tab bar's final model position.
+        // Focus scrolling animates after the notification; sample the
+        // presentation frame so the overlay follows the chrome.
         tabBarTrackingFramesRemaining = 120
         guard tabBarDisplayLink == nil else { return }
         let displayLink = CADisplayLink(target: self, selector: #selector(sampleTabBarPosition))

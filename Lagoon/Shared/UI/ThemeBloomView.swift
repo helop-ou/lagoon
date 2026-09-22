@@ -1,16 +1,9 @@
 import SwiftUI
 
-/// The moment a theme is chosen: a soft bloom of the new accent
-/// swells from the middle of the screen and lets go, and a handful of the
-/// theme's own motif drift up through it: flowers for Baby Pink, swimming
-/// jellyfish for Lagoon. Under two seconds, never in the way, and over
-/// before the eye is done with it. Nothing here is interactive: the overlay
-/// ignores touches and focus, and the UI beneath has already taken its new
-/// colours by the time the bloom fades.
+/// Plays when a theme is chosen: a bloom of the new accent with the theme's
+/// motif drifting up, under two seconds. Ignores touches and focus.
 ///
-/// Reduce Motion keeps the bloom's fade and drops the motif and the swell,
-/// so the change is still announced without anything moving across the
-/// screen.
+/// Reduce Motion keeps only the fade.
 struct ThemeBloomOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bloom: Bloom?
@@ -55,12 +48,9 @@ struct ThemeBloomOverlay: View {
     }
 }
 
-/// What a theme sends drifting up through its bloom. Each motif knows how
-/// many of itself to draw and how big, so the frame below stays one loop.
+/// What a theme sends drifting up through its bloom.
 nonisolated enum BloomMotif: Equatable, Sendable {
-    /// Five-petal flowers, turning slowly as they rise.
     case flowers
-    /// The brand's jellyfish, beating its bell as it swims up.
     case jellyfish
 
     var count: Int {
@@ -119,10 +109,7 @@ private struct ThemeBloomFrame: View {
         }
     }
 
-    /// A handful of the motif from the lower half of the screen, each on its
-    /// own schedule, drifting up with a little sway, fading as it goes.
-    /// Positions come from the seed, so one bloom's drifters are not the
-    /// next one's.
+    /// Positions come from the seed, so each bloom's drifters differ.
     private func drawDrifters(in context: inout GraphicsContext, size: CGSize) {
         var generator = SeededGenerator(seed: UInt64(truncatingIfNeeded: seed &+ 7))
         let baseHeight = max(size.width, size.height) * motif.height
@@ -150,8 +137,6 @@ private struct ThemeBloomFrame: View {
                 drifter.rotate(by: .radians(spin * local + sway * 4))
                 drifter.fill(Self.flower(radius: height / 2), with: ink)
             case .jellyfish:
-                // Two and a half beats over the climb, each squeeze lifting
-                // the animal a little, so it swims up rather than floats.
                 let beat = local * 2.5 + delay * 3
                 let contraction = Swimmer.contraction(of: beat, squeeze: 0.3)
                 let trail = Swimmer.thrust(of: beat - 0.16, squeeze: 0.3)
@@ -181,8 +166,7 @@ private struct ThemeBloomFrame: View {
     private static func easeIn(_ t: Double) -> Double { t * t * t }
 }
 
-/// A small deterministic generator, so the drifters' layout is a function
-/// of the bloom and not of the frame it is drawn in.
+/// Deterministic, so the layout is fixed per bloom, not per frame.
 private struct SeededGenerator: RandomNumberGenerator {
     private var state: UInt64
 

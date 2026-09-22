@@ -1,18 +1,14 @@
 import Foundation
 import LagoonEngine
 
-/// Builds the bytes Sentry's envelope endpoint accepts, from an incident
-/// the hub assembled. Every byte comes from this file: there is no SDK
-/// underneath adding breadcrumbs, a user, a device name, or a stack. See
-/// https://develop.sentry.dev/sdk/data-model/envelopes/ for the framing
-/// and https://develop.sentry.dev/sdk/data-model/event-payloads/ for the
-/// event.
+/// Builds Sentry envelope bytes from an incident. No SDK: every byte comes
+/// from here, so nothing adds breadcrumbs, a user, a device name or a stack.
+/// See https://develop.sentry.dev/sdk/data-model/envelopes/ and
+/// https://develop.sentry.dev/sdk/data-model/event-payloads/.
 nonisolated struct SentryEnvelope: Equatable, Sendable {
     static let sdkName = "lagoon.diagnostics"
     static let sdkVersion = "1.0.0"
-    /// Fields that double as dashboard tags, so issues can be filtered by
-    /// them without opening each event. Values are already validated
-    /// tokens or numbers.
+    /// Fields that double as dashboard tags.
     static let tagFields: [String] = [
         "delivery", "method", "container", "videoCodec", "audioCodec", "videoRange",
         "videoPath", "audioPath", "stage", "cause", "errorDomain", "client", "route",
@@ -51,8 +47,8 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
         return SentryEnvelope(eventID: eventID, data: data)
     }
 
-    /// The event payload. Grouping is by the explicit `fingerprint`; the
-    /// exception block only gives the issue a title.
+    /// Grouping is by `fingerprint`; the exception block only titles the
+    /// issue.
     static func eventJSONObject(
         incident: DiagnosticIncident,
         context: DiagnosticContext,
@@ -78,11 +74,8 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
         return [
             "event_id": eventID ?? identifier(incident.id),
             "timestamp": incident.timestamp.timeIntervalSince1970,
-            // Not "cocoa": for that platform (and "javascript") Sentry's
-            // ingest fills user.ip_address from the connection and derives
-            // a location from it unless the project setting forbids it. The
-            // app sends no user object and wants none inferred; "native" is
-            // a valid platform that Sentry leaves alone.
+            // Not "cocoa": for that platform Sentry infers the user's IP and
+            // location from the connection. "native" is left alone.
             "platform": "native",
             "level": incident.level.rawValue,
             "logger": sdkName,
@@ -116,9 +109,8 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
         ]
     }
 
-    /// Envelope framing: one JSON header line, then for each item a JSON
-    /// header line carrying the payload length, the payload, and a
-    /// newline.
+    /// A JSON header line, then per item a header line with the payload
+    /// length, the payload and a newline.
     static func frame(header: [String: Any], items: [(header: [String: Any], payload: Data)]) -> Data? {
         guard let headerData = try? JSONSerialization.data(withJSONObject: header, options: [.sortedKeys]) else {
             return nil

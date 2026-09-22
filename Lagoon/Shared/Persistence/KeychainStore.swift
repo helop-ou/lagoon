@@ -67,9 +67,8 @@ nonisolated enum KeychainStore {
         }
     }
 
-    /// Enumerate only Lagoon's generic-password account names, never values.
-    /// Needed to remove cookies for every Seerr server previously paired with
-    /// a forgotten Jellyfin account, including addresses no longer configured.
+    /// Account names only, never values. Lets a forgotten account's Seerr
+    /// cookies be removed, including for servers no longer configured.
     static func accountNames() throws -> [String] {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

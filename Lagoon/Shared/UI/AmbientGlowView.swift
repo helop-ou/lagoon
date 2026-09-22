@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Three radial blobs from the artwork's dominant colors, blurred to mush —
-/// the soft color field behind the hero panel.
+/// Blurred radial blobs of the artwork's colors behind the hero panel.
 struct AmbientGlowView: View {
     let palette: ArtworkPalette
 

@@ -1,10 +1,7 @@
 import Foundation
 
-/// Removes what the direct OpenSubtitles integration left behind on devices
-/// that ran builds 87–91. That path was retired in favour of Jellyfin's
-/// own subtitle search, so nothing reads these values any more; they must not
-/// outlive the code that wrote them. Runs on every launch: four removals and a
-/// directory check are cheaper than a marker, and repeating them is harmless.
+/// Removes data left by the retired direct OpenSubtitles integration. Runs on
+/// every launch: it is cheap and harmless to repeat, so there is no marker.
 nonisolated enum RetiredSubtitleProviderCleanup {
     static let keychainAccount = "lagoon.opensubtitles.token"
     static let defaultsKeys = [
@@ -12,7 +9,7 @@ nonisolated enum RetiredSubtitleProviderCleanup {
         "subtitles.openSubtitlesAPIKey",
         "subtitles.source",
     ]
-    /// Provider sidecars were cached under Caches/Lagoon/Subtitles.
+    /// Under Caches.
     static let cacheSubdirectory = "Lagoon/Subtitles"
 
     static func run(defaults: UserDefaults, credentials: any AccountCredentialStorage, cachesDirectory: URL?) {

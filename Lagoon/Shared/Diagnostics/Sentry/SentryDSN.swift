@@ -1,9 +1,8 @@
 import Foundation
 import LagoonEngine
 
-/// A parsed Sentry DSN: `scheme://publicKey@host[:port][/path]/projectID`.
-/// The public key is a client key, not a secret; it only lets a client
-/// submit events to that one project.
+/// `scheme://publicKey@host[:port][/path]/projectID`. The public key is not
+/// a secret.
 nonisolated struct SentryDSN: Equatable, Sendable {
     let scheme: String
     let publicKey: String
@@ -39,8 +38,7 @@ nonisolated struct SentryDSN: Equatable, Sendable {
         return components.url
     }
 
-    /// `X-Sentry-Auth`. Version 7 is the current protocol; the client name
-    /// is what the dashboard shows as the SDK.
+    /// `X-Sentry-Auth`, protocol version 7.
     var authorizationHeader: String {
         "Sentry sentry_version=7, sentry_client=\(SentryEnvelope.sdkName)/\(SentryEnvelope.sdkVersion), sentry_key=\(publicKey)"
     }

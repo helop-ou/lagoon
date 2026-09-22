@@ -1,53 +1,45 @@
 import Foundation
 import LagoonEngine
 
-/// Stable codes for reported incidents. These are the grouping keys on the
-/// dashboard, so the same rule as event codes applies: add, never rename.
+/// Stable codes and dashboard grouping keys: add, never rename.
 nonisolated enum DiagnosticIncidentCode: String, Sendable, CaseIterable {
     /// Negotiation or engine start never produced a playing engine.
     case playbackStartFailed = "playback.startFailed"
-    /// The engine failed and the delivery ladder is trying another rung.
-    /// A recovered incident: the viewer sees a reload, not an error.
+    /// The engine failed and the ladder is trying another rung. Recovered:
+    /// the viewer sees a reload.
     case playbackFallback = "playback.fallback"
-    /// The engine failed and nothing is left to try. Terminal.
+    /// Nothing is left to try. Terminal.
     case playbackFailed = "playback.failed"
     /// An AVFoundation renderer was replaced or flushed to keep playing.
     case playbackRendererRecovery = "playback.rendererRecovery"
-    /// A stall the engine's own recovery handled, but one long enough or
-    /// frequent enough that the viewer noticed.
+    /// A recovered stall long or frequent enough to notice.
     case playbackStall = "playback.stall"
-    /// The playhead stopped advancing while playback was expected to run
-    /// and no stall or error was raised. The class of bug nobody can
-    /// reproduce from a description.
+    /// The playhead stopped with no stall or error raised.
     case playbackFrozen = "playback.frozen"
-    /// A session that ended without an error but with counters over the
-    /// documented thresholds.
+    /// Ended without error but with counters over the thresholds.
     case playbackDegraded = "playback.degraded"
     /// A server-side subtitle could not be loaded; playback continued.
     case playbackSubtitleLoadFailed = "playback.subtitleLoadFailed"
     /// The next episode did not take over.
     case playbackHandoffFailed = "playback.handoffFailed"
-    /// A Jellyfin or Seerr request failed in a way that is not an expected
-    /// offline or authentication condition.
+    /// A request failed for a reason other than offline or auth.
     case apiRequestFailed = "api.requestFailed"
-    /// A response the app could not decode: a contract drift, or a bug.
+    /// A response the app could not decode.
     case apiDecodeFailed = "api.decodeFailed"
 }
 
-/// One report. Built by `DiagnosticsHub` from validated fields, a history
-/// snapshot, and the process context; handed to the sink as a value.
+/// One report, built by `DiagnosticsHub`.
 nonisolated struct DiagnosticIncident: Equatable, Sendable {
     let id: UUID
     let code: DiagnosticIncidentCode
     let level: DiagnosticLevel
-    /// The incident code followed by variant tokens. Sentry groups on it
-    /// verbatim, so it must be stable across builds and never contain a
-    /// value that varies per occurrence (a position, a duration).
+    /// Code plus variant tokens. Sentry groups on it verbatim, so never put
+    /// a per-occurrence value (position, duration) in it.
     let fingerprint: [String]
     let fields: [String: DiagnosticValue]
     let history: [DiagnosticEvent]
-    /// How many times this fingerprint fired since the last report of it,
-    /// including this one. Suppressed repeats are folded in here.
+    /// Occurrences since the last report, including this one and suppressed
+    /// repeats.
     let occurrences: Int
     let timestamp: Date
     let uptime: TimeInterval
@@ -81,7 +73,6 @@ nonisolated struct DiagnosticIncident: Equatable, Sendable {
         self.uptime = uptime
     }
 
-    /// The history attachment, as the object `JSONSerialization` writes.
     var historyJSONObject: [String: Any] {
         [
             "incident": id.uuidString.lowercased(),

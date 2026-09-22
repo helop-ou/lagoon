@@ -1,8 +1,7 @@
 import Foundation
 
-// Seerr/Jellyseerr deliberately has its own model layer. Its numeric ids are
-// TMDB ids, not Jellyfin item ids, and conflating the two makes navigation and
-// availability state subtly unsafe.
+// Seerr has its own model layer: its numeric ids are TMDB ids, not Jellyfin
+// item ids, and mixing the two breaks navigation and availability state.
 
 nonisolated struct SeerrServerStatus: Decodable, Equatable {
     let version: String
@@ -41,8 +40,6 @@ nonisolated struct SeerrUser: Decodable, Hashable, Identifiable {
     }
 
     var canManageRequests: Bool { hasPermission(.manageRequests) }
-    /// Lifting a block is an administrator's job; `hasPermission` already
-    /// treats the admin flag as an override.
     var canManageBlocklist: Bool { hasPermission(.manageBlocklist) }
     var canViewAllRequests: Bool {
         hasPermission(.manageRequests) || hasPermission(.requestView)
@@ -61,8 +58,8 @@ nonisolated struct SeerrUser: Decodable, Hashable, Identifiable {
     }
 }
 
-/// Values are the public bit flags from Seerr's permissions contract. Admin
-/// is handled as an override by `SeerrUser.hasPermission`, matching Seerr.
+/// Seerr's public permission bit flags. Admin overrides all of them, as in
+/// Seerr.
 nonisolated enum SeerrPermission: Int, Hashable {
     case admin = 2
     case manageRequests = 16
@@ -78,14 +75,9 @@ nonisolated enum SeerrPermission: Int, Hashable {
     case viewBlocklist = 1_073_741_824
 }
 
-/// The three types Lagoon acts on. Jellyseerr's `search` is a TMDB
-/// multi-search and answers with more than these — `collection` today, and
-/// whatever a later release adds — so every DTO that carries one decodes it
-/// with `try?` into an optional: an unrecognised type must leave that one
-/// result typeless, never fail the page it arrived in. The cases
-/// stay exactly the three the app can request and route, so the outbound
-/// `SeerrCreateRequest` and the `details`/`recommendations` switches keep
-/// meaning what they say.
+/// The three types Lagoon can request and route. Search also returns other
+/// types (`collection`), so DTOs decode this with `try?` into an optional: an
+/// unknown type leaves that result typeless and never fails the page.
 nonisolated enum SeerrMediaType: String, Codable, Hashable, CaseIterable, Identifiable {
     case movie
     case tv
@@ -102,10 +94,7 @@ nonisolated enum SeerrMediaType: String, Codable, Hashable, CaseIterable, Identi
 }
 
 /// Jellyseerr's `MediaStatus`. The numbers are the contract, so they are
-/// spelled out rather than left to `case` order — 6 was previously read as
-/// "deleted" when it is *blocklisted*, which offered a Request button for a
-/// title the server would refuse, and pushed the real deleted value (7) into
-/// the unknown fallback.
+/// spelled out: 6 is blocklisted, 7 is deleted.
 nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
     case unknown = 1
     case pending = 2
@@ -127,31 +116,25 @@ nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
         case .partiallyAvailable: "Partially Available"
         case .available: "Available"
         case .blocklisted: "Blocked"
-        // The media record is gone, so as far as a viewer is concerned the
-        // title is simply not in the library and can be asked for again.
+        // Gone from the library, so it can be requested again.
         case .deleted: "Not Requested"
         }
     }
 
-    /// Deleted media can be requested afresh; blocklisted media cannot, and
-    /// offering the button anyway only earns a rejection from the server.
+    /// Deleted media can be requested again; the server refuses blocklisted
+    /// media.
     var allowsRequesting: Bool {
         self == .unknown || self == .deleted
     }
 
-    /// Whether the title is in the library to any degree.
     var isPlayable: Bool {
         self == .available || self == .partiallyAvailable
     }
 }
 
-/// Jellyseerr's `MediaRequestStatus`. Lagoon knew only 1-3 and read anything
-/// else as `.pending`, so a **completed** request — what an approved request
-/// becomes once the title lands in the library — reported "Pending Approval"
-/// forever, and a failed one did too.
-///
-/// An unrecognised value is now its own case rather than a fourth way to say
-/// pending: claiming a state we do not understand is what caused that bug.
+/// Jellyseerr's `MediaRequestStatus`. An unrecognised value maps to
+/// `.unknown`, never to `.pending`: guessing a state is how completed and
+/// failed requests once showed "Pending Approval" forever.
 nonisolated enum SeerrRequestStatus: Int, Hashable {
     case pending = 1
     case approved = 2
@@ -175,33 +158,24 @@ nonisolated enum SeerrRequestStatus: Int, Hashable {
         }
     }
 
-    /// Approved and completed both mean "the server said yes"; only the
-    /// library tells you whether it has arrived yet.
+    /// Approved and completed both mean yes; only the library says whether
+    /// it has arrived.
     var isGranted: Bool {
         self == .approved || self == .completed
     }
 }
 
-/// What a viewer actually wants to know about a request: not where it sits in
-/// Jellyseerr's approval bookkeeping, but whether they can watch it yet.
-///
-/// The request's own status answers that only until it is approved; after
-/// that the media's availability does. Keeping both in one value is what
-/// stops an approved-and-available title reading as "Approved" while it is
-/// sitting in the library ready to play.
-/// How a status glyph animates while its row or button holds focus. Named
-/// here beside the symbols it belongs to; the effect itself is applied in the
-/// view layer.
+/// How a status glyph animates while its row or button holds focus.
 nonisolated enum SeerrStatusMotion: Hashable {
     case still
-    /// The refresh arrows turning — the literal reading of the symbol.
     case rotate
-    /// A down-arrow falling, for a transfer that is moving.
     case bounce
-    /// A slow fade, for waiting rather than working.
+    /// For waiting rather than working.
     case pulse
 }
 
+/// Whether a viewer can watch a request yet: the request status until it is
+/// approved, the media's availability after that.
 nonisolated enum SeerrRequestProgress: Hashable {
     case pending
     case declined
@@ -243,9 +217,8 @@ nonisolated enum SeerrRequestProgress: Hashable {
         }
     }
 
-    /// Only the states that are still *going somewhere* animate. A finished
-    /// or refused request is a fact, and a fact that wobbles reads as an
-    /// error.
+    /// Only states still in progress animate; a moving final state reads as
+    /// an error.
     var motion: SeerrStatusMotion {
         switch self {
         case .pending: .pulse
@@ -265,17 +238,12 @@ nonisolated enum SeerrRequestProgress: Hashable {
         case .failed: .failed
         case .unknown: .unknown
         case .approved, .completed:
-            // Exhaustive on purpose. A `default:` here is what produced the
-            // original bug in the first place: it quietly reported a specific,
-            // reassuring state for one nobody had thought about. Adding a case
-            // to `SeerrAvailabilityStatus` should fail this switch and make
-            // someone decide.
+            // Exhaustive on purpose, no `default:`: a new availability case
+            // must fail to compile here so someone decides what it means.
             switch availability {
             case .available: .available
             case .partiallyAvailable: .partiallyAvailable
-            // Jellyseerr models this as its own filter — a completed request
-            // whose media has since been removed. It is finished, not still
-            // arriving.
+            // A completed request whose media was since removed.
             case .deleted: .removed
             case .blocklisted: .blocked
             // Granted, not in the library yet.
@@ -290,8 +258,8 @@ nonisolated enum SeerrRequestProgress: Hashable {
 nonisolated struct SeerrDownloadItem: Decodable, Hashable, Identifiable {
     let downloadId: String
     let title: String
-    /// Radarr/Sonarr's own queue word — "downloading", "completed", "queued".
-    /// Kept as the string it is: it is theirs to extend, not ours to enumerate.
+    /// Radarr/Sonarr's queue word ("downloading", "queued"). A string because
+    /// they can add values.
     let status: String
     let size: Int64
     let sizeLeft: Int64
@@ -299,7 +267,7 @@ nonisolated struct SeerrDownloadItem: Decodable, Hashable, Identifiable {
 
     var id: String { downloadId }
 
-    /// 0 when the size is unknown rather than a division by zero.
+    /// 0 when the size is unknown.
     var fractionComplete: Double {
         guard size > 0 else { return 0 }
         return min(1, max(0, Double(size - sizeLeft) / Double(size)))
@@ -322,24 +290,20 @@ nonisolated struct SeerrDownloadItem: Decodable, Hashable, Identifiable {
 
 /// What the queue adds up to for one title.
 ///
-/// **Deduplicated by `downloadId`.** A season pack is one download that
-/// Sonarr reports once per episode, each row carrying the pack's full size —
-/// ten rows of 7.15 GB for a single 7.15 GB download on the test server.
-/// Summing the rows would claim 71 GB and a nonsense percentage.
+/// Deduplicated by `downloadId`: Sonarr reports a season pack once per
+/// episode, each row with the pack's full size, so summing rows overcounts.
 nonisolated struct SeerrDownloadProgress: Hashable {
     let fraction: Double
     let downloadCount: Int
     let timeLeft: String?
-    /// Everything has finished downloading but the title is not in the
-    /// library yet — Radarr/Sonarr is importing it. Without this, a finished
-    /// download sits at "100%" looking stuck.
+    /// Downloaded but not yet in the library: Radarr/Sonarr is importing it.
+    /// Without this a finished download looks stuck at 100%.
     let isImporting: Bool
 
     init?(items: [SeerrDownloadItem]) {
         var seen = Set<String>()
         let unique = items.filter { item in
-            // An entry with no id cannot be deduplicated, so it is kept:
-            // over-counting is better than dropping the only thing happening.
+            // Keep entries with no id: over-counting beats dropping them.
             guard !item.downloadId.isEmpty else { return true }
             return seen.insert(item.downloadId).inserted
         }
@@ -352,8 +316,7 @@ nonisolated struct SeerrDownloadProgress: Hashable {
             : 0
         downloadCount = unique.count
         isImporting = unique.allSatisfy { $0.sizeLeft <= 0 }
-        // The one still running is the one worth quoting; a finished entry
-        // reports "00:00:00".
+        // Quote a running entry; finished ones report "00:00:00".
         timeLeft = unique
             .filter { $0.sizeLeft > 0 }
             .compactMap(\.timeLeft)
@@ -365,7 +328,6 @@ nonisolated struct SeerrDownloadProgress: Hashable {
         "\(Int((fraction * 100).rounded()))%"
     }
 
-    /// One line for a detail page. The badge on a card uses `percentText`.
     var summary: String {
         if isImporting {
             return String(localized: "Downloaded, adding to your library")
@@ -401,9 +363,8 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // `id` stays strict: it is the TMDB identity this result is navigated
-        // and deduplicated by, and a defaulted one would collide with every
-        // other defaulted result on the page.
+        // `id` stays strict: it is the TMDB identity used for navigation and
+        // dedup, and defaulted ids would collide.
         id = try container.decode(Int.self, forKey: .id)
         mediaType = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .mediaType)
         title = try container.decodeIfPresent(String.self, forKey: .title)
@@ -447,21 +408,18 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
     let genres: [SeerrGenre]?
     let seasons: [SeerrSeason]?
     let mediaInfo: SeerrMediaInfo?
-    /// TMDB's cast and crew, relayed by Seerr on both movie and TV details.
     let credits: SeerrCredits?
-    /// A movie's certifications, one set per release country.
+    /// A movie's certifications per country.
     let releases: SeerrReleases?
-    /// A show's certifications, one per country.
+    /// A show's certifications per country.
     let contentRatings: SeerrContentRatings?
 
     var displayTitle: String { title ?? name ?? originalTitle ?? originalName ?? "Untitled" }
     var date: String? { releaseDate ?? firstAirDate }
     var year: String? { date.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 } }
 
-    /// The age rating a viewer here would recognise: their own region's
-    /// certification when TMDB has one, the US one otherwise, as Jellyfin's
-    /// own metadata providers fall back. Nil rather than a foreign
-    /// board's label nobody can place.
+    /// The viewer's region's certification, else the US one (as Jellyfin
+    /// falls back), else nil rather than an unfamiliar foreign label.
     func officialRating(region: String? = Locale.current.region?.identifier) -> String? {
         let byCountry: [(country: String, rating: String)]
         if let releases {
@@ -503,9 +461,8 @@ nonisolated struct SeerrCredits: Decodable, Hashable {
 }
 
 nonisolated struct SeerrCastMember: Decodable, Hashable, Identifiable {
-    /// TMDB's credit id, unique per role; the person id repeats when one
-    /// actor plays two parts. Falls back to the person id so a row without
-    /// one still has an identity rather than failing the whole page.
+    /// Unique per role; the person id repeats when one actor plays two
+    /// parts. Falls back to the person id rather than failing the page.
     let creditId: String
     let id: Int
     let name: String?
@@ -551,9 +508,8 @@ nonisolated struct SeerrCrewMember: Decodable, Hashable, Identifiable {
     }
 }
 
-/// TMDB's `release_dates` block as Seerr relays it. The wire keys are
-/// snake_case here, unlike the rest of Seerr's camelCase responses, so
-/// these two carry their own keys.
+/// TMDB's `release_dates` block. Its keys are snake_case, unlike the rest of
+/// Seerr, so these types carry their own keys.
 nonisolated struct SeerrReleases: Decodable, Hashable {
     let results: [SeerrCountryReleases]
 
@@ -619,9 +575,8 @@ nonisolated struct SeerrContentRating: Decodable, Hashable {
 nonisolated struct SeerrGenre: Decodable, Hashable, Identifiable {
     let id: Int
     let name: String
-    /// Only `discover/genreslider/*` sends these — a handful of TMDB backdrop
-    /// paths to draw the genre with. A detail page's genres carry none, so
-    /// this is empty there rather than absent.
+    /// TMDB backdrop paths; only `discover/genreslider/*` sends them, so
+    /// elsewhere this is empty.
     let backdrops: [String]
 
     init(from decoder: Decoder) throws {
@@ -741,9 +696,8 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let updatedAt: String?
     let is4k: Bool?
     let seasons: [SeerrRequestedSeason]?
-    /// Which Radarr/Sonarr quality profile the request was made against, and
-    /// on which server. Numbers only: the names live on the service, not on
-    /// the request.
+    /// The Radarr/Sonarr quality profile and server. Ids only; the names
+    /// live on the service.
     let profileId: Int?
     let serverId: Int?
 
@@ -769,8 +723,6 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
 
     var requestStatus: SeerrRequestStatus { .init(apiValue: status) }
 
-    /// What to show for this request: its approval state until it is granted,
-    /// and the library's answer after that.
     var progress: SeerrRequestProgress {
         .resolve(
             request: requestStatus,
@@ -778,8 +730,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
         )
     }
 
-    /// Only meaningful while `progress` is `.processing`; a title that has
-    /// arrived has nothing in the queue.
+    /// Only meaningful while `progress` is `.processing`.
     var downloadProgress: SeerrDownloadProgress? {
         media?.downloadProgress(is4k: is4k == true)
     }
@@ -821,8 +772,7 @@ nonisolated struct SeerrRequestMedia: Decodable, Hashable {
 
     var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
 
-    /// A 4K request is satisfied by the 4K copy, not by the 1080p one that
-    /// may already be sitting in the library.
+    /// A 4K request is satisfied only by the 4K copy.
     func availability(is4k: Bool) -> SeerrAvailabilityStatus {
         .init(apiValue: is4k ? status4k : status)
     }
@@ -847,8 +797,7 @@ nonisolated struct SeerrService: Decodable, Hashable, Identifiable {
     let name: String
     let is4k: Bool
     let isDefault: Bool
-    /// The profile this server applies when a request does not name one,
-    /// which is every request Lagoon makes and most made anywhere else.
+    /// Applied when a request names no profile, as Lagoon's never do.
     let activeProfileId: Int?
 
     init(from decoder: Decoder) throws {
@@ -914,10 +863,9 @@ nonisolated enum SeerrRequestFilter: String, CaseIterable, Identifiable {
 
 // MARK: - Discover layout
 
-/// The slider types Jellyseerr's own Discover page is built from. The server
-/// sends `settings/discover` as bare type numbers with `title: null` for
-/// built-ins, so the meaning of each number lives here and the wording is
-/// ours — the same arrangement Jellyseerr's web client uses.
+/// Jellyseerr's Discover slider types. `settings/discover` sends bare numbers
+/// with `title: null` for built-ins, so the meaning and wording live here, as
+/// in Jellyseerr's web client.
 nonisolated enum SeerrDiscoverSliderType: Int, Decodable, Hashable {
     case recentlyAdded = 1
     case recentRequests
@@ -944,9 +892,8 @@ nonisolated enum SeerrDiscoverSliderType: Int, Decodable, Hashable {
 
 nonisolated struct SeerrDiscoverSlider: Decodable, Hashable, Identifiable {
     let id: Int
-    /// Unknown to this build when nil: a newer Jellyseerr can add slider
-    /// types, and one Lagoon has never heard of must be skipped rather than
-    /// fail the whole layout.
+    /// Nil for a type this build does not know; skip it rather than fail the
+    /// layout.
     let type: SeerrDiscoverSliderType?
     let order: Int
     let enabled: Bool

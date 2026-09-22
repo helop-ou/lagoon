@@ -2,23 +2,17 @@ import Foundation
 
 // SyncPlay: shared playback across the devices in a group.
 //
-// The wire types live here rather than in JellyfinModels because only this
-// feature and the socket read them. Two rules apply throughout:
-//
-// - Every server enumeration decodes with an `unknown` fallback. A group
-//   state or a queue reason Lagoon has never heard of must not fail the
-//   whole update: the rest of it still says what happened.
-// - `When`, `EmittedAt` and `LastUpdate` stay `String`. They are wall-clock
-//   instants on the *server's* clock and are converted only through
-//   `JellyfinTimestamp`, paired with `ServerClock`'s offset.
+// - Every server enum decodes with an `unknown` fallback, so a new value
+//   never fails the whole update.
+// - `When`, `EmittedAt` and `LastUpdate` stay `String`: they are instants on
+//   the server's clock, converted only through `JellyfinTimestamp` with
+//   `ServerClock`'s offset. Never decode them as `Date`.
 
 // MARK: - Identifiers
 
-/// Jellyfin spells the same group id two ways in the same session: the
-/// `GroupId` fields and `SyncPlay/New` use undashed lowercase hex
-/// (`ea9615382d214f9c9313c26fbd3bad89`), while the `GroupLeft` update's
-/// payload is the dashed form of the same value. Measured on the fixture server, 12.0.0
-/// on 2026-09-14. Compare through here, never with `==` on the raw strings.
+/// Jellyfin spells a group id two ways: undashed hex in `GroupId` and
+/// `SyncPlay/New`, dashed in the `GroupLeft` payload. Compare through here,
+/// never with `==` on the raw strings.
 nonisolated enum SyncPlayGroupIdentifier {
     static func normalized(_ id: String) -> String {
         id.replacingOccurrences(of: "-", with: "").lowercased()
@@ -28,8 +22,7 @@ nonisolated enum SyncPlayGroupIdentifier {
         normalized(one) == normalized(other)
     }
 
-    /// Jellyfin's "no item" playlist id: an all-zero GUID, which arrives on
-    /// the `Stop` command a freshly created group is greeted with.
+    /// Jellyfin's "no item" id: an all-zero GUID.
     static func isEmptyIdentifier(_ id: String) -> Bool {
         let normalized = normalized(id)
         return normalized.isEmpty || normalized.allSatisfy { $0 == "0" }
@@ -87,11 +80,8 @@ nonisolated enum SyncPlayCommandKind: String, Codable, Hashable, Sendable {
     }
 }
 
-/// `SendCommand`: what the group wants every member to do, and when.
-///
-/// `when` is the whole point — the server names an instant on its own clock
-/// and each client schedules against it, which is why it is not a delay and
-/// cannot be acted on without `ServerClock`.
+/// `SendCommand`: what every member should do, and when. `when` is an
+/// instant on the server's clock, not a delay; act on it via `ServerClock`.
 nonisolated struct SyncPlayCommand: Decodable, Hashable, Sendable {
     let groupId: String
     let playlistItemId: String
@@ -102,9 +92,7 @@ nonisolated struct SyncPlayCommand: Decodable, Hashable, Sendable {
     /// Server wall clock: when the server sent this.
     let emittedAt: String
 
-    /// A new group is greeted with a `Stop` whose playlist item is the
-    /// all-zero GUID and whose position is 0 — there is nothing queued yet.
-    /// Verified on the fixture server, 12.0.0.
+    /// False for the `Stop` a new group is greeted with: nothing is queued.
     var hasPlaylistItem: Bool { !SyncPlayGroupIdentifier.isEmptyIdentifier(playlistItemId) }
 
     var positionSeconds: Double { Ticks.seconds(positionTicks) }
@@ -127,8 +115,7 @@ nonisolated struct SyncPlayCommand: Decodable, Hashable, Sendable {
 
 nonisolated struct SyncPlayQueueItem: Decodable, Identifiable, Hashable, Sendable {
     let itemId: String
-    /// The group's handle for this entry. Commands name it, not the item:
-    /// the same title can sit in the queue twice.
+    /// Commands name this, not the item: a title can be queued twice.
     let playlistItemId: String
 
     var id: String { playlistItemId }
@@ -162,8 +149,7 @@ nonisolated enum SyncPlayQueueReason: String, Codable, Hashable, Sendable {
 /// `PlayQueueUpdate`: the group's queue, and where in it everyone is.
 nonisolated struct SyncPlayQueueUpdate: Decodable, Hashable, Sendable {
     let reason: SyncPlayQueueReason
-    /// Server wall clock: updates older than the one already applied are
-    /// stale and must be dropped, which is what this is for.
+    /// Server wall clock. Drop updates older than the last one applied.
     let lastUpdate: String
     let playlist: [SyncPlayQueueItem]
     let playingItemIndex: Int
@@ -193,9 +179,8 @@ nonisolated struct SyncPlayQueueUpdate: Decodable, Hashable, Sendable {
 
 nonisolated struct SyncPlayStateUpdate: Decodable, Hashable, Sendable {
     let state: SyncPlayGroupState
-    /// The `PlaybackRequestType` that caused the transition — "Unpause",
-    /// "Play", "Seek" and so on. A plain string: it is a label for the
-    /// viewer and for logs, not something Lagoon branches on.
+    /// The `PlaybackRequestType` behind the change. A label only; never
+    /// branched on.
     let reason: String
 
     init(from decoder: Decoder) throws {
@@ -223,14 +208,8 @@ nonisolated enum SyncPlayGroupUpdateType: String, Codable, Hashable, Sendable {
     }
 }
 
-/// `GroupUpdate`: one envelope, whose `Data` means something different for
-/// every `Type`. That is why this decodes by hand — the type has to be read
-/// first, and the payload read according to it.
-///
-/// A payload whose shape is not what its type promises degrades to `.none`
-/// rather than failing the update, in keeping with the rest of the client's
-/// defensive decoding: knowing that the group changed is worth more than
-/// the detail that came with it.
+/// `GroupUpdate`: `Data` depends on `Type`, so this decodes by hand. A
+/// malformed payload degrades to `.none` rather than failing the update.
 nonisolated struct SyncPlayGroupUpdate: Decodable, Hashable, Sendable {
     nonisolated enum Payload: Hashable, Sendable {
         case group(SyncPlayGroup)
@@ -247,8 +226,6 @@ nonisolated struct SyncPlayGroupUpdate: Decodable, Hashable, Sendable {
     let type: SyncPlayGroupUpdateType
     let payload: Payload
 
-    /// Compare group ids through this: the two spellings Jellyfin uses are
-    /// not `==` to each other. See `SyncPlayGroupIdentifier`.
     var normalizedGroupId: String { SyncPlayGroupIdentifier.normalized(groupId) }
 
     func concerns(groupId other: String) -> Bool {
@@ -303,10 +280,8 @@ nonisolated struct SyncPlayGroupUpdate: Decodable, Hashable, Sendable {
 
 // MARK: - Reports
 
-/// `SyncPlay/Buffering` and `SyncPlay/Ready` share this body: where this
-/// client is, and when it was there. `when` is a server-clock instant
-/// produced by `JellyfinTimestamp.string(ServerClock.serverSeconds())`,
-/// since the group compares it against its own clock.
+/// Body of `SyncPlay/Buffering` and `SyncPlay/Ready`. `when` is a
+/// server-clock instant: `JellyfinTimestamp.string(ServerClock.serverSeconds())`.
 nonisolated struct SyncPlayReadinessReport: Encodable, Hashable, Sendable {
     let when: String
     let positionTicks: Int64
@@ -316,9 +291,8 @@ nonisolated struct SyncPlayReadinessReport: Encodable, Hashable, Sendable {
 
 // MARK: - Access
 
-/// `UserPolicy.SyncPlayAccess`. `unknown` covers both a value a future
-/// server invents and an answer that never arrived — neither is a denial,
-/// and the UI should say it could not check rather than "not allowed".
+/// `UserPolicy.SyncPlayAccess`. `unknown` (new value or no answer) is not
+/// a denial; the UI says it could not check.
 nonisolated enum SyncPlayAccess: String, Codable, Hashable, Sendable {
     case createAndJoinGroups = "CreateAndJoinGroups"
     case joinGroups = "JoinGroups"
@@ -371,10 +345,8 @@ extension JellyfinClient {
         try await get("SyncPlay/List")
     }
 
-    /// Creates a group and joins it. The new group's id is not read from
-    /// the response: the socket announces it as a `GroupJoined` update
-    /// moments later, which is the same path a join takes, so there is one
-    /// place that learns the id rather than two.
+    /// Creates and joins a group. The id arrives over the socket as
+    /// `GroupJoined`, the same path a join takes.
     func syncPlayCreateGroup(named name: String) async throws {
         try await postVoid("SyncPlay/New", body: SyncPlayNewGroupRequest(groupName: name))
     }
@@ -387,9 +359,8 @@ extension JellyfinClient {
         try await postVoid("SyncPlay/Leave")
     }
 
-    /// Replaces the group's queue. `itemIds` are Jellyfin item ids; the
-    /// group answers with the `PlaylistItemId`s it assigned them, over the
-    /// socket as a `PlayQueue` update.
+    /// Replaces the group's queue. The assigned `PlaylistItemId`s arrive
+    /// over the socket as a `PlayQueue` update.
     func syncPlaySetQueue(itemIds: [String], playingIndex: Int, startPositionTicks: Int64) async throws {
         try await postVoid("SyncPlay/SetNewQueue", body: SyncPlayQueueRequest(
             playingQueue: itemIds,
@@ -398,8 +369,8 @@ extension JellyfinClient {
         ))
     }
 
-    /// Asks the group to play. Nothing happens locally: the server answers
-    /// every member with a command naming the instant to start at.
+    /// Asks the group to play. Nothing happens locally until the server's
+    /// command arrives.
     func syncPlayUnpause() async throws {
         try await postVoid("SyncPlay/Unpause")
     }
@@ -428,8 +399,7 @@ extension JellyfinClient {
         try await postVoid("SyncPlay/SetPlaylistItem", body: SyncPlayItemRequest(playlistItemId: playlistItemId))
     }
 
-    /// Tells the group this client is not ready. Everyone else waits, which
-    /// is the whole bargain of SyncPlay: the slowest device sets the pace.
+    /// Tells the group this client is not ready; everyone else waits.
     func syncPlayReportBuffering(_ report: SyncPlayReadinessReport) async throws {
         try await postVoid("SyncPlay/Buffering", body: report)
     }
@@ -438,29 +408,23 @@ extension JellyfinClient {
         try await postVoid("SyncPlay/Ready", body: report)
     }
 
-    /// Reports this client's one-way latency so the group can allow for it
-    /// when it picks an instant to start at.
+    /// Reports one-way latency, which the group allows for when scheduling.
     func syncPlayPing(milliseconds: Int64) async throws {
         try await postVoid("SyncPlay/Ping", body: SyncPlayPingRequest(ping: milliseconds))
     }
 
-    /// Takes this client out of the group's readiness accounting: it will
-    /// be started at the same instant as everyone else and no longer holds
-    /// them up when it is behind.
+    /// Stops this client from holding the group up when it is behind.
     func syncPlaySetIgnoreWait(_ ignoreWait: Bool) async throws {
         try await postVoid("SyncPlay/SetIgnoreWait", body: SyncPlayIgnoreWaitRequest(ignoreWait: ignoreWait))
     }
 
-    /// What this account is allowed to do with groups. `unknown` when the
-    /// server could not be asked — see `SyncPlayAccess`.
+    /// `unknown` when the server could not be asked.
     func syncPlayAccess() async -> SyncPlayAccess {
         guard let user = try? await currentUser() else { return .unknown }
         return user.policy?.syncPlayAccess ?? .unknown
     }
 
-    /// Whether this server serves SyncPlay at all. A probe: its failure is
-    /// an answer rather than a fault, so it is never reported as an
-    /// incident.
+    /// Whether this server serves SyncPlay. A probe, so never reported.
     func isSyncPlayAvailable() async -> Bool {
         do {
             let _: [SyncPlayGroup] = try await get("SyncPlay/List", probe: true)

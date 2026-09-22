@@ -41,9 +41,8 @@ extension JellyfinClient {
         return filters.years
     }
 
-    /// One browse query, shared by the library screens and by Home's curated
-    /// rows. The filter arguments are all optional and all omitted
-    /// from the URL when unset, so a caller pays only for what it asks for.
+    /// One browse query for the library screens and Home's rows. Unset
+    /// filters are left out of the URL.
     func items(
         parentId: String? = nil,
         includeTypes: [MediaItemType] = [],
@@ -55,17 +54,15 @@ extension JellyfinClient {
         startIndex: Int = 0,
         limit: Int = 100,
         fields: String? = nil,
-        /// `ItemFilter` values, e.g. `IsUnplayed`. Spelled by the caller
-        /// because Jellyfin's own names are the clearest thing to read here.
+        /// Jellyfin `ItemFilter` names, e.g. `IsUnplayed`.
         filters: [String] = [],
         years: [Int] = [],
         is4K: Bool? = nil,
         minCommunityRating: Double? = nil,
         /// `Continuing`, `Ended`, or `Unreleased`.
         seriesStatus: String? = nil,
-        /// Watched flags and resume positions. Leave them on for anything a
-        /// card draws progress for; turn them off for a list of *folders*,
-        /// where they are ruinously expensive — see `collections()`.
+        /// Watched flags and resume positions. Turn off for lists of
+        /// folders, where they are very expensive (see `collections()`).
         enableUserData: Bool = true
     ) async throws -> ItemsPage {
         let userId = try requireUserId()
@@ -111,9 +108,7 @@ extension JellyfinClient {
         return try await get("Users/\(userId)/Items", query: query)
     }
 
-    /// The native genre catalogue for the signed-in user's playable video
-    /// libraries. One catalogue request plus one ranked artwork request is
-    /// deliberately cheaper than fetching a representative for every genre.
+    /// The genre catalogue for the user's video libraries.
     func genres(includeTypes: [MediaItemType] = [.movie, .series]) async throws -> [MediaGenre] {
         let userId = try requireUserId()
         let page: GenresPage = try await get("Genres", query: [
@@ -133,16 +128,15 @@ extension JellyfinClient {
         return try await get("Users/\(userId)/Items/\(id)")
     }
 
-    /// The item endpoint's raw body, for a download's snapshot:
-    /// saved as-is and decoded later with `JellyfinClient.decoder`, so a
-    /// downloaded title's detail page renders without the server.
+    /// The raw item body, saved with a download so its detail page renders
+    /// offline. Decode later with `JellyfinClient.decoder`.
     func itemData(id: String) async throws -> Data {
         let userId = try requireUserId()
         return try await getData("Users/\(userId)/Items/\(id)")
     }
 
-    /// Resolves a Seerr/TMDB catalogue entry back into this user's Jellyfin
-    /// library without guessing from title or year.
+    /// Finds a TMDB entry in the user's library by provider id, never by
+    /// title or year.
     func item(tmdbID: Int, mediaType: SeerrMediaType) async throws -> MediaItem? {
         let userId = try requireUserId()
         let includeType = mediaType == .tv ? MediaItemType.series : .movie
@@ -162,11 +156,8 @@ extension JellyfinClient {
         }
     }
 
-    /// Continue Watching. `MediaSources` rides along because this is the one
-    /// query that feeds the Top Shelf, and the carousel shows 4K, HDR and
-    /// Atmos badges from the streams. Asking here costs one larger
-    /// response on a query that already runs; the alternative was a second
-    /// round trip inside `TopShelfStore.publish` for the same facts.
+    /// Continue Watching. Asks for `MediaSources` because this query feeds
+    /// the Top Shelf, whose 4K, HDR and Atmos badges come from the streams.
     func resumeItems(limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Users/\(userId)/Items/Resume", query: [
@@ -188,8 +179,8 @@ extension JellyfinClient {
             URLQueryItem(name: "EnableResumable", value: "false"),
             URLQueryItem(name: "EnableRewatching", value: "false"),
         ])
-        // Filter on the server before Limit, with a defensive check for
-        // servers that still return resumable or already watched episodes.
+        // The server filters before Limit; this guards servers that still
+        // return resumable or watched episodes.
         return page.items.filter {
             ($0.userData?.playbackPositionTicks ?? 0) <= 0
                 && ($0.userData?.playedPercentage ?? 0) <= 0
@@ -207,9 +198,8 @@ extension JellyfinClient {
         ])
     }
 
-    /// Latest groups containing just one episode can be returned as Episodes,
-    /// even with Jellyfin's default GroupItems=true. Resolve real Series DTOs
-    /// so cards use the show's artwork and open its seasons, not one episode.
+    /// Latest can return a lone episode even with GroupItems=true. Resolve
+    /// the Series so cards show the show and open its seasons.
     func latestSeries(parentId: String, limit: Int = 16) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let serverURL = self.serverURL
@@ -240,8 +230,7 @@ extension JellyfinClient {
         }
         let missingIDs = orderedIDs.filter { seriesByID[$0] == nil }
         if !missingIDs.isEmpty {
-            // One bounded lookup, not one request per episode. Keep Latest's
-            // child-addition order rather than sorting by the series' age.
+            // One lookup for all missing series. Keep Latest's order.
             let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
                 URLQueryItem(name: "Ids", value: missingIDs.joined(separator: ",")),
                 URLQueryItem(name: "IncludeItemTypes", value: MediaItemType.series.rawValue),
@@ -256,13 +245,12 @@ extension JellyfinClient {
                 seriesByID[series.id] = series
             }
         }
-        // Removed/inaccessible parents are omitted. Request failures throw so
-        // Home's existing refresh fallback keeps the last good rail instead.
+        // Missing series are dropped. Failures throw so Home keeps the last
+        // good rail.
         return orderedIDs.compactMap { seriesByID[$0] }
     }
 
-    /// "More Like This" on the detail page. The server does the
-    /// picking; an empty list just hides the rail.
+    /// "More Like This". An empty list hides the rail.
     func similarItems(itemId: String, limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Items/\(itemId)/Similar", query: [
@@ -273,18 +261,11 @@ extension JellyfinClient {
         return page.items
     }
 
-    /// Every collection (a Jellyfin `BoxSet`) this user can see.
+    /// Every collection (`BoxSet`) this user can see. Most are empty stubs;
+    /// `ChildCount` lets callers drop them (`CollectionShelf.minimumTitles`).
     ///
-    /// **Expect most to be empty.** A scrape creates a collection for a film's
-    /// whole franchise regardless of what the library holds: 173 on the
-    /// reference server, 35 with anything in them, 18 with more than one.
-    /// `ChildCount` rides in `defaultFields` so callers can drop the stubs
-    /// without a request each — see `CollectionShelf.minimumTitles`.
-    ///
-    /// **`EnableUserData=false` is what makes this usable.** `UnplayedItemCount`
-    /// forces the server to walk every collection's children: **38.6 s with
-    /// user data, 0.25 s without**. The row draws a name and a count; opening
-    /// one collection is a separate cheap request that keeps its user data.
+    /// Keep `EnableUserData=false`: with user data the server walks every
+    /// collection's children, 38.6 s against 0.25 s.
     func collections(limit: Int = 200) async throws -> [MediaItem] {
         try await items(
             includeTypes: [.boxSet],
@@ -294,15 +275,8 @@ extension JellyfinClient {
         ).items
     }
 
-    /// What is inside one collection, in release order.
-    ///
-    /// Release order is the order a franchise reads in and `SortName` is not:
-    /// alphabetically *Aliens vs Predator: Requiem* opens the AVP collection
-    /// and *Alien 3* precedes *Aliens*. `PremiereDate` fixes both, with
-    /// `SortName` behind it for the titles a server has no date for.
-    ///
-    /// Not recursive and not paged: collection membership is direct, and a
-    /// franchise that needs a second page of two hundred does not exist.
+    /// One collection's titles in release order; `SortName` breaks ties for
+    /// undated titles. Not recursive: membership is direct.
     func collectionItems(collectionId: String, limit: Int = 200) async throws -> [MediaItem] {
         try await items(
             parentId: collectionId,
@@ -313,10 +287,8 @@ extension JellyfinClient {
         ).items
     }
 
-    /// The Favorites rail. `Filters=IsFavorite` does the picking
-    /// server-side. Restricted to movies and series because favouriting is
-    /// a show-level gesture — `ItemActionRow`'s star deliberately targets
-    /// the series, so a rail full of individual episodes would be noise.
+    /// The Favorites rail. Movies and series only: the favourite star
+    /// targets the series, not episodes.
     func favorites(limit: Int = 16) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
@@ -333,12 +305,8 @@ extension JellyfinClient {
 
     // MARK: - User data
 
-    /// Marks an item played, or clears it. Clearing also puts a finished item
-    /// *back* on Continue Watching, and marking played is how an item leaves
-    /// it — Jellyfin has no separate "dismiss" for the resume rail.
-    ///
-    /// Both flags are POST-to-set, DELETE-to-clear on the same path, which is
-    /// why this reads as a toggle rather than a pair of verbs.
+    /// Marks an item played or unplayed. Marking played is the only way off
+    /// Continue Watching; Jellyfin has no "dismiss".
     func setPlayed(_ played: Bool, itemId: String) async throws {
         let userId = try requireUserId()
         let path = "Users/\(userId)/PlayedItems/\(itemId)"
@@ -367,9 +335,8 @@ extension JellyfinClient {
         return page.items
     }
 
-    /// The episode a Play press on a series page should start: the one in
-    /// progress if there is one, otherwise the next unwatched. Nil once the
-    /// series is fully watched — `Shows/NextUp` simply returns nothing.
+    /// What Play on a series starts: the episode in progress, else the next
+    /// unwatched. Nil once the series is watched.
     func nextUpEpisode(seriesId: String) async throws -> MediaItem? {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Shows/NextUp", query: [
@@ -395,18 +362,12 @@ extension JellyfinClient {
         return page.items
     }
 
-    /// The episode that follows this one in its series, or nil once the run
-    /// is over — what autoplay rolls into.
+    /// The next episode for autoplay, or nil at the end of the series.
     ///
-    /// Deliberately *not* `Shows/NextUp`. That endpoint returns the episode
-    /// in progress when there is one (`enableResumable` defaults to true,
-    /// per the server's own OpenAPI document), and at the moment an episode
-    /// finishes its stop report has not landed yet — so NextUp hands back
-    /// the episode that just ended and autoplay loops on it forever.
-    ///
-    /// `startItemId` runs the series list forward to a given episode, so
-    /// asking for two from there yields [this, next]. Naming no season is
-    /// what carries a binge across a season boundary.
+    /// Not `Shows/NextUp`: when an episode ends its stop report has not
+    /// landed, so NextUp returns the same episode and autoplay loops.
+    /// `startItemId` with Limit 2 yields [this, next]; no season filter lets
+    /// it cross seasons.
     func episodeAfter(_ episode: MediaItem) async throws -> MediaItem? {
         guard let seriesId = episode.seriesId else { return nil }
         let userId = try requireUserId()
@@ -416,9 +377,8 @@ extension JellyfinClient {
             URLQueryItem(name: "Limit", value: "2"),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
         ])
-        // A first item that isn't the anchor means the server never found it
-        // and started from the top of the series instead. Rolling into
-        // episode 1 would be far worse than doing nothing.
+        // If the anchor is not first, the server started from episode 1.
+        // Doing nothing beats rolling into it.
         guard page.items.first?.id == episode.id else { return nil }
         return page.items.dropFirst().first
     }
@@ -428,13 +388,11 @@ extension JellyfinClient {
 
 nonisolated enum ItemImageKind {
     case primary
-    /// Portrait artwork for metadata surfaces. Episodes deliberately inherit
-    /// the series Primary image instead of using their landscape still.
+    /// Portrait artwork. Episodes use the series poster, not their still.
     case poster
     case backdrop
     case thumb
-    /// The title's own artwork — a transparent PNG wordmark. Jellyfin has
-    /// one for practically every film (reference shot).
+    /// The title's transparent PNG wordmark.
     case logo
 }
 
@@ -460,10 +418,8 @@ extension JellyfinClient {
             }
         case .poster:
             if item.type == .episode, let seriesId = item.seriesId {
-                // Jellyfin stores an episode screen grab in Primary. The
-                // player's portrait slot represents the title, so resolve
-                // through the series even when the list response omitted its
-                // image tag; the image endpoint does not require that tag.
+                // An episode's Primary is a screen grab. Use the series even
+                // without its tag; the image route does not need one.
                 itemId = seriesId
                 tag = item.seriesPrimaryImageTag
             } else if let primaryTag = item.imageTags?["Primary"] {
@@ -493,11 +449,8 @@ extension JellyfinClient {
                 return nil
             }
         case .thumb:
-            // Episode stills live in the Primary slot; prefer them, then
-            // Thumb, then backdrops. A title with only a poster still gets
-            // that poster rather than an empty card: jellyfin-web's card
-            // builder ends the same chain with Primary, and the demo's 1910
-            // King Lear has no wide artwork at all.
+            // Episode still, then Thumb, then backdrop, then the poster, so
+            // a title with no wide artwork still gets a card (as jellyfin-web).
             if item.type == .episode, let primaryTag = item.imageTags?["Primary"] {
                 tag = primaryTag
             } else if let thumbTag = item.imageTags?["Thumb"] {
@@ -519,11 +472,8 @@ extension JellyfinClient {
         return try? url(path: "Items/\(itemId)/Images/\(type)", query: query)
     }
 
-    /// A user's profile picture, on the same conventions as item artwork.
-    /// nil without a tag: the route answers 404 for a user who
-    /// has no picture, and initials are the right thing to show then. Built
-    /// from a server URL rather than the configured client because the
-    /// account picker shows accounts on every remembered server.
+    /// A user's picture. nil without a tag, since the route 404s and the UI
+    /// shows initials. Static because the account picker spans servers.
     nonisolated static func userImageURL(serverURL: URL, userId: String, tag: String?, maxWidth: Int) -> URL? {
         guard let tag,
               var components = URLComponents(
@@ -538,8 +488,7 @@ extension JellyfinClient {
         return components.url
     }
 
-    /// Cast headshot. People are items too, so this is the same image route
-    /// with the credit's own id.
+    /// Cast headshot. People are items, so it is the item image route.
     func personImageURL(for person: Person, maxWidth: Int) -> URL? {
         guard serverURL != nil, let tag = person.primaryImageTag else { return nil }
         return try? url(path: "Items/\(person.id)/Images/Primary", query: [

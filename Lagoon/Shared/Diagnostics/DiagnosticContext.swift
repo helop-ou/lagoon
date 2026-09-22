@@ -4,10 +4,8 @@ import LagoonEngine
 import UIKit
 #endif
 
-/// What every report says about the process it came from: build, OS,
-/// device class, and which distribution channel. Nothing here identifies
-/// an install or a person; the device model is a class name shared by
-/// every unit of that model.
+/// Build, OS, device class and channel. Nothing here identifies an install
+/// or a person.
 nonisolated struct DiagnosticContext: Equatable, Sendable {
     let bundleIdentifier: String
     let appVersion: String
@@ -23,8 +21,7 @@ nonisolated struct DiagnosticContext: Equatable, Sendable {
     /// Sentry's release identity: `bundle@version+build`.
     var release: String { "\(bundleIdentifier)@\(appVersion)+\(build)" }
 
-    /// Built once at install, on the main actor, because the iPad check
-    /// reads `UIDevice`; the value is then a plain Sendable snapshot.
+    /// Main actor because the iPad check reads `UIDevice`.
     @MainActor
     static func current(engineVersion: String) -> DiagnosticContext {
         let bundle = Bundle.main
@@ -69,8 +66,8 @@ nonisolated struct DiagnosticContext: Equatable, Sendable {
         #endif
     }
 
-    /// `AppleTV14,1`, `iPhone16,2`; the simulator reports the model it
-    /// simulates through its environment rather than `hw.machine`.
+    /// `AppleTV14,1`; the simulator reports its model via the environment,
+    /// not `hw.machine`.
     private static var deviceModel: String {
         if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"],
            DiagnosticSchema.isToken(simulated) {
@@ -97,10 +94,9 @@ nonisolated struct DiagnosticContext: Equatable, Sendable {
     }
 }
 
-/// The tester-facing switch. Release builds report unless turned off in
-/// Settings; Debug builds stay quiet unless a run asks for reports with
-/// `-diagnostics.reportingEnabled YES`, so development sessions never
-/// spend the shared quota.
+/// Release builds report unless turned off in Settings. Debug builds stay
+/// quiet unless run with `-diagnostics.reportingEnabled YES`, to spare the
+/// quota.
 nonisolated enum DiagnosticsPreference {
     static let reportingEnabledKey = "diagnostics.reportingEnabled"
 
@@ -116,9 +112,8 @@ nonisolated enum DiagnosticsPreference {
         isReportingEnabled(storedValue: UserDefaults.standard.object(forKey: reportingEnabledKey))
     }
 
-    /// The Settings toggle stores a Bool; a launch argument
-    /// (`-diagnostics.reportingEnabled YES`) arrives as a string. Both
-    /// count, and anything else means "not set".
+    /// The toggle stores a Bool, a launch argument a string. Both count;
+    /// anything else means "not set".
     static func isReportingEnabled(storedValue: Any?) -> Bool {
         switch storedValue {
         case let flag as Bool:

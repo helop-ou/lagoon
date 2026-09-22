@@ -1,9 +1,8 @@
 import Foundation
 import Network
 
-/// Parses user-entered service roots without treating a proxy path as part
-/// of the host. Explicit schemes are authoritative; only schemeless input
-/// participates in discovery over alternative schemes and default ports.
+/// Parses user-entered server roots, keeping any proxy path. Only
+/// schemeless input tries other schemes and default ports.
 nonisolated enum ServerAddress {
     enum Service { case jellyfin, seerr }
 
@@ -29,8 +28,7 @@ nonisolated enum ServerAddress {
               components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil,
               components.port.map({ (1...65535).contains($0) }) ?? true else { return [] }
-        // Foundation accepts an empty port ("host:") as nil. Treat it as
-        // incomplete input instead of quietly selecting a different port.
+        // Foundation reads "host:" as no port; treat it as incomplete.
         let authority = inputURL[inputURL.range(of: "://")!.upperBound...]
             .prefix { $0 != "/" && $0 != "?" && $0 != "#" }
         guard !authority.hasSuffix(":") else { return [] }
@@ -61,9 +59,8 @@ nonisolated enum ServerAddress {
         return candidates
     }
 
-    /// A configured or saved URL is already a service root. Do not strip an
-    /// API suffix again on configuration, restoration, or copying a client:
-    /// a proxy root can itself end in /api/v1. Only user input is ambiguous.
+    /// A saved URL is already a root. Never strip an API suffix again: a
+    /// proxy root can itself end in /api/v1.
     static func normalizedRootURL(_ url: URL) -> URL {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
         normalizePath(&components, removingAPISuffix: false)
@@ -74,8 +71,7 @@ nonisolated enum ServerAddress {
 
     static func displayString(for url: URL) -> String {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return "" }
-        // Old saved addresses may predate validation. Never display embedded
-        // credentials or query tokens when identifying the selected server.
+        // Old saved addresses may hold credentials or tokens; never show them.
         components.user = nil
         components.password = nil
         components.query = nil
@@ -98,8 +94,7 @@ nonisolated enum ServerAddress {
         if host.hasPrefix("[") && host.hasSuffix("]") {
             return IPv6Address(String(host.dropFirst().dropLast())) != nil
         }
-        // DNS names (including IDNs and local service names) must not decode
-        // into URL delimiters. IPv6 literals require brackets in an address.
+        // Host names must not decode into URL delimiters. IPv6 needs brackets.
         let forbidden = CharacterSet.whitespacesAndNewlines.union(.controlCharacters)
             .union(CharacterSet(charactersIn: "/\\:@?#[]%"))
         guard host.rangeOfCharacter(from: forbidden) == nil else { return false }

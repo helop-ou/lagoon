@@ -3,15 +3,11 @@ import SwiftUI
 import os
 #endif
 
-/// Long-press menu on any card: mark watched/unwatched and favourite.
-/// The same two mutations `ItemActionRow` offers on the detail
-/// page, so saying "I've seen this" doesn't cost a trip into the item and
-/// back — which is the whole point of a rail you're scanning.
+/// Long-press menu on any card: watched/unwatched and favourite, as in
+/// `ItemActionRow`.
 ///
-/// State is optimistic for the same reason it is there: the menu dismisses
-/// the instant you pick something, so a round trip would leave the card
-/// looking unchanged. `onChange` is what actually reconciles — the rails
-/// re-fetch and the card redraws from server truth a moment later.
+/// State is optimistic because the menu dismisses instantly. `onChange`
+/// reconciles: the rails re-fetch and the card redraws from the server.
 private struct ItemUserDataMenu: ViewModifier {
     let item: MediaItem
     let onChange: (() async -> Void)?
@@ -23,17 +19,9 @@ private struct ItemUserDataMenu: ViewModifier {
     private var isPlayed: Bool { played ?? item.userData?.played ?? false }
     private var isFavorite: Bool { favorite ?? item.userData?.isFavorite ?? false }
 
-    /// Episode cards get the checkmark only.
-    ///
-    /// Favouriting is a show-level gesture — `ItemActionRow`'s star targets
-    /// the series for the same reason, and the Favorites rail lists movies
-    /// and series only, so an episode-level star would land somewhere you
-    /// could never see it. Retargeting the star at `seriesId` from here
-    /// looks tempting and is worse: the card carries the *episode's*
-    /// `userData`, so it cannot know whether the show is already
-    /// favourited, and the toggle would point the wrong way half the time.
-    /// One extra fetch per card to find out is not worth it. The series
-    /// page owns that star.
+    /// Episode cards get the checkmark only. Favourites are show-level, and
+    /// don't retarget the star at `seriesId`: the card carries the episode's
+    /// `userData`, so it can't know the show's state. The series page owns it.
     private var offersFavorite: Bool { item.type != .episode }
 
     func body(content: Content) -> some View {
@@ -71,19 +59,16 @@ private struct ItemUserDataMenu: ViewModifier {
                 downloadMenuItems
                 #endif
             }
-            // Rails recycle their card views as the list behind them changes,
-            // so a stale local override would otherwise describe the previous
-            // item. Same guard as `ItemActionRow`.
+            // Rails recycle card views, so drop an override from the
+            // previous item. Same guard as `ItemActionRow`.
             .onChange(of: item.id) { _, _ in
                 played = nil
                 favorite = nil
             }
             #if os(iOS)
             .task {
-                // Warms the client's permission caches once, so the first
-                // long-press already knows whether to offer Download at all.
-                // A cache that already has an answer skips the
-                // round trip.
+                // Warms the permission cache so the first long-press knows
+                // whether to offer Download.
                 if session.client.cachedContentDownloadingAllowed == nil {
                     _ = await session.client.canDownloadContent()
                 }
@@ -95,11 +80,8 @@ private struct ItemUserDataMenu: ViewModifier {
     }
 
     #if os(iOS)
-    /// Movies and episodes only: a series or season has no file of its own
-    /// to take offline, and a box set is a browsing convenience rather than
-    /// something to play. Downloaded and in-flight states get a one-tap
-    /// action; a title with nothing started yet gets the quality picker
-    /// `DownloadControl` uses on the detail page.
+    /// Movies and episodes only; others have no file of their own. A new
+    /// download gets `DownloadControl`'s quality picker.
     @ViewBuilder
     private var downloadMenuItems: some View {
         if item.type == .movie || item.type == .episode {
@@ -134,10 +116,8 @@ private struct ItemUserDataMenu: ViewModifier {
         }
     }
 
-    /// The default quality first, matching `DownloadControl`'s menu. High and
-    /// Standard only appear when the account may have the server transcode
-    /// for it; Original is always offered here since this menu only builds
-    /// once downloading itself is permitted.
+    /// Default quality first, as in `DownloadControl`. High and Standard need
+    /// transcode permission; Original needs only download permission.
     private var downloadQualities: [DownloadQuality] {
         let store = DownloadStore.shared
         let allowed: [DownloadQuality] = session.client.cachedVideoTranscodingAllowed == true
@@ -158,10 +138,8 @@ private struct ItemUserDataMenu: ViewModifier {
             do {
                 try await send(target)
                 await onChange?()
-                // The override deliberately outlives the refresh: it already
-                // agrees with what the server was just told, and dropping it
-                // here would revert the icon on any card whose list has no
-                // `onChange` to re-fetch with.
+                // Keep the override past the refresh: a list without
+                // `onChange` never re-fetches, and the icon would revert.
             } catch {
                 apply(!target)
             }

@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// AsyncImage replacement backed by ImageCache. The synchronous cache probe
-/// in init means already-cached artwork renders on first frame — no
-/// placeholder flash when scrolling back through rails.
+/// in init renders cached artwork on the first frame, with no placeholder
+/// flash.
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     private let url: URL?
     private let maxPixelSize: Int

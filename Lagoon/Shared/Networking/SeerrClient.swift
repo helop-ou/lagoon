@@ -30,9 +30,8 @@ enum SeerrError: LocalizedError, Equatable {
     }
 }
 
-/// A separate HTTP boundary for Seerr. It owns only an opaque per-user
-/// session cookie; Jellyfin credentials and Seerr's global API key never
-/// enter this client.
+/// HTTP client for Seerr. Holds only a per-user session cookie; Jellyfin
+/// credentials and Seerr's global API key never enter it.
 final class SeerrClient {
     private(set) var serverURL: URL?
     private(set) var sessionCookie: String?
@@ -43,9 +42,8 @@ final class SeerrClient {
     private let encoder: JSONEncoder
     private var configurationGeneration = 0
 
-    /// Its own session rather than `.shared`, so no Seerr response can be
-    /// stored in — or answered from — the process-wide URL cache. `JellyfinClient`
-    /// does the same for the same reason. Tests pass their own.
+    /// Its own session, never `.shared`, so nothing touches the shared URL
+    /// cache. Tests pass their own.
     init(session: URLSession? = nil, requestTimeout: TimeInterval = 20) {
         self.session = session ?? Self.uncachedSession()
         self.requestTimeout = requestTimeout
@@ -153,9 +151,8 @@ final class SeerrClient {
         return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
     }
 
-    /// The viewer's own watchlist. Named `PLEX_WATCHLIST` in the slider enum
-    /// Jellyseerr inherited from Overseerr; on a Jellyfin server it is the
-    /// local watchlist, and the route is the same either way.
+    /// The viewer's watchlist. Called `PLEX_WATCHLIST` in Jellyseerr's
+    /// slider enum, but it is the local watchlist on Jellyfin.
     func watchlist(page: Int = 1) async throws -> SeerrDiscoverPage {
         try await get("discover/watchlist", query: [URLQueryItem(name: "page", value: String(page))])
     }
@@ -176,9 +173,8 @@ final class SeerrClient {
         return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
     }
 
-    /// The rows the server owner arranged for their own Discover page. Only
-    /// the type number and order come back for built-ins; the titles are the
-    /// client's to supply.
+    /// The owner's Discover rows. Built-ins come back as type and order
+    /// only; the client supplies their titles.
     func discoverSliders() async throws -> [SeerrDiscoverSlider] {
         try await get("settings/discover")
     }
@@ -201,10 +197,8 @@ final class SeerrClient {
         }
     }
 
-    /// TMDB's recommendations for a title, which is what Jellyfin's own
-    /// "More Like This" draws on for a library item. TMDB's
-    /// `similar` list is keyword-matched and much weaker, so it is not
-    /// offered.
+    /// TMDB recommendations. Not `similar`, which is keyword-matched and
+    /// much weaker.
     func recommendations(id: Int, mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
         switch mediaType {
         case .movie:
@@ -263,10 +257,8 @@ final class SeerrClient {
 
     // MARK: - Artwork
 
-    /// TMDB serves a fixed set of widths and answers 400 for anything else —
-    /// `w720` is not a rendition, it is a broken link. The requested width is
-    /// therefore snapped up to the next size TMDB actually has, so a caller
-    /// can ask for the width its layout needs without knowing the list.
+    /// TMDB serves fixed widths and 400s on others, so the width snaps up
+    /// to the next one it has.
     nonisolated static let tmdbImageWidths = [92, 154, 185, 342, 500, 780, 1280]
 
     nonisolated static func imageURL(path: String?, width: Int) -> URL? {
@@ -308,14 +300,12 @@ final class SeerrClient {
 
     // MARK: - Radarr / Sonarr
 
-    /// The configured servers for a media type. Readable without admin — the
-    /// request detail uses it to name the profile a request was made against.
+    /// Configured servers for a media type. Readable without admin.
     func services(_ mediaType: SeerrMediaType) async throws -> [SeerrService] {
         try await get("service/\(mediaType == .movie ? "radarr" : "sonarr")")
     }
 
-    /// One server's quality profiles. `MediaRequest` carries only a
-    /// `profileId`; the names live here.
+    /// Quality profile names for a `MediaRequest.profileId`.
     func qualityProfiles(
         _ mediaType: SeerrMediaType,
         serverID: Int
@@ -326,10 +316,8 @@ final class SeerrClient {
         return details.profiles
     }
 
-    /// Lifts an administrator's block on a title. Jellyseerr removes the
-    /// media row along with the blocklist entry, so the title goes back to
-    /// being simply not-requested and can be asked for again. `mediaType` is
-    /// required — the route answers 400 without it.
+    /// Unblocks a title, making it requestable again. `mediaType` is
+    /// required; the route 400s without it.
     func removeFromBlocklist(tmdbID: Int, mediaType: SeerrMediaType) async throws {
         _ = try await data(
             path: "blocklist/\(tmdbID)",
@@ -393,11 +381,8 @@ final class SeerrClient {
         request.httpShouldHandleCookies = false
         request.httpMethod = method
         request.timeoutInterval = requestTimeout
-        // Never answer a Seerr call from an HTTP cache. The live-refresh loops
-        // poll constant, cache-keyable URLs (`request/{id}`, `movie/{tmdbId}`)
-        // for the express purpose of seeing state the server has just changed,
-        // so any freshness lifetime Jellyseerr or a reverse proxy in front of
-        // it emits would make them silently observe nothing.
+        // Never answer from an HTTP cache: live refresh polls fixed URLs to
+        // see fresh state, and a cached copy would hide every change.
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
@@ -422,19 +407,14 @@ final class SeerrClient {
         }
         let data = responsePayload.data
         let response = responsePayload.response
-        // An account switch clears/reconfigures this shared client. A late
-        // response from the previous account must never install its cookie
-        // or update the new account's UI state.
+        // A late response from a previous account must never install its
+        // cookie or reach the new account's UI.
         guard configurationGeneration == requestGeneration else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw SeerrError.invalidResponse }
         captureSessionCookie(from: http, url: url)
-        // A forward-auth proxy — Cloudflare Access, Authelia, Authentik —
-        // answers before the request reaches Seerr, redirecting to its own
-        // login page. URLSession follows that, so the call succeeds with a
-        // 200 carrying HTML. Decoding it fails, and "unreadable response"
-        // then blames Seerr for something standing in front of it. Only 2xx
-        // is inspected: an HTML body on a 4xx/5xx is an ordinary gateway
-        // error page, which `server(_:_:)` already reports usefully.
+        // A forward-auth proxy (Cloudflare Access, Authelia) redirects to
+        // its login page, so the call returns a 200 with HTML. Only 2xx is
+        // checked; HTML on 4xx/5xx is a normal gateway error page.
         if (200..<300).contains(http.statusCode), let mime = http.mimeType, !mime.hasSuffix("json") {
             let context = DecodingError.Context(codingPath: [], debugDescription: "Response was \(mime), not JSON")
             APIDiagnostics.decodeFailed(
@@ -457,11 +437,8 @@ final class SeerrClient {
         return data
     }
 
-    /// `URLRequest.timeoutInterval` is an inactivity timeout, not a hard
-    /// deadline. A server that slowly dribbles response bytes can therefore
-    /// keep a discovery request alive indefinitely and strand the UI on an
-    /// activity indicator. Race the transport against an absolute deadline so
-    /// every Seerr screen can reach its existing error-and-retry state.
+    /// `timeoutInterval` is an inactivity timeout, so a server dribbling
+    /// bytes could hang the UI. Race against an absolute deadline.
     private func response(for request: URLRequest) async throws -> ResponsePayload {
         try await withThrowingTaskGroup(of: ResponsePayload.self) { group in
             group.addTask { [session] in

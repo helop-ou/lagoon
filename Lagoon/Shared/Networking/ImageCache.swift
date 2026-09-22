@@ -5,10 +5,8 @@ import UIKit
 
 /// Downsampling image loader with an in-memory cache.
 ///
-/// Decodes off-main via CGImageSource with a thumbnail max pixel size, so a
-/// 4K backdrop never reaches the render thread at full resolution, and
-/// force-decodes (`ShouldCacheImmediately`) so scrolling never stalls on
-/// JPEG decompression. Concurrent loads of the same key are coalesced.
+/// Decodes off-main to `maxPixelSize` and force-decodes, so scrolling never
+/// stalls on JPEG work. Concurrent loads of a key are coalesced.
 final class ImageCache {
     static let shared = ImageCache()
 
@@ -29,28 +27,21 @@ final class ImageCache {
 
     init(downloader: BoundedDownload = .shared) { self.downloader = downloader }
 
-    /// A `String`, not the `NSString` the cache is keyed by: the cancellation
-    /// handler runs off the main actor and carries the key with it, and a
-    /// Swift `String` is a value it may hold. Only `NSCache` needs the bridge.
+    /// `String`, not `NSString`: the off-main cancellation handler carries it.
     private func key(_ url: URL, maxPixelSize: Int) -> String {
         "\(url.absoluteString)::w\(maxPixelSize)"
     }
 
-    /// Synchronous probe so views can skip the placeholder for cached images.
-    /// Only the in-memory cache is consulted here: a downloaded title's
-    /// artwork lives on disk and needs the same off-main decode a network
-    /// fetch gets, which `load` below does.
+    /// Synchronous memory-cache probe, so views skip the placeholder. Disk
+    /// artwork goes through `load` for its off-main decode.
     func image(for url: URL, maxPixelSize: Int) -> UIImage? {
         let key = key(url, maxPixelSize: maxPixelSize)
         return cache.object(forKey: key as NSString)
     }
 
     #if os(iOS)
-    /// A downloaded title's own poster or backdrop, decoded the same way a
-    /// network fetch would be, before ever touching the network.
-    /// Reads the file and decodes it off the main actor, same as the
-    /// network path, since a 4K backdrop is exactly the decode this cache
-    /// exists to keep off the render thread.
+    /// A downloaded title's artwork from disk, decoded off-main like a
+    /// network fetch.
     private func localImage(for url: URL, maxPixelSize: Int) async -> UIImage? {
         guard let fileURL = DownloadStore.localArtworkURL(matching: url) else { return nil }
         return await Task.detached(priority: .utility) {

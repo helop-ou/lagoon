@@ -1,8 +1,7 @@
 import Foundation
 import LagoonEngine
 
-/// Stable codes for the rolling history. Renaming one changes what every
-/// dashboard query and grouping rule sees, so add rather than rename.
+/// Stable codes: dashboards query them, so add, never rename.
 nonisolated enum DiagnosticEventCode: String, Sendable, CaseIterable {
     case playbackStart = "playback.start"
     case playbackReady = "playback.ready"
@@ -22,8 +21,8 @@ nonisolated enum DiagnosticEventCode: String, Sendable, CaseIterable {
     case playbackFinished = "playback.finished"
     case playbackStop = "playback.stop"
     case playbackFailure = "playback.failure"
-    /// Watch Together. Group membership and the transport the
-    /// server drives; never which group, which item or who is in it.
+    /// Watch Together: membership and transport, never which group, item
+    /// or people.
     case syncPlayJoin = "syncplay.join"
     case syncPlayLeave = "syncplay.leave"
     case syncPlayCommand = "syncplay.command"
@@ -54,12 +53,11 @@ nonisolated enum DiagnosticLevel: String, Sendable, Comparable {
     static func < (lhs: Self, rhs: Self) -> Bool { lhs.rank < rhs.rank }
 }
 
-/// One entry in the rolling history. Fields are validated on construction,
-/// so an event can only ever hold what `DiagnosticSchema` admits.
+/// Fields are validated on construction against `DiagnosticSchema`.
 nonisolated struct DiagnosticEvent: Equatable, Sendable {
     let code: DiagnosticEventCode
-    /// `ProcessInfo.systemUptime` when recorded. History is expressed as
-    /// offsets from the incident that carries it, never as wall-clock time.
+    /// `ProcessInfo.systemUptime`. History is reported as offsets from the
+    /// incident, never wall-clock time.
     let uptime: TimeInterval
     let fields: [String: DiagnosticValue]
 
@@ -74,8 +72,7 @@ nonisolated struct DiagnosticEvent: Equatable, Sendable {
         self.fields = accepted
     }
 
-    /// The attachment form: seconds relative to `reference` (negative
-    /// before it), the code, and the fields.
+    /// Seconds relative to `reference` (negative before it).
     func jsonObject(relativeTo reference: TimeInterval) -> [String: Any] {
         var object: [String: Any] = [
             "t": (uptime - reference).rounded(toPlaces: 3),

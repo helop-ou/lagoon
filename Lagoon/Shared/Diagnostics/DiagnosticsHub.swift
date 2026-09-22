@@ -5,28 +5,23 @@ import os
 import UIKit
 #endif
 
-/// Where incidents go once the hub has assembled them. The app decides what
-/// stands behind it; the engine and the clients never know.
+/// Where incidents go. Only the app knows what stands behind it.
 nonisolated protocol DiagnosticSink: Sendable {
     func submit(_ incident: DiagnosticIncident)
     /// A chance to send what is queued, for foreground transitions.
     func flush()
 }
 
-/// The vendor-neutral core of diagnostic reporting: a rolling history any
-/// thread can append to, and a `report` that turns a moment into an incident
-/// carrying that history. Cheap on purpose. `record` is a lock and an array
-/// append; `report` adds a schema pass and a snapshot copy, then hands off to
-/// the sink, which does its serialization and I/O on its own queue.
+/// Vendor-neutral reporting: a rolling history any thread can append to,
+/// and `report`, which attaches it to an incident. Cheap on purpose: the
+/// sink does serialization and I/O on its own queue.
 nonisolated final class DiagnosticsHub: Sendable {
     private struct State {
         var history: DiagnosticHistory
         var suppressor: IncidentSuppressor
         var sink: DiagnosticSink?
-        /// Fields every incident inherits while they are set: the playback
-        /// attempt's identity and facts, so a stall the engine reports
-        /// carries the same codec and delivery tags as a failure the
-        /// controller reports. An incident's own fields win on conflict.
+        /// Fields every incident inherits, such as the playback attempt's
+        /// facts. An incident's own fields win.
         var ambientFields: [String: DiagnosticValue] = [:]
     }
 
@@ -58,16 +53,13 @@ nonisolated final class DiagnosticsHub: Sendable {
         state.withLock { $0.sink = sink }
     }
 
-    /// Sets the fields every later incident inherits; pass an empty
-    /// dictionary to clear them.
+    /// Pass an empty dictionary to clear.
     func setAmbientFields(_ fields: [String: DiagnosticValue]) {
         let validated = DiagnosticSchema.validated(fields).accepted
         state.withLock { $0.ambientFields = validated }
     }
 
-    /// Whether the tester has reporting on. Callers that do periodic work
-    /// only for the history (the playback sampler) check this so "off"
-    /// costs nothing at all.
+    /// Periodic history-only work checks this so "off" costs nothing.
     var isReportingEnabled: Bool { reportingEnabled() }
 
     func record(_ code: DiagnosticEventCode, _ fields: [String: DiagnosticValue] = [:]) {
@@ -76,9 +68,7 @@ nonisolated final class DiagnosticsHub: Sendable {
         state.withLock { $0.history.append(event) }
     }
 
-    /// Assembles and submits an incident. Returns whether it was handed to
-    /// the sink, which is false when reporting is off or the suppressor
-    /// folded it into a later report.
+    /// Returns false when reporting is off or the report was suppressed.
     @discardableResult
     func report(
         _ code: DiagnosticIncidentCode,
@@ -115,10 +105,7 @@ nonisolated final class DiagnosticsHub: Sendable {
         state.withLock { $0.sink }?.flush()
     }
 
-    /// Milliseconds since `code` was last recorded, or nil when it is not
-    /// in the buffer. Lets a report say "this failure came 800 ms after a
-    /// track switch" without the reporter and the switcher knowing each
-    /// other.
+    /// Milliseconds since `code` was last recorded, or nil if not buffered.
     func millisecondsSince(_ code: DiagnosticEventCode) -> Double? {
         let at = uptime()
         guard let last = state.withLock({ $0.history.lastUptime(of: code) }) else { return nil }
@@ -132,8 +119,7 @@ nonisolated final class DiagnosticsHub: Sendable {
     }
 }
 
-/// The process-wide hub. The app configures its sink at launch; everything
-/// else only records and reports.
+/// The process-wide hub. The app sets its sink at launch.
 nonisolated enum Diagnostics {
     static let shared = DiagnosticsHub()
 
@@ -152,9 +138,8 @@ nonisolated enum Diagnostics {
     }
 }
 
-/// Process-level context the history is better for having: memory
-/// pressure, thermal state, and foreground transitions. Recorded, never
-/// reported; an incident that follows a memory warning carries it.
+/// Memory, thermal and foreground events: recorded into the history, never
+/// reported on their own.
 nonisolated final class DiagnosticsProcessObserver: Sendable {
     private let tokens: OSAllocatedUnfairLock<[NSObjectProtocol]>
 

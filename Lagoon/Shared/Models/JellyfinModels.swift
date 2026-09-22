@@ -1,8 +1,8 @@
 import Foundation
 import LagoonEngine
 
-// Jellyfin JSON uses PascalCase keys; the client's de/encoders convert to and
-// from camelCase globally, so these types need no per-field CodingKeys.
+// Jellyfin JSON is PascalCase; the client's coders convert it globally, so
+// never add CodingKeys for casing.
 
 // MARK: - Server & auth
 
@@ -20,37 +20,25 @@ nonisolated struct UserDto: Codable, Identifiable {
     let policy: UserPolicy?
 }
 
-/// The permissions Jellyfin attaches to an account. Only the ones Lagoon
-/// acts on are decoded. Subtitle management is off by default for every
-/// non-administrator, and without it Jellyfin answers 403 to every remote
-/// subtitle search, fetch and upload.
+/// Account permissions Lagoon acts on. Without subtitle management (off by
+/// default for non-admins) Jellyfin answers 403 to remote subtitle calls.
 nonisolated struct UserPolicy: Codable {
     let isAdministrator: Bool?
     let enableSubtitleManagement: Bool?
     /// "Allow media downloading": gates `Items/{id}/Download`.
     let enableContentDownloading: Bool?
-    /// "Allow video remuxing/transcoding": without it every progressive
-    /// transcode the download picker could otherwise ask for answers 403.
+    /// "Allow video remuxing/transcoding": without it download transcodes
+    /// answer 403.
     let enableVideoPlaybackTranscoding: Bool?
-    /// Whether this account may create SyncPlay groups, only join them, or
-    /// neither. Absent on a server too old to have the setting,
-    /// which reads as `unknown` rather than as a denial.
+    /// Create, join only, or neither. Absent on older servers, which reads
+    /// as `unknown`, not a denial.
     let syncPlayAccess: SyncPlayAccess?
 
-    /// Whether to let a subtitle search start.
+    /// Pre-flight check only; the server decides. Block only on a known
+    /// denial and let anything ambiguous through.
     ///
-    /// This is a pre-flight convenience, not the authority: the server
-    /// decides, and a 403 is reported honestly. So it only
-    /// blocks when the answer is positively known, and anything ambiguous is
-    /// allowed through to be settled by the server. Getting it wrong in the
-    /// restrictive direction stops someone who would have succeeded, which is
-    /// worse than not checking at all.
-    ///
-    /// Administrators pass regardless of the flag. Jellyfin's dashboard hides
-    /// subtitle management for them because it is implied, so the stored
-    /// value on an admin account is routinely `false` — never ticked because
-    /// there is no checkbox to tick. Reading that as a denial locked
-    /// administrators out of their own servers.
+    /// Admins always pass: the dashboard hides the flag for them, so it is
+    /// often stored `false` and must not read as a denial.
     var allowsSubtitleManagement: Bool {
         if isAdministrator == true { return true }
         return enableSubtitleManagement ?? true
@@ -123,8 +111,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let seriesPrimaryImageTag: String?
     let providerIds: [String: String]?
     let mediaSources: [MediaSource]?
-    /// Cast and crew — only the single-item endpoint returns these, so rails
-    /// hand the detail page an item with an empty list until it re-fetches.
+    /// Only the single-item endpoint returns these; rail items have none.
     let people: [Person]?
 
     init(from decoder: Decoder) throws {
@@ -161,13 +148,9 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     }
 }
 
-// Value equality, synthesized — and it has to stay that way. SwiftUI
-// compares Equatable values before it re-renders: a `@State` write whose new
-// value compares equal to the old one is dropped, and a child view handed an
-// "equal" item keeps what it has. The id-only `==` this replaced made a
-// re-fetched item with a new resume point equal to the stale one, so detail
-// pages kept offering Play after playback and rails kept stale progress.
-// Navigation identity lives on `ContentNavigationRoute`.
+// Synthesized value equality; never an id-only `==`. SwiftUI drops a state
+// write whose new value compares equal, so an id-only `==` hides a refreshed
+// resume point. Navigation identity lives on `ContentNavigationRoute`.
 nonisolated extension MediaItem: Hashable {}
 
 nonisolated struct ItemsPage: Decodable {
@@ -181,9 +164,7 @@ nonisolated struct ItemsPage: Decodable {
     }
 }
 
-/// A Jellyfin genre is an addressable library item. Keeping the server id
-/// lets Lagoon evolve toward id-based filters, while the current item query
-/// uses the human-readable name supported by older servers too.
+/// Item queries filter by `name`, which older servers support too.
 nonisolated struct MediaGenre: Decodable, Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -217,11 +198,9 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?
     let container: String?
-    /// `VideoFile`, `Iso`, `BluRay` or `Dvd`. Jellyfin reports the container
-    /// it probed *inside* a disc — `ts` for a Blu-ray — and still answers
-    /// `SupportsDirectPlay = true`, so this is the only field that says the
-    /// static stream would arrive as a disc image or a folder rather than as
-    /// something a demuxer can open.
+    /// `VideoFile`, `Iso`, `BluRay` or `Dvd`. The only field that marks a
+    /// disc image or folder: Jellyfin reports the inner container (`ts`) and
+    /// still claims `SupportsDirectPlay`.
     let videoType: String?
     /// `BluRay` or `Dvd` when `videoType` is `Iso`; nil otherwise.
     let isoType: String?
@@ -234,15 +213,14 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     let bitrate: Int?
     let size: Int64?
     let eTag: String?
-    // The server resolves its own single-language preference into these;
-    // Lagoon may apply its richer per-account policy on top.
+    // The server's own language preference; Lagoon may override it.
     let defaultAudioStreamIndex: Int?
     let defaultSubtitleStreamIndex: Int?
     let mediaStreams: [MediaStream]?
 }
 
-/// A cast or crew credit as the item endpoint reports it. Headshots
-/// live at `Items/{person.id}/Images/Primary`, gated on `primaryImageTag`.
+/// Headshots live at `Items/{person.id}/Images/Primary`, gated on
+/// `primaryImageTag`.
 nonisolated struct Person: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?
@@ -266,10 +244,9 @@ nonisolated struct MediaStream: Decodable, Hashable {
     let type: String?
     let codec: String?
     let displayTitle: String?
-    /// The title the file actually carries, absent when it carries none.
-    /// Distinct from `displayTitle`, which Jellyfin synthesizes from codec
-    /// and channel layout — so four untagged DTS tracks all "display" as
-    /// "DTS-HD MA - 5.1" and only this tells you they are anonymous.
+    /// The title the file carries, nil when untagged. `displayTitle` is
+    /// synthesized from codec and layout, so only this shows a track is
+    /// anonymous.
     let title: String?
     let language: String?
     let index: Int?
@@ -289,8 +266,7 @@ nonisolated struct MediaStream: Decodable, Hashable {
     let realFrameRate: Double?
 }
 
-/// A result returned by Jellyfin's configured subtitle providers. Field
-/// names mirror RemoteSubtitleInfo so Lagoon remains provider-agnostic.
+/// A result from Jellyfin's subtitle providers.
 nonisolated struct RemoteSubtitleInfo: Decodable, Identifiable, Equatable {
     let id: String
     let name: String?
@@ -309,8 +285,6 @@ nonisolated struct RemoteSubtitleInfo: Decodable, Identifiable, Equatable {
     let frameRate: Double?
 }
 
-/// A chapter marker. Both list and single-item responses
-/// carry these; servers that never scanned chapters just send an empty list.
 nonisolated struct ChapterInfo: Decodable {
     let startPositionTicks: Int64
     let name: String?
@@ -345,8 +319,7 @@ nonisolated struct TrickplayTileInfo: Decodable {
     }
 }
 
-/// The vocabulary for describing a stream's quality, in one place: the
-/// player's Info facts and the detail page's badge row must agree on what
+/// Shared so the player's Info facts and the detail badges agree on what
 /// counts as 4K or Dolby Vision.
 nonisolated enum MediaQuality {
     static func resolutionClass(width: Int) -> String {
@@ -365,7 +338,6 @@ nonisolated enum MediaQuality {
         return range
     }
 
-    /// Marketing name for an audio codec, as the detail page spells it.
     static func audioName(_ codec: String) -> String {
         switch codec.lowercased() {
         case "truehd": "TrueHD"
@@ -390,10 +362,8 @@ nonisolated enum MediaQuality {
 }
 
 extension MediaSource {
-    /// The capability line from `MediaQuality`: plain tokens, spaced —
-    /// "4K   DV   TrueHD 7.1   Atmos" — describing the best the file can do,
-    /// not the track that happens to be selected. Empty when the server told
-    /// us nothing.
+    /// "4K DV TrueHD 7.1 Atmos": the best the file can do, not the selected
+    /// track.
     var qualityTokens: [String] {
         let streams = mediaStreams ?? []
         var tokens: [String] = []
@@ -443,9 +413,8 @@ nonisolated enum PlayMethod: String {
     case directStream = "DirectStream"
     case transcode = "Transcode"
 
-    /// How the engine should treat the bytes behind this choice. Direct play
-    /// and direct stream are both one stable file; a transcode is a manifest
-    /// the server writes as playback advances.
+    /// Direct play and direct stream are one stable file; a transcode is a
+    /// manifest the server writes as playback advances.
     var delivery: MediaDelivery {
         switch self {
         case .directPlay, .directStream: .stableFile

@@ -1,21 +1,13 @@
 import Foundation
 
-/// The one place a Jellyfin wall-clock timestamp becomes a number, and the
-/// deliberate exception to "no `Date` is decoded anywhere".
+/// The one place a Jellyfin timestamp becomes a number: the deliberate
+/// exception to "never decode `Date`". SyncPlay DTOs keep them as `String`.
 ///
-/// SyncPlay needs an instant rather than a duration: `SendCommand` says when,
-/// on the server's clock, every client should unpause. Those stay `String` on
-/// the DTOs and are converted here, at the one boundary that wants a number.
-///
-/// The format is .NET's `yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z`, with a *variable*
-/// number of fractional digits — 6 and 7 both observed on the same server in
-/// the same minute. `ISO8601DateFormatter` rejects 7, which is why the
-/// codebase models no dates at all, so this parses the components itself
-/// through a fixed UTC Gregorian calendar. Anything not UTC returns nil
-/// rather than a plausible wrong answer.
+/// .NET's `yyyy-MM-ddTHH:mm:ss[.f{0,7}]Z` has a variable number of
+/// fractional digits, and `ISO8601DateFormatter` rejects 7, so this parses
+/// by hand in UTC. Anything not UTC returns nil.
 nonisolated enum JellyfinTimestamp {
-    /// .NET's fractional resolution: 100 ns, the same tick used for
-    /// positions. The wire carries at most seven digits of it.
+    /// .NET's 100 ns tick, the same as positions.
     static let fractionalDigits = 7
     private static let ticksPerSecond: Double = 10_000_000
 
@@ -25,18 +17,11 @@ nonisolated enum JellyfinTimestamp {
         return calendar
     }()
 
-    /// Seconds since 1970 for a server timestamp, or nil if it is not one.
-    ///
-    /// Sub-millisecond precision survives: the fraction is parsed separately
-    /// and added to the whole second, so a 7-digit `.2805781` is kept to
-    /// roughly half a microsecond — the resolution a `Double` of epoch
-    /// seconds has left in 2026, and two orders of magnitude finer than the
-    /// 60–100 ms round trip it is used to measure.
+    /// Seconds since 1970, or nil. The fraction is parsed separately to keep
+    /// sub-millisecond precision.
     static func seconds(_ string: String) -> Double? {
         var body = Substring(string)
-        // Jellyfin emits UTC in one of these spellings. A genuine offset is
-        // refused: no SyncPlay server sends one, and guessing at one would
-        // put the group hours out rather than visibly failing.
+        // UTC spellings only. A real offset is refused rather than guessed.
         if body.hasSuffix("Z") || body.hasSuffix("z") {
             body = body.dropLast()
         } else if body.hasSuffix("+00:00") || body.hasSuffix("-00:00") {
@@ -66,9 +51,7 @@ nonisolated enum JellyfinTimestamp {
         guard time.count == 3,
               let hour = integer(time[0], digits: 2), (0...23).contains(hour),
               let minute = integer(time[1], digits: 2), (0...59).contains(minute),
-              // 60 is a leap second. .NET never emits one; accepting it and
-              // letting the calendar roll it forward beats refusing a valid
-              // instant over a value this parser has no opinion about.
+              // 60 is a leap second; the calendar rolls it forward.
               let second = integer(time[2], digits: 2), (0...60).contains(second) else { return nil }
 
         var components = DateComponents()
@@ -82,10 +65,8 @@ nonisolated enum JellyfinTimestamp {
         return instant.timeIntervalSince1970 + fraction
     }
 
-    /// The wire spelling of an instant, always with seven fractional digits
-    /// and a `Z`. This is what goes back to the server in `SyncPlay/Ready`
-    /// and `SyncPlay/Buffering`, whose `When` it compares against its own
-    /// clock.
+    /// The wire form, with seven fractional digits and `Z`, for the `When`
+    /// in `SyncPlay/Ready` and `SyncPlay/Buffering`.
     static func string(_ seconds: Double) -> String {
         let value = seconds.isFinite ? seconds : 0
         var whole = value.rounded(.down)
@@ -104,9 +85,8 @@ nonisolated enum JellyfinTimestamp {
         return "\(date)T\(time).\(padded(fractionTicks, fractionalDigits))Z"
     }
 
-    /// Exactly `digits` ASCII digits, so `+7`, ` 7` and `7` are all refused
-    /// where `07` is wanted. `Int(_:)` alone accepts a sign and would read a
-    /// zone offset as an hour.
+    /// Exactly `digits` ASCII digits. `Int(_:)` alone accepts a sign and
+    /// would read a zone offset as an hour.
     private static func integer(_ text: Substring, digits: Int) -> Int? {
         guard text.count == digits, text.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
         return Int(text)

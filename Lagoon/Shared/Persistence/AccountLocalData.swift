@@ -43,8 +43,7 @@ final class AccountLocalData {
                        "home.sectionPreferences.", "search.recents."] {
             defaults.removeObject(forKey: prefix + accountID)
         }
-        // Downloads are iOS only; tvOS keeps this file compiling but has
-        // nothing to remove.
+        // Downloads are iOS only.
         #if os(iOS)
         DownloadStore.shared.removeAll(forAccountKey: DownloadStore.accountKey(for: accountID))
         #endif
@@ -52,8 +51,8 @@ final class AccountLocalData {
 
     func finishRemoval(accountID: String) throws {
         guard pendingAccountIDs.contains(accountID) else { return }
-        // Enumerate before deleting, so a failure cannot falsely report that
-        // the cookies were removed. The persistent quarantine remains on error.
+        // Enumerate before deleting so a failure cannot report the cookies
+        // removed; the quarantine stays on error.
         let cookiePrefix = "seerr.cookie:\(accountID)|"
         let names = try credentials.accountNames().filter { $0.hasPrefix(cookiePrefix) }
         var failure: Error?

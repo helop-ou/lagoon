@@ -1,37 +1,28 @@
 import Foundation
 import LagoonEngine
 
-/// What a schema key accepts. Strings are the only kind that could carry
-/// private content, so each string key is either a closed choice or a
-/// bounded token: letters, digits, `.`, `_`, `-` and `,`, never whitespace,
-/// `/`, `:`, `@` or `?`, which rules out URLs, hostnames-with-paths, query
-/// strings, and prose. A hostname alone would pass the token test, which is
-/// why hostnames must never be handed to a token key in the first place and
-/// why the sensitive-payload test in `DiagnosticPrivacyTests` drives the
-/// real entry points with one.
+/// What a schema key accepts. Strings could carry private content, so each
+/// is a closed choice or a bounded token, which rules out URLs and prose. A
+/// bare hostname passes the token test, so never pass one to a token key;
+/// `DiagnosticPrivacyTests` checks this.
 nonisolated enum DiagnosticFieldKind: Equatable, Sendable {
     case int
     case double
     case bool
     /// `[A-Za-z0-9._,-]{1,48}`.
     case token
-    /// A route template such as `Users/{id}/Items/{id}`: path segments of
-    /// letters or the literal `{id}`, joined by `/`. Produced only by
-    /// `DiagnosticRouteTemplate`, which replaces every other segment.
+    /// `Users/{id}/Items/{id}`, produced only by `DiagnosticRouteTemplate`.
     case route
     case choice(Set<String>)
 }
 
-/// The complete allowlist of fields a diagnostic event or incident may
-/// carry, and the only place it is defined. A key that is not here is
-/// dropped at construction time; a value that does not fit its kind is
-/// dropped too. `schemaRejected` counts what was dropped so a mistake at a
-/// call site shows up in the report instead of silently vanishing.
+/// The only allowlist of diagnostic fields. Unknown keys and ill-fitting
+/// values are dropped and counted in `schemaRejected`, so call-site mistakes
+/// show up in the report.
 nonisolated enum DiagnosticSchema {
     static let tokenMaximumLength = 48
-    /// A failure incident carries the attempt's facts, the pipeline
-    /// snapshot and its own detail, around fifty keys; the cap only has to
-    /// stop a runaway caller.
+    /// A failure carries about fifty keys; the cap only stops a runaway
+    /// caller.
     static let maximumFieldsPerRecord = 64
 
     static let deliveryChoices: Set<String> = ["negotiated", "remux", "transcode"]
@@ -44,9 +35,8 @@ nonisolated enum DiagnosticSchema {
     static let recoveryChoices: Set<String> = [
         "rendererFailed", "mediaServicesReset", "requiresFlush", "restartPoint",
         "stallReprime", "stallResume", "cacheFallback",
-        // A VideoToolbox session that was rebuilt instead of being read as an
-        // undecodable stream, and one that needed no rebuild because nothing
-        // was waiting on it.
+        // A VideoToolbox session rebuilt rather than read as undecodable, and
+        // one that needed no rebuild.
         "decodeSessionRebuilt", "decodeSessionIgnored",
     ]
     static let outcomeChoices: Set<String> = [
@@ -62,10 +52,8 @@ nonisolated enum DiagnosticSchema {
     static let httpMethodChoices: Set<String> = ["GET", "POST", "DELETE", "PUT"]
     static let clientChoices: Set<String> = ["jellyfin", "seerr", "media", "image", "subtitle"]
     static let networkChoices: Set<String> = ["unrestricted", "constrained", "expensive", "unknown"]
-    /// SyncPlay's four transport commands, and how a drift was corrected.
-    /// The correction has its own key rather than reusing
-    /// `method`, which is Jellyfin's delivery method and a different
-    /// closed set.
+    /// SyncPlay's transport commands and drift corrections. The correction
+    /// has its own key: `method` is Jellyfin's delivery method.
     static let syncPlayCommandChoices: Set<String> = ["unpause", "pause", "seek", "stop"]
     static let syncPlayCorrectionChoices: Set<String> = ["none", "rate", "seek"]
     static let degradationChoices: Set<String> = [
@@ -77,8 +65,7 @@ nonisolated enum DiagnosticSchema {
         "attempt": .token,
         "occurrences": .int,
         "schemaRejected": .int,
-        // How the item is delivered and what it is made of. Codec, container
-        // and range names are FFmpeg/Jellyfin identifiers, never titles.
+        // Delivery and format: FFmpeg/Jellyfin identifiers, never titles.
         "delivery": .choice(deliveryChoices),
         "method": .choice(methodChoices),
         "container": .token,
@@ -150,20 +137,18 @@ nonisolated enum DiagnosticSchema {
         "routeReason": .token,
         "samplesSinceFlush": .int,
         "startPointDrops": .int,
-        /// Which sample the renderer refused, in media milliseconds: what
-        /// tells a restart-point failure apart from a verdict on the stream.
+        /// The refused sample, in media ms: separates a restart-point failure
+        /// from a verdict on the stream.
         "refusedSampleMs": .int,
         "retry": .bool,
-        // Watch Together. Numbers and closed choices only: a
-        // group has a name, an id, participants and an item, and none of
-        // them belongs in a report.
+        // Watch Together: numbers and closed choices only, never the group's
+        // name, id, participants or item.
         "command": .choice(syncPlayCommandChoices),
         "leadMs": .int,
         "driftMs": .int,
         "correction": .choice(syncPlayCorrectionChoices),
     ]
 
-    /// Keeps the fields the schema admits, in the form it admits them.
     static func validated(
         _ fields: [String: DiagnosticValue]
     ) -> (accepted: [String: DiagnosticValue], rejected: Int) {
@@ -218,12 +203,9 @@ nonisolated enum DiagnosticSchema {
         return charactersAllowed && !looksLikeAnAddress(text)
     }
 
-    /// The charset admits `lagoonfix.example.eu` and `192.168.1.10`, which no
-    /// identifier this app reports ever looks like. A dotted token whose
-    /// last label is two or three lowercase letters, or whose labels are
-    /// all numeric, is treated as an address and refused. Error domains
-    /// (`NSURLErrorDomain`, `com.apple.coreaudio.avfaudio`), codec names,
-    /// and versions (`lavf62.3.100`) all pass.
+    /// Refuses addresses the charset would admit: a dotted token whose last
+    /// label is two or three lowercase letters, or all-numeric labels. Error
+    /// domains, codecs and versions (`lavf62.3.100`) pass.
     static func looksLikeAnAddress(_ text: String) -> Bool {
         let labels = text.split(separator: ".", omittingEmptySubsequences: false)
         guard labels.count >= 2 else { return false }
@@ -237,8 +219,7 @@ nonisolated enum DiagnosticSchema {
     static func isRoute(_ text: String) -> Bool {
         guard !text.isEmpty, text.utf8.count <= 120 else { return false }
         return text.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { segment in
-            // The version exception must match `DiagnosticRouteTemplate`'s, or
-            // a route it emits would be rejected here and the field dropped.
+            // Must match `DiagnosticRouteTemplate`'s version exception.
             if segment == "{id}" || DiagnosticRouteTemplate.isVersionSegment(segment) {
                 return true
             }
@@ -253,10 +234,8 @@ nonisolated enum DiagnosticSchema {
         }
     }
 
-    /// A token from arbitrary text, or nil. Used where a caller holds an
-    /// identifier that is expected to be a token (an error domain, a codec
-    /// name) so an unexpected value is dropped rather than truncated into
-    /// something misleading.
+    /// A token from text, or nil: an unexpected value is dropped, not
+    /// truncated into something misleading.
     static func token(_ text: String?) -> DiagnosticValue? {
         guard let text, isToken(text) else { return nil }
         return .string(text)
@@ -265,8 +244,6 @@ nonisolated enum DiagnosticSchema {
 
 nonisolated extension DiagnosticValue {
     /// The Foundation object `JSONSerialization` accepts for this value.
-    /// The engine produces these values; turning them into an envelope is
-    /// this side's job.
     var jsonObject: Any {
         switch self {
         case .int(let value): value

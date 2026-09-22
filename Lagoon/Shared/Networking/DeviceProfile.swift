@@ -1,16 +1,10 @@
 import Foundation
 import LagoonEngine
 
-// Capability profile sent with PlaybackInfo so the server can choose between
-// direct play and transcoding. It mirrors what the engine can play:
-// progressive h264 compressed and interlaced h264 software-deinterlaced, hevc
-// hardware-decoded ahead, AV1 hardware where available, and AV1/VP9 to 10-bit
-// plus 8-bit VC-1, WMV3, MPEG-4 Part 2 and MPEG-2 to 1080p in software.
-// aac/mp3/ac3/eac3 stay compressed, other audio decodes to LPCM, non-square
-// pixels ride through as a PixelAspectRatio extension so anamorphic DVD rips
-// direct-play, and subtitles are embedded or external vtt. Anything outside
-// this arrives as the fMP4 HLS transcode, which lands back in the same
-// envelope. The generated table is docs/codec-support.md.
+// Capability profile sent with PlaybackInfo so the server can choose direct
+// play or transcode. It mirrors what the engine plays; anything outside it
+// arrives as the fMP4 HLS transcode. The generated table is
+// docs/codec-support.md.
 nonisolated enum DeviceProfile {
     struct Profile: Encodable {
         let maxStreamingBitrate: Int
@@ -46,8 +40,8 @@ nonisolated enum DeviceProfile {
         let conditions: [ProfileCondition]
     }
 
-    // isRequired false lets streams whose property the server couldn't probe
-    // pass the condition; the server-side default is true, so encode it always.
+    // isRequired false lets unprobed streams pass. The server defaults it to
+    // true, so always encode it.
     struct ProfileCondition: Encodable {
         let condition: String
         let property: String
@@ -60,9 +54,8 @@ nonisolated enum DeviceProfile {
         let method: String
     }
 
-    /// Every format the engine knows how to play, before this device's
-    /// capabilities are subtracted. Use it to reason about the envelope
-    /// itself; `lagoon` is what actually gets sent.
+    /// Every format the engine plays, before this device's limits are
+    /// subtracted. `lagoon` is what gets sent.
     static let everything = Profile(
         maxStreamingBitrate: 120_000_000,
         maxStaticBitrate: 100_000_000,
@@ -78,13 +71,10 @@ nonisolated enum DeviceProfile {
             DirectPlayProfile(container: "flac", type: "Audio"),
         ],
         transcodingProfiles: [
-            // Container here is the HLS segment container. Apple's HLS stack
-            // only accepts HEVC (and any HDR/Dolby Vision signalling) in fMP4
-            // segments — never MPEG-TS — and libavformat reads fMP4 fine.
-            // Audio codec order is the server's transcode preference:
-            // multichannel sources that need an audio transcode (TrueHD, DTS)
-            // land on E-AC3 5.1 instead of stereo AAC, while ac3/eac3 source
-            // tracks stream-copy — which keeps Atmos (E-AC3 JOC) intact.
+            // fMP4 segments: Apple's HLS only takes HEVC and HDR/DV in fMP4,
+            // never MPEG-TS. Audio order is the server's preference: TrueHD
+            // and DTS become E-AC3 5.1, not stereo AAC, and ac3/eac3 stream-copy,
+            // which keeps Atmos intact.
             TranscodingProfile(
                 container: "mp4",
                 type: "Video",
@@ -98,17 +88,9 @@ nonisolated enum DeviceProfile {
             ),
         ],
         codecProfiles: [
-            // Video range types the pipeline can present. Dolby Vision
-            // profile 5 is DOVI, profile 8 the DOVIWith* fallbacks.
-            // Dual-layer profile 7 (DOVIWithEL / DOVIWithELHDR10Plus)
-            // direct-plays too: the demuxer rewrites every RPU (unspec 62)
-            // to profile 8.1 with libdovi and drops the enhancement-layer
-            // NALs (unspec 63) in flight, tagging the track hvc1 plus a
-            // supplementary dvvC so tvOS engages real Dolby Vision off the
-            // rewritten single layer. The base layer's own
-            // HDR10(+) tags are the debug-toggle fallback when that
-            // conversion is turned off. Either way direct play skips the
-            // lossy server re-encode.
+            // Dolby Vision profile 5 is DOVI, profile 8 the DOVIWith* ranges.
+            // Profile 7 (DOVIWithEL*) direct-plays too: the demuxer converts
+            // it to profile 8.1 with libdovi and drops the enhancement layer.
             CodecProfile(
                 type: "Video",
                 codec: "hevc",
@@ -161,22 +143,14 @@ nonisolated enum DeviceProfile {
                         value: "52",
                         isRequired: false
                     ),
-                    // No interlace guard: interlaced H.264 (1080i broadcast
-                    // recordings) is routed to the software decoder, which
-                    // deinterlaces, while progressive H.264 stays on
-                    // VideoToolbox. The profile cannot say "interlaced only",
-                    // so that split is the demuxer's field-order check, not
-                    // the server's. HEVC keeps its guard: it has no
-                    // software route here and interlaced HEVC is not
-                    // something a library holds.
+                    // No interlace guard: the demuxer sends interlaced H.264
+                    // to the software decoder, which deinterlaces. HEVC keeps
+                    // its guard because it has no software route.
                 ]
             ),
-            // AV1 remains direct play on every supported device: recent
-            // Apple silicon takes the compressed stream through VideoToolbox,
-            // while older hardware uses the pinned libdav1d decoder and
-            // presents NV12/P010 through the same renderer. The capability
-            // transform below applies the initial 1080p ceiling only to that
-            // software fallback; hardware AV1 keeps the full envelope.
+            // AV1 direct-plays everywhere: VideoToolbox where the hardware
+            // has it, dav1d otherwise. Only the software path gets a
+            // resolution ceiling (see `boundedTo4K`).
             CodecProfile(
                 type: "Video",
                 codec: "av1",
@@ -207,10 +181,8 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            // Apple exposes no public VP9 VideoToolbox path on tvOS. Profiles
-            // 0 and 2 cover 8- and 10-bit 4:2:0 respectively; libavcodec emits
-            // those as NV12/P010-ready frames within the same conservative
-            // 1080p software ceiling as AV1.
+            // No public VP9 VideoToolbox path on tvOS, so software, capped at
+            // 1080p. Profiles 0 and 2 are 8- and 10-bit 4:2:0.
             CodecProfile(
                 type: "Video",
                 codec: "vp9",
@@ -253,11 +225,8 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            // Apple does not expose VC-1 through VideoToolbox on tvOS. Lagoon
-            // decodes this deliberately bounded legacy envelope with
-            // libavcodec and presents ready NV12 image buffers through the
-            // existing AVSampleBufferRenderSynchronizer. Interlaced content
-            // still transcodes because the client has no deinterlacing stage.
+            // No VC-1 in VideoToolbox on tvOS: software decode, bounded to
+            // 8-bit 1080p. Interlaced VC-1 still transcodes.
             CodecProfile(
                 type: "Video",
                 codec: "vc1",
@@ -294,18 +263,9 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            // WMV3 (WMV9) is the same bitstream family as VC-1 — SMPTE 421M
-            // Simple/Main to VC-1's Advanced — and SoftwareVideoDecoder has
-            // always listed AV_CODEC_ID_WMV3 beside it. Only the profile
-            // omitted it, so every WMV3 file took a server transcode for a
-            // decoder already present and already exercised. Same bounds as
-            // VC-1 above for the same reasons, including the AC-3 pairing
-            // through AudioDecodePolicy.requiresLocalPCM, which keys on
-            // software-decoded video rather than on the codec.
-            //
-            // Note the container list does not include asf/wmv, so this
-            // reaches WMV3 remuxed into mkv/avi rather than plain .wmv files.
-            // Adding the container is a separate decision.
+            // WMV3 is VC-1's Simple/Main family and uses the same software
+            // decoder and bounds. The container list has no asf/wmv, so this
+            // only reaches WMV3 in mkv/avi.
             CodecProfile(
                 type: "Video",
                 codec: "wmv3",
@@ -342,15 +302,8 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            // MPEG-4 Part 2 (Xvid/DivX) has no VideoToolbox decoder either,
-            // and rides the same libavcodec → Core Video path as VC-1. The
-            // Simple and Advanced Simple Profiles that real files use are
-            // 8-bit 4:2:0 by specification, which is exactly what
-            // SoftwareVideoDecoder accepts; the bounds below keep anything
-            // outside that legacy envelope on the server transcode. AC-3
-            // alongside software-decoded video already routes through
-            // AudioDecodePolicy.requiresLocalPCM, so the pairing that made
-            // VC-1 stutter is handled for these files too.
+            // MPEG-4 Part 2 (Xvid/DivX): software decode like VC-1. Its real
+            // profiles are 8-bit 4:2:0; anything else transcodes.
             CodecProfile(
                 type: "Video",
                 codec: "mpeg4",
@@ -387,12 +340,9 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            // MPEG-2 uses the same 8-bit planar 4:2:0 software path as the
-            // other legacy codecs, and that path now deinterlaces what it
-            // decodes, so the interlace guard this profile used to carry is
-            // gone: an interlaced DVD or recording is Direct Play like any
-            // other MPEG-2. The guard stays on every codec that
-            // decodes in hardware, where there is no deinterlacing stage.
+            // No interlace guard: the MPEG-2 software path deinterlaces.
+            // Hardware-decoded codecs keep the guard; they have no
+            // deinterlacing stage.
             CodecProfile(
                 type: "Video",
                 codec: "mpeg2video",
@@ -427,8 +377,7 @@ nonisolated enum DeviceProfile {
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
             SubtitleProfile(format: "vtt", method: "External"),
-            // Embedded formats the engine decodes itself (M5) — without
-            // these the server burns subtitles in, forcing a transcode.
+            // Without these the server burns subtitles in, forcing a transcode.
             SubtitleProfile(format: "subrip", method: "Embed"),
             SubtitleProfile(format: "srt", method: "Embed"),
             SubtitleProfile(format: "ass", method: "Embed"),
@@ -443,29 +392,18 @@ nonisolated enum DeviceProfile {
         ]
     )
 
-    /// What this device is offered: the full envelope minus anything its
-    /// hardware cannot decode.
+    /// The full envelope minus what this device's hardware cannot decode.
     static var lagoon: Profile { profile(for: .current) }
 
-    /// What this device is offered for one rung of the delivery ladder.
-    /// Only the bottom rung differs, and only because that is
-    /// the one rung where the server re-encodes.
-    ///
-    /// The metered cap is applied after the rung, so a constrained path
-    /// bounds the transcode rung too rather than being overwritten by it.
+    /// The profile for one ladder rung. Only the transcode rung differs.
+    /// The metered cap applies last so it also bounds the transcode rung.
     static func lagoon(for delivery: PlaybackDelivery) -> Profile {
         let forRung = delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
         return cappedForMeteredPath(forRung)
     }
 
-    /// Bounds a profile to what a metered path should be asked to carry,
-    /// or returns it untouched on an ordinary one.
-    ///
-    /// **iOS only.** An Apple TV is a wired or strong-Wi-Fi appliance and
-    /// Apple has no reason to report its path as expensive, so applying this
-    /// there would be dead code that could only ever surprise. Widening it
-    /// later is a one-line change if a tvOS device on a hotspot ever turns
-    /// out to matter.
+    /// Bounds a profile on a metered path; untouched otherwise. iOS only:
+    /// an Apple TV never reports an expensive path.
     static func cappedForMeteredPath(
         _ profile: Profile,
         cost: NetworkPathCost = NetworkPathObserver.shared.current,
@@ -482,10 +420,8 @@ nonisolated enum DeviceProfile {
         )
         return Profile(
             maxStreamingBitrate: bitrate,
-            // The static ceiling has to come down with it. It is the one the
-            // server checks before offering the original file, so leaving it
-            // at 100 Mbps would let an 89 Mbps remux direct-play over
-            // cellular no matter what the streaming figure said.
+            // The server checks the static ceiling before offering the
+            // original file, so it must come down too.
             maxStaticBitrate: min(profile.maxStaticBitrate, bitrate),
             directPlayProfiles: profile.directPlayProfiles,
             transcodingProfiles: profile.transcodingProfiles,
@@ -506,24 +442,14 @@ nonisolated enum DeviceProfile {
     /// The defaults key behind Settings → Playback → Full Quality on Cellular.
     static let meteredOverrideKey = "playback.allowFullQualityOnMetered"
 
-    /// The ceiling the transcode rung asks for. The envelope's 120 Mbps is
-    /// a direct-play figure — the bitrate of an untouched file this device
-    /// is willing to pull — and means nothing to an encoder being asked to
-    /// produce a new stream.
+    /// The transcode rung's bitrate. The envelope's 120 Mbps is a
+    /// direct-play figure, not an encoder target.
     static let realtimeTranscodeBitrateCeiling = 20_000_000
 
-    /// Bounds the rung that re-encodes, and only that rung.
-    ///
-    /// Unbounded it inherits the envelope, asking the server to re-encode at
-    /// the source's own shape — 4K HEVC up to 120 Mbps. A server without a
-    /// hardware encoder cannot do that near realtime (9.5 fps for a 30 fps 4K
-    /// source on the reference server) and stalls indefinitely, making the
-    /// rescue rung worse than the failure it exists to rescue.
-    ///
-    /// HD is the same heuristic `boundedToHD` applies for a missing hardware
-    /// decoder, erring the same way: toward a stream that plays. Deliberately
-    /// not applied to `remux`, which stream-copies the video — a resolution
-    /// condition there would force the re-encode that rung avoids.
+    /// Bounds the transcode rung to HD. Unbounded, a server without a
+    /// hardware encoder re-encodes 4K far below realtime (9.5 fps for a
+    /// 30 fps source) and stalls. Never apply to `remux`: a resolution
+    /// condition there forces the re-encode that rung avoids.
     static func boundedForRealtimeTranscode(_ profile: Profile) -> Profile {
         Profile(
             maxStreamingBitrate: min(profile.maxStreamingBitrate, realtimeTranscodeBitrateCeiling),
@@ -535,24 +461,16 @@ nonisolated enum DeviceProfile {
         )
     }
 
-    /// Subtracts rather than rebuilds, so the envelope above stays the single
-    /// statement of what the engine can play and this stays a short, testable
-    /// transform over it.
+    /// Subtracts from `everything` rather than rebuilding it.
     ///
-    /// HEVC has to come out in three places, not one. The direct-play list is
-    /// the obvious one.
-    /// The codec profile has to go too, or the server sees conditions for a
-    /// codec it is not being offered. And the **transcoding** profile matters
-    /// most: left listing `hevc,h264` it lets a server answer a transcode
-    /// request with an HEVC rendition, which is precisely the format this
-    /// device just said it cannot decode — a fallback that lands back on the
-    /// same failure.
+    /// Without hardware HEVC, HEVC leaves three places: direct play, the
+    /// codec profile, and above all the transcoding profile, or the server
+    /// can answer a transcode with the HEVC this device cannot decode.
     static func profile(for capabilities: PlaybackCapabilities) -> Profile {
         subtractingUnsupported(everything, for: capabilities)
     }
 
-    /// The transform itself, over any envelope, so it can be exercised
-    /// against shapes the shipping literal does not currently take.
+    /// The transform over any envelope, so tests can feed it other shapes.
     static func subtractingUnsupported(
         _ envelope: Profile,
         for capabilities: PlaybackCapabilities
@@ -562,10 +480,8 @@ nonisolated enum DeviceProfile {
         var codecProfiles = envelope.codecProfiles
 
         if !capabilities.hardwareHEVC {
-            // A profile whose every video codec was HEVC is dropped outright,
-            // not blanked. Both an absent and an empty codec list read as *no
-            // constraint* to Jellyfin, so blanking one would come back
-            // offering strictly more than the full envelope did.
+            // Drop an HEVC-only profile, never blank it: Jellyfin reads an
+            // empty codec list as "no constraint".
             directPlayProfiles = directPlayProfiles.compactMap { profile in
                 guard let videoCodec = profile.videoCodec else { return profile }
                 guard let kept = withoutHEVC(videoCodec) else { return nil }
@@ -605,54 +521,29 @@ nonisolated enum DeviceProfile {
         )
     }
 
-    /// Caps one codec at 1080p when it must use a conservative fallback:
-    /// H.264 for a device without HEVC.
-    ///
-    /// Without it the subtraction has a sharp edge — a 4K HEVC film stops
-    /// direct-playing and the server is asked for H.264 *at 4K*, an enormous
-    /// transcode for a device with no chance of decoding it. Observed doing
-    /// exactly that, the player sitting at 0 s with empty queues. Hardware
-    /// that cannot decode HEVC will not manage 4K H.264 either. AV1 uses
-    /// `boundedTo4K` instead, since dav1d keeps up there.
-    ///
-    /// A heuristic: VideoToolbox answers per codec, never per resolution, so
-    /// nothing would make this exact. It errs toward a stream that plays.
+    /// Caps H.264 at 1080p on a device without HEVC. Otherwise a 4K HEVC
+    /// film transcodes to 4K H.264, which that hardware cannot decode
+    /// either. A heuristic: VideoToolbox answers per codec, not per
+    /// resolution.
     private static func boundedToHD(_ profile: CodecProfile, codec: String) -> CodecProfile {
         guard profile.codec == codec else { return profile }
         return boundedToHD(profile)
     }
 
-    /// What software AV1 is allowed to reach for.
-    ///
-    /// 4K rather than the HD this used to bound: dav1d decodes 3840x2160 AV1
-    /// comfortably once it is allowed more than one core, made possible by a
-    /// threading fix. Measured on a 4K HDR10+ episode, 30 s of video decoded in
-    /// 1.66 s threaded against 13.26 s on a single core, and the single-core
-    /// figure is what this bound was quietly assuming.
-    ///
-    /// Still a ceiling rather than no bound at all. 8K AV1 exists, nothing has
-    /// measured it here, and its frames are four times the size of these.
+    /// Software AV1's ceiling. Threaded dav1d decodes 30 s of 4K in 1.66 s.
+    /// 8K is unmeasured, so it stays bounded.
     private static func boundedTo4K(_ profile: CodecProfile, codec: String) -> CodecProfile {
         guard profile.codec == codec else { return profile }
         return boundedTo(profile, width: 3840, height: 2160)
     }
 
-    /// The bound itself, over any video codec profile. Idempotent: the
-    /// codecs the envelope already writes a ceiling for (vp9, vc1, wmv3,
-    /// mpeg4, mpeg2video) keep the single pair of conditions they were
-    /// written with instead of collecting a duplicate set, which matters
-    /// once two transforms can each ask for one.
     private static func boundedToHD(_ profile: CodecProfile) -> CodecProfile {
         boundedTo(profile, width: 1920, height: 1080)
     }
 
-    /// One geometry bound, applied to a video codec profile.
-    ///
-    /// Not idempotent by skipping, but by *tightening*: a codec the envelope
-    /// already bounds keeps the smaller of the two ceilings rather than
-    /// carrying a contradictory pair. That matters now that two transforms
-    /// can each ask for one and they no longer ask for the same number —
-    /// the metered cap is 720p and the fallback bounds are 1080p.
+    /// Replaces any Width/Height pair with the smaller ceiling, so two
+    /// transforms (metered 720p, fallback 1080p) never leave a
+    /// contradictory pair.
     static func boundedTo(_ profile: CodecProfile, width: Int, height: Int) -> CodecProfile {
         guard profile.type == "Video" else { return profile }
         var conditions = profile.conditions.filter {
@@ -679,21 +570,17 @@ nonisolated enum DeviceProfile {
         return CodecProfile(type: profile.type, codec: profile.codec, conditions: conditions)
     }
 
-    /// nil when nothing would be left. Callers drop the profile rather than
-    /// send an empty or absent codec list, either of which Jellyfin reads as
-    /// "no constraint" — the opposite of what removal means.
+    /// nil when nothing is left; callers then drop the profile.
     private static func withoutHEVC(_ codecs: String) -> String? {
         let kept = codecs.split(separator: ",").filter { $0 != "hevc" }
         return kept.isEmpty ? nil : kept.joined(separator: ",")
     }
 
     #if DEBUG && targetEnvironment(simulator)
-    /// CoreSimulator has no reliable HEVC/Dolby Vision hardware decoder.
-    /// UI regression tests therefore ask Jellyfin for an H.264/AAC HLS
-    /// rendition; production and physical-device profiles remain unchanged.
+    /// The simulator has no reliable HEVC/DV decoder, so UI regression tests
+    /// ask for an H.264/AAC HLS rendition.
     static let simulatorRegression = Profile(
-        // Keep the generated rendition light enough for deterministic
-        // seek tests even when the server must decode a 4K source first.
+        // Light enough for deterministic seek tests on a 4K source.
         maxStreamingBitrate: 4_000_000,
         maxStaticBitrate: 100_000_000,
         directPlayProfiles: [

@@ -1,14 +1,11 @@
 import Foundation
 import LagoonEngine
 
-/// The bounded, retrying part of the transport, as pure rules: how many
-/// envelopes may wait on disk, how a response is classified, and how long
-/// to stay quiet after a failure or a rate limit. `SentryTransport` applies
-/// them; the tests pin them.
+/// Pure transport rules: queue bound, response classes, and how long to
+/// stay quiet after a failure or rate limit.
 nonisolated struct SentryTransportPolicy: Equatable, Sendable {
     enum Outcome: Equatable, Sendable {
-        /// Taken. Sentry may still ask for a pause on a 200 through
-        /// `X-Sentry-Rate-Limits`; honour it before the next envelope.
+        /// Taken. A 200 can still carry `X-Sentry-Rate-Limits`; honour it.
         case accepted(pauseFor: TimeInterval?)
         /// The server said when to come back (429).
         case retryAfter(TimeInterval)
@@ -35,8 +32,7 @@ nonisolated struct SentryTransportPolicy: Equatable, Sendable {
         case 408, 425:
             return .backoff
         case 400...499:
-            // 400 invalid envelope, 413 too large, 401/403 wrong key: a
-            // retry sends the same bytes to the same verdict.
+            // 400, 413, 401/403: a retry gets the same verdict.
             return .discard
         default:
             return .backoff
@@ -44,9 +40,8 @@ nonisolated struct SentryTransportPolicy: Equatable, Sendable {
     }
 
     /// The longest `X-Sentry-Rate-Limits` entry
-    /// (`<seconds>:<categories>:<scope>,…`) that covers error events or
-    /// attachments, on any status code. Nil when the header is absent or
-    /// names only other categories. Header names match case-insensitively.
+    /// (`<seconds>:<categories>:<scope>,…`) covering errors or attachments,
+    /// on any status. Header names match case-insensitively.
     func rateLimit(headers: [String: String]) -> TimeInterval? {
         guard let limits = header("X-Sentry-Rate-Limits", in: headers) else { return nil }
         var longest: TimeInterval = 0
@@ -74,8 +69,7 @@ nonisolated struct SentryTransportPolicy: Equatable, Sendable {
         return defaultRetryAfter
     }
 
-    /// Exponential from `initialBackoff`, capped. Failure one waits the
-    /// initial delay.
+    /// Exponential from `initialBackoff`, capped.
     func backoff(afterConsecutiveFailures failures: Int) -> TimeInterval {
         guard failures > 0 else { return 0 }
         let exponent = min(failures - 1, 12)

@@ -1,44 +1,31 @@
 import Foundation
 
-/// One message off Jellyfin's WebSocket, with its payload kept as JSON so
-/// the caller decodes whatever shape that message type carries.
-///
-/// The envelope is `{"MessageType": …, "MessageId": …, "Data": …}` and
-/// `Data` is anything: an object for `SyncPlayGroupUpdate`, a bare integer
-/// for `ForceKeepAlive`, a bare string for `GroupLeft`, or absent.
+/// One WebSocket message. `Data` can be an object, a bare integer or string,
+/// or absent, so it stays JSON for the caller to decode.
 nonisolated struct ServerSocketMessage: Equatable, Sendable {
     let messageType: String
-    /// Absent on every SyncPlay message observed on the fixture server, 12.0.0, so this
-    /// stays optional rather than defaulting to something invented.
+    /// Absent on SyncPlay messages in practice.
     let messageId: String?
     /// The `Data` subtree, re-serialised, or nil when there was none.
     let payload: Data?
 
-    /// Decodes the payload with the Jellyfin decoder, so PascalCase keys
-    /// land on camelCase properties exactly as they do over HTTP.
+    /// Uses the Jellyfin decoder, so casing works as over HTTP.
     func decodePayload<T: Decodable>(_ type: T.Type) throws -> T {
         guard let payload else { throw JellyfinError.server(status: 0, message: "No socket payload") }
         return try JellyfinClient.decoder.decode(type, from: payload)
     }
 }
 
-/// Splits the envelope from its payload without knowing any message type.
-///
-/// Pure, and separate from the socket, because this is the part that has to
-/// survive a server sending something new: an unknown `MessageType` parses
-/// like any other and is ignored by the caller, and only genuinely malformed
-/// JSON returns nil. `JSONSerialization` rather than `Codable` because
-/// `Data` has no fixed type — re-serialising the subtree is what lets the
-/// caller decode it as the concrete DTO it turns out to be.
+/// Splits the envelope from its payload. Unknown message types parse fine;
+/// only malformed JSON returns nil. `JSONSerialization` because `Data` has
+/// no fixed type.
 nonisolated enum ServerSocketEnvelope {
     static func parse(_ data: Data) -> ServerSocketMessage? {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let messageType = object["MessageType"] as? String, !messageType.isEmpty else { return nil }
         var payload: Data?
         if let value = object["Data"], !(value is NSNull) {
-            // `.fragmentsAllowed`: `ForceKeepAlive` carries a bare 60 and
-            // `GroupLeft` a bare string, neither of which is a valid
-            // top-level JSON object.
+            // Payloads can be bare numbers or strings.
             payload = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
         }
         return ServerSocketMessage(
@@ -49,11 +36,8 @@ nonisolated enum ServerSocketEnvelope {
     }
 }
 
-/// How long to wait before the next reconnection attempt.
-///
-/// Pure so the schedule is pinned by tests rather than by pulling a network
-/// cable. Doubling to a 30 s ceiling, with jitter so a server coming back up
-/// is not met by every client in the house at the same instant.
+/// Reconnect delay: doubling to 30 s, with jitter so clients do not all
+/// return at once.
 nonisolated enum ServerSocketBackoff {
     static let delays: [Double] = [1, 2, 4, 8, 16, 30]
     static let jitterFraction = 0.2
@@ -75,14 +59,9 @@ nonisolated enum ServerSocketBackoff {
     }
 }
 
-/// Builds the WebSocket URL from the configured server URL.
-///
-/// Same base-path rules as every other route, so it goes through
-/// `serverRelativeURL("socket")` and only the scheme changes here. The token
-/// rides in the query, which is the one first-party URL that still carries
-/// it: Jellyfin's socket handshake authenticates from `api_key`, and a
-/// WebSocket upgrade is not a request Lagoon's `Authorization` header was
-/// verified to reach. Verified against the fixture server, 12.0.0.
+/// The WebSocket URL. The only first-party URL carrying the token: the
+/// handshake authenticates from `api_key`, and the header is not known to
+/// reach a WebSocket upgrade.
 nonisolated enum ServerSocketURL {
     static func socket(from httpURL: URL, token: String, deviceId: String) -> URL? {
         guard var components = URLComponents(url: httpURL, resolvingAgainstBaseURL: false) else { return nil }
@@ -100,20 +79,11 @@ nonisolated enum ServerSocketURL {
     }
 }
 
-/// Jellyfin's server-to-client WebSocket: the only way a SyncPlay group's
-/// commands reach a client. Main-actor owned.
+/// Jellyfin's WebSocket, the only way SyncPlay commands arrive.
 ///
-/// Built from a snapshot of the client's URL, token and device id, like
-/// `sessionSnapshot()`, so a socket outliving an account change fails and
-/// reconnects as the account it was opened for rather than adopting the new
-/// one.
-///
-/// Keep-alive is handled here and never forwarded: the server sends
-/// `ForceKeepAlive` with a timeout, expects a `KeepAlive` at once and then
-/// every half-timeout, and echoes a bare `KeepAlive` back.
-///
-/// Nothing tears this down on deinit — a `URLSessionWebSocketTask` outlives
-/// its owner happily. Whoever calls `connect()` owns `disconnect()`.
+/// Snapshots the client's URL and token, so it never adopts a new account.
+/// Keep-alive is handled here and never forwarded. Nothing tears it down on
+/// deinit: whoever calls `connect()` owns `disconnect()`.
 final class ServerSocket {
     nonisolated enum State: Equatable, Sendable {
         case idle
@@ -124,10 +94,7 @@ final class ServerSocket {
 
     private(set) var state: State = .idle
 
-    /// Every message except keep-alive traffic, in arrival order. One
-    /// consumer: the stream is created once and survives
-    /// disconnect/reconnect, so a consumer's `for await` keeps working
-    /// across a drop.
+    /// Every non-keep-alive message. One consumer; survives reconnects.
     let messages: AsyncStream<ServerSocketMessage>
 
     private let continuation: AsyncStream<ServerSocketMessage>.Continuation
@@ -174,9 +141,7 @@ final class ServerSocket {
             let opened = await receiveUntilFailure()
             stopKeepAlive()
             if Task.isCancelled { break }
-            // A connection that opened and then dropped starts the schedule
-            // over: it is a different failure from never having reached the
-            // server at all.
+            // A connection that opened and dropped restarts the backoff.
             if opened { attempt = 0 }
             state = .waitingToReconnect
             let delay = ServerSocketBackoff.randomDelay(attempt: attempt)
@@ -190,9 +155,8 @@ final class ServerSocket {
         state = .idle
     }
 
-    /// Runs one connection to completion. Returns whether it ever carried a
-    /// message, which is what counts as having opened: the handshake alone
-    /// can succeed against a proxy that then answers nothing.
+    /// Returns whether a message arrived. The handshake alone can succeed
+    /// against a proxy that then answers nothing.
     private func receiveUntilFailure() async -> Bool {
         guard let url else { return false }
         let task = session.webSocketTask(with: url)
@@ -239,8 +203,7 @@ final class ServerSocket {
     private func startKeepAlive(timeout: Int) {
         stopKeepAlive()
         sendKeepAlive()
-        // Half the timeout, as the server asks, and never less than a
-        // second in case a server ever sends a nonsense timeout.
+        // Half the timeout, as the server asks, and at least a second.
         let interval = Duration.seconds(max(Double(timeout) / 2, 1))
         keepAliveTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -261,8 +224,7 @@ final class ServerSocket {
 
     private func sendKeepAlive() {
         socketTask?.send(.string(Self.keepAliveBody)) { _ in
-            // A failed send is a dead connection; the receive loop is
-            // already about to say so and start the backoff.
+            // The receive loop notices a dead connection.
         }
     }
 }

@@ -1,26 +1,17 @@
 import Foundation
 import LagoonEngine
 
-/// App-owned wiring: which backend stands behind
-/// `Diagnostics.shared`.
+/// Which backend stands behind `Diagnostics.shared`.
 ///
-/// The DSN is injected at build time rather than committed. A DSN
-/// is write-only ingest and grants nobody access to our data, but a tracked
-/// one lets anyone flood the project's quota, and reporting defaults on in
-/// Release builds — so without this, any checkout that archived the app would
-/// report into it. A build that carries no DSN configures no sink and stays
-/// silent; that is the ordinary case for a plain checkout.
-///
-/// `-diagnostics.sentryDSN <dsn>` overrides it for a run that captures
-/// payloads locally.
+/// The DSN is injected at build time, never committed: a tracked one lets
+/// any checkout's Release build flood the quota. No DSN means no sink.
+/// `-diagnostics.sentryDSN <dsn>` overrides it for a local capture run.
 nonisolated enum DiagnosticsConfiguration {
-    /// Substituted into the app's Info.plist from the `LAGOON_SENTRY_DSN`
-    /// build setting. `scripts/upload-testflight.sh` requires it; ordinary
-    /// `xcodebuild` and Xcode builds leave it empty.
+    /// From the `LAGOON_SENTRY_DSN` build setting via Info.plist.
+    /// `scripts/upload-testflight.sh` requires it; other builds leave it empty.
     static let dsnInfoPlistKey = "LagoonSentryDSN"
     static let dsnOverrideKey = "diagnostics.sentryDSN"
 
-    /// The DSN this build should report to, or `nil` when none was injected.
     static var sentryDSN: String? {
         resolveDSN(
             override: UserDefaults.standard.string(forKey: dsnOverrideKey),
@@ -28,9 +19,8 @@ nonisolated enum DiagnosticsConfiguration {
         )
     }
 
-    /// First usable candidate, override first. An absent build setting leaves
-    /// the Info.plist value empty, and a target that never declared one leaves
-    /// the `$(LAGOON_SENTRY_DSN)` reference unexpanded; both mean "no DSN".
+    /// Override first. An empty value or an unexpanded
+    /// `$(LAGOON_SENTRY_DSN)` means "no DSN".
     static func resolveDSN(override: String?, injected: String?) -> String? {
         for candidate in [override, injected] {
             guard let value = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -52,9 +42,7 @@ nonisolated enum DiagnosticsConfiguration {
         return DiagnosticsProcessObserver(hub: Diagnostics.shared)
     }
 
-    /// The playback package's version and the FFmpeg it was built against.
-    /// Both, because the engine is versioned independently of this app now
-    /// and can be rebuilt against a different libavformat without changing
-    /// its own number.
+    /// Engine version plus its FFmpeg: the engine can be rebuilt against a
+    /// different libavformat without changing its own number.
     static var engineVersion: String { EngineVersion.summary }
 }

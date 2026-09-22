@@ -1,26 +1,19 @@
 import SwiftUI
 
-// Focus strategy: no custom scaling anywhere — cards rely on the system
-// `.card` lift/parallax for the movement, and add one thing of their own: an
-// ambient halo sampled from the card's artwork. Nothing here scales,
-// replaces or competes with the system treatment.
+// Focus: no custom scaling. Cards use the system `.card` lift and add only
+// an artwork-sampled halo.
 
 /// 2:3 poster card that navigates to the item's detail page.
 ///
-/// The title sits **under** the artwork, not over it:
-/// a scrim and a headline across the bottom third covers the part of a poster
-/// its designer cared most about, and a poster is already a title card. Below
-/// it, the name and the year — the two things a poster doesn't reliably tell
-/// you — in the Infuse arrangement.
+/// Name and year sit **under** the artwork, never over the poster.
 struct PosterCard: View {
     let item: MediaItem
     @Environment(SessionStore.self) private var session
     let layout = PosterLayout()
 
     var body: some View {
-        // The gap has to clear the focus lift, not just look right at rest:
-        // `.card` scales the poster about a tenth, so a 390pt one grows ~20pt
-        // past its resting bottom edge and lands on the title.
+        // The gap must clear the focus lift: `.card` grows the poster ~20pt
+        // past its bottom edge.
         VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: ContentNavigationRoute.item(item)) {
                 ZStack(alignment: .bottom) {
@@ -80,8 +73,7 @@ struct PosterCard: View {
         #endif
     }
 
-    /// Fixed height so a one-line title and a two-line one still leave every
-    /// row of a grid aligned.
+    /// Fixed height keeps grid rows aligned.
     private var caption: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.hair) {
             Text(item.name ?? "")
@@ -117,9 +109,8 @@ struct PosterCard: View {
     }
 }
 
-/// 16:9 card for landscape rails. Resume-oriented rails provide a direct-play
-/// action and can opt into metadata; discovery rails navigate to item details
-/// and keep the artwork free of the underlying asset's title.
+/// 16:9 card for landscape rails. Resume rails play directly; others open
+/// the detail page.
 struct LandscapeCard: View {
     let item: MediaItem
     var showsMetadata = false
@@ -175,8 +166,7 @@ struct LandscapeCard: View {
             .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
             .clipped()
 
-            // A card with no artwork at all still needs to say what it is;
-            // without the label it is an anonymous grey tile.
+            // No artwork: show the name.
             if showsMetadata || thumbURL == nil {
                 LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
                     .frame(height: Metrics.landscapeHeight * 0.55)
@@ -216,13 +206,10 @@ struct LandscapeCard: View {
 
 /// 6pt playback progress bar pinned to a card's bottom edge.
 #if os(tvOS)
-/// An ambient halo behind a focused card, drawn from that card's own artwork
-/// by the same sampler the hero glow uses.
+/// An ambient halo behind a focused card, sampled from its artwork.
 ///
-/// Strictly additive: the system `.card` lift, parallax and specular remain
-/// the whole of the focus treatment, and nothing here scales or replaces them.
-/// The halo only tints the space the lift already opens up, which is why the
-/// rails carry a little more padding than the lift alone needs.
+/// Strictly additive to the system `.card` focus; nothing here scales. Rails
+/// carry extra padding for it on top of the lift.
 private struct ArtworkFocusHue: ViewModifier {
     let url: URL?
     let cornerRadius: CGFloat
@@ -234,21 +221,15 @@ private struct ArtworkFocusHue: ViewModifier {
         content
             .focused($isFocused)
             .background { halo }
-            // Holding a direction walks a rail faster than artwork can be
-            // sampled, so nothing is fetched until focus settles. Changing
-            // focus cancels the wait rather than queueing another sample.
+            // Wait for focus to settle; a held direction outruns sampling.
             .task(id: "\(url?.absoluteString ?? "")|\(isFocused)") {
                 guard isFocused, let url else { return }
                 try? await Task.sleep(for: .milliseconds(180))
                 guard !Task.isCancelled else { return }
                 let sampled = await ArtworkPaletteCache.shared.palette(for: url)
                 guard !Task.isCancelled else { return }
-                // The halo does not exist until this lands, so its arrival is
-                // an insertion rather than a change of opacity. Without an
-                // animated transaction here there is nothing for the opacity
-                // animation below to interpolate and the hue snaps in at full
-                // strength; it only faded when re-focusing a card whose
-                // palette had already been sampled.
+                // The halo's arrival is an insertion, so it needs its own
+                // animated transaction or it snaps in at full strength.
                 withAnimation(.easeOut(duration: Motion.standard)) {
                     palette = sampled
                 }
@@ -261,22 +242,16 @@ private struct ArtworkFocusHue: ViewModifier {
             RoundedRectangle(cornerRadius: cornerRadius + Metrics.Space.s)
                 .fill(
                     LinearGradient(
-                        // The halo wears the theme: its blush over the
-                        // sampled colours, its own glow when sampling
-                        // failed.
                         colors: Theme.glow(for: palette).colors,
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
                 .blur(radius: Metrics.focusHaloBlur)
-                // Grown by padding rather than a scale, so nothing in the card
-                // hierarchy carries a focus-driven transform.
+                // Padding, not scale: no focus-driven transforms.
                 .padding(-Metrics.Space.xl)
                 .opacity(isFocused ? Metrics.focusHaloOpacity : 0)
                 .animation(.easeOut(duration: Motion.standard), value: isFocused)
-                // Carries the insertion above; the opacity animation only
-                // covers focus moving on a card that already has its palette.
                 .transition(.opacity)
                 .allowsHitTesting(false)
         }
@@ -317,10 +292,7 @@ struct ItemProgressBar: View {
 }
 
 #if os(iOS)
-/// A small badge over artwork whose title has been taken offline:
-/// the same glyph `DownloadControl` shows once a download completes, white
-/// on a dark disc so it reads over any poster. Shared by every card that
-/// shows a downloadable item's artwork.
+/// Badge for a downloaded title: `DownloadControl`'s glyph on a dark disc.
 struct DownloadedMark: View {
     var body: some View {
         Image(systemName: "arrow.down.circle.fill")
@@ -330,11 +302,8 @@ struct DownloadedMark: View {
 }
 #endif
 
-/// A small badge over an episode the viewer has watched: a
-/// checkmark on the same dark disc as `DownloadedMark`, so the two read as
-/// one family when an episode carries both. A disc and weight rather than a
-/// colour, like every other watched state in the app, and only
-/// once the server says played: the progress bar covers the time before.
+/// Badge for a played episode: a checkmark on `DownloadedMark`'s disc. No
+/// colour, like every watched state in the app.
 struct WatchedMark: View {
     var body: some View {
         Image(systemName: "checkmark")
@@ -344,8 +313,7 @@ struct WatchedMark: View {
 }
 
 private extension View {
-    /// The badge's disc. The parent card's accessibility label carries the
-    /// meaning, so the glyph itself is silent.
+    /// Silent: the card's accessibility label carries the meaning.
     func cardMark() -> some View {
         foregroundStyle(.white)
             .frame(width: Metrics.cardMarkSize, height: Metrics.cardMarkSize)
@@ -355,8 +323,7 @@ private extension View {
 }
 
 extension MediaItem {
-    /// Fractional watch progress, or nil when there's nothing worth drawing —
-    /// including the ≥95% tail where a bar reads as "watched" clutter.
+    /// Fractional watch progress; nil when zero or at 95% and above.
     var playbackProgress: Double? {
         guard let percentage = userData?.playedPercentage, percentage > 0, percentage < 95 else { return nil }
         return percentage / 100

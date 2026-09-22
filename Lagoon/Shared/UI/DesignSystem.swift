@@ -1,7 +1,7 @@
 import SwiftUI
 
-// Layout and animation tokens — prefer these over literals.
-// tvOS values follow the 80pt safe-zone gutter convention; iOS scales down.
+// Layout and animation tokens. Use these, never literals.
+// tvOS values follow the 80pt safe-zone gutter; iOS scales down.
 
 enum Metrics {
     #if os(tvOS)
@@ -15,8 +15,7 @@ enum Metrics {
     /// Room under a poster for its title and year.
     static let posterCaptionHeight: CGFloat = 58
     /// Room under a landscape card for a name and a count. Taller than a
-    /// poster's because the names that need it are collections, and
-    /// "Spider-Man (MCU) Collection" does not fit on one line.
+    /// poster's because long collection names wrap to two lines.
     static let landscapeCaptionHeight: CGFloat = 96
     /// Width reserved for the oversized rank beside a Top 10 card.
     static let topTenRankWidth: CGFloat = 150
@@ -25,9 +24,8 @@ enum Metrics {
     static let railTopPadding: CGFloat = 48    // headroom for the system focus lift and the focus halo
     static let railBottomPadding: CGFloat = 96
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
-    /// Backdrop left uncovered above the info block — a scroll inset, not a
-    /// spacer (see DetailPageScaffold). The reference starts its title about
-    /// a third of the way down.
+    /// Backdrop left uncovered above the info block. A scroll inset, not a
+    /// spacer (see DetailPageScaffold).
     static let detailHeroSpace: CGFloat = 210
     static let detailHeaderSpacing: CGFloat = 16
     static let detailSectionSpacing: CGFloat = 40
@@ -36,97 +34,74 @@ enum Metrics {
     static let castPortraitSize: CGFloat = 130
     static let castCaptionWidth: CGFloat = 180
     static let castCount = 8
-    /// Box the title's logo artwork fits inside — height is what keeps a
-    /// wide wordmark and a stacked one reading as the same design.
+    /// Box the title's logo fits inside. The height cap keeps wide and
+    /// stacked logos looking the same size.
     static let logoMaxWidth: CGFloat = 620
     static let logoMaxHeight: CGFloat = 150
     /// Shorter than a detail page's: the hero pairs it with a synopsis.
     static let heroLogoHeight: CGFloat = 110
-    /// The hero's text column. Bounded on tvOS so it doesn't run under the
-    /// artwork; on a phone there is no room to bound it, so it takes what it
-    /// is given.
+    /// The hero's text column, bounded so it doesn't run under the artwork.
     static let heroTextWidth: CGFloat = 640
     static let heroTextInset: CGFloat = 56
-    /// Square avatar tile in the account picker.
     static let accountTileSize: CGFloat = 220
-    /// The brand symbol's height in the onboarding lockup. Sized to read as
-    /// a mark across a room without competing with the screen's heading.
     static let lockupSymbolHeight: CGFloat = 150
     /// A smaller lockup for a screen that already has a title of its own.
     static let lockupHeaderSymbolHeight: CGFloat = 64
     static let jellyfishAccentHeight: CGFloat = 88
-    /// Identity column in Settings — avatar, user, server. Sized so the
-    /// settings list beside it still gets the larger half.
+    /// Identity column in Settings. The list beside it keeps the larger half.
     static let settingsIdentityWidth: CGFloat = 460
     static let settingsAvatarSize: CGFloat = 260
     #else
     static let screenGutter: CGFloat = 20
     static let cardSpacing: CGFloat = 14
-    /// The rail card: recommendations aren't reduced to thumbnails. Grids
-    /// size their own cards to the column instead (`PosterLayout.grid`).
+    /// The rail card. Grids size cards to the column (`PosterLayout.grid`).
     static let posterWidth: CGFloat = 160
     static let accessibilityPosterWidth: CGFloat = 240
-    /// Smallest grid card before a column is dropped: three across on every
-    /// portrait phone down to the SE and six on its side; four or more on an
-    /// iPad.
+    /// Smallest grid card before a column is dropped: three across on a
+    /// portrait SE, six on its side, four or more on an iPad.
     static let phoneGridPosterMinimum: CGFloat = 100
     static let padGridPosterMinimum: CGFloat = 150
     static let landscapeWidth: CGFloat = 240
-    /// A landscape banner at standard text sizes; HeroSection grows for
-    /// Dynamic Type when its title and synopsis need more room.
+    /// At standard text sizes; HeroSection grows it for Dynamic Type.
     static let heroHeight: CGFloat = 200
-    /// More artwork above the copy in regular-width iPad windows.
     static let expandedHeroHeight: CGFloat = 360
     static let gridRowSpacing: CGFloat = Space.xxl
     static let posterCaptionHeight: CGFloat = 38
     static let landscapeCaptionHeight: CGFloat = 60
-    /// Width reserved for the oversized rank beside a Top 10 card.
     static let topTenRankWidth: CGFloat = 88
-    /// Pulls the card over the rank so the number reads as part of the card.
     static let topTenRankOverlap: CGFloat = 16
-    /// Keep a heading close to its own cards, with a larger break before
-    /// the next shelf. Browse pages stack rails without extra spacing.
+    /// A heading sits close to its cards, with a larger break before the
+    /// next shelf.
     static let railTopPadding: CGFloat = Space.m
     static let railBottomPadding: CGFloat = Space.xxl
     static let accountTileSize: CGFloat = 110
-    /// The signed-in user's picture at the top of the Account page.
     static let touchAvatarSize: CGFloat = 64
     static let scrubberHeight: CGFloat = 6     // flat native transport rail
     static let detailHeroSpace: CGFloat = 100
-    /// A regular-width iPad window shows more of the landscape backdrop
-    /// above the title than a phone can afford.
     static let expandedDetailHeroSpace: CGFloat = 240
-    /// The poster hero on a phone or compact iPad window: at most
-    /// this share of the window height inside the safe area, so the title
-    /// is never pushed off-screen. On a phone this cap is what binds, and
-    /// the hero is the poster's upper part rather than the whole image.
+    /// Cap on the poster hero as a share of the safe-area height, so the
+    /// title is never pushed off-screen. On a phone the hero shows the
+    /// poster's upper part.
     static let detailPosterHeroMaxShare: CGFloat = 0.72
-    /// The landscape artwork as a portrait hero: this share of the window
-    /// height, filled and centred, so the middle of the key art shows and
-    /// the sides are cropped the way Infuse frames the same image.
+    /// Landscape artwork as a portrait hero: this share of the window
+    /// height, filled and centred, with the sides cropped.
     static let detailBackdropHeroShare: CGFloat = 0.6
-    /// How far the metadata block rises over the poster hero, as a share of
-    /// the poster's height. The fade beneath the block is drawn to match.
+    /// How far the metadata block overlaps the poster hero, as a share of
+    /// its height. The fade beneath it is drawn to match.
     static let detailPosterContentOverlap: CGFloat = 0.36
-    /// A landscape phone shows the poster as the whole hero and lays the
-    /// title, actions and Play along its bottom in one row; the row starts
-    /// at this share of the window height, low enough that the facts and
-    /// synopsis sit below the fold the way Infuse places them.
+    /// On a landscape phone, the title/actions/Play row starts at this share
+    /// of the window height, leaving the facts and synopsis below the fold.
     static let detailLandscapeRowShare: CGFloat = 0.88
     /// Blur of the poster copy that fills the sides of a landscape hero.
     static let detailPosterAmbientBlur: CGFloat = 36
-    /// The phone's Play pill: wide enough to be the page's one big target,
-    /// capped so it never becomes a bar across the screen (after
-    /// Infuse's proportions). The landscape row shares its width with the
-    /// title art and the circles, so its cap is smaller.
+    /// Caps the phone's Play pill so it never becomes a bar across the
+    /// screen. The landscape row shares its width, so its cap is smaller.
     static let detailPlayButtonMaxWidth: CGFloat = 360
     static let detailLandscapePlayButtonMaxWidth: CGFloat = 260
     static let detailHeaderSpacing: CGFloat = 12
     static let detailSectionSpacing: CGFloat = 32
-    /// The liquid tab bar floats over scroll content. The final rail needs
-    /// enough runway to clear it rather than finishing underneath it.
+    /// Runway for the last rail to clear the floating tab bar.
     static let detailBottomPadding: CGFloat = 110
-    /// Keep the native large glass actions distinct and easy to tap.
     static let detailActionSpacing: CGFloat = Space.s
     static let castPortraitSize: CGFloat = 72
     static let castCaptionWidth: CGFloat = 104
@@ -135,49 +110,37 @@ enum Metrics {
     static let logoMaxHeight: CGFloat = 70
     static let heroLogoHeight: CGFloat = 54
     static let heroTextWidth: CGFloat = .infinity
-    /// Keep iPad hero copy readable without spanning the whole banner.
     static let expandedHeroTextWidth: CGFloat = 520
-    /// The detail header's information column in a regular-width iPad
-    /// window: a leading column beside the artwork, the way the TV lays it
-    /// out, rather than a synopsis running the full width of the screen.
+    /// The detail header's info column in a regular-width iPad window,
+    /// laid out beside the artwork as on the TV.
     static let expandedDetailColumnWidth: CGFloat = 640
     static let heroTextInset: CGFloat = 20
     static let lockupSymbolHeight: CGFloat = 78
     static let lockupHeaderSymbolHeight: CGFloat = 34
     static let jellyfishAccentHeight: CGFloat = 38
-    /// The download control's progress ring stroke.
     static let downloadRingLineWidth: CGFloat = 2.5
     /// The download progress ring and the poster's "downloaded" badge glyph.
     static let downloadMarkSize: CGFloat = 18
     #endif
 
-    /// The touch detail page's poster hero, in pixels. The request width is
-    /// a phone-width poster at 3x; the decode budget is the longest edge of
-    /// that 2:3 image, because `maxPixelSize` caps the longest edge and a
-    /// width-sized budget would decode the poster soft and upscale it.
-    /// Declared for both platforms because the detail pages build the URL
-    /// unconditionally and the scaffold ignores it on tvOS.
+    /// The touch detail page's poster hero, in pixels. The decode budget is
+    /// the 2:3 image's longest edge, because `maxPixelSize` caps the longest
+    /// edge; a width-sized budget would decode soft. Declared on both
+    /// platforms because the URL is built unconditionally.
     static let detailPosterRequestWidth = 1200
     static let detailPosterDecodeSize = 1800
-    /// The landscape key art is requested at `detailBackdropRequestWidth`
-    /// and decoded to match, so a landscape phone hero, which shows the
-    /// whole width, is not decoded smaller than the server sent it and
-    /// then upscaled soft.
+    /// Decoded at the request width, so a full-width landscape hero is not
+    /// decoded small and upscaled soft.
     static let detailBackdropRequestWidth = 1920
     static let detailBackdropDecodeSize = 1920
-    /// Diameter of the phone's circular detail actions: the large control
-    /// height, so the circles sit level with the Play pill beside them.
+    /// The large control height, so the circles sit level with the Play pill.
     static let detailCircleActionSize: CGFloat = 50
-    /// The blurred ambient copy needs no detail; a small decode keeps the
-    /// blur cheap.
+    /// Small decode: the blurred ambient copy needs no detail.
     static let detailPosterAmbientDecodeSize = 240
 
-    /// The spacing scale: gaps and insets *inside* a screen. Structural values
-    /// above (gutter, card sizes, hero height) stay separate — they answer to
-    /// the 10-foot safe zone, not to rhythm.
-    ///
-    /// Roughly ×1.5 after `s`, so adjacent steps read as different rather than
-    /// as a mistake. Same on both platforms for now.
+    /// The spacing scale for gaps and insets *inside* a screen. Structural
+    /// values above follow the safe zone, not this scale. Roughly ×1.5 per
+    /// step after `s`, so adjacent steps look deliberately different.
     ///
     /// | step | pt | for |
     /// |---|---|---|
@@ -200,11 +163,8 @@ enum Metrics {
         static let section: CGFloat = 56
     }
 
-    /// Columns for a poster grid. tvOS has exactly one screen size, so a
-    /// fixed count is the right call there and keeps the approved 5-column
-    /// rhythm. iOS spans SE to Pro Max, where a fixed count is what made
-    /// cards wider than their columns and cut the first and last off the
-    /// screen — so the count follows the width instead.
+    /// Columns for a poster grid: fixed on tvOS (one screen size), adaptive
+    /// on iOS, where a fixed count cut the outer cards off small screens.
     static var posterGridColumns: [GridItem] {
         #if os(tvOS)
         Array(repeating: GridItem(.flexible(), spacing: cardSpacing), count: gridColumns)
@@ -226,29 +186,22 @@ enum Metrics {
 
     static let cardCornerRadius: CGFloat = 12
     static let cardArtRadius: CGFloat = 10
-    /// The focused card's artwork-derived halo. Blurred far enough that no
-    /// edge of the gradient reads as a shape, and kept well under full
-    /// strength so it kindles the space around the card rather than
-    /// competing with the artwork inside it.
+    /// The focused card's artwork halo: blurred so no edge reads as a shape,
+    /// and faint so it doesn't compete with the artwork.
     static let focusHaloBlur: CGFloat = 36
     static let focusHaloOpacity: Double = 0.55
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
 
-    /// The scannable side of a QR code, and the floor under its white margin.
+    /// The QR code's side, and a floor under its white margin.
     ///
-    /// A code scans from roughly ten times its own width, so the television
-    /// needs a large one: someone three metres from a 55-inch set is holding
-    /// their phone about as far away as the rule of thumb allows, and 420
-    /// points is a little over a fifth of the 1920-point screen. Phones and
-    /// iPads never need this — they can open the link — so the smaller size
-    /// exists only for the component gallery.
+    /// A code scans from about ten times its width, so the TV needs a large
+    /// one to scan from a sofa. iOS opens the link instead; its size exists
+    /// only for the component gallery.
     ///
-    /// The margin itself is the quiet zone and is *not* a token: four modules
-    /// is what the specification asks for, and a module is only as wide as the
-    /// address is short, so `QRCode.quietZone(side:modulesAcross:)` measures
-    /// it from the code that was generated. This is the floor under that, for
-    /// the moment before one exists.
+    /// The real quiet zone is four modules, measured from the generated code
+    /// by `QRCode.quietZone(side:modulesAcross:)`. This is the floor before
+    /// a code exists.
     #if os(tvOS)
     static let qrCodeSize: CGFloat = 420
     static let qrCodeMinimumQuietZone: CGFloat = 32
@@ -259,12 +212,9 @@ enum Metrics {
     /// iOS hero clipping; tvOS heroes use the native card shape.
     static let heroCornerRadius: CGFloat = 16
     static let progressBarHeight: CGFloat = 6
-    /// The theme swatch beside a theme's name in Appearance settings.
     static let themeSwatchSize: CGFloat = 28
-    /// A card's small round badges: "downloaded" and "watched".
-    /// Sized to read at each platform's viewing distance, and equal to the
-    /// download control's `downloadMarkSize` on iOS so the badge and the
-    /// ring stay one family.
+    /// A card's small round badges, "downloaded" and "watched". On iOS this
+    /// matches `downloadMarkSize` so the badge and the ring match.
     #if os(tvOS)
     static let cardMarkSize: CGFloat = 28
     static let cardMarkInset: CGFloat = Space.s
@@ -275,21 +225,14 @@ enum Metrics {
     static let touchTarget: CGFloat = 44
 }
 
-/// The only sanctioned escapes from the Dynamic Type scale.
-///
-/// Everything that is *text* uses a semantic style — `.callout`, `.headline`,
-/// `.caption` — so it scales and stays consistent. Two things legitimately
-/// don't: SF Symbols used as artwork (an empty state's glyph is a picture,
-/// not a sentence) and display type that is effectively a logo. Naming them
-/// here keeps `.system(size:)` out of the screens, where each new call site
-/// would otherwise invent its own size.
+/// The only allowed escapes from the Dynamic Type scale: symbols used as
+/// artwork and display type that acts as a logo. All other text uses a
+/// semantic style. Keep `.system(size:)` out of the screens.
 enum Typography {
     /// Big SF Symbol standing in for artwork — empty and error states.
     static let glyph: Font = .system(size: 48)
-    /// The same idea where it carries a whole screen.
     static let largeGlyph: Font = .system(size: 56)
-    /// Quick Connect's code: monospaced so the digits don't jitter as it
-    /// polls, and large enough to read across a room.
+    /// Monospaced so the digits don't jitter as the code polls.
     static let quickConnectCode: Font = .system(size: 42, weight: .bold, design: .monospaced)
     /// Oversized display number used by the ranked Home shelves.
     #if os(tvOS)
@@ -306,70 +249,47 @@ enum Motion {
     static let crossfade: TimeInterval = 0.8  // backdrop / ambient-glow crossfade
 }
 
-// Brand colors are only for genuine branding: progress fills, the lockup,
-// selection markers. Everything else uses system semantic styles.
+// Brand colors are only for branding: progress fills, the lockup, selection
+// markers. Everything else uses system semantic styles.
 //
-// These are the Twin Shores palette from the brand package, and the names
-// deliberately do **not** follow it. The package calls #0D4A57 "Lagoon Teal",
-// which is the dark upper shore — while this codebase has always used
-// `lagoonTeal` for the bright accent. Keeping that name would leave one word
-// meaning two colors, so the roles are named after the mark instead: aqua is
-// the lower shore, shore the upper one, navy the ground they sit on.
+// The Twin Shores palette, deliberately renamed: the brand package's
+// "Lagoon Teal" is `lagoonShore` here, to avoid one word meaning two colors.
 extension Color {
-    /// Aqua — the lower shore, and the only brand color bright enough to
-    /// carry an accent against black.
+    /// The only brand color bright enough for an accent on black.
     nonisolated static let lagoonAqua = Color(red: 0x2E / 255, green: 0xD4 / 255, blue: 0xC7 / 255)
-    /// Deep Navy — the brand's ground. Lagoon keeps true black behind its
-    /// content, so this is a wash over black rather than a background.
+    /// Deep Navy. A wash over black, not a content background.
     nonisolated static let lagoonNavy = Color(red: 0x0B / 255, green: 0x1D / 255, blue: 0x28 / 255)
     /// Lagoon Teal in the brand package — the mark's upper shore.
     nonisolated static let lagoonShore = Color(red: 0x0D / 255, green: 0x4A / 255, blue: 0x57 / 255)
-    /// Ink — the package's monochrome dark, for the one place Lagoon prints
-    /// something dark on something light instead of the other way round.
+    /// Ink, for dark-on-light.
     nonisolated static let lagoonInk = Color(red: 0x07 / 255, green: 0x16 / 255, blue: 0x1D / 255)
-    /// Mist — the package's light background and reverse support, the ground
-    /// Ink is meant to sit on.
+    /// Mist, the light ground Ink sits on.
     nonisolated static let lagoonMist = Color(red: 0xE9 / 255, green: 0xF1 / 255, blue: 0xF2 / 255)
 }
 
-/// SF Symbols for things the app navigates to, in one place so the library
-/// tab, the library picker and Discover's buttons cannot drift apart.
+/// SF Symbols for navigation targets, in one place so tabs, pickers and
+/// Discover's buttons cannot drift apart.
 ///
-/// **Fill is not a free choice.** Navigation and transport are filled;
-/// empty and error states are outline, being artwork rather than controls.
+/// Navigation and transport are filled; empty and error states are outline.
 /// `checkmark`, `chevron.*`, `plus`, `minus`, `xmark`, `magnifyingglass` and
 /// `speedometer` have no filled variant.
 ///
-/// Glyphs are chosen for shape too. `house.fill` and `gearshape.fill` anchor
-/// the tab bar at 1.13 and 1.00 width-to-height and ~0.55 ink density; this
-/// set spans 1.00–1.13 and 0.28–0.81. `film.fill` (1.28, 0.85) and
-/// `play.square.stack.fill` (0.75) were the outliers that made Movies look
-/// wrong.
+/// Tab glyphs are also matched for shape: width-to-height 1.00–1.13, like
+/// `house.fill` and `gearshape.fill`. `film.fill` (1.28) looked wrong.
 nonisolated enum ContentIcon {
-    /// A clapperboard. 1.04 — square enough to sit beside the gear, where a
-    /// film strip's 1.28 could not.
     static let movies = "movieclapper.fill"
-    /// A stack with a play badge: a series is a pile of episodes rather than
-    /// one item, which is also what tells it apart from Movies at a glance.
-    /// 1.10, near-identical to the house beside it.
     static let shows = "rectangle.stack.badge.play.fill"
-    /// Every library at once, when there are too many for tabs of their own.
-    /// A grid rather than a stack, so it cannot be mistaken for Shows.
+    /// All libraries, when there are too many for tabs. A grid, so it is not
+    /// mistaken for Shows.
     static let libraries = "square.grid.2x2.fill"
     static let home = "house.fill"
-    /// The single sparkle, not the cluster: `sparkles` measured 0.81, narrow
-    /// and lopsided next to the rest. It stays the lightest glyph in the bar
-    /// at 0.28 ink, which is what a sparkle is — forcing it heavier would make
-    /// it something else.
+    /// The single sparkle: `sparkles` (0.81) is narrow and lopsided.
     static let discover = "sparkle"
-    /// A stroke by construction, like `sparkle` beside it: SF Symbols has no
-    /// filled magnifier, and the circled variants read as a button rather
-    /// than a tab. `Tab(role: .search)` may substitute the system's own
-    /// glyph here, which is the outcome we want either way.
+    /// No filled magnifier exists; circled variants read as a button.
+    /// `Tab(role: .search)` may substitute the system glyph, which is fine.
     static let search = "magnifyingglass"
     static let settings = "gearshape.fill"
 
-    /// Settings destinations share the same filled navigation vocabulary.
     nonisolated enum Settings {
         static let account = "person.crop.circle.fill"
         static let playback = "play.circle.fill"
@@ -400,15 +320,9 @@ extension View {
     }
 }
 
-/// The ground the onboarding screens sit on: the theme's `ground`, which is
-/// the brand's Deep Navy under Lagoon and the rose under Baby Pink.
-///
-/// The guidelines call Deep Navy "the default full-bleed field", and onboarding
-/// takes them at their word: it is the app's front door and the stretch that is
-/// purely identity, so the mark gets a field behind it rather than a void. Past
-/// it, the theme's background is the ground Lagoon plays content against.
-/// Which theme shows here is `ThemeStore`'s call: the last profile's until
-/// another signs in.
+/// The onboarding screens' background: the theme's `ground` (Deep Navy under
+/// Lagoon). Past onboarding, content sits on the theme's background.
+/// `ThemeStore` picks the theme: the last profile's until another signs in.
 struct GroundBackground: View {
     var body: some View {
         Theme.ground.ignoresSafeArea()
@@ -417,18 +331,10 @@ struct GroundBackground: View {
 
 /// The Twin Shores lockup: the two-tone symbol beside or above the wordmark.
 ///
-/// Composed here rather than shipped as one asset because the brand package
-/// has no dark-background lockup. Its color lockup sets the wordmark in Ink
-/// (#07161D), which is invisible on black, and its white lockup flattens the
-/// two shores into a single silhouette — losing the one idea the mark is
-/// carrying. Pairing the color symbol with the Light wordmark keeps both.
-///
-/// The proportions are not invented. They are measured off the package's own
-/// `Lagoon_Lockup_Stacked_Color` and `_Horizontal_Color`, which do not agree
-/// with each other — the horizontal lockup sets the wordmark nearly twice as
-/// large relative to the mark, because beside it rather than beneath it the
-/// word has to hold its own. `import-brand-vectors.swift` crops both assets to
-/// their ink, so these ratios apply to the frames directly.
+/// Composed here because the brand package has no dark-background lockup.
+/// Ratios are measured from `Lagoon_Lockup_Stacked_Color` and
+/// `_Horizontal_Color`; `import-brand-vectors.swift` crops both to their ink,
+/// so they apply to the frames directly.
 struct LagoonLockup: View {
     enum Layout {
         /// Symbol above wordmark, for a screen that is mostly lockup.
@@ -454,16 +360,12 @@ struct LagoonLockup: View {
     }
 
     var layout: Layout = .stacked
-    /// Height of the symbol. Everything else is derived from it, so a call
-    /// site sizes the lockup with one number.
+    /// Everything else derives from this.
     var symbolHeight: CGFloat = Metrics.lockupSymbolHeight
 
     private var wordmarkHeight: CGFloat { symbolHeight * layout.wordmarkRatio }
     private var gap: CGFloat { symbolHeight * layout.gapRatio }
-    /// "Keep lockup clear space equal to half the symbol height on all
-    /// sides" — the guidelines' rule, enforced by the component rather than
-    /// left to each call site, where it was already being broken four times
-    /// out of four.
+    /// Brand rule: clear space of half the symbol height on all sides.
     private var clearSpace: CGFloat { symbolHeight / 2 }
 
     var body: some View {
@@ -477,11 +379,8 @@ struct LagoonLockup: View {
             case .horizontal:
                 HStack(spacing: gap) {
                     symbol
-                    // The package centres the wordmark's *cap height* on the
-                    // symbol, not its ink box. Centring the box instead would
-                    // hang the whole word low by the depth of the g's
-                    // descender, which is what makes an assembled lockup look
-                    // assembled.
+                    // Centre the wordmark's cap height, not its ink box,
+                    // or the g's descender hangs the word low.
                     wordmark.offset(y: -symbolHeight * 0.053)
                 }
             }
@@ -506,10 +405,8 @@ struct LagoonLockup: View {
     }
 }
 
-/// The secondary jellyfish, used the way the brand package restricts it:
-/// "only as punctuation in loading, empty-state, or atmospheric moments …
-/// small, one-color, and low contrast." It is a template image, so the tint
-/// comes from the call site rather than from the artwork.
+/// The secondary jellyfish. Brand rule: only in loading, empty or
+/// atmospheric moments, small, one-color and low contrast.
 struct LagoonJellyfishAccent: View {
     var height: CGFloat = Metrics.jellyfishAccentHeight
 
@@ -524,8 +421,6 @@ struct LagoonJellyfishAccent: View {
 }
 
 private extension Image {
-    /// `.resizable()` plus the template intent in one place, so the accent's
-    /// one-color rule is not restated at every call site.
     func renderable(template: Bool) -> some View {
         renderingMode(template ? .template : .original).resizable()
     }

@@ -2,11 +2,9 @@ import Foundation
 import LagoonEngine
 import os
 
-/// Posts envelopes to a Sentry project over URLSession, from a bounded
-/// on-disk queue, on its own utility queue. Nothing here runs on a playback
-/// path: `submit` returns after enqueuing a block. The queue survives a
-/// process exit; a purge of Caches loses pending reports, which is
-/// acceptable for diagnostics.
+/// Posts envelopes from a bounded on-disk queue on its own utility queue,
+/// never on a playback path. A Caches purge loses pending reports, which is
+/// acceptable.
 nonisolated final class SentryTransport: DiagnosticSink, Sendable {
     private static let log = Logger(subsystem: "ee.helop.lagoon", category: "diagnostics")
 
@@ -15,9 +13,8 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
     private let policy: SentryTransportPolicy
     private let directory: URL
     private let session: URLSession
-    /// The tester's switch, consulted before every upload and every
-    /// enqueue: turning reporting off also discards what is still queued,
-    /// so nothing recorded before the change leaves the device after it.
+    /// Checked before every enqueue and upload; turning reporting off also
+    /// discards the queue.
     private let isEnabled: @Sendable () -> Bool
     private let queue = DispatchQueue(label: "ee.helop.lagoon.diagnostics", qos: .utility)
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -102,8 +99,7 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
-    /// Reporting was turned off: whatever is still waiting stays on this
-    /// device. Runs on `queue`.
+    /// Reporting was turned off. Runs on `queue`.
     private func discardPending() {
         for file in pendingFiles() {
             try? FileManager.default.removeItem(at: file)
@@ -118,8 +114,8 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
         }
     }
 
-    /// Sends one envelope at a time until the queue is empty, a limit
-    /// applies, or a failure starts a backoff. Runs on `queue`.
+    /// One envelope at a time until empty, limited or backing off. Runs on
+    /// `queue`.
     private func drain() {
         guard isEnabled() else {
             discardPending()
@@ -164,8 +160,7 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
             outcome = .backoff
         }
         let now = ProcessInfo.processInfo.systemUptime
-        // The lock's closure is `Sendable`, so the decision to keep draining
-        // is its return value rather than a captured variable.
+        // The lock's closure is `Sendable`, so it returns the decision.
         let continueDraining: Bool = state.withLock { state in
             state.inFlight = false
             switch outcome {
@@ -200,8 +195,8 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
         }
     }
 
-    /// One timer at a time; a scheduled retry that fires early simply finds
-    /// `notBefore` still ahead and reschedules.
+    /// One timer at a time; an early retry finds `notBefore` ahead and
+    /// reschedules.
     private func scheduleRetry(after delay: TimeInterval, state: inout State) {
         guard !state.retryScheduled else { return }
         state.retryScheduled = true

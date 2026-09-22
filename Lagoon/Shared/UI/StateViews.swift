@@ -12,9 +12,8 @@ struct LoadingView: View {
     }
 }
 
-/// Keeps a recoverable next-page failure close to the content that did load.
-/// Replacing a populated grid with a full-screen error would discard context;
-/// silently stopping pagination makes the interface look finished instead.
+/// A next-page failure shown inline, so loaded content stays and the list
+/// doesn't look finished.
 struct InlineRetryView: View {
     let message: String
     let retry: () -> Void

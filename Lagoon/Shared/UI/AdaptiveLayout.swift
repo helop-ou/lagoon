@@ -22,14 +22,10 @@ struct AdaptiveActionStack<Content: View>: View {
     }
 }
 
-/// Wrap metadata between tokens, but allow a token longer than the viewport
-/// to wrap internally too. Unlike fixed-size HStacks, this also handles
-/// translated strings and accessibility text sizes.
+/// Wraps metadata between tokens, and within a token wider than the view.
 struct MetadataFlowLayout: Layout {
     var spacing: CGFloat = Metrics.Space.m
-    /// Where each row sits in the width it did not use. Leading is the
-    /// column composition; centre is the phone's block under the poster
-    /// hero, where the title and actions are centred too.
+    /// Where each row sits in its unused width.
     var alignment: HorizontalAlignment = .leading
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -38,8 +34,7 @@ struct MetadataFlowLayout: Layout {
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let arrangement = arrange(subviews, width: bounds.width)
-        // A row is every frame sharing a minY; its slack is what the
-        // alignment distributes.
+        // A row is every frame sharing a minY.
         var rowWidths: [CGFloat: CGFloat] = [:]
         for frame in arrangement.frames {
             rowWidths[frame.minY] = max(rowWidths[frame.minY] ?? 0, frame.maxX)
@@ -89,9 +84,8 @@ extension EnvironmentValues {
     @Entry var posterCardWidth: CGFloat?
 }
 
-/// What a grid resolved for the width it was given: the column set, how
-/// many there are (paging thresholds scale with it), and the card width to
-/// hand its cards through `posterCardWidth`.
+/// A grid resolved for a width. Paging thresholds scale with the column
+/// count.
 struct PosterGrid {
     let columns: [GridItem]
     let columnCount: Int
@@ -99,8 +93,7 @@ struct PosterGrid {
     let cardWidth: CGFloat?
 }
 
-/// Cards and their grids must scale together; scaling just the caption
-/// leaves accessibility text crowded into a three-column phone grid.
+/// Cards and their grids must scale together with Dynamic Type.
 struct PosterLayout: DynamicProperty {
     @ScaledMetric(relativeTo: .caption) private var scaledWidth = Metrics.posterWidth
     @ScaledMetric(relativeTo: .caption) private var scaledCaptionHeight = Metrics.posterCaptionHeight
@@ -116,15 +109,9 @@ struct PosterLayout: DynamicProperty {
         #endif
     }
 
-    /// iOS grids size their cards to the column rather than the column to a
-    /// rail-sized card: a portrait phone gets three across, an iPad four or
-    /// more, and a wider window simply adds columns. The minimum
-    /// is per idiom, not per size class: a Pro Max reports regular width in
-    /// landscape, and a phone on its side wants six small posters, not four
-    /// iPad-sized ones. The minimum scales with Dynamic Type the way the
-    /// rail width does, so accessibility sizes still drop to fewer, larger
-    /// cards. tvOS keeps its fixed five-column rhythm. A width of zero means
-    /// "not measured yet".
+    /// iOS sizes cards to the column. The minimum is per idiom, not size
+    /// class (a Pro Max is regular width in landscape), and scales with
+    /// Dynamic Type. tvOS keeps five columns. Zero width means not measured.
     func grid(fitting availableWidth: CGFloat) -> PosterGrid {
         #if os(tvOS)
         return PosterGrid(columns: Metrics.posterGridColumns, columnCount: Metrics.gridColumns, cardWidth: nil)

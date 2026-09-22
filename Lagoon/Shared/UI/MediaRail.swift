@@ -13,8 +13,7 @@ struct MediaRail: View {
     let title: String
     let items: [MediaItem]
     var style: RailStyle = .poster
-    /// Continue Watching and Next Up need episode context. Other landscape
-    /// shelves should let their artwork stand on its own.
+    /// For Continue Watching and Next Up, which need episode context.
     var showsLandscapeMetadata = false
     var playAction: ((MediaItem) -> Void)?
     /// Lets a card's watched/favourite menu re-fetch the list it sits in.
@@ -65,10 +64,7 @@ struct MediaRail: View {
                     .padding(.top, Metrics.railTopPadding)
                     .padding(.bottom, Metrics.railBottomPadding)
                 }
-                // The rail's own ScrollView clips to its bounds, which cut the
-                // focus halo off square at the rail edge. The page-level
-                // ScrollView already does this for the lift; the shelf needs
-                // it too, or anything that bleeds past a card is sliced.
+                // Or the focus halo is cut off square at the rail edge.
                 .scrollClipDisabled()
             }
         }

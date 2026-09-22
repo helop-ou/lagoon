@@ -3,9 +3,8 @@ import Foundation
 import Network
 #endif
 
-/// Diagnose the endpoint the viewer already tried to reach. There is no
-/// general local-network authorization API; only Network's explicit path
-/// reason establishes denial. Timeouts, DNS failures and offline paths do not.
+/// Diagnoses the endpoint the viewer tried. Only Network's explicit path
+/// reason proves local-network denial; timeouts and DNS failures do not.
 nonisolated enum LocalNetworkAccess {
     enum Failure: LocalizedError {
         case denied
@@ -34,10 +33,9 @@ nonisolated enum LocalNetworkAccess {
               let port = NWEndpoint.Port(rawValue: UInt16(exactly: url.port ?? (url.scheme == "https" ? 443 : 80)) ?? 0),
               port.rawValue != 0 else { return false }
         #if DEBUG
-        // Simulator has no local-network privacy prompt. The UI fixture may
-        // substitute only this diagnosis, only for its exact loopback origin,
-        // and only after a real URLSession connectivity failure in explain().
-        // It cannot grant access, bypass TLS or affect a Release build.
+        // The simulator has no local-network prompt. The UI fixture may fake
+        // this diagnosis for its loopback origin only, after a real failure.
+        // It cannot grant access or affect a Release build.
         if host == "127.0.0.1",
            ProcessInfo.processInfo.environment["LAGOON_TEST_DENIED_ORIGIN"] == url.absoluteString {
             return true

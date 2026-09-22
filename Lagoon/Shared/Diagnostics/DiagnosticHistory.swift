@@ -1,10 +1,8 @@
 import Foundation
 import LagoonEngine
 
-/// The bounded rolling history an incident carries with it: the last
-/// `capacity` events, trimmed to `window` seconds when snapshotted. A value
-/// type so a test can drive it deterministically; `DiagnosticsHub` owns the
-/// live one behind a lock.
+/// The last `capacity` events, trimmed to `window` seconds on snapshot.
+/// `DiagnosticsHub` owns the live one behind a lock.
 nonisolated struct DiagnosticHistory: Equatable, Sendable {
     static let defaultCapacity = 240
     static let defaultWindow: TimeInterval = 90
@@ -29,9 +27,8 @@ nonisolated struct DiagnosticHistory: Equatable, Sendable {
         events.removeAll(keepingCapacity: true)
     }
 
-    /// Everything recorded within `window` seconds before `now`, oldest
-    /// first. Events stamped in the future (a clock that went backwards)
-    /// are kept rather than lost; they are still the most recent context.
+    /// Oldest first. Events stamped in the future (clock went backwards)
+    /// are kept.
     func snapshot(at now: TimeInterval) -> [DiagnosticEvent] {
         let cutoff = now - window
         return events.filter { $0.uptime >= cutoff }

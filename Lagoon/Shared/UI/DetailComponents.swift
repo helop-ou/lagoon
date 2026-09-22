@@ -1,26 +1,16 @@
 import SwiftUI
 
-/// Full-bleed backdrop behind a detail page. Only lightly dimmed —
-/// the artwork is meant to be the first thing you see, and the scrim that
-/// makes text readable travels with the content block instead, so it lands
-/// exactly where the words are.
+/// Full-bleed backdrop behind a detail page, only lightly dimmed. The
+/// readability scrim travels with the content block instead.
 struct DetailBackdropView: View {
     let url: URL?
-    /// Portrait artwork for the compact touch layout. On a phone
-    /// or a compact iPad window the poster is the hero: it fills the width
-    /// at the top and fades into the reading surface, and the landscape
-    /// backdrop is not drawn at all. Regular-width iPad windows keep the
-    /// backdrop, whose shape suits a wide window the way a poster does not.
+    /// Portrait artwork for the compact touch layout, where it replaces the
+    /// backdrop as the hero. Regular-width iPad windows keep the backdrop.
     var posterURL: URL? = nil
-    /// The height the poster hero occupies, decided by the scaffold so the
-    /// content inset and the fade agree on where the words begin.
+    /// Set by the scaffold so the content inset and the fade agree.
     var posterHeight: CGFloat = 0
-    /// Which part of the poster the hero shows. Its top in a portrait
-    /// window, so the artwork's own composition survives and only the
-    /// bottom, where the fade sits anyway, is lost. Centre means a
-    /// landscape window, where the whole poster is shown at the window's
-    /// height over a blurred copy of itself filling the sides, as Infuse
-    /// does, rather than a band cropped out of its middle.
+    /// `.top` in portrait: the bottom is lost under the fade anyway.
+    /// `.center` in landscape: the whole poster over a blurred copy of itself.
     var posterAnchor: Alignment = .top
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -33,8 +23,7 @@ struct DetailBackdropView: View {
             Theme.background
             #if os(iOS)
             if usesPosterHero {
-                // Anchored to the top of a centred stack, so the backdrop
-                // composition below keeps the centring it always had.
+                // Pinned to the top of the centred ZStack.
                 VStack(spacing: 0) {
                     posterHero
                     Spacer(minLength: 0)
@@ -66,16 +55,13 @@ struct DetailBackdropView: View {
     }
 
     #if os(iOS)
-    /// The scaffold decides: it hands over a height only for the compact,
-    /// portrait composition, and zero whenever the backdrop should draw.
+    /// The scaffold passes zero whenever the backdrop should draw.
     private var usesPosterHero: Bool {
         posterURL != nil && posterHeight > 0
     }
 
-    /// One image for both orientations, as Infuse frames it: the landscape
-    /// key art, centred and cropped at the sides in portrait, shown whole
-    /// in landscape. The portrait poster only stands in for a title that
-    /// has no backdrop.
+    /// The landscape key art in both orientations. The poster only stands
+    /// in for a title without a backdrop.
     private var heroURL: URL? { url ?? posterURL }
     private var heroIsPoster: Bool { url == nil }
 
@@ -83,10 +69,8 @@ struct DetailBackdropView: View {
         GeometryReader { proxy in
             ZStack {
                 if heroIsPoster && posterAnchor == .center {
-                    // A poster in a landscape window: the sides take a soft,
-                    // dimmed copy of it and the poster stands whole in the
-                    // middle. Both layers get the hero's own frame, so the
-                    // fill's overflow never becomes the fit's proposal.
+                    // Both layers get the hero's own frame, so the fill's
+                    // overflow never becomes the fit's proposal.
                     CachedAsyncImage(url: heroURL, maxPixelSize: Metrics.detailPosterAmbientDecodeSize) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
@@ -103,13 +87,8 @@ struct DetailBackdropView: View {
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
                 } else {
-                    // The key art fills the hero edge to edge, centred: its
-                    // middle in portrait, cropped at the sides, and in
-                    // landscape the whole width with a little trimmed from the
-                    // top and bottom, since a phone's window is wider than
-                    // 16:9. A poster fallback keeps its top in portrait so its
-                    // composition survives. The decode budget follows the
-                    // image: the backdrop is requested wider than the poster.
+                    // Fill edge to edge. The decode budget follows the image:
+                    // the backdrop is requested wider than the poster.
                     CachedAsyncImage(
                         url: heroURL,
                         maxPixelSize: heroIsPoster ? Metrics.detailPosterDecodeSize : Metrics.detailBackdropDecodeSize
@@ -130,10 +109,8 @@ struct DetailBackdropView: View {
         .animation(.easeInOut(duration: Motion.crossfade), value: heroURL)
     }
 
-    /// Photographic at the top, a reading surface by the time the title
-    /// arrives, black where the poster ends so the page continues seamlessly.
-    /// The reading surface begins where the scaffold puts the content: the
-    /// overlap point in portrait, the row's share in landscape.
+    /// Clear at the top, a reading surface where the scaffold puts the
+    /// content, and solid where the poster ends.
     private var posterFade: some View {
         let heavy = contrast == .increased || reduceTransparency
         let contentStart = posterAnchor == .top
@@ -156,8 +133,7 @@ struct DetailBackdropView: View {
     @ViewBuilder
     private var readabilityWash: some View {
         #if os(tvOS)
-        // The 10-foot layout only occupies the leading half, so keep the
-        // rest of the still vivid.
+        // The layout uses only the leading half; keep the rest vivid.
         ZStack {
             Theme.background.opacity(0.12)
             LinearGradient(
@@ -173,10 +149,8 @@ struct DetailBackdropView: View {
         #else
         let heavy = contrast == .increased || reduceTransparency
         if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
-            // A regular-width iPad window is laid out like the TV: the
-            // information column on the leading half, so the wash is the
-            // TV's leading fade and the trailing half stays vivid, with a
-            // bottom fade for the rails that scroll up over it.
+            // Laid out like the TV: a leading fade, plus a bottom fade for
+            // the rails that scroll over it.
             ZStack {
                 Theme.background.opacity(heavy ? 0.85 : 0.18)
                 LinearGradient(
@@ -201,9 +175,7 @@ struct DetailBackdropView: View {
             }
         } else {
             // A compact page without a poster hero (Seerr, collections):
-            // the content spans the whole screen. Keep the top recognisably
-            // photographic, then settle into a near-black reading surface
-            // before the rails begin.
+            // photographic at the top, near-black before the rails.
             ZStack {
                 Theme.background.opacity(heavy ? 0.9 : 0.3)
                 LinearGradient(
@@ -226,19 +198,15 @@ struct DetailBackdropView: View {
 /// The shell both detail pages sit in: full-bleed backdrop with content inset
 /// below it.
 ///
-/// The hero space is a **scroll content margin, not a spacer view**. As a
-/// spacer it was non-focusable content above the first button, leaving the
-/// focus engine no way out — Up from Play did nothing, the scroll never
-/// returned to the top, and the tab bar stayed unreachable. As an inset the
-/// first button *is* the first content item, so Up leaves the page.
+/// The hero space is a **scroll content margin, not a spacer view**. A spacer
+/// is non-focusable content above the first button, so Up from Play goes
+/// nowhere and the tab bar is unreachable.
 ///
-/// The backdrop does **not** darken as you scroll. Tried and cut: moving
-/// focus into a rail jumps further in one press than the ramp covered, so it
-/// read as a slam to black. The rails rely on their own artwork for contrast.
+/// The backdrop does **not** darken on scroll: one focus jump into a rail
+/// covers the whole ramp and reads as a slam to black.
 struct DetailPageScaffold<Content: View>: View {
     let backdropURL: URL?
-    /// Portrait artwork for the compact touch hero; nil keeps the
-    /// backdrop composition on every platform.
+    /// Portrait artwork for the compact touch hero; nil keeps the backdrop.
     var posterURL: URL? = nil
     @ViewBuilder let content: Content
 
@@ -263,13 +231,9 @@ struct DetailPageScaffold<Content: View>: View {
                         content
                     }
                     .padding(.bottom, Metrics.detailBottomPadding)
-                    // A horizontal rail reports its content's ideal width
-                    // while it is loading. Without a concrete viewport, the
-                    // enclosing vertical ScrollView accepted that width and
-                    // centered a phone-sized page inside a ~1,300pt layout,
-                    // putting the detail actions off-screen. The
-                    // rails still scroll on their own axis; only the page is
-                    // pinned to the screen it belongs to.
+                    // A loading rail reports its content's ideal width; without
+                    // a fixed width the page grows to it and pushes the
+                    // actions off-screen.
                     .frame(width: proxy.size.width, alignment: .leading)
                 }
                 .contentMargins(
@@ -283,17 +247,9 @@ struct DetailPageScaffold<Content: View>: View {
         }
     }
 
-    /// A 2:3 poster at the window's width, capped at a share of the height
-    /// so the title is never pushed off-screen. In a landscape phone window
-    /// the cap is all that applies and the hero is a band across the
-    /// poster's middle, one image for both orientations the way Infuse does
-    /// it. Zero for the wide iPad composition, which draws the backdrop.
-    /// Portrait: a 2:3 poster at the window's width, capped at a share of
-    /// the height so the title is never pushed off-screen. Landscape: the
-    /// whole window, edge to edge under the safe areas, showing the
-    /// poster's middle band, one image for both orientations the way
-    /// Infuse does it. Zero for the wide iPad composition, which draws the
-    /// backdrop.
+    /// Portrait: a share of the height (a 2:3 poster capped so the title
+    /// stays on-screen). Landscape: the whole window under the safe areas.
+    /// Zero for the wide iPad layout, which draws the backdrop.
     private func posterHeroHeight(in size: CGSize, safeArea: EdgeInsets) -> CGFloat {
         #if os(iOS)
         guard posterURL != nil, !DetailLayout.usesLeadingColumn(horizontalSizeClass) else { return 0 }
@@ -309,9 +265,8 @@ struct DetailPageScaffold<Content: View>: View {
         #endif
     }
 
-    /// Where the content begins. Over a poster hero the block rises into
-    /// the poster's fade; the poster ignores the safe area and the scroll
-    /// view does not, so the inset is taken from the same origin.
+    /// Where the content begins. The poster ignores the safe area and the
+    /// scroll view does not, so subtract the safe top.
     private func heroSpace(posterHeight: CGFloat, isLandscape: Bool, safeTop: CGFloat) -> CGFloat {
         #if os(iOS)
         guard posterHeight > 0 else {
@@ -329,10 +284,8 @@ struct DetailPageScaffold<Content: View>: View {
 
 #if os(iOS)
 extension VerticalAlignment {
-    /// The landscape phone's action row aligns on this: the Resume pill's
-    /// centre, which its resume caption hangs under, so the circles beside
-    /// it sit level with the pill rather than with the pill-and-caption
-    /// block. Views that set no guide fall back to their own centre.
+    /// The Resume pill's centre, so the circles sit level with the pill and
+    /// not with the pill-and-caption block.
     private enum DetailPillCenter: AlignmentID {
         static func defaultValue(in context: ViewDimensions) -> CGFloat {
             context[VerticalAlignment.center]
@@ -341,12 +294,9 @@ extension VerticalAlignment {
     static let detailPillCenter = VerticalAlignment(DetailPillCenter.self)
 }
 
-/// A glass circle for the phone's row of secondary detail actions.
-/// Built on the interactive glass effect rather than `.buttonStyle(.glass)`
-/// with a circular border shape: that style draws its pressed highlight as
-/// a capsule sized to the label, not to the circle, so a press showed a
-/// lozenge through the circle on iOS 26.0 and 26.5. The interactive effect
-/// brightens and lifts the circle itself.
+/// A glass circle for the phone's secondary detail actions. Not
+/// `.buttonStyle(.glass)`: on iOS 26 its press highlight is a capsule, not
+/// the circle.
 struct DetailCircleButton<Label: View>: View {
     let action: () -> Void
     @ViewBuilder let label: Label
@@ -362,9 +312,7 @@ struct DetailCircleButton<Label: View>: View {
     }
 }
 
-/// The menu-shaped sibling of `DetailCircleButton`: the download control's
-/// circles open a menu rather than firing an action, and they
-/// press as circles for the same reason.
+/// `DetailCircleButton` for a menu.
 struct DetailCircleMenu<Content: View, Label: View>: View {
     @ViewBuilder let content: Content
     @ViewBuilder let label: Label
@@ -384,11 +332,7 @@ struct DetailCircleMenu<Content: View, Label: View>: View {
 #endif
 
 extension View {
-    /// A detail page on iPhone and iPad is the immersive one: artwork edge to
-    /// edge, one decision to make. The floating tab bar has no place over it
-    /// and is hidden for the page's lifetime, the way Photos hides it over a
-    /// photo. Back is the way out; the bar returns with the list
-    /// it belongs to. tvOS has no tab bar to hide inside a pushed page.
+    /// Hides the tab bar on touch detail pages; it returns on Back.
     func detailPageChrome() -> some View {
         #if os(iOS)
         toolbarVisibility(.hidden, for: .tabBar)
@@ -399,16 +343,13 @@ extension View {
 }
 
 #if os(iOS)
-/// The one question every touch detail component asks: is this the wide
-/// composition (a regular-width iPad window, laid out like the TV) or the
-/// compact one (a phone, or an iPad window narrow enough to read like one)?
+/// Wide (regular-width iPad, laid out like the TV) or compact touch layout.
 enum DetailLayout {
     static func usesLeadingColumn(_ horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
         UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
     }
 
-    /// A landscape phone: the poster is the whole hero and the title,
-    /// actions and Play share one row along its lower part.
+    /// A landscape phone: title, actions and Play share one row.
     static func usesLandscapeRow(
         _ horizontalSizeClass: UserInterfaceSizeClass?,
         _ verticalSizeClass: UserInterfaceSizeClass?
@@ -416,8 +357,6 @@ enum DetailLayout {
         !usesLeadingColumn(horizontalSizeClass) && verticalSizeClass == .compact
     }
 
-    /// Where the title art sits: centred under the portrait phone's hero,
-    /// leading in the landscape row and the iPad's column.
     static func titleAlignment(
         _ horizontalSizeClass: UserInterfaceSizeClass?,
         _ verticalSizeClass: UserInterfaceSizeClass?
@@ -429,18 +368,13 @@ enum DetailLayout {
 }
 #endif
 
-/// The actions block of a detail page: one primary pill and some secondary
-/// controls. Film, series and Seerr pages each carried their own copy, and
-/// Seerr's fell behind when the touch pages were redesigned.
+/// A detail page's actions, shared by film, series and Seerr pages.
 ///
 /// - tvOS and regular-width iPad: one row, primary first so it takes first
 ///   focus, accessory beneath.
-/// - Landscape phone: secondary controls, accessory, then primary on one line
-///   along the hero's lower part, aligned on the primary's
-///   `detailPillCenter` so a caption under the pill does not pull the circles
-///   off level.
-/// - Portrait phone: primary alone and wide, secondary controls and accessory
-///   in a row beneath.
+/// - Landscape phone: secondary, accessory, then primary on one line,
+///   aligned on `detailPillCenter`.
+/// - Portrait phone: primary alone and wide, the rest in a row beneath.
 ///
 /// The accessory is the series page's season picker.
 struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View {
@@ -482,9 +416,8 @@ struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View
                 accessory
             }
         } else if DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass) {
-            // A plain row, not the adaptive stack: when the line is tight
-            // the title art beside it gives way, rather than the accessory
-            // dropping under the circles.
+            // A plain row: when tight, the title art gives way instead of
+            // the accessory wrapping.
             HStack(alignment: .detailPillCenter, spacing: Metrics.detailActionSpacing) {
                 secondary
                 accessory
@@ -505,15 +438,11 @@ struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View
 }
 
 extension View {
-    /// The label of a detail page's one hero action (Play, Resume, Request,
-    /// Open in Lagoon): `title3` on touch, always on one line, and capped in
-    /// width on a phone so it is big without becoming a bar. The
-    /// TV's glass pill sizes itself.
+    /// The label of a detail page's hero action (Play, Resume, Request...).
     func detailPrimaryLabel() -> some View {
         modifier(DetailPrimaryLabelModifier())
     }
 
-    /// The button around that label: glass, and extra large on touch.
     func detailPrimaryButton() -> some View {
         #if os(iOS)
         buttonStyle(.glass)
@@ -529,8 +458,7 @@ private struct DetailPrimaryLabelModifier: ViewModifier {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
-    /// Natural in the wide iPad row; capped on a phone, tighter still in
-    /// the landscape row it shares with the title art and the circles.
+    /// Uncapped in the wide iPad row.
     private var maxWidth: CGFloat? {
         if DetailLayout.usesLeadingColumn(horizontalSizeClass) { return nil }
         return DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
@@ -543,9 +471,7 @@ private struct DetailPrimaryLabelModifier: ViewModifier {
         #if os(iOS)
         content
             .font(.title3.weight(.semibold))
-            // One line always: a Label squeezed for width stacks its icon
-            // over its text, which folded the landscape row's pill into a
-            // column once four circles shared the line.
+            // A squeezed Label stacks its icon over its text.
             .fixedSize()
             .frame(maxWidth: maxWidth)
             .padding(.vertical, Metrics.Space.xs)
@@ -555,22 +481,16 @@ private struct DetailPrimaryLabelModifier: ViewModifier {
     }
 }
 
-/// Title, metadata, capability badges, actions and synopsis — the block that
-/// sits at the bottom of a detail page's first screen.
-///
-/// No poster: the backdrop is the artwork here, which replaced an earlier
-/// poster-left composition. Everything is left-aligned on the screen gutter
-/// so title, badges, buttons and synopsis share one edge.
+/// Title, metadata, badges, actions and synopsis at the bottom of a detail
+/// page's first screen.
 struct DetailHeader<Buttons: View>: View {
     let item: MediaItem
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
-    /// On a series page, the episode a Play press would start. Its label and
-    /// synopsis take over from the show's, because what you're deciding about
-    /// is the next episode, not the premise of the series (Infuse does the
-    /// same). The title art stays the show's — that's the page's identity.
+    /// On a series page, the episode Play would start. Its label and synopsis
+    /// replace the show's; the title art stays the show's.
     var upNext: MediaItem?
     /// Keep the synopsis's height fixed while `upNext` changes.
     var reservesOverviewLines = false
@@ -604,7 +524,6 @@ struct DetailHeader<Buttons: View>: View {
         }
     }
 
-    /// Runtime first, then year — the reference's order.
     private var factTokens: [String] {
         var parts: [String] = []
         if let episodeLabel = item.episodeLabel {
@@ -622,16 +541,13 @@ struct DetailHeader<Buttons: View>: View {
         return parts
     }
 
-    /// Only the single-item fetch carries MediaSources, so this is empty
-    /// until the detail page's own request lands — the tokens simply appear.
+    /// Empty until the single-item fetch lands; only it carries MediaSources.
     private var qualityTokens: [String] {
         item.mediaSources?.first?.qualityTokens ?? []
     }
 }
 
-/// The common visual language for both Jellyfin and Seerr media details.
-/// The services supply different title artwork and actions, while all of the
-/// information hierarchy and platform-specific layout remains one component.
+/// The detail header shared by Jellyfin and Seerr pages.
 struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     let subtitle: String?
     let factTokens: [String]
@@ -672,15 +588,10 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
-    /// A landscape phone: title art and the actions share one row over the
-    /// poster's lower part, and everything else follows below the fold.
     private var usesLandscapeRow: Bool {
         DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
     }
 
-    /// A regular-width iPad window gets the TV's composition: a leading
-    /// information column beside the artwork. A phone keeps one full-width
-    /// column with the title and facts centred over the poster hero.
     private var usesLeadingColumn: Bool {
         DetailLayout.usesLeadingColumn(horizontalSizeClass)
     }
@@ -713,13 +624,8 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
             buttons
                 .padding(.top, Metrics.Space.xs)
             #else
-            // Touch order: the decision first. Title, facts and
-            // the actions form one block over the artwork, and the synopsis
-            // follows in full below it; a synopsis you have to expand was
-            // the one thing every viewer tapped and nobody wanted to. The
-            // stack's own alignment centres the block on a phone, so an
-            // absent row costs nothing and every client of this header,
-            // Seerr and collections included, gets the same composition.
+            // Touch: title, facts and actions over the artwork, then the
+            // full synopsis below (no expand button).
             if usesLandscapeRow {
                 HStack(alignment: .center, spacing: Metrics.Space.xl) {
                     title
@@ -746,8 +652,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
             #endif
         }
         #if os(iOS)
-        // Let SwiftUI size the glass labels, circles and hit areas together.
-        // This also covers the synopsis button in the header.
+        // Sizes the glass labels, circles and hit areas together.
         .controlSize(.large)
         .frame(
             maxWidth: usesLeadingColumn ? Metrics.expandedDetailColumnWidth : .infinity,
@@ -787,17 +692,13 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     @ViewBuilder
     private var facts: some View {
         #if os(tvOS)
-        // One spaced line at 10 feet: runtime, year, certification, then
-        // playback capabilities.
         HStack(spacing: Metrics.Space.l) {
             primaryFactViews
             qualityFactViews
         }
         .font(.callout)
         #else
-        // Runtime/year/rating and playback capabilities are different kinds
-        // of information. Separate rows let every token stay intact instead
-        // of producing "1 h 56" / "min" and "TrueHD" / "7.1" fragments.
+        // Separate flow rows keep each token whole ("1 h 56 min", "TrueHD 7.1").
         VStack(alignment: .leading, spacing: Metrics.Space.s) {
             if !factTokens.isEmpty || officialRating != nil {
                 MetadataFlowLayout(alignment: flowAlignment) {
@@ -902,17 +803,11 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     }
 }
 
-/// The synopsis. Three lines at 10 feet, where the page is a glance and the
-/// rest of the block has to fit beside the artwork; the whole text on touch,
-/// where the page scrolls and an expand button only stood between the viewer
-/// and the paragraph they had already started reading.
+/// The synopsis: three lines on tvOS, the whole text on touch.
 ///
-/// On a series page the text follows the focused episode, and the synopsis
-/// sits between the facts and the Play row, so its height moved everything
-/// beneath it, the episode rail being browsed included, by up to two lines
-/// per step. `reservesLines` keeps all three lines' worth of
-/// height whatever the current text needs. Touch shows the whole synopsis
-/// and changes it only after playback, so it takes no reservation.
+/// `reservesLines` keeps three lines of height on tvOS, so a series page's
+/// synopsis, which follows the focused episode, does not shift the episode
+/// rail below it.
 private struct DetailOverview: View {
     let text: String
     var reservesLines = false
@@ -932,17 +827,10 @@ private struct DetailOverview: View {
     }
 }
 
-/// The title, as its own artwork when the server has a logo for it and as
-/// type when it doesn't. Logos are transparent PNGs at wildly varying
-/// aspect ratios, so this is a box they fit inside rather than a fixed
-/// frame — the height is the constraint that keeps a wide wordmark and a
-/// stacked one looking like the same design.
+/// The title as its logo when the server has one, otherwise as type.
 struct TitleArtView: View {
     let item: MediaItem
-    /// The hero wants a smaller box than a detail page does.
     var maxHeight: CGFloat = Metrics.logoMaxHeight
-    /// Where the art sits in its box, and how a wrapped title is set:
-    /// centred under the phone's poster hero, leading everywhere else.
     var alignment: HorizontalAlignment = .leading
 
     @Environment(SessionStore.self) private var session
@@ -957,10 +845,8 @@ struct TitleArtView: View {
     }
 }
 
-/// A title's logo where there is one, and the title set in type where there
-/// is not. Split out of `TitleArtView` so the hero can use it for sources
-/// that resolve their own artwork — Seerr serves no logo images at all, so
-/// Discover's hero always takes the type path.
+/// `TitleArtView` for sources that resolve their own artwork URL, such as
+/// Seerr (which has no logos, so it always shows type).
 struct TitleArtImage: View {
     let url: URL?
     let title: String
@@ -982,8 +868,7 @@ struct TitleArtImage: View {
                     .resizable()
                     .scaledToFit()
             } placeholder: {
-                // Type, not a grey box: a placeholder that reserves the
-                // logo's full height would leave a hole on every load.
+                // Type, not a box: reserving the logo's height leaves a hole.
                 titleText
             }
             .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: maxHeight, alignment: Alignment(horizontal: alignment, vertical: .center))
@@ -1003,43 +888,36 @@ struct TitleArtImage: View {
     }
 }
 
-/// One person in the cast strip, from whichever service supplied them: a
-/// Jellyfin `Person` on a library title, TMDB's credits on a Seerr title.
+/// One person in the cast strip, from Jellyfin or from Seerr's TMDB credits.
 struct CastCredit: Identifiable, Hashable {
     let id: String
     let name: String
-    /// The character for actors; the job itself for crew, so a director
-    /// doesn't sit there with a blank line under them.
+    /// The character for actors, the job for crew.
     let credit: String?
     let imageURL: URL?
 }
 
-/// Cast strip. Deliberately **not** focusable and not scrolling: there's no
-/// person screen to navigate to, and a rail you can focus but not act on is
-/// worse than a short honest one. It sits between the buttons and the
-/// related rail, so moving focus down scrolls it into view.
+/// Cast strip. Deliberately **not** focusable and not scrolling on tvOS:
+/// there is no person screen to open. Focus moving past it scrolls it into
+/// view.
 struct CastStrip: View {
     private let people: [Person]
     private let credits: [CastCredit]?
 
     @Environment(SessionStore.self) private var session
 
-    /// A library title's cast, with headshots from the Jellyfin server.
     init(people: [Person]) {
         self.people = people
         self.credits = nil
     }
 
-    /// A cast already resolved to names and pictures, for titles that are
-    /// not in the library.
+    /// A cast already resolved, for titles not in the library.
     init(credits: [CastCredit]) {
         self.people = []
         self.credits = credits
     }
 
-    /// Actors first, then crew — the server returns them roughly in that
-    /// order already, so this only drops the ones with no headshot, which
-    /// would otherwise be a row of grey circles.
+    /// Drops people with no headshot. Server order is kept.
     private var cast: [CastCredit] {
         if let credits {
             return credits.filter { $0.imageURL != nil }
@@ -1064,8 +942,7 @@ struct CastStrip: View {
                     .padding(.leading, Metrics.screenGutter)
 
                 #if os(tvOS)
-                // Fixed row: eight fit across a 16:9 screen, and a rail you
-                // can focus but not act on is worse than a short honest one.
+                // Fixed row: eight fit across the screen.
                 HStack(alignment: .top, spacing: Metrics.cardSpacing) {
                     ForEach(cast.prefix(Metrics.castCount)) { member in
                         castMember(member)
@@ -1075,9 +952,7 @@ struct CastStrip: View {
                 .padding(.horizontal, Metrics.screenGutter)
                 .padding(.top, Metrics.Space.l)
                 #else
-                // Touch scrolls without needing focus, so the phone shows
-                // the whole cast rather than the four that would fit — and
-                // four at this width would overflow the screen anyway.
+                // Touch scrolls without focus, so show everyone.
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .top, spacing: Metrics.cardSpacing) {
                         ForEach(cast) { member in
@@ -1117,8 +992,6 @@ struct CastStrip: View {
             .accessibilityHidden(true)
 
             VStack(spacing: Metrics.Space.hair) {
-                // Two lines for the name: at eight across there is width to
-                // spare, and "Elijah Isaiah…" reads worse than a wrap.
                 Text(member.name)
                     .font(.caption.weight(.semibold))
                     .lineLimit(2)

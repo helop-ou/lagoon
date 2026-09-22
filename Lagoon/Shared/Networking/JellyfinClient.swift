@@ -9,10 +9,8 @@ nonisolated enum JellyfinError: LocalizedError {
     case invalidServerURL
     case unauthorized
     case sessionExpired
-    /// `message` is whatever the server said in the body. Jellyfin wraps a
-    /// provider's exception into a 500 and puts the real reason there — an
-    /// exhausted OpenSubtitles quota, for instance — so discarding it left
-    /// the UI guessing between causes it could have simply read.
+    /// `message` is the server's body text, which often holds the real
+    /// reason behind a 500 (an exhausted provider quota, say).
     case server(status: Int, message: String? = nil)
     case unplayable
 
@@ -35,8 +33,8 @@ nonisolated enum JellyfinError: LocalizedError {
 
 /// Thin async HTTP client for a single Jellyfin server.
 ///
-/// Jellyfin JSON is PascalCase on the wire; the decoder and encoder convert
-/// key casing globally so model types stay camelCase with no CodingKeys.
+/// Jellyfin JSON is PascalCase; the decoder and encoder convert key casing,
+/// so models never add CodingKeys for casing.
 final class JellyfinClient {
     static let clientName = "Lagoon"
 
@@ -59,27 +57,15 @@ final class JellyfinClient {
     /// Playback sessions whose stop report is still in flight. Screens that
     /// re-fetch after the player closes wait on it first.
     let playbackReports = PlaybackReportLedger()
-    /// Resolved once per session: sign-in carries the policy, a restored
-    /// token does not, so this is filled from whichever arrives first.
+    /// Policy flags, resolved once per session from sign-in or, for a
+    /// restored token, from the first `Users/Me`.
     private var subtitleManagementAllowed: Bool?
-    /// Resolved once per session, same as subtitle management, but for
-    /// "Allow media downloading". Unlike subtitles, an unknown
-    /// answer must not let a download start, so this defaults to false
-    /// rather than true; see `canDownloadContent()`.
     private var contentDownloadingAllowed: Bool?
-    /// Resolved once per session, same pattern as content downloading, but
-    /// for "Allow video transcoding": whether the server will build a
-    /// High/Standard transcoded download for this account. Same
-    /// opposite-of-subtitles default; see `canTranscodeForDownload()`.
     private var videoTranscodingAllowed: Bool?
 
-    /// The value `contentDownloadingAllowed` holds right now, for view code
-    /// that must answer synchronously while building a menu body. `nil`
-    /// until something has resolved it this session; a `.task` should call
-    /// `canDownloadContent()` once to warm it.
+    /// For view code that must answer synchronously, e.g. a menu body. `nil`
+    /// until resolved; a `.task` should call `canDownloadContent()` to warm it.
     var cachedContentDownloadingAllowed: Bool? { contentDownloadingAllowed }
-    /// The value `videoTranscodingAllowed` holds right now; see
-    /// `cachedContentDownloadingAllowed`.
     var cachedVideoTranscodingAllowed: Bool? { videoTranscodingAllowed }
 
     private let session: URLSession
@@ -110,8 +96,7 @@ final class JellyfinClient {
         self.deviceId = deviceId
         let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
-        // Nothing this session fetches is worth caching (images and the
-        // playback cache have their own sessions), and see `request(for:)`.
+        // API calls bypass the URL cache; see `request(for:)`.
         config.urlCache = nil
         session = URLSession(configuration: config)
         downloads = BoundedDownload(configuration: config)
@@ -142,8 +127,7 @@ final class JellyfinClient {
         videoTranscodingAllowed = nil
     }
 
-    /// An independent client for work that may outlive a view/account change.
-    /// It never consults or mutates the active client's later credentials.
+    /// An independent copy for work that may outlive an account change.
     func sessionSnapshot() -> JellyfinClient {
         let copy = JellyfinClient(deviceId: deviceId, sessionConfiguration: session.configuration)
         if let serverURL { copy.configure(serverURL: serverURL) }
@@ -151,11 +135,9 @@ final class JellyfinClient {
         return copy
     }
 
-    /// Whether this account may use Jellyfin's remote-subtitle endpoints.
-    /// Every one of them answers 403 without the permission, so asking once
-    /// is what lets the UI say so plainly instead of failing per result.
-    /// An unreachable server answers `true`: a network problem must not be
-    /// reported to the viewer as a permissions problem.
+    /// Whether this account may use the remote-subtitle endpoints (403
+    /// otherwise). An unreachable server answers `true`: a network problem
+    /// must not read as a permissions problem.
     func canManageSubtitles() async -> Bool {
         if let subtitleManagementAllowed { return subtitleManagementAllowed }
         guard let user = try? await currentUser() else { return true }
@@ -164,10 +146,8 @@ final class JellyfinClient {
         return allowed
     }
 
-    /// Re-asks the server for the account's subtitle permission, for the
-    /// Settings status that must reflect a flag an administrator turned on
-    /// after sign-in. nil when the server could not be reached, so
-    /// the caller can say "couldn't check" rather than "not enabled".
+    /// Re-asks the server, for a flag changed after sign-in. nil when
+    /// unreachable, so Settings can say "couldn't check".
     func refreshSubtitlePermission() async -> Bool? {
         guard let user = try? await currentUser() else { return nil }
         let allowed = user.policy?.allowsSubtitleManagement ?? true
@@ -175,26 +155,20 @@ final class JellyfinClient {
         return allowed
     }
 
-    /// Whether the account may take a title off the server at all.
-    /// Opposite default from subtitles: since a network problem here must
-    /// not let a download start against a server that would refuse it, an
-    /// answer that was never learned and a refresh that fails both mean no,
-    /// not yes. Administrators pass regardless of the flag, same reasoning
-    /// as `allowsSubtitleManagement`.
+    /// Whether the account may download. Unlike subtitles, unknown means no.
+    /// Administrators always pass.
     func canDownloadContent() async -> Bool {
         if let contentDownloadingAllowed { return contentDownloadingAllowed }
         return await refreshContentDownloadingPermission() ?? false
     }
 
-    /// Re-asks the server, for a permission an administrator could have
-    /// turned on after sign-in. Returns the last known value (nil the first
-    /// time) when the server can't be reached, rather than flipping to no.
+    /// Re-asks the server. When unreachable, returns the last known value
+    /// (nil the first time) rather than flipping to no.
     @discardableResult
     func refreshContentDownloadingPermission() async -> Bool? {
         let identity = sessionIdentity
         let user = try? await currentUser()
-        // A failed request can be an old session's cancelled response. Its
-        // caller must not receive the newly selected account's cached policy.
+        // Never hand an old session's caller the new account's policy.
         guard identity == sessionIdentity, !Task.isCancelled else { return nil }
         guard let user else { return contentDownloadingAllowed }
         if user.policy?.isAdministrator == true {
@@ -208,19 +182,14 @@ final class JellyfinClient {
         return allowed ?? contentDownloadingAllowed
     }
 
-    /// Whether the account may have the server build a transcoded download
-    /// (High/Standard quality) for offline playback, rather than only the
-    /// original file. Same opposite-default reasoning as
-    /// `canDownloadContent()`: an unknown or unreachable answer means no.
-    /// Administrators pass regardless of the flag.
+    /// Whether the server will build a High/Standard transcoded download.
+    /// Unknown means no; administrators always pass.
     func canTranscodeForDownload() async -> Bool {
         if let videoTranscodingAllowed { return videoTranscodingAllowed }
         return await refreshVideoTranscodingPermission() ?? false
     }
 
-    /// Re-asks the server, for a permission an administrator could have
-    /// turned on after sign-in. Returns the last known value (nil the first
-    /// time) when the server can't be reached, rather than flipping to no.
+    /// Same contract as `refreshContentDownloadingPermission()`.
     @discardableResult
     func refreshVideoTranscodingPermission() async -> Bool? {
         let identity = sessionIdentity
@@ -287,15 +256,10 @@ final class JellyfinClient {
         return userId
     }
 
-    /// Resolves a server-relative route Jellyfin hands back inside a
-    /// response body — a `TranscodingUrl` or a subtitle `DeliveryUrl`, in
-    /// absolute-path form with its own query — against the configured
-    /// server, keeping a reverse-proxy base path such as
-    /// `https://host/jellyfin`. `URL(string:relativeTo:)` discards that
-    /// path for an absolute-path reference, which is how every transcode
-    /// and external subtitle on a base-path server resolved to the wrong
-    /// route until the regression lane hit demo.jellyfin.org/stable.
-    /// A reference that is already absolute is returned as given.
+    /// Resolves a route from a response body (`TranscodingUrl`, subtitle
+    /// `DeliveryUrl`) against the server, keeping a reverse-proxy base path
+    /// like `https://host/jellyfin`. Do not use `URL(string:relativeTo:)`:
+    /// it drops that path. Absolute references are returned as given.
     func serverRelativeURL(_ reference: String) -> URL? {
         guard let serverURL, let reference = URLComponents(string: reference) else { return nil }
         if reference.scheme != nil || reference.host != nil {
@@ -325,10 +289,8 @@ final class JellyfinClient {
         return url
     }
 
-    /// Builds a route from individually encoded path components. Opaque API
-    /// ids (notably subtitle-provider ids) may contain `/`, `?`, `%`, or `#`;
-    /// interpolating one into a path would change the route or double-encode
-    /// it instead of sending it as the single component Jellyfin expects.
+    /// Encodes each component on its own. Opaque ids (subtitle-provider ids)
+    /// can contain `/`, `?`, `%` or `#`, which interpolation would break.
     func url(pathComponents: [String], query: [URLQueryItem] = []) throws -> URL {
         guard let serverURL,
               var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false) else {
@@ -350,9 +312,8 @@ final class JellyfinClient {
         return url
     }
 
-    /// `probe` marks a request whose failure is an answer, not a fault: an
-    /// optional plugin route, a newer-server endpoint. It is still thrown
-    /// to the caller but never reported as an incident.
+    /// `probe`: failure is an answer (optional plugin, newer endpoint). It
+    /// still throws but is never reported as an incident.
     func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [], probe: Bool = false) async throws -> T {
         try await send(request(for: url(path: path, query: query), method: "GET", probe: probe))
     }
@@ -447,10 +408,8 @@ final class JellyfinClient {
     ) -> PreparedRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
-        // Never answer an API call from the HTTP cache: these responses carry
-        // per-user state (resume points, played flags) that the app has just
-        // changed with a report, and a cached copy is exactly the position
-        // from before.
+        // Never answer an API call from the HTTP cache: a cached copy holds
+        // resume points and played flags from before the last report.
         request.cachePolicy = .reloadIgnoringLocalCacheData
         if let timeout { request.timeoutInterval = timeout }
         request.setValue(authorizationHeader(token: authenticated ? accessToken : nil), forHTTPHeaderField: "Authorization")
@@ -506,8 +465,8 @@ final class JellyfinClient {
             guard let http = response as? HTTPURLResponse else { throw JellyfinError.server(status: 0) }
             status = http.statusCode
         }
-        // A response belongs to the session captured before suspension. Even
-        // a successful old response must not update the new account's screen.
+        // Even a successful response from an old session must not reach the
+        // new account's screen.
         if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
         switch status {
         case 200...299:
@@ -531,9 +490,8 @@ final class JellyfinClient {
         }
     }
 
-    /// Pulls a human sentence out of an error body. Jellyfin answers with
-    /// problem-details JSON, plain text, or an HTML page depending on where
-    /// the failure happened; only the first two say anything worth showing.
+    /// A readable sentence from an error body: problem-details JSON or plain
+    /// text. HTML pages are ignored.
     nonisolated static func serverMessage(from data: Data) -> String? {
         guard !data.isEmpty, data.count < 64 * 1_024 else { return nil }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -545,7 +503,6 @@ final class JellyfinClient {
             return nil
         }
         guard let text = String(data: data, encoding: .utf8) else { return nil }
-        // An HTML error page is the server's chrome, not its explanation.
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("<") else { return nil }
         return condensed(text)
     }
@@ -620,15 +577,8 @@ extension JellyfinClient {
                                method: "GET", authenticated: false))
     }
 
-    /// Approves a Quick Connect code on behalf of the signed-in user — the
-    /// other half of the handshake, performed by a client that is *already*
-    /// authenticated. Normally that is your phone approving a television;
-    /// Lagoon uses it to approve a code Jellyseerr asked Jellyfin for, which
-    /// is how Seerr can be signed into without a password.
-    ///
-    /// Verified against Jellyfin 10.11: a client may authorise a code for its
-    /// own user, and the requesting side's `Connect` immediately reports
-    /// authenticated.
+    /// Approves a Quick Connect code as the signed-in user. Lagoon uses it
+    /// to approve Jellyseerr's code, signing into Seerr without a password.
     @discardableResult
     func authorizeQuickConnect(code: String) async throws -> Bool {
         try await post("QuickConnect/Authorize", query: [URLQueryItem(name: "code", value: code)])

@@ -8,9 +8,8 @@ extension JellyfinClient {
         let deviceProfile: DeviceProfile.Profile
         let autoOpenLiveStream: Bool
         let maxStreamingBitrate: Int
-        /// Jellyfin defaults all four of these to true. They are sent
-        /// explicitly so a retry can withdraw them one rung at a time
-        /// rather than restating the whole profile.
+        /// Jellyfin defaults these to true. Sent explicitly so each ladder
+        /// rung can withdraw them.
         let enableDirectPlay: Bool
         let enableDirectStream: Bool
         let allowVideoStreamCopy: Bool
@@ -66,18 +65,14 @@ extension JellyfinClient {
         let isHearingImpaired: Bool
     }
 
-    /// Negotiates a stream. `delivery` is how hard the server is being asked
-    /// to work: `.negotiated` lets it pick freely (direct play for anything
-    /// inside the profile), while the lower rungs withdraw permissions after
-    /// a playback failure so it reaches for a remux, then a re-encode.
+    /// Negotiates a stream. `.negotiated` lets the server pick freely; lower
+    /// rungs withdraw permissions after a failure, forcing a remux, then a
+    /// re-encode.
     func playbackInfo(
         itemId: String,
         delivery: PlaybackDelivery = .negotiated
     ) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
-        // The rung shapes the profile as well as the flags: the bottom one
-        // is the only place the server re-encodes, and it is bounded so it
-        // asks for something an encoder can actually produce in realtime.
         #if DEBUG && targetEnvironment(simulator)
         let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
             ? DeviceProfile.simulatorRegression
@@ -106,10 +101,9 @@ extension JellyfinClient {
                 .directPlay
             )
         }
-        // Direct stream: the bytes are playable as-is but must be served
-        // through the server (remote/.strm sources, static-bitrate limits).
-        // jellyfin-web requests stream.{container} with static=true here;
-        // the container can arrive as an ffprobe list ("mov,mp4,m4a").
+        // Direct stream: playable bytes served through the server (.strm,
+        // static-bitrate limits). The container can be an ffprobe list
+        // ("mov,mp4,m4a"); use the first.
         if source.supportsDirectStream == true, accessToken != nil,
            let container = source.container?.split(separator: ",").first {
             return (
@@ -118,22 +112,18 @@ extension JellyfinClient {
             )
         }
         if let transcodingUrl = source.transcodingUrl, serverURL != nil {
-            // TranscodingUrl arrives server-relative, query string included,
-            // and must keep the server's base path.
             guard let resolvedURL = serverRelativeURL(transcodingUrl) else {
                 throw JellyfinError.unplayable
             }
-            // The server may have stamped its own api_key/ApiKey into this
-            // URL; strip it rather than send two credentials, and never
-            // touch a cross-origin transcode URL at all.
+            // Strip a server-stamped api_key/ApiKey; the header carries the
+            // credential. Cross-origin URLs are left alone.
             let url = mediaRequestAuthorization()?.sanitizedURL(resolvedURL) ?? resolvedURL
             return (url, .transcode)
         }
         throw JellyfinError.unplayable
     }
 
-    /// Resolves an external subtitle stream's DeliveryUrl (server-relative,
-    /// not always carrying credentials) into a fetchable absolute URL.
+    /// An external subtitle's DeliveryUrl as a fetchable absolute URL.
     func externalSubtitleURL(deliveryUrl: String?) -> URL? {
         guard let deliveryUrl, serverURL != nil, accessToken != nil,
               let url = serverRelativeURL(deliveryUrl) else { return nil }
@@ -142,9 +132,8 @@ extension JellyfinClient {
 
     // MARK: - Remote subtitles
 
-    /// Searches every subtitle provider configured on the Jellyfin server.
-    /// Jellyfin expects an ISO language identifier and preserves provider
-    /// ranking in the returned array.
+    /// Searches the server's subtitle providers. `language` is an ISO code;
+    /// results keep provider ranking.
     func searchRemoteSubtitles(itemId: String, language: String) async throws -> [RemoteSubtitleInfo] {
         try await get(
             ["Items", itemId, "RemoteSearch", "Subtitles", language],
@@ -152,9 +141,8 @@ extension JellyfinClient {
         )
     }
 
-    /// Asks Jellyfin to download and attach a result. The file belongs to
-    /// the server/library after this point; Lagoon then refreshes
-    /// PlaybackInfo to obtain the authoritative stream index and URL.
+    /// Asks Jellyfin to download and attach a result. Refresh PlaybackInfo
+    /// afterwards for the real stream index and URL.
     func downloadRemoteSubtitle(itemId: String, subtitleId: String) async throws {
         try await postVoid(
             ["Items", itemId, "RemoteSearch", "Subtitles", subtitleId],
@@ -162,15 +150,12 @@ extension JellyfinClient {
         )
     }
 
-    /// Fetches the provider result itself. This is a live-playback fallback
-    /// for servers that accept the save request but fail to expose the new
-    /// sidecar during their queued library refresh.
+    /// Fetches the provider file directly: a fallback for servers that
+    /// accept the save but do not expose the new sidecar in time.
     func remoteSubtitleFile(subtitleId: String) async throws -> (url: URL, data: Data) {
         guard accessToken != nil else { throw JellyfinError.notConfigured }
         let components = ["Providers", "Subtitles", "Subtitles", subtitleId]
-        // The caller always has the bytes already (`getData` below); this URL
-        // is kept only as the track's display/identity value, so it carries
-        // no credential at all rather than one more copy of the token.
+        // Identity only; the bytes come from `getData`, so no credential.
         let deliveryURL = try url(pathComponents: components)
         return (
             deliveryURL,
@@ -178,10 +163,9 @@ extension JellyfinClient {
         )
     }
 
-    /// Persists provider bytes already fetched for immediate playback. This
-    /// avoids asking the provider for the same file a second time and avoids
-    /// Jellyfin's remote-download endpoint silently returning 204 after an
-    /// internal provider/save failure (the behavior in Jellyfin 10.11.x).
+    /// Uploads provider bytes already fetched. Avoids a second provider
+    /// request, and Jellyfin 10.11's remote download, which can return 204
+    /// after failing to save.
     func uploadSubtitle(
         itemId: String,
         data: Data,
@@ -219,14 +203,10 @@ extension JellyfinClient {
         return query
     }
 
-    /// Every media consumer — the FFmpeg transport, the playback cache, the
-    /// subtitle loader, the trickplay loader — attaches the credential itself
-    /// via `MediaRequestAuthorization`, so no URL Lagoon builds carries the
-    /// token (CFNetwork logs a failed task's full URL into the unified log, and
-    /// a query token would leak into diagnostics where the header never does).
-    /// Server-provided playback and subtitle URLs may still contain either
-    /// legacy spelling (`api_key`/`ApiKey`); `sanitizedURL(_:)` strips it on
-    /// the Jellyfin origin and leaves any other origin's URL untouched.
+    // No URL Lagoon builds carries the token: media consumers send it as a
+    // header via `MediaRequestAuthorization`, because CFNetwork logs failed
+    // URLs. `sanitizedURL(_:)` strips `api_key`/`ApiKey` from server URLs on
+    // the Jellyfin origin.
 
     // MARK: - Transport extras
 
@@ -234,9 +214,8 @@ extension JellyfinClient {
     nonisolated struct PlaybackExtras: Decodable {
         let chapters: [ChapterInfo]
         let originalLanguage: String?
-        /// Keyed by media source id, then by resolution width — verbatim,
-        /// since the decoder's PascalCase strategy leaves dictionary keys
-        /// alone (only `CodingKey`s are converted).
+        /// Media source id, then width. Dictionary keys arrive verbatim; the
+        /// key strategy only converts `CodingKey`s.
         let trickplay: [String: [String: TrickplayTileInfo]]
 
         static let none = PlaybackExtras(chapters: [], originalLanguage: nil, trickplay: [:])
@@ -259,26 +238,20 @@ extension JellyfinClient {
         }
     }
 
-    /// Fetched separately from `playbackInfo` (which carries neither) and
-    /// from the item the caller already holds: playback starts from rails
-    /// too, and their list requests don't ask for these fields. Never
-    /// throws — both features are garnish, and a server that hasn't
-    /// generated them must simply go without.
+    /// Fetched separately: neither `playbackInfo` nor rail items carry these.
+    /// Never throws; playback goes on without them.
     func playbackExtras(itemId: String) async -> PlaybackExtras {
         guard let userId else { return .none }
         return (try? await get("Users/\(userId)/Items/\(itemId)")) ?? .none
     }
 
-    /// Resolves the trickplay tiles for a media source into everything the
-    /// transport needs, or nil when the server has none for it.
+    /// Trickplay tiles for a media source, or nil when there are none.
     func trickplaySource(itemId: String, mediaSourceId: String, extras: PlaybackExtras) -> TrickplaySource? {
-        // Match the source's own tiles; fall back to the only entry when the
-        // keys disagree (transcodes report a different source id than the
-        // file the tiles were generated from).
+        // Fall back to the only entry: transcodes report a different
+        // source id than the tiles were made from.
         let byWidth = extras.trickplay.first { $0.key.caseInsensitiveCompare(mediaSourceId) == .orderedSame }?.value
             ?? (extras.trickplay.count == 1 ? extras.trickplay.first?.value : nil)
-        // Highest resolution the server generated; the decode caps the sheet
-        // size anyway, so a big one costs quality, not memory.
+        // Highest resolution; the decode caps sheet size, so no memory cost.
         guard let info = byWidth?.values.max(by: { $0.width < $1.width }),
               info.width > 0, info.height > 0,
               info.tileWidth > 0, info.tileHeight > 0,
@@ -302,10 +275,8 @@ extension JellyfinClient {
         )
     }
 
-    /// Unlike `Items/…/Images/…`, the trickplay route is authenticated — it
-    /// 401s without credentials. Like every other media URL Lagoon builds,
-    /// this one carries no query token; the credential travels as a header
-    /// instead.
+    /// Authenticated route (401 without credentials); the header carries
+    /// the token, never the URL.
     private func trickplaySheetURL(itemId: String, width: Int, index: Int) -> URL? {
         guard accessToken != nil else { return nil }
         return try? url(path: "Videos/\(itemId)/Trickplay/\(width)/\(index).jpg")
@@ -351,19 +322,10 @@ extension JellyfinClient {
         }
     }
 
-    /// Intro/recap/credit ranges, or an empty list when the server has none.
-    ///
-    /// Native to Jellyfin 10.10+, so no plugin-specific client code is
-    /// needed even though a plugin is what populates it. Never throws —
-    /// like chapters and trickplay this is garnish, and an older server
-    /// simply goes without.
-    ///
-    /// The endpoint takes an optional `includeSegmentTypes`, deliberately
-    /// unused here: it wants *repeated* query params and 400s on a
-    /// comma-joined list, and filtering client-side costs nothing at these
-    /// sizes.
+    /// Intro/recap/credit ranges (Jellyfin 10.10+), empty when none. Never
+    /// throws. `includeSegmentTypes` is unused: it 400s on a comma-joined
+    /// list, and filtering here is free.
     func mediaSegments(itemId: String) async -> [MediaSegment] {
-        // 10.10+ only; an older server's 404 is an answer, not a fault.
         let page: MediaSegmentsPage? = try? await get("MediaSegments/\(itemId)", probe: true)
         return (page?.items ?? [])
             .map {

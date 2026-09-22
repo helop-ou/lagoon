@@ -1,10 +1,8 @@
 import Foundation
 import LagoonEngine
 
-/// Client-side suppression, so a failure that repeats every second costs one
-/// report and a count rather than the month's quota. Dashboard grouping
-/// alone does not reduce event volume. Pure: the hub owns one
-/// behind its lock and feeds it the clock.
+/// A failure that repeats every second costs one report and a count, not
+/// the month's quota. Dashboard grouping does not reduce volume.
 nonisolated struct IncidentSuppressor: Equatable, Sendable {
     struct Limits: Equatable, Sendable {
         /// Reports allowed per fingerprint inside `window`.
