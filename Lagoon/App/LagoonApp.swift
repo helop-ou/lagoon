@@ -9,6 +9,10 @@ struct LagoonApp: App {
 
     init() {
         diagnosticsObserver = DiagnosticsConfiguration.install()
+        // The playback package asks for its knobs and hands back its
+        // diagnostics; without this it runs uninstrumented and reports
+        // nothing, which is its default for any host.
+        EngineConfiguration.install()
         // The path has to be under observation before the first negotiation
         // asks what it costs. Until the monitor has reported,
         // `NetworkPathObserver` answers "unrestricted", which is the
