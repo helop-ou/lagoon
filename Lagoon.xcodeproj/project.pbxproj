@@ -254,7 +254,7 @@
 			mainGroup = 4C41474F4F4E000000000002;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "../lagoon-engine" */,
+				4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "lagoon-engine" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4C41474F4F4E000000000003 /* Products */;
@@ -768,16 +768,21 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "../lagoon-engine" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../lagoon-engine;
+/* Begin XCRemoteSwiftPackageReference section */
+		4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "lagoon-engine" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:helop-ou/lagoon-engine.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		4C41474F4F4E000000000011 /* LagoonEngine */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "lagoon-engine" */;
 			productName = LagoonEngine;
 		};
 /* End XCSwiftPackageProductDependency section */
