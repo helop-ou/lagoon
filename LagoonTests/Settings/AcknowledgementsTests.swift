@@ -3,7 +3,7 @@ import Testing
 @testable import Lagoon
 
 /// The in-app acknowledgements screen is only honest if
-/// every bundled licence resolves, every binary target LagoonFFmpeg links is
+/// every bundled licence resolves, every binary target the engine package links is
 /// covered by an entry, and the trademark notice actually names the marks it
 /// disclaims.
 @Suite("Acknowledgements", .serialized)
@@ -52,8 +52,11 @@ struct AcknowledgementsTests {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+        // The native libraries moved out with the engine, so the manifest
+        // that declares them is the sibling package's.
         let packageSwiftURL = repoRoot
-            .appendingPathComponent("Packages/LagoonFFmpeg/Package.swift")
+            .deletingLastPathComponent()
+            .appendingPathComponent("lagoon-engine/Package.swift")
 
         guard let contents = try? String(contentsOf: packageSwiftURL, encoding: .utf8) else {
             Issue.record("Could not read \(packageSwiftURL.path); skipping binary target coverage check")

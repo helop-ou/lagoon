@@ -95,9 +95,9 @@ struct DownloadHardeningTests {
 
     @Test func subtitleValidationRejectsOversizeHTMLAndInvalidTimingButKeepsValidText() async throws {
         do { _ = try await ExternalSubtitleLoader.parse(Data(repeating: 65, count: DownloadLimit.subtitle + 1), language: nil); Issue.record("Expected byte cap") }
-        catch SubtitleDownloadError.tooLarge {}
+        catch SubtitleFileError.tooLarge {}
         do { _ = try await ExternalSubtitleLoader.parse(Data("<html>\n\n1\n00:00:00,000 --> 00:00:10,000\nLogin page\n</html>".utf8), language: nil); Issue.record("Expected HTML rejection") }
-        catch SubtitleDownloadError.invalidFile {}
+        catch SubtitleFileError.invalidFile {}
         #expect(SubtitleParser.cues(from: Data("1\n00:00:00,000 --> 00:00:inf\nBad cue".utf8)).isEmpty)
         #expect(try await ExternalSubtitleLoader.parse(Self.cues("Valid cue"), language: "en").first?.text == "Valid cue")
     }
