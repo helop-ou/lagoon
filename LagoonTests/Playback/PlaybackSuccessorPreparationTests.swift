@@ -10,62 +10,62 @@ struct PlaybackSuccessorPreparationTests {
         let expected = try prepared(sourceID: "ready")
         var negotiations = 0
         let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in negotiations += 1; return expected },
-            warm: { _, _ in }
+            negotiate: { _, _ in negotiations += 1; return expected }
         )
-        let cache = makeCache()
-        defer { subject.cancel(); cache.discardAll() }
-        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"), cache: cache,
-                        allowsWarming: true, playbackState: { nil })
+        let staging = StagingSpy()
+        defer { subject.cancel() }
+        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
+                        staging: staging.brief, warms: true)
         await waitUntil { !subject.isPreparing }
-        let staged = try #require(cache.next)
+        #expect(staging.staged.map(\.url) == [expected.streamURL])
         #expect(subject.hasPreparation)
 
         let result = try #require(await subject.preparedForHandoff())
         #expect(result.source.id == "ready")
         #expect(negotiations == 1)
         #expect(!subject.hasPreparation)
-        #expect(cache.activate(itemID: result.mediaID, url: result.streamURL,
-                               delivery: result.method.delivery, expectedLength: result.source.size) === staged)
+        // Handing the result over must not open a second scope for it: the
+        // one staged during negotiation is what the next engine promotes.
+        #expect(staging.staged.count == 1)
+        #expect(staging.discarded.isEmpty)
     }
 
-    @Test func handoffCancelsWarmingWithoutCancellingNegotiation() async throws {
+    @Test func handoffEndsWarmingWithoutCancellingNegotiation() async throws {
         let expected = try prepared(sourceID: "warming")
-        let enteredWarm = SuccessorTestGate()
-        var cancelledWarm = false
+        let started = SuccessorTestGate()
+        let release = SuccessorTestGate()
         let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in expected },
-            warm: { _, _ in
-                enteredWarm.open()
-                do { try await Task.sleep(for: .seconds(60)) }
-                catch { cancelledWarm = Task.isCancelled }
+            negotiate: { _, _ in
+                started.open()
+                await release.wait()
+                return expected
             }
         )
-        let cache = makeCache()
-        defer { subject.cancel(); cache.discardAll() }
-        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"), cache: cache,
-                        allowsWarming: true, playbackState: { nil })
-        await enteredWarm.wait()
+        let staging = StagingSpy()
+        defer { subject.cancel() }
+        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
+                        staging: staging.brief, warms: true)
+        await started.wait()
+        let handoff = Task { await subject.preparedForHandoff() }
+        await waitUntil { staging.endWarmingCount == 1 }
+        release.open()
 
-        let result = await subject.preparedForHandoff()
-        #expect(result?.source.id == "warming")
-        #expect(cancelledWarm)
-        #expect(cache.next != nil)
+        #expect(await handoff.value?.source.id == "warming")
+        // The scope is still opened — the handoff wants what it can get —
+        // but the warm-up it would have queued ahead of the handoff is not.
+        #expect(staging.staged.map(\.warms) == [false])
+        #expect(staging.discarded.isEmpty)
     }
 
     @Test func forcedPreparationSkipsWarming() async throws {
         let expected = try prepared(sourceID: "forced")
-        var warms = 0
-        let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in expected },
-            warm: { _, _ in warms += 1 }
-        )
-        let cache = makeCache()
-        defer { subject.cancel(); cache.discardAll() }
-        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"), cache: cache,
-                        allowsWarming: false, playbackState: { nil })
+        let subject = PlaybackSuccessorPreparation(negotiate: { _, _ in expected })
+        let staging = StagingSpy()
+        defer { subject.cancel() }
+        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
+                        staging: staging.brief, warms: false)
         #expect(await subject.preparedForHandoff()?.source.id == "forced")
-        #expect(warms == 0)
+        #expect(staging.staged.map(\.warms) == [false])
     }
 
     @Test func cancelledNegotiationCannotClearItsReplacement() async throws {
@@ -87,62 +87,12 @@ struct PlaybackSuccessorPreparationTests {
                 newStarted.open()
                 await newRelease.wait()
                 return replacement
-            },
-            warm: { _, _ in }
-        )
-        let cache = makeCache()
-        defer { subject.cancel(); cache.discardAll() }
-        let client = JellyfinClient(deviceId: "successor-tests")
-        subject.prepare(itemID: old.mediaID, client: client, cache: cache,
-                        allowsWarming: false, playbackState: { nil })
-        await oldStarted.wait()
-        let handoffStarted = SuccessorTestGate()
-        let oldHandoff = Task {
-            handoffStarted.open()
-            return await subject.preparedForHandoff()
-        }
-        await handoffStarted.wait()
-        subject.cancel()
-        subject.prepare(itemID: replacement.mediaID, client: client, cache: cache,
-                        allowsWarming: false, playbackState: { nil })
-        await newStarted.wait()
-        oldRelease.open()
-        #expect(await oldHandoff.value == nil)
-        #expect(subject.isPreparing)
-        #expect(cache.next == nil)
-        newRelease.open()
-        #expect(await subject.preparedForHandoff()?.source.id == "replacement")
-        #expect(cache.next?.sourceURL == replacement.streamURL)
-    }
-
-    @Test func lateWarmCompletionCannotDiscardSameItemReplacementScope() async throws {
-        let old = try prepared(sourceID: "old")
-        let replacement = try prepared(sourceID: "replacement")
-        let oldStarted = SuccessorTestGate()
-        let oldRelease = SuccessorTestGate()
-        let newStarted = SuccessorTestGate()
-        let newRelease = SuccessorTestGate()
-        var negotiations = 0
-        let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in
-                negotiations += 1
-                return negotiations == 1 ? old : replacement
-            },
-            warm: { scope, _ in
-                if scope?.sourceURL == old.streamURL {
-                    oldStarted.open()
-                    await oldRelease.wait() // Finishes after a new scope exists.
-                } else {
-                    newStarted.open()
-                    await newRelease.wait()
-                }
             }
         )
-        let cache = makeCache()
-        defer { subject.cancel(); cache.discardAll() }
+        let staging = StagingSpy()
+        defer { subject.cancel() }
         let client = JellyfinClient(deviceId: "successor-tests")
-        subject.prepare(itemID: old.mediaID, client: client, cache: cache,
-                        allowsWarming: true, playbackState: { nil })
+        subject.prepare(itemID: old.mediaID, client: client, staging: staging.brief, warms: false)
         await oldStarted.wait()
         let handoffStarted = SuccessorTestGate()
         let oldHandoff = Task {
@@ -151,17 +101,20 @@ struct PlaybackSuccessorPreparationTests {
         }
         await handoffStarted.wait()
         subject.cancel()
-        subject.prepare(itemID: replacement.mediaID, client: client, cache: cache,
-                        allowsWarming: true, playbackState: { nil })
+        subject.prepare(itemID: replacement.mediaID, client: client, staging: staging.brief, warms: false)
         await newStarted.wait()
-        let replacementScope = try #require(cache.next)
         oldRelease.open()
         #expect(await oldHandoff.value == nil)
         #expect(subject.isPreparing)
-        #expect(cache.next === replacementScope)
+        // The abandoned generation may finish at any point after its cancel.
+        // It staged nothing on its way out, and discarded only once — on the
+        // cancel itself, before the replacement could stage anything.
+        #expect(staging.staged.isEmpty)
+        #expect(staging.discarded == [old.mediaID])
         newRelease.open()
         #expect(await subject.preparedForHandoff()?.source.id == "replacement")
-        #expect(cache.next === replacementScope)
+        #expect(staging.staged.map(\.url) == [replacement.streamURL])
+        #expect(staging.discarded == [old.mediaID])
     }
 
     @Test func suspendedNegotiationDoesNotRetainItsOwner() async throws {
@@ -175,49 +128,33 @@ struct PlaybackSuccessorPreparationTests {
                 await release.wait()
                 finished.open()
                 return expected
-            },
-            warm: { _, _ in }
+            }
         )
-        let cache = makeCache()
-        defer { cache.discardAll() }
-        subject?.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"), cache: cache,
-                         allowsWarming: true, playbackState: { nil })
+        let staging = StagingSpy()
+        subject?.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
+                         staging: staging.brief, warms: true)
         await started.wait()
         weak let released = subject
         subject = nil
         #expect(released == nil)
         release.open()
         await finished.wait()
-        #expect(cache.next == nil)
+        #expect(staging.staged.isEmpty)
     }
 
-    @Test func releasingOwnerCancelsWarmingAndDiscardsItsStagedScope() async throws {
+    @Test func releasingOwnerDiscardsItsStagedScope() async throws {
         let expected = try prepared(sourceID: "released")
-        let started = SuccessorTestGate()
-        let finished = SuccessorTestGate()
-        var cancelled = false
         var subject: PlaybackSuccessorPreparation? = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in expected },
-            warm: { _, _ in
-                started.open()
-                do { try await Task.sleep(for: .seconds(60)) }
-                catch { cancelled = Task.isCancelled }
-                finished.open()
-            }
+            negotiate: { _, _ in expected }
         )
-        let cache = makeCache()
-        defer { cache.discardAll() }
-        subject?.prepare(itemID: expected.mediaID,
-                         client: JellyfinClient(deviceId: "successor-tests"), cache: cache,
-                         allowsWarming: true, playbackState: { nil })
-        await started.wait()
-        #expect(cache.next != nil)
+        let staging = StagingSpy()
+        subject?.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
+                         staging: staging.brief, warms: true)
+        await waitUntil { !staging.staged.isEmpty }
         weak let released = subject
         subject = nil
         #expect(released == nil)
-        #expect(cache.next == nil)
-        await finished.wait()
-        #expect(cancelled)
+        #expect(staging.discarded == [expected.mediaID])
     }
 
     private func prepared(sourceID: String) throws -> PlaybackSuccessorPreparation.PreparedPlayback {
@@ -229,17 +166,30 @@ struct PlaybackSuccessorPreparationTests {
                      streamURL: URL(string: "https://media.test/\(sourceID).mkv")!, method: .directPlay)
     }
 
-    private func makeCache() -> PlaybackCacheCoordinator {
-        PlaybackCacheCoordinator(
-            rootDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString),
-            byteLimit: 1_024, isEnabled: true, allowsTranscodeCaching: false
-        )
-    }
-
     private func waitUntil(_ predicate: () -> Bool) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while !predicate(), ContinuousClock.now < deadline { await Task.yield() }
         #expect(predicate())
+    }
+}
+
+/// Stands in for the engine. Every cache decision the preparation used to
+/// make now travels through this brief, so the generation rules can be
+/// tested without a player.
+@MainActor
+private final class StagingSpy {
+    private(set) var staged: [(id: String, url: URL, warms: Bool)] = []
+    private(set) var endWarmingCount = 0
+    private(set) var discarded: [String] = []
+
+    var brief: PlaybackSuccessorPreparation.Staging {
+        .init(
+            stage: { [self] prepared, warms in
+                staged.append((prepared.mediaID, prepared.streamURL, warms))
+            },
+            endWarming: { [self] in endWarmingCount += 1 },
+            discard: { [self] itemID in discarded.append(itemID) }
+        )
     }
 }
 

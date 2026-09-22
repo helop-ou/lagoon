@@ -127,10 +127,12 @@ final class PlaybackController {
     private(set) var hudLines: [String] = []
     /// The byte-zero prefix remains available for compatibility diagnostics,
     /// while the timeline renders every sparse range retained around seeks.
-    /// HLS/native paths have no direct-file byte-range model.
-    private(set) var bufferedFraction: Double?
-    private(set) var bufferedRanges: [PlaybackBufferedRange] = []
-    private(set) var playheadPrefetchCount = 0
+    /// HLS/native paths have no direct-file byte-range model. All three read
+    /// through to the engine, which owns the cache and publishes what it is
+    /// holding; nothing here mirrors that state.
+    var bufferedFraction: Double? { engine?.bufferState.bufferedFraction }
+    var bufferedRanges: [PlaybackBufferedRange] { engine?.bufferState.bufferedRanges ?? [] }
+    var playheadPrefetchCount: Int { engine?.bufferState.playheadPrefetchCount ?? 0 }
 
     private var client: JellyfinClient?
     /// Retained so a failed attempt can be replayed on the next rung of the
@@ -187,12 +189,10 @@ final class PlaybackController {
     var activeDeliveryRung: PlaybackDelivery { delivery }
 
     var isPlaybackCacheActive: Bool {
-        playbackCache.current != nil
+        engine?.bufferState.isActive ?? false
     }
     @ObservationIgnored private var reporting: PlaybackReportingSession?
     @ObservationIgnored private let diagnosticSampler = PlaybackDiagnosticsSampler()
-    private var bufferFillTask: Task<Void, Never>?
-    private var bufferFillGeneration = UUID()
     private var isClosed = false
     private var lastKnownPosition: Double = 0
     private var nextUpTask: Task<Void, Never>?
@@ -257,9 +257,6 @@ final class PlaybackController {
     private var missingSubtitleMode: MissingSubtitleMode = .ask
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
-    @ObservationIgnored private let playbackCache = PlaybackCacheCoordinator(
-        isEnabled: PlaybackBufferPolicy.backgroundBufferingEnabled
-    )
     @ObservationIgnored private let lifecycleID = UUID()
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
     @ObservationIgnored private var transitionFeedbackTask: Task<Void, Never>?
@@ -515,24 +512,6 @@ final class PlaybackController {
                     runtimeSeconds: source.runTimeTicks.map(Ticks.seconds)
                 )
                 : nil
-            // A local file needs no cache in front of it.
-            let cacheSession = streamURL.isFileURL ? nil : playbackCache.activate(
-                itemID: media.id,
-                url: streamURL,
-                delivery: method.delivery,
-                expectedLength: source.size,
-                authorization: client.mediaRequestAuthorization()
-            )
-            let playbackURL = cacheSession?.completeFileURL ?? streamURL
-            // A complete file plays from disk without the session, except a
-            // disc image, whose reader lives behind the session.
-            let transportCache = PlaybackBufferPolicy.engineUsesCacheSession(
-                playsFromCompleteFile: playbackURL.isFileURL,
-                disc: discRequest != nil,
-                delivery: method.delivery
-            ) ? cacheSession : nil
-            publishBufferMetrics(cacheSession?.metrics)
-
             var resumeSeconds = Self.resumeStartSeconds(
                 fallbackOverrideSeconds: startPositionOverride ?? resumeOverride,
                 startFromBeginning: startFromBeginning,
@@ -545,7 +524,9 @@ final class PlaybackController {
                 delivery: delivery,
                 method: method,
                 source: source,
-                cached: transportCache != nil || playbackURL.isFileURL,
+                cached: SampleBufferPlayerEngine.cachesPlayback(
+                    url: streamURL, delivery: method.delivery
+                ),
                 disc: discRequest != nil,
                 resumeSeconds: resumeSeconds
             )
@@ -791,8 +772,10 @@ final class PlaybackController {
             }
             startsPaused = false
             engine.prepare(
-                url: playbackURL,
-                cacheSession: transportCache,
+                url: streamURL,
+                itemID: media.id,
+                delivery: method.delivery,
+                expectedLength: source.size,
                 disc: discRequest,
                 startSeconds: resumeSeconds,
                 initialAudioOrdinal: initialAudioOrdinal,
@@ -822,23 +805,11 @@ final class PlaybackController {
                 guard let self, let engine, self.engine === engine else { return }
                 self.finishEpisodeHandoff(outcome: "ready")
                 self.incidents.playbackReady(engine: engine)
-                if playbackURL.isFileURL {
-                    self.publishBufferMetrics(cacheSession?.metrics)
-                } else {
-                    self.startBufferFill(session: cacheSession, engine: engine)
-                }
                 #if DEBUG
                 self.schedulePlaybackStarvationDiagnostics(for: engine)
                 self.scheduleRendererRecoveryRegressionHooks(for: engine)
                 self.scheduleDeliveryFallbackRegression(for: engine)
                 #endif
-            }
-            engine.onPlaybackCacheFallback = { [weak self, weak engine] in
-                guard let self, let engine, self.engine === engine else { return }
-                self.bufferFillTask?.cancel()
-                self.bufferFillTask = nil
-                self.playbackCache.discardCurrent(preservingNext: true)
-                self.publishBufferMetrics(nil)
             }
             engine.onError = { [weak self, weak engine] failure in
                 guard let self, let engine, self.engine === engine else { return }
@@ -965,7 +936,7 @@ final class PlaybackController {
                 return
             }
             startProgressLoop()
-            diagnosticSampler.cacheMetrics = { [weak self] in self?.playbackCache.current?.metrics }
+            diagnosticSampler.cacheMetrics = { [weak self] in self?.engine?.playbackCacheMetrics }
             diagnosticSampler.startTrace(engine: engine) { [weak self] in
                 self?.soakExitRequested = true
                 self?.soakExitRequestedAt = ContinuousClock.now
@@ -975,7 +946,7 @@ final class PlaybackController {
                 context: { [weak self] in
                     guard let self else { return nil }
                     return .init(
-                        cache: self.playbackCache.current?.metrics,
+                        cache: self.engine?.playbackCacheMetrics,
                         handoffMilliseconds: self.lastHandoffMilliseconds,
                         fallbackLines: self.deliveryFallbackHUDLines
                             + (self.groupHUDLines?() ?? [])
@@ -1335,22 +1306,37 @@ final class PlaybackController {
             guard let engine, engine.duration > 0,
                   engine.duration - engine.timePosition <= 120 else { return }
         }
-        // One proactive download at a time. Cached active-file bytes remain
-        // readable while the successor gets priority near the ending.
-        bufferFillTask?.cancel()
-        bufferFillTask = nil
+        // One proactive download at a time: staging suspends the engine's own
+        // fill, and cached active-file bytes remain readable while the
+        // successor gets priority near the ending.
         successorPreparation.prepare(
             itemID: next.id,
             client: client,
-            cache: playbackCache,
-            allowsWarming: !isAdvancing,
-            playbackState: { [weak engine] in
-                guard let engine else { return nil }
-                return .init(
-                    isBuffering: engine.isBuffering,
-                    stallCount: engine.stallCount,
-                    isPaused: engine.isPaused
+            staging: successorStaging,
+            warms: !isAdvancing
+        )
+    }
+
+    /// What the preparation does with a successor once it has negotiated
+    /// one. Nothing here holds an engine: each closure reaches through the
+    /// controller for whichever engine is current, so a handoff that has
+    /// already replaced it stages against the new one.
+    private var successorStaging: PlaybackSuccessorPreparation.Staging {
+        .init(
+            stage: { [weak self] prepared, warms in
+                guard let self, let client = self.client else { return }
+                self.engine?.stageSuccessor(
+                    itemID: prepared.mediaID,
+                    url: prepared.streamURL,
+                    delivery: prepared.method.delivery,
+                    expectedLength: prepared.source.size,
+                    authorization: client.mediaRequestAuthorization(),
+                    warms: warms
                 )
+            },
+            endWarming: { [weak self] in self?.engine?.endSuccessorWarming() },
+            discard: { [weak self] itemID in
+                self?.engine?.discardStagedSuccessor(itemID: itemID)
             }
         )
     }
@@ -1459,136 +1445,10 @@ final class PlaybackController {
         return streams.firstIndex { $0.language == language }.map { $0 + 1 }
     }
 
-    private func publishBufferMetrics(_ metrics: PlaybackCacheMetrics?) {
-        bufferedFraction = metrics?.bufferedFraction
-        bufferedRanges = metrics?.bufferedRanges ?? []
-        playheadPrefetchCount = metrics?.playheadPrefetchCount ?? 0
-    }
-
-    /// Proactive fill starts only after the player has presented its initial
-    /// cushion and advances in 1 MiB requests. `PlaybackFillPolicy` decides
-    /// the pace from the cushion of cached media ahead of the playhead, backs
-    /// off after a failed fetch instead of giving up, and gives the link to
-    /// the foreground after a stall. Native foreground playback —
-    /// not URLSession priority hints — stays the hard priority.
-    private func startBufferFill(
-        session: PlaybackCacheSession?,
-        engine: SampleBufferPlayerEngine
-    ) {
-        bufferFillTask?.cancel()
-        bufferFillTask = nil
-        guard let session, session.directScope != nil else {
-            publishBufferMetrics(session?.metrics)
-            return
-        }
-        let generation = UUID()
-        bufferFillGeneration = generation
-        bufferFillTask = Task { [weak self, weak engine] in
-            // A finished loop clears its handle so `resumeBufferFill` can
-            // start a fresh one; a loop that was replaced leaves the newer
-            // handle alone.
-            defer {
-                if let self, self.bufferFillGeneration == generation {
-                    self.bufferFillTask = nil
-                }
-            }
-            do {
-                try await Task.sleep(for: .seconds(PlaybackFillPolicy.warmupSeconds))
-            } catch {
-                return
-            }
-            var policy = PlaybackFillPolicy()
-            var observedStalls = engine?.stallCount ?? 0
-            // Only the pre-fetch snapshot consumes a stall: the policy acts
-            // on it there, so a stall that lands while a chunk is in flight
-            // must survive the post-fetch snapshot and take the cooldown on
-            // the next pass instead of being discarded.
-            @MainActor func snapshot(
-                _ metrics: PlaybackCacheMetrics,
-                engine: SampleBufferPlayerEngine,
-                consumingStall: Bool = true
-            ) -> PlaybackFillPolicy.Snapshot {
-                let newStall = engine.stallCount > observedStalls
-                if consumingStall { observedStalls = engine.stallCount }
-                return .init(
-                    isPaused: engine.isPaused,
-                    isBuffering: engine.isBuffering,
-                    newStall: newStall,
-                    aheadSeconds: PlaybackFillPolicy.aheadSeconds(
-                        cachedBytesAhead: metrics.cachedBytesAheadOfPlayhead,
-                        contentLength: metrics.contentLength,
-                        durationSeconds: engine.duration
-                    ),
-                    averageBytesPerSecond: PlaybackFillPolicy.averageBytesPerSecond(
-                        contentLength: metrics.contentLength,
-                        durationSeconds: engine.duration
-                    ),
-                    playbackRate: engine.rate,
-                    isWindowed: metrics.isWindowed,
-                    bufferedFraction: metrics.bufferedFraction
-                )
-            }
-            while !Task.isCancelled {
-                guard let self, let engine,
-                      self.engine === engine,
-                      self.playbackCache.current === session else { return }
-
-                let before = session.metrics
-                self.publishBufferMetrics(before)
-                switch policy.beforeFetch(snapshot(before, engine: engine)) {
-                case .stop:
-                    return
-                case .wait(let seconds):
-                    do {
-                        try await Task.sleep(for: .seconds(seconds))
-                    } catch {
-                        return
-                    }
-                    continue
-                case .fetch:
-                    break
-                }
-
-                let outcome = await session.prefetchNextChunk()
-                guard !Task.isCancelled,
-                      self.engine === engine,
-                      self.playbackCache.current === session else { return }
-                let after = session.metrics
-                self.publishBufferMetrics(after)
-                os_signpost(
-                    .event,
-                    log: PlaybackPerformance.log,
-                    name: "Playback Buffer Progress",
-                    signpostID: self.performanceSignpostID,
-                    "cachedMB=%{public}.1f totalMB=%{public}.1f prefixFraction=%{public}.3f ranges=%{public}d playheadPrefetches=%{public}d stalls=%{public}d aheadMB=%{public}.1f outcome=%{public}s",
-                    Double(after.cachedBytes) / 1_048_576,
-                    Double(after.contentLength ?? 0) / 1_048_576,
-                    after.bufferedFraction ?? -1,
-                    after.bufferedRanges.count,
-                    after.playheadPrefetchCount,
-                    engine.stallCount,
-                    Double(after.cachedBytesAheadOfPlayhead) / 1_048_576,
-                    String(describing: outcome)
-                )
-                switch policy.afterFetch(outcome, snapshot(after, engine: engine, consumingStall: false)) {
-                case .stop:
-                    return
-                case .wait(let seconds):
-                    do {
-                        try await Task.sleep(for: .seconds(seconds))
-                    } catch {
-                        return
-                    }
-                case .fetch:
-                    continue
-                }
-            }
-        }
-    }
-
+    /// Stop filling ahead without discarding what is cached. The engine
+    /// owns the loop; this is the viewer-facing reason to pause it.
     func suspendBufferFill() {
-        bufferFillTask?.cancel()
-        bufferFillTask = nil
+        engine?.suspendBufferFill()
     }
 
     /// The file ran out. A countdown still running when it did finishes
@@ -1785,10 +1645,11 @@ final class PlaybackController {
     }
 
     func resumeBufferFill() {
-        guard bufferFillTask == nil,
-              !successorPreparation.isPreparing,
-              let engine else { return }
-        startBufferFill(session: playbackCache.current, engine: engine)
+        // A successor being negotiated is about to take the link for its own
+        // warm-up; the engine refuses a resume once that has started, and
+        // this covers the negotiation ahead of it.
+        guard !successorPreparation.isPreparing else { return }
+        engine?.resumeBufferFill()
     }
 
     func updateNowPlayingTimeline() {
@@ -1816,8 +1677,6 @@ final class PlaybackController {
     ) -> Task<Void, Never>? {
         reporting?.cancelProgress()
         diagnosticSampler.stop()
-        bufferFillTask?.cancel()
-        bufferFillTask = nil
         nextUpTask?.cancel()
         nextUpTask = nil
         // A countdown still sleeping must not wake up on an engine that is
@@ -1848,14 +1707,14 @@ final class PlaybackController {
             engine.onPlaybackStarted = nil
             engine.onSeekReady = nil
             engine.onBufferingChanged = nil
-            engine.onPlaybackCacheFallback = nil
             engine.shutdown()
+            // The scope goes with the engine that was reading it. A handoff
+            // keeps the staged successor, which the next engine promotes.
+            engine.discardPlaybackCache(preservingStagedSuccessor: preservingPreparedNext)
             if !preservingPlayerSurface {
                 self.engine = nil
             }
         }
-        playbackCache.discardCurrent(preservingNext: preservingPreparedNext)
-        publishBufferMetrics(nil)
         if !preservingPlayerSurface {
             finishEpisodeHandoff(outcome: "cancelled")
             nowPlaying.stop()
