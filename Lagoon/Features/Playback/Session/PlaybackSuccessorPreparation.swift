@@ -1,14 +1,9 @@
 import Foundation
 import LagoonEngine
 
-/// Owns successor negotiation and hands the result to whatever will warm it.
-/// The controller supplies only immutable inputs and a staging brief; network
-/// work never retains the controller or the outgoing engine.
-///
-/// The warm-up itself belongs to the engine, which is where the cache and the
-/// playback state that paces it live. What is left here is the half Jellyfin
-/// owns: asking the server about the next episode, and making sure a late or
-/// cancelled answer can never publish over its replacement.
+/// Negotiates the next episode and hands the result to the engine to warm.
+/// Network work never retains the controller or the outgoing engine, and a
+/// late or cancelled answer never publishes over its replacement.
 @MainActor
 final class PlaybackSuccessorPreparation {
     struct PreparedPlayback {
@@ -19,8 +14,7 @@ final class PlaybackSuccessorPreparation {
         let method: PlayMethod
     }
 
-    /// What to do with a negotiated successor. Injected so the preparation's
-    /// generation rules can be tested without an engine.
+    /// Injected so the generation rules can be tested without an engine.
     struct Staging {
         /// Open a cache scope for this item, warming it when asked.
         var stage: @MainActor (PreparedPlayback, _ warms: Bool) -> Void
@@ -73,9 +67,8 @@ final class PlaybackSuccessorPreparation {
                 guard let result = try await negotiate(itemID, client),
                       !Task.isCancelled,
                       let self, self.generation == generation else { return nil }
-                // Read the flag now rather than capturing it: a handoff that
-                // began while the server was answering has already given up
-                // its warm-up, and must not have one started behind it.
+                // Read the flag now: a handoff that began meanwhile has given up its
+                // warm-up, and must not have one started behind it.
                 self.staging.stage(result, self.allowsWarming)
                 self.prepared = result
                 return result
@@ -85,9 +78,8 @@ final class PlaybackSuccessorPreparation {
         }
     }
 
-    /// A ready result remains usable after its task has finished. If the
-    /// negotiation is still running, let it finish but stop or skip the
-    /// optional warm-up: accepting Up Next must not wait out its pacing.
+    /// A ready result stays usable after its task ends. A running negotiation
+    /// finishes, but skips the warm-up: accepting Up Next must not wait on it.
     func preparedForHandoff() async -> PreparedPlayback? {
         let generation = generation
         allowsWarming = false
@@ -104,9 +96,9 @@ final class PlaybackSuccessorPreparation {
         return result
     }
 
-    /// Discard synchronously before a replacement can stage its scope.
-    /// Cancelled work may finish later, including for the same item ID; its
-    /// generation must never clear the new task or remove the new scope.
+    /// Discard synchronously before a replacement stages its scope. Late
+    /// cancelled work, even for the same item ID, must never clear the new task
+    /// or scope.
     func cancel() {
         generation &+= 1
         preparationTask?.cancel()
@@ -128,8 +120,7 @@ final class PlaybackSuccessorPreparation {
         guard !Task.isCancelled,
               info.errorCode == nil,
               let source = info.mediaSources.first else { return nil }
-        // Disc images cannot use this warm-up; they negotiate their own
-        // delivery rung when playback starts.
+        // Disc images negotiate their own rung at playback start.
         let layout = PlaybackSourceLayout(videoType: source.videoType, isoType: source.isoType)
         guard !layout.isDisc else { return nil }
         let (url, method) = try client.streamURL(itemId: itemID, source: source)

@@ -6,15 +6,10 @@ nonisolated struct PlayerItem: Identifiable {
     let id = UUID()
     let media: MediaItem
     var startFromBeginning = false
-    /// Where to start, outranking every resume rule. Set by a SyncPlay
-    /// group, which knows where everyone else already is; nil
-    /// everywhere else, so the ordinary resume logic decides.
+    /// Overrides every resume rule. Set only by a SyncPlay group.
     var startPosition: Double?
-    /// Load and sit on the first frame instead of rolling. A group member
-    /// primes, reports Ready, and is started later at an instant the whole
-    /// group agreed on.
+    /// Hold on the first frame; a group member starts at the agreed instant.
     var startPaused = false
-    /// The group's handle for this queue entry, carried so the presenting
-    /// layer can tell one group item from the next.
+    /// Tells one group queue entry from the next.
     var groupPlaylistItemId: String?
 }

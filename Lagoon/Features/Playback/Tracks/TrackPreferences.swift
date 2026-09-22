@@ -68,9 +68,8 @@ nonisolated struct TrackPreferenceValues: Codable, Equatable {
     var subtitleMode: SubtitleDefaultMode = .system
 }
 
-/// Lagoon's per-account playback-language choices. Subtitle rendering and
-/// subtitle-search preferences intentionally remain in SubtitlePreferences;
-/// this store owns only the track that should be selected at playback start.
+/// Per-account playback-language choices: which track to select at start.
+/// Subtitle rendering and search preferences live in SubtitlePreferences.
 @MainActor
 @Observable
 final class TrackPreferencesStore {
@@ -141,9 +140,8 @@ final class TrackPreferencesStore {
     }
 }
 
-/// A stream reduced to the facts that may legitimately influence automatic
-/// selection. In particular there is no title: "Original" is metadata, not
-/// a filename or display-name convention.
+/// A stream reduced to the facts that may influence automatic selection. No
+/// title: "Original" is metadata, not a naming convention.
 nonisolated struct TrackSelectionCandidate: Equatable {
     let language: String?
     let isDefault: Bool

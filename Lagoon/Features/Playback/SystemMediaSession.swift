@@ -4,10 +4,9 @@ import LagoonEngine
 import MediaPlayer
 import UIKit
 
-/// Owns the AVAudioSession lifecycle for Lagoon's one custom player.
-/// Renderer setup deliberately does not configure the process-wide audio
-/// session: interruptions and routes belong to the playback session, not to
-/// an individual AVSampleBufferAudioRenderer.
+/// Owns the AVAudioSession lifecycle. Renderers never configure the
+/// process-wide session: interruptions and routes belong to the playback
+/// session.
 @MainActor
 final class PlaybackAudioSession {
     var onPauseRequested: (() -> Void)?
@@ -35,8 +34,8 @@ final class PlaybackAudioSession {
             options: []
         )
         #else
-        // longFormVideo is an iOS route-sharing policy. tvOS already owns
-        // the television's long-form output route.
+        // longFormVideo is an iOS route-sharing policy; tvOS already owns the
+        // long-form route.
         try session.setCategory(.playback, mode: .moviePlayback, options: [])
         #endif
         try session.setSupportsMultichannelContent(true)
@@ -126,9 +125,8 @@ final class PlaybackAudioSession {
             as? AVAudioSessionRouteDescription
         Diagnostics.record(.audioRoute, ["routeReason": .string(Self.routeChangeReasonName(reason))])
         if ProcessCPUTrace.enabled {
-            // Report-only diagnostic: route churn on the same
-            // console as DecodeTrace/SoakWait, gated identically. Never
-            // changes behaviour below.
+            // Report-only: route churn on the DecodeTrace console, gated the same.
+            // Never changes behaviour.
             let previousPortTypes = (previousRoute?.outputs.map(\.portType.rawValue) ?? [])
                 .joined(separator: ",")
             let currentPortTypes = session.currentRoute.outputs.map(\.portType.rawValue)
@@ -150,9 +148,8 @@ final class PlaybackAudioSession {
         onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
     }
 
-    /// Name for the `RouteTrace` line — not used for any playback
-    /// decision, which is why `shouldPauseAfterRouteLoss` below switches on
-    /// the raw `AVAudioSession.RouteChangeReason` itself instead of this.
+    /// For `RouteTrace` only. `shouldPauseAfterRouteLoss` switches on the raw
+    /// reason.
     private static func routeChangeReasonName(_ reason: AVAudioSession.RouteChangeReason) -> String {
         switch reason {
         case .unknown: "unknown"
@@ -168,10 +165,9 @@ final class PlaybackAudioSession {
     }
 
     private func restoreAfterMediaServicesReset() {
-        // The media server has discarded every AVAudioSession property and
-        // invalidated the renderer that was using it. Apple requires apps to
-        // recreate those audio objects and to wait for user action before
-        // resuming playback.
+        // The media server discarded every session property and the renderer.
+        // Apple requires recreating them and waiting for user action before
+        // resuming.
         isActive = false
         wasPlayingBeforeInterruption = false
         do {
@@ -197,9 +193,9 @@ final class PlaybackAudioSession {
     #endif
 
     /// Apple recommends pausing for old-device-unavailable, but only a
-    /// private/remote output disappearing should do that here. tvOS changes
-    /// HDMI timing while matching content; treating HDMI as headphones was
-    /// an easy way to pause every 24 Hz movie as it began.
+    /// private output disappearing should pause here. tvOS changes HDMI timing
+    /// when matching content; treating HDMI as headphones paused every 24 Hz
+    /// movie as it began.
     nonisolated static func shouldPauseAfterRouteLoss(
         reason: AVAudioSession.RouteChangeReason,
         previousOutputs: [AVAudioSession.Port]
@@ -216,18 +212,15 @@ final class PlaybackAudioSession {
     }
 }
 
-/// Publishes Lagoon's custom-engine state to the system and translates
-/// lock-screen, Control Center, Siri Remote, and headset commands back into
-/// the PlayerEngine protocol.
+/// Publishes engine state to the system and routes lock-screen, Control
+/// Center, Siri Remote and headset commands back to the PlayerEngine.
 @MainActor
 final class NowPlayingCoordinator {
     private weak var engine: (any PlayerEngine)?
-    /// Where a transport command goes. The controller supplies it so the
-    /// lock screen, Control Center and a headset button reach the same
-    /// interception point the player chrome does — inside a SyncPlay group
-    /// they become requests to the server and nothing moves locally.
-    /// Track selection, rate and the published timeline are not
-    /// routed: those are this viewer's, not the group's.
+    /// Where a transport command goes, so system controls reach the same
+    /// interception point as the player chrome. In a SyncPlay group they become
+    /// server requests. Track selection, rate and the timeline are this
+    /// viewer's and are not routed.
     private var transport: PlayerTransportActions?
     private var commandTargets: [(MPRemoteCommand, Any)] = []
     private var nowPlayingInfo: [String: Any] = [:]
@@ -292,10 +285,8 @@ final class NowPlayingCoordinator {
         reset(publishStopped: true)
     }
 
-    /// Removes ownership from the previous engine. During an episode
-    /// handoff the system keeps displaying the outgoing item until the new
-    /// metadata is published a few lines later; reporting `.stopped` in that
-    /// gap makes Control Center and HDMI receivers visibly flicker.
+    /// Releases the previous engine. During a handoff, publishing `.stopped`
+    /// before the new metadata makes Control Center and HDMI receivers flicker.
     private func reset(publishStopped: Bool) {
         artworkTask?.cancel()
         artworkTask = nil
@@ -380,8 +371,7 @@ final class NowPlayingCoordinator {
     private func add(_ command: MPRemoteCommand, handler: @escaping @MainActor (MPRemoteCommandEvent) -> Void) {
         command.isEnabled = true
         let target = command.addTarget { event in
-            // MediaPlayer does not promise its callback queue. Hop to the
-            // actor that owns the engine instead of assuming it is main.
+            // MediaPlayer does not promise its callback queue, so hop to the main actor.
             Task { @MainActor in handler(event) }
             return .success
         }

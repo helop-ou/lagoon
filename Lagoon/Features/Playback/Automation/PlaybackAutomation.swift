@@ -2,58 +2,46 @@ import Foundation
 import LagoonEngine
 import Observation
 
-/// The player's two timed decisions — skipping an intro or recap
-/// and rolling into the next episode — driven by the engine's
-/// clock instead of a view body, so they keep working with the phone
-/// locked or the player minimised into Picture in Picture.
+/// The player's two timed decisions, skipping an intro or recap and rolling
+/// into the next episode, driven by the engine's clock rather than a view
+/// body so they keep working with the phone locked or in Picture in Picture.
 ///
-/// The overlays draw from this and nothing else: the pill and Select
-/// cannot disagree because there is one answer. `SkipSegmentPolicy` and
-/// `NextUpPolicy` decide *where*; this decides *when*, and remembers what
-/// the viewer already answered.
+/// The overlays only draw this, so the pill and Select cannot disagree.
+/// `SkipSegmentPolicy` and `NextUpPolicy` decide where; this decides when,
+/// and remembers what the viewer already answered.
 @Observable
 @MainActor
 final class PlaybackAutomation {
-    /// The skippable segment the playhead is inside. Nil when there is
-    /// none, when it was already handled, and while suppressed.
+    /// The segment the playhead is inside. Nil when none, already handled, or
+    /// suppressed.
     private(set) var activeSegment: MediaSegment?
     /// Timing shared by the pending skip and the pill's visible progress.
     private(set) var skipTiming: PlaybackCountdown?
-    /// The Up Next card is due and not waved away.
     private(set) var showsNextUp = false
-    /// The card's countdown is running.
     private(set) var isCountingDown = false
     /// Timing shared by the pending handoff and the card's visible progress.
     private(set) var nextUpTiming: PlaybackCountdown?
-    /// Where the card is due, for the regression probe.
     private(set) var nextUpCardStart: Double?
-    /// The panel and an open scrub own the screen and the remote, and a
-    /// prompt that quietly rewrites what Select does underneath them would
-    /// be a trap. Set by the player view.
+    /// The panel and an open scrub own the remote; a prompt must not change
+    /// what Select does underneath them. Set by the player view.
     var isSuppressed = false {
         didSet { if oldValue != isSuppressed { evaluate() } }
     }
-    /// The engine is refilling its queues. A skip that comes due now waits
-    /// for it: the countdown runs on wall time so it keeps working with the
-    /// screen locked, which means it can come due mid-stall, where seeking
-    /// throws away the buffer the stall is waiting on.
+    /// The countdown runs on wall time, so it can come due mid-stall. A skip due
+    /// now waits: seeking would throw away the buffer the stall is waiting on.
     var isBuffering = false {
         didSet {
             if oldValue != isBuffering, !isBuffering { commitDeferredSkip() }
         }
     }
-    /// A skip that came due while buffering and is owed the moment the
-    /// picture is moving again.
+    /// A skip that came due while buffering, owed once the picture moves.
     private var deferredSkip: MediaSegment?
 
-    /// Back was pressed on the Up Next card. Outlives the card itself: the
-    /// episode still has its credits to run, and the end of the file must
-    /// not undo the answer that was already given.
+    /// Back was pressed on the Up Next card. Outlives the card, so the end of
+    /// the file does not undo the answer.
     private(set) var nextUpDismissed = false
 
-    /// Where a committed skip lands the playhead.
     @ObservationIgnored var onSkip: ((MediaSegment) -> Void)?
-    /// The next episode was asked for, by the countdown or the viewer.
     @ObservationIgnored var onPlayNext: (() -> Void)?
 
     private(set) var identity = ""
@@ -61,14 +49,12 @@ final class PlaybackAutomation {
     private var hasNextUp = false
     private var duration: Double = 0
     private var position: Double = 0
-    /// Nothing is decided before the engine has said where it is. A new
-    /// item starts at a phantom zero, and a recap that covers zero would
-    /// otherwise arm — and, on an open slower than its countdown, fire —
-    /// before the clock has ever ticked (found while rejoining a SyncPlay
-    /// group at 10:30 and being dragged to the recap's end).
+    /// Nothing is decided before the engine reports a position. A new item
+    /// starts at a phantom zero, and a recap covering zero would otherwise arm,
+    /// and on a slow open fire, before the clock ticks.
     private var hasPosition = false
-    /// Segments already acted on or waved away, so a committed skip (or a
-    /// "no thanks") does not re-arm the moment the playhead lands.
+    /// Segments already acted on or waved away, so a committed skip does not
+    /// re-arm when the playhead lands.
     private var handledSegmentIDs: Set<String> = []
     private var skipCountdown: Task<Void, Never>?
     private var nextUpCountdown: Task<Void, Never>?
@@ -92,14 +78,11 @@ final class PlaybackAutomation {
         defaults.string(forKey: AutoplayMode.defaultsKey).flatMap(AutoplayMode.init) ?? .autoDelay
     }
 
-    /// Whether the end of the file should roll into the next episode on
-    /// its own: only when the countdown mode is on and nobody said no.
     var autoplaysOnFinish: Bool {
         autoplayMode == .autoDelay && !nextUpDismissed && hasNextUp
     }
 
-    /// The player is closing or handing off: a countdown must not wake
-    /// up and act on an engine that is gone.
+    /// Closing or handing off: no countdown may act on a gone engine.
     func invalidate() {
         cancelSkipCountdown()
         cancelNextUpCountdown()
@@ -109,8 +92,8 @@ final class PlaybackAutomation {
 
     // MARK: - Inputs
 
-    /// A new item starts with a clean slate: a "no" belongs to the episode
-    /// it was said during, not to the rest of the binge.
+    /// A "no" belongs to the episode it was said during, not the rest of the
+    /// binge.
     func beginItem(identity: String, segments: [MediaSegment]) {
         self.identity = identity
         self.segments = segments
@@ -133,8 +116,7 @@ final class PlaybackAutomation {
         evaluate()
     }
 
-    /// The engine's clock. Duration rides along because it is known only
-    /// once the streams are, and the card is placed against it.
+    /// The engine's clock. Duration arrives only once the streams are known.
     func tick(position: Double, duration: Double) {
         self.position = position
         self.duration = duration
@@ -144,11 +126,8 @@ final class PlaybackAutomation {
 
     // MARK: - Answers
 
-    /// A skip the clock asked for, rather than the viewer. Held back while
-    /// the engine is refilling, and taken up again when it is not.
-    ///
-    /// Only timed skips wait. Select and a tap are the viewer asking for
-    /// this now, and they go straight through `skip`.
+    /// A skip the clock asked for. Held while the engine refills. Select and a
+    /// tap go straight through `skip`.
     private func commitTimedSkip(_ segment: MediaSegment) {
         guard !isBuffering else {
             deferredSkip = segment
@@ -157,10 +136,9 @@ final class PlaybackAutomation {
         skip(segment)
     }
 
-    /// The picture is moving again. A skip is owed only while the playhead
-    /// is still inside the segment it was armed for: past its end, seeking
-    /// to that end would drag the viewer backwards through what they have
-    /// already watched.
+    /// The picture is moving again. Skip only while the playhead is still inside
+    /// the segment: past its end, seeking would drag the viewer back through
+    /// what they have watched.
     private func commitDeferredSkip() {
         guard let segment = deferredSkip else { return }
         deferredSkip = nil
@@ -171,18 +149,16 @@ final class PlaybackAutomation {
         skip(segment)
     }
 
-    /// Commits the skip, by the countdown, a tap, or Select.
     func skip(_ segment: MediaSegment) {
-        // Marked before seeking: landing near the end would otherwise put
-        // the playhead back inside the segment and re-arm the whole thing.
+        // Mark before seeking, or landing near the end re-arms the segment.
         handledSegmentIDs.insert(segment.id)
         cancelSkipCountdown()
         onSkip?(segment)
         evaluate()
     }
 
-    /// Back during the skip countdown means "no" — the one mode with a
-    /// pending action to call off. Returns whether there was one.
+    /// Back during the skip countdown means "no". Returns whether anything was
+    /// pending.
     @discardableResult
     func dismissSkip() -> Bool {
         guard let segment = activeSegment, skipMode == .autoDelay else { return false }
@@ -192,20 +168,17 @@ final class PlaybackAutomation {
         return true
     }
 
-    /// Starts the next episode now, by the countdown, a tap, or Select.
     func playNext() {
-        // The pending task is called off, but the timing stays. An accepted
-        // hand-off outlives this call: the card is still on screen while the
-        // successor is prepared, and a bar that emptied underneath
-        // it would read as the offer being withdrawn. Progress clamps at 1,
-        // so the bar fills out its run and holds until the next item begins.
+        // Cancel the task but keep the timing: the card stays up while the
+        // successor is prepared, and an emptied bar would read as the offer being
+        // withdrawn.
         nextUpCountdown?.cancel()
         nextUpCountdown = nil
         onPlayNext?()
     }
 
-    /// Back on the card during its countdown. Same rule as the skip pill:
-    /// only where something is pending. Returns whether there was.
+    /// Back on the card during its countdown. Returns whether anything was
+    /// pending.
     @discardableResult
     func dismissNextUp() -> Bool {
         guard showsNextUp, autoplayMode == .autoDelay else { return false }
@@ -234,7 +207,7 @@ final class PlaybackAutomation {
         activeSegment = segment
         cancelSkipCountdown()
         guard let segment else { return }
-        // Arms as the playhead crosses into a segment, once per segment.
+        // Arms once per segment, as the playhead crosses into it.
         switch skipMode {
         case .instant:
             commitTimedSkip(segment)
@@ -277,7 +250,6 @@ final class PlaybackAutomation {
         isCountingDown = counting
         cancelNextUpCountdown()
         guard counting else { return }
-        // Arms as the playhead crosses into the countdown window, once.
         let timing = PlaybackCountdown(duration: countdown)
         nextUpTiming = timing
         nextUpCountdown = Task { [weak self] in

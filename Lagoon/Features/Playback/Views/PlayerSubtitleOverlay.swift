@@ -1,23 +1,16 @@
 import LagoonEngine
 import SwiftUI
 
-/// The cue layer, lifted out of `CustomPlayerView`.
+/// The cue layer.
 ///
-/// `currentSubtitleText`, `currentSubtitleCues` and `currentSubtitleImages`
-/// all move at the engine's tick rate, and Observation tracks property reads
-/// per view *body*. Reading them here — and nowhere above here — is what keeps
-/// a cue change from re-evaluating the whole player, and on tvOS from
-/// re-hosting `MenuPressGate`'s tree ten times a second along with it.
-///
-/// Bitmap cues (PGS/VobSub) land exactly where they compose on the video
-/// plane; text cues sit bottom-center Infuse-style.
+/// The subtitle properties change at tick rate and Observation tracks reads
+/// per body. Read them here and nowhere above, or every cue change
+/// re-evaluates the whole player.
 struct PlayerSubtitleOverlay: View {
     @PlayerEngineRef var engine: any PlayerEngine
     let style: SubtitleRenderStyle
-    /// Custom renderers must tell Media Accessibility which caption text is
-    /// currently onscreen. The report is driven from here because this is the
-    /// one body that reads that text; the player still clears it on its own
-    /// disappearance.
+    /// Reports onscreen caption text to Media Accessibility, from the one
+    /// body that reads it.
     let onDisplayedCaption: (String?) -> Void
 
     var body: some View {
@@ -42,8 +35,7 @@ struct PlayerSubtitleOverlay: View {
                 if !textCues.isEmpty,
                    textCues.allSatisfy({ $0.usesDefaultPlacement && $0.usesDefaultStyle }),
                    let text = engine.currentSubtitleText {
-                    // Preserve the original path for ordinary SRT, WebVTT
-                    // and unstyled dialogue.
+                    // Plain SRT, WebVTT and unstyled dialogue.
                     VStack {
                         Spacer()
                         PlayerSubtitleText(text: text, style: style)
@@ -92,14 +84,12 @@ struct PlayerSubtitleOverlay: View {
         }
     }
 
-    /// The first cue on screen keeps `player.subtitle.text`; the rest are
-    /// suffixed so simultaneous authored cues stay individually addressable
-    /// without making that name ambiguous.
+    /// The first cue keeps `player.subtitle.text`; the rest are suffixed.
     static func subtitleIdentifier(_ index: Int) -> String {
         index == 0 ? "player.subtitle.text" : "player.subtitle.text.\(index)"
     }
 
-    /// Where the aspect-fit video actually sits inside the surface.
+    /// Where the aspect-fit video sits inside the surface.
     private func displayedVideoRect(in container: CGSize) -> CGRect {
         guard let videoSize = engine.videoSize, videoSize.width > 0, videoSize.height > 0,
               container.width > 0, container.height > 0 else {
@@ -116,9 +106,8 @@ struct PlayerSubtitleOverlay: View {
     }
 }
 
-/// Places one authored cue inside the aspect-fit video rect. `Layout` can
-/// place a subview by an arbitrary anchor, which is the semantic difference
-/// between ASS `\an1` and `\an3` at the same `\pos` coordinate.
+/// Places one authored cue in the video rect. `Layout` can anchor anywhere,
+/// which is what separates ASS `\an1` from `\an3` at the same `\pos`.
 private struct PositionedSubtitleLayout: Layout {
     let position: SubtitleTextPosition?
     let alignment: SubtitleTextAlignment

@@ -7,8 +7,7 @@ nonisolated enum SubtitleSearchPhase: Equatable {
     case searching
     case noProvider
     /// The account lacks Jellyfin's subtitle-management permission, so every
-    /// remote endpoint answers 403. Distinguished from a failure because it
-    /// is a server setting, not something retrying can fix.
+    /// remote endpoint answers 403. A server setting, so retrying cannot fix it.
     case notPermitted
     case noResults
     case failed(String)
@@ -30,10 +29,8 @@ nonisolated enum SubtitleSearchPhase: Equatable {
     }
 }
 
-/// Why a subtitle search or download failed, kept specific enough to be
-/// actionable. Collapsing every failure into "the provider could not supply
-/// this file" sent viewers after an imagined download quota when the real
-/// cause was a 403, an expired session or a timeout.
+/// Why a subtitle search or download failed, specific enough for the viewer
+/// to act on.
 nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     case notAvailable
     case providerUnavailable
@@ -46,9 +43,7 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     case timedOut
     case offline
     case server(Int)
-    /// The server explained itself. Its own words beat any wording invented
-    /// here, because it is the only party that knows whether the provider
-    /// refused, timed out, or ran the account out of downloads.
+    /// The server's own explanation, which beats any wording invented here.
     case reported(status: Int, message: String)
 
     var errorDescription: String? {
@@ -80,9 +75,8 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         }
     }
 
-    /// The HTTP status behind this, where there was one. Callers branch on
-    /// the status rather than on case equality, so a response that carries a
-    /// message is still recognised as the same failure.
+    /// The HTTP status behind this, if any. Branch on this, not case equality,
+    /// so a failure that carries a message still matches.
     var httpStatus: Int? {
         switch self {
         case .server(let status), .reported(let status, _): status
@@ -93,9 +87,8 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         }
     }
 
-    /// Maps transport failures onto the cause a viewer can act on. Anything
-    /// unrecognised stays an honest server error rather than being asserted
-    /// to be a provider problem.
+    /// Maps transport failures onto a cause the viewer can act on. Anything
+    /// unrecognised stays a server error.
     static func classify(_ error: Error) -> SubtitleDownloadError {
         if let known = error as? SubtitleDownloadError { return known }
         if let download = error as? DownloadFailure {
@@ -111,8 +104,7 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
             case .unauthorized, .sessionExpired:
                 return .sessionExpired
             case .server(let status, let message):
-                // Our own wording is better for the cases we understand;
-                // beyond those the server's sentence is the whole point.
+                // Own wording for the cases we understand, the server's otherwise.
                 switch status {
                 case 401: return .sessionExpired
                 case 403: return .notPermitted
@@ -141,14 +133,9 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
         return .server(0)
     }
 
-    /// Only failures that fail *fast* and plausibly succeed on a second try.
-    ///
-    /// A timeout is deliberately excluded: the provider budget is already
-    /// 90 s, and retrying it would leave a viewer watching a spinner for
-    /// minutes to reach the same answer. Rate limiting is excluded because
-    /// retrying inside seconds cannot clear a limit measured in minutes and
-    /// would spend more of the provider's quota getting there — the message
-    /// tells the viewer to wait instead.
+    /// Only failures that fail fast and may succeed on a second try. Not a
+    /// timeout (the budget is already 90 s) and not rate limiting (it lasts
+    /// minutes, and retrying spends quota).
     var isRetryable: Bool {
         switch self {
         case .offline, .providerUnavailable:
@@ -162,16 +149,11 @@ nonisolated enum SubtitleDownloadError: LocalizedError, Equatable {
     }
 }
 
-/// Bounded retry for the transient half of `SubtitleDownloadError`. Remote
-/// subtitle calls reach third-party providers through the server, which makes
-/// them the flakiest requests Lagoon issues and the ones most worth retrying.
+/// Bounded retry for the transient `SubtitleDownloadError`s. These calls
+/// reach third-party providers through the server and are the flakiest.
 nonisolated enum SubtitleRetryPolicy {
-    /// A download failure costs the viewer their action and a unit of the
-    /// provider's quota, so it is worth persisting at.
     static let downloadAttempts = 3
-    /// A search already degrades gracefully — other languages still return
-    /// results, and the Search button is right there — so it buys one quick
-    /// retry rather than making every search wait on the worst provider.
+    /// A search degrades gracefully, so it gets only one quick retry.
     static let searchAttempts = 2
 
     static func delayBeforeRetry(after attempt: Int) -> Duration {
@@ -187,9 +169,8 @@ nonisolated enum SubtitleRetryPolicy {
     }
 }
 
-/// Provider searches fan out from the server to third-party services, so they
-/// need far longer than an ordinary library call. The client-wide 30 s budget
-/// timed these out routinely.
+/// Provider searches reach third-party services through the server and
+/// outlast the client-wide 30 s budget.
 nonisolated enum SubtitleRequestTimeout {
     static let provider: TimeInterval = 90
 }
@@ -204,9 +185,9 @@ nonisolated struct SubtitleStreamSignature: Hashable {
     }
 }
 
-/// Jellyfin queues its library refresh after accepting a remote-subtitle
-/// download. Poll PlaybackInfo until that refresh exposes the new sidecar
-/// rather than interpreting the first stale response as an unplayable file.
+/// Jellyfin refreshes the library after accepting a remote-subtitle
+/// download. Poll PlaybackInfo until the new sidecar appears, rather than
+/// reading the first stale response as a failure.
 @MainActor
 struct DownloadedSubtitlePoller {
     nonisolated static let defaultRefreshDelays: [Duration] = [
@@ -281,18 +262,15 @@ struct DownloadedSubtitlePoller {
     }
 }
 
-/// Host-side service for the player's subtitle tab. Search/download stays
-/// outside PlayerEngine; only the final authenticated sidecar URL crosses
-/// the engine boundary.
+/// Host-side service for the player's subtitle tab. Only the final
+/// authenticated sidecar URL crosses into the engine.
 @MainActor
 @Observable
 final class SubtitleSearchCoordinator {
     private(set) var phase: SubtitleSearchPhase = .idle
     private(set) var results: [SubtitleCandidate] = []
-    /// The Subtitles tab is either choosing a track or browsing search
-    /// results, never both. Results used to be stacked above the track list
-    /// with no way back, which left two rows of candidates squeezed over the
-    /// tracks a viewer was actually trying to reach.
+    /// The Subtitles tab is either choosing a track or browsing results, never
+    /// both.
     private(set) var isBrowsingResults = false
     private(set) var preferredLanguages: [String] = []
     private(set) var languageChoices: [String] = []
@@ -349,15 +327,11 @@ final class SubtitleSearchCoordinator {
         phase = .idle
         existingSignatures = Set(streams.filter { $0.type == "Subtitle" }.map(SubtitleStreamSignature.init))
         if missingMode == .automaticSearch, !hasSuitableLocalTrack {
-            // Automatic search opens straight onto the results browser: the
-            // viewer asked for candidates, not for the track list.
             startSearch()
         }
     }
 
-    /// Changing the language while browsing re-runs the search, because the
-    /// results on screen are the answer to the previous language and nothing
-    /// else in the panel would reflect the change.
+    /// Changing the language while browsing re-runs the search.
     func selectLanguage(_ language: String?) {
         selectedLanguage = language
         if isBrowsingResults { startSearch() }
@@ -391,10 +365,8 @@ final class SubtitleSearchCoordinator {
         }
     }
 
-    /// Leaves the results browser for the track list. A search still running
-    /// is abandoned, but a download is deliberately left alone: it is already
-    /// fetching the file the viewer chose, and its outcome is what the status
-    /// line above the track list is there to report.
+    /// Leaves the results browser for the track list. Abandons a running search
+    /// but not a download: the status line reports its outcome.
     func closeResults() {
         searchTask?.cancel()
         searchTask = nil
@@ -413,9 +385,7 @@ final class SubtitleSearchCoordinator {
         guard let client else { return }
         let itemID = itemID
 
-        // Languages are searched concurrently: one slow provider must not
-        // gate the rest, and sequentially they multiplied both the wait and
-        // the number of chances to time out.
+        // Search languages concurrently so one slow provider does not gate the rest.
         let outcomes = await withTaskGroup(
             of: (Int, Result<[RemoteSubtitleInfo], Error>).self
         ) { group in
@@ -436,8 +406,7 @@ final class SubtitleSearchCoordinator {
             }
             var collected: [(Int, Result<[RemoteSubtitleInfo], Error>)] = []
             for await outcome in group { collected.append(outcome) }
-            // Provider ranking is meaningful, so restore request order rather
-            // than completion order.
+            // Keep request order: provider ranking is meaningful.
             return collected.sorted { $0.0 < $1.0 }
         }
         guard generation == searchGeneration else { return }
@@ -463,8 +432,7 @@ final class SubtitleSearchCoordinator {
                 return
             case .failure(let error):
                 let classified = SubtitleDownloadError.classify(error)
-                // Jellyfin answers 404 for an item it cannot find, not for a
-                // missing provider; treat it as such.
+                // Jellyfin answers 404 for a missing item, not a missing provider.
                 if classified.httpStatus == 404 {
                     itemMissing = true
                 } else {
@@ -485,16 +453,14 @@ final class SubtitleSearchCoordinator {
         }
     }
 
-    /// A permission or session problem explains every other failure in the
-    /// batch, so it wins over whichever language happened to fail first.
+    /// A permission or session problem explains every other failure, so it wins.
     static func mostActionable(_ failures: [SubtitleDownloadError]) -> SubtitleDownloadError? {
         failures.first { $0 == .notPermitted }
             ?? failures.first { $0 == .sessionExpired }
             ?? failures.first
     }
 
-    /// Retries only the transient half of `SubtitleDownloadError`, rethrowing
-    /// the classified error so callers never have to re-derive it.
+    /// Retries only transient errors, rethrowing the classified error.
     static func retrying<T>(
         maxAttempts: Int = SubtitleRetryPolicy.downloadAttempts,
         _ operation: () async throws -> T
@@ -546,10 +512,9 @@ final class SubtitleSearchCoordinator {
                 candidate.language ?? selectedLanguage ?? ""
             )
             do {
-                // Fetch once for immediate playback, validate the actual
-                // bytes, then upload those same bytes to Jellyfin. This
-                // bypasses the 10.11.x endpoint that can return 204 even
-                // after its internal provider/save operation failed.
+                // Fetch once, validate the bytes, then upload the same bytes to Jellyfin.
+                // This bypasses the 10.11.x endpoint that can return 204 after a failed
+                // save.
                 let file = try await Self.retrying {
                     try await client.remoteSubtitleFile(subtitleId: subtitleID)
                 }
@@ -567,12 +532,9 @@ final class SubtitleSearchCoordinator {
                     isHearingImpaired: candidate.isHearingImpaired,
                     isDownloaded: true
                 ))
-                // The controller keeps its own ordered stream list beside the
-                // engine's tracks, and maps the selected track through it to
-                // carry the choice into the next episode. The server has no
-                // stream for this file until the upload below lands, so hand
-                // it the candidate's own description; without it the list
-                // ran one short and a downloaded track was never carried.
+                // The controller maps the selected track through its own stream list to
+                // carry the choice into the next episode. The server has no stream for
+                // this file until the upload lands, so add the candidate's description.
                 onTrackAdded?(MediaStream(
                     type: "Subtitle",
                     codec: candidate.format,
@@ -596,9 +558,6 @@ final class SubtitleSearchCoordinator {
                     realFrameRate: nil
                 ))
                 phase = .downloaded
-                // The chosen result is now a track. Hand the viewer back the
-                // track list with it selected rather than leaving them in a
-                // list of candidates they have finished with.
                 finishBrowsing()
 
                 persistenceTask?.cancel()
@@ -620,12 +579,10 @@ final class SubtitleSearchCoordinator {
                 directFailure = SubtitleDownloadError.classify(error)
             }
 
-            // Jellyfin's native save/convert path is a compatibility fallback
-            // for provider formats Lagoon cannot parse, and for servers
-            // without the direct endpoint. It makes the server fetch from the
-            // provider a *second* time, so it must not run for a failure the
-            // retry could never fix — a 403 or an expired session would only
-            // burn the provider's download quota on its way to the same error.
+            // Jellyfin's save path is a fallback for formats Lagoon cannot parse and
+            // for servers without the direct endpoint. It fetches from the provider
+            // again, so skip it for failures a retry cannot fix (403, expired session)
+            // to save the provider's download quota.
             guard let directFailure,
                   directFailure == .unsupportedFile || directFailure.httpStatus == 404 else {
                 throw directFailure ?? .providerUnavailable
@@ -665,10 +622,8 @@ final class SubtitleSearchCoordinator {
         } catch {
             guard generation == downloadGeneration else { return }
             var failure = SubtitleDownloadError.classify(error)
-            // The provider answered 404 for the file itself and Jellyfin's
-            // save then attached nothing: the result really has gone from the
-            // provider, which is the one case the quota/removal wording is
-            // earned.
+            // Provider 404 and nothing attached: the result really is gone, the one
+            // case the quota/removal wording fits.
             if failure == .notAvailable, directFailure?.httpStatus == 404 {
                 failure = .providerUnavailable
             }
@@ -679,7 +634,7 @@ final class SubtitleSearchCoordinator {
     }
 
     /// Returns to the track list without touching `phase`, so the "Downloaded
-    /// and selected" line survives the transition and explains the new track.
+    /// and selected" line survives.
     private func finishBrowsing() {
         results = []
         isBrowsingResults = false
@@ -701,9 +656,8 @@ final class SubtitleSearchCoordinator {
         searchGeneration &+= 1
     }
 
-    /// Playback dismissal severs the coordinator's session-sized references
-    /// immediately. Cancellation alone stops the work but otherwise leaves
-    /// the client and completion closure alive until the controller dies.
+    /// Drops the session-sized references at dismissal. Cancellation alone
+    /// keeps the client and completion closure alive until the controller dies.
     func detach() {
         cancel()
         client = nil
@@ -718,8 +672,7 @@ final class SubtitleSearchCoordinator {
     }
 
     #if DEBUG
-    /// Fixture for the Debug component gallery: the results browser with a
-    /// representative page of candidates and no server behind it.
+    /// Fixture for the Debug component gallery.
     static func previewingResults(_ results: [SubtitleCandidate]) -> SubtitleSearchCoordinator {
         let coordinator = SubtitleSearchCoordinator()
         coordinator.results = results
@@ -731,20 +684,18 @@ final class SubtitleSearchCoordinator {
     #endif
 
     static func makeLanguageChoices(preferredLanguages: [String]) -> [String] {
-        // Settings retains the exhaustive language catalogue. Inside active
-        // playback, keep this list deliberately compact and stable.
+        // Keep this list compact during playback. Settings has the full catalogue.
         SubtitlePreferencesStore.deduplicated(
             preferredLanguages + SubtitlePreferencesStore.commonLanguageChoices
         )
     }
 }
 
-/// Jellyfin's subtitle route uses ISO 639-2 identifiers while Apple's
-/// preference APIs normally return BCP-47/two-letter identifiers.
+/// Jellyfin's subtitle route uses ISO 639-2 codes. Apple's preference APIs
+/// return BCP-47 or two-letter codes.
 nonisolated enum JellyfinSubtitleLanguageCode {
-    /// ISO 639-1 → ISO 639-2/T. Source: the Library of Congress's official
-    /// ISO 639-2 table. Languages that only have a three-letter code pass
-    /// through unchanged below.
+    /// ISO 639-1 → ISO 639-2/T, from the Library of Congress table. Three-letter-
+    /// only languages pass through unchanged.
     private static let common: [String: String] = [
         "aa": "aar", "ab": "abk", "af": "afr", "ak": "aka", "sq": "sqi", "am": "amh",
         "ar": "ara", "an": "arg", "hy": "hye", "as": "asm", "av": "ava", "ae": "ave",
@@ -781,8 +732,7 @@ nonisolated enum JellyfinSubtitleLanguageCode {
 
     private static let reverse: [String: String] = {
         var result = Dictionary(uniqueKeysWithValues: common.map { ($0.value, $0.key) })
-        // ISO 639-2/B aliases still appear in older media libraries even
-        // though Jellyfin normally emits the terminological form above.
+        // ISO 639-2/B aliases still appear in older libraries.
         result.merge([
             "alb": "sq", "arm": "hy", "baq": "eu", "bur": "my", "chi": "zh",
             "cze": "cs", "dut": "nl", "fre": "fr", "geo": "ka", "ger": "de",

@@ -2,18 +2,11 @@
 import LagoonEngine
 import SwiftUI
 
-/// The iOS touch grammar's centre cluster: a large play/pause with
-/// a ±10 s skip either side, the same three-button row every phone player
-/// puts under the thumb. tvOS keeps its own remote grammar in
-/// `CustomPlayerView` untouched — this view exists only on iOS.
+/// The iOS centre cluster: play/pause with a ±10 s skip either side.
 ///
-/// Holds the engine the same way every other player view does: weak, via
-/// `@PlayerEngineRef`, so a stale copy of this cluster kept alive by a
-/// SwiftUI gesture context after an episode handoff reads
-/// `DetachedPlayerEngine` instead of leaking the drained one. The
-/// closures below read `engine.isPaused` from the body, which is fine — it
-/// changes on viewer action, not at tick rate (what is ruled out is
-/// `timePosition`, the subtitle cue properties, and other per-tick state).
+/// Holds the engine weakly via `@PlayerEngineRef`, never strongly, so a stale
+/// copy after a handoff cannot leak the drained engine. Reading `isPaused`
+/// here is fine; tick-rate state such as `timePosition` is not.
 struct PlayerTouchTransportCluster: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// `true` for the forward button, `false` for back.
@@ -38,9 +31,7 @@ struct PlayerTouchTransportCluster: View {
             )
             .labelStyle(.iconOnly)
             .font(.title.weight(.semibold))
-            // Padding lives inside the label, not outside the button, so it
-            // grows the glass shape the style draws rather than just adding
-            // dead space around an unchanged one — roughly a 60pt circle.
+            // Inside the label, so it grows the glass circle (~60pt).
             .padding(Metrics.Space.l)
         }
         .buttonStyle(.glass(.clear))
@@ -60,27 +51,20 @@ struct PlayerTouchTransportCluster: View {
             )
             .labelStyle(.iconOnly)
             .font(Typography.glyph)
-            // Roughly an 88pt circle — generous enough to be the obvious
-            // primary target beside the two 60pt skip buttons either side.
+            // ~88pt circle, the primary target.
             .padding(Metrics.Space.xl)
         }
         .buttonStyle(.glass(.clear))
         .buttonBorderShape(.circle)
         .foregroundStyle(.white)
         .contentShape(Circle())
-        // Moved here from the toolbar: the centre cluster is now
-        // the one play/pause control on iOS, so it keeps the identifier the
-        // regression suite already looks for.
+        // The regression suite looks for this identifier.
         .accessibilityIdentifier("player.playPause")
     }
 }
 
-/// Pure policy behind the iOS double-tap seek's stacking feedback:
-/// a further double-tap on the same side, while the glyph from the last one
-/// is still up, adds another step instead of resetting it, so three quick
-/// double-taps forward reads "30 s" rather than restarting at 10 s each time.
-/// `nonisolated` so a unit test can call it directly, with no view or engine
-/// in the way.
+/// Double-tap seek feedback: a repeat on the same side while the glyph is
+/// up adds a step (10, 20, 30 s); a direction change resets it.
 nonisolated enum TouchSeekPolicy {
     static let step: Double = 10
 

@@ -2,14 +2,12 @@ import Foundation
 import LagoonEngine
 import UIKit
 
-/// An engine a sampler can read: the player contract plus the optional
-/// diagnostics surface. Neither the sampler nor the incident monitor needs
-/// to know which engine it is.
+/// An engine a sampler can read: the player contract plus diagnostics.
 typealias DiagnosableEngine = any PlayerEngine & PlayerEngineDiagnostics
 
-/// Optional tester-facing sampling. Tasks keep only weak engine references;
-/// observations are read here and published as low-frequency HUD snapshots.
-/// The independent incident monitor owns automatic diagnostic reporting.
+/// Optional tester-facing sampling into low-frequency HUD snapshots. Tasks
+/// hold the engine weakly. `PlaybackIncidentMonitor` owns automatic
+/// reporting.
 @MainActor
 final class PlaybackDiagnosticsSampler {
     struct HUDContext {
@@ -20,8 +18,7 @@ final class PlaybackDiagnosticsSampler {
 
     private var decodeTraceTask: Task<Void, Never>?
     private var hudTask: Task<Void, Never>?
-    /// Supplied by the controller so the decode trace can print the cache's
-    /// fill progress next to the engine counters.
+    /// Lets the decode trace print cache fill next to the engine counters.
     var cacheMetrics: (() -> PlaybackCacheMetrics?)?
 
     deinit {
@@ -37,16 +34,9 @@ final class PlaybackDiagnosticsSampler {
     }
 
     /// A console time series of the software decode path, every two seconds.
-    ///
-    /// The HUD shows the same numbers, but a HUD reading is one glance at one
-    /// moment and the question is a *curve*: cost per frame climbs from 31 ms
-    /// past the 41.7 ms budget within half a minute, and whether queue depth
-    /// and footprint move with it separates memory pressure from heat from
-    /// scene complexity. Reading that off a television by eye loses the
-    /// correlation.
-    ///
-    /// `devicectl … --console` streams it from a real Apple TV, where the
-    /// unified log is out of reach. Off unless `-debug.decodeTrace YES`.
+    /// The question is a curve (cost per frame, queue depth, footprint over
+    /// time), which a HUD glance cannot show. `devicectl … --console` streams it
+    /// from a real Apple TV. Off unless `-debug.decodeTrace YES`.
     func startTrace(
         engine: DiagnosableEngine,
         onExitRequested: @escaping @MainActor () -> Void
@@ -56,20 +46,15 @@ final class PlaybackDiagnosticsSampler {
         decodeTraceTask = Task { [weak engine] in
             let cpuTrace = ProcessCPUTrace()
             let pumpPing = PumpPing()
-            // Soak hooks: a hands-off pause/resume and a hands-off
-            // exit at fixed media-time positions, each off (0) unless set.
-            // Read once so a value that changes mid-soak (it shouldn't)
-            // can't retrigger either one.
+            // Soak hooks: hands-off pause/resume and exit at fixed media-time
+            // positions, off (0) unless set. Read once so neither can retrigger.
             let soakPauseAtSeconds = UserDefaults.standard.double(forKey: "debug.soakPauseAtSeconds")
             let soakExitAtSeconds = UserDefaults.standard.double(forKey: "debug.soakExitAtSeconds")
             var didSoakPause = false
             var didSoakExit = false
             while !Task.isCancelled {
-                // Soak diagnostic: overshoot past the requested 2 s
-                // sleep is time the main actor was unavailable to resume
-                // this task — this loop runs on the main actor because it
-                // was created inside `PlaybackController`, a `@MainActor`
-                // type.
+                // Overshoot past the 2 s sleep is time the main actor was busy. This
+                // loop runs on the main actor.
                 let sleepStart = ContinuousClock.now
                 do {
                     try await Task.sleep(for: .seconds(2))
@@ -78,15 +63,12 @@ final class PlaybackDiagnosticsSampler {
                 }
                 let mainLateMs = max(0, ms(ContinuousClock.now - sleepStart) - 2_000)
                 guard !Task.isCancelled, let engine else { return }
-                // Whether frames take the direct-display path or are being
-                // composited with UI — readable here with the HUD off, which
-                // the HUD itself never could be.
+                // Direct-display or composited, readable here with the HUD off.
                 engine.refreshVideoPerformanceMetrics()
                 let performance = engine.videoPerformance
                 let memory = MemorySnapshot.current()
                 let depths = engine.queueDepths
-                // Last tick's completed pump-queue ping; the one fired below
-                // lands in time for the next tick to read.
+                // Last tick's pump-queue ping; the one fired below is read next tick.
                 let lastPumpMs = pumpPing.lastMs
                 let thermalName: String
                 switch ProcessInfo.processInfo.thermalState {
@@ -96,12 +78,8 @@ final class PlaybackDiagnosticsSampler {
                 case .critical: thermalName = "critical"
                 @unknown default: thermalName = "unknown"
                 }
-                // The renderer-side audio signal rides on the same
-                // line, so a device console can correlate it with position
-                // and the queues without the HUD or the accessibility probe.
-                // Built in steps rather than one `+` chain. The chain
-                // type-checked while the engine was in this module; across
-                // the package boundary the solver gives up on it.
+                // Built in steps: one `+` chain is too much for the type checker across
+                // the package boundary.
                 var trace = "DecodeTrace"
                 trace += String(format: " position=%.2f", engine.timePosition)
                 trace += " video=\(engine.videoQueueCountDiagnostic)/\(engine.maximumVideoBacklogDiagnostic)/\(engine.videoQueueHardLimitDiagnostic)"
@@ -119,21 +97,16 @@ final class PlaybackDiagnosticsSampler {
                 trace += " opt=\(performance?.optimizedCompositingFrames ?? -1)"
                 trace += " dropped=\(performance?.droppedFrames ?? -1)"
                 trace += " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\""
-                // Soak diagnostics: main-actor scheduling latency, pump-queue
-                // ping, the 10 Hz tick summary, subtitle cue count, renderer
-                // observer count, thermal state — everything the 100-minute
-                // soak needs to show whether the engine degrades over a long
-                // film.
+                // Soak diagnostics: main-actor latency, pump ping, tick summary, cue and
+                // observer counts, thermal state.
                 trace += String(format: " mainLateMs=%.0f pumpMs=%.1f", mainLateMs, lastPumpMs)
                 trace += " \(engine.drainMainTickDiagnostic())"
                 trace += " cues=\(engine.subtitleCueCountDiagnostic)"
                 trace += " observers=\(engine.rendererObserverCountDiagnostic)"
                 trace += " thermal=\(thermalName)"
                 #if os(tvOS)
-                // Whether the display actually matched the content: a
-                // 60 Hz SDR mode left in place makes the compositor
-                // cadence-convert and tone-map every HDR frame, which is
-                // the standing suspect for the composited-path drops.
+                // Whether the display matched the content. A 60 Hz SDR mode makes the
+                // compositor convert and tone-map every HDR frame.
                 trace += " display=\"\(DisplayModeMatcher.statusDescription)"
                     + " · \(DisplayModeMatcher.maximumFramesPerSecond.map(String.init) ?? "?") Hz\""
                 #endif
@@ -141,8 +114,6 @@ final class PlaybackDiagnosticsSampler {
                 trace += " audioHeld=\(engine.audioDeliverySuspendedForDiagnostics ? 1 : 0)"
                     + " deliveryHeld=\(engine.demuxDeliverySuspendedForDiagnostics ? 1 : 0)"
                 #endif
-                // The cache's fill progress on the same line, so a
-                // console run can read the fill rate against position.
                 if let cache = cacheMetrics?() {
                     trace += String(
                         format: " cacheMB=%.1f aheadMB=%.1f netMB=%.1f dupMB=%.1f shared=%d req=%d",
@@ -285,12 +256,10 @@ final class PlaybackDiagnosticsSampler {
             lines.append("Time:    \(Int(engine.timePosition))/\(Int(engine.duration)) s")
         }
         let depths = engine.queueDepths
-        // App-side count/seconds explain demux backpressure. `lead` is the
-        // separate renderer-side starvation signal: media already handed to
-        // AVFoundation beyond the clock, which stays positive after Lagoon's
-        // own queue drains to zero. `+cur/peak` is compressed video
-        // parked in the intake, past the decoded limit, waiting for the
-        // demuxer to reach it again.
+        // count/seconds explain demux backpressure. `lead` is renderer-side
+        // starvation: media handed to AVFoundation beyond the clock, positive even
+        // after Lagoon's queue is empty. `+cur/peak` is compressed video parked in
+        // the intake past the decoded limit.
         lines.append(String(
             format: "Queues:  V %d/%d/%d +%d/%d · A %d/%d (%.1fs) · lead %.2fs ready%d · stalls %d (%d audio) · reprime %d · aDry %d · aGaps %d",
             engine.videoQueueCountDiagnostic,
@@ -318,15 +287,13 @@ final class PlaybackDiagnosticsSampler {
             )
         }
         #endif
-        // Audio thrown away in the demuxer, which no other counter can show:
-        // dropped packets never reach the renderer, so aGaps above reads 0
-        // through exactly the failure this line exists to catch.
+        // Audio dropped in the demuxer. It never reaches the renderer, so aGaps
+        // reads 0 through exactly this failure.
         if let drops = engine.audioPacketDropInfo {
             lines.append("AudDrop: \(drops)")
         }
-        // Only once something has actually been rebuilt. A renderer that
-        // failed and was replaced leaves no other trace — playback simply
-        // carries on, which is the point.
+        // Only once something was rebuilt; a replaced renderer leaves no other
+        // trace.
         if engine.audioRendererRecoveryCount > 0 || engine.mediaServicesResetRecoveryCount > 0 {
             lines.append(
                 "Recovery: audio ×\(engine.audioRendererRecoveryCount) · service ×\(engine.mediaServicesResetRecoveryCount)"
@@ -354,8 +321,6 @@ final class PlaybackDiagnosticsSampler {
                 cache.resourceCount,
                 cache.evictionCount
             ))
-            // The cushion the fill scheduler is protecting, and what
-            // overtaking a prefetch cost or saved.
             lines.append(String(
                 format: "Ahead:   %.1f MB cached past the playhead · %.1f MB duplicate · %d shared fetches",
                 Double(cache.cachedBytesAheadOfPlayhead) / 1_048_576,
@@ -366,10 +331,8 @@ final class PlaybackDiagnosticsSampler {
         if let videoTiming = engine.videoTimingDiagnostic {
             lines.append("Vtime:   \(videoTiming)")
         }
-        // Where the software path's frame budget goes, split three ways so a
-        // slow one can be attributed rather than guessed at. Each
-        // percentage is a share of one core on its own queue; they overlap,
-        // so they are not meant to sum.
+        // The software path's frame budget, split three ways. Each is a share of
+        // one core on its own queue; they overlap and do not sum.
         if let software = engine.softwareDecodeDiagnostic {
             lines.append("SWdec:   \(software)")
         }
@@ -377,8 +340,8 @@ final class PlaybackDiagnosticsSampler {
             lines.append("DoVi P7: \(dovi)")
         }
         #if os(tvOS)
-        // Every gate between the request and the glass. Lagoon always asks;
-        // the system's Match Content setting remains the user's authority.
+        // Every gate between the request and the glass. Lagoon always asks; the
+        // system's Match Content setting decides.
         if let request = engine.displayMatchRequest {
             lines.append(String(
                 format: "Display: request %.3f Hz · %@",
@@ -412,9 +375,8 @@ final class PlaybackDiagnosticsSampler {
     }
 }
 
-/// Soak diagnostic: holds the DecodeTrace loop's pump-queue ping
-/// result. A box rather than a local var because the callback that fills it
-/// runs on the main actor a tick later than the print that reads it.
+/// Holds the DecodeTrace pump-queue ping result. A box because the callback
+/// fills it a tick after the print reads it.
 @MainActor
 private final class PumpPing {
     var lastMs: Double = -1

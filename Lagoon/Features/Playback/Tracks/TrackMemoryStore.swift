@@ -2,27 +2,20 @@ import Foundation
 import LagoonEngine
 import Observation
 
-/// A track choice durable enough to be stored, and the defaults namespace
-/// it is stored under.
-///
-/// The namespace belongs to the choice rather than to a store's
-/// initializer, so no call site can write one kind of choice into another
-/// kind's key by passing the wrong string.
+/// A track choice that can be stored, and its defaults namespace. The
+/// namespace belongs to the choice so no call site can write one kind into
+/// another's key.
 nonisolated protocol RememberedTrackChoice: Codable, Equatable {
     static var memoryNamespace: String { get }
-    /// Reference-date seconds, used only to evict the oldest entries.
-    /// Deliberately not a `Date`: the codebase keeps dates out of Codable.
+    /// Reference-date seconds, used only to evict the oldest entries. Not a
+    /// `Date`: dates stay out of Codable.
     var updatedAt: Double { get }
 }
 
-/// The shape of a track layout, as one string two layouts can be compared
-/// by.
+/// A track layout's shape as one comparable string.
 nonisolated enum TrackLayoutFingerprint {
-    /// Fields are length-prefixed rather than merely joined, because a
-    /// title is uncontrolled file metadata and may contain the separators
-    /// itself — and two different layouts colliding here is the one way a
-    /// remembered position could be applied to a layout it was never
-    /// measured in.
+    /// Fields are length-prefixed because titles may contain separators, and a
+    /// collision would apply a remembered position to the wrong layout.
     static func of(_ streams: [[String]]) -> String {
         streams
             .map { fields in fields.map { "\($0.count):\($0)" }.joined() }
@@ -30,13 +23,9 @@ nonisolated enum TrackLayoutFingerprint {
     }
 }
 
-/// Per-account memory of track choices, scoped to a series so that
-/// correcting one episode carries to the rest of the show. Written straight
-/// through to `UserDefaults`, so it outlives the player presentation.
-///
-/// Generic over the choice because the mechanism — re-read, merge, evict,
-/// persist — has nothing to do with what was chosen, and a second copy of
-/// it would be a second place for the merge to go wrong.
+/// Per-account track choices, scoped to a series so correcting one episode
+/// carries to the rest. Written straight to `UserDefaults`, so it outlives
+/// the player.
 @MainActor
 @Observable
 final class TrackMemoryStore<Choice: RememberedTrackChoice> {
@@ -44,8 +33,7 @@ final class TrackMemoryStore<Choice: RememberedTrackChoice> {
     private var choices: [String: Choice] = [:]
 
     private let defaults: UserDefaults
-    /// Enough for any plausible library of part-watched shows; the oldest
-    /// entries fall off rather than letting the payload grow without end.
+    /// Oldest entries fall off so the payload stays bounded.
     private static var capacity: Int { 200 }
 
     init(defaults: UserDefaults = .standard) {
@@ -58,8 +46,7 @@ final class TrackMemoryStore<Choice: RememberedTrackChoice> {
         choices = accountID.flatMap { Self.stored(for: $0, in: defaults) } ?? [:]
     }
 
-    /// One show, one choice: an episode answers for its series, anything
-    /// else only for itself.
+    /// An episode answers for its series, anything else only for itself.
     nonisolated static func scope(seriesID: String?, itemID: String) -> String {
         seriesID ?? itemID
     }
@@ -86,8 +73,7 @@ final class TrackMemoryStore<Choice: RememberedTrackChoice> {
         persist()
     }
 
-    /// Dropped when the viewer lands back on what automatic selection would
-    /// have picked anyway: there is no longer an override to carry.
+    /// Called when the viewer lands back on the automatic choice.
     func forget(_ scope: String) {
         var merged = reloaded()
         let removed = merged.removeValue(forKey: scope) != nil
@@ -96,9 +82,8 @@ final class TrackMemoryStore<Choice: RememberedTrackChoice> {
         persist()
     }
 
-    /// Re-reads what is on disk before changing it, so two players open
-    /// over one account — a Picture in Picture session and a new one — do
-    /// not write whole-map snapshots over each other's entries.
+    /// Re-read before writing, so two players on one account (PiP and a new
+    /// one) do not overwrite each other's entries.
     private func reloaded() -> [String: Choice] {
         guard let accountID,
               let stored = Self.stored(for: accountID, in: defaults) else { return choices }

@@ -17,33 +17,26 @@ nonisolated enum PlaybackStartError: LocalizedError {
     }
 }
 
-/// What the viewer's transport means when a server owns it.
+/// Transport requests routed to a SyncPlay group instead of the local engine.
 ///
-/// Implemented by the SyncPlay driver and held weakly by the controller,
-/// which is the one place every play, pause, seek and "next" passes
-/// through. A request does nothing locally: the group answers everyone
-/// with a command, and that command is what moves this player.
+/// A request does nothing locally: the group's answering command is what
+/// moves this player.
 @MainActor
 protocol GroupTransportRequests: AnyObject {
     func requestPlay()
     func requestPause()
-    /// `resume` carries the tvOS commit grammar — land here *and* play on —
-    /// so the implementation can order the two requests itself.
+    /// `resume` means seek and then play, so the implementation can order
+    /// the two requests.
     func requestSeek(to seconds: Double, resume: Bool)
     func requestNextItem()
 }
 
-/// The transport intentions the player chrome states, and the owner acts
-/// on.
+/// The transport actions the player chrome can request.
 ///
-/// Actions rather than an object, for the reason `CustomPlayerView` takes
-/// `automation` and a handful of values rather than the controller: the
-/// chrome says what the viewer asked for and stays out of who answers.
-/// Closures, not a reference, also keep the engine out of anything SwiftUI
-/// retains.
+/// Closures rather than a controller reference keep the engine out of
+/// anything SwiftUI retains.
 struct PlayerTransportActions {
-    /// Idempotent, because the system integrations that use these describe
-    /// the state they want rather than asking the app to invert its own.
+    /// Idempotent: system integrations state the wanted state, not a toggle.
     let play: () -> Void
     let pause: () -> Void
     let togglePause: () -> Void
@@ -51,8 +44,7 @@ struct PlayerTransportActions {
     let seekBy: (_ seconds: Double) -> Void
 }
 
-/// Soak diagnostic: milliseconds for a `Duration`, shared by the
-/// DecodeTrace loop's `mainLateMs`/`pumpMs`/`Soak*` lines.
+/// Milliseconds for a `Duration`, for DecodeTrace and soak lines.
 private func ms(_ duration: Duration) -> Double {
     Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
 }
@@ -63,129 +55,93 @@ private func ms(_ duration: Duration) -> Double {
 @MainActor
 final class PlaybackController {
     private(set) var engine: SampleBufferPlayerEngine?
-    /// Changes only when a prepared engine replaces the previous one. The
-    /// persistent player surface uses it to reset episode-scoped chrome.
+    /// Changes when a new engine replaces the old one; resets episode-scoped
+    /// chrome.
     private(set) var playbackIdentity = ""
-    /// Process-local identity of the hosted AVSampleBufferDisplayLayer. The
-    /// debug UI journey compares it across autoplay to prove that a stable
-    /// SwiftUI branch also retained the actual UIKit render surface.
+    /// Identity of the hosted display layer. UI tests compare it across
+    /// autoplay to prove the render surface was kept.
     private(set) var playerSurfaceIdentity = ""
     private(set) var playerInfo: PlayerItemInfo?
     private(set) var errorMessage: String?
     private(set) var didFinish = false
     private(set) var isExternalPlaybackRouteActive = false
     let subtitleSearch = SubtitleSearchCoordinator()
-    /// Reports failures, recoveries and degraded sessions to the
-    /// diagnostics hub, one attempt at a time.
     let incidents = PlaybackIncidentMonitor()
 
-    /// The episode queued behind this one, resolved once at start so the Up
-    /// Next card can appear the instant the credits do. Nil for
-    /// movies and at the end of a series.
+    /// The next episode, resolved at start so Up Next can appear instantly.
+    /// Nil for movies and at the end of a series.
     private(set) var nextUp: MediaItem? {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
-    /// Skip and Up Next timing, off the engine's clock.
     let automation = PlaybackAutomation()
-    /// The end of the file is rolling into the next episode: set before the
-    /// hand-off task runs, so the view's own end-of-file handling does not
-    /// close the player underneath it.
+    /// Set before the autoplay hand-off runs, so the view's end-of-file
+    /// handling does not close the player underneath it.
     private(set) var isAutoplayPending = false
-    /// The app is in the background on iOS and the picture is off: every
-    /// engine, including a successor started by autoplay, plays audio only
-    /// until the app is back.
+    /// iOS background with the picture off: every engine, including an
+    /// autoplay successor, plays audio only until the app returns.
     private var videoOutputSuspended = false
-    /// The engine anchored its first frame after a load or a seek — every
-    /// time, not once per engine. A SyncPlay driver reports Ready on it;
-    /// the controller rewires it onto each successor engine, so
-    /// the driver never has to hold one.
+    /// Fires each time the engine anchors its first frame after a load or
+    /// seek. Rewired onto each successor, so a SyncPlay driver never holds an
+    /// engine.
     @ObservationIgnored var onEngineReady: (() -> Void)?
-    /// The player session is over for good. A driver leaves its group here
-    /// rather than going on reporting from a controller with no engine.
+    /// The player session is over for good.
     @ObservationIgnored var onClosed: (() -> Void)?
-    /// The engine started or stopped buffering — a stall, a seek, the
-    /// initial prime. A SyncPlay group's Buffering and Ready reports are
-    /// this signal, since the slowest member sets the group's pace.
-    /// Rewired onto each successor engine like `onEngineReady`.
+    /// Buffering started or stopped (stall, seek, initial prime). Rewired
+    /// onto each successor like `onEngineReady`.
     @ObservationIgnored var onBufferingChanged: ((Bool) -> Void)?
-    /// Set while a SyncPlay group owns the transport. Weak: the
-    /// store owns the driver, the driver holds this controller weakly, and
-    /// neither end may keep the other alive. Nil is the ordinary case and
-    /// the ordinary behaviour — every `user…` method below acts locally.
+    /// Set while a SyncPlay group owns the transport. Weak so neither end
+    /// keeps the other alive. When nil, every `user…` method acts locally.
     @ObservationIgnored weak var groupTransport: (any GroupTransportRequests)?
-    /// Extra playback-HUD lines from whatever else is driving this session.
-    /// Supplied by the SyncPlay driver so the `Sync:` line is assembled by
-    /// the object that knows the group.
+    /// Extra HUD lines, such as SyncPlay's `Sync:` line.
     @ObservationIgnored var groupHUDLines: (() -> [String])?
     #if os(iOS)
     @ObservationIgnored private var lifecycleObservers: [NSObjectProtocol] = []
-    /// Whether Picture in Picture is showing the picture, or about to. The
-    /// player view answers, because the PiP coordinator is its state.
+    /// Whether PiP is showing the picture, or about to. Answered by the
+    /// player view, which owns the PiP coordinator.
     @ObservationIgnored var isPictureInPictureShowing: () -> Bool = { false }
     #endif
 
     private(set) var hudLines: [String] = []
-    /// The byte-zero prefix remains available for compatibility diagnostics,
-    /// while the timeline renders every sparse range retained around seeks.
-    /// HLS/native paths have no direct-file byte-range model. All three read
-    /// through to the engine, which owns the cache and publishes what it is
-    /// holding; nothing here mirrors that state.
+    /// Read through to the engine, which owns the cache; nothing here
+    /// mirrors it. HLS has no byte-range model.
     var bufferedFraction: Double? { engine?.bufferState.bufferedFraction }
     var bufferedRanges: [PlaybackBufferedRange] { engine?.bufferState.bufferedRanges ?? [] }
     var playheadPrefetchCount: Int { engine?.bufferState.playheadPrefetchCount ?? 0 }
 
     private var client: JellyfinClient?
-    /// Retained so a failed attempt can be replayed on the next rung of the
-    /// delivery ladder; everything else `start` needs is already
-    /// controller state.
+    /// Kept so a failed attempt can be replayed on the next rung.
     private var currentMedia: MediaItem?
-    /// How the current item is being delivered, and the position a retry
-    /// resumes from. The ladder belongs to one item — a new one starts at
-    /// the top.
+    /// The current rung and the position a retry resumes from. A new item
+    /// starts at the top of the ladder.
     private var delivery: PlaybackDelivery = .negotiated
     private var deliveryItemId: String?
     private var resumeOverride: Double?
-    /// A position handed to `start` by its caller, outranking every resume
-    /// rule for that one start: joining a SyncPlay group means the
-    /// server, not the viewer's own watch history, says where to begin.
-    /// Deliberately not `resumeOverride`, which the new-item reset clears —
-    /// and a group join is exactly when the item is new.
+    /// A caller's start position (a SyncPlay join), outranking every resume
+    /// rule for one start. Not `resumeOverride`, which the new-item reset
+    /// clears, and a group join is exactly when the item is new.
     private var startPositionOverride: Double?
-    /// Whether the engine about to be built should sit at its start position
-    /// instead of rolling. A group member loads, waits there,
-    /// reports Ready, and is started later by `playGroup(atHostTime:)`.
+    /// Load paused at the start position; a group member is started later
+    /// by `playGroup(atHostTime:)`.
     private var startsPaused = false
-    /// Whether the attempt currently starting (or last started) is playing a
-    /// downloaded file rather than a server stream. Always false
-    /// on tvOS, which carries no downloads.
+    /// Playing a downloaded file. Always false on tvOS.
     private var isLocalPlayback = false
-    /// Set once a local-playback attempt fails and falls back, so the retry
-    /// negotiates with the server instead of finding the same broken file on
-    /// disk again and replaying it forever. A new item resets it.
+    /// Set when a downloaded file fails, so the retry goes to the server
+    /// instead of looping on the same broken file. A new item resets it.
     private var skipsLocalPlayback = false
-    /// One rung at a time. The renderer and the demux loop can both report
-    /// the same collapse, and two fallbacks in flight would skip a rung —
-    /// straight past the cheap remux to a transcode nobody needed.
+    /// One rung at a time. Renderer and demux can report the same failure,
+    /// and two fallbacks in flight would skip the remux rung.
     private var isFallingBack = false
     /// Every rung this item has descended, and the failure that forced it.
-    ///
-    /// The detail inside `failure.message` — the VideoToolbox status or
-    /// renderer error that is the entire reason the ladder ran — reaches
-    /// `errorMessage` only when the ladder runs *out* of rungs. A fallback
-    /// that succeeds therefore throws away the one fact that explains it,
-    /// leaving a signpost as the only trace and Instruments as the only
-    /// reader — which needs a paired device, and an Apple TV that cannot be
-    /// paired has no way to get at it. The HUD carries it instead.
+    /// Shown in the HUD, because a fallback that succeeds never reaches
+    /// `errorMessage`.
     private(set) var deliveryFallbacks: [PlaybackDeliveryFallbackRecord] = []
     private var itemId = ""
     private var mediaSourceId = ""
     private var playMethod: PlayMethod = .directPlay
 
     var activePlayMethod: PlayMethod { playMethod }
-    /// Jellyfin's `PlayMethod` collapses the remux and transcode rungs to
-    /// the same `Transcode` value, so the regression probe needs the
-    /// ladder rung itself to tell a forced remux apart from an ordinary
-    /// transcode.
+    /// `PlayMethod` reports remux and transcode both as `Transcode`; the
+    /// regression probe needs the rung to tell them apart.
     var activeDeliveryRung: PlaybackDelivery { delivery }
 
     var isPlaybackCacheActive: Bool {
@@ -198,56 +154,41 @@ final class PlaybackController {
     private var nextUpTask: Task<Void, Never>?
     @ObservationIgnored private let successorPreparation = PlaybackSuccessorPreparation()
     /// Guards the hand-off: `didFinish` and an expiring countdown can both
-    /// arrive at the end of a file, and advancing twice would skip an
-    /// episode outright.
+    /// fire, and advancing twice would skip an episode.
     private(set) var isAdvancing = false
-    /// Presentation state is separate from the reentrancy guard: playback
-    /// reporting may still be finishing after the successor has shown its
-    /// first frame, and must not leave a spinner over healthy video.
+    /// Separate from `isAdvancing`: reporting may still be finishing after
+    /// the successor's first frame, and must not leave a spinner over video.
     private(set) var isTransitionOverlayVisible = false
-    /// User action/EOF to the successor's first primed presentation clock.
-    /// Visible in the HUD and hardware accessibility probe for regression
-    /// comparisons; nil before the first episode handoff.
+    /// Time from action or end of file to the successor's first frame, for
+    /// the HUD and regression probe. Nil before the first hand-off.
     private(set) var lastHandoffMilliseconds: Double?
-    /// Soak hook (`debug.soakExitAtSeconds`): flips once the film
-    /// reaches the configured position, so the view's `onChange` can drive
-    /// the same `dismiss()` a real exit would. Observable so that onChange
-    /// fires; kept separate from `didFinish`, which means something
-    /// different (the file actually ran out).
+    /// Soak hook (`debug.soakExitAtSeconds`): flips at the configured
+    /// position so the view drives a real `dismiss()`. Not `didFinish`,
+    /// which means the file ran out.
     private(set) var soakExitRequested = false
-    /// When the soak exit was requested, so `close()` can report how long
-    /// the whole exit — not just `beginStop()` — took from that instant.
+    /// Lets `close()` time the whole soak exit from the request.
     @ObservationIgnored private var soakExitRequestedAt: ContinuousClock.Instant?
-    /// What the viewer picked in the track panel, carried into the next
-    /// episode. Nil on a first load — there is nothing to carry.
+    /// The viewer's track picks, carried into the next episode.
     private var trackPreference: TrackPreference?
-    /// Series-scoped memory of the viewer's audio choice, which outlives
-    /// this controller and so survives closing the player. Set by
-    /// the player view before the first start; nil in tests and previews,
-    /// where the in-session carry above is the whole mechanism.
+    /// Series-scoped audio choice that survives closing the player. Set by
+    /// the player view before the first start; nil in tests and previews.
     @ObservationIgnored var audioTrackMemory: AudioTrackMemoryStore?
-    /// Which show (or film) the current item answers for in that memory.
+    /// The show or film the current item is remembered under.
     @ObservationIgnored private var audioMemoryScope: String?
-    /// The audio layout that scope was resolved against. Held rather than
-    /// re-read from `audioStreams` at exit, so the shape a choice is stored
-    /// against is always the one it was chosen from — a start that fails
-    /// partway cannot pair a new item's scope with the last one's streams.
+    /// The layout the scope was resolved against. Held, not re-read at exit,
+    /// so a start that fails partway cannot pair a new scope with old streams.
     @ObservationIgnored private var audioMemoryLayout: [AudioLayoutStream] = []
-    /// What automatic selection alone chose for this item, before any
-    /// remembered override. Kept so the exit can tell an override from a
-    /// viewer who simply left the default alone.
+    /// What automatic selection chose, so the exit can tell an override
+    /// from an untouched default.
     @ObservationIgnored private var policyAudioOrdinal: Int?
-    /// The same three for subtitles. Separate from the audio trio rather
-    /// than folded in with it: an item can lose its remembered subtitle and
-    /// keep its remembered audio, and a layout that describes one says
-    /// nothing about the other.
+    /// The same three for subtitles, kept separate because one can be lost
+    /// while the other is kept.
     @ObservationIgnored var subtitleTrackMemory: SubtitleTrackMemoryStore?
     @ObservationIgnored private var subtitleMemoryScope: String?
     @ObservationIgnored private var subtitleMemoryLayout: [SubtitleLayoutStream] = []
     @ObservationIgnored private var policySubtitleOrdinal: Int?
-    /// The current item's streams in the order the engine numbers them, so
-    /// a selected track can be named rather than just counted. Audio is the
-    /// embedded list; subtitles are embedded first, then external.
+    /// Streams in engine order: audio is the embedded list; subtitles are
+    /// embedded first, then external.
     private var audioStreams: [MediaStream] = []
     private var orderedSubtitleStreams: [MediaStream] = []
     private var preferredAudioLanguages: [String] = []
@@ -261,20 +202,16 @@ final class PlaybackController {
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
     @ObservationIgnored private var transitionFeedbackTask: Task<Void, Never>?
     #if DEBUG
-    /// `debug.regressionStartNearEnd` exists to reach autoplay quickly. It
-    /// must only affect the fixture episode: applying it again to the
-    /// successor made the old handoff test exit before sustained playback
-    /// could be measured.
+    /// `debug.regressionStartNearEnd` applies to the fixture episode only;
+    /// applied to the successor, the hand-off test exits too early.
     @ObservationIgnored private var didApplyRegressionNearEnd = false
     #endif
 
     init() {
         PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
         #if os(iOS)
-        // Application notifications rather than SwiftUI's `scenePhase`: the
-        // player is presented from UIKit (`PlayerPresentationHub`), where
-        // the environment's phase never changes, which is how the old
-        // pause-on-background silently never ran on iOS.
+        // Not `scenePhase`: under the UIKit-presented player
+        // (`PlayerPresentationHub`) it never changes.
         let center = NotificationCenter.default
         lifecycleObservers = [
             center.addObserver(
@@ -304,28 +241,22 @@ final class PlaybackController {
         #endif
     }
 
-    /// A track choice described by what it *is* rather than where it sat.
-    ///
-    /// Matching by language and title rather than by ordinal because two
-    /// episodes of one show usually share a stream layout, and "usually" is
-    /// not "always": a commentary track on one episode would shift every
-    /// choice below it and hand the viewer the wrong language.
+    /// A track choice by language and title, not ordinal: an extra track
+    /// on one episode would shift every ordinal below it.
     private struct TrackPreference {
         var audioLanguage: String?
         var audioTitle: String?
         var subtitleLanguage: String?
         var subtitleTitle: String?
-        /// Subtitles deliberately turned off, which is a choice to carry
-        /// like any other — otherwise the next episode reinstates whatever
-        /// the server thinks the default is.
+        /// Subtitles turned off is carried too, or the next episode
+        /// reinstates the server default.
         var subtitlesOff: Bool
     }
 
     @ObservationIgnored private let performanceSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
-    /// `startPosition` and `startPaused` are the group-playback entry:
-    /// the server names the position and whether the member
-    /// waits there for a start instant. Both apply to this start only.
+    /// `startPosition` and `startPaused` are for SyncPlay joins and apply
+    /// to this start only.
     func start(
         media: MediaItem,
         startFromBeginning: Bool,
@@ -382,24 +313,19 @@ final class PlaybackController {
         }
         self.client = client
         currentMedia = media
-        // A failed or cancelled group start must not leak its position into
-        // the next ordinary playback attempt.
+        // Reset every start, so a failed group start cannot leak its position.
         startPositionOverride = startPosition
         startsPaused = startPaused
         if deliveryItemId != media.id {
-            // A different item negotiates from scratch: the previous one's
-            // failures say nothing about this file.
+            // A new item negotiates from scratch.
             deliveryItemId = media.id
             delivery = .negotiated
             deliveryFallbacks = []
             resumeOverride = nil
             skipsLocalPlayback = false
             #if DEBUG
-            // Regression hook: start on a chosen rung instead of negotiating,
-            // so the HLS cases open a real playlist on a server whose content
-            // would otherwise direct-play — every public-demo item is H.264
-            // (audit A18). `debug.regressionInitialDelivery` is a
-            // `PlaybackDelivery` raw value: `remux` or `transcode`.
+            // Regression hook: force a rung so HLS cases run on a server that
+            // would direct-play everything. Raw value `remux` or `transcode`.
             if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
                let forced = UserDefaults.standard.string(forKey: "debug.regressionInitialDelivery"),
                let rung = PlaybackDelivery(rawValue: forced), rung != .negotiated {
@@ -417,10 +343,8 @@ final class PlaybackController {
             ? SubtitlePreferencesStore.systemCaptionLanguages
             : preferredSubtitleLanguages
         self.missingSubtitleMode = missingSubtitleMode
-        // A downloaded title plays from its own file with no server round
-        // trip at all: checked first, ahead of both negotiation and a
-        // prepared successor, since a prepared successor still describes a
-        // network stream. Only iOS carries downloads.
+        // A download plays from disk with no server round trip. Checked
+        // before a prepared successor, which describes a network stream.
         var localSource: MediaSource?
         var localURL: URL?
         var localResumeTicks: Int64?
@@ -434,18 +358,12 @@ final class PlaybackController {
         }
         #endif
         isLocalPlayback = localURL != nil
-        // How far the attempt got, for the report if it fails: nothing
-        // negotiated, or an engine that never became ready.
+        // How far the attempt got, for the failure report.
         var startStage: PlaybackFailureDetail.Stage = .negotiate
         do {
-            // Chapters and trickplay ride alongside the negotiation rather
-            // than after it — neither is in PlaybackInfo, and waiting for a
-            // second round trip would delay the first frame. A
-            // downloaded title has no negotiation to ride alongside, and
-            // asking anyway would burn the client's full request timeout
-            // against an unreachable server before the engine ever starts;
-            // chapters, trickplay and skip segments are accepted losses
-            // offline for this MVP.
+            // Fetched alongside negotiation so they don't delay the first
+            // frame. Skipped for downloads: an unreachable server would cost
+            // the full request timeout before the engine starts.
             async let extras: JellyfinClient.PlaybackExtras = isLocalPlayback
                 ? .none
                 : await client.playbackExtras(itemId: media.id)
@@ -472,11 +390,8 @@ final class PlaybackController {
                       var resolvedSource = negotiated.mediaSources.first else {
                     throw JellyfinError.unplayable
                 }
-                // A disc cannot be played from the bytes this rung serves,
-                // whatever the server answers about direct play, so the
-                // ladder steps past it before an attempt rather than after
-                // one. No engine starts, but the HUD still gets a
-                // record of why the rung below is in force.
+                // A disc this rung cannot play steps down before an attempt,
+                // whatever the server says. The HUD still records why.
                 let layout = PlaybackSourceLayout(
                     videoType: resolvedSource.videoType,
                     isoType: resolvedSource.isoType
@@ -496,12 +411,8 @@ final class PlaybackController {
             }
             mediaSourceId = source.id
             playMethod = method
-            // A disc image Lagoon can read is played by reading it, not by
-            // asking the server to rebuild it — but only when the bytes on
-            // offer are the image itself. A transcode of the same title is an
-            // ordinary stream and must stay one. A downloaded file
-            // is never a raw disc image on disk, and disc reading depends on
-            // the cache session a local file deliberately has none of.
+            // Read a disc image directly only when direct play serves the
+            // image itself. Transcodes and downloads are ordinary streams.
             let discRequest: DiscPlaybackRequest? = !isLocalPlayback
                 && method == .directPlay
                 && PlaybackSourceLayout(
@@ -547,9 +458,7 @@ final class PlaybackController {
 
             let resolvedExtras = await extras
             let resolvedSegments = await segments
-            // Launch-only UI regression hook: enter the first real intro or
-            // recap so XCTest can exercise the actual CustomPlayerView
-            // countdown and seek. Normal launches never read this path.
+            // UI regression hook: start inside the first skippable segment.
             if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
                UserDefaults.standard.bool(forKey: "debug.regressionStartAtFirstSkippable"),
                let segment = resolvedSegments.first(where: { $0.kind.isSkippable }) {
@@ -564,23 +473,16 @@ final class PlaybackController {
                 segments: resolvedSegments
             )
 
-            // A downloaded original is the stored file, so its source
-            // streams describe it and drive selection exactly as a
-            // negotiated stream would. A transcode download is a different
-            // file the server built for offline use (one audio track, no
-            // external subtitles, a container the source metadata never
-            // described), so its source streams do not describe what is
-            // actually on disk; empty metadata here is safe; the ordinal
-            // policies below and the engine's own track building already
-            // degrade to what the file demuxes to when given nothing.
+            // A transcoded download is a different file from the source, so
+            // its source streams don't describe it. Empty metadata is safe:
+            // selection falls back to what the file demuxes to.
             #if os(iOS)
             let sourceStreams: [MediaStream] = localIsTranscode ? [] : (source.mediaStreams ?? [])
             #else
             let sourceStreams = source.mediaStreams ?? []
             #endif
-            // The server's default audio choice (user language preferences
-            // applied server-side) maps to the demuxer's per-type 1-based
-            // ordinal: embedded streams keep their demux order.
+            // Map the server's default audio to the demuxer's per-type
+            // 1-based ordinal; embedded streams keep demux order.
             let embeddedAudio = sourceStreams.filter { $0.type == "Audio" }
             var initialAudioOrdinal: Int?
             if let index = source.defaultAudioStreamIndex,
@@ -594,8 +496,7 @@ final class PlaybackController {
                 preferredLanguages: self.preferredAudioLanguages,
                 originalLanguage: resolvedExtras.originalLanguage ?? media.originalLanguage
             )
-            // A choice carried in from the previous episode outranks the
-            // server's default: the viewer overrode it once already.
+            // A choice carried from the previous episode outranks the default.
             let audioLayout = embeddedAudio.map(Self.layoutStream)
             policyAudioOrdinal = initialAudioOrdinal
             audioMemoryLayout = audioLayout
@@ -611,10 +512,8 @@ final class PlaybackController {
                ) {
                 initialAudioOrdinal = carried
             }
-            // And a choice the viewer made for this show outranks both, for
-            // as long as it still describes a track here. Its last rung is
-            // the track's position, which speaks only where the layout
-            // offers nothing else to reason about.
+            // A remembered choice for this show outranks both, while it
+            // still matches a track here.
             if let scope = audioMemoryScope,
                let remembered = audioTrackMemory?.choice(for: scope),
                let carried = AudioTrackMemoryPolicy.ordinal(
@@ -624,15 +523,12 @@ final class PlaybackController {
                 initialAudioOrdinal = carried
             }
 
-            // Subtitles share the ordinal convention, with external
-            // (sidecar) streams appended after the embedded ones — the
-            // engine lists them in the same order.
+            // Subtitle ordinals: embedded first, then external, as the engine
+            // lists them.
             let allSubtitles = sourceStreams.filter { $0.type == "Subtitle" }
             let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
-            // Kept paired with their streams: a sidecar whose URL won't
-            // resolve is dropped from what the engine is given, so the
-            // stream list has to lose it too or every ordinal past it
-            // would name the wrong track.
+            // Kept paired: a sidecar whose URL won't resolve is dropped from
+            // both lists, or every later ordinal names the wrong track.
             let externalPairs: [(stream: MediaStream, track: ExternalSubtitleTrack)] = allSubtitles
                 .filter { $0.isExternal == true }
                 .compactMap { stream in
@@ -656,9 +552,7 @@ final class PlaybackController {
                     initialSubtitleOrdinal = embeddedSubtitles.count + position + 1
                 }
             }
-            // What automatic selection would choose here, whether or not
-            // anything overrules it below: the exit compares against it to
-            // tell a deliberate change from the default left alone.
+            // Automatic selection alone; the exit compares against it.
             let selectedAudioLanguage = initialAudioOrdinal.flatMap { ordinal in
                 embeddedAudio.indices.contains(ordinal - 1)
                     ? embeddedAudio[ordinal - 1].language
@@ -693,9 +587,8 @@ final class PlaybackController {
             } else {
                 initialSubtitleOrdinal = automaticSubtitleOrdinal
             }
-            // And a choice the viewer made for this show outranks both, for
-            // as long as it still describes a track here, or says there
-            // should be none.
+            // A remembered choice for this show outranks both, while it
+            // still matches a track here or says none.
             subtitleMemoryLayout = orderedSubtitles.map(Self.subtitleLayoutStream)
             subtitleMemoryScope = SubtitleTrackMemoryStore.scope(
                 seriesID: media.seriesId,
@@ -709,17 +602,13 @@ final class PlaybackController {
                ) {
                 initialSubtitleOrdinal = carried
             }
-            // Hands-off soak/bench hook, mirroring
-            // `debug.benchSearchTerm`: forces a subtitle language on so a
-            // scripted long-film run always has cues to count, independent
-            // of whatever this server/account's track preferences resolve
-            // to.
+            // Bench hook: force a subtitle language so scripted runs always
+            // have cues to count.
             if let language = UserDefaults.standard.string(forKey: "debug.benchSubtitleLanguage"),
                !language.isEmpty {
                 if language == "off" {
-                    // The system caption preference can turn a track on by
-                    // itself; a bench arm that means "no subtitles" has to
-                    // say so explicitly.
+                    // Explicit, or the system caption preference may turn
+                    // one on.
                     initialSubtitleOrdinal = 0
                 } else if let ordinal = Self.ordinal(matchingLanguage: language, title: nil, in: orderedSubtitles) {
                     initialSubtitleOrdinal = ordinal
@@ -745,10 +634,9 @@ final class PlaybackController {
                     lifecycle.attachedRendererSets,
                     lifecycle.footprintMB
                 )
-                // Never attach a replacement to the display-layer renderer
-                // while an outgoing synchronizer still owns it. Proceeding
-                // after the old three-second timeout was the autoplay-only
-                // episode-two stall path on Apple TV.
+                // Never attach a new engine to the display layer while the
+                // outgoing synchronizer still owns it; that stalls the
+                // autoplayed episode on Apple TV.
                 throw PlaybackStartError.previousEngineDidNotRetire
             }
             guard !isClosed else { throw CancellationError() }
@@ -760,14 +648,11 @@ final class PlaybackController {
 
             let engine = SampleBufferPlayerEngine()
             startStage = .start
-            // Episode handoff and delivery fallback replace the engine while
-            // the viewer remains in one player session. Carry their chosen
-            // speed across that internal swap.
+            // Carry the viewer's speed across hand-off and fallback swaps.
             engine.setRate(self.engine?.rate ?? 1)
             if startsPaused {
-                // Before the view attaches and priming begins, so
-                // `beginPlayback` anchors the clock at rate 0 and the member
-                // sits on its first frame until the group is started.
+                // Before priming, so the clock anchors at rate 0 and the
+                // member waits on its first frame.
                 engine.pause()
             }
             startsPaused = false
@@ -795,8 +680,7 @@ final class PlaybackController {
             }
             engine.onBufferingChanged = { [weak self, weak engine] buffering in
                 guard let self, let engine, self.engine === engine else { return }
-                // A timed skip waits for the picture to be moving again
-                // before it spends the buffer on a seek.
+                // A timed skip waits out a stall before seeking.
                 self.automation.isBuffering = buffering
                 self.onBufferingChanged?(buffering)
             }
@@ -825,9 +709,8 @@ final class PlaybackController {
                 }
                 if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag,
                    let normalized = SubtitlePreferencesStore.normalizedLanguage(language) {
-                    // Apple's caption contract asks custom selectors to
-                    // feed explicit language choices back to the system's
-                    // ordered caption-language preference stack.
+                    // Apple's caption contract: feed explicit choices back
+                    // to the system caption-language preferences.
                     _ = MACaptionAppearanceAddSelectedLanguage(.user, normalized as CFString)
                 }
             }
@@ -835,19 +718,13 @@ final class PlaybackController {
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
             automation.beginItem(identity: media.id, segments: playerInfo.segments)
-            // Seeded, not waited for: the callback above only reports
-            // changes, and it was installed before this engine was the
-            // controller's own.
+            // Seeded: the callback only reports changes.
             automation.isBuffering = engine.isBuffering
-            // Through the controller rather than straight to the engine, so
-            // a skip inside a group becomes the group's seek and everyone
-            // skips the intro together.
+            // Through the controller, so a skip in a group is a group seek.
             automation.onSkip = { [weak self] segment in self?.userSeek(to: segment.end) }
             automation.onPlayNext = { [weak self] in
                 guard let self, !self.isClosed, !self.isAdvancing else { return }
-                // In a group the queue decides what comes next, and the
-                // server tells every member — including this one, which is
-                // why nothing local starts here.
+                // In a group the server starts the next item for everyone.
                 if let groupTransport = self.groupTransport {
                     groupTransport.requestNextItem()
                     return
@@ -897,8 +774,7 @@ final class PlaybackController {
             self.reporting = reporting
 
             #if DEBUG
-            // Deterministic UI-test hook for the otherwise tiny interval in
-            // which dismissal can race a suspended startup request.
+            // UI-test hook: widen the window where dismissal races startup.
             let startupDelay = UserDefaults.standard.double(
                 forKey: "debug.regressionPlaybackStartDelaySeconds"
             )
@@ -908,13 +784,8 @@ final class PlaybackController {
             #endif
 
             if isLocalPlayback {
-                // A downloaded title plays regardless of whether the server
-                // ever hears about it, so nothing below should wait on this
-                // call: an unreachable server would otherwise hold up the
-                // progress loop, HUD and next-up warm-up for the client's
-                // full request timeout, entirely off the local file.
-                // The report still goes out when the server is
-                // reachable; a failure is silently dropped either way.
+                // Not awaited: an unreachable server would stall local
+                // playback for the full request timeout. Failures are dropped.
                 Task {
                     try? await reporting.reportStart(at: resumeSeconds)
                 }
@@ -922,13 +793,10 @@ final class PlaybackController {
                 do {
                     try await reporting.reportStart(at: resumeSeconds)
                 } catch is CancellationError {
-                    // A cover dismissed while this request is suspended must not
-                    // resume below and recreate progress/HUD/next-up work after
-                    // `onDisappear` has already torn the session down.
+                    // Dismissed mid-request: don't recreate work after teardown.
                     throw CancellationError()
                 } catch {
-                    // Jellyfin reporting is advisory; a healthy local stream must
-                    // continue when the server declines or times out this call.
+                    // Reporting failure must not interrupt playback.
                 }
             }
             try Task.checkCancellation()
@@ -956,8 +824,7 @@ final class PlaybackController {
             )
             resolveNextUp(after: media, client: client)
         } catch {
-            // This also claims the exactly-once stop report if cancellation
-            // landed after the playback session became active.
+            // `beginStop` also claims the exactly-once stop report.
             let cancelled = Self.isStartCancellation(error, taskCancelled: Task.isCancelled, closed: isClosed)
             finishEpisodeHandoff(outcome: cancelled ? "cancelled" : "failed")
             if !cancelled {
@@ -970,14 +837,10 @@ final class PlaybackController {
         }
     }
 
-    /// Whether a start-path error is the viewer leaving rather than a
-    /// failure. A dismissed cover cancels the start task, and a request
-    /// suspended in URLSession at that moment surfaces as
-    /// `URLError.cancelled` (-999), not `CancellationError`; reported as
-    /// is, it filed a `playback.startFailed` at error level for every
-    /// back-out during a slow negotiation. The URL error only counts when
-    /// the task or the controller was actually cancelled, so a session the
-    /// transport tore down on its own still reports.
+    /// Whether a start error is the viewer leaving rather than a failure.
+    /// A cancelled URLSession request surfaces as `URLError.cancelled`, not
+    /// `CancellationError`. It counts only when the task or controller was
+    /// really cancelled, so a transport teardown still reports.
     nonisolated static func isStartCancellation(_ error: Error, taskCancelled: Bool, closed: Bool) -> Bool {
         if error is CancellationError { return true }
         guard let urlError = error as? URLError, urlError.code == .cancelled else { return false }
@@ -986,15 +849,9 @@ final class PlaybackController {
 
     /// Which resume position wins when a title starts.
     ///
-    /// An override always outranks the rest — a fallback retry's exact landing
-    /// spot, or where a SyncPlay group already is. Neither is a stored position
-    /// the viewer could be overruling, so both apply even when the viewer chose
-    /// to start over.
-    ///
-    /// Short of that, starting from the beginning always starts at 0. A
-    /// downloaded title's local position resumes it only in place of the
-    /// server's last known position, since a fresh negotiation never runs for
-    /// a local file.
+    /// An override (a fallback retry or a SyncPlay position) wins even over
+    /// "start from the beginning". Otherwise a download's local position
+    /// replaces the server's.
     nonisolated static func resumeStartSeconds(
         fallbackOverrideSeconds: Double?,
         startFromBeginning: Bool,
@@ -1048,25 +905,18 @@ final class PlaybackController {
         )
     }
 
-    /// Persists — or drops — an audio choice the viewer just made.
+    /// Persists, or drops, an audio choice the viewer just made.
     ///
-    /// Driven by the engine's selection callback, which only `selectAudioTrack`
-    /// fires and only the track panel and the system now-playing menu reach.
-    /// Automatic selection takes the engine's internal path instead, so
-    /// everything recorded here is a deliberate act. Recording at
-    /// the moment of the act, rather than reading a selection back at exit,
-    /// is also what keeps the item, its layout and the live engine in step:
-    /// at exit any of the three can already belong to the next episode.
+    /// The selection callback fires only for deliberate choices, not
+    /// automatic selection. Recorded now, not at exit, because by exit the
+    /// item, layout or engine may belong to the next episode.
     private func rememberAudioChoice(engine: SampleBufferPlayerEngine) {
         guard let audioTrackMemory,
               let scope = audioMemoryScope,
               let selected = engine.audioTracks.first(where: \.isSelected),
               audioMemoryLayout.indices.contains(selected.engineID - 1),
-              // Engine ordinals count what was delivered; the layout counts
-              // what the server described. On a remux or transcode rung
-              // those differ — one delivered track against the source's
-              // several — and an ordinal from one means nothing in the
-              // other.
+              // Engine ordinals count delivered tracks, the layout counts
+              // source tracks. On remux or transcode they can differ.
               engine.audioTracks.count == audioMemoryLayout.count else { return }
         switch AudioTrackMemoryPolicy.outcome(
             chosen: selected.engineID,
@@ -1088,16 +938,11 @@ final class PlaybackController {
         }
     }
 
-    /// Persists — or drops — a subtitle choice the viewer just made, on the
-    /// same terms as `rememberAudioChoice`.
+    /// Persists, or drops, a subtitle choice, like `rememberAudioChoice`.
     ///
-    /// Two differences, both from the ordinal space. Nothing selected is
-    /// ordinal 0 and a real answer, so this records a selection *and* its
-    /// absence. And subtitle search appends tracks while the episode plays,
-    /// so the engine can list more than the layout captured at start: the
-    /// prefix still lines up, which is why this asks for at least as many
-    /// rather than exactly as many, and refuses an ordinal naming one of the
-    /// appended tracks.
+    /// Ordinal 0 (off) is a real choice. Subtitle search appends tracks
+    /// mid-play, so the engine may list more than the layout; the prefix
+    /// still lines up, and appended tracks are not remembered.
     private func rememberSubtitleChoice(engine: SampleBufferPlayerEngine) {
         guard let subtitleTrackMemory,
               let scope = subtitleMemoryScope,
@@ -1140,10 +985,8 @@ final class PlaybackController {
         )
     }
 
-    /// Seeds a first playback from the system's caption policy without
-    /// overriding an explicit in-player choice carried from the last
-    /// episode. Jellyfin's own default remains authoritative when present,
-    /// except for Forced Only, whose meaning is unambiguous.
+    /// Seeds a first playback from the system caption policy. Jellyfin's
+    /// default wins when present, except under Forced Only.
     private static func systemDefaultSubtitleOrdinal(
         current: Int?,
         subtitles: [MediaStream],
@@ -1221,10 +1064,8 @@ final class PlaybackController {
     }
 
     #if DEBUG
-    /// Debug-only: the paired Apple TV cannot be driven by the
-    /// simulator-only regression suite, but must run the identical bounded
-    /// outages from a Debug build before either renderer-side conclusion is
-    /// trusted on hardware.
+    /// Debug hook: injects bounded outages, so hardware can run the same
+    /// cases as the simulator regression suite.
     private func schedulePlaybackStarvationDiagnostics(for engine: SampleBufferPlayerEngine) {
         let defaults = UserDefaults.standard
         let requestedDelay = defaults.double(forKey: "debug.starvationInjectionDelaySeconds")
@@ -1250,8 +1091,8 @@ final class PlaybackController {
     #endif
 
     #if DEBUG
-    /// Deterministic integration coverage for events that CoreSimulator
-    /// cannot cause by changing a physical HDMI or audio route.
+    /// Injects renderer events the simulator cannot cause with a real
+    /// HDMI or audio route change.
     private func scheduleRendererRecoveryRegressionHooks(for engine: SampleBufferPlayerEngine) {
         if UserDefaults.standard.bool(forKey: "debug.regressionInjectAudioRendererFlush") {
             Task { [weak self, weak engine] in
@@ -1277,12 +1118,8 @@ final class PlaybackController {
     }
     #endif
 
-    /// Looks up what plays next, off the critical path.
-    ///
-    /// Deliberately after the engine is running rather than alongside the
-    /// negotiation: nothing on screen needs it for another forty minutes,
-    /// and `start` is the one place in the app where a round trip costs a
-    /// visibly later first frame.
+    /// Looks up what plays next, after the engine is running, so the round
+    /// trip cannot delay the first frame.
     private func resolveNextUp(after media: MediaItem, client: JellyfinClient) {
         nextUpTask?.cancel()
         successorPreparation.cancel()
@@ -1295,10 +1132,8 @@ final class PlaybackController {
         }
     }
 
-    /// Negotiates and warms the successor only near the end of an episode.
-    /// Eight MiB is enough to cover container probing and the first playback
-    /// cushion without turning an unanswered Up Next card into a large
-    /// background download.
+    /// Negotiates and warms the successor in the last two minutes of an
+    /// episode.
     private func prepareNextIfNeeded(force: Bool = false) {
         guard !successorPreparation.hasPreparation,
               let next = nextUp, let client else { return }
@@ -1306,9 +1141,7 @@ final class PlaybackController {
             guard let engine, engine.duration > 0,
                   engine.duration - engine.timePosition <= 120 else { return }
         }
-        // One proactive download at a time: staging suspends the engine's own
-        // fill, and cached active-file bytes remain readable while the
-        // successor gets priority near the ending.
+        // Staging suspends the current fill; cached bytes stay readable.
         successorPreparation.prepare(
             itemID: next.id,
             client: client,
@@ -1317,10 +1150,8 @@ final class PlaybackController {
         )
     }
 
-    /// What the preparation does with a successor once it has negotiated
-    /// one. Nothing here holds an engine: each closure reaches through the
-    /// controller for whichever engine is current, so a handoff that has
-    /// already replaced it stages against the new one.
+    /// Staging closures. They hold no engine: each reaches the current one
+    /// through the controller, so a completed hand-off stages on the new one.
     private var successorStaging: PlaybackSuccessorPreparation.Staging {
         .init(
             stage: { [weak self] prepared, warms in
@@ -1343,10 +1174,8 @@ final class PlaybackController {
 
     /// Roll into the queued episode without leaving the player.
     ///
-    /// The order is the whole of it: the finished episode's stop report has
-    /// to land *before* the next one starts. Jellyfin marks an item played
-    /// off that report, and starting a second session for the same device
-    /// first leaves the one just finished unresolved.
+    /// The finished episode's stop report must land before the next one
+    /// starts, or Jellyfin leaves it unresolved instead of marking it played.
     func playNextEpisode() async {
         defer { isAutoplayPending = false }
         guard !isAdvancing, let next = nextUp, let client else { return }
@@ -1378,13 +1207,11 @@ final class PlaybackController {
             return
         }
         guard !isClosed else { return }
-        // The old card describes the item that is now becoming current. Do
-        // not let it reappear over a successor that resumes near its end.
+        // Don't let the old card reappear over a successor resumed near its end.
         nextUp = nil
         didFinish = false
         errorMessage = nil
-        // Resume rather than restart: `episodeAfter` walks the series in
-        // order, so the next one along can carry a position of its own.
+        // Resume: the next episode may have a position of its own.
         await start(
             media: next,
             startFromBeginning: false,
@@ -1409,14 +1236,12 @@ final class PlaybackController {
         let subtitleStream = subtitle.flatMap { Self.stream(at: $0.engineID, in: orderedSubtitleStreams) }
         trackPreference = TrackPreference(
             audioLanguage: audioStream?.language,
-            // The file's own title, not Jellyfin's synthesized display
-            // title: the latter is built from codec and channel layout, so
-            // it reads the same on every untagged track and would match the
-            // first of them rather than the one the viewer picked.
+            // The file's title, not Jellyfin's display title, which reads
+            // the same on every untagged track and would match the first.
             audioTitle: audioStream?.title,
             subtitleLanguage: subtitleStream?.language,
             subtitleTitle: subtitleStream?.displayTitle,
-            // No selected subtitle track is the engine's way of saying off.
+            // No selected subtitle track means off.
             subtitlesOff: subtitle == nil
         )
     }
@@ -1427,9 +1252,8 @@ final class PlaybackController {
         return streams.indices.contains(index) ? streams[index] : nil
     }
 
-    /// Where the carried-over choice lands in this item's streams, or nil to
-    /// leave the server's default alone — which is the right answer when the
-    /// next episode simply hasn't got the track the last one did.
+    /// Where the carried choice lands in these streams, or nil to keep the
+    /// server's default.
     private static func ordinal(
         matchingLanguage language: String?,
         title: String?,
@@ -1439,30 +1263,23 @@ final class PlaybackController {
         if let exact = streams.firstIndex(where: { $0.language == language && $0.displayTitle == title }) {
             return exact + 1
         }
-        // Titles carry episode-specific noise ("English (SDH) - Forced");
-        // language alone is the durable half of the match.
+        // Titles vary per episode; fall back to language alone.
         guard let language else { return nil }
         return streams.firstIndex { $0.language == language }.map { $0 + 1 }
     }
 
-    /// Stop filling ahead without discarding what is cached. The engine
-    /// owns the loop; this is the viewer-facing reason to pause it.
+    /// Stop filling ahead without discarding what is cached.
     func suspendBufferFill() {
         engine?.suspendBufferFill()
     }
 
-    /// The file ran out. A countdown still running when it did finishes
-    /// the job here — without an `Outro` segment to anchor it the two land
-    /// within a frame of each other, and whichever arrives first should
-    /// win; `playNextEpisode` is guarded against being taken up on it
-    /// twice. Decided here rather than in the view so a locked phone rolls
-    /// into the next episode too.
+    /// The file ran out. Races a running countdown; whichever arrives first
+    /// wins, and `playNextEpisode` guards against both. Decided here, not in
+    /// the view, so a locked phone rolls on too.
     private func playbackDidFinish() {
         didFinish = true
-        // A group's queue is the group's business: the end of the file asks
-        // the server for the next entry whether or not this item has a
-        // series successor, and whether or not this viewer's autoplay
-        // preference would have rolled on alone.
+        // In a group, always ask the server for the next entry, whatever
+        // the local successor or autoplay setting.
         if let groupTransport {
             groupTransport.requestNextItem()
             return
@@ -1472,10 +1289,8 @@ final class PlaybackController {
     }
 
     #if os(iOS)
-    /// The app left the screen: the phone was locked or the viewer went
-    /// home. Audio carries on under the `audio` background mode; the
-    /// picture is dropped unless something is still showing it — PiP, or
-    /// an AirPlay route — and proactive cache fill stops.
+    /// Locked or backgrounded: audio carries on, cache fill stops, and the
+    /// picture is dropped unless PiP or AirPlay still shows it.
     private func applicationDidEnterBackground() {
         guard !isClosed, engine != nil else { return }
         suspendBufferFill()
@@ -1495,12 +1310,9 @@ final class PlaybackController {
 
     // MARK: - Group playback
     //
-    // The transport a SyncPlay driver drives, deliberately separate from the
-    // viewer-facing controls below. The driver intercepts those and turns
-    // them into group requests, and needs a way back down that does not
-    // recurse into itself. It also means the driver never holds the engine:
-    // the controller stays the boundary, and a successor engine is picked up
-    // for free.
+    // What a SyncPlay driver calls. Separate from the viewer's controls
+    // below, which the driver turns into group requests, so this path does
+    // not recurse. The driver never holds the engine.
 
     /// Start so the current position is on screen exactly at `hostTime`.
     func playGroup(atHostTime hostTime: CMTime) {
@@ -1515,38 +1327,31 @@ final class PlaybackController {
         engine?.seek(to: seconds)
     }
 
-    /// A drift nudge on top of the viewer's chosen speed, which it leaves
-    /// alone. 1 is no correction.
+    /// A drift nudge on top of the viewer's speed. 1 is no correction.
     func setCorrectionRate(_ multiplier: Double) {
         engine?.setCorrectionRate(multiplier)
     }
 
-    /// The media clock as the synchronizer reports it, and the position a
-    /// group report carries. 0 with no engine. For the driver, not for a
-    /// view: this reads tick-rate engine state, which the player root must
-    /// stay out of.
+    /// The synchronizer's media clock, 0 with no engine. For the driver,
+    /// never a view: it is tick-rate state the player root must not read.
     var clockPosition: Double { engine?.clockPosition ?? 0 }
 
-    /// Loaded and anchored without rolling: a member that has reported Ready
-    /// and is waiting for the group to start — or simply a paused player.
+    /// Loaded and anchored but not rolling.
     var isPrimedAndPaused: Bool {
         guard let engine else { return false }
         return engine.isPaused && !engine.isBuffering
     }
 
-    /// The media clock is actually advancing, which is what a group
-    /// readiness report means by `IsPlaying`. Not the inverse of
-    /// `isPrimedAndPaused`: a buffering engine is neither.
+    /// The clock is advancing (a group report's `IsPlaying`). Not the
+    /// inverse of `isPrimedAndPaused`: a buffering engine is neither.
     var isClockRunning: Bool {
         guard let engine else { return false }
         return !engine.isPaused && !engine.isBuffering
     }
 
-    /// Swaps the item inside one player session, for a group that moved to
-    /// another queue entry while the player is open. The same
-    /// stop-then-start `playNextEpisode` does — so the SwiftUI branch and
-    /// its UIKit video surface survive — minus the successor warm-up, since
-    /// the group, not the series order, decided what comes next.
+    /// Swaps the item in one player session when the group moves on. Same
+    /// stop-then-start as `playNextEpisode`, so the video surface survives,
+    /// without the successor warm-up.
     func startGroupItem(_ media: MediaItem, startPosition: Double) async {
         guard !isAdvancing, !isClosed, let client else { return }
         isAdvancing = true
@@ -1574,13 +1379,9 @@ final class PlaybackController {
 
     // MARK: - The viewer's transport
     //
-    // Every control the viewer touches comes through here rather than
-    // reaching the engine itself, so that one `groupTransport` check turns
-    // the whole transport over to the server when a SyncPlay group owns it.
-    // Outside a group each of these is the engine call the caller
-    // used to make. Audio and subtitle tracks, audio delay and playback
-    // speed stay local and are not routed: they are this viewer's, not the
-    // group's.
+    // Every viewer control comes through here, so one `groupTransport` check
+    // hands the transport to a SyncPlay group. Tracks, audio delay and speed
+    // stay local.
 
     func userPlay() {
         guard let groupTransport else {
@@ -1610,12 +1411,11 @@ final class PlaybackController {
         }
     }
 
-    /// `resume` is the tvOS scrub-commit grammar: land here *and* play on.
+    /// `resume` means seek and then play (the tvOS scrub commit).
     func userSeek(to seconds: Double, resume: Bool = false) {
         guard let groupTransport else {
-            // Resume before seeking: the engine re-anchors the synchronizer
-            // when the seek primes, so unpausing afterwards fights that
-            // hand-off. The group path is the other way round and says why.
+            // Resume before seeking: the seek re-anchors the synchronizer
+            // when it primes, and unpausing afterwards fights that.
             if resume, engine?.isPaused == true { engine?.play() }
             engine?.seek(to: seconds)
             return
@@ -1632,8 +1432,6 @@ final class PlaybackController {
         groupTransport.requestSeek(to: max(engine.timePosition + seconds, 0), resume: false)
     }
 
-    /// Handed to the player chrome so it can state an intention without
-    /// knowing who acts on it.
     var transportActions: PlayerTransportActions {
         PlayerTransportActions(
             play: { [weak self] in self?.userPlay() },
@@ -1645,9 +1443,8 @@ final class PlaybackController {
     }
 
     func resumeBufferFill() {
-        // A successor being negotiated is about to take the link for its own
-        // warm-up; the engine refuses a resume once that has started, and
-        // this covers the negotiation ahead of it.
+        // A successor under negotiation is about to take the link for its
+        // warm-up; the engine only refuses once warm-up has started.
         guard !successorPreparation.isPreparing else { return }
         engine?.resumeBufferFill()
     }
@@ -1667,9 +1464,9 @@ final class PlaybackController {
         })
     }
 
-    /// Performs every resource-owning part of dismissal synchronously on the
-    /// main actor. The Jellyfin report is returned as an independent task so
-    /// neither UI dismissal nor its network latency retains this controller.
+    /// Releases every resource synchronously on the main actor. The stop
+    /// report is returned as a separate task, so network latency never
+    /// holds up dismissal or retains this controller.
     @discardableResult
     func beginStop(
         preservingPreparedNext: Bool = false,
@@ -1679,8 +1476,7 @@ final class PlaybackController {
         diagnosticSampler.stop()
         nextUpTask?.cancel()
         nextUpTask = nil
-        // A countdown still sleeping must not wake up on an engine that is
-        // gone; `start` wires the successor's own.
+        // A sleeping countdown must not wake on a gone engine.
         automation.invalidate()
         if !preservingPreparedNext {
             successorPreparation.cancel()
@@ -1690,9 +1486,8 @@ final class PlaybackController {
         lastKnownPosition = seconds
         incidents.endAttempt(engine: engine, outcome: stopOutcome)
 
-        // Keep the dismissal-critical main-actor phase measurable and tiny.
-        // The engine now serializes renderer flushing and queued-buffer
-        // release on its existing pump queue.
+        // Keep this main-actor phase tiny; the engine does renderer flushing
+        // and buffer release on its pump queue.
         os_signpost(
             .begin,
             log: PlaybackPerformance.log,
@@ -1708,8 +1503,7 @@ final class PlaybackController {
             engine.onSeekReady = nil
             engine.onBufferingChanged = nil
             engine.shutdown()
-            // The scope goes with the engine that was reading it. A handoff
-            // keeps the staged successor, which the next engine promotes.
+            // A hand-off keeps the staged successor for the next engine.
             engine.discardPlaybackCache(preservingStagedSuccessor: preservingPreparedNext)
             if !preservingPlayerSurface {
                 self.engine = nil
@@ -1737,20 +1531,16 @@ final class PlaybackController {
         await report?.value
     }
 
-    /// Terminal view dismissal. Unlike the internal episode-to-episode stop,
-    /// this prevents any suspended preparation/report task from resurrecting
-    /// an engine after the full-screen cover has gone away.
+    /// Final dismissal. Unlike the hand-off stop, it stops any suspended
+    /// task from reviving an engine after the player has gone.
     @discardableResult
     func close() -> Task<Void, Never>? {
         isClosed = true
-        // After the teardown either way, so a group driver leaves on a
-        // controller that has already let go of its engine.
+        // After teardown, so a group driver leaves a controller with no engine.
         defer { onClosed?() }
         guard let soakExitRequestedAt else { return beginStop() }
-        // Soak diagnostic: `soakExitRequestedAt` is only ever set by
-        // the (decodeTrace-gated) soak-exit hook, so this print needs no
-        // separate gate. `closeMs` is `beginStop()` alone; `sinceRequestMs`
-        // is the whole exit, from the soak hook's request to here.
+        // Soak only (the hook is gated). `closeMs` is `beginStop()` alone;
+        // `sinceRequestMs` is the whole exit since the request.
         let closeStart = ContinuousClock.now
         let result = beginStop()
         let closeMs = ms(ContinuousClock.now - closeStart)
@@ -1768,9 +1558,8 @@ final class PlaybackController {
             preservingPreparedNext: preservingPreparedNext,
             preservingPlayerSurface: preservingPlayerSurface
         )
-        // Stop reporting and local teardown are independent. Await them in
-        // parallel so a slow Jellyfin response does not add to the renderer
-        // retirement latency, while still preserving report-before-start.
+        // Await report and retirement in parallel, so a slow server does not
+        // add to retirement, while keeping report-before-start.
         let retirement = Task {
             guard let outgoingEngine else { return true }
             return await outgoingEngine.waitForMediaResourcesToRetire()
@@ -1788,19 +1577,15 @@ final class PlaybackController {
             isFallingBack = true
             #if os(iOS)
             if isLocalPlayback {
-                // A download the engine could not play must not keep
-                // replaying itself: the next rung reaches the server instead
-                // of finding the same file on disk again. The entry
-                // is left alone; one failed attempt is not proof the file is
-                // bad, and the viewer can delete it from its page.
+                // Retry from the server, not the same file. The download is
+                // kept: one failure is not proof the file is bad.
                 skipsLocalPlayback = true
                 DownloadStore.log.error(
                     "Downloaded file failed to play, falling back to the server: \(self.itemId, privacy: .public)"
                 )
             }
             #endif
-            // This engine has said its piece; anything it reports from here
-            // belongs to a session that is already being torn down.
+            // Anything this engine reports now belongs to a dying session.
             engine.onError = nil
             Task { await self.fallBack(to: next, after: failure) }
             return
@@ -1809,21 +1594,17 @@ final class PlaybackController {
         incidents.endAttempt(engine: engine, outcome: "failed")
         let report = beginStop()
         errorMessage = failure.message
-        // beginStop claims reporting ownership before returning, so a later
-        // onDisappear remains idempotent while this fire-and-forget task runs.
+        // beginStop claims the report, so a later onDisappear stays idempotent.
         _ = report
     }
 
     #if DEBUG
-    /// Fails the first negotiated attempt on purpose so the delivery ladder
-    /// can be walked without a broken file. The fallback only ever runs when
-    /// something is already wrong, which makes it exactly the path that never
-    /// gets exercised in ordinary use.
+    /// Fails the first negotiated attempt so the ladder can be tested
+    /// without a broken file.
     ///
-    /// `debug.regressionFailFirstDelivery` is `delivery` (expect the cheap
-    /// remux rung) or `undecodable` (expect the transcode rung, remux
-    /// skipped). Injected after playback starts so the retry has a real
-    /// position to resume from.
+    /// `debug.regressionFailFirstDelivery` is `delivery` (expect remux) or
+    /// `undecodable` (expect transcode, remux skipped). Injected after
+    /// playback starts so the retry has a position to resume from.
     private func scheduleDeliveryFallbackRegression(for engine: SampleBufferPlayerEngine) {
         guard let injected = UserDefaults.standard.string(
             forKey: "debug.regressionFailFirstDelivery"
@@ -1843,10 +1624,8 @@ final class PlaybackController {
     }
     #endif
 
-    /// Records a rung the ladder stepped past without trying it, so the
-    /// HUD's `Rung:`/`Fell n:` lines still account for where playback ended
-    /// up. `fallBack` cannot serve here: nothing has started yet, so there is
-    /// no engine to retire and no position to resume from.
+    /// Records a rung skipped before any attempt, for the HUD. Not
+    /// `fallBack`: there is no engine to retire or position to resume.
     private func skipDelivery(
         to next: PlaybackDelivery,
         refusal: (cause: String, message: String)
@@ -1858,25 +1637,18 @@ final class PlaybackController {
         delivery = next
     }
 
-    /// Asks the server to deliver the same media a different way and starts
-    /// over where the failure landed.
+    /// Retries the same media on the next rung, from where it failed.
     ///
-    /// The viewer sees the player reload rather than an error, so the rungs
-    /// are worth their latency only because the alternative is the film
-    /// ending here. Each rung is entered at most once — `next` only ever
-    /// moves downward — so a stream that fails every way still terminates in
-    /// the overlay.
+    /// `next` only moves down, so a stream that fails every way still ends
+    /// in the error overlay.
     private func fallBack(to next: PlaybackDelivery, after failure: PlaybackEngineFailure) async {
-        // Held across the restart as well: a failure arriving while the next
-        // attempt is still starting up takes the terminal path rather than
-        // tearing down an engine that is mid-flight. That is today's
-        // behaviour for a rare race, never worse than it.
+        // Held across the restart: a failure while the next attempt starts
+        // takes the terminal path instead of tearing down a starting engine.
         defer { isFallingBack = false }
         guard !isClosed, let client, let media = currentMedia else { return }
         let resumeAt = engine?.timePosition ?? lastKnownPosition
-        // A replacement starts buffering before its callbacks are wired.
-        // Tell the group now so its later Ready is a new state, even when
-        // the outgoing engine had already reported Ready.
+        // Tell the group now: the replacement buffers before its callbacks
+        // are wired, and its Ready must read as a new state.
         onBufferingChanged?(true)
         let cause = failure.cause == .undecodable ? "undecodable" : "delivery"
         os_signpost(
@@ -1894,12 +1666,9 @@ final class PlaybackController {
             transition: "\(delivery.rawValue)→\(next.rawValue) · \(cause)",
             message: failure.message
         ))
-        // Same teardown the episode handoff uses, and for the same reason:
-        // keeping the display layer mounted lets the successor attach to the
-        // surface that is already there. Tearing it down instead left the
-        // outgoing renderer set registered as attached — its removal
-        // completion never fired once SwiftUI had destroyed the layer under
-        // it — and the retirement wait then timed out every single time.
+        // Keep the display layer mounted, as the hand-off does. Destroying it
+        // leaves the old renderer registered as attached, and the retirement
+        // wait times out every time.
         let outgoingResourcesRetired = await stop(
             preservingPreparedNext: true,
             preservingPlayerSurface: true
@@ -1925,14 +1694,12 @@ final class PlaybackController {
             preferredSubtitleLanguages: preferredSubtitleLanguages,
             missingSubtitleMode: missingSubtitleMode,
             prepared: nil,
-            // A delivery retry must prime and report Ready before the
-            // server starts the group; autoplay would bypass its authority.
+            // In a group, prime and report Ready; the server starts playback.
             startPaused: groupTransport != nil
         )
     }
 
-    // Builds the Infuse-style facts line: runtime, year, size, video, audio,
-    // bitrate, fps, genres, rating — skipping anything the server didn't know.
+    // The facts line, skipping anything the server didn't know.
     private func itemInfo(
         for media: MediaItem,
         source: MediaSource,
@@ -1979,8 +1746,7 @@ final class PlaybackController {
             videoSummary = parts.isEmpty ? nil : parts.joined(separator: " · ")
         }
 
-        // Kept whole, opening chapter included: it's a jump target even
-        // though the transport draws no tick at 0:00.
+        // Keep the opening chapter: a jump target, though no tick at 0:00.
         let chapters = extras.chapters
             .enumerated()
             .map { PlayerChapter(id: $0.offset, name: $0.element.name, start: Ticks.seconds($0.element.startPositionTicks)) }
@@ -2012,8 +1778,7 @@ final class PlaybackController {
         return token
     }
 
-    // "Dolby Digital+ Atmos 5.1" — marketing codec name, Atmos when the
-    // server's stream profile says so, channel layout.
+    // "Dolby Digital+ Atmos 5.1".
     private static func audioToken(for audio: MediaStream?) -> String? {
         guard let audio, let codec = audio.codec else { return nil }
         var name = switch codec.lowercased() {
@@ -2036,8 +1801,7 @@ final class PlaybackController {
         return [name, layout].compactMap(\.self).joined(separator: " ")
     }
 
-    // Shared with the detail page's badge row so the two can't disagree
-    // about what 4K or Dolby Vision means (see MediaQuality).
+    // Shared with the detail page's badges via MediaQuality.
     private static func resolutionClass(width: Int) -> String {
         MediaQuality.resolutionClass(width: width)
     }
@@ -2046,8 +1810,7 @@ final class PlaybackController {
         MediaQuality.rangeLabel(range)
     }
 
-    /// What the diagnostics history calls the end of an attempt. A failure
-    /// is recorded by its own path before this runs.
+    /// The attempt's end, as the diagnostics history names it.
     private var stopOutcome: String {
         if errorMessage != nil { return "failed" }
         if didFinish { return "finished" }
@@ -2106,9 +1869,7 @@ final class PlaybackController {
         )
     }
 
-    /// Why this rung is in force, and nothing at all when it is the one the
-    /// server picked unaided — the `Method:` line above already says that,
-    /// and a ladder that never ran has nothing to explain.
+    /// Why this rung is in force; empty when the ladder never ran.
     private var deliveryFallbackHUDLines: [String] {
         guard !deliveryFallbacks.isEmpty else { return [] }
         var lines = ["Rung:    \(delivery.rawValue)"]

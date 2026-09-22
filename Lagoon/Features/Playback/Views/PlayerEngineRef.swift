@@ -5,16 +5,11 @@ import Observation
 
 /// A player view's handle on the engine: weak on purpose.
 ///
-/// SwiftUI copies a view struct, stored properties and all, into the closure
-/// contexts it keeps for gestures. The copy a gesture kept from before an
-/// episode handoff stays alive beside the refreshed one for as long as the
-/// player is up (`leaks --traceTree` named the `AddGestureModifier` context),
-/// so a strong `let engine` leaked one drained engine per episode boundary.
-///
-/// Declare `@PlayerEngineRef var engine: any PlayerEngine`: the memberwise
-/// init still takes the engine, reads still reach the live object, Observation
-/// still tracks them. A copy that outlives it reads `DetachedPlayerEngine`
-/// rather than crashing.
+/// SwiftUI keeps copies of view structs in gesture closure contexts past an
+/// episode handoff, so a strong `let engine` leaks one drained engine per
+/// episode. Player views must declare
+/// `@PlayerEngineRef var engine: any PlayerEngine`, never a strong reference.
+/// A copy that outlives the engine reads `DetachedPlayerEngine`.
 @propertyWrapper
 struct PlayerEngineRef {
     private weak var engine: (any PlayerEngine)?
@@ -31,9 +26,7 @@ struct PlayerEngineRef {
     var isAttached: Bool { engine != nil }
 }
 
-/// What a player view talks to once its engine is gone: nothing playing,
-/// nothing to select, every control a no-op. Exists so `PlayerEngineRef`
-/// can hand out a non-optional engine without extending the real one's life.
+/// What a player view sees once its engine is gone: every control a no-op.
 @Observable
 final class DetachedPlayerEngine: PlayerEngine {
     static let shared = DetachedPlayerEngine()

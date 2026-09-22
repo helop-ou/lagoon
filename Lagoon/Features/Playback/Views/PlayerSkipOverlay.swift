@@ -1,9 +1,8 @@
 import LagoonEngine
 import SwiftUI
 
-/// Which skippable segment the playhead is inside. One implementation,
-/// because the overlay draws from it and the player's Select/Menu handling
-/// acts on it, and the two disagreeing would be a trap rather than a glitch.
+/// Which skippable segment the playhead is inside. Shared by the overlay and
+/// Select/Menu handling so they never disagree.
 nonisolated enum SkipSegmentPolicy {
     static func activeSegment(
         in segments: [MediaSegment],
@@ -18,20 +17,14 @@ nonisolated enum SkipSegmentPolicy {
     }
 }
 
-/// The Skip Intro / Skip Recap shelf, lifted out of
-/// `CustomPlayerView`. It draws `PlaybackAutomation`'s answer and
-/// nothing else: which segment is active, and how far the auto-skip fill
-/// has run, are decided off the engine's clock so a locked phone still
-/// skips. The parent only hears about a committed skip through
-/// the automation. Bottom-trailing, clear of the transport — the shelf the
-/// reference players use. Not focusable; on tvOS Select drives it from the
-/// video surface, because taking focus would move `onMoveCommand` off the
-/// surface and kill scrubbing while it is up.
+/// The Skip Intro / Recap pill. Draws `PlaybackAutomation`'s state, which
+/// runs off the engine's clock so a locked phone still skips.
+/// Not focusable: on tvOS Select drives it from the video surface, because
+/// taking focus would move `onMoveCommand` off the surface and kill scrubbing.
 struct PlayerSkipOverlay: View {
     let automation: PlaybackAutomation
     let reduceMotion: Bool
-    /// A tap on the pill; the player commits it through the automation and
-    /// reveals its controls, the same as Select does on tvOS.
+    /// A tap on the pill, handled like Select on tvOS.
     let onSkip: (MediaSegment) -> Void
 
     private var transientScaleTransition: AnyTransition {
@@ -68,9 +61,7 @@ struct PlayerSkipOverlay: View {
     }
 }
 
-/// Shared player chrome rendered by both live playback and the Debug-only
-/// component gallery. Keeping one implementation means gallery approval is
-/// approval of the view that actually ships.
+/// Shared with the Debug component gallery, so the gallery shows what ships.
 struct PlayerSkipPrompt: View {
     let title: String
     let showsCountdown: Bool
@@ -101,8 +92,7 @@ struct PlayerSkipPrompt: View {
     }
 }
 
-/// Skip-button geometry. Fixed width so the countdown fill can be
-/// sized from it without a GeometryReader.
+/// Fixed width, so the countdown fill needs no GeometryReader.
 private enum SkipMetrics {
     #if os(tvOS)
     static let width: CGFloat = 260

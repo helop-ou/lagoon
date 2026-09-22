@@ -5,8 +5,7 @@ import LagoonEngine
 import Observation
 import SwiftUI
 
-/// PiP adapter for the same AVSampleBufferDisplayLayer used on screen.
-/// There is no AVPlayer or alternate decode path behind this controller.
+/// PiP over the same display layer used on screen; no AVPlayer path.
 @MainActor
 @Observable
 final class SampleBufferPictureInPicture: NSObject {
@@ -25,9 +24,8 @@ final class SampleBufferPictureInPicture: NSObject {
 
     func attach(displayLayer: AVSampleBufferDisplayLayer, engine: any PlayerEngine) {
         if controller?.contentSource?.sampleBufferDisplayLayer === displayLayer {
-            // Episode handoff keeps the same display layer. Swap only the
-            // transport delegate target so active PiP is not torn down and
-            // recreated around the new engine.
+            // Handoff keeps the layer. Swap only the engine so active PiP
+            // survives.
             self.engine = engine
             invalidatePlaybackState()
             return
@@ -42,17 +40,15 @@ final class SampleBufferPictureInPicture: NSObject {
         let controller = AVPictureInPictureController(contentSource: source)
         controller.delegate = self
         #if os(iOS)
-        // Launch-only regression hook: with automatic PiP off, leaving the
-        // app is the same as locking it, which the simulator cannot do, so
-        // the background audio-only path can be exercised there.
+        // Regression hook: without automatic PiP, leaving the app acts like
+        // locking it, so the simulator can exercise background audio.
         controller.canStartPictureInPictureAutomaticallyFromInline =
             !UserDefaults.standard.bool(forKey: "debug.regressionNoAutomaticPiP")
         #endif
         self.controller = controller
         possibilityObservation = controller.observe(\.isPictureInPicturePossible, options: [.initial, .new]) {
             [weak self] controller, _ in
-            // AVKit mutates PiP possibility on the main run loop; KVO is
-            // delivered synchronously on that same thread.
+            // AVKit posts this KVO synchronously on the main thread.
             MainActor.assumeIsolated {
                 self?.isPossible = controller.isPictureInPicturePossible
             }
@@ -180,8 +176,7 @@ extension SampleBufferPictureInPicture: AVPictureInPictureControllerDelegate {
 }
 
 #if os(iOS)
-/// Apple's standard route picker, hosted directly rather than imitating it
-/// with a custom menu so route state and accessibility remain system-owned.
+/// The system route picker, so route state and accessibility stay native.
 struct AirPlayRoutePicker: UIViewRepresentable {
     func makeUIView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()

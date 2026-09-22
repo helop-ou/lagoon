@@ -1,13 +1,11 @@
 import LagoonEngine
 import SwiftUI
 
-/// When the Up Next card and its countdown are due. Pure, and separate from
-/// the view, because the player, the card and the launch-gated regression
-/// probe all have to agree about it.
+/// When the Up Next card and its countdown are due. Pure, so the player,
+/// the card and the regression probe agree.
 nonisolated enum NextUpPolicy {
-    /// When the card appears. With an outro that is where the credits start;
-    /// without one it is a short fixed run-out, because guessing any earlier
-    /// would put the card over the closing scene.
+    /// At the outro, or else a short fixed run-out, so the card never
+    /// covers the closing scene.
     static func cardStart(
         hasEpisode: Bool,
         autoplayMode: AutoplayMode,
@@ -19,13 +17,9 @@ nonisolated enum NextUpPolicy {
         return duration - NextUpMetrics.fallbackLeadIn
     }
 
-    /// When the fill starts, which is not always when the card does.
-    ///
-    /// With an outro there are credits to cut short, so the countdown runs
-    /// from their first frame — the whole point of the feature. Without one
-    /// the server has told us nothing about where the episode stops being
-    /// the episode, so the fill is pinned to the last seconds of the file
-    /// and autoplay can never eat content nobody called credits.
+    /// With an outro the countdown runs from the credits' first frame.
+    /// Without one it is pinned to the file's last seconds, so autoplay
+    /// never cuts into content.
     static func countdownStart(
         cardStart: Double?,
         outroStart: Double?,
@@ -37,19 +31,12 @@ nonisolated enum NextUpPolicy {
     }
 }
 
-/// The Up Next card, lifted out of `CustomPlayerView`.
-/// It draws `PlaybackAutomation`'s answer: whether the card is due and how
-/// far the countdown has run are decided off the engine's clock, so a
-/// locked phone still rolls into the next episode. The parent
-/// only hears about a committed hand-off through the automation.
-/// Bottom-trailing, on the same shelf as the skip pill. The two can never
-/// be up together — intro and recap live at the front of an episode, the
-/// credits at the back — so they share the corner rather than competing
-/// for it.
+/// Draws `PlaybackAutomation`'s state, which runs off the engine's clock so
+/// a locked phone still rolls into the next episode. Shares the corner with
+/// the skip pill; the two are never up together.
 struct PlayerNextUpOverlay: View {
     let automation: PlaybackAutomation
-    /// The episode queued behind this one. Nil for movies, at the end of a
-    /// series, and until the lookup lands.
+    /// Nil for movies, at a series end, and until the lookup lands.
     let episode: NextUpEpisode?
     let reduceMotion: Bool
     let hint: LocalizedStringKey
@@ -73,16 +60,14 @@ struct PlayerNextUpOverlay: View {
                 .padding(.trailing, Metrics.screenGutter)
                 .padding(.bottom, NextUpMetrics.bottomInset)
                 #if !os(tvOS)
-                // Touch has no Select to route, so the card takes the tap
-                // itself — see the hit-testing note below.
+                // Touch has no Select, so the card takes the tap itself.
                 .onTapGesture { automation.playNext() }
                 #endif
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: isCardVisible)
-        // tvOS drives this from the surface's Select, and a focusable card
-        // would move `onMoveCommand` off the surface and kill scrubbing
-        // while it is up — the same trap the skip pill documents.
+        // tvOS drives this from the surface's Select. A focusable card
+        // would take `onMoveCommand` off the surface and kill scrubbing.
         #if os(tvOS)
         .allowsHitTesting(false)
         #endif
@@ -166,8 +151,6 @@ private nonisolated enum NextUpMetrics {
     static let bottomInset: CGFloat = 130
     static let barHeight: CGFloat = 4
     #endif
-    /// With no `Outro` segment there is nothing to say where the credits
-    /// begin, so the card appears on a fixed run-out instead. Long enough
-    /// to read and act on, short enough not to sit over the closing scene.
+    /// Run-out in seconds when there is no `Outro` segment.
     static let fallbackLeadIn: Double = 15
 }

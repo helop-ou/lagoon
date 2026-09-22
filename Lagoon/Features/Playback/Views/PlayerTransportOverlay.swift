@@ -1,29 +1,18 @@
 import LagoonEngine
 import SwiftUI
 
-/// The bottom transport, lifted out of `CustomPlayerView`.
-///
-/// Nothing in *this* body moves at tick rate: the title block, the speed
-/// readout, the pause glyph and the gradient all read state that changes when
-/// the viewer does something. The two things that do follow the playhead —
-/// the rail and the timestamps — are separate child views below, so a
-/// position tick repaints them and leaves the rest of the transport, and the
-/// player above it, alone.
+/// The bottom transport. No tick-rate reads in this body: only the rail and
+/// the timestamps follow the playhead, each in its own child view.
 struct PlayerTransportOverlay: View {
     @PlayerEngineRef var engine: any PlayerEngine
     let info: PlayerItemInfo
-    /// Whether the transport is actually on screen. `CustomPlayerView` keeps
-    /// this view mounted at `.opacity(0)` so the fade can animate, so the
-    /// tick-following leaves below need their own signal to stop following
-    /// the playhead while nobody can see it.
+    /// The view stays mounted at zero opacity; this tells the tick-rate
+    /// leaves to stop following the playhead while hidden.
     let isVisible: Bool
-    /// The virtual playhead's position while scrubbing; nil when the
-    /// transport is live.
+    /// The virtual playhead while scrubbing; nil otherwise.
     let scrubTarget: Double?
     /// Swaps the remaining time for the clock time the item will finish at.
     let showsEndTime: Bool
-    /// The subtitle error already supplies guidance in this space, and Down
-    /// is also unavailable while scrubbing.
     let showsPanelHint: Bool
     let bufferedFraction: Double?
     let bufferedRanges: [PlaybackBufferedRange]
@@ -76,7 +65,6 @@ struct PlayerTransportOverlay: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // Scrubbing hands this space to the trickplay frame.
                 .opacity(isScrubbing ? 0 : 1)
                 .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
                 .allowsHitTesting(false)
@@ -115,9 +103,8 @@ struct PlayerTransportOverlay: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                // Taps in the gutter belong to the surface underneath —
-                // as do the title and time rows above. On iOS the bar
-                // between them is the one thing here that takes a touch.
+                // Taps here belong to the surface; only the iOS bar takes
+                // touch.
                 .allowsHitTesting(false)
             )
         }
@@ -125,11 +112,8 @@ struct PlayerTransportOverlay: View {
     }
 }
 
-/// Infuse/AVKit-style flat rail: played and buffered ranges stay inside
-/// the line, while a slim vertical marker appears only during scrubbing.
-///
-/// One of the two views in the player that legitimately follows the playhead
-/// at tick rate, which is exactly why it is its own view.
+/// Flat rail with played and buffered ranges; a marker shows while
+/// scrubbing. One of the two tick-rate leaves, so keep it a separate view.
 struct PlayerScrubber: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// See `PlayerTransportOverlay.isVisible`.
@@ -145,18 +129,13 @@ struct PlayerScrubber: View {
     var onCancelScrub: () -> Void = {}
     var onPoke: () -> Void = {}
 
-    /// The last position shown while the transport was visible. Rendered
-    /// in place of `engine.timePosition` while hidden so the un-taken
-    /// `isVisible` branch below never reads it — Observation only
-    /// registers reads that actually happen, so that is what drops the
-    /// hidden transport's subscription to the tick.
+    /// Shown while hidden, so the engine's position is never read and
+    /// Observation drops the tick subscription.
     @State private var lastShownSeconds: Double = 0
 
     private var isScrubbing: Bool { scrubTarget != nil }
 
-    /// The position this view renders. Only the `isVisible` branch touches
-    /// the engine; the hidden branch reads state that never changes on its
-    /// own, so nothing here ticks while the transport is faded out.
+    /// Only the `isVisible` branch may read the engine.
     private var seconds: Double {
         isVisible ? (scrubTarget ?? engine.timePosition) : lastShownSeconds
     }
@@ -189,28 +168,22 @@ struct PlayerScrubber: View {
                 )
                     .fill(.white)
                     .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
-                    // Glides between the engine's 0.1 s position updates
-                    // instead of ticking; big deltas (seeks)
-                    // become a quick slide to the target.
+                    // Glides between the engine's 0.1 s position updates.
                     .animation(fillMotion, value: fillFraction)
                 chapterTicks(in: width)
             }
-            // The marker is deliberately an overlay. As a ZStack child its
-            // 28 pt height enlarged the supposedly 6 pt rail and pushed it
-            // into the timestamp row even while the marker was invisible.
+            // The marker is an overlay: as a ZStack child its height grew
+            // the rail into the timestamp row.
             .frame(width: width, height: Metrics.scrubberHeight)
             .overlay(alignment: .leading) { playheadMarker(in: width) }
             .overlay(alignment: .bottomLeading) { scrubPreview(in: width) }
             #if os(iOS)
-            // The visible rail is deliberately quiet; its touch target is not.
             .contentShape(Rectangle().inset(by: -18))
             .gesture(scrubDrag(in: width))
             #endif
         }
         .frame(height: Metrics.scrubberHeight)
-        // Tracks the live position into `lastShownSeconds` while visible,
-        // so the instant the transport hides again it freezes on the frame
-        // the viewer last saw rather than snapping to 0.
+        // So hiding freezes on the last position rather than 0.
         .onChange(of: seconds) { _, newValue in
             if isVisible { lastShownSeconds = newValue }
         }
@@ -250,8 +223,7 @@ struct PlayerScrubber: View {
             .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
     }
 
-    /// Chapter boundaries, drawn over the fill so they read on both halves
-    /// of the bar. Nothing at 0:00 — a tick under the playhead is noise.
+    /// Drawn over the fill so they read on both halves. None at 0:00.
     @ViewBuilder
     private func chapterTicks(in width: CGFloat) -> some View {
         if engine.duration > 0 {
@@ -264,9 +236,7 @@ struct PlayerScrubber: View {
         }
     }
 
-    /// Trickplay remains above the rail. The timestamp itself belongs below
-    /// the marker, rendered by `PlayerTimelineLabels`, just like AVKit and
-    /// Infuse.
+    /// Trickplay above the rail; the timestamp is in `PlayerTimelineLabels`.
     @ViewBuilder
     private func scrubPreview(in width: CGFloat) -> some View {
         Group {
@@ -294,9 +264,8 @@ struct PlayerScrubber: View {
         .allowsHitTesting(false)
     }
 
-    /// The preview image, or its empty frame while the sheet downloads —
-    /// reserving the space keeps the chip from resizing under the caption
-    /// when the picture lands.
+    /// Reserves the frame while the sheet downloads so the chip doesn't
+    /// resize.
     @ViewBuilder
     private var trickplayFrame: some View {
         if let size = previewSize {
@@ -321,14 +290,12 @@ struct PlayerScrubber: View {
         }
     }
 
-    /// The chapter the scrub playhead is sitting in, for the chip's caption.
     private var scrubChapter: PlayerChapter? {
         guard let target = scrubTarget else { return nil }
         return chapters.last { $0.start <= target }
     }
 
-    /// Preview size at the chip's width, in the tiles' own aspect ratio (not
-    /// every library is 16:9).
+    /// In the tiles' own aspect ratio; not every library is 16:9.
     private var previewSize: CGSize? {
         guard trickplay?.isUnavailable != true,
               let source = trickplaySource, source.tileSize.width > 0, source.tileSize.height > 0 else { return nil }
@@ -340,9 +307,7 @@ struct PlayerScrubber: View {
         max(previewSize?.width ?? 0, ScrubMetrics.previewWidth)
     }
 
-    /// Where the playhead knob sits: the virtual position while scrubbing,
-    /// the engine's otherwise. Both read `seconds`, never the engine
-    /// directly, so they freeze along with it while hidden.
+    /// Reads `seconds`, never the engine, so it freezes while hidden.
     private var knobFraction: CGFloat {
         guard engine.duration > 0 else { return 0 }
         return CGFloat(min(max(seconds / engine.duration, 0), 1))
@@ -353,34 +318,25 @@ struct PlayerScrubber: View {
         return CGFloat(min(max(seconds / engine.duration, 0), 1))
     }
 
-    /// The played rail follows the preview target while scrubbing. Cancel
-    /// still returns to the live engine position, but the visual stays joined
-    /// to its marker in the native transport style.
     private var fillFraction: CGFloat {
         isScrubbing ? knobFraction : progressFraction
     }
 
-    /// The live playhead's curve, matched to the engine's position-update
-    /// cadence so the bar glides instead of ticking.
+    /// Matched to the engine's position-update cadence.
     private var liveMotion: Animation { .linear(duration: 0.25) }
 
-    /// Scrub steps snap over; while live the knob must glide on exactly the
-    /// fill's curve, or the two drift apart between position updates.
+    /// Knob and fill must share a curve, or they drift apart.
     private var scrubMotion: Animation {
         isScrubbing ? .easeOut(duration: Motion.fast) : liveMotion
     }
 
-    /// Keep the played edge and vertical marker on the same curve; otherwise
-    /// they visibly separate during quick remote presses.
     private var fillMotion: Animation {
         isScrubbing ? scrubMotion : liveMotion
     }
 
     #if os(iOS)
-    /// Touch grammar: a tap on the bar is a seek, a drag is a scrub —
-    /// both land the same way and neither changes the play state. Only
-    /// the release seeks; every intermediate position would flush the
-    /// engine's queues and re-demux.
+    /// Only the release seeks: each intermediate seek would flush the
+    /// engine's queues. Never changes the play state.
     private func scrubDrag(in width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
@@ -403,11 +359,8 @@ struct PlayerScrubber: View {
     #endif
 }
 
-/// The elapsed/target label follows the end of the played rail. The
-/// remaining time stays pinned to the trailing edge unless the two would
-/// overlap near the end of an item.
-///
-/// The player's second legitimate tick-rate leaf.
+/// Elapsed time follows the rail; remaining time is pinned trailing and
+/// hides on overlap. The second tick-rate leaf.
 struct PlayerTimelineLabels: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// See `PlayerTransportOverlay.isVisible`.
@@ -415,7 +368,7 @@ struct PlayerTimelineLabels: View {
     let scrubTarget: Double?
     let showsEndTime: Bool
 
-    /// See `PlayerScrubber.lastShownSeconds` — same freeze, same reason.
+    /// See `PlayerScrubber.lastShownSeconds`.
     @State private var lastShownSeconds: Double = 0
 
     private var isScrubbing: Bool { scrubTarget != nil }
@@ -467,10 +420,8 @@ struct PlayerTimelineLabels: View {
         .allowsHitTesting(false)
     }
 
-    /// Either the time left, or the clock time the item finishes at. The
-    /// projection is redrawn once a second on its own schedule rather than
-    /// with the playhead, because the whole point is that it keeps moving
-    /// while playback is paused and the playhead is not.
+    /// The end time redraws each second, not with the playhead, because it
+    /// keeps moving while paused.
     @ViewBuilder
     private var trailingTimeLabel: some View {
         let remaining = max(engine.duration - seconds, 0)
@@ -485,8 +436,6 @@ struct PlayerTimelineLabels: View {
                         .accessibilityIdentifier("player.endsAt")
                         .accessibilityLabel("Ends at \(PlaybackFinish.label(finish))")
                 } else {
-                    // No usable duration, as on a live stream: there is no
-                    // finish to project, so the time left stands.
                     Text("-" + PlaybackTimestamp.text(remaining))
                         .accessibilityIdentifier("player.remaining")
                 }
@@ -527,23 +476,14 @@ nonisolated enum PlaybackTimestamp {
     }
 }
 
-/// Scrub-bar geometry. Lives outside `CustomPlayerView` because the view is
-/// generic over its surface, and generics can't hold static storage. The
-/// time label has a fixed width so the edge clamping is exact.
+/// Outside `CustomPlayerView` because a generic type can't hold static
+/// storage. Fixed label width keeps edge clamping exact.
 enum ScrubMetrics {
-    /// No input for this long and the acceleration run expires, so the next
-    /// press is a 10 s step again rather than a 60 s one.
+    /// Quiet time before the acceleration run resets to 10 s steps.
     static let runExpiry: Duration = .milliseconds(600)
-    /// A further beat after that and the scrub lands itself. This is what
-    /// keeps a single press a plain 10 s skip now that scrub opens during
-    /// playback — tune it on hardware, not in the simulator: too
-    /// short and a preview can't be read, too long and a nudge feels stuck.
+    /// Then the scrub commits itself. Tune on hardware, not the simulator.
     static let selfCommit: Duration = .milliseconds(600)
-    /// A chapter hop waits longer than a step before landing. Found on
-    /// hardware: a hop is a *survey* gesture — you are
-    /// reading where chapter 13 starts — where an arrow step is a nudge, and
-    /// sharing the step's window turned browsing past the next chapter into
-    /// a race against the timer.
+    /// Longer than a step: a viewer hopping chapters is reading, not nudging.
     static let chapterSelfCommit: Duration = .milliseconds(2000)
 
     #if os(tvOS)
@@ -551,8 +491,7 @@ enum ScrubMetrics {
     static let markerHeight: CGFloat = 22
     static let timeLabelWidth: CGFloat = 150
     static let timeLabelHeight: CGFloat = 36
-    /// Smaller than the source tile on purpose: a 320 pt frame dominates a
-    /// ten-foot UI even though the underlying Jellyfin image is 320 px.
+    /// Smaller than the 320 px tile on purpose; 320 pt dominates the TV.
     static let previewWidth: CGFloat = 240
     #else
     static let markerWidth: CGFloat = 3

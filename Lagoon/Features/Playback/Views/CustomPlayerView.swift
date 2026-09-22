@@ -3,30 +3,20 @@ import MediaAccessibility
 import OSLog
 import SwiftUI
 
-/// Bench hook (`debug.benchBareSurface`): nothing but the video surface, so
-/// a hardware run can say whether the chrome layered over an HDR frame is
-/// what keeps it off the display's optimized composition path. Read once; a
-/// shipping launch never sets it. File-private because the view is generic
-/// and cannot hold a static stored property.
+/// Bench hook (`debug.benchBareSurface`): draw only the video surface, to
+/// test whether chrome over an HDR frame costs composition. File-private
+/// because a generic view cannot hold a static stored property.
 private let benchBareSurface = UserDefaults.standard.bool(forKey: "debug.benchBareSurface")
 
-/// Bench hook (`debug.benchFlatCues`): HDR frame-loss bench on Apple TV
-/// found the subtitle cue text costing dropped frames — its shadow/outline
-/// (`SubtitleEdgeModifier`) and translucent background are filtered every
-/// composited frame while the cue is on screen. `rasterizedCue()` bakes
-/// those into one Metal-rendered texture via `.drawingGroup()` so steady
-/// cues cost the compositor nothing extra; setting this flag skips that and
-/// keeps the old per-frame path, for an on-device A/B from the same binary.
-/// Read once; default off, i.e. the cache is on by default. File-private
-/// for the same reason as `benchBareSurface`.
+/// Bench hook (`debug.benchFlatCues`): skip `rasterizedCue()` for an
+/// on-device A/B. Cue shadow and background filtered every frame cost dropped
+/// frames on Apple TV HDR; rasterizing them fixes that.
 private let benchFlatCues = UserDefaults.standard.bool(forKey: "debug.benchFlatCues")
 
 private extension View {
-    /// Rasterizes the cue (shadow/outline + background already applied) into
-    /// a single offscreen texture instead of re-filtering a live layer every
-    /// frame. Must be applied after those modifiers and before any
-    /// accessibility identifier/label, which stay outside the drawing group
-    /// so `player.subtitle.text` is still queryable by UI tests.
+    /// Bakes the cue into one texture. Apply after edge and background, and
+    /// before the accessibility identifier, so UI tests can still query
+    /// `player.subtitle.text`.
     @ViewBuilder
     func rasterizedCue() -> some View {
         if benchFlatCues {
@@ -37,83 +27,52 @@ private extension View {
     }
 }
 
-/// Full-screen custom player: title block over a thin scrubber, and a
-/// swipe-down panel of pill tabs (Info · Video · Audio · Subtitles, plus
-/// Together in a group). Talks only to `PlayerEngine`.
+/// Full-screen player: transport, overlays and the options panel. Talks only
+/// to `PlayerEngine`.
 ///
-/// **Never read `timePosition`, `currentSubtitle*` or anything else the engine
-/// moves at tick rate from this body.** Observation tracks reads per body, and
-/// one such read re-hosts `MenuPressGate`'s whole tree every tick. The child
-/// overlays read them in their own bodies. Handler and task closures are not
-/// body reads.
+/// **Never read `timePosition`, `currentSubtitle*` or other tick-rate engine
+/// state in this body.** One such read re-hosts `MenuPressGate`'s whole tree
+/// every tick. Child overlays read them in their own bodies. Handler and task
+/// closures are not body reads.
 ///
-/// tvOS: the surface stays focusable always, or Menu quits the app. Touch tap
-/// reveals, play/pause toggles anywhere, left/right seek ±10 s playing and
-/// walk the playhead paused, down opens the panel, then left/right walk tabs
-/// and down enters rows. `MenuPressGate` takes Menu at the UIKit press layer
-/// (`onExitCommand` never fires inside a fullScreenCover on tvOS 26):
-/// scrubbing cancels, else the panel closes, else exit.
-///
-/// iOS: tap toggles rather than reveals, double-tap either half seeks ±10 s
-/// and stacks within the glyph's dismiss window, the centred cluster is
-/// buttons under the thumb, the scrubber drags, pills are tapped.
+/// tvOS: the surface must stay focusable, or Menu quits the app.
+/// `MenuPressGate` takes Menu at the UIKit layer (`onExitCommand` never fires
+/// in a fullScreenCover on tvOS 26): cancel scrub, else close panel, else exit.
 struct CustomPlayerView<Surface: View>: View {
     @PlayerEngineRef var engine: any PlayerEngine
-    /// Stable media identity, independent of the engine object's lifetime.
-    /// Changing it resets episode-only chrome while preserving this view's
-    /// structural position and its UIKit video surface.
+    /// Changing it resets episode chrome but keeps this view and its UIKit
+    /// video surface in place.
     let playbackIdentity: String
-    /// Debug measurement supplied by the host for asserting that UIKit did
-    /// not replace the render surface at an episode boundary.
+    /// Lets tests assert UIKit kept the render surface across an episode.
     var playerSurfaceIdentity = ""
-    /// Most recent successor-ready latency, exposed only through the launch-
-    /// gated hardware probe and the optional performance HUD.
     var handoffMilliseconds: Double? = nil
-    /// Negotiated Jellyfin mode and transport ownership are carried into the
-    /// launch-gated probe so regressions prove the intended path actually ran.
     var playbackMethod: PlayMethod = .directPlay
-    /// The delivery-ladder rung backing `playbackMethod`: Jellyfin's
-    /// own `PlayMethod` reports `Transcode` for both the cheap remux rung and
-    /// the expensive re-encode rung, so the regression probe needs this to
-    /// tell them apart.
+    /// Jellyfin reports `Transcode` for both remux and re-encode; the probe
+    /// needs this to tell them apart.
     var deliveryRung: PlaybackDelivery = .negotiated
     var isPlaybackCacheActive = false
-    /// The legacy byte-zero prefix remains in the regression probe. The
-    /// visible scrubber renders every sparse direct-file cache island.
+    /// Probe only; the scrubber draws `bufferedRanges`.
     var bufferedFraction: Double? = nil
     var bufferedRanges: [PlaybackBufferedRange] = []
     var playheadPrefetchCount = 0
     let info: PlayerItemInfo
-    /// Skip and Up Next, decided off the engine's clock by the controller;
-    /// the overlays draw it and Select/Menu act on it.
+    /// Skip and Up Next, decided off the engine's clock by the controller.
     let automation: PlaybackAutomation
-    /// Where the viewer's play, pause and seek go. Supplied by the player
-    /// host so a SyncPlay group can turn them into requests to the server
-    /// instead of local moves. Nil means straight to the engine,
-    /// which is what the developer-settings preview wants and what every
-    /// call below falls back to.
+    /// Where play, pause and seek go; a SyncPlay group sends them to the
+    /// server. Nil means straight to the engine.
     var transport: PlayerTransportActions? = nil
     let onDismiss: () -> Void
-    /// Lets the host react to the panel opening (the debug HUD hides so
-    /// it can't sit on top of the track card).
     var onPanelToggle: ((Bool) -> Void)? = nil
-    /// Incremented by the host when a gesture it owns (the iOS swipe up)
-    /// asks for the options panel; the view opens it as Info would.
+    /// Bumped by the host (iOS swipe up) to open the options panel.
     var openPanelRequest = 0
-    /// The episode queued behind this one. Nil for movies, at the
-    /// end of a series, and until the lookup lands.
     var nextUp: NextUpEpisode? = nil
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
-    /// The Watch Together group owning this session, or nil outside one.
-    /// A value, supplied by the host: the player root must not
-    /// read a store, and this is what decides whether a fifth tab exists.
+    /// A value, not a store: the player root must not read a store.
     var together: PlayerTogetherState? = nil
     var onLeaveGroup: (() -> Void)? = nil
     var onSetIgnoreWait: ((Bool) -> Void)? = nil
-    /// The group is holding for a member that is not ready, so the
-    /// spinner earns a line saying why nothing is moving.
     var isWaitingForGroup = false
     var subtitleStyle: SubtitleRenderStyle = .fallback
     var subtitleSearch: SubtitleSearchCoordinator? = nil
@@ -124,35 +83,27 @@ struct CustomPlayerView<Surface: View>: View {
     private struct SeekFeedback: Equatable {
         let forward: Bool
         let token: Int
-        /// Stacked total for the iOS double-tap grammar; always
-        /// 10 for the tvOS remote's plain ±10 s seek.
+        /// Stacked iOS double-tap total; always 10 on tvOS.
         var seconds: Int = 10
     }
 
     @State private var controlsVisible = true
-    /// Swaps the remaining time for the clock time the item will finish at.
-    /// Toggled by a further touch-surface tap while the transport is already
-    /// up, and reset with the item.
+    /// Shows the finish clock time instead of the remaining time.
     @State private var showsEndTime = false
     @State private var interactionToken = 0
     @State private var panelOpen = false
     @State private var selectedTab: PlayerPanelTab = .info
     @State private var seekFeedback: SeekFeedback?
     @State private var showsBuffering = false
-    /// The virtual playhead's position while scrubbing; nil when the
-    /// transport is live.
+    /// The virtual playhead while scrubbing; nil otherwise.
     @State private var scrubTarget: Double?
-    /// Debug-only regression evidence for the most recent explicit/self
-    /// commit; harmless in normal builds and omitted from the visible UI.
+    /// Regression-probe evidence only.
     @State private var lastCommittedScrubTarget: Double = -1
-    /// How many scrub steps this run of uninterrupted input has taken —
-    /// what the step size accelerates on. Expires with `scrubStepToken`.
+    /// Steps in the current input run; the step size accelerates on it.
     @State private var scrubRunLength = 0
     @State private var scrubStepToken = 0
-    /// Whether the last scrub input was a chapter hop rather than a step —
-    /// they get different self-commit windows (see the task below).
+    /// Chapter hops get a different self-commit window than steps.
     @State private var scrubHopped = false
-    /// Only exists when the server generated trickplay tiles.
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
     #if os(tvOS)
@@ -160,28 +111,22 @@ struct CustomPlayerView<Surface: View>: View {
     @Environment(\.resetFocus) private var resetFocus
     #endif
     #if os(iOS)
-    /// The video surface's width, read via `.onGeometryChange` so a
-    /// double-tap's x position can be read as "back half" vs "forward half"
-    /// of the screen.
+    /// Splits double-taps into back and forward halves.
     @State private var surfaceWidth: CGFloat = 0
     #endif
     @State private var panelRevealSignpostActive = false
     private let panelSignpostID = OSSignpostID(log: PlaybackPerformance.log)
 
-    /// Slide the panel in on, and back out with, the swipe that summons it.
     private var panelMotion: Animation? {
         reduceMotion ? nil : .spring(duration: Motion.fast, bounce: 0.05)
     }
     private var transientScaleTransition: AnyTransition {
         reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9))
     }
-    /// Far enough to carry the tabs and card clear of the top edge.
     private var panelSlideDistance: CGFloat { 720 }
 
     var body: some View {
         #if os(tvOS)
-        // Menu never reaches SwiftUI inside a fullScreenCover on tvOS 26;
-        // the gate intercepts the press itself (see MenuPressGate).
         MenuPressGate(onMenu: {
             handleMenu()
         }, onRemoteTouchTap: {
@@ -193,8 +138,8 @@ struct CustomPlayerView<Surface: View>: View {
         #else
         NavigationStack {
             playerContent
-                // Toolbar visibility changes the navigation safe area. Keep
-                // the video and its centered controls in stable screen bounds.
+                // Toolbar visibility changes the safe area; keep the video
+                // and centre controls from moving.
                 .ignoresSafeArea(.container, edges: .top)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -202,9 +147,6 @@ struct CustomPlayerView<Surface: View>: View {
                             .accessibilityIdentifier("player.close")
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        // Play/Pause moved to the centred touch cluster,
-                        // which owns the accessibility identifier
-                        // now; Info stays here.
                         Button("Info", systemImage: "info.circle", action: openPanel)
                             .accessibilityIdentifier("player.info")
                     }
@@ -224,17 +166,8 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
-    /// Deliberately free of anything the engine updates at tick rate.
-    ///
-    /// Observation tracks property reads per body, and on tvOS this whole
-    /// tree is rebuilt inside `MenuPressGate.updateUIViewController`, so one
-    /// `engine.timePosition` read in here used to re-host the hosting
-    /// controller's entire view tree ten times a second. The views
-    /// that actually display the playhead, the cues and the skip/Up Next
-    /// windows read those properties in their own bodies instead, and the
-    /// per-tick invalidation stops at them. Reads inside event handlers and
-    /// task closures are not body reads and are fine; the computed properties
-    /// below that touch `engine.timePosition` exist only for those.
+    /// Must stay free of tick-rate reads (see the type comment). Computed
+    /// properties below that read `engine.timePosition` are for handlers only.
 
     private var playerContent: some View {
         ZStack {
@@ -261,17 +194,12 @@ struct CustomPlayerView<Surface: View>: View {
                     .allowsHitTesting(false)
                 }
 
-                // Every animation in here is value-driven (.animation + value:).
-                // withAnimation doesn't survive the MenuPressGate hosting
-                // boundary, and neither do transitions — see the panel below and
-                // the write-up in docs/playback.md.
+                // Animations here are value-driven only: withAnimation and
+                // transitions don't survive the MenuPressGate hosting boundary.
                 Group {
                     if showsBuffering || isWaitingForGroup {
-                        // The same spinner, with the group's reason under
-                        // it: a member primed and paused at the group's
-                        // position is not buffering, and without the line
-                        // a still picture and a live spinner look like a
-                        // stall.
+                        // Without the reason, a paused group member
+                        // looks stalled.
                         VStack(spacing: Metrics.Space.m) {
                             ProgressView()
                                 .tint(.white)
@@ -282,11 +210,8 @@ struct CustomPlayerView<Surface: View>: View {
                                     .accessibilityIdentifier("player.together.waiting")
                             }
                         }
-                        // Waiting keeps the engine paused, which keeps the
-                        // touch grammar's 88pt play button up for as long
-                        // as the line is on screen — and it sits in this
-                        // exact spot. Drop the pair into the empty band
-                        // below it rather than behind it.
+                        // Waiting keeps the paused touch play button in
+                        // this spot, so drop below it.
                         .offset(y: waitingDrop)
                         .transition(.opacity)
                     }
@@ -331,19 +256,16 @@ struct CustomPlayerView<Surface: View>: View {
                     onPoke: pokeControls
                 )
                     .opacity(transportVisible ? 1 : 0)
-                    // A faded-out overlay still hit-tests: without this the
-                    // invisible iOS scrubber would swallow drags meant for the
-                    // video (and the button row taps). tvOS is never touched —
-                    // Select goes to the focused surface — so nothing down
-                    // there may take a press at all.
+                    // A faded overlay still hit-tests and would swallow
+                    // drags. On tvOS Select belongs to the focused surface, so
+                    // nothing here may take a press.
                     #if os(tvOS)
                     .allowsHitTesting(false)
                     #else
                     .allowsHitTesting(transportVisible)
                     .accessibilityHidden(!transportVisible)
                     #endif
-                    // Asymmetric: target-state-conditional animation — fast
-                    // in, gentle out.
+                    // Fast in, gentle out.
                     .animation(
                         controlsVisible ? .easeOut(duration: Motion.fast) : .easeInOut(duration: Motion.slow),
                         value: controlsVisible
@@ -352,10 +274,7 @@ struct CustomPlayerView<Surface: View>: View {
                     .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
 
                 #if os(iOS)
-                // The touch grammar's equivalent of the remote's Select and
-                // left/right: the same transport visibility and
-                // scrub suppression the bottom bar uses, so both fade and
-                // hide together instead of drifting out of sync.
+                // Shares the bottom bar's visibility so both fade together.
                 PlayerTouchTransportCluster(
                     engine: engine,
                     onSkip: { forward in
@@ -370,21 +289,14 @@ struct CustomPlayerView<Surface: View>: View {
                 )
                 .opacity(transportVisible && !isScrubbing ? 1 : 0)
                 .allowsHitTesting(transportVisible && !isScrubbing)
-                // Opacity preserves layout; explicitly hide unavailable
-                // controls from assistive navigation as well as touch input.
                 .accessibilityHidden(!transportVisible || isScrubbing)
                 .animation(.easeInOut(duration: Motion.fast), value: controlsVisible)
                 .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
                 #endif
 
-                // The panel stays mounted and slides out of frame rather than
-                // being inserted. A *transition* needs an animation transaction
-                // at the moment of insertion, and none survives MenuPressGate's
-                // rootView reassignment — tried twice, including forwarding
-                // context.transaction, and frame capture showed it still popping
-                // between two frames 0.04 s apart. A plain value change does
-                // survive, so the slide is an offset. Disabled while closed so
-                // its buttons stay out of the focus engine's reach.
+                // Stays mounted and slides by offset: no insertion transition
+                // survives MenuPressGate's rootView reassignment. Disabled
+                // while closed to keep its buttons out of focus.
                 #if os(tvOS)
                 panel
                     .focusScope(panelFocusScope)
@@ -407,17 +319,14 @@ struct CustomPlayerView<Surface: View>: View {
             }
         }
         #endif
-        // Leaving the group takes its tab with it, and a selection left
-        // pointing at a tab that is no longer drawn leaves the panel
-        // showing nothing.
+        // A selection on a vanished tab leaves the panel blank.
         .onChange(of: together == nil) { _, hasNoGroup in
             if hasNoGroup, selectedTab == .together { selectedTab = .info }
         }
         .onChange(of: playerFocus) { _, focus in
             if case .tab(let tab) = focus {
-                // The native focus lozenge already animates. Animating the
-                // selected state as well made SwiftUI interpolate the entire
-                // material card and long track hierarchy on every arrow press.
+                // Don't animate: it interpolates the whole card on every
+                // arrow press.
                 selectedTab = tab
             }
         }
@@ -426,8 +335,7 @@ struct CustomPlayerView<Surface: View>: View {
             guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing else { return }
             controlsVisible = false
         }
-        // The spinner only earns screen time when buffering persists —
-        // instant local seeks used to flash it on every press.
+        // Only show the spinner when buffering persists.
         .task(id: engine.isBuffering) {
             if engine.isBuffering {
                 try? await Task.sleep(for: .milliseconds(300))
@@ -446,19 +354,15 @@ struct CustomPlayerView<Surface: View>: View {
         .task(id: playbackIdentity) {
             resetForPlaybackIdentity()
         }
-        // Frames follow the virtual playhead, not playback: the loader
-        // no-ops until the target crosses into the next thumbnail.
         .onChange(of: scrubTarget) { _, target in
             if let target { trickplay?.update(to: target) }
         }
         .onDisappear {
             reportDisplayedCaption(nil)
         }
-        // Two beats of quiet, both timed from the last press. The first
-        // ends the acceleration run, so the next press steps 10 s again.
-        // The second lands the scrub on its own: without it, opening scrub
-        // during playback would cost a Select to confirm every small skip,
-        // and the ±10 s nudge would have nowhere to live.
+        // Two quiet beats after the last press: the first ends the
+        // acceleration run, the second commits the scrub on its own so a lone
+        // press still works as a ±10 s skip.
         .task(id: scrubStepToken) {
             guard isScrubbing else { return }
             try? await Task.sleep(for: ScrubMetrics.runExpiry)
@@ -466,8 +370,7 @@ struct CustomPlayerView<Surface: View>: View {
             scrubRunLength = 0
             try? await Task.sleep(for: scrubHopped ? ScrubMetrics.chapterSelfCommit : ScrubMetrics.selfCommit)
             guard !Task.isCancelled, let target = scrubTarget else { return }
-            // Landing on the timeout keeps whatever the play state was;
-            // only an explicit Select/Play means "go here *and* play on".
+            // Only an explicit Select/Play resumes.
             commitScrub(to: target, resume: false)
         }
     }
@@ -483,20 +386,14 @@ struct CustomPlayerView<Surface: View>: View {
         if isScrubbing {
             cancelScrub()
         } else if automation.dismissSkip() {
-            // Back during the countdown means "no" — the one mode with a
-            // pending action to call off. In `button` mode there is nothing
-            // to cancel, so Menu keeps meaning "leave".
+            // Back cancels only a pending countdown; otherwise Menu leaves.
         } else if automation.dismissNextUp() {
-            // Same rule as the skip pill: Back only cancels where something
-            // is pending. In `card` mode the offer sits there unanswered and
-            // Menu still means "leave".
+            // Same rule as the skip pill.
         } else if panelOpen,
                   selectedTab == .subtitles,
                   let subtitleSearch,
                   subtitleSearch.isBrowsingResults {
-            // One more level of the same nesting the panel itself follows:
-            // Back leaves the results browser before it would close the panel,
-            // just as it closes the panel before it would leave playback.
+            // Back leaves the results browser before closing the panel.
             subtitleSearch.closeResults()
             playerFocus = .track("subtitle-search")
         } else if panelOpen {
@@ -506,16 +403,11 @@ struct CustomPlayerView<Surface: View>: View {
         }
     }
 
-    /// A light tap is intentionally non-destructive: reveal the existing
-    /// transport and restart its four-second dwell without changing play,
-    /// scrub, skip, or Up Next state. The panel already owns the whole remote
-    /// while it is open, so a touch there is ignored.
+    /// A light touch-surface tap only reveals the transport. It must never
+    /// act as Select: no play, scrub, skip or Up Next changes.
     private func handleRemoteTouchTap() {
         guard !panelOpen else { return }
-        // The first tap only reveals the transport. A further tap while it is
-        // already up swaps the remaining time for the clock time the item
-        // finishes at, and a third swaps it back. Neither touches
-        // play, scrub, skip or Up Next state.
+        // A further tap while visible toggles remaining time and end time.
         if transportVisible {
             showsEndTime.toggle()
         }
@@ -523,20 +415,13 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     #if os(iOS)
-    /// A double-tap on either half of the surface seeks ±10 s and, unlike
-    /// every other touch gesture here, does not summon the transport — every
-    /// phone player leaves double-tap seek silent on chrome, and popping the
-    /// bars under the thumb mid-tap would fight repeated double-taps.
-    /// Ignored mid-scrub and while the panel owns the
-    /// screen, same as the single tap beside it.
+    /// Seeks ±10 s without revealing the transport, which would fight
+    /// repeated double-taps.
     private func handleTouchSeek(at point: CGPoint) {
         guard !panelOpen, !isScrubbing else { return }
         let forward = point.x >= surfaceWidth / 2
         requestSeek(by: forward ? TouchSeekPolicy.step : -TouchSeekPolicy.step)
-        // A further double-tap on the same side inside the glyph's dismiss
-        // window (the `.task(id: seekFeedback?.token)` below) adds another
-        // step rather than resetting it, so three quick double-taps forward read
-        // "30 s" instead of restarting at 10 each time.
+        // Same-side double-taps within the glyph's window stack (10, 20, 30 s).
         let total = TouchSeekPolicy.accumulated(
             previous: seekFeedback?.seconds,
             sameDirection: seekFeedback?.forward == forward
@@ -549,16 +434,12 @@ struct CustomPlayerView<Surface: View>: View {
         surface()
             .ignoresSafeArea()
         #if os(tvOS)
-            // The surface owns focus during playback. It stays eligible
-            // during the panel animation so there is never a focusless
-            // full-screen cover; `onMoveCommand` bridges any first command
-            // that arrives before a tab has accepted focus.
+            // Stays focusable during the panel animation so the cover is
+            // never focusless; `onMoveCommand` bridges the first command.
             .focusable()
             .focused($playerFocus, equals: .surface)
         #endif
-            // The regression suite reads state from the surface that owns
-            // focus. The probe is a modifier so the tick-rate values it
-            // reports are read in its body rather than this one.
+            // A modifier so its tick-rate reads stay out of this body.
             .modifier(
                 PlayerRegressionValue(
                     engine: engine,
@@ -583,18 +464,14 @@ struct CustomPlayerView<Surface: View>: View {
                     trickplay: trickplay
                 )
             )
-            // The panel and an open scrub own the screen and the remote, so
-            // neither prompt may act underneath them.
             .onChange(of: panelOpen || isScrubbing, initial: true) { _, suppressed in
                 automation.isSuppressed = suppressed
             }
         #if os(tvOS)
             .onMoveCommand { direction in
                 if panelOpen {
-                    // tvOS can retain the full-screen surface until the
-                    // sliding tabs fully enter its focus region. Do not eat
-                    // that first command: move the selection and focus to
-                    // the tab the command was trying to reach.
+                    // tvOS can keep focus on the surface until the tabs slide
+                    // in; send this first command to the intended tab.
                     let tabs = PlayerPanelTab.offered(inGroup: together != nil)
                     if direction == .left || direction == .right,
                        let index = tabs.firstIndex(of: selectedTab) {
@@ -609,25 +486,21 @@ struct CustomPlayerView<Surface: View>: View {
                     return
                 }
                 switch direction {
-                // Left/right open scrub rather than seeking blind, playing
-                // or paused. A lone press still reads as a 10 s
-                // skip — it just previews the frame first and lands itself
-                // a beat later; holding accelerates into a real scrub.
+                // Left/right scrub, playing or paused. A lone press
+                // self-commits as a 10 s skip.
                 case .left where canScrub:
                     stepScrub(direction: -1)
                 case .right where canScrub:
                     stepScrub(direction: 1)
-                // No duration to walk along (live streams): blind ±10 s,
-                // with the glyph as the only feedback available.
+                // No duration (live): blind ±10 s.
                 case .left:
                     requestSeek(by: -10)
                     showSeekFeedback(forward: false)
                 case .right:
                     requestSeek(by: 10)
                     showSeekFeedback(forward: true)
-                // Mid-scrub, up/down hop chapters. Down
-                // keeps the panel everywhere else — opening it mid-scrub
-                // would strand a virtual playhead behind it.
+                // Mid-scrub, up/down hop chapters rather than opening the
+                // panel over a virtual playhead.
                 case .up where isScrubbing:
                     jumpChapter(direction: 1)
                 case .down where isScrubbing:
@@ -641,10 +514,7 @@ struct CustomPlayerView<Surface: View>: View {
             }
         #endif
         #if os(iOS)
-            // Attached before the single-tap gesture below so SwiftUI
-            // recognizes the double-tap and delays the single tap while it
-            // waits to see whether a second one follows — the standard
-            // trade-off every phone player makes for a working double-tap.
+            // Must precede the single-tap gesture so the double-tap wins.
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { surfaceWidth = $0 }
             .onTapGesture(count: 2, coordinateSpace: .local) { point in
                 handleTouchSeek(at: point)
@@ -653,16 +523,12 @@ struct CustomPlayerView<Surface: View>: View {
             .onTapGesture {
                 guard !panelOpen else { return }
                 #if os(tvOS)
-                // Select commits a scrub and plays on from there — the
-                // native tvOS grammar; otherwise it's play/pause.
+                // Select: commit scrub, Skip, Up Next, then play/pause.
                 if let target = scrubTarget {
                     commitScrub(to: target, resume: true)
                 } else if let segment = automation.activeSegment, automation.skipMode != .instant {
-                    // The button is deliberately not focusable: taking focus
-                    // would move `onMoveCommand` off the surface and kill
-                    // scrubbing while it is up. Select acts on it
-                    // instead, which is the grammar the rest of the
-                    // player already uses.
+                    // Not focusable: taking focus would move `onMoveCommand`
+                    // off the surface and break scrubbing.
                     skip(segment)
                 } else if automation.showsNextUp {
                     // Not focusable either, and for the same reason.
@@ -686,9 +552,8 @@ struct CustomPlayerView<Surface: View>: View {
         interactionToken += 1
     }
 
-    /// The SwiftUI player hierarchy deliberately survives autoplay. Clear
-    /// only state that belongs to the finished item; focus and the hosted
-    /// display layer remain in place for a seamless engine swap.
+    /// The hierarchy survives autoplay; clear only per-item state and keep
+    /// the display layer for a seamless engine swap.
     private func resetForPlaybackIdentity() {
         controlsVisible = true
         showsEndTime = false
@@ -703,8 +568,6 @@ struct CustomPlayerView<Surface: View>: View {
         scrubRunLength = 0
         scrubStepToken += 1
         scrubHopped = false
-        // Skip and Up Next state belongs to the controller's automation,
-        // which starts each item clean.
         trickplay = info.trickplay.map(TrickplayLoader.init(source:))
         reportDisplayedCaption(nil)
         #if os(tvOS)
@@ -716,8 +579,8 @@ struct CustomPlayerView<Surface: View>: View {
         seekFeedback = SeekFeedback(forward: forward, token: (seekFeedback?.token ?? 0) + 1, seconds: seconds)
     }
 
-    /// Custom renderers must tell Media Accessibility which caption text is
-    /// currently onscreen; an empty array explicitly clears the report.
+    /// Custom renderers must report on-screen captions to Media
+    /// Accessibility; an empty array clears it.
     private func reportDisplayedCaption(_ text: String?) {
         let strings: NSArray = text.map { [$0] } ?? []
         MACaptionAppearanceDidDisplayCaptions(strings)
@@ -727,10 +590,7 @@ struct CustomPlayerView<Surface: View>: View {
 
     private var isScrubbing: Bool { scrubTarget != nil }
 
-    /// How far the buffering spinner steps down to clear the centre
-    /// transport cluster while it carries the group's waiting line. Only
-    /// touch has a cluster in the middle of the screen; the TV's transport
-    /// is a bottom bar, so nothing moves there.
+    /// Clears the iOS centre cluster; tvOS has none.
     private var waitingDrop: CGFloat {
         #if os(iOS)
         isWaitingForGroup ? Metrics.Space.section * 2 : 0
@@ -743,21 +603,12 @@ struct CustomPlayerView<Surface: View>: View {
         (controlsVisible || voiceOverEnabled || engine.isPaused || isScrubbing) && !panelOpen
     }
 
-    /// Walking a virtual playhead needs a known duration to walk along;
-    /// without one (live streams) the arrows stay plain ±10 s seeks.
-    ///
-    /// Playback is deliberately no bar to it. This used to also require
-    /// `engine.isPaused`, which left trickplay, chapter ticks and chapter
-    /// hopping unreachable for anyone who never guessed they had to pause
-    /// first.
+    /// Needs a known duration; deliberately not gated on pause.
     private var canScrub: Bool {
         engine.duration > 0
     }
 
-    /// Walks the virtual playhead one step. Sustained input accelerates
-    /// (10 s → 30 s → 60 s) so crossing a feature-length film isn't fifty
-    /// presses; the run expires after a beat of no input, so a deliberate
-    /// single press is always a 10 s step.
+    /// Sustained input accelerates 10 → 30 → 60 s; a single press is 10 s.
     private func stepScrub(direction: Double) {
         let origin = scrubTarget ?? engine.timePosition
         let step: Double = switch scrubRunLength {
@@ -772,9 +623,8 @@ struct CustomPlayerView<Surface: View>: View {
         scrubStepToken += 1
     }
 
-    /// Lands the virtual playhead. `resume` is the tvOS grammar for an
-    /// explicit commit — Select/Play scrubs *and* plays on. Touch drags and
-    /// the self-commit timeout keep whatever the play state already was.
+    /// `resume` is an explicit Select/Play; drags and the timeout keep the
+    /// play state.
     private func commitScrub(to target: Double, resume: Bool) {
         lastCommittedScrubTarget = target
         endScrub()
@@ -784,12 +634,8 @@ struct CustomPlayerView<Surface: View>: View {
 
     // MARK: - Transport intentions
     //
-    // The viewer asked for something; who acts on it is not this view's
-    // business. With a `transport` the player host answers — a SyncPlay
-    // group turns each of these into a request to the server and moves
-    // nothing locally. Without one they are the engine calls that used to
-    // be written here. The engine is read through `@PlayerEngineRef` at
-    // the moment of the press and never captured.
+    // The engine is read through `@PlayerEngineRef` at the press, never
+    // captured.
 
     private func requestTogglePause() {
         guard let transport else {
@@ -809,9 +655,8 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func requestSeek(to seconds: Double, resume: Bool = false) {
         guard let transport else {
-            // Resume before seeking: the engine re-anchors the synchronizer
-            // when the seek primes, so unpausing afterwards fights that
-            // hand-off.
+            // Resume before seeking: unpausing after fights the engine's
+            // synchronizer re-anchor.
             if resume, engine.isPaused { engine.togglePause() }
             engine.seek(to: seconds)
             return
@@ -828,14 +673,11 @@ struct CustomPlayerView<Surface: View>: View {
         scrubTarget = nil
         scrubRunLength = 0
         scrubHopped = false
-        // The loader deliberately keeps its last frame: the chip fades out
-        // showing the picture you committed to, and a later scrub in the
-        // same neighbourhood opens on it instead of a placeholder.
+        // Trickplay keeps its last frame on purpose.
     }
 
-    /// Chapter hop while scrubbing. Backwards lands on the
-    /// current chapter's start first, the way track skip-back does, so a
-    /// second press is what reaches the previous one.
+    /// Backwards lands on the current chapter's start first, like track
+    /// skip-back.
     private func jumpChapter(direction: Int) {
         let origin = scrubTarget ?? engine.timePosition
         let target = direction > 0
@@ -843,8 +685,6 @@ struct CustomPlayerView<Surface: View>: View {
             : info.chapters.last { $0.start < origin - 3 }
         guard let target else { return }
         scrubTarget = min(max(target.start, 0), engine.duration)
-        // A hop isn't part of a walking run — the next arrow press should
-        // step 10 s, not 60.
         scrubRunLength = 0
         scrubHopped = true
         scrubStepToken += 1
@@ -852,9 +692,6 @@ struct CustomPlayerView<Surface: View>: View {
 
     // MARK: - Skip intro / recap and Up Next
 
-    /// Select or a tap on the pill. The automation decides *whether* a
-    /// segment is active, from the same clock the pill draws, so Select and
-    /// the pill cannot disagree; this only adds the reveal.
     private func skip(_ segment: MediaSegment) {
         automation.skip(segment)
         pokeControls()
@@ -880,13 +717,9 @@ struct CustomPlayerView<Surface: View>: View {
         }
         panelOpen = true
         onPanelToggle?(true)
-        // defaultFocus is only honored when a fresh scene appears — for a
-        // mid-screen reveal tvOS leaves focus where it was, stranding the
-        // panel. The panel is mounted but disabled while closed, so a focus
-        // assignment in the same update that enables it can be rejected by
-        // the focus engine even though the FocusState retains the requested
-        // value. Claim after the reveal begins, once SwiftUI has applied
-        // `panelOpen` and removed the panel's disabled focus environment.
+        // defaultFocus doesn't run for a mounted panel, and focusing it in
+        // the same update that enables it can be rejected. Claim focus after
+        // the reveal begins.
         playerFocus = .surface
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(225))
@@ -895,10 +728,7 @@ struct CustomPlayerView<Surface: View>: View {
                 return
             }
 
-            // The panel stays mounted off-screen, so defaultFocus alone does
-            // not run when it slides in. Re-entering its dedicated scope asks
-            // tvOS to resolve a visible default, while the explicit binding
-            // keeps the selected tab and focus state in lockstep.
+            // Resetting the scope makes tvOS resolve a visible default.
             #if os(tvOS)
             playerFocus = nil
             await Task.yield()
@@ -938,9 +768,6 @@ struct CustomPlayerView<Surface: View>: View {
 
     // MARK: - Transport
 
-    /// The transport itself is `PlayerTransportOverlay`; only the hint's
-    /// condition is decided here, because it turns on the subtitle load
-    /// state and the scrub, not on the playhead.
     private var showsPanelHint: Bool {
         if case .failed = engine.subtitleLoadState { return false }
         return !isScrubbing
@@ -990,15 +817,12 @@ struct PlayerSubtitleText: View {
     }
 }
 
-/// Renders the small inline-style subset retained from ASS override blocks.
-/// Placement is owned by `PositionedSubtitleLayout`; this view deliberately
-/// has no dialogue-shelf padding of its own.
+/// Inline ASS styling. Placement belongs to `PositionedSubtitleLayout`, so
+/// no shelf padding here.
 struct PlayerStyledSubtitleText: View {
     let cue: SubtitleTextCue
     let style: SubtitleRenderStyle
-    /// Simultaneous authored cues are separate elements, so only the first
-    /// keeps the canonical identifier — several elements answering to one
-    /// name is an ambiguous match for anything querying it.
+    /// Only the first simultaneous cue keeps the canonical identifier.
     var accessibilityIdentifier = "player.subtitle.text"
 
     var body: some View {
@@ -1026,8 +850,7 @@ struct PlayerStyledSubtitleText: View {
             if let color = run.primaryColor {
                 fragment = fragment.foregroundColor(color.swiftUIColor)
             }
-            // Interpolation, not `+`: tvOS 26 deprecates `Text.+` and its
-            // fix-it points here. Reads like a style choice, is not one.
+            // tvOS 26 deprecates `Text.+`.
             return Text("\(partial)\(fragment)")
         }
     }
@@ -1056,9 +879,7 @@ private extension SubtitleTextColor {
 
 struct PlayerSeekIndicator: View {
     let forward: Bool
-    /// The iOS double-tap grammar's stacked total; tvOS's remote
-    /// seek never exceeds the base step, so this stays at its default there
-    /// and the glyph alone renders exactly as before.
+    /// Stacked iOS double-tap total; tvOS stays at 10.
     var seconds: Int = 10
     var accessibilityIdentifier = "player.seekFeedback"
 
@@ -1089,17 +910,10 @@ struct PlayerSeekIndicator: View {
     }
 }
 
-/// When an item will finish in real time, kept apart from the view so the
-/// projection can be tested without one.
-///
-/// The viewer's chosen speed is what the remaining media time is divided by,
-/// and `PlayerEngine.rate` deliberately survives a pause, so a paused item
-/// still projects against the speed it will resume at. Because the remaining
-/// time then stops falling while the clock keeps running, the answer slides
-/// later for as long as playback is held.
+/// When an item will finish in wall-clock time. `PlayerEngine.rate`
+/// survives a pause, so a paused item projects at its resume speed.
 nonisolated enum PlaybackFinish {
-    /// Anything beyond a day is a live stream or a duration the demuxer has
-    /// not worked out yet, not something worth projecting a finish for.
+    /// Beyond a day is live or an unknown duration.
     static let longestProjection: TimeInterval = 24 * 60 * 60
 
     static func date(from now: Date, remaining: TimeInterval, rate: Double) -> Date? {
@@ -1110,8 +924,7 @@ nonisolated enum PlaybackFinish {
         return now.addingTimeInterval(seconds)
     }
 
-    /// The clock time as the viewer's region writes it, so a 24-hour locale
-    /// gets 21:45 and a 12-hour one gets 9:45 PM.
+    /// Follows the locale's 12- or 24-hour clock.
     static func label(_ date: Date, locale: Locale = .current) -> String {
         date.formatted(
             Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)

@@ -6,51 +6,41 @@ import Observation
 
 /// Feeds preview frames to the scrub chip.
 ///
-/// Jellyfin serves trickplay as sprite sheets — typically a 10×10 grid of
-/// 320×180 thumbnails per JPEG, one thumbnail every 10 s — so a "frame" is a
-/// crop out of a sheet that is already in memory, and only crossing a sheet
-/// boundary costs a download. That geometry is why so little caching is
-/// needed: one sheet covers ~16 minutes of runtime.
+/// Jellyfin trickplay sheets are typically 10×10 grids of 320×180 tiles, one
+/// per 10 s, so one sheet covers ~16 minutes and a frame is a crop.
 ///
-/// Deliberately not routed through `ImageCache`: sheets are ~23 MB decoded
-/// and would evict the entire poster cache on the first scrub. This holds
-/// its own two and dies with the player.
+/// Not routed through `ImageCache`: a decoded sheet is ~23 MB and would
+/// evict the poster cache on the first scrub.
 @Observable
 @MainActor
 final class TrickplayLoader {
-    /// The frame for the position last handed to `update(to:)`. The previous
-    /// frame stays up while the next sheet downloads — a scrub that crosses
-    /// a boundary should stall the picture, never blank it.
+    /// The previous frame stays up while the next sheet downloads, so a
+    /// scrub stalls the picture rather than blanking it.
     private(set) var frame: CGImage?
 
-    /// Set when a sheet the manifest promised doesn't come back — pruned
-    /// files, a stale manifest — so the chip can stop reserving space for a
-    /// picture that will never arrive.
+    /// Set when promised sheets never arrive, so the chip stops reserving
+    /// space for them.
     private(set) var isUnavailable = false
 
     private let source: TrickplaySource
-    /// The trickplay route 401s without credentials, and the sheet URL
-    /// carries no query token, so every sheet fetch sends
-    /// the header credential the source arrived with.
+    /// The trickplay route 401s without the header credential.
     private var authorization: MediaRequestAuthorization? { source.authorization }
     /// Decoded sheets, most-recently-used first.
     private var sheets: [(index: Int, image: CGImage)] = []
-    /// Compressed sheets, capped at 32 MiB. Revisiting a retained sheet
-    /// re-decodes it without another download.
+    /// Compressed sheets, capped at 32 MiB, so a revisit re-decodes
+    /// without downloading.
     private var sheetData: [Int: Data] = [:]
     private var sheetDataOrder: [Int] = []
     private var loading: Set<Int> = []
     @ObservationIgnored private var loadTasks: [Int: Task<Void, Never>] = [:]
-    /// The tile the scrubber is asking for right now — re-checked when a
-    /// sheet lands, since the playhead has usually moved on by then.
+    /// Re-checked when a sheet lands; the playhead has usually moved on.
     private var wanted: TrickplayTile?
 
     /// Two sheets ≈ 46 MB. A third buys almost nothing at 16 minutes each.
     private static let sheetLimit = 2
     private static let rawSheetByteLimit = 32 * 1_024 * 1_024
-    /// Caps the decode so a server generating fat trickplay resolutions
-    /// can't blow up memory. Tile geometry is derived from the decoded
-    /// sheet, so a downscaled one crops just as correctly.
+    /// Caps decode memory. Cropping uses the decoded size, so downscaling
+    /// is safe.
     private static let maxSheetPixels = 3200
 
     init(source: TrickplaySource) {
@@ -59,8 +49,7 @@ final class TrickplayLoader {
 
     deinit { for task in loadTasks.values { task.cancel() } }
 
-    /// Points the loader at a playback position. Cheap to call per drag
-    /// update: within one thumbnail's interval it does nothing at all.
+    /// Cheap per drag update: a no-op within one thumbnail's interval.
     func update(to seconds: Double) {
         guard let tile = source.tile(at: seconds), tile != wanted else { return }
         wanted = tile
@@ -80,8 +69,7 @@ final class TrickplayLoader {
 
     private func load(sheet index: Int) {
         guard !loading.contains(index), source.sheetURLs.indices.contains(index) else { return }
-        // A rapid scrub can cross many sheets. Keep only the requested
-        // sheet's transfer; the previous decoded frame remains visible.
+        // A rapid scrub crosses many sheets; keep only this transfer.
         for (other, task) in loadTasks where other != index {
             task.cancel()
             loadTasks.removeValue(forKey: other)
@@ -103,8 +91,8 @@ final class TrickplayLoader {
             self.loading.remove(index)
             self.loadTasks.removeValue(forKey: index)
             guard let image else {
-                // Nothing has ever loaded, so the tiles aren't really there.
-                // A later failure just means one bad sheet — keep going.
+                // Unavailable only if nothing ever loaded; otherwise one
+                // bad sheet.
                 self.isUnavailable = self.sheets.isEmpty
                 return
             }
@@ -126,9 +114,8 @@ final class TrickplayLoader {
         }
     }
 
-    /// Tile geometry comes from the *decoded* sheet rather than the declared
-    /// numbers: the decode may have downscaled it, and the last sheet of a
-    /// film is only partially filled, so its height isn't `rows` tiles.
+    /// Geometry comes from the decoded sheet: it may be downscaled, and the
+    /// last sheet is only partly filled.
     private func crop(_ sheet: CGImage, to tile: TrickplayTile) -> CGImage? {
         guard source.columns > 0, source.tileSize.width > 0, source.tileSize.height > 0 else { return nil }
         let scale = CGFloat(sheet.width) / (CGFloat(source.columns) * source.tileSize.width)

@@ -2,12 +2,9 @@ import LagoonEngine
 import SwiftUI
 
 extension View {
-    /// tvOS keeps SwiftUI's full-screen presentation and remote grammar on
-    /// whichever screen started playback. iOS only *requests* playback here:
-    /// the one `playerPresentationHost` at the tab root presents it, so the
-    /// player never depends on the screen that asked for it staying mounted.
-    /// `onDismiss` still reaches the requesting screen once the
-    /// player has closed, PiP included.
+    /// tvOS presents full-screen from the calling screen. iOS only requests
+    /// playback; the one `playerPresentationHost` at the tab root presents
+    /// it. `onDismiss` still reaches the requesting screen, PiP included.
     func playerPresentation(item: Binding<PlayerItem?>, onDismiss: @escaping () -> Void) -> some View {
         #if os(iOS)
         modifier(PlayerPresentationRequest(item: item, onDismiss: onDismiss))
@@ -28,12 +25,9 @@ extension View {
 }
 
 #if os(iOS)
-/// The single place iOS playback is presented from. A pushed detail page
-/// used to host its own presenting controller; presenting from inside a
-/// `NavigationStack` destination made the stack briefly show its root, and
-/// any view update in that window dropped the destination, which dismantled
-/// the presenter and closed the player about a second after it opened.
-/// The tab root is outside every stack, so it has none of that.
+/// The single place iOS playback is presented from. Never present from
+/// inside a `NavigationStack` destination: the stack briefly shows its root,
+/// the destination drops, and the player closes a second after opening.
 @MainActor
 @Observable
 final class PlayerPresentationHub {
@@ -46,14 +40,12 @@ final class PlayerPresentationHub {
     private(set) var request: Request?
 
     func present(_ item: PlayerItem, finish: @escaping () -> Void) {
-        // The UI cannot ask for a second player while one is up; a repeat of
-        // the same request (a screen re-evaluating its item) is a no-op.
+        // A repeat request while one is up is a no-op.
         guard request == nil else { return }
         request = Request(item: item, finish: finish)
     }
 
-    /// The requesting screen dropped its item (an account switch clears
-    /// them, for instance): the host closes the player it is showing.
+    /// The requesting screen dropped its item, so the host closes the player.
     func withdraw(_ id: PlayerItem.ID) {
         guard request?.item.id == id else { return }
         request = nil
@@ -90,8 +82,7 @@ private struct PlayerPresentationRequest: ViewModifier {
 private struct PlayerPresentationBridge: UIViewControllerRepresentable {
     let hub: PlayerPresentationHub
     @Environment(SessionStore.self) private var session
-    /// The hosted player is outside SwiftUI's environment, so everything
-    /// it reads is re-injected below — Watch Together included.
+    /// The hosted player is outside SwiftUI's environment; re-inject below.
     @Environment(SyncPlayStore.self) private var syncPlay
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -115,15 +106,11 @@ private struct PlayerPresentationBridge: UIViewControllerRepresentable {
             }
         ).environment(session).environment(syncPlay).preferredColorScheme(.dark)
         let host = UIHostingController(rootView: AnyView(player))
-        // `.overFullScreen`, never `.fullScreen`: a full-screen presentation
-        // removes the presenting hierarchy from the window once its
-        // transition ends, and SwiftUI answers by re-running the `.task`s of
-        // everything underneath — the root view's regression bootstrap
-        // included. Keeping the hierarchy is also what lets
-        // `restore` find the presenter in a window after PiP.
+        // `.overFullScreen`, never `.fullScreen`: that removes the
+        // presenting hierarchy and re-runs every `.task` underneath, the
+        // bootstrap included. It also lets `restore` find the presenter.
         host.modalPresentationStyle = .overFullScreen
-        // The player paints its own black; a clear host lets the requesting
-        // screen show through while a swipe carries the player down.
+        // Clear, so the screen shows through while a swipe drags the player.
         host.view.backgroundColor = .clear
         coordinator.host = host
         coordinator.presenter = presenter

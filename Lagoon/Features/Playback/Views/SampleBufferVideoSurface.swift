@@ -3,8 +3,7 @@ import LagoonEngine
 import SwiftUI
 import UIKit
 
-/// Hosts the AVSampleBufferDisplayLayer the Lagoon engine renders into and
-/// hands it to the engine once the view exists (mirrors MPVVideoSurface).
+/// Hosts the display layer the engine renders into.
 struct SampleBufferVideoSurface: UIViewRepresentable {
     let engine: SampleBufferPlayerEngine
     var onDisplayLayerReady: ((AVSampleBufferDisplayLayer) -> Void)?
@@ -33,9 +32,8 @@ struct SampleBufferVideoSurface: UIViewRepresentable {
 
     func updateUIView(_ uiView: SampleBufferVideoView, context: Context) {
         guard context.coordinator.engine !== engine else { return }
-        // PlaybackController waits for the prior renderer set to detach
-        // before publishing its successor, so this layer can survive an
-        // episode boundary without belonging to two synchronizers at once.
+        // The controller detaches the old renderers before publishing the
+        // successor, so the layer never has two synchronizers.
         engine.attach(displayLayer: uiView.displayLayer)
         context.coordinator.engine = engine
         onDisplayLayerReady?(uiView.displayLayer)

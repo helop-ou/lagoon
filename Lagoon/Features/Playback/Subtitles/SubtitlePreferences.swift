@@ -109,8 +109,8 @@ nonisolated struct SubtitlePreferenceValues: Codable, Equatable {
     var edgeStyle: SubtitleEdgeStyle = .shadow
     var background: SubtitleBackground = .light
     var verticalPosition: SubtitleVerticalPosition = .standard
-    /// Lagoon-specific choices come first; Apple's caption languages are
-    /// appended dynamically so changing Settings.app still takes effect.
+    /// Lagoon's choices first. Apple's caption languages are appended at read
+    /// time so Settings.app changes still apply.
     var languageOverrides: [String] = []
     var missingMode: MissingSubtitleMode = .ask
 }

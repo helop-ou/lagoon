@@ -2,32 +2,22 @@ import Foundation
 import LagoonEngine
 import SwiftUI
 
-/// Whether the launch-gated player regression probe is on.
-///
-/// Read once. It is a launch argument, so it cannot change while the app is
-/// running, and `videoSurface` used to ask `UserDefaults` for it twice per
-/// body evaluation — which, before the player's Observation scope was split
-/// up, meant twice per position tick. `CustomPlayerView` is generic
-/// over its surface and generics can't hold static storage, so the flag lives
-/// here, beside the modifier that reads it.
+/// Whether the launch-gated player regression probe is on. Read once: it is
+/// a launch argument, and `CustomPlayerView` is generic so cannot hold
+/// static storage.
 nonisolated enum PlayerRegressionProbe {
     static let isEnabled = UserDefaults.standard.bool(forKey: "debug.playerRegression")
 }
 
 /// A launch-gated accessibility probe for the physical-device UI suite. It
-/// observes the same view state the viewer sees; it does not call player
-/// actions or replace the Siri Remote interaction path.
+/// observes what the viewer sees; it never calls player actions or replaces
+/// the Siri Remote path.
 ///
-/// It is a `ViewModifier` rather than a computed string in the player.
-/// Almost everything it reports moves at position-tick rate, and
-/// a `ViewModifier` has a body of its own, so Observation attaches those
-/// reads here instead of to the player's body — and on tvOS to
-/// `MenuPressGate`'s hosting update with it. With the flag off the value is
-/// never assembled at all, so a shipping build tracks nothing.
+/// A `ViewModifier` so its tick-rate reads land in its own body, not the
+/// player's. With the flag off nothing is assembled.
 ///
-/// On tvOS the value is deliberately carried by the focusable video surface
-/// itself: a separate invisible accessibility element stole arrow focus on
-/// the first hardware run and therefore tested the probe, not the player.
+/// On tvOS the value rides on the focusable video surface: a separate
+/// invisible element stole arrow focus.
 struct PlayerRegressionValue: ViewModifier {
     @PlayerEngineRef var engine: any PlayerEngine
     let info: PlayerItemInfo
@@ -40,11 +30,8 @@ struct PlayerRegressionValue: ViewModifier {
     let bufferedRanges: [PlaybackBufferedRange]
     let playheadPrefetchCount: Int
     let handoffMilliseconds: Double?
-    /// Where the Up Next card is due, already resolved by the player from
-    /// `engine.duration`; only the comparison against the moving position
-    /// belongs in here.
+    /// Where the Up Next card is due, already resolved from `engine.duration`.
     let nextUpCardStart: Double?
-    /// Panel open, scrub up, or the card already waved away with Back.
     let isNextUpSuppressed: Bool
     let isScrubbing: Bool
     let isTransportVisible: Bool
@@ -84,11 +71,9 @@ struct PlayerRegressionValue: ViewModifier {
     private var value: String {
         let selectedAudio = engine.audioTracks.first(where: \.isSelected)?.engineID ?? 0
         let selectedSubtitle = engine.subtitleTracks.first(where: \.isSelected)?.engineID ?? 0
-        // An external (sidecar) track is the only selection that is not
-        // committed synchronously, so it is the only one that can strand the
-        // panel on "Loading …". Reported here rather than read off the panel
-        // because the panel exists only while it is open, and a stuck load
-        // has to be observable after it closes.
+        // An external sidecar track is the only selection that can strand the
+        // panel on "Loading …". Reported here because the panel is gone after it
+        // closes.
         let subtitleLoad: String = switch engine.subtitleLoadState {
         case .idle: "idle"
         case .loading(let id, _): "loading-\(id)"

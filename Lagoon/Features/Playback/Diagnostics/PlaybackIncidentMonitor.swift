@@ -6,13 +6,11 @@ import UIKit
 
 /// Detects playback that stopped without anyone saying so.
 ///
-/// The engine's own stall detection covers a dry queue: it pauses the
-/// clock, sets `isBuffering`, and recovers. This watches two other cases,
-/// both while the engine believes it is playing (rate above zero, not
-/// buffering, not paused): the playhead has not moved for `threshold`
-/// seconds, or the playhead moves but the renderer has not presented a
-/// frame for that long, which is a frozen picture over running audio.
-/// Pure so the thresholds can be pinned.
+/// The engine handles a dry queue itself (`isBuffering`). This catches two
+/// cases while the engine thinks it is playing: the playhead has not moved
+/// for `threshold` seconds, or it moves but no frame has been presented,
+/// which is a frozen picture over running audio. Pure so the thresholds can
+/// be pinned.
 nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     struct Sample: Equatable, Sendable {
         var position: Double
@@ -22,10 +20,8 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
         var duration: Double
         var isFinished: Bool
         var isAppActive: Bool
-        /// Nil when no seek has been recorded this attempt.
         var secondsSinceSeek: Double?
-        /// The renderer's running frame count (displayed plus dropped), nil
-        /// when no metric has been read yet.
+        /// The renderer's frame count (displayed plus dropped), nil until read.
         var framesPresented: Int? = nil
     }
 
@@ -35,9 +31,7 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     }
 
     enum Verdict: Equatable, Sendable {
-        /// Playback is not expected to advance, or it advanced.
         case idle
-        /// No progress yet, but not for long enough.
         case watching(seconds: Double)
         /// Reported once per freeze; progress resets it.
         case frozen(seconds: Double, kind: Kind)
@@ -45,7 +39,7 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
 
     static let threshold: Double = 8
     static let positionTolerance: Double = 0.05
-    /// The last moments before the end are the finish observer's, not ours.
+    /// The last moments belong to the finish observer.
     static let endGuard: Double = 2
     /// A seek repositions optimistically and then refills; give it time.
     static let seekSettle: Double = 3
@@ -88,7 +82,6 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
         lastPosition = sample.position
         stalledSince = now
         reported = false
-        // The clock advanced. Did the picture?
         guard let frames = sample.framesPresented else { return .idle }
         if let lastFrames, frames <= lastFrames {
             let since = pictureStalledSince ?? now
@@ -107,10 +100,9 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     }
 }
 
-/// When a session that ended without an error still deserves a report:
-/// the counters that, over enough playback, describe a viewing that was
-/// visibly bad. Thresholds are documented in docs/reference/playback/
-/// diagnostics.md; change both together.
+/// When a session that ended without an error still deserves a report.
+/// Thresholds are documented in docs/reference/playback/diagnostics.md;
+/// change both together.
 nonisolated enum PlaybackDegradationPolicy {
     struct Counters: Equatable, Sendable {
         var playedSeconds: Double = 0
@@ -131,13 +123,12 @@ nonisolated enum PlaybackDegradationPolicy {
     static let reprimesMinimum = 1
     static let audioStarvationMinimum = 5
 
-    /// The reasons a session is degraded, sorted so they fingerprint
-    /// stably. Empty for a healthy or too-short session. Frozen playback
-    /// and renderer recoveries have their own incidents and are carried as
-    /// counters only.
+    /// Why a session is degraded, sorted so the fingerprint is stable. Empty for
+    /// a healthy or too-short session. Freezes and renderer recoveries have their
+    /// own incidents.
     static func reasons(for counters: Counters, sampledWholeAttempt: Bool = true) -> [String] {
-        // Engine totals cover the entire attempt. A partial sampling window
-        // cannot compare those totals fairly with observed playing time.
+        // Engine totals cover the whole attempt, so a partial window cannot be
+        // compared fairly.
         guard sampledWholeAttempt, counters.playedSeconds >= minimumPlayedSeconds else { return [] }
         var reasons: [String] = []
         if counters.droppedFrames >= droppedFramesMinimum, counters.totalFrames > 0,
@@ -151,11 +142,10 @@ nonisolated enum PlaybackDegradationPolicy {
     }
 }
 
-/// The controller's reporter for one playback attempt after another: what
-/// the item is made of, how it is delivered, and what happened to it.
-/// Owns the sampling task that feeds the rolling history every few seconds
-/// and runs the freeze detector; the controller calls in at the moments it
-/// already knows about (start, ready, failure, handoff, stop).
+/// Reports on one playback attempt after another: what the item is, how it
+/// is delivered, and what happened. Owns the sampling task and the freeze
+/// detector; the controller calls in at start, ready, failure, handoff and
+/// stop.
 @MainActor
 final class PlaybackIncidentMonitor {
     static let sampleInterval: Duration = .seconds(2)
@@ -181,12 +171,11 @@ final class PlaybackIncidentMonitor {
     private var lastStallCount = 0
     private var frequentStallsReported = false
     private var attemptEnded = true
-    /// Session-wide degradation can only be assessed after uninterrupted
-    /// sampling of this attempt.
+    /// Degradation is only assessed after uninterrupted sampling of the
+    /// attempt.
     private(set) var sampledWholeAttempt = false
-    /// A fallback whose report waits for the successor's verdict: the
-    /// dashboard should say whether the other rung actually played
-    /// (`recovered`), failed too, or was abandoned by the viewer.
+    /// A fallback whose report waits for the next rung's verdict: `recovered`,
+    /// failed, or abandoned.
     private var pendingFallback: PendingFallback?
     private let hub: DiagnosticsHub
     private let notificationCenter: NotificationCenter
@@ -206,9 +195,8 @@ final class PlaybackIncidentMonitor {
         self.hub = hub
         self.notificationCenter = notificationCenter
         self.sleep = sleep
-        // Preference changes are infrequent and do not belong in a view's
-        // Observation scope. Keep listening while opted out so this same
-        // attempt can resume sampling without polling or retaining its engine.
+        // Keep listening while opted out, so this attempt can resume sampling
+        // without polling or retaining its engine.
         preferenceObserver = notificationCenter.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
@@ -218,9 +206,8 @@ final class PlaybackIncidentMonitor {
             let enabled = hub.isReportingEnabled
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                // Preserve an observed opt-out even if it is turned back on
-                // before this main-actor callback runs. A queued change from
-                // the outgoing attempt must not reset its enabled successor.
+                // Preserve an observed opt-out even if re-enabled before this runs. A
+                // queued change from the outgoing attempt must not reset its successor.
                 if !enabled, let startedAt = self.attemptStartedAt, observedAt >= startedAt {
                     self.sampledWholeAttempt = false
                     self.endSampling()
@@ -237,8 +224,8 @@ final class PlaybackIncidentMonitor {
         }
     }
 
-    /// A new attempt: a fresh random token, the negotiated facts, and clean
-    /// counters. Called after negotiation, before the engine exists.
+    /// A new attempt with a fresh random token. Called after negotiation, before
+    /// the engine exists.
     func beginAttempt(
         delivery: PlaybackDelivery,
         method: PlayMethod,
@@ -269,8 +256,8 @@ final class PlaybackIncidentMonitor {
         publishAmbientFields()
     }
 
-    /// The attempt's identity and facts, inherited by every incident until
-    /// the attempt ends, including the ones the engine reports itself.
+    /// Fields every incident inherits until the attempt ends, including ones the
+    /// engine reports itself.
     private func publishAmbientFields() {
         var ambient = facts
         ambient["attempt"] = .string(attempt)
@@ -315,8 +302,7 @@ final class PlaybackIncidentMonitor {
         updateSamplingPreference()
     }
 
-    /// The engine failed. `next` is the rung the ladder is about to try,
-    /// nil when it is spent.
+    /// `next` is the rung the ladder tries next, nil when it is spent.
     func engineFailed(_ failure: PlaybackEngineFailure, delivery: PlaybackDelivery, next: PlaybackDelivery?, engine: DiagnosableEngine?) {
         let detail = failure.detail ?? PlaybackFailureDetail(stage: .unknown)
         var fields = incidentFields(extra: detail.fields)
@@ -331,8 +317,7 @@ final class PlaybackIncidentMonitor {
             variant.append("afterTrackSwitch")
         }
         hub.record(.playbackFailure, fields)
-        // A failure while a fallback is still pending is that fallback's
-        // verdict; report it before the new one.
+        // A failure during a pending fallback is its verdict; report that first.
         resolvePendingFallback(outcome: "failed")
         if let next {
             fields["to"] = .string(next.rawValue)
@@ -345,9 +330,7 @@ final class PlaybackIncidentMonitor {
         }
     }
 
-    /// Reports the waiting fallback with what became of it. `elapsedMs`
-    /// is the time from the failure to the verdict: for a recovery, how
-    /// long the viewer watched a reload.
+    /// `elapsedMs` runs from the failure to the verdict.
     private func resolvePendingFallback(outcome: String) {
         guard let pending = pendingFallback else { return }
         pendingFallback = nil
@@ -375,13 +358,13 @@ final class PlaybackIncidentMonitor {
         }
     }
 
-    /// The attempt is over, for whatever reason. Evaluates the session
-    /// counters once and stops sampling. Safe to call more than once.
+    /// Evaluates the session counters once and stops sampling. Safe to call
+    /// more than once.
     func endAttempt(engine: DiagnosableEngine?, outcome: String) {
         guard !attemptEnded else { return }
         attemptEnded = true
-        // The outgoing engine of a fallback ends here too; its successor
-        // still owes the verdict. Any other end abandons the fallback.
+        // A fallback's outgoing engine ends here too, but its successor owes the
+        // verdict. Any other end abandons the fallback.
         if outcome != "fallback" {
             resolvePendingFallback(outcome: "cancelled")
         }
@@ -418,11 +401,10 @@ final class PlaybackIncidentMonitor {
     }
 
     private func beginSampling(engine: DiagnosableEngine) {
-        // Off means off: with reporting disabled there is nothing to feed,
-        // so the 2 s tick does not run at all.
+        // Off means off: no tick at all.
         guard hub.isReportingEnabled else { return }
-        // An opt-out interval is not a frozen picture, played time, or a
-        // burst of stalls. Reset the window before resuming this attempt.
+        // Reset the window after an opt-out interval, which is not a freeze,
+        // played time or stalls.
         freeze = PlaybackFreezeDetector()
         tick = 0
         stallUptimes = []
@@ -435,8 +417,7 @@ final class PlaybackIncidentMonitor {
                 } catch {
                     return
                 }
-                // Cancellation may race a completed sleep. An outgoing task
-                // must never sample an ended attempt or a restarted window.
+                // Cancellation may race a completed sleep. Never sample an ended attempt.
                 guard !Task.isCancelled, let self, let engine else { return }
                 guard self.hub.isReportingEnabled else {
                     self.sampledWholeAttempt = false
@@ -479,8 +460,7 @@ final class PlaybackIncidentMonitor {
             hub.report(.playbackFrozen, level: .error, variant: [kind.rawValue], fields: fields)
         }
 
-        // Stalls the engine recovered from, counted here so a run of them
-        // becomes one report rather than staying invisible.
+        // Stalls the engine recovered from, so a run of them becomes one report.
         let stalls = engine.stallCount
         if stalls > lastStallCount {
             stallUptimes.append(contentsOf: repeatElement(now, count: stalls - lastStallCount))
@@ -537,8 +517,8 @@ final class PlaybackIncidentMonitor {
     /// switched a track, merged with `extra`.
     private func incidentFields(extra: [String: DiagnosticValue]) -> [String: DiagnosticValue] {
         var fields = facts
-        // A negotiation failure precedes the attempt; an empty token would
-        // only be rejected by the schema and counted as a call-site mistake.
+        // Negotiation failures precede the attempt; the schema rejects an empty
+        // token.
         if !attempt.isEmpty {
             fields["attempt"] = .string(attempt)
         }

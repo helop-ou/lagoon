@@ -1,9 +1,7 @@
 import LagoonEngine
 import SwiftUI
 
-/// Tabs shared by the live player's slide-down panel and the Debug component
-/// gallery. Keeping this outside `CustomPlayerView` ensures the gallery is a
-/// preview of production UI rather than a separately maintained imitation.
+/// Shared with the Debug gallery so it previews production UI.
 enum PlayerPanelTab: CaseIterable, Hashable {
     case info
     case video
@@ -21,44 +19,35 @@ enum PlayerPanelTab: CaseIterable, Hashable {
         }
     }
 
-    /// The tabs actually on offer. Together exists only while a group
-    /// does, and every place that walks the tabs — the strip, the tvOS
-    /// left/right grammar — must walk *this* rather than `allCases`, or
-    /// arrowing right lands on a tab that is not drawn.
+    /// Walk this, never `allCases`, or arrowing right can land on the
+    /// undrawn Together tab.
     static func offered(inGroup: Bool) -> [PlayerPanelTab] {
         inGroup ? allCases : allCases.filter { $0 != .together }
     }
 }
 
-/// What the Together tab draws.
-///
-/// A value rather than the store: the panel host is `Equatable` so the
-/// playback clock cannot walk its tabs and track rows, and that boundary
-/// only works if everything it shows can be compared.
+/// What the Together tab draws. A value, not the store, so the panel host's
+/// `Equatable` boundary can compare it.
 nonisolated struct PlayerTogetherState: Equatable, Sendable {
     let groupName: String
     let participants: [String]
     let state: SyncPlayGroupState
-    /// This member has taken itself out of the group's readiness
-    /// accounting: it is started with everyone else and no longer holds
-    /// them up when it is behind.
+    /// This member no longer holds the group up when behind.
     let ignoresWait: Bool
 
     var stateTitle: String { SyncPlayStateCopy.title(for: state) }
 }
 
-/// The panel keeps using the live player's focus namespace so opening and
-/// closing it can hand focus back to the video surface without a dead frame.
+/// Shares the player's focus namespace so focus returns to the surface
+/// without a dead frame.
 enum PlayerControlFocus: Hashable {
     case surface
     case tab(PlayerPanelTab)
     case track(String)
 }
 
-/// The real Info · Video · Audio · Subtitles panel used during playback,
-/// with a fifth Together tab while a Watch Together group owns the session.
-/// Values and actions are injected so Debug settings can exercise the same
-/// focusable controls with representative data and harmless local state.
+/// The playback options panel. Values and actions are injected so the Debug
+/// gallery can drive the same controls.
 struct PlayerControlPanel: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var selectedTab: PlayerPanelTab
@@ -74,7 +63,6 @@ struct PlayerControlPanel: View {
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
-    /// Nil outside a group, which is also what hides the Together tab.
     var together: PlayerTogetherState? = nil
     var onLeaveGroup: (() -> Void)? = nil
     var onSetIgnoreWait: ((Bool) -> Void)? = nil
@@ -92,18 +80,11 @@ struct PlayerControlPanel: View {
     private static var subtitleResultPrefix: String { "subtitle-result-" }
     /// Room a focused track row needs before its ScrollView clips it.
     private var rowFocusInset: CGFloat { 20 }
-    /// A track row at rest; the card sizes itself from this plus the gap.
     private var trackRowHeight: CGFloat { 62 }
-    /// Keep large libraries scrollable without letting the sheet dominate
-    /// the video behind it.
     private var trackListMaxHeight: CGFloat { 360 }
-    /// A result row at rest: its title over the provider/format detail line,
-    /// measured in the panel rather than guessed, so a capped list ends on a
-    /// row boundary instead of a clipped sliver.
+    /// Measured, so a capped list ends on a row boundary.
     private var resultRowHeight: CGFloat { 99 }
-    /// Results are the whole tab while browsing, not a strip above the track
-    /// list, so they take considerably more of the sheet than tracks do: five
-    /// rows and their focus insets, which is what fits above the safe area.
+    /// tvOS: five result rows plus focus insets.
     private var resultListMaxHeight: CGFloat {
         #if os(tvOS)
         583
@@ -131,10 +112,8 @@ struct PlayerControlPanel: View {
         #else
         VStack(spacing: Metrics.Space.xl) {
             VStack(spacing: Metrics.Space.l) {
-                // Only the sibling glass tabs need shared sampling and
-                // blending. Keeping the material sheet and its potentially
-                // long track tree outside this specialized container avoids
-                // an unnecessary glass-compositing subtree on every tab move.
+                // Only the tabs: keeping the card outside avoids glass
+                // compositing its track tree on every tab move.
                 GlassEffectContainer(spacing: Metrics.Space.s) {
                     tabBar
                 }
@@ -149,9 +128,7 @@ struct PlayerControlPanel: View {
         }
         .padding(.top, Metrics.railTopPadding)
         .defaultFocus(focus, .tab(selectedTab))
-        // Both edges of the subtitle mode switch remove the row focus is
-        // sitting on, so focus has to be placed deliberately or tvOS drops it
-        // somewhere arbitrary in the card.
+        // Switching modes removes the focused row; place focus explicitly.
         .onChange(of: subtitleSearch?.isBrowsingResults) { _, isBrowsing in
             moveFocusForSubtitleBrowsing(isBrowsing)
         }
@@ -159,9 +136,8 @@ struct PlayerControlPanel: View {
     }
 
     #if os(tvOS)
-    /// Leaving the browser lands on the track that was just downloaded, and
-    /// otherwise back on Search — the control the viewer opened it from.
-    /// Entering it moves the same press onto Done, which takes Search's place.
+    /// Entering lands on Done; leaving lands on the downloaded track, else
+    /// Search.
     private func moveFocusForSubtitleBrowsing(_ isBrowsing: Bool?) {
         guard let isBrowsing, case .track(let id)? = focus.wrappedValue else { return }
         let target: PlayerControlFocus?
@@ -178,16 +154,13 @@ struct PlayerControlPanel: View {
             target = nil
         }
         guard let target else { return }
-        // The control being claimed is created by this same update and is not
-        // in the focus system yet, so an immediate assignment is dropped and
-        // tvOS parks focus back on the tab bar. Claim it on the next turn.
+        // The target is created in this update, so assigning now is
+        // dropped. Claim it next turn.
         Task { focus.wrappedValue = target }
     }
     #endif
 
-    // Native buttons only: the system's focused lozenge IS the Infuse
-    // white-pill look — never draw custom focus chrome around it. The
-    // active tab keeps bold text once focus moves down into the card.
+    // Native buttons only; never draw custom focus chrome.
     @ViewBuilder
     private var tabBar: some View {
         #if os(iOS)
@@ -202,8 +175,6 @@ struct PlayerControlPanel: View {
                 Button {
                     selectedTab = tab
                 } label: {
-                    // Always bold. Selection follows focus here, so the
-                    // lozenge already says which tab is active.
                     Text(tab.title)
                         .fontWeight(.bold)
                 }
@@ -239,10 +210,6 @@ struct PlayerControlPanel: View {
         }
     }
 
-    /// Who is in the room, what the room is doing, and the two decisions
-    /// that belong to this member alone: whether to hold everyone up, and
-    /// whether to stay. Everything about *playback* is the
-    /// group's and is not offered here.
     @ViewBuilder
     private var togetherCard: some View {
         if let together {
@@ -258,11 +225,8 @@ struct PlayerControlPanel: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("player.together.group")
 
-                // Whoever the server names, this viewer included. A
-                // `GroupJoined` usually lists the member that just joined,
-                // but a group's creator is sometimes handed an empty list
-                // and no `UserJoined` of its own, so an empty list still
-                // means a room with you in it (the fixture server on 12.0.0, 2026-09-14).
+                // A group's creator can get an empty list, so empty still
+                // means you are in it.
                 cardHeader("In the Group")
                 if together.participants.isEmpty {
                     Text("Just you so far.")
@@ -324,8 +288,7 @@ struct PlayerControlPanel: View {
         #if os(tvOS)
         .focused(focus, equals: .track(Self.togetherLeaveID))
         #else
-        // Several controls share this Form row; an automatic button would
-        // also fire its neighbour.
+        // Shared Form row; an automatic button would also fire its neighbour.
         .buttonStyle(.borderless)
         #endif
         .accessibilityIdentifier("player.together.leave")
@@ -335,12 +298,8 @@ struct PlayerControlPanel: View {
         tabContent
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(PlayerPanelMetrics.cardPadding)
-        // Native focused controls choose their own label color. Forcing a
-        // foreground style here makes their text disappear in the lozenge.
-        // Apple reserves Liquid Glass for controls/navigation. This is the
-        // content sheet beneath those glass tabs, so tvOS's regular overlay
-        // material preserves that hierarchy and adapts for contrast and
-        // Reduce Transparency without nesting glass inside glass.
+        // No foreground style: it hides focused labels in the lozenge.
+        // Material, not glass: glass is for controls, not content.
         .background(
             .regularMaterial,
             in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius)
@@ -396,9 +355,6 @@ struct PlayerControlPanel: View {
             CachedAsyncImage(url: info.posterURL, maxPixelSize: 400) { image in
                 image
                     .resizable()
-                    // Respect the downloaded artwork's own pixels. The
-                    // surrounding frame supplies the poster ratio without
-                    // stretching or zoom-cropping the image itself.
                     .scaledToFit()
             } placeholder: {
                 Color.white.opacity(0.1)
@@ -466,16 +422,12 @@ struct PlayerControlPanel: View {
             trackCard(rows: audioTracks.map { ($0.id, $0.displayName, $0.isSelected) }) { rowID in
                 onSelectAudioTrack(audioTracks.first(where: { $0.id == rowID })?.engineID)
             }
-            // One or two audio tracks should read as a compact list, not a
-            // half-screen column. Long libraries still scroll vertically.
             .frame(
                 width: PlayerPanelMetrics.audioTrackColumnWidth,
                 alignment: .topLeading
             )
             .padding(.trailing, Metrics.Space.l)
-            // A standalone vertical Divider greedily accepts the sheet's
-            // full proposed height. Keeping it in this content-sized overlay
-            // makes the Audio sheet follow its actual rows instead.
+            // A standalone vertical Divider takes the sheet's full height.
             .overlay(alignment: .trailing) {
                 Divider()
             }
@@ -546,10 +498,6 @@ struct PlayerControlPanel: View {
         }
     }
 
-    /// The same split the Audio tab uses: what is playing on the left, the
-    /// options for it on the right. Speed is a short, fixed set of values, so
-    /// its options are a row rather than a column — six stacked rows made the
-    /// card taller than the sheet needed to be, for six numbers.
     private var videoCard: some View {
         #if os(tvOS)
         HStack(alignment: .top, spacing: Metrics.Space.xl) {
@@ -559,19 +507,13 @@ struct PlayerControlPanel: View {
                     alignment: .topLeading
                 )
                 .padding(.trailing, Metrics.Space.l)
-                // Same content-sized overlay as the Audio tab: a standalone
-                // vertical Divider would take the sheet's full proposed
-                // height.
+                // See the Audio tab's Divider.
                 .overlay(alignment: .trailing) {
                     Divider()
                 }
 
-            // Takes whatever the track column leaves rather than a width of
-            // its own, and declares itself a focus section. The Audio tab does
-            // not need to: its left column is a list of focusable rows, so
-            // there is always something directly under the tab. This card's
-            // left column is a summary line, so without the section Down from
-            // the tab finds nothing below it and focus never enters the card.
+            // Focus section: the left column has nothing focusable, so
+            // without it Down from the tab never enters the card.
             videoOptions
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .focusSection()
@@ -596,11 +538,6 @@ struct PlayerControlPanel: View {
         }
     }
 
-    /// Shaped exactly like the Audio tab's delay row — label, value, a pair
-    /// of steppers — because it is the same kind of control: one value from a
-    /// short ordered scale. Six selectable options made the card either tall
-    /// (stacked) or wide (a row), and neither earned the space for something
-    /// that is almost always left at 1×.
     private var videoOptions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Options")
@@ -634,8 +571,6 @@ struct PlayerControlPanel: View {
                 .accessibilityIdentifier("player.playbackRate.decrease")
                 Text(PlaybackRatePolicy.title(playbackRate))
                     .font(.callout.monospacedDigit())
-                    // Dimmed at the default, exactly as a zero delay is: it
-                    // says "nothing to see here" without hiding the value.
                     .foregroundStyle(playbackRate == 1 ? .secondary : .primary)
                     .fixedSize()
                     .layoutPriority(1)
@@ -651,9 +586,7 @@ struct PlayerControlPanel: View {
         }
     }
 
-    /// The tab is either choosing a track or browsing search results, never
-    /// both. Stacking results above the tracks gave the candidates two visible
-    /// rows and left no way back to a track list they were now burying.
+    /// Either choosing a track or browsing results, never both.
     private var subtitleCard: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.l) {
             if let subtitleSearch, subtitleSearch.isBrowsingResults {
@@ -683,16 +616,12 @@ struct PlayerControlPanel: View {
                 subtitleLanguageMenu(subtitleSearch)
             }
 
-            // Only the phases that outlive the browser reach this: what a
-            // finished download did, or why one could not start.
             subtitleSearchStatus(subtitleSearch)
 
             Divider()
         }
 
-        // Discovery stays above this potentially very long list. A
-        // library with dozens of embedded/external tracks should still
-        // reach Find Subtitles with one Down press from the tab bar.
+        // Search stays above the list so one Down press reaches it.
         trackCard(
             rows: [(Self.subtitleOffID, String(localized: "Off"), !subtitleTracks.contains(where: \.isSelected))]
                 + subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
@@ -705,9 +634,7 @@ struct PlayerControlPanel: View {
         }
     }
 
-    /// Done takes the Search button's place, so the press that opened the
-    /// browser is also the press that leaves it. Menu does the same thing one
-    /// level up, exactly as it closes the panel before it would exit playback.
+    /// Done takes Search's place, so the same press opens and leaves.
     @ViewBuilder
     private func subtitleResultsBrowser(_ search: SubtitleSearchCoordinator) -> some View {
         cardHeader("Subtitle Results")
@@ -745,8 +672,7 @@ struct PlayerControlPanel: View {
         .focused(focus, equals: .track(Self.subtitleSearchCloseID))
         .accessibilityIdentifier("player.subtitleSearch.close")
         #if os(iOS)
-        // Multiple controls share this Form row; an automatic button would
-        // also fire the neighbouring one.
+        // Shared Form row; see `togetherOptions`.
         .buttonStyle(.borderless)
         #endif
     }
@@ -849,8 +775,7 @@ struct PlayerControlPanel: View {
                         .focused(focus, equals: .track("subtitle-retry"))
                         .accessibilityIdentifier("player.subtitleLoad.retry")
                         #if os(iOS)
-                        // Multiple controls share this Form row. An automatic
-                        // button can also activate the adjacent Search action.
+                        // Shared Form row; see `togetherOptions`.
                         .buttonStyle(.borderless)
                         #endif
                 }
@@ -914,8 +839,6 @@ struct PlayerControlPanel: View {
         }
         if let provider = result.providerName { details.append(provider) }
         if let format = result.format { details.append(format.uppercased()) }
-        // An exact-release match is the single most useful thing to know
-        // about a result, so it is called out rather than left implicit.
         if result.isHashMatch { details.append(String(localized: "Exact match")) }
         if result.isForced { details.append(String(localized: "Forced")) }
         if result.isHearingImpaired { details.append(String(localized: "SDH")) }
@@ -955,9 +878,7 @@ struct PlayerControlPanel: View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Tracks")
             ScrollView {
-                // Libraries can legitimately expose dozens of subtitle
-                // streams. Keep offscreen buttons out of the focus/layout
-                // tree until scrolling approaches them.
+                // Lazy: dozens of subtitle streams are normal.
                 LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
                     ForEach(rows, id: \.id) { row in
                         Button {
@@ -1007,7 +928,6 @@ private enum PlayerPanelMetrics {
     static let posterWidth: CGFloat = 112
     static let audioTrackColumnWidth: CGFloat = 720
     static let audioOptionsColumnWidth: CGFloat = 520
-    /// The video track summary is one line; the speeds take the rest.
     static let videoTrackColumnWidth: CGFloat = 560
     #else
     static let maxWidth: CGFloat = .infinity
@@ -1018,11 +938,9 @@ private enum PlayerPanelMetrics {
     static let posterHeight = posterWidth * 1.5
 }
 
-/// Observation boundary between the playback clock and the comparatively
-/// expensive panel hierarchy. `CustomPlayerView` reads position/buffering
-/// several times a second; this host only observes the engine properties the
-/// panel actually displays. Equatable identity prevents unrelated parent
-/// updates from walking the tabs and track rows again.
+/// Observation boundary between the playback clock and the panel. Observes
+/// only what the panel shows; `Equatable` stops parent updates walking the
+/// tabs and rows. Keep both.
 struct PlayerControlPanelHost: View, Equatable {
     @PlayerEngineRef var engine: any PlayerEngine
     @Binding var selectedTab: PlayerPanelTab
@@ -1043,9 +961,6 @@ struct PlayerControlPanelHost: View, Equatable {
             && lhs.subtitleSearch === rhs.subtitleSearch
             && lhs.isPictureInPicturePossible == rhs.isPictureInPicturePossible
             && lhs.isPictureInPictureActive == rhs.isPictureInPictureActive
-            // Somebody joining or leaving has to reach the Together tab,
-            // so the group's state is part of this boundary rather than
-            // something it filters out.
             && lhs.together == rhs.together
     }
 

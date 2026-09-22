@@ -1,38 +1,26 @@
 import Foundation
 import LagoonEngine
 
-/// How the server is being asked to deliver a stream. Each rung costs the
-/// server more than the one above it, so the ladder is descended only as far
-/// as a failure actually forces.
+/// How the server is asked to deliver a stream. Each rung costs the server
+/// more, so descend only as far as a failure forces.
 nonisolated enum PlaybackDelivery: String, Equatable, CaseIterable {
-    /// Whatever the server picks unaided, which for anything inside
-    /// `DeviceProfile.lagoon` is direct play: the original file, no server
-    /// work at all.
+    /// Whatever the server picks unaided: direct play for anything inside
+    /// `DeviceProfile.lagoon`.
     case negotiated
-    /// Direct play refused, but the server may still copy the tracks rather
-    /// than re-encode them.
+    /// Direct play refused, but the server may still copy the tracks.
     ///
-    /// Not `SupportsDirectStream`: Jellyfin couples the two, and withdrawing
-    /// direct play turns direct stream off with it (verified against 10.11 —
-    /// both come back false). What comes back instead is a `TranscodingUrl`,
-    /// and the remux happens inside it: with video stream copy still
-    /// permitted the server wraps the existing bitstream in fMP4 segments
-    /// and spends no encoder time. This is the rung that rescues a file
+    /// Not `SupportsDirectStream`: Jellyfin turns that off with direct play.
+    /// The remux happens inside the returned `TranscodingUrl`, which wraps
+    /// the existing bitstream in fMP4 with no encoder time. Rescues a file
     /// whose container libavformat choked on.
     case remux
-    /// Stream copy refused as well, so the video has to be re-encoded. The
-    /// expensive rung — minutes of server CPU per viewer — and the only one
-    /// that can rescue a bitstream the engine cannot decode.
-    ///
-    /// Its `TranscodingUrl` differs from the rung above by exactly one
-    /// parameter, `allowVideoStreamCopy=false`. That single flag is the
-    /// whole distinction between a remux and a transcode, which is why the
-    /// two rungs are worth keeping apart.
+    /// Video re-encoded. Minutes of server CPU per viewer, and the only rung
+    /// that rescues a bitstream the engine cannot decode. Differs from
+    /// `.remux` only by `allowVideoStreamCopy=false`.
     case transcode
 
-    /// The PlaybackInfo flags this rung asks for. Jellyfin defaults all four
-    /// to true, so `.negotiated` sends exactly what the server would have
-    /// assumed on its own.
+    /// The PlaybackInfo flags for this rung. Jellyfin defaults all four to
+    /// true.
     var flags: PlaybackDeliveryFlags {
         switch self {
         case .negotiated:
@@ -50,12 +38,9 @@ nonisolated enum PlaybackDelivery: String, Equatable, CaseIterable {
                 allowAudioStreamCopy: true
             )
         case .transcode:
-            // Video stream copy has to go too, or the server may satisfy a
-            // transcode request by copying the very bitstream that failed.
-            // Audio copy stays: an audio track the engine cannot decode
-            // never reaches this code — the demuxer drops undecodable audio
-            // streams from the track list rather than failing playback — so
-            // re-encoding audio here would be server cost for nothing.
+            // Without this the server may copy the bitstream that failed.
+            // Audio copy stays: the demuxer drops undecodable audio tracks,
+            // so audio never causes this rung.
             PlaybackDeliveryFlags(
                 enableDirectPlay: false,
                 enableDirectStream: false,
@@ -73,11 +58,8 @@ nonisolated struct PlaybackDeliveryFlags: Equatable {
     let allowAudioStreamCopy: Bool
 }
 
-/// One descent of the ladder, kept for the playback HUD.
-///
-/// Two pieces rather than one string because the message is the only
-/// unbounded part: a VideoToolbox status can run long enough to wrap the
-/// overlay, so the HUD gives it a line of its own.
+/// One descent of the ladder, for the playback HUD. The message is kept
+/// apart because it can be long enough to need its own line.
 nonisolated struct PlaybackDeliveryFallbackRecord: Equatable {
     /// `negotiated→transcode · undecodable`
     let transition: String
@@ -85,24 +67,20 @@ nonisolated struct PlaybackDeliveryFallbackRecord: Equatable {
     let message: String
 }
 
-/// What the server is holding, as far as the delivery ladder cares.
+/// What the server holds, as far as the delivery ladder cares.
 ///
-/// A disc is the case Jellyfin describes accurately and then contradicts:
-/// `VideoType` says `Iso`, `Container` reports the format probed *inside*
-/// the disc (`ts` for a Blu-ray), and `SupportsDirectPlay` still comes back
-/// true. What the static stream then serves is the image or the folder
-/// itself — 64 GB of UDF for an image — and libavformat has no filesystem to
-/// walk it with, so the open fails with `invalid data` every time.
+/// For a disc, Jellyfin says `VideoType` `Iso` but still reports
+/// `SupportsDirectPlay` true and a `Container` probed inside the disc. The
+/// static stream then serves the raw image or folder, which libavformat
+/// cannot open.
 nonisolated enum PlaybackSourceLayout: Equatable {
     /// One file, whose served bytes are the bytes to demux.
     case file
-    /// A Blu-ray image, which Lagoon reads itself: it mounts the UDF
-    /// filesystem over the same byte-range transport everything else uses and
-    /// plays the main title's clips directly.
+    /// A Blu-ray image Lagoon reads itself: UDF over the byte-range
+    /// transport, playing the main title's clips.
     case blurayImage
-    /// A DVD image, read here as well: the same UDF reader mounts it, and
-    /// `VIDEO_TS` needs no playlist because a title is simply its VOB files
-    /// in order. Interlaced ones are deinterlaced on the way out.
+    /// A DVD image, read by the same UDF reader. A title is its VOB files in
+    /// order.
     case dvdImage
     /// An image the server did not type, which is not assumed to be readable.
     case discImage
@@ -112,8 +90,8 @@ nonisolated enum PlaybackSourceLayout: Equatable {
     init(videoType: String?, isoType: String?) {
         switch videoType?.lowercased() {
         case "iso":
-            // Named kinds only. An image the reader would decline is better
-            // sent to the server at once than discovered a rung later.
+            // Named kinds only, so an unreadable image goes to the server at
+            // once.
             switch isoType?.lowercased() {
             case "bluray": self = .blurayImage
             case "dvd": self = .dvdImage
@@ -121,10 +99,8 @@ nonisolated enum PlaybackSourceLayout: Equatable {
             }
         case "bluray", "dvd":
             self = .discFolder
-        // An unrecognised value stays a file. The ladder already recovers
-        // from an open that fails, which costs one attempt; assuming a disc
-        // would silently spend a server transcode on something that might
-        // have played perfectly.
+        // Unknown stays a file: a failed open costs one attempt, a wrong
+        // disc guess costs a server transcode.
         default:
             self = .file
         }
@@ -132,14 +108,12 @@ nonisolated enum PlaybackSourceLayout: Equatable {
 
     var isDisc: Bool { self != .file }
 
-    /// Whether Lagoon opens this one itself rather than asking the server to
-    /// rebuild it.
+    /// Whether Lagoon opens this itself.
     var isReadableDisc: Bool {
         self == .blurayImage || self == .dvdImage
     }
 
-    /// Why direct play is not worth attempting, for the playback HUD — nil
-    /// for a file, and nil for the one kind of disc this client can open.
+    /// Why direct play is not worth attempting, for the HUD. Nil when it is.
     var directPlayRefusal: (cause: String, message: String)? {
         switch self {
         case .file, .blurayImage, .dvdImage:
@@ -154,21 +128,13 @@ nonisolated enum PlaybackSourceLayout: Equatable {
 
 /// Which rung to try after a failure, or nil when the ladder is spent.
 ///
-/// Descending one rung at a time is deliberate: a transcode is minutes of
-/// server CPU per viewer and the reason most of this client exists is to
-/// avoid asking for one. The ladder only skips to the bottom when the rung
-/// in between provably cannot help.
-///
-/// Both lower rungs arrive as HLS, which costs the embedded subtitle track:
-/// the engine cannot demux subtitles out of a Jellyfin transcode. One more
-/// reason the ladder is only ever descended after a real failure.
+/// Descend one rung at a time, and only on the engine's verdict: a transcode
+/// is minutes of server CPU per viewer. Both lower rungs arrive as HLS and
+/// lose the embedded subtitle tracks. A `.delivery` verdict never skips to
+/// the re-encode.
 nonisolated enum PlaybackFallbackPolicy {
-    /// The best rung a source can be *tried* at, before anything has failed.
-    /// A file plays from the bytes the negotiated rung serves, and so do the
-    /// disc images Lagoon can now read. Anything else has to be rebuilt by
-    /// the server, and starting above that spends an open which cannot
-    /// succeed plus a second negotiation to learn what `VideoType` already
-    /// said.
+    /// The best rung to try before anything has failed. Sources Lagoon
+    /// cannot open start at `.remux` rather than spend a doomed open.
     static func start(for layout: PlaybackSourceLayout) -> PlaybackDelivery {
         switch layout {
         case .file, .blurayImage, .dvdImage: .negotiated
@@ -184,9 +150,8 @@ nonisolated enum PlaybackFallbackPolicy {
         case (.negotiated, .delivery):
             .remux
         case (.negotiated, .undecodable):
-            // A remux hands the decoder the same samples in a different
-            // wrapper. Whatever refused them will refuse them again, so
-            // spending a server remux to prove it is pure latency.
+            // A remux hands the decoder the same samples, so skip it. This
+            // is one-way: never reach it without a verdict on the samples.
             .transcode
         case (.remux, _):
             .transcode
