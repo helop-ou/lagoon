@@ -36,8 +36,8 @@ direct plays. Run it with `--check` to fail on drift rather than ship it.
 
 The [native dependency inventory](reference/native-dependency-inventory.json)
 is generated. Regenerate it with [the inventory
-script](../scripts/inventory-native-dependencies.py) whenever the linked
-artifacts change.
+script](../scripts/inventory-native-dependencies.py), pointed at the resolved
+engine checkout, whenever the engine pin moves.
 
 [CHANGELOG.md](../CHANGELOG.md) is generated from `Changelog.swift` by [the
 changelog script](../scripts/generate-changelog.sh), which also prints one
