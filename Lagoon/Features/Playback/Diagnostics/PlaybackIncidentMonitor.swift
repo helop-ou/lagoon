@@ -171,7 +171,7 @@ final class PlaybackIncidentMonitor {
     private var attemptStartedAt: TimeInterval?
     private var readyAt: TimeInterval?
     private var sampleTask: Task<Void, Never>?
-    private weak var samplingEngine: SampleBufferPlayerEngine?
+    private weak var samplingEngine: DiagnosableEngine?
     private var preferenceObserver: NSObjectProtocol?
     private var freeze = PlaybackFreezeDetector()
     private var counters = PlaybackDegradationPolicy.Counters()
@@ -296,7 +296,7 @@ final class PlaybackIncidentMonitor {
     }
 
     /// The engine presented its first frames. Starts sampling.
-    func playbackReady(engine: SampleBufferPlayerEngine) {
+    func playbackReady(engine: DiagnosableEngine) {
         let now = ProcessInfo.processInfo.systemUptime
         readyAt = now
         var fields: [String: DiagnosticValue] = ["attempt": .string(attempt)]
@@ -317,7 +317,7 @@ final class PlaybackIncidentMonitor {
 
     /// The engine failed. `next` is the rung the ladder is about to try,
     /// nil when it is spent.
-    func engineFailed(_ failure: PlaybackEngineFailure, delivery: PlaybackDelivery, next: PlaybackDelivery?, engine: SampleBufferPlayerEngine?) {
+    func engineFailed(_ failure: PlaybackEngineFailure, delivery: PlaybackDelivery, next: PlaybackDelivery?, engine: DiagnosableEngine?) {
         let detail = failure.detail ?? PlaybackFailureDetail(stage: .unknown)
         var fields = incidentFields(extra: detail.fields)
         fields["cause"] = .string(failure.cause == .undecodable ? "undecodable" : "delivery")
@@ -377,7 +377,7 @@ final class PlaybackIncidentMonitor {
 
     /// The attempt is over, for whatever reason. Evaluates the session
     /// counters once and stops sampling. Safe to call more than once.
-    func endAttempt(engine: SampleBufferPlayerEngine?, outcome: String) {
+    func endAttempt(engine: DiagnosableEngine?, outcome: String) {
         guard !attemptEnded else { return }
         attemptEnded = true
         // The outgoing engine of a fallback ends here too; its successor
@@ -417,7 +417,7 @@ final class PlaybackIncidentMonitor {
         beginSampling(engine: engine)
     }
 
-    private func beginSampling(engine: SampleBufferPlayerEngine) {
+    private func beginSampling(engine: DiagnosableEngine) {
         // Off means off: with reporting disabled there is nothing to feed,
         // so the 2 s tick does not run at all.
         guard hub.isReportingEnabled else { return }
@@ -454,7 +454,7 @@ final class PlaybackIncidentMonitor {
         lastSampleAt = nil
     }
 
-    private func sample(engine: SampleBufferPlayerEngine) {
+    private func sample(engine: DiagnosableEngine) {
         let now = ProcessInfo.processInfo.systemUptime
         tick += 1
         accumulate(engine: engine, at: now)
@@ -503,7 +503,7 @@ final class PlaybackIncidentMonitor {
 
     /// Advances the session counters from the engine's session-scoped
     /// values and the wall clock while playing.
-    private func accumulate(engine: SampleBufferPlayerEngine, at now: TimeInterval) {
+    private func accumulate(engine: DiagnosableEngine, at now: TimeInterval) {
         if let lastSampleAt, !engine.isPaused, !engine.isBuffering {
             counters.playedSeconds += max(now - lastSampleAt, 0)
         }
@@ -599,7 +599,7 @@ final class PlaybackIncidentMonitor {
     }
 
     /// What the pipeline looks like right now: cheap reads only.
-    static func pipelineFields(_ engine: SampleBufferPlayerEngine) -> [String: DiagnosticValue] {
+    static func pipelineFields(_ engine: DiagnosableEngine) -> [String: DiagnosticValue] {
         let memory = MemorySnapshot.current()
         var fields: [String: DiagnosticValue] = [
             "position": .double(engine.timePosition.rounded(toPlaces: 1)),

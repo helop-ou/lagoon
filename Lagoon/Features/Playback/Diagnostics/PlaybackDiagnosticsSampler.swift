@@ -2,6 +2,11 @@ import Foundation
 import LagoonEngine
 import UIKit
 
+/// An engine a sampler can read: the player contract plus the optional
+/// diagnostics surface. Neither the sampler nor the incident monitor needs
+/// to know which engine it is.
+typealias DiagnosableEngine = any PlayerEngine & PlayerEngineDiagnostics
+
 /// Optional tester-facing sampling. Tasks keep only weak engine references;
 /// observations are read here and published as low-frequency HUD snapshots.
 /// The independent incident monitor owns automatic diagnostic reporting.
@@ -43,7 +48,7 @@ final class PlaybackDiagnosticsSampler {
     /// `devicectl … --console` streams it from a real Apple TV, where the
     /// unified log is out of reach. Off unless `-debug.decodeTrace YES`.
     func startTrace(
-        engine: SampleBufferPlayerEngine,
+        engine: DiagnosableEngine,
         onExitRequested: @escaping @MainActor () -> Void
     ) {
         decodeTraceTask?.cancel()
@@ -192,7 +197,7 @@ final class PlaybackDiagnosticsSampler {
     func startHUD(
         source: MediaSource,
         method: PlayMethod,
-        engine: SampleBufferPlayerEngine,
+        engine: DiagnosableEngine,
         context: @escaping @MainActor () -> HUDContext?,
         publish: @escaping @MainActor ([String]) -> Void
     ) {
@@ -264,7 +269,7 @@ final class PlaybackDiagnosticsSampler {
     }
 
     private static func liveHUDLines(
-        for engine: SampleBufferPlayerEngine,
+        for engine: DiagnosableEngine,
         cache: PlaybackCacheMetrics?
     ) -> [String] {
         var lines: [String] = []
