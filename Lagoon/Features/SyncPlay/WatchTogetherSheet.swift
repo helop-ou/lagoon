@@ -263,8 +263,9 @@ struct WatchTogetherSheet: View {
         return "\(state) · \(group.participants.joined(separator: ", "))"
     }
 
-    /// "Jaagop's room" — a name the others recognise without anyone having
-    /// to type one. A profile with no name falls back to the feature's own.
+    /// The signed-in profile's name, so the others recognise the room
+    /// without anyone having to type one. A profile with no name falls back
+    /// to the feature's own.
     private var defaultName: String {
         guard let user = session.userName, !user.isEmpty else {
             return String(localized: "Watch Together")

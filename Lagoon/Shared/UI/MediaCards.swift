@@ -7,7 +7,7 @@ import SwiftUI
 
 /// 2:3 poster card that navigates to the item's detail page.
 ///
-/// The title sits **under** the artwork, not over it (Jaagop, 2026-08-17):
+/// The title sits **under** the artwork, not over it:
 /// a scrim and a headline across the bottom third covers the part of a poster
 /// its designer cared most about, and a poster is already a title card. Below
 /// it, the name and the year — the two things a poster doesn't reliably tell
@@ -20,7 +20,7 @@ struct PosterCard: View {
     var body: some View {
         // The gap has to clear the focus lift, not just look right at rest:
         // `.card` scales the poster about a tenth, so a 390pt one grows ~20pt
-        // past its resting bottom edge and lands on the title (Jaagop).
+        // past its resting bottom edge and lands on the title.
         VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: ContentNavigationRoute.item(item)) {
                 ZStack(alignment: .bottom) {

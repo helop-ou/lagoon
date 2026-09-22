@@ -131,7 +131,7 @@ struct SeerrMediaRail: View {
 
 /// Ends a rail rather than sitting above it. A focusable heading put a stop
 /// between every pair of rails, so moving down the page meant passing through
-/// one for each — clunky on a remote (Jaagop). Here it is just the last thing
+/// one for each — clunky on a remote. Here it is just the last thing
 /// in the row you were already scrolling.
 struct RailSeeAllCard<Route: Hashable>: View {
     let destination: Route

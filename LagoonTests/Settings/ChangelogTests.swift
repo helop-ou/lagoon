@@ -26,7 +26,7 @@ struct ChangelogTests {
         )
     }
 
-    /// Jaagop's call on house style, enforced here because a style rule
+    /// House style, enforced here because a style rule
     /// nobody checks is a style rule that decays. See docs/release.md.
     @Test @MainActor func notesAvoidEmDashes() {
         let emDash = "\u{2014}"

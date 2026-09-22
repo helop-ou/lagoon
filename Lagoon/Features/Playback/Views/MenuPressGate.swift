@@ -58,7 +58,7 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
     var onRemoteTouchTap: (() -> Void)?
     private(set) var remoteTouchTapRecognizer: UITapGestureRecognizer?
 
-    // Hardware finding (Jaagop's Apple TV): a real Siri Remote .menu press
+    // Hardware finding, on a real Apple TV: a Siri Remote .menu press
     // is consumed by UIKit's presentation-dismissal *gesture recognizer*
     // before press delivery ever reaches the responder chain — the
     // pressesBegan/Ended overrides below never see it (the simulator's

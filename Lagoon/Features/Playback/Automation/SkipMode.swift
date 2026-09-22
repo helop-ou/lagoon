@@ -3,7 +3,7 @@ import LagoonEngine
 
 /// How the player treats a skippable segment — intro or recap.
 ///
-/// Jaagop's three, 2026-08-18. There is no "off": *button* already covers
+/// Three modes. There is no "off": *button* already covers
 /// wanting nothing to happen, because an ignored button skips nothing.
 nonisolated enum SkipMode: String, CaseIterable, Identifiable {
     /// Show the button with a fill that runs down, then skip on its own.

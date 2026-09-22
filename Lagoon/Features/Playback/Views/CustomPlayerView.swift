@@ -661,7 +661,8 @@ struct CustomPlayerView<Surface: View>: View {
                     // The button is deliberately not focusable: taking focus
                     // would move `onMoveCommand` off the surface and kill
                     // scrubbing while it is up. Select acts on it
-                    // instead, which is also the grammar Jaagop described.
+                    // instead, which is the grammar the rest of the
+                    // player already uses.
                     skip(segment)
                 } else if automation.showsNextUp {
                     // Not focusable either, and for the same reason.

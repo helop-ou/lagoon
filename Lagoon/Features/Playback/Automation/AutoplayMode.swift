@@ -3,7 +3,7 @@ import LagoonEngine
 
 /// What the player does when an episode runs out.
 ///
-/// Jaagop's three, 2026-08-18. Deliberately shaped like `SkipMode` — same
+/// Three modes, deliberately shaped like `SkipMode` — same
 /// row in Settings, same countdown length — so the two playback decisions
 /// read as a pair rather than as two unrelated features that happen to
 /// share a screen.
@@ -36,7 +36,7 @@ nonisolated enum AutoplayMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Matches `SkipMode.autoDelaySeconds` on purpose (Jaagop, 2026-08-18):
+    /// Matches `SkipMode.autoDelaySeconds` on purpose:
     /// two countdowns in the same player running at different speeds would
     /// read as a bug rather than as two settings.
     static let countdownSeconds: Double = 5

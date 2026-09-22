@@ -201,7 +201,7 @@ struct HeroSection<Route: Hashable>: View {
             // crossfade can animate. Without the `.id`, SwiftUI keeps one
             // image view and swaps its contents — nothing animatable happens
             // and the picture just cuts, which is what `Motion.crossfade`
-            // below was silently failing to do (Jaagop).
+            // below was silently failing to do.
             backdrop(for: item)
                 .frame(width: width, height: panelHeight)
                 #if os(tvOS)
@@ -294,7 +294,7 @@ struct HeroSection<Route: Hashable>: View {
         .clipped()
         // The artwork now runs the full width of the panel. What used to be
         // here was a *mask* fading its leading third into flat material, which
-        // read as a grey wash over a third of the image (Jaagop). What's left
+        // read as a grey wash over a third of the image. What's left
         // is the detail page's answer instead: darken only the column the
         // text occupies, and let the rest of the still be itself.
         .overlay(
