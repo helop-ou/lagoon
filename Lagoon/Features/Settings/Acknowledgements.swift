@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// One third-party component Lagoon ships, as shown under Settings → About →
 /// Acknowledgements and from the sign-in screen (audit A06).
@@ -25,7 +26,7 @@ nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     let notes: String?
     /// Resource name without extension under `Resources/Licenses`.
     let licenseFile: String
-    /// The the engine package's `Package.swift` binary targets this entry covers.
+    /// The engine package's `Package.swift` binary targets this entry covers.
     let binaryTargets: [String]
 }
 
@@ -38,10 +39,10 @@ nonisolated enum Acknowledgements {
             name: "FFmpeg",
             version: "8.1.2",
             summary: "Reads the container and decodes audio and video the hardware cannot.",
-            licenseName: "GNU LGPL 2.1 or later and 3.0 or later",
+            licenseName: "GNU LGPL 2.1 or later",
             copyright: "Copyright (c) 2000-2026 the FFmpeg developers",
             sourceURL: URL(string: "https://github.com/FFmpeg/FFmpeg/tree/n8.1.2")!,
-            notes: "libavformat is built by this repository from the same release with its network stack compiled out (scripts/build-ffmpeg-format.py, HEL-142); libavcodec, libavutil and libswresample are MPVKit's 1.0.0 prebuilt slices of the same FFmpeg release. The build enables no GPL or nonfree components. Two licence versions apply: the repository-built libavformat is configured without --enable-version3 and is LGPL 2.1 or later, while the three MPVKit slices keep upstream's version3 election and are LGPL 3.0 or later, so the bundled notice prints both texts.",
+            notes: "All four libraries are built by lagoon-engine \(EngineVersion.current) from this release in one configuration, with the network stack compiled out (scripts/build-ffmpeg.py). The build enables no GPL, nonfree or version 3 components.",
             licenseFile: "ffmpeg",
             binaryTargets: ["Libavcodec", "Libavformat", "Libavutil", "Libswresample"]
         ),
@@ -53,7 +54,7 @@ nonisolated enum Acknowledgements {
             licenseName: "BSD 2-Clause",
             copyright: "Copyright © 2018-2025, VideoLAN and dav1d authors",
             sourceURL: URL(string: "https://code.videolan.org/videolan/dav1d/-/tags/1.5.4")!,
-            notes: "Built by this repository (scripts/build-dav1d.sh, HEL-137) from the same dav1d release MPVKit uses, with the arm64 assembly kept.",
+            notes: "Built by lagoon-engine \(EngineVersion.current) from this release, with the arm64 assembly kept (scripts/build-dav1d.sh).",
             licenseFile: "dav1d",
             binaryTargets: ["Libdav1d"]
         ),
@@ -61,23 +62,23 @@ nonisolated enum Acknowledgements {
             id: "lcms2",
             name: "Little-CMS",
             version: "2.17",
-            summary: "Colour management used by FFmpeg's filters.",
+            summary: "Colour management FFmpeg uses for embedded ICC profiles.",
             licenseName: "MIT",
             copyright: "Copyright (c) 2023 Marti Maria Saguer",
             sourceURL: URL(string: "https://github.com/mm2/Little-CMS/tree/lcms2.17")!,
-            notes: "Prebuilt by MPVKit's lcms2-build release 2.17.0.",
+            notes: "Built by lagoon-engine \(EngineVersion.current) from this release, without the GPL-3.0 fast_float and threaded plugins (scripts/build-lcms2.sh).",
             licenseFile: "lcms2",
             binaryTargets: ["lcms2"]
         ),
         ThirdPartyComponent(
             id: "uavs3d",
             name: "uavs3d",
-            version: "1.2.1-fix",
+            version: "1.2 (0e20d2c)",
             summary: "Decodes AVS3 video.",
             licenseName: "BSD 3-Clause",
             copyright: "Copyright (c) 2018-2022 Peking University Shenzhen Graduate School, Peng Cheng Laboratory, and Guangdong Bohua UHD Innovation Corporation",
-            sourceURL: URL(string: "https://github.com/mpvkit/libuavs3d-build/releases/tag/1.2.1-fix")!,
-            notes: "Prebuilt by MPVKit's libuavs3d-build release \"1.2.1-fix\", which points at the upstream uavs3d repository (https://github.com/uavs3/uavs3d) rather than a signed upstream tag.",
+            sourceURL: URL(string: "https://github.com/uavs3/uavs3d/tree/0e20d2c291853f196c68922a264bcd8471d75b68")!,
+            notes: "Built by lagoon-engine \(EngineVersion.current) from the upstream repository at this commit; uavs3d has not tagged a release since 1.2 (scripts/build-uavs3d.sh).",
             licenseFile: "uavs3d",
             binaryTargets: ["Libuavs3d"]
         ),
@@ -89,7 +90,7 @@ nonisolated enum Acknowledgements {
             licenseName: "MIT",
             copyright: "Copyright (c) 2026 quietvoid",
             sourceURL: URL(string: "https://github.com/quietvoid/dovi_tool/tree/libdovi-3.4.0")!,
-            notes: "Vendored prebuilt from superuser404notfound/LibDovi at tag 2.1.0 (HEL-145; details and per-slice hashes in the engine package's Artifacts/Libdovi.README.md). dovi_tool is dual-licensed MIT OR Apache-2.0 upstream; Lagoon uses it under the MIT option. LibDovi's own packaging carries a separate MIT notice that does not replace the one bundled here.",
+            notes: "Vendored prebuilt in lagoon-engine \(EngineVersion.current) from superuser404notfound/LibDovi at tag 2.1.0 (details and per-slice hashes in its Artifacts/Libdovi.README.md). dovi_tool is dual-licensed MIT OR Apache-2.0 upstream; Lagoon uses it under the MIT option. LibDovi's own packaging carries a separate MIT notice that does not replace the one bundled here.",
             licenseFile: "libdovi",
             binaryTargets: ["Libdovi"]
         ),
