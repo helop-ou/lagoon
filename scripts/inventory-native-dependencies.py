@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Record pinned native artifacts, slice hashes, binary formats and API imports.
 
-Run after package resolution; this inspects files without invoking a compiler.
-Undefined imports are an inventory aid, not proof of runtime use or a complete
-license/source audit. The output deliberately preserves that distinction.
+The native libraries ship inside the lagoon-engine package, so this reads the
+engine checkout SwiftPM resolved for the app and refuses one that is not the
+revision Package.resolved pins. Run it after resolving packages; it inspects
+files without invoking a compiler. Undefined imports are an inventory aid, not
+proof of runtime use or a complete license/source audit. The output
+deliberately preserves that distinction.
+
+  scripts/inventory-native-dependencies.py \
+      --engine ~/Library/Developer/Xcode/DerivedData/Lagoon-*/SourcePackages/checkouts/lagoon-engine \
+      --report docs/reference/native-dependency-inventory.json
 """
 import argparse
 import hashlib
@@ -15,7 +22,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "Packages/LagoonFFmpeg"
+RESOLVED = ROOT / "Lagoon.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
 API_SYMBOLS = {
     "FileTimestamp": {"_stat", "_fstat", "_lstat", "_fstatat", "_getattrlist", "_getattrlistbulk", "_fgetattrlist"},
     "DiskSpace": {"_statfs", "_fstatfs", "_statvfs", "_fstatvfs", "_getattrlist", "_getattrlistbulk", "_fgetattrlist"},
@@ -48,24 +55,27 @@ def output(*args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--artifacts", type=Path, required=True, help="DerivedData/SourcePackages/artifacts")
+    parser.add_argument("--engine", type=Path, required=True,
+                        help="The resolved checkout: DerivedData/.../SourcePackages/checkouts/lagoon-engine")
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
+    package = args.engine.resolve()
+    pin = next(pin for pin in json.loads(RESOLVED.read_text())["pins"] if pin["identity"] == "lagoon-engine")
+    revision = output("git", "-C", str(package), "rev-parse", "HEAD")
+    if revision != pin["state"]["revision"]:
+        raise ValueError(f"{package} is at {revision}, but Package.resolved pins "
+                         f"{pin['state']['version']} at {pin['state']['revision']}; resolve packages first")
     targets = []
-    for match in re.finditer(r'\.binaryTarget\(\s*name:\s*"([^"]+)"(.*?)\n\s*\)', (PACKAGE / "Package.swift").read_text(), re.S):
+    for match in re.finditer(r'\.binaryTarget\(\s*name:\s*"([^"]+)"(.*?)\n\s*\)', (package / "Package.swift").read_text(), re.S):
         name, declaration = match.groups()
         target = {"name": name}
-        for field in ["url", "checksum", "path"]:
-            value = re.search(rf'\b{field}:\s*"([^"]+)"', declaration)
-            if value:
-                target[field] = value.group(1)
-        if "path" in target:
-            framework = PACKAGE / target["path"]
-        else:
-            candidates = list(args.artifacts.rglob(f"{name}.xcframework"))
-            if len(candidates) != 1:
-                raise ValueError(f"Expected one resolved {name}.xcframework, found {len(candidates)}")
-            framework = candidates[0]
+        path = re.search(r'\bpath:\s*"([^"]+)"', declaration)
+        if not path:
+            # Every native library is built or vendored inside the engine; a
+            # fetched one would need its resolved artifact found and hashed.
+            raise ValueError(f"{name} is not a path: binary target; teach this script where SwiftPM put it")
+        target["path"] = path.group(1)
+        framework = package / target["path"]
         target["bundled_license_files"] = [str(p.relative_to(framework)) for p in sorted(framework.rglob("*"))
                                             if p.is_file() and p.name.upper().startswith(("LICENSE", "COPYING", "NOTICE"))]
         provenance = framework / "BUILD.json"
@@ -90,7 +100,8 @@ def main():
     if len(targets) != 8:
         raise ValueError(f"Native target set changed ({len(targets)}); review the inventory before regenerating")
     report = {"scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
-              "package_sha256": sha256(PACKAGE / "Package.swift"), "dependencies": targets}
+              "engine": {"version": pin["state"]["version"], "revision": revision},
+              "package_sha256": sha256(package / "Package.swift"), "dependencies": targets}
     args.report.write_text(json.dumps(report, indent=2) + "\n")
     print(f"Recorded {len(targets)} dependencies / {sum(len(t['slices']) for t in targets)} slices in {args.report}")
 
