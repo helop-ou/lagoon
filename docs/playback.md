@@ -16,38 +16,34 @@ PlaybackController
   ├─ PlaybackDiagnosticsSampler → optional HUD and decode trace
   ├─ PlaybackIncidentMonitor → opt-in incident sampling
   ├─ PlaybackCacheCoordinator → scoped file/range cache
-  └─ SampleBufferPlayerEngine
-       ├─ FFmpegDemuxer → compressed packets
-       ├─ VideoToolbox / software decode + conversion
-       └─ audio/video queues → AVSampleBuffer renderers and synchronizer
+  └─ PlayerEngine (LagoonEngine package)
+       → a picture, a clock, and a verdict when it fails
 ```
 
-Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift` owns
-the session. `Views/VideoPlayerView.swift` retains it with `@State`. Surfaces,
-controls, overlays and PiP presentation live in `Views/`. The
-demux/decode/render pipeline lives in `Engine/`. Byte sources and cache live
-in `Transport/`. Subtitle processing lives in `Subtitles/`. Sampling and
-benchmarks live in `Diagnostics/`.
+Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift`
+owns the session. `Views/VideoPlayerView.swift` retains it with `@State`.
+Surfaces, controls, overlays and PiP presentation live in `Views/`.
+
+The demux/decode/render pipeline is **not in this repository**. It is the
+`LagoonEngine` package, which knows nothing of Jellyfin, accounts or SwiftUI:
+it is handed a media source, track metadata and an optional credential, and it
+returns a picture and a verdict. Its guides live with it — start at [the
+engine guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md).
+What stays here is everything that decides *what* to hand it and what to do
+with what comes back.
 
 ## Network transport
 
-Every HTTP open uses `FFmpegNetworkTransport` over URLSession, including HLS
-playlists and segments. Repo-built libavformat has its network stack disabled.
-Do not restore native FFmpeg HTTP/TLS as a cache fallback. System certificate
-trust, account-scoped authorization, redirect rules, cancellation, and the
-size-capped fetches `BoundedDownload` applies to subtitles and artwork must
-apply to every streamed media path. That bound is a transport safeguard, not
-the offline Downloads feature: see [Downloads](#downloads) below for the
-feature that keeps a whole file on disk.
+The engine owns the transport: every HTTP open goes through URLSession, and
+its libavformat has no network stack. The app's part is the credential.
 
-Media credentials use the authorization header rather than token-bearing URLs.
-Keep endpoint/cross-origin rules in the shared authorization and transport
-helpers. Cache incompatibility changes the byte-source strategy, not the
-security policy. Failures remain errors. Only a successfully read resource's
-end is EOF. TLS validation is recorded in [transport
-details](reference/playback/transport.md#network-transport) and the
-[libavformat build
-record](../Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
+Build media authorization in the shared helpers and hand it to the engine with
+the request. Credentials travel in the authorization header, never in
+token-bearing URLs. Keep endpoint and cross-origin rules in the shared
+authorization helpers rather than at call sites. The size-capped fetches
+`BoundedDownload` applies are a transport safeguard, not the offline Downloads
+feature: see [Downloads](#downloads) for the feature that keeps a whole file
+on disk.
 
 ## Stream resolution
 
@@ -57,32 +53,18 @@ play, remux, then video transcode. Only the re-encode rung has the 1080p
 ceiling. Do not confuse remux selection with `SupportsDirectStream`. Preserve
 the failure cause and resume position when moving down a rung.
 
-Descend only on a verdict about the samples. `.undecodable` skips the remux
-rung and is one-way: it costs a reload, the embedded subtitle tracks, and
-server CPU per viewer. A failure that says nothing about the bitstream must
-never reach it. A lost VideoToolbox session is the case that keeps getting
-mistaken for an undecodable stream. `kVTInvalidSessionErr` and its siblings
-(`VideoToolboxDecoder.isSessionFault`) mean the decoder was taken away, not
-that the stream is undecodable. The answer is a new session
-(`PlaybackDecodeSessionPolicy`), bounded at one rebuild per playback
-generation, the same bound the renderer keeps on its own rebuilds. While video
-output is suspended there is nothing to rebuild for, so the fault is ignored
-outright: backgrounding leaves the old session alive on purpose, and the
-resume seek makes a fresh one. Both guards belong on the decoder path and the
-renderer path. The decoder path once had neither.
+Descend only on the engine's verdict. `.undecodable` skips the remux rung and
+is one-way: it costs a reload, the embedded subtitle tracks, and server CPU
+per viewer. A failure that says nothing about the bitstream must never reach
+it.
 
-A renderer that has just been flushed is the other way a verdict gets faked.
-`AVSampleBufferVideoRenderer` starts on a random-access point or on nothing,
-and the sample that reaches it need not be the seek's landing: the demux
-thread can be parked in a read when the flush happens, and the packet it
-returns goes straight out as sample one. So `pumpVideo` asks
-`PlaybackRendererStartPolicy` first and refuses anything the container does
-not call a keyframe, bounded so a stream with unflagged keyframes still shows
-a picture. The window is as long as the demux thread sits in a read, so a
-stalling episode hits it and a healthy scrub does not — three attempts on one
-MPEG-TS remux each transcoded at the same auto-skip target, failing 4, 6 and
-384 ms after the seek. Incidents carry `refusedSampleMs` and
-`startPointDrops`.
+The engine is responsible for not faking that verdict — a decode session the
+system reclaimed is rebuilt rather than reported as undecodable, and a
+just-flushed renderer refuses a sample the container does not call a keyframe.
+Both guards, and the measurements behind them, are in the engine's [stream
+recovery notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/stream-recovery.md).
+What this side must not do is treat a `.delivery` verdict as a reason to
+re-encode.
 
 Progressive H.264 uses the compressed sample-buffer path. Interlaced H.264 is
 software-decoded and deinterlaced, on the stream's probed field order, never
@@ -191,44 +173,22 @@ next episode.
 
 ## Lifecycle and memory
 
+These are the app's obligations. The engine's own lifecycle and memory
+invariants — two-phase stop, never reviving a stopped engine, queue
+watermarks, decoded-frame byte budgets — are stated and evidenced in [the
+engine guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md#lifecycle).
+
 - The controller owns the engine. SwiftUI player views hold it through
   `@PlayerEngineRef`. View builders and gesture closures must not capture an
   engine strongly, because SwiftUI can retain old view values after an episode
-  handoff.
-- Stop is two-phase: cancel clocks and work, and interrupt FFmpeg,
-  immediately. Serialize renderer stop, flush and release on the pump queue.
-  Serialize decoder destruction on the demux queue. Network reporting never
-  blocks dismissal.
-- Replacement waits for the outgoing engine's demux loop and renderers to
-  retire, with a bounded timeout. Never revive a stopped engine or overlap two
-  pipelines because teardown timed out.
+  handoff. This is the rule the engine cannot enforce for us, and the one that
+  has regressed most often.
+- Network reporting never blocks dismissal.
 - There is one active cache scope and at most one staged successor. Exit,
   failure, account replacement, and handoff cancel and remove the appropriate
   scopes. The cache is transient playback storage, not an offline library.
-- Preserve decoded-frame byte budgets, reorder depth, queue watermarks, and
-  backpressure across both queued packets and decode work in flight. A frame
-  count alone is not a sufficient memory budget for 4K software decoding.
-- Arm `requestMediaDataWhenReady` only while a queue has data to offer.
-  Returning empty-handed in a still-armed callback creates a busy loop.
-- Compressed packets retain their FFmpeg backing buffer. Decoded LPCM is
-  copied into CoreMedia-owned storage at emit. The previous zero-copy LPCM
-  handoff leaked a whole decoded audio stream.
-- Preserve sample-exact audio timelines, seek generations, decoder callback
-  ordering, and bounded stall recovery. Do not replace queue ownership with
-  unstructured tasks as part of a file reorganization.
-- A seek into a container with no index must still start video on a keyframe.
-  A plain MPEG-TS file, such as a transcode download, has no index. The
-  demuxer peeks the landing packet, re-seeks to the last keyframe before the
-  target, and drops non-start packets until one arrives.
-  `TransportStreamSeekTests` pins it against the fixture named by
-  `LAGOON_TS_SEEK_FIXTURE_URL`, injected into the xctestrun.
-
-The repo builds dav1d with arm64 assembly. After changing its artifact, run
-`scripts/build-dav1d.sh --verify-only
-Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework`. Software 10-bit
-conversion uses the asynchronous Metal path. Synchronous conversion changes
-its performance characteristics. Native dependency changes also need matching
-acknowledgements, license text, and build evidence.
+- Do not replace queue ownership with unstructured tasks as part of a file
+  reorganization.
 
 ### Downloads
 
@@ -275,22 +235,15 @@ lost to a bad connection.
 
 ### Group transport hooks
 
-Jellyfin SyncPlay makes the server the transport authority, and three engine
-hooks exist for it. `clockPosition` is the media clock as the synchronizer
-reports it, never the optimistic `timePosition` a seek moves before anything
-is demuxed. While the clock is stopped for a load or a seek, it answers with
-the position being headed for. That is what a Buffering report carries.
-`play(atHostTime:)` starts so that the current position is presented at one
-named instant on `CMClockGetHostTimeClock()`. A group start is an instant
-every member agreed on after time sync, not "now, roughly." A request that
-arrives while the engine is still buffering is handed to `beginPlayback` in
-place of its own near-future anchor. `setCorrectionRate(_:)` nudges a member
-that has drifted without touching `rate`. `rate` is the viewer's own choice,
-and what the speed row and Now Playing publish.
-`PlaybackRatePolicy.effectiveRate` folds the two together, and every
-media-time cushion, watermark and synchronizer rate is computed from it.
-`onSeekReady` fires from `beginPlayback` on every open and every seek. It is
-the signal Ready is reported on, unlike the one-shot `onPlaybackStarted`.
+Jellyfin SyncPlay makes the server the transport authority. The engine
+exposes four hooks for exactly this case — `clockPosition`,
+`play(atHostTime:)`, `setCorrectionRate(_:)` and `onSeekReady` — and [the
+engine guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md#driving-the-clock-from-outside)
+states what each one promises. Two of those promises matter constantly on this
+side: `clockPosition` is the synchronizer's clock and never the optimistic
+position a seek moves before anything is demuxed, which is what a Buffering
+report must carry; and `setCorrectionRate(_:)` is not `rate`, which stays the
+viewer's own choice and is what the speed row and Now Playing publish.
 
 The controller is the boundary: a group driver never holds the engine. It
 starts playback through `start(startPosition:startPaused:)`. The server's
