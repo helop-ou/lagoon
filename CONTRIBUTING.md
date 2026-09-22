@@ -93,36 +93,32 @@ stays subject-only. Keep structural moves separate from behaviour changes.
 
 ## Dependencies
 
-`Packages/LagoonFFmpeg` is the only dependency, and that is deliberate. A new
-one needs a real argument. If you add one, add its entry to
+The `LagoonEngine` package is the only dependency, and that is deliberate. A
+new one needs a real argument. If you add one, add its entry to
 [`Acknowledgements.swift`](Lagoon/Features/Settings/Acknowledgements.swift)
 and its licence text under `Lagoon/Resources/Licenses`, or
 `AcknowledgementsTests` fails the unit suite. That test also checks every
-binary target declared in `Packages/LagoonFFmpeg/Package.swift` is covered by
-an entry.
+binary target the engine package declares is covered by an entry.
 
 ## Native artifacts
 
-Three xcframeworks are vendored rather than fetched, and two are built here.
-Each rebuild recipe sits beside its artifact, and both scripts have a
-`--verify-only` mode that checks a packaged framework.
+The native media libraries are not in this repository. They belong to the
+[`lagoon-engine`](https://github.com/helop-ou/lagoon-engine) package, which
+carries them with it and which this app resolves at a tagged version pinned in
+`Package.resolved`. Rebuild recipes, provenance and the `--verify-only` checks
+all live there, beside the artifacts, and its `CONTRIBUTING.md` is the guide to
+them.
 
-- libavformat, built without its network stack:
-  [`Libavformat.README.md`](Packages/LagoonFFmpeg/Artifacts/Libavformat.README.md).
-  Needs Python 3.12+ and pkg-config.
-- dav1d, built with its arm64 assembly kept: see the header comment of
-  [`scripts/build-dav1d.sh`](scripts/build-dav1d.sh), which needs meson and
-  ninja. Always run `scripts/build-dav1d.sh --verify-only
-  Packages/LagoonFFmpeg/Artifacts/Libdav1d.xcframework` after touching it:
-  without the assembly it still decodes everything correctly, about ten times
-  slower, and nothing fails.
-- libdovi cannot be rebuilt in this repository. It is vendored prebuilt, and a
-  from-source build needs a Rust toolchain and `cargo-c`. Provenance and
-  per-slice hashes are in
-  [`Libdovi.README.md`](Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md).
+Nothing here needs to be built to build the app: resolving the package fetches
+what it needs. Changing a native library means a change in that repository and
+a new version tagged there, then moving the pin here — not editing anything
+under this checkout.
 
-Regenerate `docs/reference/native-dependency-inventory.json` with
-`scripts/inventory-native-dependencies.py` when a linked artifact changes.
+`docs/reference/native-dependency-inventory.json` and
+`scripts/inventory-native-dependencies.py` are the exception that has not been
+sorted out yet: the script still expects the libraries to be in this
+repository, so it cannot run as written. Where the inventory should live is an
+open question tracked on HEL-195.
 
 ## Signing and assets
 
