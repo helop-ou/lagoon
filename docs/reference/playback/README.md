@@ -9,27 +9,30 @@ They record why the code is shaped the way it is, including approaches that
 were tried and abandoned. Treat a measurement as evidence for the decision it
 justified, not as a current acceptance result.
 
-**One engine for everything** — the maintainer's call. All playback runs
-through the Lagoon sample-buffer engine. The AVPlayer and mpv players were
-removed the same day the decision was made: no split paths, no per-container
-routing.
+## The engine is not here any more
 
-The FFmpeg libraries come from the local `Packages/LagoonFFmpeg` package. It
-pins three Libav\* static xcframeworks from MPVKit's 1.0.0 release — avcodec,
-avutil and swresample, from FFmpeg 8.1.2 — plus dav1d, uavs3d and lcms2.
-MPVKit itself, libmpv, MoltenVK and libplacebo are no longer in the project.
+All playback runs through the `LagoonEngine` package, which lives in its own
+repository. The AVPlayer and mpv players were removed the day that decision
+was made: no split paths, no per-container routing.
 
-The archives are static, so the app binary links only the objects it
-references and the bundle embeds 7 framework shells instead of 27. Lagoon
-builds two of those seven itself: dav1d, for its arm64 assembly, and
-libavformat, without a network stack.
+Demux, decode, render, queues, the byte-source cache, the FFmpeg build and the
+codec-by-codec behaviour are documented with the engine, not here:
+
+- [The engine guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md)
+  — pipeline, transport, lifecycle, memory, failure verdicts
+- [Engineering notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/README.md)
+  — decode, queues and renderers, cache and teardown, transport, codecs,
+  stream recovery, system integration, memory ceilings
+
+What stays here is everything on this side of that boundary: what Lagoon
+negotiates with a Jellyfin server, what it does with a verdict, how the player
+presents itself, and what it reports.
 
 | Topic | Notes |
 | --- | --- |
-| Input and negotiation | [Network transport](transport.md), [stream resolution and disc images](stream-resolution.md) |
-| Decode and performance | [The engine](engine.md), [codec, timing and subtitle details](codecs-and-subtitles.md) |
-| Rendering | [Queues and renderers](queues-and-renderers.md), [system media, display mode and HUD](system-integration.md) |
-| Measurement and ownership | [Frame-loss bench and memory ceiling](frame-loss-bench.md), [cache and teardown](cache-and-teardown.md) |
+| Negotiation | [Stream resolution and disc images](stream-resolution.md) |
+| System and presentation | [System media, display mode and HUD](system-integration.md) |
+| Measurement | [The frame-loss bench harness](frame-loss-bench.md) |
 | UI and server state | [Progress reporting and player controls](controls-and-reporting.md) |
 | Group playback | [Watch Together](watch-together.md): opening, commands, drift, the sheet and panel |
 | Failure reporting | [Diagnostic reporting](diagnostics.md): schema, detectors, limits, Sentry setup |
