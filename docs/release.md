@@ -81,7 +81,10 @@ version/build to have an entry. Builds before the changelog's introduction are
 not reconstructed from commit messages.
 
 Write one line per noticeable improvement, with the most useful first.
-Describe a fixed symptom and any setup needed. Omit ticket keys, filenames,
+Describe a fixed symptom and any setup needed. A note is one short sentence,
+two only when setup needs saying: what changed, never why or how. The cause,
+the diagnostics behind it and the caveats belong in the commit, not the
+changelog. Omit ticket keys, filenames,
 internal refactors, tests, docs, and fixes to work that never shipped. Do not
 use em dashes. `ChangelogTests` enforces this. Release notes are written for a
 release, not generated per commit. Each build's notes are grouped in the About
