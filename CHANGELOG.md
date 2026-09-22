@@ -17,6 +17,16 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.2.0 (108)
+
+September 2026
+
+**Clearer about a Seerr server you cannot reach.**
+
+### Improvements
+
+- When a Seerr server sits behind a sign in proxy such as Cloudflare Access or Authelia, Lagoon now says so instead of reporting an unreadable response. Connecting through one is not supported yet.
+
 ## 0.2.0 (107)
 
 September 2026
