@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4C41474F4F4E000000000012 /* LagoonFFmpeg in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* LagoonFFmpeg */; };
+		4C41474F4F4E000000000012 /* LagoonEngine in Frameworks */ = {isa = PBXBuildFile; productRef = 4C41474F4F4E000000000011 /* LagoonEngine */; };
 		4C41474F4F4E000000000022 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000021 /* ContentProvider.swift */; };
 		4C41474F4F4E000000000023 /* LagoonTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000024 /* LagoonTopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4C41474F4F4E000000000072 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000071 /* PrivacyInfo.xcprivacy */; };
@@ -85,7 +85,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4C41474F4F4E000000000012 /* LagoonFFmpeg in Frameworks */,
+				4C41474F4F4E000000000012 /* LagoonEngine in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -161,7 +161,7 @@
 			);
 			name = Lagoon;
 			packageProductDependencies = (
-				4C41474F4F4E000000000011 /* LagoonFFmpeg */,
+				4C41474F4F4E000000000011 /* LagoonEngine */,
 			);
 			productName = Lagoon;
 			productReference = 4C41474F4F4E000000000004 /* Lagoon.app */;
@@ -254,7 +254,7 @@
 			mainGroup = 4C41474F4F4E000000000002;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "Packages/LagoonFFmpeg" */,
+				4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "../lagoon-engine" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4C41474F4F4E000000000003 /* Products */;
@@ -769,16 +769,16 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "Packages/LagoonFFmpeg" */ = {
+		4C41474F4F4E000000000010 /* XCLocalSwiftPackageReference "../lagoon-engine" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/LagoonFFmpeg;
+			relativePath = ../lagoon-engine;
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		4C41474F4F4E000000000011 /* LagoonFFmpeg */ = {
+		4C41474F4F4E000000000011 /* LagoonEngine */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = LagoonFFmpeg;
+			productName = LagoonEngine;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
