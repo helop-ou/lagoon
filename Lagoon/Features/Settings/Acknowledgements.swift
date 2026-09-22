@@ -8,7 +8,7 @@ import Foundation
 /// them, and where the licence text lives in the bundle. Adding a native
 /// dependency means adding an entry here and its licence text under
 /// `Resources/Licenses`; `AcknowledgementsTests` checks that every binary
-/// target in `Packages/LagoonFFmpeg/Package.swift` is covered.
+/// target in the engine package's `Package.swift` is covered.
 nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -25,7 +25,7 @@ nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     let notes: String?
     /// Resource name without extension under `Resources/Licenses`.
     let licenseFile: String
-    /// The `Packages/LagoonFFmpeg/Package.swift` binary targets this entry covers.
+    /// The the engine package's `Package.swift` binary targets this entry covers.
     let binaryTargets: [String]
 }
 
@@ -89,7 +89,7 @@ nonisolated enum Acknowledgements {
             licenseName: "MIT",
             copyright: "Copyright (c) 2026 quietvoid",
             sourceURL: URL(string: "https://github.com/quietvoid/dovi_tool/tree/libdovi-3.4.0")!,
-            notes: "Vendored prebuilt from superuser404notfound/LibDovi at tag 2.1.0 (HEL-145; details and per-slice hashes in Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md). dovi_tool is dual-licensed MIT OR Apache-2.0 upstream; Lagoon uses it under the MIT option. LibDovi's own packaging carries a separate MIT notice that does not replace the one bundled here.",
+            notes: "Vendored prebuilt from superuser404notfound/LibDovi at tag 2.1.0 (HEL-145; details and per-slice hashes in the engine package's Artifacts/Libdovi.README.md). dovi_tool is dual-licensed MIT OR Apache-2.0 upstream; Lagoon uses it under the MIT option. LibDovi's own packaging carries a separate MIT notice that does not replace the one bundled here.",
             licenseFile: "libdovi",
             binaryTargets: ["Libdovi"]
         ),

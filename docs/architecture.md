@@ -2,8 +2,9 @@
 
 Lagoon is one SwiftUI app target for tvOS 26 and iOS 26, with a tvOS Top Shelf
 extension, unit tests, and UI tests. Its filesystem-synced app group adds new
-Swift files automatically; `Packages/LagoonFFmpeg` is the only local package
-dependency.
+Swift files automatically. Its one dependency is the `LagoonEngine` package,
+resolved from its own repository at a tagged version and pinned in
+`Package.resolved`, so a build records which engine it carries.
 
 Follow [Coding standards](standards.md) for folder conventions and rules for
 new code.

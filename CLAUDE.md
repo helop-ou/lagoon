@@ -54,6 +54,12 @@ clean" in docs/README.md.
   libraries with it. Do not add another without serious deliberation. When you
   do, add its acknowledgement and licence text as [Release](docs/release.md)
   describes, or `AcknowledgementsTests` fails the unit suite.
+- The engine resolves from its own repository at a tagged version, pinned in
+  `Package.resolved`, so a build records which engine it carries. Changing it
+  is two repositories and two commits: cut a version there first, then move
+  the pin here. To work on both at once, point Xcode at the sibling checkout
+  (File, Add Package Dependencies, Add Local) and drop the override before
+  committing — a local override resolves nothing and pins nothing.
 - Verify UI changes in the simulator before calling them done. Build, then
   `simctl install/launch`, then drive focus with `osascript -e 'tell
   application "System Events" to key code …'` — 125/126/123/124 are the

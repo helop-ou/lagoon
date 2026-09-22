@@ -3,7 +3,7 @@ Source: https://github.com/quietvoid/dovi_tool/tree/libdovi-3.4.0
 Copyright (c) 2026 quietvoid
 
 Vendored prebuilt from superuser404notfound/LibDovi at tag 2.1.0 (details
-and per-slice hashes in Packages/LagoonFFmpeg/Artifacts/Libdovi.README.md).
+and per-slice hashes in the engine package's Artifacts/Libdovi.README.md).
 dovi_tool is dual-licensed MIT OR Apache-2.0 upstream; Lagoon uses it under
 the MIT option, reproduced below. LibDovi's own packaging carries a
 separate MIT notice (Copyright (c) 2026 Vincent Herbst, packaging and
