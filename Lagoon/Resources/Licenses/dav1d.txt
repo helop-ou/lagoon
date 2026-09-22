@@ -2,8 +2,9 @@ dav1d 1.5.4
 Source: https://code.videolan.org/videolan/dav1d/-/tags/1.5.4
 Copyright © 2018-2025, VideoLAN and dav1d authors
 
-Built by this repository (scripts/build-dav1d.sh) from the same dav1d
-release, with its arm64 assembly kept.
+Built by the lagoon-engine package from this release, with its arm64
+assembly kept (scripts/build-dav1d.sh in
+https://github.com/helop-ou/lagoon-engine).
 
 Copyright © 2018-2025, VideoLAN and dav1d authors
 All rights reserved.
