@@ -16,8 +16,9 @@ new code.
 | `Lagoon/App/` | App entry, root composition, navigation, refresh coordination, Top Shelf publishing |
 | `Lagoon/Features/Accounts/` | Connection, sign-in, account selection and session ownership |
 | `Lagoon/Features/{Home,Library,Discovery,Detail,Search,Settings}/` | Feature screens, models and local helpers |
-| `Lagoon/Features/Playback/` | Controller, reporting, successor preparation, track preferences and system media |
-| `Lagoon/Features/Playback/{Views,Engine,Transport,Subtitles,Diagnostics}/` | Player presentation, decode/render pipeline, byte sources/cache, subtitles and sampling |
+| `Lagoon/Features/Playback/` | The controller, and the audio session the player owns |
+| `Lagoon/Features/Playback/{Session,Automation,Tracks}/` | The delivery ladder, server reporting and successor negotiation; what happens when an episode ends; remembered track choices |
+| `Lagoon/Features/Playback/{Views,Subtitles,Diagnostics}/` | Player presentation, subtitle search and preferences, optional sampling |
 | `Lagoon/Features/Downloads/` | Offline downloads: the store, its background session, and the Downloads screens (iOS only) |
 | `Lagoon/Features/SyncPlay/` | Watch Together: group membership, the pure session reducer, and the driver that runs playback from a group |
 | `Lagoon/Shared/UI/` | Visual components, design tokens, artwork and presentation helpers shared across features |
