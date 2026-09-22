@@ -57,6 +57,18 @@ QuickConnect/Initiate` — needs the MediaBrowser header, no token — returns
 - Pre-auth server validation hits `GET System/Info/Public`, which needs no
   header. Its `ServerName` seeds the sign-in screen.
 
+An authenticated API 401 expires only the request's captured account session.
+Lagoon dismisses playback and opens sign-in for that server, keeping its
+username, remembered identity and preferences; reauthentication replaces the
+rejected token. Progress reporting uses the same path, so a remote revocation
+while buffered media plays is caught on the next authenticated report. There
+is no separate expiry polling and no startup network probe. Outages and 403s
+preserve credentials, and a late response cannot expire a newer session.
+
+`python3 scripts/test-session-recovery.py` exercises direct and native HLS
+playback, remote revocation and sign-in against a loopback synthetic server.
+
+
 ## Library endpoints
 
 | Purpose                    | Endpoint                                                | Quirk                                                                                                                        |
@@ -257,6 +269,18 @@ library is read-only. Provider formats Lagoon cannot parse use the native
 endpoint and a PlaybackInfo poll as a compatibility fallback. Playback
 position, renderers, selected audio, and the Now Playing session are not
 rebuilt. Forced and hearing-impaired metadata is preserved.
+
+**One subtitle source, and why.** When the permission holds, Lagoon searches
+preferred languages concurrently, fetches the matched provider file directly
+for immediate playback — side-loading and selecting it without restarting the
+video — and uploads those same bytes so the sidecar persists for every client
+and viewer. Lagoon used to run a direct OpenSubtitles provider for accounts
+without the permission, and removed it: OpenSubtitles' REST terms require one
+API key per application and ban apps that ask users to supply their own, which
+is exactly what the per-device-key design did. Settings shows the account's
+permission state instead, so a viewer knows whether to ask their server
+administrator.
+
 
 ## SyncPlay
 
