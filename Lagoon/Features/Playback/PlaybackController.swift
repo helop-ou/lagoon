@@ -1,3 +1,4 @@
+import LagoonEngine
 import CoreMedia
 import MediaAccessibility
 import Observation
@@ -518,7 +519,7 @@ final class PlaybackController {
             let cacheSession = streamURL.isFileURL ? nil : playbackCache.activate(
                 itemID: media.id,
                 url: streamURL,
-                method: method,
+                delivery: method.delivery,
                 expectedLength: source.size,
                 authorization: client.mediaRequestAuthorization()
             )
@@ -528,7 +529,7 @@ final class PlaybackController {
             let transportCache = PlaybackBufferPolicy.engineUsesCacheSession(
                 playsFromCompleteFile: playbackURL.isFileURL,
                 disc: discRequest != nil,
-                method: method
+                delivery: method.delivery
             ) ? cacheSession : nil
             publishBufferMetrics(cacheSession?.metrics)
 

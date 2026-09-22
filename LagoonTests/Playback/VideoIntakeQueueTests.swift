@@ -1,5 +1,6 @@
 import CoreMedia
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The demuxer parks compressed video read past the decoded-frame

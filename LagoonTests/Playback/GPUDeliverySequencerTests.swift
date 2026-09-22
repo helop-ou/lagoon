@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The GPU output stage delivers frames from Metal's completion

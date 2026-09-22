@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The Subtitles tab is either choosing a track or browsing search
@@ -57,7 +58,7 @@ struct SubtitleSearchBrowseStateTests {
         defer { coordinator.detach(); engine.shutdown() }
         coordinator.startSearch()
         try await waitUntil { !coordinator.results.isEmpty }
-        let broken = try #require(coordinator.results.first { $0.jellyfinID == "broken" })
+        let broken = try #require(coordinator.results.first { $0.providerID == "broken" })
         coordinator.startDownload(broken)
         try await waitUntil {
             if case .downloadFailed = coordinator.phase { return true }
@@ -118,7 +119,7 @@ struct SubtitleSearchBrowseStateTests {
         defer { coordinator.detach(); engine.shutdown() }
         coordinator.startSearch()
         try await waitUntil { !coordinator.results.isEmpty }
-        let good = try #require(coordinator.results.first { $0.jellyfinID == "good" })
+        let good = try #require(coordinator.results.first { $0.providerID == "good" })
 
         coordinator.startDownload(good)
         try await waitUntil { coordinator.phase == .downloaded }

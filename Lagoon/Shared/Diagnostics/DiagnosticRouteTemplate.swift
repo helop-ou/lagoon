@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Turns a request path into the shape a report may carry: letters-only
 /// segments and API version segments survive, everything else becomes

@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// How the player treats a skippable segment — intro or recap.
 ///

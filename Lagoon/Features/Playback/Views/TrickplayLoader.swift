@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import LagoonEngine
 import Observation
 
 /// Feeds preview frames to the scrub chip.

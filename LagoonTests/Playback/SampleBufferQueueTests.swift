@@ -1,5 +1,6 @@
 import CoreMedia
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// Priming after a seek lands inside a fragment whose audio block

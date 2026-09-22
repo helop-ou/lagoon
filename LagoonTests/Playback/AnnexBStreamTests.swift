@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The 118 bytes libavformat hands over as `extradata` for WALL·E's Blu-ray

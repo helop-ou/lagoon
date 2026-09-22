@@ -2,6 +2,7 @@ import CoreVideo
 import Darwin
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Failed demuxer setup", .serialized)

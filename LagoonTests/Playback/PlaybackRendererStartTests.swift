@@ -1,5 +1,6 @@
 import CoreMedia
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// A renderer that has just been flushed starts on a random-access point or

@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Stable codes for reported incidents. These are the grouping keys on the
 /// dashboard, so the same rule as event codes applies: add, never rename.
@@ -31,62 +32,6 @@ nonisolated enum DiagnosticIncidentCode: String, Sendable, CaseIterable {
     case apiRequestFailed = "api.requestFailed"
     /// A response the app could not decode: a contract drift, or a bug.
     case apiDecodeFailed = "api.decodeFailed"
-}
-
-/// Where a playback failure happened and what the underlying layer said,
-/// in codes only. `PlaybackEngineFailure.message` stays the viewer's
-/// sentence; this is the reporter's.
-nonisolated struct PlaybackFailureDetail: Equatable, Sendable {
-    enum Stage: String, Sendable {
-        case negotiate, open, seek, read, decode, videoRenderer, audioRenderer, subtitle, cache, start, handoff, unknown
-    }
-
-    let stage: Stage
-    /// A token such as `AVFoundationErrorDomain`, `VideoToolbox`, `ffmpeg`,
-    /// or `NSURLErrorDomain`. Nil when the layer gave none.
-    let domain: String?
-    let code: Int?
-
-    init(stage: Stage, domain: String? = nil, code: Int? = nil) {
-        self.stage = stage
-        self.domain = domain
-        self.code = code
-    }
-
-    /// Domain and code from any error, and nothing else from it: not the
-    /// description, not `userInfo`, which is where URLs and file names live.
-    init(stage: Stage, error: Error?) {
-        guard let error else {
-            self.init(stage: stage)
-            return
-        }
-        let nsError = error as NSError
-        self.init(stage: stage, domain: nsError.domain, code: nsError.code)
-    }
-
-    var fields: [String: DiagnosticValue] {
-        var fields: [String: DiagnosticValue] = ["stage": .string(stage.rawValue)]
-        if let domain = DiagnosticSchema.token(domain) {
-            fields["errorDomain"] = domain
-        }
-        if let code {
-            fields["errorCode"] = .int(code)
-        }
-        return fields
-    }
-
-    /// The part of the fingerprint that separates one kind of failure at a
-    /// stage from another.
-    var fingerprint: [String] {
-        var parts = [stage.rawValue]
-        if let domain, DiagnosticSchema.isToken(domain) {
-            parts.append(domain)
-        }
-        if let code {
-            parts.append(String(code))
-        }
-        return parts
-    }
 }
 
 /// One report. Built by `DiagnosticsHub` from validated fields, a history

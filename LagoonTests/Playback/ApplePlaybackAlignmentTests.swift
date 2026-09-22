@@ -5,6 +5,7 @@ import Libavcodec
 import Libavutil
 import Testing
 import VideoToolbox
+@testable import LagoonEngine
 @testable import Lagoon
 
 struct ApplePlaybackAlignmentTests {

@@ -1,3 +1,4 @@
+import LagoonEngine
 import SwiftUI
 
 /// Which skippable segment the playhead is inside. One implementation,

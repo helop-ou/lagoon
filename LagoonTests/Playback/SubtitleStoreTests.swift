@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Subtitle cue lifetime and lookup")

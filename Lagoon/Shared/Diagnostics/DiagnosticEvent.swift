@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Stable codes for the rolling history. Renaming one changes what every
 /// dashboard query and grouping rule sees, so add rather than rename.
@@ -84,12 +85,5 @@ nonisolated struct DiagnosticEvent: Equatable, Sendable {
             object["fields"] = fields.mapValues(\.jsonObject)
         }
         return object
-    }
-}
-
-nonisolated extension Double {
-    func rounded(toPlaces places: Int) -> Double {
-        let scale = pow(10, Double(places))
-        return (self * scale).rounded() / scale
     }
 }

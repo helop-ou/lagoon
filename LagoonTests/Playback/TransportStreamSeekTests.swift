@@ -3,6 +3,7 @@ import CoreVideo
 import os
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// Opt-in check on a real progressive MPEG-TS transcode — the shape a

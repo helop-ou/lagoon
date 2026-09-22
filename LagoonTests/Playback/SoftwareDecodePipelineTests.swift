@@ -1,6 +1,7 @@
 import Foundation
 import Libavcodec
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// 4K AV1 plays on the software path but does not hold frame rate.

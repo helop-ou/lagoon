@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import OSLog
 
 private let reportLog = Logger(subsystem: "ee.helop.lagoon", category: "playback-reports")

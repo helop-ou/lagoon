@@ -1,5 +1,6 @@
 import CoreMedia
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 struct VideoPresentationOrderQueueTests {

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// A UDF 2.50 image small enough to live in a test, laid out the way BD-ROM

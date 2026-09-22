@@ -3,6 +3,7 @@ import AVFoundation
 import UIKit
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Player system integration", .serialized)
@@ -1024,7 +1025,7 @@ struct PlayerSystemIntegrationTests {
         try await waitUntil { coordinator.results.count == 2 }
         // Candidate ids are namespaced by source now that results can come
         // from Jellyfin or the provider directly.
-        let missing = try #require(coordinator.results.first { $0.jellyfinID == "missing-provider-file" })
+        let missing = try #require(coordinator.results.first { $0.providerID == "missing-provider-file" })
         coordinator.startDownload(missing)
         try await waitUntil {
             if case .downloadFailed = coordinator.phase { return true }

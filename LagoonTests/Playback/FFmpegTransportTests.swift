@@ -3,6 +3,7 @@ import Libavcodec
 import Libavformat
 import Libavutil
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Native FFmpeg transport", .serialized)

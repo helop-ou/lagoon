@@ -3,6 +3,7 @@ import CoreVideo
 import Dovi
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// Opt-in end-to-end check on a real profile 7 remux: the head of

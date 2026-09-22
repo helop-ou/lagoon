@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The measurement discipline that two false positives paid for:

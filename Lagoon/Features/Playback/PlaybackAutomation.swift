@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import Observation
 
 /// The player's two timed decisions — skipping an intro or recap

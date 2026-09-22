@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Identifiable wrapper so `fullScreenCover(item:)` can present playback.
 nonisolated struct PlayerItem: Identifiable {

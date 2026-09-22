@@ -2,6 +2,7 @@ import Dovi
 import Foundation
 import Libavutil
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The profile 7 → 8.1 RPU rewrite: `DolbyVisionProfileConverter` rewrites

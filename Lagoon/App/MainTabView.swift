@@ -1,4 +1,5 @@
 import SwiftUI
+import LagoonEngine
 
 private enum MainTabSelection: Hashable {
     case home

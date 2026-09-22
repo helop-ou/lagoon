@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// The bounded, retrying part of the transport, as pure rules: how many
 /// envelopes may wait on disk, how a response is classified, and how long

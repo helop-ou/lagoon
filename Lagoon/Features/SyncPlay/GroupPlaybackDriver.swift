@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Drives one player session from a SyncPlay group, and the group from that
 /// player's viewer.

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Playback successor preparation", .timeLimit(.minutes(1)))
@@ -25,7 +26,7 @@ struct PlaybackSuccessorPreparationTests {
         #expect(negotiations == 1)
         #expect(!subject.hasPreparation)
         #expect(cache.activate(itemID: result.mediaID, url: result.streamURL,
-                               method: result.method, expectedLength: result.source.size) === staged)
+                               delivery: result.method.delivery, expectedLength: result.source.size) === staged)
     }
 
     @Test func handoffCancelsWarmingWithoutCancellingNegotiation() async throws {

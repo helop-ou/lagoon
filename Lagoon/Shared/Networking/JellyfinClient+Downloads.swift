@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 // URLs for taking a title off the server. Both carry no credential;
 // the caller attaches `mediaRequestAuthorization()` as a header exactly as

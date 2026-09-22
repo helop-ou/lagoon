@@ -1,3 +1,4 @@
+import LagoonEngine
 import SwiftUI
 import UIKit
 
@@ -60,7 +61,12 @@ struct VideoPlayerView: View {
         )
     }
 
-    var body: some View {
+    /// The player and the observers that belong to the engine.
+    ///
+    /// Split from `body` rather than left as one chain: with the engine
+    /// behind a package boundary the combined modifier chain stopped
+    /// type-checking in reasonable time.
+    private var playerStack: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -69,52 +75,7 @@ struct VideoPlayerView: View {
                 // its own focus and exit handling so Menu never strands.
                 errorOverlay(errorMessage)
             } else if let engine = controller.engine {
-                CustomPlayerView(
-                    engine: engine,
-                    playbackIdentity: controller.playbackIdentity,
-                    playerSurfaceIdentity: controller.playerSurfaceIdentity,
-                    handoffMilliseconds: controller.lastHandoffMilliseconds,
-                    playbackMethod: controller.activePlayMethod,
-                    deliveryRung: controller.activeDeliveryRung,
-                    isPlaybackCacheActive: controller.isPlaybackCacheActive,
-                    bufferedFraction: controller.bufferedFraction,
-                    bufferedRanges: controller.bufferedRanges,
-                    playheadPrefetchCount: controller.playheadPrefetchCount,
-                    info: fallbackInfo,
-                    automation: controller.automation,
-                    transport: controller.transportActions,
-                    onDismiss: { closePlayer() },
-                    onPanelToggle: { panelOpen = $0 },
-                    openPanelRequest: openPanelRequest,
-                    nextUp: nextUpEpisode,
-                    isPictureInPicturePossible: pictureInPicture.isPossible,
-                    isPictureInPictureActive: pictureInPicture.isActive,
-                    onTogglePictureInPicture: { pictureInPicture.toggle() },
-                    together: togetherState,
-                    onLeaveGroup: { Task { await syncPlay.leave() } },
-                    onSetIgnoreWait: { ignore in Task { await syncPlay.setIgnoreWait(ignore) } },
-                    isWaitingForGroup: syncPlay.isWaitingForGroup,
-                    subtitleStyle: subtitlePreferences.renderStyle,
-                    subtitleSearch: controller.subtitleSearch
-                ) { [weak engine] in
-                    // Weak for the same reason the player views hold the
-                    // engine through `PlayerEngineRef`: SwiftUI
-                    // keeps copies of `CustomPlayerView`, this closure
-                    // included, past the next episode handoff, and a strong
-                    // capture here would pin the outgoing engine just as the
-                    // view's own field did. The controller has the engine
-                    // for every body evaluation that actually builds the
-                    // surface, so the `nil` branch is never what is shown.
-                    if let engine {
-                        SampleBufferVideoSurface(engine: engine) { displayLayer in
-                            let identity = String(ObjectIdentifier(displayLayer).hashValue)
-                            Task { @MainActor in
-                                controller.recordPlayerSurface(identity: identity)
-                            }
-                            pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
-                        }
-                    }
-                }
+                playerSurface(engine: engine)
             } else {
                 LoadingView()
             }
@@ -139,15 +100,7 @@ struct VideoPlayerView: View {
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
                let bench = controller.hudLines.first(where: { $0.hasPrefix("Bench:") }) {
-                Text("Frame-loss regression")
-                    .font(.system(size: 1))
-                    .foregroundStyle(.clear)
-                    .frame(width: 1, height: 1)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Frame-loss regression")
-                    .accessibilityValue(bench)
-                    .accessibilityIdentifier("player.regression.frameLoss")
-                    .allowsHitTesting(false)
+                frameLossRegressionProbe(bench: bench)
             }
             #endif
         }
@@ -252,6 +205,10 @@ struct VideoPlayerView: View {
         .onChange(of: controller.engine?.duration) { _, _ in
             pictureInPicture.invalidatePlaybackState()
         }
+    }
+
+    var body: some View {
+        playerStack
         // Backgrounding mid-playback must hand the display back — the
         // home screen has no business running at the content's mode — and
         // returning re-requests it.
@@ -436,5 +393,82 @@ struct VideoPlayerView: View {
             closePlayer()
         }
         #endif
+    }
+
+#if DEBUG
+    /// A zero-size accessibility element carrying the bench line, for the
+    /// frame-loss UI regression to read.
+    ///
+    /// Extracted from the body rather than inlined: with the engine behind a
+    /// package boundary the whole `body` stopped type-checking in reasonable
+    /// time, and this chain was the expensive part.
+    @ViewBuilder
+    private func frameLossRegressionProbe(bench: String) -> some View {
+        Text("Frame-loss regression")
+            .font(.system(size: 1))
+            .foregroundStyle(.clear)
+            .frame(width: 1, height: 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Frame-loss regression")
+            .accessibilityValue(bench)
+            .accessibilityIdentifier("player.regression.frameLoss")
+            .allowsHitTesting(false)
+    }
+#endif
+
+
+    /// The player surface and its panel.
+    ///
+    /// Extracted from `body` rather than inlined: with the engine
+    /// behind a package boundary the whole body stopped type-checking
+    /// in reasonable time, and this call was the expensive part.
+    @ViewBuilder
+    private func playerSurface(engine: SampleBufferPlayerEngine) -> some View {
+            CustomPlayerView(
+                engine: engine,
+                playbackIdentity: controller.playbackIdentity,
+                playerSurfaceIdentity: controller.playerSurfaceIdentity,
+                handoffMilliseconds: controller.lastHandoffMilliseconds,
+                playbackMethod: controller.activePlayMethod,
+                deliveryRung: controller.activeDeliveryRung,
+                isPlaybackCacheActive: controller.isPlaybackCacheActive,
+                bufferedFraction: controller.bufferedFraction,
+                bufferedRanges: controller.bufferedRanges,
+                playheadPrefetchCount: controller.playheadPrefetchCount,
+                info: fallbackInfo,
+                automation: controller.automation,
+                transport: controller.transportActions,
+                onDismiss: { closePlayer() },
+                onPanelToggle: { panelOpen = $0 },
+                openPanelRequest: openPanelRequest,
+                nextUp: nextUpEpisode,
+                isPictureInPicturePossible: pictureInPicture.isPossible,
+                isPictureInPictureActive: pictureInPicture.isActive,
+                onTogglePictureInPicture: { pictureInPicture.toggle() },
+                together: togetherState,
+                onLeaveGroup: { Task { await syncPlay.leave() } },
+                onSetIgnoreWait: { ignore in Task { await syncPlay.setIgnoreWait(ignore) } },
+                isWaitingForGroup: syncPlay.isWaitingForGroup,
+                subtitleStyle: subtitlePreferences.renderStyle,
+                subtitleSearch: controller.subtitleSearch
+            ) { [weak engine] in
+                // Weak for the same reason the player views hold the
+                // engine through `PlayerEngineRef`: SwiftUI
+                // keeps copies of `CustomPlayerView`, this closure
+                // included, past the next episode handoff, and a strong
+                // capture here would pin the outgoing engine just as the
+                // view's own field did. The controller has the engine
+                // for every body evaluation that actually builds the
+                // surface, so the `nil` branch is never what is shown.
+                if let engine {
+                    SampleBufferVideoSurface(engine: engine) { displayLayer in
+                        let identity = String(ObjectIdentifier(displayLayer).hashValue)
+                        Task { @MainActor in
+                            controller.recordPlayerSurface(identity: identity)
+                        }
+                        pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
+                    }
+                }
+            }
     }
 }

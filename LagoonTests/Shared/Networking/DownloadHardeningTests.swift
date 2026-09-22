@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import UIKit
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Bounded downloads and subtitle replacement", .serialized)

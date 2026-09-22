@@ -1,4 +1,5 @@
 #if DEBUG
+import LagoonEngine
 import Observation
 import SwiftUI
 

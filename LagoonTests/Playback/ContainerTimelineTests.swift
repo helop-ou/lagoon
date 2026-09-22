@@ -1,6 +1,7 @@
 import Foundation
 import Libavutil
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Container timelines")

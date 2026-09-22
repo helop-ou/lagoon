@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import Observation
 
 nonisolated enum SubtitleSearchPhase: Equatable {
@@ -532,7 +533,7 @@ final class SubtitleSearchCoordinator {
 
     private func downloadFromJellyfin(_ candidate: SubtitleCandidate, generation: Int, selectionRevision: Int) async {
         guard let client, let engine else { return }
-        let subtitleID = candidate.jellyfinID
+        let subtitleID = candidate.providerID
         var directFailure: SubtitleDownloadError?
         do {
             guard await client.canManageSubtitles() else {

@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import LagoonEngine
 import Observation
 
 /// A player view's handle on the engine: weak on purpose.

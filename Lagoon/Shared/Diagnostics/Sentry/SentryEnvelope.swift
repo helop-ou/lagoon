@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Builds the bytes Sentry's envelope endpoint accepts, from an incident
 /// the hub assembled. Every byte comes from this file: there is no SDK

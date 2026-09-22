@@ -1,6 +1,7 @@
 import AVFoundation
 import AVKit
 import CoreMedia
+import LagoonEngine
 import Observation
 import SwiftUI
 

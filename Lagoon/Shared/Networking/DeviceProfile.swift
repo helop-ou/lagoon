@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 // Capability profile sent with PlaybackInfo so the server can choose between
 // direct play and transcoding. It mirrors what the engine can play:

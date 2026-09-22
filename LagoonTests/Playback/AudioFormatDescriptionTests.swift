@@ -3,6 +3,7 @@ import Foundation
 import Libavcodec
 import Libavutil
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The compressed-audio format descriptions the renderer is handed, pinned

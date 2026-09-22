@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// Pure scheduler-policy coverage: no cache, no clock, no engine —

@@ -1,5 +1,6 @@
 import CoreMedia
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The audio-crackle fix, pinned down: compressed passthrough audio

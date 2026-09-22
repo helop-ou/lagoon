@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// A parsed Sentry DSN: `scheme://publicKey@host[:port][/path]/projectID`.
 /// The public key is a client key, not a secret; it only lets a client

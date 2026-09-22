@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import Observation
 
 nonisolated enum AudioDefaultMode: String, Codable, CaseIterable, Identifiable {

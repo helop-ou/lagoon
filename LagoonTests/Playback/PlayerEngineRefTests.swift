@@ -1,6 +1,7 @@
 import CoreGraphics
 import Observation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// Pins `PlayerEngineRef`: a copied player view struct must not

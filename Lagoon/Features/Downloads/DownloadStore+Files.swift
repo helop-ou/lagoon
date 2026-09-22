@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import LagoonEngine
 import os
 
 // Directories, manifest persistence and artwork files. Reading and

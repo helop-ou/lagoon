@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// The one place a failed Jellyfin or Seerr request becomes a diagnostic
 /// record. Both clients call in from their shared request path

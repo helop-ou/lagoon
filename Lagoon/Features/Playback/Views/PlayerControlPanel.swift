@@ -1,3 +1,4 @@
+import LagoonEngine
 import SwiftUI
 
 /// Tabs shared by the live player's slide-down panel and the Debug component

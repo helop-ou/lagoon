@@ -1,26 +1,5 @@
 import Foundation
-
-/// One value inside a diagnostic event or incident. Deliberately narrow:
-/// numbers, flags, and short tokens. There is no place for a sentence, a
-/// URL, a title, or an error's `localizedDescription`, which is how the
-/// allowlist in `DiagnosticSchema` stays the only thing that can reach the
-/// reporting backend.
-nonisolated enum DiagnosticValue: Equatable, Sendable {
-    case int(Int)
-    case double(Double)
-    case bool(Bool)
-    case string(String)
-
-    /// The Foundation object `JSONSerialization` accepts for this value.
-    var jsonObject: Any {
-        switch self {
-        case .int(let value): value
-        case .double(let value): value
-        case .bool(let value): value
-        case .string(let value): value
-        }
-    }
-}
+import LagoonEngine
 
 /// What a schema key accepts. Strings are the only kind that could carry
 /// private content, so each string key is either a closed choice or a
@@ -281,5 +260,19 @@ nonisolated enum DiagnosticSchema {
     static func token(_ text: String?) -> DiagnosticValue? {
         guard let text, isToken(text) else { return nil }
         return .string(text)
+    }
+}
+
+nonisolated extension DiagnosticValue {
+    /// The Foundation object `JSONSerialization` accepts for this value.
+    /// The engine produces these values; turning them into an envelope is
+    /// this side's job.
+    var jsonObject: Any {
+        switch self {
+        case .int(let value): value
+        case .double(let value): value
+        case .bool(let value): value
+        case .string(let value): value
+        }
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// The bounded rolling history an incident carries with it: the last
 /// `capacity` events, trimmed to `window` seconds when snapshotted. A value

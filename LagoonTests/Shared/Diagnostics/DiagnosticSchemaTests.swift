@@ -1,6 +1,7 @@
 import Foundation
 import os
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Diagnostic schema")

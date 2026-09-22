@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import LagoonEngine
 
 // Stream resolution and progress reporting.
 extension JellyfinClient {

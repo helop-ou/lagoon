@@ -1,6 +1,7 @@
 import Foundation
 import os
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The monitor against a test hub: what the controller's calls turn into.

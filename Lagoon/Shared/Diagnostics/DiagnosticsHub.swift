@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import os
 #if canImport(UIKit)
 import UIKit

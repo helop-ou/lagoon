@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import LagoonEngine
 import os
 
 // The viewer-facing commands: start, pause, resume, delete.

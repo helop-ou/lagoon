@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// What the player does when an episode runs out.
 ///

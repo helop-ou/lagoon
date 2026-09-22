@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Owns successor negotiation and its bounded byte warm-up. The controller
 /// supplies only immutable inputs and weak engine snapshots; network work
@@ -73,7 +74,7 @@ final class PlaybackSuccessorPreparation {
                 let scope = cache.stageNext(
                     itemID: itemID,
                     url: result.streamURL,
-                    method: result.method,
+                    delivery: result.method.delivery,
                     expectedLength: result.source.size,
                     authorization: client.mediaRequestAuthorization()
                 )

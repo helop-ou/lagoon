@@ -1,6 +1,7 @@
 import Foundation
 import Libavformat
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Native cached I/O bounds")

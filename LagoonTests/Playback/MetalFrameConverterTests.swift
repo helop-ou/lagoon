@@ -1,6 +1,7 @@
 import CoreVideo
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// The Metal output stage replaced two CPU passes, so what it

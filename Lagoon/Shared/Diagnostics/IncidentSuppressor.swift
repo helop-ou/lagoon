@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// Client-side suppression, so a failure that repeats every second costs one
 /// report and a count rather than the month's quota. Dashboard grouping

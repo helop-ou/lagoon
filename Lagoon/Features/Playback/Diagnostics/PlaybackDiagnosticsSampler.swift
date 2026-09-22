@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import UIKit
 
 /// Optional tester-facing sampling. Tasks keep only weak engine references;
@@ -93,33 +94,36 @@ final class PlaybackDiagnosticsSampler {
                 // The renderer-side audio signal rides on the same
                 // line, so a device console can correlate it with position
                 // and the queues without the HUD or the accessibility probe.
+                // Built in steps rather than one `+` chain. The chain
+                // type-checked while the engine was in this module; across
+                // the package boundary the solver gives up on it.
                 var trace = "DecodeTrace"
-                    + String(format: " position=%.2f", engine.timePosition)
-                    + " video=\(engine.videoQueueCountDiagnostic)/\(engine.maximumVideoBacklogDiagnostic)/\(engine.videoQueueHardLimitDiagnostic)"
-                    + " intake=\(engine.videoIntakeCountDiagnostic)/\(engine.maximumVideoIntakeDiagnostic)"
-                    + " audio=\(depths.audio)"
-                    + String(format: " lead=%.3f", engine.audioDeliveryLeadSeconds)
-                    + " ready=\(engine.audioRendererReadyForPlayback ? 1 : 0)"
-                    + " buffering=\(engine.isBuffering ? 1 : 0)"
-                    + " aDry=\(engine.audioStarvationCount)"
-                    + String(format: " footprintMB=%.1f availableMB=%.1f",
-                        memory.footprintMB, memory.availableMB)
-                    + " stalls=\(engine.stallCount) audioStalls=\(engine.audioStallCount)"
-                    + " reprimes=\(engine.stallReprimeCount)"
-                    + " shown=\(performance?.totalFrames ?? -1)"
-                    + " opt=\(performance?.optimizedCompositingFrames ?? -1)"
-                    + " dropped=\(performance?.droppedFrames ?? -1)"
-                    + " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\""
-                    // Soak diagnostics: main-actor scheduling
-                    // latency, pump-queue ping, the 10 Hz tick summary,
-                    // subtitle cue count, renderer observer count, thermal
-                    // state — everything the 100-minute soak needs to show
-                    // whether the engine degrades over a long film.
-                    + String(format: " mainLateMs=%.0f pumpMs=%.1f", mainLateMs, lastPumpMs)
-                    + " \(engine.drainMainTickDiagnostic())"
-                    + " cues=\(engine.subtitleCueCountDiagnostic)"
-                    + " observers=\(engine.rendererObserverCountDiagnostic)"
-                    + " thermal=\(thermalName)"
+                trace += String(format: " position=%.2f", engine.timePosition)
+                trace += " video=\(engine.videoQueueCountDiagnostic)/\(engine.maximumVideoBacklogDiagnostic)/\(engine.videoQueueHardLimitDiagnostic)"
+                trace += " intake=\(engine.videoIntakeCountDiagnostic)/\(engine.maximumVideoIntakeDiagnostic)"
+                trace += " audio=\(depths.audio)"
+                trace += String(format: " lead=%.3f", engine.audioDeliveryLeadSeconds)
+                trace += " ready=\(engine.audioRendererReadyForPlayback ? 1 : 0)"
+                trace += " buffering=\(engine.isBuffering ? 1 : 0)"
+                trace += " aDry=\(engine.audioStarvationCount)"
+                trace += String(format: " footprintMB=%.1f availableMB=%.1f",
+                                memory.footprintMB, memory.availableMB)
+                trace += " stalls=\(engine.stallCount) audioStalls=\(engine.audioStallCount)"
+                trace += " reprimes=\(engine.stallReprimeCount)"
+                trace += " shown=\(performance?.totalFrames ?? -1)"
+                trace += " opt=\(performance?.optimizedCompositingFrames ?? -1)"
+                trace += " dropped=\(performance?.droppedFrames ?? -1)"
+                trace += " swdec=\"\(engine.softwareDecodeBenchField ?? "n/a")\""
+                // Soak diagnostics: main-actor scheduling latency, pump-queue
+                // ping, the 10 Hz tick summary, subtitle cue count, renderer
+                // observer count, thermal state — everything the 100-minute
+                // soak needs to show whether the engine degrades over a long
+                // film.
+                trace += String(format: " mainLateMs=%.0f pumpMs=%.1f", mainLateMs, lastPumpMs)
+                trace += " \(engine.drainMainTickDiagnostic())"
+                trace += " cues=\(engine.subtitleCueCountDiagnostic)"
+                trace += " observers=\(engine.rendererObserverCountDiagnostic)"
+                trace += " thermal=\(thermalName)"
                 #if os(tvOS)
                 // Whether the display actually matched the content: a
                 // 60 Hz SDR mode left in place makes the compositor

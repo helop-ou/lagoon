@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// `HEVCNALUnitRewriter` replaced the strip-only `HEVCEnhancementLayerFilter`:

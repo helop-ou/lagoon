@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import Observation
 
 /// A track choice durable enough to be stored, and the defaults namespace

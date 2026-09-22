@@ -3,6 +3,7 @@ import Foundation
 import Libavformat
 import Libavutil
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("URLSession transport", .serialized)

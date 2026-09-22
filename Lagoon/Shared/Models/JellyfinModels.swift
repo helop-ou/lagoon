@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 // Jellyfin JSON uses PascalCase keys; the client's de/encoders convert to and
 // from camelCase globally, so these types need no per-field CodingKeys.
@@ -441,6 +442,16 @@ nonisolated enum PlayMethod: String {
     case directPlay = "DirectPlay"
     case directStream = "DirectStream"
     case transcode = "Transcode"
+
+    /// How the engine should treat the bytes behind this choice. Direct play
+    /// and direct stream are both one stable file; a transcode is a manifest
+    /// the server writes as playback advances.
+    var delivery: MediaDelivery {
+        switch self {
+        case .directPlay, .directStream: .stableFile
+        case .transcode: .segmentedManifest
+        }
+    }
 }
 
 // MARK: - Ticks

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 @Suite("Playback cache", .serialized)
@@ -31,14 +32,14 @@ struct PlaybackCacheTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        #expect(PlaybackBufferPolicy.customIOEnabled(for: .directPlay, defaults: defaults))
-        #expect(PlaybackBufferPolicy.customIOEnabled(for: .directStream, defaults: defaults))
-        #expect(!PlaybackBufferPolicy.customIOEnabled(for: .transcode, defaults: defaults))
+        #expect(PlaybackBufferPolicy.customIOEnabled(for: .stableFile, defaults: defaults))
+        #expect(PlaybackBufferPolicy.customIOEnabled(for: .stableFile, defaults: defaults))
+        #expect(!PlaybackBufferPolicy.customIOEnabled(for: .segmentedManifest, defaults: defaults))
         defaults.set(true, forKey: "debug.experimentalPlaybackCache")
         #if DEBUG
-        #expect(PlaybackBufferPolicy.customIOEnabled(for: .transcode, defaults: defaults))
+        #expect(PlaybackBufferPolicy.customIOEnabled(for: .segmentedManifest, defaults: defaults))
         #else
-        #expect(!PlaybackBufferPolicy.customIOEnabled(for: .transcode, defaults: defaults))
+        #expect(!PlaybackBufferPolicy.customIOEnabled(for: .segmentedManifest, defaults: defaults))
         #endif
     }
 
@@ -49,18 +50,18 @@ struct PlaybackCacheTests {
 
         // Streaming: the session is the transport.
         #expect(PlaybackBufferPolicy.engineUsesCacheSession(
-            playsFromCompleteFile: false, disc: false, method: .directPlay, defaults: defaults))
+            playsFromCompleteFile: false, disc: false, delivery: .stableFile, defaults: defaults))
         // A complete ordinary file plays straight from disk.
         #expect(!PlaybackBufferPolicy.engineUsesCacheSession(
-            playsFromCompleteFile: true, disc: false, method: .directPlay, defaults: defaults))
+            playsFromCompleteFile: true, disc: false, delivery: .stableFile, defaults: defaults))
         // A complete disc image still needs the session: the UDF reader
         // mounts it through the session's byte source, and without one the
         // raw image reached libavformat and fell to a server remux.
         #expect(PlaybackBufferPolicy.engineUsesCacheSession(
-            playsFromCompleteFile: true, disc: true, method: .directPlay, defaults: defaults))
+            playsFromCompleteFile: true, disc: true, delivery: .stableFile, defaults: defaults))
         // A transcode never gets the session in Release, disc or not.
         #expect(!PlaybackBufferPolicy.engineUsesCacheSession(
-            playsFromCompleteFile: false, disc: true, method: .transcode, defaults: defaults))
+            playsFromCompleteFile: false, disc: true, delivery: .segmentedManifest, defaults: defaults))
     }
 
     @Test func adaptiveCapacityPreservesFreeSpaceAndHonorsMaximum() {
@@ -664,13 +665,13 @@ struct PlaybackCacheTests {
         let current = coordinator.activate(
             itemID: "episode-1",
             url: URL(string: "https://media.test/one.mkv")!,
-            method: .directPlay,
+            delivery: .stableFile,
             expectedLength: 1_024
         )
         let prepared = coordinator.stageNext(
             itemID: "episode-2",
             url: URL(string: "https://media.test/two.mkv")!,
-            method: .directPlay,
+            delivery: .stableFile,
             expectedLength: 1_024
         )
 
@@ -682,7 +683,7 @@ struct PlaybackCacheTests {
         let promoted = coordinator.activate(
             itemID: "episode-2",
             url: URL(string: "https://media.test/two.mkv")!,
-            method: .directPlay,
+            delivery: .stableFile,
             expectedLength: 1_024
         )
 
@@ -706,7 +707,7 @@ struct PlaybackCacheTests {
         let staged = coordinator.stageNext(
             itemID: "episode-hls",
             url: hlsURL,
-            method: .transcode,
+            delivery: .segmentedManifest,
             expectedLength: nil
         )
         #expect(staged?.hlsScope != nil)
@@ -715,7 +716,7 @@ struct PlaybackCacheTests {
         let promoted = coordinator.activate(
             itemID: "episode-hls",
             url: hlsURL,
-            method: .transcode,
+            delivery: .segmentedManifest,
             expectedLength: nil
         )
         #expect(promoted === staged)
@@ -737,7 +738,7 @@ struct PlaybackCacheTests {
         #expect(coordinator.activate(
             itemID: "episode-hls",
             url: URL(string: "https://media.test/Videos/id/master.m3u8")!,
-            method: .transcode,
+            delivery: .segmentedManifest,
             expectedLength: nil
         ) == nil)
         #expect(coordinator.current == nil)
@@ -746,7 +747,7 @@ struct PlaybackCacheTests {
         #expect(coordinator.activate(
             itemID: "movie-direct",
             url: URL(string: "https://media.test/movie.mkv")!,
-            method: .directPlay,
+            delivery: .stableFile,
             expectedLength: 1_024
         )?.directScope != nil)
         coordinator.discardAll()
@@ -762,13 +763,13 @@ struct PlaybackCacheTests {
         #expect(coordinator.activate(
             itemID: "movie",
             url: url,
-            method: .directPlay,
+            delivery: .stableFile,
             expectedLength: 1_024
         ) == nil)
         #expect(coordinator.stageNext(
             itemID: "next",
             url: url,
-            method: .transcode,
+            delivery: .segmentedManifest,
             expectedLength: nil
         ) == nil)
         #expect(coordinator.current == nil)

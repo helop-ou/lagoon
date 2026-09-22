@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LagoonEngine
 @testable import Lagoon
 
 /// Pins `MainTickStatistics`' arithmetic and drain/reset contract:

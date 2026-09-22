@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import os
 
 /// Posts envelopes to a Sentry project over URLSession, from a bounded

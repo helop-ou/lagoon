@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// The action and its visible fill share one monotonic deadline. Progress
 /// remains correct when an overlay first appears or returns from background.
