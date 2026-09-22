@@ -106,7 +106,7 @@ See [negotiation and
 delivery](reference/playback/stream-resolution.md#stream-resolution), [disc
 images](reference/playback/stream-resolution.md#disc-images), and
 [decode
-details](reference/playback/engine.md#the-engine-lagoonfeaturesplaybackengine).
+details](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/decode.md).
 
 ### Audio track selection
 
@@ -306,7 +306,7 @@ hidden timeline. Observation subscribes to reads that actually execute.
 
 The panel host's `Equatable` boundary separately protects its interior from
 unnecessary renders. Preserve both boundaries. See the [scope
-measurements](reference/playback/engine.md#the-players-observation-scope)
+measurements](reference/playback/controls-and-reporting.md#the-players-observation-scope)
 and [memory/lifecycle
 notes](reference/playback/frame-loss-bench.md#decoded-frame-memory-ceiling).
 
