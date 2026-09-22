@@ -12,8 +12,8 @@ Support is conditional, not a flat list. A codec appears below with the
 profiles, ranges and limits that go with it, because "everything direct
 plays" is never true and the conditions are where the real answer is.
 
-The reasoning behind each decision is in [Codec, timing and subtitle
-details](reference/playback/codecs-and-subtitles.md).
+The reasoning behind each decision is in the engine's [codec
+notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/codecs.md).
 
 ## Containers
 
