@@ -3,6 +3,7 @@ import Foundation
 enum SeerrError: LocalizedError, Equatable {
     case invalidServerURL
     case invalidResponse
+    case webPageResponse
     case server(Int, String)
     case unauthenticated
     case quickConnectUnavailable
@@ -13,6 +14,12 @@ enum SeerrError: LocalizedError, Equatable {
             "Enter a valid Seerr or Jellyseerr server address."
         case .invalidResponse:
             "The server returned an unreadable response."
+        case .webPageResponse:
+            """
+            This address answered with a web page instead of Seerr's API. \
+            If Seerr sits behind an authentication proxy such as Cloudflare \
+            Access or Authelia, Lagoon can't sign in through it.
+            """
         case .server(_, let message):
             message
         case .unauthenticated:
@@ -421,6 +428,23 @@ final class SeerrClient {
         guard configurationGeneration == requestGeneration else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw SeerrError.invalidResponse }
         captureSessionCookie(from: http, url: url)
+        // A forward-auth proxy — Cloudflare Access, Authelia, Authentik —
+        // answers before the request reaches Seerr, redirecting to its own
+        // login page. URLSession follows that, so the call succeeds with a
+        // 200 carrying HTML. Decoding it fails, and "unreadable response"
+        // then blames Seerr for something standing in front of it. Only 2xx
+        // is inspected: an HTML body on a 4xx/5xx is an ordinary gateway
+        // error page, which `server(_:_:)` already reports usefully.
+        if (200..<300).contains(http.statusCode), let mime = http.mimeType, !mime.hasSuffix("json") {
+            let context = DecodingError.Context(codingPath: [], debugDescription: "Response was \(mime), not JSON")
+            APIDiagnostics.decodeFailed(
+                DecodingError.dataCorrupted(context),
+                request: request,
+                serverURL: serverURL,
+                client: "seerr"
+            )
+            throw SeerrError.webPageResponse
+        }
         guard (200..<300).contains(http.statusCode) else {
             APIDiagnostics.statusFailed(http.statusCode, request: request, serverURL: serverURL, client: "seerr", startedAt: startedAt)
             if authenticated && http.statusCode == 401 {
