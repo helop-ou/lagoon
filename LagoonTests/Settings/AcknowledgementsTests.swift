@@ -1,4 +1,7 @@
 import Foundation
+import Libavutil
+import Libdav1d
+import lcms2
 import Testing
 @testable import Lagoon
 
@@ -87,6 +90,22 @@ struct AcknowledgementsTests {
             Extra: \(coveredTargets.subtracting(declaredTargets).sorted())
             """
         )
+    }
+
+    /// The engine is a versioned dependency, so the libraries it links can
+    /// move under an entry that still names the old release. Where a library
+    /// reports its own version at runtime, the entry has to agree with it.
+    @Test func versionsMatchTheLinkedLibraries() throws {
+        func entry(_ id: String) throws -> ThirdPartyComponent {
+            try #require(Acknowledgements.components.first { $0.id == id })
+        }
+        #expect(try entry("ffmpeg").version == String(cString: av_version_info()))
+        // dav1d reports `git describe`, e.g. "1.5.4-0-g54706fc": zero commits
+        // past the tag. The release is the part before the first hyphen.
+        let dav1d = String(cString: dav1d_version()).split(separator: "-").first.map(String.init)
+        #expect(try entry("dav1d").version == dav1d)
+        let lcms = Int(cmsGetEncodedCMMversion())
+        #expect(try entry("lcms2").version == "\(lcms / 1000).\(lcms % 1000 / 10)")
     }
 
     @Test func trademarkNoticeNamesJellyfinAndApple() {
