@@ -303,8 +303,15 @@ final signed candidate, not an earlier audit revision.
   checksum-pinned source without `--enable-version3`, and are
   LGPL-2.1-or-later; dav1d, lcms2 and uavs3d are built there too. libdovi is
   the one component vendored prebuilt, because it needs a Rust toolchain.
-  Whether any route satisfies the licence for App Store distribution is a
-  legal judgement, not an engineering one.
+  In place: every engine release attaches FFmpeg's corresponding source
+  (upstream tarball, patch, build script and configure records); each
+  artifact ships its licence, libdovi's with its Rust crates; the FFmpeg
+  notice links that release and credits the Independent JPEG Group, whose
+  DCT code is in libavcodec. Owed: this repository and the engine's public,
+  since relinking relies on their source, before any external build; the
+  FFmpeg line on the website's download pages. Whether the App Store's usage
+  rules are a further restriction under LGPL-2.1 §10 is a legal judgement,
+  not an engineering one; VLC for iOS ships the same arrangement.
 - [ ] Record encryption classification and territories, including France.
   Align build declarations and keep any required documentation.
 - [ ] Approve data collection and retention answers, complete the app's
