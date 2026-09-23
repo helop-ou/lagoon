@@ -1,8 +1,8 @@
 {
   "scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
   "engine": {
-    "version": "1.0.4",
-    "revision": "e9dae04561fa24a7b9bd7a0be5c4bc593ce2a6a4"
+    "version": "1.0.5",
+    "revision": "185c5293b7ba9b3ad6c72e27348e6ce973ec4ee5"
   },
   "package_sha256": "4575ecf6b87f134384e5b975b10ebdee191ee771df75286fc548da917632c11e",
   "dependencies": [
@@ -290,7 +290,9 @@
     {
       "name": "Libdav1d",
       "path": "Artifacts/Libdav1d.xcframework",
-      "bundled_license_files": [],
+      "bundled_license_files": [
+        "COPYING"
+      ],
       "slices": [
         {
           "id": "ios-arm64",
@@ -345,7 +347,9 @@
     {
       "name": "Libdovi",
       "path": "Artifacts/Libdovi.xcframework",
-      "bundled_license_files": [],
+      "bundled_license_files": [
+        "LICENSE"
+      ],
       "slices": [
         {
           "id": "ios-arm64",
