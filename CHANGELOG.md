@@ -17,15 +17,19 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
-## 0.2.0 (108)
+## 0.2.1 (108)
 
 September 2026
 
-**Clearer about a Seerr server you cannot reach.**
+**Smoother playback for some films and episodes on Apple TV.**
 
 ### Improvements
 
 - Lagoon now says when a Seerr server sits behind a sign in proxy such as Cloudflare Access, instead of reporting an unreadable response. Connecting through one is not supported yet.
+
+### Bug fixes
+
+- Some 23.976 fps films and episodes no longer judder on Apple TV: the TV now switches to the right frame rate for them.
 
 ## 0.2.0 (107)
 
