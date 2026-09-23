@@ -12,7 +12,9 @@ Settings → About shows the version and build you are running.
 Please report privately rather than opening an issue, and give the fix a
 chance to ship before describing the problem publicly.
 
-- Email **support@helop.dev**.
+- Use GitHub's [private vulnerability
+  reporting](https://github.com/helop-ou/lagoon/security/advisories/new),
+  or email **support@helop.dev**.
 - Include the app version and build, the platform and OS version, the device
   or simulator, what an attacker could achieve, and the steps to reproduce it.
 - Say whether you want credit in the release notes, and under what name.
