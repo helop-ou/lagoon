@@ -25,7 +25,6 @@ guide is right and this file needs fixing.
 | [Jellyfin API](docs/jellyfin-api.md) | Authentication, endpoints, wire formats, decoding rules, server compatibility |
 | [Playback](docs/playback.md) | Negotiation, the delivery ladder, controls, reporting, regression checks. Engine internals live with the engine. |
 | [Release](docs/release.md) | Build numbers, changelog, acknowledgements, licence, TestFlight, release gates |
-| [Roadmap](docs/roadmap.md) | Remaining product work and device acceptance |
 
 `docs/reference/` holds the engineering notes and measurements behind the
 guides. Keep routine session history out of the guides — see "Keeping this
