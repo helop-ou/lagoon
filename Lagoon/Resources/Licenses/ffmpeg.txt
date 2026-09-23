@@ -1,13 +1,21 @@
 FFmpeg 8.1.2 (libavcodec, libavformat, libavutil, libswresample)
-Source: https://github.com/FFmpeg/FFmpeg/tree/n8.1.2
+Upstream: https://github.com/FFmpeg/FFmpeg/tree/n8.1.2
 Copyright (c) 2000-2026 the FFmpeg developers
 
 All four libraries are built by the lagoon-engine package from this release,
-in one configuration, with the network stack compiled out
-(scripts/build-ffmpeg.py in https://github.com/helop-ou/lagoon-engine). The
-build enables no GPL, nonfree or version 3 components, so all four are
-covered by the GNU Lesser General Public License, version 2.1 or later,
-printed below.
+in one configuration, with the network stack compiled out and one patch to
+libavformat's HLS demuxer so it works without it (scripts/build-ffmpeg.py in
+https://github.com/helop-ou/lagoon-engine). The build enables no GPL, nonfree
+or version 3 components, so all four are covered by the GNU Lesser General
+Public License, version 2.1 or later, printed below.
+
+Complete corresponding source: every lagoon-engine release on GitHub
+(https://github.com/helop-ou/lagoon-engine/releases) carries it as
+lagoon-engine-<version>-ffmpeg-8.1.2-source.tar.gz, with upstream's tarball,
+the patch and the build script. Lagoon's own source, which you can rebuild
+against a modified FFmpeg, is at https://github.com/helop-ou/lagoon.
+
+This software is based in part on the work of the Independent JPEG Group.
 
                   GNU LESSER GENERAL PUBLIC LICENSE
                        Version 2.1, February 1999
