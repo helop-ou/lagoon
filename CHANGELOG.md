@@ -17,6 +17,16 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.2.1 (109)
+
+September 2026
+
+**Lagoon opens to external testers.**
+
+### Improvements
+
+- The first build for testers outside the team. The app itself is unchanged from 0.2.1 (108).
+
 ## 0.2.1 (108)
 
 September 2026
