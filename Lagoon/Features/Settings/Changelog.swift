@@ -47,13 +47,16 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
-            version: "0.2.0",
+            version: "0.2.1",
             build: "108",
             released: "September 2026",
-            headline: "Clearer about a Seerr server you cannot reach.",
+            headline: "Smoother playback for some films and episodes on Apple TV.",
             sections: [
                 ChangelogSection(category: .improvements, changes: [
                     "Lagoon now says when a Seerr server sits behind a sign in proxy such as Cloudflare Access, instead of reporting an unreadable response. Connecting through one is not supported yet.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "Some 23.976 fps films and episodes no longer judder on Apple TV: the TV now switches to the right frame rate for them.",
                 ]),
             ]
         ),
