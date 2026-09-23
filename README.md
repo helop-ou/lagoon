@@ -119,6 +119,9 @@ video and audio codecs, subtitle formats, and the conditions attached to each.
 It is generated from the capability profile the app sends the server, so it is
 accurate by construction rather than by me remembering to update it.
 
+I won't throw in promises that this will play anything and will never transcode, but 
+I do try to have as wide as a support for most stuff as possible.
+
 ### Does it work offline?
 
 On iPhone and iPad, yes. Films and episodes can be downloaded and played back.
@@ -130,9 +133,18 @@ server, not by Lagoon.
 Yes, optionally. Connect it and requests and discovery appear alongside your
 library. Without it, Lagoon works exactly as before.
 
+## Does it have any telemetry?
+In a sense, yes, it has a custom Sentry diagnostic chain built-in.
+The reason for that is because reporting issues is always the point that has the most
+friction, and I wanted to have something that would automatically send some basic info to me if
+any issues are detected. The Sentry info is completely anonymous though, no info about your server,
+connection, or anything like that is ever sent to me (you can check the code). It is also possible to trun
+it off completely in settings.
+
 ### Why target tvOS and iOS 26?
 
 Because most iOS devices are kept up to date and since I made the project mostly for me,
 I don't know anyone who uses OS versions older than those.
 
-This is not set in stone.
+This is not set in stone and may change in the future, although I doubt I will be supporting anything older
+than 26 proactively.
