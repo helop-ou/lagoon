@@ -10,7 +10,6 @@ you are changing. The guides describe the code as it is today.
 | [Jellyfin API](jellyfin-api.md) | Authentication, endpoints, wire formats, and server compatibility |
 | [Playback](playback.md) | Negotiation, the delivery ladder, lifecycle ownership, controls, and regression checks |
 | [Release](release.md) | Build numbers, changelog, licence, TestFlight, website, and release gates |
-| [Roadmap](roadmap.md) | Remaining product work and device acceptance |
 
 ## Supporting material
 
