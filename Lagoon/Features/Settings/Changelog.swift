@@ -48,6 +48,17 @@ nonisolated enum Changelog {
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
             version: "0.2.1",
+            build: "109",
+            released: "September 2026",
+            headline: "Lagoon opens to external testers.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "The first build for testers outside the team. The app itself is unchanged from 0.2.1 (108).",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
+            version: "0.2.1",
             build: "108",
             released: "September 2026",
             headline: "Smoother playback for some films and episodes on Apple TV.",
