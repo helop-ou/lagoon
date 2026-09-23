@@ -1,8 +1,8 @@
 {
   "scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
   "engine": {
-    "version": "1.0.3",
-    "revision": "1139a29df6e6f3b0c76d1db6124c816d99d0d010"
+    "version": "1.0.4",
+    "revision": "24814e27e1ba1ece0a9d2a723aa22857cfb0a14b"
   },
   "package_sha256": "4575ecf6b87f134384e5b975b10ebdee191ee771df75286fc548da917632c11e",
   "dependencies": [
