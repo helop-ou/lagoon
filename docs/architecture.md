@@ -162,5 +162,3 @@ notes](reference/architecture.md).
 - Keep the [playback invariants](playback.md#lifecycle-and-memory). Validate
   an ownership change with dismissal and replay, episode handoff, PiP and
   hardware performance, plus both builds and the tests.
-- Remaining acceptance is in the
-  [roadmap](roadmap.md#awaiting-device-or-deployment-verification).
