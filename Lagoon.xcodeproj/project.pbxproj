@@ -771,7 +771,7 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		4C41474F4F4E000000000010 /* XCRemoteSwiftPackageReference "lagoon-engine" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "git@github.com:helop-ou/lagoon-engine.git";
+			repositoryURL = "https://github.com/helop-ou/lagoon-engine.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.0.0;

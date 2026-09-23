@@ -4,7 +4,7 @@
     {
       "identity" : "lagoon-engine",
       "kind" : "remoteSourceControl",
-      "location" : "git@github.com:helop-ou/lagoon-engine.git",
+      "location" : "https://github.com/helop-ou/lagoon-engine.git",
       "state" : {
         "revision" : "185c5293b7ba9b3ad6c72e27348e6ce973ec4ee5",
         "version" : "1.0.5"
