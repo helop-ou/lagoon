@@ -36,8 +36,8 @@ Acceptance carried forward from engineering work:
 
 - Audio refill, transcode cache selection, interlaced MPEG-2 and the iOS
   cellular cap.
-- Dolby Vision profile 7 to 8.1 conversion, including display mode and a
-  same-scene frame-loss comparison on Apple TV.
+- Dolby Vision profile 7 to 8.1 conversion: the television reporting Dolby
+  Vision for a MEL and a FEL title. Frame loss on Apple TV is measured.
 - Remote touch reveal and finish-time display, browse refresh, recent
   searches and post-playback resume state.
 - Account and privacy cleanup, local-network permission recovery and native
