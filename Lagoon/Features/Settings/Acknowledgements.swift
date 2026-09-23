@@ -13,7 +13,8 @@ nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     /// The licence as a viewer would say it, e.g. "GNU LGPL 2.1 or later".
     let licenseName: String
     let copyright: String
-    /// The exact upstream tag or release the shipped build came from.
+    /// Where the shipped build's source can be had: the exact upstream tag or
+    /// release, or for a patched build the engine release carrying it.
     let sourceURL: URL
     /// Built by this repository, or prebuilt by whom, from what.
     let notes: String?
@@ -33,8 +34,11 @@ nonisolated enum Acknowledgements {
             summary: "Reads the container and decodes audio and video the hardware cannot.",
             licenseName: "GNU LGPL 2.1 or later",
             copyright: "Copyright (c) 2000-2026 the FFmpeg developers",
-            sourceURL: URL(string: "https://github.com/FFmpeg/FFmpeg/tree/n8.1.2")!,
-            notes: "All four libraries are built by lagoon-engine \(EngineVersion.current) from this release in one configuration, with the network stack compiled out (scripts/build-ffmpeg.py). The build enables no GPL, nonfree or version 3 components.",
+            // Patched, so upstream's tag is not the corresponding source; the
+            // engine release carries upstream's tarball, the patch and the
+            // build script together.
+            sourceURL: URL(string: "https://github.com/helop-ou/lagoon-engine/releases/tag/\(EngineVersion.current)")!,
+            notes: "All four libraries are built by lagoon-engine \(EngineVersion.current) from FFmpeg 8.1.2 in one configuration, with the network stack compiled out and one patch so HLS works without it (scripts/build-ffmpeg.py). The build enables no GPL, nonfree or version 3 components. The engine release linked here carries the complete source. This software is based in part on the work of the Independent JPEG Group.",
             licenseFile: "ffmpeg",
             binaryTargets: ["Libavcodec", "Libavformat", "Libavutil", "Libswresample"]
         ),
@@ -82,7 +86,7 @@ nonisolated enum Acknowledgements {
             licenseName: "MIT",
             copyright: "Copyright (c) 2026 quietvoid",
             sourceURL: URL(string: "https://github.com/quietvoid/dovi_tool/tree/libdovi-3.4.0")!,
-            notes: "Vendored prebuilt in lagoon-engine \(EngineVersion.current) from superuser404notfound/LibDovi at tag 2.1.0 (details and per-slice hashes in its Artifacts/Libdovi.README.md). dovi_tool is dual-licensed MIT OR Apache-2.0 upstream; Lagoon uses it under the MIT option. LibDovi's own packaging carries a separate MIT notice that does not replace the one bundled here.",
+            notes: "Vendored prebuilt in lagoon-engine \(EngineVersion.current) from superuser404notfound/LibDovi at tag 2.1.0 (details and per-slice hashes in its Artifacts/Libdovi.README.md). The dolby_vision crate is MIT-licensed; the Rust crates and standard library linked with it are listed in its notice. LibDovi's own packaging carries a separate MIT notice that does not replace the one bundled here.",
             licenseFile: "libdovi",
             binaryTargets: ["Libdovi"]
         ),
