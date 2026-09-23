@@ -65,7 +65,7 @@ keeps each one's provenance and rebuild instructions beside it.
 
 Start with the [documentation index](docs/README.md) and [coding
 standards](docs/standards.md). The guides cover architecture, design, the
-Jellyfin API, playback, release and the roadmap.
+Jellyfin API, playback and release.
 
 [Contributing](CONTRIBUTING.md) has the prerequisites, build and test
 commands, and repository conventions; [security reports](SECURITY.md) go
