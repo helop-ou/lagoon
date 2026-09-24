@@ -217,8 +217,8 @@ The controller is the boundary; a group driver never holds the engine.
   position outranks every resume rule, and a member can wait primed and
   paused until the group starts.
 - It drives `playGroup(atHostTime:)`, `pauseGroup()`, `seekGroup(to:)` and
-  `setCorrectionRate(_:)`, reads `clockPosition` and `isPrimedAndPaused`, and
-  listens to `onEngineReady` and `onClosed`.
+  `setCorrectionRate(_:)`, reads `clockPosition`, and listens to
+  `onEngineReady` and `onClosed`.
 - Group transport is separate from viewer controls, so the driver can turn
   the viewer's Play and Pause into group requests without recursing into
   itself.
