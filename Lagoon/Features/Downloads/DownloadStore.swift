@@ -245,6 +245,11 @@ final class DownloadStore {
         // Drop a reply that outlived an account switch, even back to the same key.
         guard generation == accountGeneration, account == accountKey else { return }
         permitted = value
+        // The card menu's quality list reads this. Warmed here, once per
+        // account, rather than by every card on screen.
+        if value, client.cachedVideoTranscodingAllowed == nil {
+            await client.refreshVideoTranscodingPermission()
+        }
     }
 
     func freeSpace() -> Int64? {
