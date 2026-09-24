@@ -7,11 +7,11 @@ import LagoonEngine
 // docs/codec-support.md.
 nonisolated enum DeviceProfile {
     struct Profile: Encodable {
-        let maxStreamingBitrate: Int
-        let maxStaticBitrate: Int
-        let directPlayProfiles: [DirectPlayProfile]
-        let transcodingProfiles: [TranscodingProfile]
-        let codecProfiles: [CodecProfile]
+        var maxStreamingBitrate: Int
+        var maxStaticBitrate: Int
+        var directPlayProfiles: [DirectPlayProfile]
+        var transcodingProfiles: [TranscodingProfile]
+        var codecProfiles: [CodecProfile]
         let subtitleProfiles: [SubtitleProfile]
     }
 
@@ -25,7 +25,7 @@ nonisolated enum DeviceProfile {
     struct TranscodingProfile: Encodable {
         let container: String
         let type: String
-        let videoCodec: String
+        var videoCodec: String
         let audioCodec: String
         let context: String
         let `protocol`: String
@@ -227,152 +227,18 @@ nonisolated enum DeviceProfile {
             ),
             // No VC-1 in VideoToolbox on tvOS: software decode, bounded to
             // 8-bit 1080p. Interlaced VC-1 still transcodes.
-            CodecProfile(
-                type: "Video",
-                codec: "vc1",
-                conditions: [
-                    ProfileCondition(
-                        condition: "EqualsAny",
-                        property: "VideoRangeType",
-                        value: "SDR",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "VideoBitDepth",
-                        value: "8",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Width",
-                        value: "1920",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Height",
-                        value: "1080",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsInterlaced",
-                        value: "true",
-                        isRequired: true
-                    ),
-                ]
-            ),
+            softwareDecoded("vc1"),
             // WMV3 is VC-1's Simple/Main family and uses the same software
             // decoder and bounds. The container list has no asf/wmv, so this
             // only reaches WMV3 in mkv/avi.
-            CodecProfile(
-                type: "Video",
-                codec: "wmv3",
-                conditions: [
-                    ProfileCondition(
-                        condition: "EqualsAny",
-                        property: "VideoRangeType",
-                        value: "SDR",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "VideoBitDepth",
-                        value: "8",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Width",
-                        value: "1920",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Height",
-                        value: "1080",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsInterlaced",
-                        value: "true",
-                        isRequired: true
-                    ),
-                ]
-            ),
+            softwareDecoded("wmv3"),
             // MPEG-4 Part 2 (Xvid/DivX): software decode like VC-1. Its real
             // profiles are 8-bit 4:2:0; anything else transcodes.
-            CodecProfile(
-                type: "Video",
-                codec: "mpeg4",
-                conditions: [
-                    ProfileCondition(
-                        condition: "EqualsAny",
-                        property: "VideoRangeType",
-                        value: "SDR",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "VideoBitDepth",
-                        value: "8",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Width",
-                        value: "1920",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Height",
-                        value: "1080",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsInterlaced",
-                        value: "true",
-                        isRequired: true
-                    ),
-                ]
-            ),
+            softwareDecoded("mpeg4"),
             // No interlace guard: the MPEG-2 software path deinterlaces.
             // Hardware-decoded codecs keep the guard; they have no
             // deinterlacing stage.
-            CodecProfile(
-                type: "Video",
-                codec: "mpeg2video",
-                conditions: [
-                    ProfileCondition(
-                        condition: "EqualsAny",
-                        property: "VideoRangeType",
-                        value: "SDR",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "VideoBitDepth",
-                        value: "8",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Width",
-                        value: "1920",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Height",
-                        value: "1080",
-                        isRequired: true
-                    ),
-                ]
-            ),
+            softwareDecoded("mpeg2video", rejectsInterlaced: false),
         ],
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
@@ -391,6 +257,23 @@ nonisolated enum DeviceProfile {
             SubtitleProfile(format: "dvbsub", method: "Embed"),
         ]
     )
+
+    /// A codec the engine decodes in software: SDR, 8-bit, at most 1080p,
+    /// and progressive unless the decoder deinterlaces.
+    private static func softwareDecoded(_ codec: String, rejectsInterlaced: Bool = true) -> CodecProfile {
+        var conditions = [
+            ProfileCondition(condition: "EqualsAny", property: "VideoRangeType", value: "SDR", isRequired: false),
+            ProfileCondition(condition: "LessThanEqual", property: "VideoBitDepth", value: "8", isRequired: false),
+            ProfileCondition(condition: "LessThanEqual", property: "Width", value: "1920", isRequired: true),
+            ProfileCondition(condition: "LessThanEqual", property: "Height", value: "1080", isRequired: true),
+        ]
+        if rejectsInterlaced {
+            conditions.append(
+                ProfileCondition(condition: "NotEquals", property: "IsInterlaced", value: "true", isRequired: true)
+            )
+        }
+        return CodecProfile(type: "Video", codec: codec, conditions: conditions)
+    }
 
     /// The full envelope minus what this device's hardware cannot decode.
     static var lagoon: Profile { profile(for: .current) }
@@ -418,22 +301,15 @@ nonisolated enum DeviceProfile {
             cost: cost,
             allowFullQuality: allowFullQuality
         )
-        return Profile(
-            maxStreamingBitrate: bitrate,
-            // The server checks the static ceiling before offering the
-            // original file, so it must come down too.
-            maxStaticBitrate: min(profile.maxStaticBitrate, bitrate),
-            directPlayProfiles: profile.directPlayProfiles,
-            transcodingProfiles: profile.transcodingProfiles,
-            codecProfiles: profile.codecProfiles.map {
-                boundedTo(
-                    $0,
-                    width: MeteredPathPolicy.maxWidth,
-                    height: MeteredPathPolicy.maxHeight
-                )
-            },
-            subtitleProfiles: profile.subtitleProfiles
-        )
+        var capped = profile
+        capped.maxStreamingBitrate = bitrate
+        // The server checks the static ceiling before offering the original
+        // file, so it must come down too.
+        capped.maxStaticBitrate = min(profile.maxStaticBitrate, bitrate)
+        capped.codecProfiles = profile.codecProfiles.map {
+            boundedTo($0, width: MeteredPathPolicy.maxWidth, height: MeteredPathPolicy.maxHeight)
+        }
+        return capped
         #else
         return profile
         #endif
@@ -451,14 +327,10 @@ nonisolated enum DeviceProfile {
     /// 30 fps source) and stalls. Never apply to `remux`: a resolution
     /// condition there forces the re-encode that rung avoids.
     static func boundedForRealtimeTranscode(_ profile: Profile) -> Profile {
-        Profile(
-            maxStreamingBitrate: min(profile.maxStreamingBitrate, realtimeTranscodeBitrateCeiling),
-            maxStaticBitrate: profile.maxStaticBitrate,
-            directPlayProfiles: profile.directPlayProfiles,
-            transcodingProfiles: profile.transcodingProfiles,
-            codecProfiles: profile.codecProfiles.map { boundedToHD($0) },
-            subtitleProfiles: profile.subtitleProfiles
-        )
+        var bounded = profile
+        bounded.maxStreamingBitrate = min(profile.maxStreamingBitrate, realtimeTranscodeBitrateCeiling)
+        bounded.codecProfiles = profile.codecProfiles.map { boundedToHD($0) }
+        return bounded
     }
 
     /// Subtracts from `everything` rather than rebuilding it.
@@ -491,17 +363,9 @@ nonisolated enum DeviceProfile {
             }
             transcodingProfiles = transcodingProfiles.compactMap { profile in
                 guard let videoCodec = withoutHEVC(profile.videoCodec) else { return nil }
-                return TranscodingProfile(
-                    container: profile.container,
-                    type: profile.type,
-                    videoCodec: videoCodec,
-                    audioCodec: profile.audioCodec,
-                    context: profile.context,
-                    protocol: profile.protocol,
-                    maxAudioChannels: profile.maxAudioChannels,
-                    minSegments: profile.minSegments,
-                    breakOnNonKeyFrames: profile.breakOnNonKeyFrames
-                )
+                var reduced = profile
+                reduced.videoCodec = videoCodec
+                return reduced
             }
             codecProfiles = codecProfiles
                 .filter { $0.codec != "hevc" }
@@ -511,14 +375,11 @@ nonisolated enum DeviceProfile {
             codecProfiles = codecProfiles.map { boundedTo4K($0, codec: "av1") }
         }
 
-        return Profile(
-            maxStreamingBitrate: envelope.maxStreamingBitrate,
-            maxStaticBitrate: envelope.maxStaticBitrate,
-            directPlayProfiles: directPlayProfiles,
-            transcodingProfiles: transcodingProfiles,
-            codecProfiles: codecProfiles,
-            subtitleProfiles: envelope.subtitleProfiles
-        )
+        var result = envelope
+        result.directPlayProfiles = directPlayProfiles
+        result.transcodingProfiles = transcodingProfiles
+        result.codecProfiles = codecProfiles
+        return result
     }
 
     /// Caps H.264 at 1080p on a device without HEVC. Otherwise a 4K HEVC
@@ -626,42 +487,7 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            CodecProfile(
-                type: "Video",
-                codec: "vc1",
-                conditions: [
-                    ProfileCondition(
-                        condition: "EqualsAny",
-                        property: "VideoRangeType",
-                        value: "SDR",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "VideoBitDepth",
-                        value: "8",
-                        isRequired: false
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Width",
-                        value: "1920",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "LessThanEqual",
-                        property: "Height",
-                        value: "1080",
-                        isRequired: true
-                    ),
-                    ProfileCondition(
-                        condition: "NotEquals",
-                        property: "IsInterlaced",
-                        value: "true",
-                        isRequired: true
-                    ),
-                ]
-            ),
+            softwareDecoded("vc1"),
         ],
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
