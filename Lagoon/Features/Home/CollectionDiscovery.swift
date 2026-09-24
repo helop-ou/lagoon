@@ -120,6 +120,8 @@ struct CollectionRail: View {
                     .padding(.top, Metrics.railTopPadding)
                     .padding(.bottom, Metrics.railBottomPadding)
                 }
+                // Or the focus halo is cut off square at the rail edge.
+                .scrollClipDisabled()
             }
             .accessibilityIdentifier("home.collections")
         }
@@ -129,6 +131,7 @@ struct CollectionRail: View {
 /// The name sits under the artwork, not over it: collection art often has
 /// the name painted in already, and a caption can wrap instead of truncating.
 private struct CollectionCard: View {
+    @Environment(\.displayScale) private var displayScale
     let collection: CollectionShelfItem
     @Environment(SessionStore.self) private var session
 
@@ -174,9 +177,9 @@ private struct CollectionCard: View {
                 url: session.client.imageURL(
                     for: artwork,
                     kind: .thumb,
-                    maxWidth: Int(Metrics.landscapeWidth * 1.5)
+                    maxWidth: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
                 ),
-                maxPixelSize: Int(Metrics.landscapeWidth * 1.5)
+                maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
             ) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
