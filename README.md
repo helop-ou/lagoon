@@ -3,6 +3,10 @@
 A native Jellyfin client for Apple TV (and iPhone/iPad), with the goal of being as simple to
 use as possible and following Apple's SwiftUI guidelines.
 
+Lagoon is in public beta: [join it on
+TestFlight](https://testflight.apple.com/join/PwjnXuAt), or read more at
+[lagoon.helop.dev](https://lagoon.helop.dev).
+
 ## Features
 
 - Connect by address (schemeless input works — Lagoon probes https/http and
