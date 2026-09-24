@@ -23,7 +23,7 @@ final class SignOutUITests: XCTestCase {
         // Only Cancel proves the dialog: tvOS hides its title and the row
         // behind is also "Sign Out".
         let appeared = app.buttons["Cancel"].waitForExistence(timeout: 5)
-        attach(app, name: appeared ? "signout-confirmation" : "signout-no-confirmation")
+        attachScreenshot(of: app, named: appeared ? "signout-confirmation" : "signout-no-confirmation")
         XCTAssertTrue(appeared, "Sign Out armed no confirmation, so the row does nothing")
 
         XCUIRemote.shared.press(.menu)
@@ -52,11 +52,5 @@ final class SignOutUITests: XCTestCase {
         XCUIRemote.shared.press(.select)
     }
 
-    private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 }
 #endif

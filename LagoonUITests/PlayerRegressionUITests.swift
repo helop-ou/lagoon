@@ -811,10 +811,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         openSubtitleTab(in: app)
         selectTrackRow(externalRow, in: app)
         assertSubtitleLoadFinishes(ordinal: externalOrdinal, in: app, stage: "second external load")
-        let reloaded = XCTAttachment(screenshot: app.screenshot())
-        reloaded.name = "External subtitle reselected"
-        reloaded.lifetime = .keepAlways
-        add(reloaded)
+        attachScreenshot(of: app, named: "External subtitle reselected")
         remote.press(.menu)
         waitForState(in: app, timeout: 4) { $0.int("panel") == 0 }
         waitForSubtitleCue(in: app, stage: "second external load")
@@ -1237,10 +1234,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         app.launch()
 
         func capture(_ name: String) {
-            let attachment = XCTAttachment(screenshot: app.screenshot())
-            attachment.name = name
-            attachment.lifetime = .keepAlways
-            add(attachment)
+            attachScreenshot(of: app, named: name)
         }
 
         let homeTab = app.tabBars.buttons["Home"]
@@ -1440,10 +1434,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let preferredLanguage = app.descendants(matching: .any)["Preferred Language"]
         XCTAssertTrue(preferredLanguage.waitForExistence(timeout: 5))
         XCTAssertGreaterThan(preferredLanguage.frame.minX, defaultAudio.frame.midX)
-        let menuScreenshot = XCTAttachment(screenshot: app.screenshot())
-        menuScreenshot.name = "Settings split view with native audio menu"
-        menuScreenshot.lifetime = .keepAlways
-        add(menuScreenshot)
+        attachScreenshot(of: app, named: "Settings split view with native audio menu")
         remote.press(.menu)
         XCTAssertTrue(defaultAudio.waitForExistence(timeout: 3))
 
@@ -1471,10 +1462,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         remote.press(.right)
         remote.press(.select)
         XCTAssertNotEqual(systemStyle.valueDescription, previousSystemStyle)
-        let toggleScreenshot = XCTAttachment(screenshot: app.screenshot())
-        toggleScreenshot.name = "Subtitle Appearance native toggle without duplicate state"
-        toggleScreenshot.lifetime = .keepAlways
-        add(toggleScreenshot)
+        attachScreenshot(of: app, named: "Subtitle Appearance native toggle without duplicate state")
         // Left must still reach Back from a control far below it.
         moveFocus(to: back, maxPresses: 2) { remote.press(.left) }
         remote.press(.select)
@@ -1510,10 +1498,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let previousNativeVisibility = nativeContinueWatching.valueDescription
         remote.press(.select)
         XCTAssertNotEqual(nativeContinueWatching.valueDescription, previousNativeVisibility)
-        let homeRowsScreenshot = XCTAttachment(screenshot: app.screenshot())
-        homeRowsScreenshot.name = "Lagoon native and Home Screen Sections plugin rows"
-        homeRowsScreenshot.lifetime = .keepAlways
-        add(homeRowsScreenshot)
+        attachScreenshot(of: app, named: "Lagoon native and Home Screen Sections plugin rows")
         // Row visibility persists per account, so restore it or later tests
         // (ServerSync steps a fixed number of rows) see a different Home.
         remote.press(.select)
@@ -1564,20 +1549,14 @@ final class PlayerRegressionUITests: PlayerUITestCase {
                 .waitForExistence(timeout: 5)
         )
         remote.press(.right)
-        let developerScreenshot = XCTAttachment(screenshot: app.screenshot())
-        developerScreenshot.name = "Debug-only player component gallery"
-        developerScreenshot.lifetime = .keepAlways
-        add(developerScreenshot)
+        attachScreenshot(of: app, named: "Debug-only player component gallery")
 
         remote.press(.select)
         selectNativeMenuOption("Next Episode — Card", in: app, menuIndex: 4)
         let nextEpisodeSelection = NSPredicate(format: "value == %@", "Next Episode — Card")
         expectation(for: nextEpisodeSelection, evaluatedWith: componentPicker)
         waitForExpectations(timeout: 5)
-        let nextEpisodeScreenshot = XCTAttachment(screenshot: app.screenshot())
-        nextEpisodeScreenshot.name = "Debug-only next episode component preview"
-        nextEpisodeScreenshot.lifetime = .keepAlways
-        add(nextEpisodeScreenshot)
+        attachScreenshot(of: app, named: "Debug-only next episode component preview")
 
         // The panel preview uses the real controls, so focus must reach its
         // audio rows.
@@ -1601,10 +1580,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let firstAudioTrack = app.buttons["player.track.audio-1"]
         XCTAssertTrue(firstAudioTrack.waitForExistence(timeout: 3))
         XCTAssertTrue(firstAudioTrack.hasFocus)
-        let panelScreenshot = XCTAttachment(screenshot: app.screenshot())
-        panelScreenshot.name = "Debug-only interactive production player panel"
-        panelScreenshot.lifetime = .keepAlways
-        add(panelScreenshot)
+        attachScreenshot(of: app, named: "Debug-only interactive production player panel")
 
         remote.press(.menu)
         XCTAssertTrue(componentPicker.waitForExistence(timeout: 5))
@@ -1622,10 +1598,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         remote.press(.right)
         remote.press(.select)
         XCTAssertNotEqual(hud.valueDescription, previousHUDValue)
-        let diagnosticsScreenshot = XCTAttachment(screenshot: app.screenshot())
-        diagnosticsScreenshot.name = "Diagnostics native toggle without duplicate state"
-        diagnosticsScreenshot.lifetime = .keepAlways
-        add(diagnosticsScreenshot)
+        attachScreenshot(of: app, named: "Diagnostics native toggle without duplicate state")
         let diagnosticsBack = app.descendants(matching: .any)["settings.detail.back"]
         moveFocus(to: diagnosticsBack, maxPresses: 2) { remote.press(.left) }
         remote.press(.select)
@@ -1639,10 +1612,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         // Right from Back must cross the non-focusable Connection rows.
         remote.press(.right)
         XCTAssertTrue(addAccount.hasFocus, "Account actions column was unreachable")
-        let accountScreenshot = XCTAttachment(screenshot: app.screenshot())
-        accountScreenshot.name = "Account actions reachable past connection information"
-        accountScreenshot.lifetime = .keepAlways
-        add(accountScreenshot)
+        attachScreenshot(of: app, named: "Account actions reachable past connection information")
         let accountBack = app.descendants(matching: .any)["settings.detail.back"]
         moveFocus(to: accountBack, maxPresses: 2) { remote.press(.left) }
         remote.press(.select)
@@ -1708,10 +1678,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
 
         let resting = waitForState(in: app, timeout: 8) { $0.string("tab") == "info" }
         XCTAssertEqual(resting.int("panel"), 1, "The sweep left the panel closed")
-        let sweepScreenshot = XCTAttachment(screenshot: app.screenshot())
-        sweepScreenshot.name = "Live player panel after the sweep"
-        sweepScreenshot.lifetime = .keepAlways
-        add(sweepScreenshot)
+        attachScreenshot(of: app, named: "Live player panel after the sweep")
 
         // A stalled player would make the numbers above meaningless.
         let afterSweep = state(in: app).double("time")
@@ -1755,10 +1722,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertLessThan(firstAudioTrack.frame.width, app.frame.width * 0.45)
         XCTAssertLessThan(firstAudioTrack.frame.maxX, audioDelayDecrease.frame.minX)
         XCTAssertLessThan(audioDelayDecrease.frame.maxX, audioDelayIncrease.frame.minX)
-        let audioPanelScreenshot = XCTAttachment(screenshot: app.screenshot())
-        audioPanelScreenshot.name = "Compact player Audio panel"
-        audioPanelScreenshot.lifetime = .keepAlways
-        add(audioPanelScreenshot)
+        attachScreenshot(of: app, named: "Compact player Audio panel")
         remote.press(.left)
         remote.press(.left)
         XCTAssertTrue(infoTab.hasFocus)
@@ -2547,10 +2511,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         }
 
         let selectedGenre = selectedGenreButton.label
-        let shelfScreenshot = XCTAttachment(screenshot: app.screenshot())
-        shelfScreenshot.name = "Native Genres shelf — \(selectedGenre) focused"
-        shelfScreenshot.lifetime = .keepAlways
-        add(shelfScreenshot)
+        attachScreenshot(of: app, named: "Native Genres shelf — \(selectedGenre) focused")
         remote.press(.select)
 
         let library = app.descendants(matching: .any)["genre.library"]
@@ -2749,10 +2710,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         moveRight(toTab: "subtitles", in: app)
         remote.press(.down) // Search, deliberately ahead of long track lists.
         waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-search" }
-        let subtitleDiscoveryScreenshot = XCTAttachment(screenshot: app.screenshot())
-        subtitleDiscoveryScreenshot.name = "Subtitle discovery ahead of track list"
-        subtitleDiscoveryScreenshot.lifetime = .keepAlways
-        add(subtitleDiscoveryScreenshot)
+        attachScreenshot(of: app, named: "Subtitle discovery ahead of track list")
         remote.press(.down) // language
         remote.press(.down) // Off
         waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-off" }

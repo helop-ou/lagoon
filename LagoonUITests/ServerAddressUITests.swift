@@ -34,11 +34,11 @@ final class ServerAddressUITests: XCTestCase {
         #endif
         XCTAssertTrue(app.textFields["signin.username"].waitForExistence(timeout: 15))
         assertConnection(in: app, address: jellyfin, http: true)
-        attach(app, name: "jellyfin-proxy-http-before-signin")
+        attachScreenshot(of: app, named: "jellyfin-proxy-http-before-signin")
         #if os(tvOS)
         let password = app.secureTextFields["signin.password"]
         focus(password)
-        attach(app, name: "jellyfin-http-password-focus")
+        attachScreenshot(of: app, named: "jellyfin-http-password-focus")
         let change = app.buttons["signin.changeServer"]
         focus(change)
         XCUIRemote.shared.press(.select)
@@ -65,10 +65,10 @@ final class ServerAddressUITests: XCTestCase {
         app.buttons["settings.seerr.connect"].tap()
         #endif
         assertConnection(in: app, address: seerr, http: true)
-        attach(app, name: "seerr-proxy-http-before-signin")
+        attachScreenshot(of: app, named: "seerr-proxy-http-before-signin")
         #if os(tvOS)
         focus(app.buttons["settings.seerr.quickConnect"])
-        attach(app, name: "seerr-http-authentication-focus")
+        attachScreenshot(of: app, named: "seerr-http-authentication-focus")
         #endif
         app.terminate()
 
@@ -80,7 +80,7 @@ final class ServerAddressUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.textFields["signin.username"].waitForExistence(timeout: 10))
         assertConnection(in: app, address: https, http: false)
-        attach(app, name: "jellyfin-https-before-signin")
+        attachScreenshot(of: app, named: "jellyfin-https-before-signin")
         app.terminate()
     }
 
@@ -136,10 +136,4 @@ final class ServerAddressUITests: XCTestCase {
     }
     #endif
 
-    private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 }

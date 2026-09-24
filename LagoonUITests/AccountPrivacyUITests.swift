@@ -27,7 +27,7 @@ final class AccountPrivacyUITests: XCTestCase {
         selectTab("Search", in: app)
         XCTAssertTrue(app.buttons["A private search"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["B private search"].exists)
-        attach(app, name: "account-a-searches")
+        attachScreenshot(of: app, named: "account-a-searches")
 
         openAccountSettings(in: app)
         select(app.buttons["settings.account.switch"])
@@ -35,12 +35,12 @@ final class AccountPrivacyUITests: XCTestCase {
         selectTab("Search", in: app)
         XCTAssertTrue(app.buttons["B private search"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["A private search"].exists)
-        attach(app, name: "account-b-searches")
+        attachScreenshot(of: app, named: "account-b-searches")
 
         openAccountSettings(in: app)
         select(app.buttons["settings.account.add"])
         XCTAssertTrue(app.textFields["signin.username"].waitForExistence(timeout: 5))
-        attach(app, name: "account-add-draft")
+        attachScreenshot(of: app, named: "account-add-draft")
         #if os(tvOS)
         XCUIRemote.shared.press(.menu)
         #else
@@ -50,7 +50,7 @@ final class AccountPrivacyUITests: XCTestCase {
         selectTab("Search", in: app)
         XCTAssertTrue(app.buttons["B private search"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["A private search"].exists)
-        attach(app, name: "account-b-after-cancel")
+        attachScreenshot(of: app, named: "account-b-after-cancel")
         app.terminate()
     }
 
@@ -113,10 +113,4 @@ final class AccountPrivacyUITests: XCTestCase {
         #endif
     }
 
-    private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 }

@@ -26,7 +26,7 @@ final class LocalNetworkUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 25))
         XCTAssertEqual(field.value as? String, address)
         XCTAssertTrue(app.buttons["server.connect"].isEnabled)
-        attach(app, name: "local-network-denied")
+        attachScreenshot(of: app, named: "local-network-denied")
         settings.tap()
         let settingsApp = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         XCTAssertTrue(settingsApp.wait(for: .runningForeground, timeout: 10))
@@ -38,7 +38,7 @@ final class LocalNetworkUITests: XCTestCase {
         app.buttons["server.connect"].tap()
         XCTAssertTrue(app.textFields["signin.username"].waitForExistence(timeout: 10))
         XCTAssertFalse(settings.exists)
-        attach(app, name: "local-network-recovered")
+        attachScreenshot(of: app, named: "local-network-recovered")
 
         let username = app.textFields["signin.username"]
         username.tap()
@@ -55,13 +55,13 @@ final class LocalNetworkUITests: XCTestCase {
         XCTAssertTrue(retry.waitForExistence(timeout: 25))
         XCTAssertTrue(settings.exists)
         XCTAssertEqual(seerrAddress.value as? String, address)
-        attach(app, name: "seerr-local-network-denied")
+        attachScreenshot(of: app, named: "seerr-local-network-denied")
         try await control(server, path: "connectivity?drop=0")
         retry.tap()
         let version = app.descendants(matching: .any)["settings.seerr.version"].firstMatch
         XCTAssertTrue(version.waitForExistence(timeout: 10))
         XCTAssertFalse(settings.exists)
-        attach(app, name: "seerr-local-network-recovered")
+        attachScreenshot(of: app, named: "seerr-local-network-recovered")
 
         // Reopen with the remembered account and Seerr server; also covers
         // restoration finishing after the initial prefill.
@@ -71,12 +71,12 @@ final class LocalNetworkUITests: XCTestCase {
         app.launch()
         openSeerr(in: app)
         XCTAssertTrue(retry.waitForExistence(timeout: 25))
-        attach(app, name: "seerr-saved-server-denied")
+        attachScreenshot(of: app, named: "seerr-saved-server-denied")
         try await control(server, path: "connectivity?drop=0")
         retry.tap()
         XCTAssertTrue(version.waitForExistence(timeout: 10))
         XCTAssertFalse(settings.exists)
-        attach(app, name: "seerr-saved-server-recovered")
+        attachScreenshot(of: app, named: "seerr-saved-server-recovered")
         app.terminate()
         #else
         throw XCTSkip("tvOS has no local-network privacy permission")
@@ -102,10 +102,4 @@ final class LocalNetworkUITests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
     }
 
-    private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 }

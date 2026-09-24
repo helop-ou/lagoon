@@ -26,20 +26,20 @@ final class SubtitleDownloadUITests: XCTestCase {
         closePanel(in: app)
         let caption = app.staticTexts["player.subtitle.text"]
         expect(caption) { $0.exists && $0.label == "Working captions" }
-        attach(app, name: "subtitles-working")
+        attachScreenshot(of: app, named: "subtitles-working")
 
         openSubtitles(in: app)
         select(app.buttons["player.track.subtitle-2"], in: app)
         let error = app.staticTexts["player.subtitleLoad.error"]
         expect(error) { $0.exists && $0.label.contains("500") }
-        attach(app, name: "subtitle-server-error-and-retry")
+        attachScreenshot(of: app, named: "subtitle-server-error-and-retry")
         closePanel(in: app)
         XCTAssertEqual(caption.label, "Working captions")
         XCTAssertTrue(app.descendants(matching: .any)["player.subtitleLoad.notice"].firstMatch.exists)
         #if os(tvOS)
         XCTAssertFalse(app.staticTexts["Swipe down for Info"].exists)
         #endif
-        attach(app, name: "subtitle-error-retains-working-captions")
+        attachScreenshot(of: app, named: "subtitle-error-retains-working-captions")
 
         try await control(server, path: "subtitle-recover")
         openSubtitles(in: app)
@@ -47,12 +47,12 @@ final class SubtitleDownloadUITests: XCTestCase {
         expect(error) { !$0.exists }
         closePanel(in: app)
         expect(caption) { $0.exists && $0.label == "Recovered captions" }
-        attach(app, name: "subtitle-retry-recovered")
+        attachScreenshot(of: app, named: "subtitle-retry-recovered")
 
         openSubtitles(in: app)
         select(app.buttons["player.track.subtitle-3"], in: app)
         expect(error) { $0.exists && $0.label.contains("8 MB") }
-        attach(app, name: "subtitle-compressed-oversize-rejected")
+        attachScreenshot(of: app, named: "subtitle-compressed-oversize-rejected")
         closePanel(in: app)
         XCTAssertEqual(caption.label, "Recovered captions")
         XCTAssertGreaterThan(time(probe), initialTime + 2, "Subtitle failures must not stop video playback")
@@ -62,7 +62,7 @@ final class SubtitleDownloadUITests: XCTestCase {
         closePanel(in: app)
         expect(caption) { !$0.exists }
         XCTAssertFalse(app.descendants(matching: .any)["player.subtitleLoad.notice"].firstMatch.exists)
-        attach(app, name: "subtitles-off-clears-error")
+        attachScreenshot(of: app, named: "subtitles-off-clears-error")
         app.terminate()
     }
 
@@ -163,10 +163,4 @@ final class SubtitleDownloadUITests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
     }
 
-    private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 }

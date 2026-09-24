@@ -34,14 +34,14 @@ final class SessionExpiryUITests: XCTestCase {
         let probe = app.descendants(matching: .any)["player.regression.state"]
         XCTAssertTrue(probe.waitForExistence(timeout: 30))
         waitForPlayback(probe, method: playMethod, minimumTime: 6)
-        attach(app, name: "\(mode)-playing")
+        attachScreenshot(of: app, named: "\(mode)-playing")
 
         try await control(server, path: "revoke")
         let notice = app.staticTexts["signin.sessionExpired"]
         XCTAssertTrue(notice.waitForExistence(timeout: 20), "Revocation should dismiss playback and show account-specific sign-in")
         XCTAssertFalse(probe.exists)
         XCTAssertEqual(app.textFields["signin.username"].value as? String, "Fixture viewer")
-        attach(app, name: "\(mode)-expired")
+        attachScreenshot(of: app, named: "\(mode)-expired")
 
         let submit = app.buttons["signin.submit"]
         XCTAssertTrue(submit.exists)
@@ -56,7 +56,7 @@ final class SessionExpiryUITests: XCTestCase {
         XCTAssertTrue(probe.waitForExistence(timeout: 30))
         waitForPlayback(probe, method: playMethod, minimumTime: 3)
         XCTAssertFalse(notice.exists)
-        attach(app, name: "\(mode)-reauthenticated")
+        attachScreenshot(of: app, named: "\(mode)-reauthenticated")
 
         let (data, _) = try await URLSession.shared.data(from: server.appendingPathComponent("__fixture/state"))
         let state = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -92,10 +92,4 @@ final class SessionExpiryUITests: XCTestCase {
         waitForExpectations(timeout: 35)
     }
 
-    private func attach(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-    }
 }
