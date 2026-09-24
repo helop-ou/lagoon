@@ -65,18 +65,6 @@ private struct ItemUserDataMenu: ViewModifier {
                 played = nil
                 favorite = nil
             }
-            #if os(iOS)
-            .task {
-                // Warms the permission cache so the first long-press knows
-                // whether to offer Download.
-                if session.client.cachedContentDownloadingAllowed == nil {
-                    _ = await session.client.canDownloadContent()
-                }
-                if session.client.cachedVideoTranscodingAllowed == nil {
-                    _ = await session.client.canTranscodeForDownload()
-                }
-            }
-            #endif
     }
 
     #if os(iOS)
