@@ -23,10 +23,6 @@ nonisolated struct DiagnosticHistory: Equatable, Sendable {
         }
     }
 
-    mutating func removeAll() {
-        events.removeAll(keepingCapacity: true)
-    }
-
     /// Oldest first. Events stamped in the future (clock went backwards)
     /// are kept.
     func snapshot(at now: TimeInterval) -> [DiagnosticEvent] {
