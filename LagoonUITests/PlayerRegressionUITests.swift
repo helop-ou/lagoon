@@ -562,6 +562,158 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertFalse(app.descendants(matching: .any)["player.skip"].exists)
     }
 
+    /// Back during the skip countdown means "no": the pill goes, the player
+    /// stays open, and the countdown never seeks.
+    func testMenuDuringSkipCountdownCancelsWithoutClosing() throws {
+        let app = launchPlayer(
+            title: "hardware-regression",
+            series: "9-1-1",
+            extraArguments: [
+                "-debug.playerInputTrace", "YES",
+                "-debug.regressionFindSkippableEpisode", "YES",
+                "-debug.regressionStartAtFirstSkippable", "YES",
+                "-playback.skipMode", "autoDelay",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) {
+            $0.int("ready") == 1 && $0.double("skippableEnd") > $0.double("skippableStart")
+        }
+        let end = state(in: app).double("skippableEnd")
+        let pill = app.descendants(matching: .any)["player.skip"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 4))
+        remote.press(.menu)
+
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 2), "Back left the skip pill up")
+        // Past the 5 s countdown, the player is still open and never skipped.
+        Thread.sleep(forTimeInterval: 6)
+        let after = state(in: app)
+        XCTAssertFalse(after.raw.isEmpty, "Back during the skip countdown closed the player")
+        XCTAssertLessThan(after.double("time"), end - 1, "The cancelled countdown still skipped: \(after.raw)")
+        XCTAssertEqual(after.int("paused"), 0)
+    }
+
+    /// Select on the pill skips at once and keeps playing; it must not fall
+    /// through to play/pause.
+    func testSelectOnSkipPillSkipsWithoutPausing() throws {
+        let app = launchPlayer(
+            title: "hardware-regression",
+            series: "9-1-1",
+            extraArguments: [
+                "-debug.playerInputTrace", "YES",
+                "-debug.regressionFindSkippableEpisode", "YES",
+                "-debug.regressionStartAtFirstSkippable", "YES",
+                // No countdown, so only Select can skip.
+                "-playback.skipMode", "button",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) {
+            $0.int("ready") == 1 && $0.double("skippableEnd") > $0.double("skippableStart")
+        }
+        let end = state(in: app).double("skippableEnd")
+        let pill = app.descendants(matching: .any)["player.skip"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 4))
+        remote.press(.select)
+
+        let skipped = waitForState(in: app, timeout: 8) { $0.double("time") >= end - 0.75 }
+        XCTAssertEqual(skipped.int("paused"), 0, "Select on the skip pill paused: \(skipped.raw)")
+        XCTAssertFalse(pill.exists)
+    }
+
+    /// "Ask Every Time" has no countdown, but Back still answers the pill
+    /// before it closes the player.
+    func testMenuDismissesTheAskSkipPillWithoutClosing() throws {
+        let app = launchPlayer(
+            title: "hardware-regression",
+            series: "9-1-1",
+            extraArguments: [
+                "-debug.regressionFindSkippableEpisode", "YES",
+                "-debug.regressionStartAtFirstSkippable", "YES",
+                "-debug.playerInputTrace", "YES",
+                "-playback.skipMode", "button",
+                "-playback.autoplayMode", "off",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        waitForState(in: app, timeout: 45) {
+            $0.int("ready") == 1 && $0.double("skippableEnd") > $0.double("skippableStart")
+        }
+        let end = state(in: app).double("skippableEnd")
+        let pill = app.descendants(matching: .any)["player.skip"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 4))
+        remote.press(.menu)
+
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 2), "Back left the Ask skip pill up")
+        let after = state(in: app)
+        XCTAssertFalse(after.raw.isEmpty, "Back on the Ask skip pill closed the player")
+        XCTAssertLessThan(after.double("time"), end - 1, "Back on the Ask skip pill skipped: \(after.raw)")
+        XCTAssertEqual(after.int("paused"), 0)
+
+        // Answered: a second Back leaves.
+        remote.press(.menu)
+        XCTAssertTrue(
+            app.descendants(matching: .any)["player.regression.state"].waitForNonExistence(timeout: 5),
+            "A second Back did not close the player"
+        )
+    }
+
+    /// Same rule for the Up Next card in "Ask Every Time".
+    func testMenuDismissesTheAskUpNextCardWithoutClosing() throws {
+        let app = launchPlayer(
+            title: "Pilot",
+            series: "9-1-1",
+            extraArguments: [
+                "-debug.regressionStartNearEnd", "YES",
+                "-debug.playerInputTrace", "YES",
+                "-playback.skipMode", "button",
+                "-playback.autoplayMode", "card",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let first = waitForState(in: app, timeout: 60) { $0.int("ready") == 1 && $0.int("nextUp") == 1 }
+        remote.press(.menu)
+
+        let after = waitForState(in: app, timeout: 3) { $0.int("nextUp") == 0 }
+        XCTAssertEqual(after.string("item"), first.string("item"), "Back on the Ask card changed episode")
+        XCTAssertEqual(after.int("paused"), 0)
+    }
+
+    /// The binge path: accept Up Next, then answer the successor's intro pill.
+    /// 9-1-1's episodes open on an intro at 0 s.
+    func testSkipPillAnswersAfterEpisodeHandoff() throws {
+        let app = launchPlayer(
+            title: "Pilot",
+            series: "9-1-1",
+            extraArguments: [
+                "-debug.playerInputTrace", "YES",
+                "-debug.regressionStartNearEnd", "YES",
+                "-playback.skipMode", "autoDelay",
+                "-playback.autoplayMode", "card",
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let first = waitForState(in: app, timeout: 60) { $0.int("ready") == 1 && $0.int("nextUp") == 1 }
+        remote.press(.select)
+
+        let successor = waitForState(in: app, timeout: 60) {
+            $0.string("item") != first.string("item") && $0.int("ready") == 1
+                && $0.double("skippableEnd") > $0.double("skippableStart")
+        }
+        let end = successor.double("skippableEnd")
+        let pill = app.descendants(matching: .any)["player.skip"]
+        XCTAssertTrue(pill.waitForExistence(timeout: 6), "No skip pill on the successor: \(successor.raw)")
+        remote.press(.menu)
+        XCTAssertTrue(pill.waitForNonExistence(timeout: 2), "Back left the successor's skip pill up")
+        Thread.sleep(forTimeInterval: 6)
+        let after = state(in: app)
+        XCTAssertFalse(after.raw.isEmpty, "Back on the successor's skip pill closed the player")
+        XCTAssertLessThan(after.double("time"), end - 1, "The cancelled countdown still skipped: \(after.raw)")
+        XCTAssertEqual(after.int("paused"), 0, "Back on the successor's skip pill paused: \(after.raw)")
+    }
+
     func testRealSubtitleCueReachesThePlayerOverlay() throws {
         let app = launchPlayer(title: "Pilot", series: "Young Sheldon")
         try requireRegressionFixture(in: app)
