@@ -226,8 +226,6 @@ nonisolated struct SyncPlayGroupUpdate: Decodable, Hashable, Sendable {
     let type: SyncPlayGroupUpdateType
     let payload: Payload
 
-    var normalizedGroupId: String { SyncPlayGroupIdentifier.normalized(groupId) }
-
     func concerns(groupId other: String) -> Bool {
         SyncPlayGroupIdentifier.matches(groupId, other)
     }
