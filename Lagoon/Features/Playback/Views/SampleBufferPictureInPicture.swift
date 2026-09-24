@@ -12,7 +12,6 @@ final class SampleBufferPictureInPicture: NSObject {
     private(set) var isPossible = false
     private(set) var isActive = false
     private(set) var isTransitioning = false
-    private(set) var errorMessage: String?
 
     @ObservationIgnored var onStarted: (() -> Void)?
     @ObservationIgnored var onStopped: (() -> Void)?
@@ -60,7 +59,6 @@ final class SampleBufferPictureInPicture: NSObject {
         if controller.isPictureInPictureActive || isTransitioning {
             controller.stopPictureInPicture()
         } else if controller.isPictureInPicturePossible {
-            errorMessage = nil
             isTransitioning = true
             controller.startPictureInPicture()
         }
@@ -149,7 +147,6 @@ extension SampleBufferPictureInPicture: AVPictureInPictureControllerDelegate {
     ) {
         isTransitioning = false
         isActive = false
-        errorMessage = error.localizedDescription
     }
 
     func pictureInPictureControllerWillStopPictureInPicture(
