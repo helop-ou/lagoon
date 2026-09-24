@@ -62,12 +62,11 @@ enum QRCode {
 /// centre mark only.
 struct QRCodeView: View {
     let text: String
-    var side: CGFloat = Metrics.qrCodeSize
 
     private var code: CGImage? { QRCode.image(for: text) }
 
     private var quietZone: CGFloat {
-        QRCode.quietZone(side: side, modulesAcross: code?.width ?? 0)
+        QRCode.quietZone(side: Metrics.qrCodeSize, modulesAcross: code?.width ?? 0)
     }
 
     var body: some View {
@@ -78,11 +77,11 @@ struct QRCodeView: View {
                     // a camera looks for.
                     .interpolation(.none)
                     .resizable()
-                    .frame(width: side, height: side)
+                    .frame(width: Metrics.qrCodeSize, height: Metrics.qrCodeSize)
                     .overlay(mark)
             } else {
                 // Every caller also shows the address as text.
-                Color.lagoonMist.frame(width: side, height: side)
+                Color.lagoonMist.frame(width: Metrics.qrCodeSize, height: Metrics.qrCodeSize)
             }
         }
         .padding(quietZone)
@@ -94,7 +93,7 @@ struct QRCodeView: View {
     /// The Lagoon symbol on a Mist plate. Not the jellyfish: brand rules
     /// restrict it to loading, empty and atmospheric moments.
     private var mark: some View {
-        let plate = side * QRCode.markShare
+        let plate = Metrics.qrCodeSize * QRCode.markShare
         return Image("LagoonSymbol")
             .resizable()
             .scaledToFit()
