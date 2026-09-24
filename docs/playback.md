@@ -353,7 +353,8 @@ integration](reference/playback/system-integration.md).
   play/pause.
 - **A light Siri Remote touch is a separate input that reveals controls. It
   never becomes Select.**
-- Menu cancels scrubbing, then closes the panel, then exits.
+- Menu cancels scrubbing, then dismisses a skip or Up Next prompt in any
+  mode, then closes the panel, then exits.
 - Keep the mounted panel and remote command ordering intact.
 
 See [remote
