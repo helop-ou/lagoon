@@ -157,11 +157,11 @@ final class PlaybackAutomation {
         evaluate()
     }
 
-    /// Back during the skip countdown means "no". Returns whether anything was
-    /// pending.
+    /// Back on the pill means "no", with or without a countdown. Returns
+    /// whether a pill was up.
     @discardableResult
     func dismissSkip() -> Bool {
-        guard let segment = activeSegment, skipMode == .autoDelay else { return false }
+        guard let segment = activeSegment, skipMode != .instant else { return false }
         handledSegmentIDs.insert(segment.id)
         cancelSkipCountdown()
         evaluate()
@@ -177,11 +177,11 @@ final class PlaybackAutomation {
         onPlayNext?()
     }
 
-    /// Back on the card during its countdown. Returns whether anything was
-    /// pending.
+    /// Back on the card means "no", with or without a countdown. Returns
+    /// whether the card was up.
     @discardableResult
     func dismissNextUp() -> Bool {
-        guard showsNextUp, autoplayMode == .autoDelay else { return false }
+        guard showsNextUp else { return false }
         nextUpDismissed = true
         cancelNextUpCountdown()
         evaluate()
