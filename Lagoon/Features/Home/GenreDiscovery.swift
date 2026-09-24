@@ -107,6 +107,8 @@ struct GenreRail: View {
                     .padding(.top, Metrics.railTopPadding)
                     .padding(.bottom, Metrics.railBottomPadding)
                 }
+                // Or the focus halo is cut off square at the rail edge.
+                .scrollClipDisabled()
             }
             .accessibilityIdentifier("home.genres.\(identifier)")
         }
@@ -114,6 +116,7 @@ struct GenreRail: View {
 }
 
 private struct GenreCard: View {
+    @Environment(\.displayScale) private var displayScale
     let genre: GenreShelfItem
     let includeTypes: [MediaItemType]
     let identifier: String
@@ -168,9 +171,9 @@ private struct GenreCard: View {
                 url: session.client.imageURL(
                     for: artwork,
                     kind: .thumb,
-                    maxWidth: Int(Metrics.landscapeWidth * 1.5)
+                    maxWidth: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
                 ),
-                maxPixelSize: Int(Metrics.landscapeWidth * 1.5)
+                maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
             ) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
