@@ -183,12 +183,32 @@ struct PlaybackAutomationTests {
         automation.tick(position: 12, duration: 1_320)
         #expect(automation.activeSegment?.id == "intro")
         #expect(automation.skipTiming == nil)
-        #expect(!automation.dismissSkip())
         try await Task.sleep(for: Self.settled)
         #expect(landed == nil)
 
         automation.skip(Self.intro)
         #expect(landed == 70)
+    }
+
+    @Test func backDismissesTheButtonToo() {
+        let automation = automation(skip: .button)
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+        automation.tick(position: 12, duration: 1_320)
+        #expect(automation.dismissSkip())
+        #expect(automation.activeSegment == nil)
+        #expect(landed == nil)
+        // Answered for this segment, so it does not come back.
+        automation.tick(position: 20, duration: 1_320)
+        #expect(automation.activeSegment == nil)
+    }
+
+    @Test func instantModeHasNoPillForBackToDismiss() {
+        let automation = automation(skip: .instant)
+        automation.isBuffering = true
+        // Held by the stall: the segment is active but nothing is drawn.
+        automation.tick(position: 12, duration: 1_320)
+        #expect(!automation.dismissSkip())
     }
 
     @Test func nothingArmsBeforeTheFirstTick() async throws {
@@ -278,12 +298,20 @@ struct PlaybackAutomationTests {
         automation.tick(position: 1_201, duration: 1_320)
         #expect(automation.showsNextUp)
         #expect(!automation.isCountingDown)
-        #expect(!automation.dismissNextUp())
         #expect(!automation.autoplaysOnFinish)
         try await Task.sleep(for: Self.settled)
         #expect(!played)
         automation.playNext()
         #expect(played)
+    }
+
+    @Test func backDismissesTheCardInCardModeToo() {
+        let automation = automation(autoplay: .card, segments: [Self.intro, Self.outro])
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.dismissNextUp())
+        #expect(!automation.showsNextUp)
+        automation.tick(position: 1_300, duration: 1_320)
+        #expect(!automation.showsNextUp)
     }
 
     @Test func nothingQueuedMeansNoCard() {
