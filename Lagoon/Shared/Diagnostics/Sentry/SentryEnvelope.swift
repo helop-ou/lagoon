@@ -18,7 +18,7 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
     let eventID: String
     let data: Data
 
-    static func make(incident: DiagnosticIncident, context: DiagnosticContext, dsn: SentryDSN) -> SentryEnvelope? {
+    static func make(incident: DiagnosticIncident, context: DiagnosticContext) -> SentryEnvelope? {
         let eventID = identifier(incident.id)
         let event = eventJSONObject(incident: incident, context: context, eventID: eventID)
         let history = incident.historyJSONObject

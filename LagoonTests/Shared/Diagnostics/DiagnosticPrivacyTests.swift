@@ -88,10 +88,9 @@ struct DiagnosticPrivacyTests {
             fields: PlaybackFailureDetail(stage: .subtitle, error: transportError).fields
         )
 
-        let dsn = try #require(SentryDSN(string: "https://key@o1.ingest.de.sentry.io/1"))
         #expect(sink.incidents.map(\.code) == [.apiRequestFailed, .apiRequestFailed, .apiDecodeFailed, .playbackFailed, .playbackStartFailed, .playbackSubtitleLoadFailed])
         for incident in sink.incidents {
-            let envelope = try #require(SentryEnvelope.make(incident: incident, context: Self.context, dsn: dsn))
+            let envelope = try #require(SentryEnvelope.make(incident: incident, context: Self.context))
             let text = String(decoding: envelope.data, as: UTF8.self)
             for value in Self.sensitive {
                 #expect(!text.contains(value), "\(incident.code.rawValue) leaked \(value)")

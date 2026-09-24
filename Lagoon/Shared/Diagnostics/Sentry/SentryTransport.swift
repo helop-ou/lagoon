@@ -63,7 +63,7 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
     func submit(_ incident: DiagnosticIncident) {
         queue.async { [self] in
             guard isEnabled() else { return }
-            guard let envelope = SentryEnvelope.make(incident: incident, context: context, dsn: dsn) else { return }
+            guard let envelope = SentryEnvelope.make(incident: incident, context: context) else { return }
             guard envelope.data.count <= policy.maximumEnvelopeBytes else {
                 Self.log.error("envelope too large: \(envelope.data.count, privacy: .public) bytes")
                 return

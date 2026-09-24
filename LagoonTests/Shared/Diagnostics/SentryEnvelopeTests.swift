@@ -16,8 +16,6 @@ struct SentryEnvelopeTests {
         environment: "testflight",
         engineVersion: "lavf62.3.100"
     )
-    static let dsn = SentryDSN(string: "https://abc123@o1.ingest.de.sentry.io/42")!
-
     static func incident(
         fields: [String: DiagnosticValue] = ["stage": .string("open"), "errorDomain": .string("ffmpeg"), "errorCode": .int(-1094995529)],
         history: [DiagnosticEvent] = []
@@ -75,7 +73,7 @@ struct SentryEnvelopeTests {
 
     @Test func envelopeIsFramedWithExactLengthsAndAnAttachment() throws {
         let history = [DiagnosticEvent(code: .playbackSeek, uptime: 498, fields: ["position": .double(12)])]
-        let envelope = try #require(SentryEnvelope.make(incident: Self.incident(history: history), context: Self.context, dsn: Self.dsn))
+        let envelope = try #require(SentryEnvelope.make(incident: Self.incident(history: history), context: Self.context))
         #expect(envelope.eventID == "0123abcd000040008000000000000001")
         var lines = envelope.data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
         #expect(lines.last?.isEmpty == true)
@@ -105,7 +103,7 @@ struct SentryEnvelopeTests {
             "message": .string("The stream https://lagoonfix.example.eu/Items/x could not be opened"),
             "route": .string("Items/12c4"),
         ])
-        let envelope = try #require(SentryEnvelope.make(incident: incident, context: Self.context, dsn: Self.dsn))
+        let envelope = try #require(SentryEnvelope.make(incident: incident, context: Self.context))
         let text = String(decoding: envelope.data, as: UTF8.self)
         #expect(!text.contains("lagoonfix"))
         #expect(!text.contains("could not be opened"))
