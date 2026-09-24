@@ -17,6 +17,24 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.2.2 (110)
+
+September 2026
+
+**Back answers the Skip Intro and Up Next prompts.**
+
+### Improvements
+
+- On Apple TV, Back dismisses the Skip Intro and Up Next prompts in every mode, and a second Back closes the player.
+- Genre, collection, cast and title artwork is sharper on iPhone.
+
+### Bug fixes
+
+- When the next episode lacks the subtitle language you were watching, Lagoon follows your subtitle setting instead of the server's default.
+- The focus highlight is no longer cut off on the genre, collection and recent search rows on Apple TV.
+- Removing an account also forgets its library sort and filters.
+- A Watch Together title change that cannot start shows an error instead of freezing.
+
 ## 0.2.1 (109)
 
 September 2026
