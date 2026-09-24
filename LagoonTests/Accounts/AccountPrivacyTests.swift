@@ -50,6 +50,27 @@ struct AccountPrivacyTests {
         }
     }
 
+    @Test func forgettingAnAccountForgetsItsLibrarySelection() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let store = fixture.store()
+        store.switchTo(fixture.b)
+        var selection = LibrarySelection()
+        selection.favoritesOnly = true
+        selection.save(accountID: fixture.a.id, defaults: fixture.defaults)
+        selection.save(accountID: fixture.b.id, defaults: fixture.defaults)
+        try store.remove(fixture.a)
+        #expect(LibrarySelection.restore(accountID: fixture.a.id, defaults: fixture.defaults) == LibrarySelection())
+        #expect(LibrarySelection.restore(accountID: fixture.b.id, defaults: fixture.defaults) == selection)
+    }
+
+    /// The regression reset must reach every per-account record too.
+    @Test func regressionResetCoversEveryPerAccountKey() {
+        for prefix in AccountLocalData.perAccountKeyPrefixes {
+            #expect(RegressionStateReset.keyPrefixes.contains { prefix.hasPrefix($0) }, "\(prefix)")
+        }
+    }
+
     @Test func logoutDropsLocalAccessBeforeNetworkAndLateCompletionCannotAffectB() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
@@ -219,7 +240,7 @@ struct AccountPrivacyTests {
         let b = StoredAccount(serverURL: URL(string: "https://b.privacy.test")!, serverName: "B", userId: "same-user", userName: "Viewer B")
         var cookieA: String { AccountLocalData.seerrCookieKey(a, serverURL: URL(string: "https://seerr-a.privacy.test")!) }
         var cookieB: String { AccountLocalData.seerrCookieKey(b, serverURL: URL(string: "https://seerr-b.privacy.test")!) }
-        static let preferencePrefixes = ["libraries.", "subtitles.preferences.", "playback.trackPreferences.", "home.sectionPreferences.", "search.recents.", ThemeStore.keyPrefix]
+        static let preferencePrefixes = AccountLocalData.perAccountKeyPrefixes
         init() throws {
             PrivacyProtocol.reset()
             defaults = UserDefaults(suiteName: suite)!
