@@ -357,9 +357,7 @@ struct DeveloperSettingsView: View {
 
     private var previewNextUpHint: LocalizedStringKey {
         #if os(tvOS)
-        selectedPreview == .nextEpisodeCountdown
-            ? "Select to play now · Back to stay"
-            : "Select to play now"
+        "Select to play now · Back to stay"
         #else
         "Tap to play now"
         #endif
