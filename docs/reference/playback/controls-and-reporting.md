@@ -67,6 +67,14 @@ The tap calls `pokeControls()`, the path every interaction uses, so showing
 the bar and resetting auto-hide cannot drift apart. XCUITest cannot produce a
 light touch-surface tap; this is checked only on a physical remote.
 
+`-debug.playerInputTrace YES` (Debug builds) logs a `PlayerInput` line for
+every press, the path that took it (gate recognizer, `pressesEnded`,
+`onTapGesture`, `onPlayPauseCommand`, touch tap) and the prompt, panel, scrub
+and focus state it found. It goes through `NSLog`, so it shows in
+`devicectl … --console` and in a simulator's unified log. Back and Select
+reach the player by different paths on a Siri Remote than in the simulator,
+so compare the two before trusting a simulator result for remote input.
+
 ## Putting controls in the transport (tvOS)
 
 **Nothing in the transport is focusable, deliberately.** The overlay sets
@@ -166,12 +174,14 @@ Platform limits, verified on device:
   mid-film in real libraries; `Outro` hands off to the next episode.
 - Episodes quite often have **two `Intro` segments**, and one can start at
   tick 0. Both cases are handled; do not "simplify" to first-of-each.
-- `SkipMode`: auto after delay (default: 5 s fill then commit, Menu cancels),
-  instant, or ask every time.
+- `SkipMode`: auto after delay (default: 5 s fill then commit), instant, or
+  ask every time. Menu dismisses the pill in both modes that draw it.
 - **The button is not focusable**, since focus would pull `onMoveCommand` off
   the surface. It extends the priority chains instead: Select commits a
-  scrub, else skips, else toggles pause; Menu cancels a scrub, else waves off
-  a pending auto-skip, else closes the panel, else exits. The iOS pill takes a
+  scrub, else skips, else toggles pause; Menu cancels a scrub, else dismisses
+  the pill or the Up Next card, else closes the panel, else exits. A prompt
+  is a layer above the player, so Back answers it first, countdown or not
+  (HIG, Playing video: give people a clear way to dismiss an overlay). The iOS pill takes a
   direct tap.
 - `handledSegmentIDs` marks a segment before seeking, or landing near its end
   re-enters it and re-arms everything.
