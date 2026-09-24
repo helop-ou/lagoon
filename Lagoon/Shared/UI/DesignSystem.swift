@@ -181,7 +181,6 @@ enum Metrics {
     static let modalPanelSize = CGSize(width: 420, height: 560)
     #endif
 
-    static var posterHeight: CGFloat { (posterWidth * 3 / 2).rounded() }
     static var landscapeHeight: CGFloat { (landscapeWidth * 9 / 16).rounded() }
 
     static let cardCornerRadius: CGFloat = 12
@@ -408,13 +407,11 @@ struct LagoonLockup: View {
 /// The secondary jellyfish. Brand rule: only in loading, empty or
 /// atmospheric moments, small, one-color and low contrast.
 struct LagoonJellyfishAccent: View {
-    var height: CGFloat = Metrics.jellyfishAccentHeight
-
     var body: some View {
         Image("LagoonJellyfish")
             .renderable(template: true)
             .scaledToFit()
-            .frame(height: height)
+            .frame(height: Metrics.jellyfishAccentHeight)
             .foregroundStyle(Theme.accent.opacity(0.35))
             .accessibilityHidden(true)
     }
