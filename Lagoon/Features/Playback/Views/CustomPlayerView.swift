@@ -37,7 +37,8 @@ private extension View {
 ///
 /// tvOS: the surface must stay focusable, or Menu quits the app.
 /// `MenuPressGate` takes Menu at the UIKit layer (`onExitCommand` never fires
-/// in a fullScreenCover on tvOS 26): cancel scrub, else close panel, else exit.
+/// in a fullScreenCover on tvOS 26): cancel scrub, else dismiss a skip or Up
+/// Next prompt, else close panel, else exit.
 struct CustomPlayerView<Surface: View>: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// Changing it resets episode chrome but keeps this view and its UIKit
@@ -311,6 +312,7 @@ struct CustomPlayerView<Surface: View>: View {
         .background(Color.black.ignoresSafeArea())
         #if os(tvOS)
         .onPlayPauseCommand {
+            traceInput("playPause via=onPlayPauseCommand")
             if let target = scrubTarget {
                 commitScrub(to: target, resume: true)
             } else {
@@ -383,12 +385,16 @@ struct CustomPlayerView<Surface: View>: View {
     // MARK: - Surface & remote commands
 
     private func handleMenu() {
+        traceInput("menu")
         if isScrubbing {
             cancelScrub()
         } else if automation.dismissSkip() {
-            // Back cancels only a pending countdown; otherwise Menu leaves.
+            // A visible prompt is a layer above the player: Back answers it
+            // before it leaves.
+            PlayerInputTrace.log("menu -> dismiss skip")
         } else if automation.dismissNextUp() {
             // Same rule as the skip pill.
+            PlayerInputTrace.log("menu -> dismiss up next")
         } else if panelOpen,
                   selectedTab == .subtitles,
                   let subtitleSearch,
@@ -399,13 +405,25 @@ struct CustomPlayerView<Surface: View>: View {
         } else if panelOpen {
             closePanel()
         } else {
+            PlayerInputTrace.log("menu -> close player")
             onDismiss()
         }
+    }
+
+    /// `debug.playerInputTrace`: the state an input found. Arguments are only
+    /// built when the flag is on.
+    private func traceInput(_ input: String) {
+        PlayerInputTrace.log(
+            "\(input) segment=\(automation.activeSegment?.id ?? "none") skipMode=\(automation.skipMode.rawValue)"
+                + " nextUp=\(automation.showsNextUp ? 1 : 0) autoplay=\(automation.autoplayMode.rawValue)"
+                + " panel=\(panelOpen ? 1 : 0) scrubbing=\(isScrubbing ? 1 : 0) focus=\(String(describing: playerFocus))"
+        )
     }
 
     /// A light touch-surface tap only reveals the transport. It must never
     /// act as Select: no play, scrub, skip or Up Next changes.
     private func handleRemoteTouchTap() {
+        traceInput("touch-tap")
         guard !panelOpen else { return }
         // A further tap while visible toggles remaining time and end time.
         if transportVisible {
@@ -521,6 +539,9 @@ struct CustomPlayerView<Surface: View>: View {
             }
         #endif
             .onTapGesture {
+                #if os(tvOS)
+                traceInput("select via=onTapGesture")
+                #endif
                 guard !panelOpen else { return }
                 #if os(tvOS)
                 // Select: commit scrub, Skip, Up Next, then play/pause.
@@ -529,11 +550,14 @@ struct CustomPlayerView<Surface: View>: View {
                 } else if let segment = automation.activeSegment, automation.skipMode != .instant {
                     // Not focusable: taking focus would move `onMoveCommand`
                     // off the surface and break scrubbing.
+                    PlayerInputTrace.log("select -> skip")
                     skip(segment)
                 } else if automation.showsNextUp {
                     // Not focusable either, and for the same reason.
+                    PlayerInputTrace.log("select -> play next")
                     automation.playNext()
                 } else {
+                    PlayerInputTrace.log("select -> toggle pause")
                     requestTogglePause()
                     pokeControls()
                 }
@@ -699,7 +723,7 @@ struct CustomPlayerView<Surface: View>: View {
 
     private var hint: LocalizedStringKey {
         #if os(tvOS)
-        automation.autoplayMode == .autoDelay ? "Select to play now · Back to stay" : "Select to play now"
+        "Select to play now · Back to stay"
         #else
         "Tap to play now"
         #endif
