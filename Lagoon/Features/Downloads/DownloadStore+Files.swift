@@ -114,7 +114,7 @@ extension DownloadStore {
     ) async throws -> [String: String] {
         var files: [String: String] = [:]
         // Same widths the detail page requests online.
-        let kinds: [(ItemImageKind, Int)] = [(.poster, Metrics.detailPosterRequestWidth), (.backdrop, 1920)]
+        let kinds: [(ItemImageKind, Int)] = [(.poster, Metrics.detailPosterRequestWidth), (.backdrop, Metrics.detailBackdropRequestWidth)]
         for (kind, maxWidth) in kinds {
             guard let url = client.imageURL(for: item, kind: kind, maxWidth: maxWidth),
                   let key = DownloadArtworkKey.parse(url) else { continue }
