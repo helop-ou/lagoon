@@ -130,7 +130,7 @@ struct DiscoverView: View {
                 id: "\(item.id)",
                 title: item.displayTitle,
                 overview: item.overview,
-                backdropURL: SeerrClient.imageURL(path: item.backdropPath, width: 1920),
+                backdropURL: SeerrClient.imageURL(path: item.backdropPath, width: Metrics.detailBackdropRequestWidth),
                 logoURL: nil,
                 route: .media(id: item.id, type: type)
             )
