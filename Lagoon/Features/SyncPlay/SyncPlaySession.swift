@@ -55,10 +55,8 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
     private var lastQueueUpdateSeconds: Double?
 
     var isJoined: Bool { group != nil }
-    var groupId: String? { group?.groupId }
     var groupName: String? { group?.groupName }
     var currentPlaylistItemId: String? { queue?.playingItem?.playlistItemId }
-    var currentItemId: String? { queue?.playingItem?.itemId }
     var startSeconds: Double { Ticks.seconds(queue?.startPositionTicks ?? 0) }
 
     /// Where the group is now: an `Unpause` position carried forward by
