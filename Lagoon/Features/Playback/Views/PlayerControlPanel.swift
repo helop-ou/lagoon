@@ -381,30 +381,8 @@ struct PlayerControlPanel: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-
-                #if os(iOS)
-                if let onTogglePictureInPicture {
-                    Button(action: onTogglePictureInPicture) {
-                        Label(
-                            isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
-                            systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
-                        )
-                        .font(.callout.weight(.medium))
-                    }
-                    .buttonStyle(.glass)
-                    .fixedSize()
-                    .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
-                    .focused(focus, equals: .track("picture-in-picture"))
-                    .accessibilityIdentifier("player.pictureInPicture")
-                }
-                #endif
             }
             Spacer(minLength: 0)
-            #if os(iOS)
-            AirPlayRoutePicker()
-                .frame(width: 44, height: 44)
-                .accessibilityLabel("AirPlay")
-            #endif
         }
         #endif
     }
