@@ -708,7 +708,7 @@ final class PlaybackController {
             playbackIdentity = media.id
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
-            automation.beginItem(identity: media.id, segments: playerInfo.segments)
+            automation.beginItem(segments: playerInfo.segments)
             // Seeded: the callback only reports changes.
             automation.isBuffering = engine.isBuffering
             // Through the controller, so a skip in a group is a group seek.
@@ -1315,14 +1315,8 @@ final class PlaybackController {
     /// never a view: it is tick-rate state the player root must not read.
     var clockPosition: Double { engine?.clockPosition ?? 0 }
 
-    /// Loaded and anchored but not rolling.
-    var isPrimedAndPaused: Bool {
-        guard let engine else { return false }
-        return engine.isPaused && !engine.isBuffering
-    }
-
-    /// The clock is advancing (a group report's `IsPlaying`). Not the
-    /// inverse of `isPrimedAndPaused`: a buffering engine is neither.
+    /// The clock is advancing (a group report's `IsPlaying`). Not simply
+    /// the inverse of paused: a buffering engine is neither.
     var isClockRunning: Bool {
         guard let engine else { return false }
         return !engine.isPaused && !engine.isBuffering
@@ -1531,11 +1525,6 @@ final class PlaybackController {
         let report = reporting?.stop(at: seconds)
         reporting = nil
         return report
-    }
-
-    func stop() async {
-        let report = beginStop()
-        await report?.value
     }
 
     /// Final dismissal. Unlike the hand-off stop, it stops any suspended

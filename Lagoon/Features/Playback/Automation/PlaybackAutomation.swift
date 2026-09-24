@@ -44,7 +44,6 @@ final class PlaybackAutomation {
     @ObservationIgnored var onSkip: ((MediaSegment) -> Void)?
     @ObservationIgnored var onPlayNext: (() -> Void)?
 
-    private(set) var identity = ""
     private var segments: [MediaSegment] = []
     private var hasNextUp = false
     private var duration: Double = 0
@@ -94,8 +93,7 @@ final class PlaybackAutomation {
 
     /// A "no" belongs to the episode it was said during, not the rest of the
     /// binge.
-    func beginItem(identity: String, segments: [MediaSegment]) {
-        self.identity = identity
+    func beginItem(segments: [MediaSegment]) {
         self.segments = segments
         handledSegmentIDs.removeAll()
         nextUpDismissed = false

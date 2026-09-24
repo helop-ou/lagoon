@@ -40,7 +40,7 @@ struct PlaybackAutomationTests {
             defaults: defaults(skip: skip, autoplay: autoplay),
             countdown: Self.countdown
         )
-        automation.beginItem(identity: "episode-1", segments: segments)
+        automation.beginItem(segments: segments)
         automation.setNextUpAvailable(nextUp)
         return automation
     }
@@ -332,7 +332,7 @@ struct PlaybackAutomationTests {
         automation.tick(position: 1_201, duration: 1_320)
         automation.dismissNextUp()
 
-        automation.beginItem(identity: "episode-2", segments: [Self.intro, Self.outro])
+        automation.beginItem(segments: [Self.intro, Self.outro])
         automation.setNextUpAvailable(true)
         #expect(!automation.nextUpDismissed)
         #expect(!automation.showsNextUp)
