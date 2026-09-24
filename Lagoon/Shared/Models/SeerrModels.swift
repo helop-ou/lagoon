@@ -126,10 +126,6 @@ nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
     var allowsRequesting: Bool {
         self == .unknown || self == .deleted
     }
-
-    var isPlayable: Bool {
-        self == .available || self == .partiallyAvailable
-    }
 }
 
 /// Jellyseerr's `MediaRequestStatus`. An unrecognised value maps to
@@ -156,12 +152,6 @@ nonisolated enum SeerrRequestStatus: Int, Hashable {
         case .completed: "Completed"
         case .unknown: "Unknown"
         }
-    }
-
-    /// Approved and completed both mean yes; only the library says whether
-    /// it has arrived.
-    var isGranted: Bool {
-        self == .approved || self == .completed
     }
 }
 
