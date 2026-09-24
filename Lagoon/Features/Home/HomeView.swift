@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+    @Environment(\.displayScale) private var displayScale
     let isActive: Bool
     let heroFocus: FocusState<Bool>.Binding
     @Environment(SessionStore.self) private var session
@@ -95,11 +96,11 @@ struct HomeView: View {
                 id: item.id,
                 title: item.name ?? "",
                 overview: item.overview,
-                backdropURL: session.client.imageURL(for: item, kind: .backdrop, maxWidth: 1920),
+                backdropURL: session.client.imageURL(for: item, kind: .backdrop, maxWidth: Metrics.detailBackdropRequestWidth),
                 logoURL: session.client.imageURL(
                     for: item,
                     kind: .logo,
-                    maxWidth: Int(Metrics.logoMaxWidth * 2)
+                    maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)
                 ),
                 route: .item(item)
             )
