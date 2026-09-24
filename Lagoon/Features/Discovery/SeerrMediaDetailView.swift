@@ -4,6 +4,7 @@ import SwiftUI
 /// state where Play would be. TMDB artwork via Seerr; the Jellyfin logo once
 /// the title is in the library.
 struct SeerrMediaDetailView: View {
+    @Environment(\.displayScale) private var displayScale
     let mediaID: Int
     let mediaType: SeerrMediaType
 
@@ -111,7 +112,7 @@ struct SeerrMediaDetailView: View {
 
     private var titleArtURL: URL? {
         if let jellyfinItem,
-           let url = session.client.imageURL(for: jellyfinItem, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)) {
+           let url = session.client.imageURL(for: jellyfinItem, kind: .logo, maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)) {
             return url
         }
         return nil
@@ -120,7 +121,7 @@ struct SeerrMediaDetailView: View {
     /// Cast in billing order, then crew; the strip drops anyone without a picture.
     private func castCredits(_ details: SeerrMediaDetails) -> [CastCredit] {
         guard let credits = details.credits else { return [] }
-        let portraitWidth = Int(Metrics.castPortraitSize * 2)
+        let portraitWidth = ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale)
         let cast = credits.cast
             .sorted { ($0.order ?? .max) < ($1.order ?? .max) }
             .map { member in
