@@ -74,10 +74,12 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
     }
 
     @objc private func menuRecognized() {
+        PlayerInputTrace.log("menu via=gate-recognizer")
         onMenu?()
     }
 
     @objc func remoteTouchTapRecognized() {
+        PlayerInputTrace.log("touch-tap via=gate-recognizer")
         onRemoteTouchTap?()
     }
 
@@ -88,11 +90,13 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        PlayerInputTrace.log("began \(Self.describe(presses)) via=pressesBegan")
         guard !isMenuPress(presses) else { return }
         super.pressesBegan(presses, with: event)
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        PlayerInputTrace.log("ended \(Self.describe(presses)) via=pressesEnded")
         if isMenuPress(presses) {
             onMenu?()
             return
@@ -101,8 +105,29 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        PlayerInputTrace.log("cancelled \(Self.describe(presses)) via=pressesCancelled")
         guard !isMenuPress(presses) else { return }
         super.pressesCancelled(presses, with: event)
+    }
+
+    private static func describe(_ presses: Set<UIPress>) -> String {
+        presses.map { press in
+            let name = switch press.type {
+            case .menu: "menu"
+            case .select: "select"
+            case .playPause: "playPause"
+            case .upArrow: "up"
+            case .downArrow: "down"
+            case .leftArrow: "left"
+            case .rightArrow: "right"
+            case .pageUp: "pageUp"
+            case .pageDown: "pageDown"
+            default: "type\(press.type.rawValue)"
+            }
+            return press.key.map { "\(name)(key \($0.keyCode.rawValue))" } ?? name
+        }
+        .sorted()
+        .joined(separator: ",")
     }
 }
 #endif
