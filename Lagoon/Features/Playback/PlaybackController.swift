@@ -573,6 +573,9 @@ final class PlaybackController {
                     selectedAudioLanguage: selectedAudioLanguage
                 )
             policySubtitleOrdinal = automaticSubtitleOrdinal
+            // A carry that finds no match here falls back to the viewer's
+            // own mode, as audio does, never to the server's default.
+            initialSubtitleOrdinal = automaticSubtitleOrdinal
             if let preference = trackPreference {
                 // 0 is the engine's "no subtitles" ordinal.
                 if preference.subtitlesOff {
@@ -584,8 +587,6 @@ final class PlaybackController {
                 ) {
                     initialSubtitleOrdinal = carried
                 }
-            } else {
-                initialSubtitleOrdinal = automaticSubtitleOrdinal
             }
             // A remembered choice for this show outranks both, while it
             // still matches a track here or says none.
