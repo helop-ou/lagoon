@@ -8,7 +8,7 @@ nonisolated enum SkipMode: String, CaseIterable, Identifiable {
     case autoDelay
     /// No button; skip the instant the segment is entered.
     case instant
-    /// The button waits for confirmation and never acts alone.
+    /// The button waits for confirmation and never acts alone. Back dismisses.
     case button
 
     var id: String { rawValue }
