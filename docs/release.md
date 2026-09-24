@@ -413,6 +413,9 @@ licences require. GitHub attaches that source archive to the release.
   two, because a reviewer compares them. An unpublished destination stays nil
   and its row disappears.
 - Still owed: publisher identity and a monitored contact, current
-  rights-cleared screenshots, and the App Store/TestFlight destination. Keep
-  site and store copy consistent with the actual formats, devices, server
-  setup and subtitle permissions.
+  rights-cleared screenshots, and the App Store destination. Keep site and
+  store copy consistent with the actual formats, devices, server setup and
+  subtitle permissions.
+- The site links the external group's public TestFlight link
+  (`site.testflight` in `lagoon-website`). Closing or replacing that group
+  means changing the site in the same sitting.
