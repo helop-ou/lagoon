@@ -270,7 +270,7 @@ struct HeroSection<Route: Hashable>: View {
     private func backdrop(for item: HeroItem<Route>) -> some View {
         CachedAsyncImage(
             url: item.backdropURL,
-            maxPixelSize: 1920
+            maxPixelSize: Metrics.detailBackdropDecodeSize
         ) { image in
             image.resizable().scaledToFill()
         } placeholder: {
@@ -322,7 +322,7 @@ struct HeroSection<Route: Hashable>: View {
               let nextID = selection.adjacentID(offset: 1, in: itemIDs),
               let next = items.first(where: { $0.id == nextID }) else { return }
         if let url = next.backdropURL {
-            _ = await ImageCache.shared.load(url, maxPixelSize: 1920)
+            _ = await ImageCache.shared.load(url, maxPixelSize: Metrics.detailBackdropDecodeSize)
             guard !Task.isCancelled else { return }
             _ = await ArtworkPaletteCache.shared.palette(for: url)
         }
@@ -348,7 +348,7 @@ struct HeroSection<Route: Hashable>: View {
             guard !Task.isCancelled else { return }
             let id = selection.adjacentID(offset: offset, in: itemIDs)
             guard let url = items.first(where: { $0.id == id })?.backdropURL else { continue }
-            _ = await ImageCache.shared.load(url, maxPixelSize: 1920)
+            _ = await ImageCache.shared.load(url, maxPixelSize: Metrics.detailBackdropDecodeSize)
             guard !Task.isCancelled else { return }
             _ = await ArtworkPaletteCache.shared.palette(for: url)
         }
