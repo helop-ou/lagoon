@@ -47,6 +47,24 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.2.2",
+            build: "110",
+            released: "September 2026",
+            headline: "Back answers the Skip Intro and Up Next prompts.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "On Apple TV, Back dismisses the Skip Intro and Up Next prompts in every mode, and a second Back closes the player.",
+                    "Genre, collection, cast and title artwork is sharper on iPhone.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "When the next episode lacks the subtitle language you were watching, Lagoon follows your subtitle setting instead of the server's default.",
+                    "The focus highlight is no longer cut off on the genre, collection and recent search rows on Apple TV.",
+                    "Removing an account also forgets its library sort and filters.",
+                    "A Watch Together title change that cannot start shows an error instead of freezing.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.2.1",
             build: "109",
             released: "September 2026",
