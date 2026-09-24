@@ -6,7 +6,8 @@ import LagoonEngine
 nonisolated enum AutoplayMode: String, CaseIterable, Identifiable {
     /// The card counts down, then the next episode starts. Back/Menu means "no".
     case autoDelay
-    /// The card appears but never acts alone; Select starts the next one.
+    /// The card appears but never acts alone; Select starts the next one,
+    /// Back dismisses it.
     case card
     /// No card. The player closes at the end of an episode.
     case off
