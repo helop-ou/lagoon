@@ -1,8 +1,8 @@
 # Release
 
-The single release checklist. The upload tooling targets internal TestFlight;
-public distribution has more gates below. Simulator results and unsigned
-archives do not complete those gates.
+The single release checklist. Builds go to external TestFlight testers
+through the public link; the App Store has more gates below. Simulator
+results and unsigned archives do not complete those gates.
 
 ## Cutting a build, start to finish
 
@@ -21,7 +21,7 @@ xcodebuild test -scheme Lagoon \                  #  5. both builds, then tests
 #  6. commit, one change per commit, and push
 cp .env.example .env                              #  7. once: fill in the DSN
 scripts/upload-testflight.sh both --archive-only  #  8. archive with the DSN
-#  9. upload in Xcode's Organizer, then wait for acceptance
+#  9. upload in Xcode's Organizer, add to the external group, wait for review
 scripts/publish-release.sh <build>                # 10. tag and publish
 ```
 
@@ -41,8 +41,9 @@ scripts/publish-release.sh <build>                # 10. tag and publish
    [`.env.example`](../.env.example); the shell still overrides it.
 8. **[Archive](#internal-testflight)** with `--archive-only` when uploading
    through Xcode, because an Xcode-made archive has diagnostics off.
-9. **Upload** with **Automatically manage version and build number**
-   unticked, and wait for App Store Connect to accept the build.
+9. **Upload** as **App Store Connect**, not TestFlight Internal Only, with
+   **Automatically manage version and build number** unticked. Add the build
+   to the external group and wait for [Beta App Review](#external-testflight).
 10. **[Publish the release](#release-tags)**, after acceptance, not before.
 
 ## Version and changelog
@@ -132,7 +133,8 @@ these mistakes are silent and a published tag is hard to withdraw. It refuses:
 
 If the revision is ahead of the commit that set the build number, it asks,
 because which revision was archived is not recorded. Pass `--rev` when the
-archive came from something other than `HEAD`.
+archive came from something other than `HEAD`. It asks even then, so run it
+in a terminal; piped or from an agent, it stops.
 
 It **warns** without stopping when the website's generated facts are behind
 the build, or could not be checked. The fix is
@@ -214,6 +216,10 @@ plutil -p "<archive>/Products/Applications/Lagoon.app/Info.plist" | grep DSN
 An empty string means that build reports nothing.
 
 ## External TestFlight
+
+Live since 0.2.1 (109), approved for iOS and tvOS on 2026-09-24. Testers
+join the external group "Lagoonies Beta" through its public link, which the
+website carries.
 
 Adding a build to an external group submits it to Beta App Review under the
 full App Review Guidelines; uploading alone never does. Apple reviews a
@@ -307,9 +313,9 @@ final signed candidate, not an earlier audit revision.
   (upstream tarball, patch, build script and configure records); each
   artifact ships its licence, libdovi's with its Rust crates; the FFmpeg
   notice links that release and credits the Independent JPEG Group, whose
-  DCT code is in libavcodec. Owed: this repository and the engine's public,
-  since relinking relies on their source, before any external build; the
-  FFmpeg line on the website's download pages. Whether the App Store's usage
+  DCT code is in libavcodec. Both repositories have been public since
+  2026-09-23, before the first external build. Owed: the FFmpeg line on
+  the website's download pages. Whether the App Store's usage
   rules are a further restriction under LGPL-2.1 §10 is a legal judgement,
   not an engineering one; VLC for iOS ships the same arrangement.
 - [ ] Record encryption classification and territories, including France.
