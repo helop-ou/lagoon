@@ -831,7 +831,6 @@ private struct DetailOverview: View {
 struct TitleArtView: View {
     @Environment(\.displayScale) private var displayScale
     let item: MediaItem
-    var maxHeight: CGFloat = Metrics.logoMaxHeight
     var alignment: HorizontalAlignment = .leading
 
     @Environment(SessionStore.self) private var session
@@ -840,7 +839,7 @@ struct TitleArtView: View {
         TitleArtImage(
             url: session.client.imageURL(for: item, kind: .logo, maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)),
             title: item.name ?? "",
-            maxHeight: maxHeight,
+            maxHeight: Metrics.logoMaxHeight,
             alignment: alignment
         )
     }
