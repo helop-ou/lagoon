@@ -79,10 +79,6 @@ final class ServerClock {
         self.client = client
     }
 
-    /// Until true, `serverSeconds` falls back to the local clock; do not
-    /// schedule a group against it.
-    var isReady: Bool { estimate.best != nil }
-
     /// Server minus local, in seconds; nil before the first sample.
     var offset: Double? { estimate.offset }
 
