@@ -46,7 +46,7 @@ struct DetailBackdropView: View {
     }
 
     private var backdrop: some View {
-        CachedAsyncImage(url: url, maxPixelSize: 1920) { image in
+        CachedAsyncImage(url: url, maxPixelSize: Metrics.detailBackdropDecodeSize) { image in
             image.resizable().scaledToFill()
         } placeholder: {
             Theme.background
@@ -829,6 +829,7 @@ private struct DetailOverview: View {
 
 /// The title as its logo when the server has one, otherwise as type.
 struct TitleArtView: View {
+    @Environment(\.displayScale) private var displayScale
     let item: MediaItem
     var maxHeight: CGFloat = Metrics.logoMaxHeight
     var alignment: HorizontalAlignment = .leading
@@ -837,7 +838,7 @@ struct TitleArtView: View {
 
     var body: some View {
         TitleArtImage(
-            url: session.client.imageURL(for: item, kind: .logo, maxWidth: Int(Metrics.logoMaxWidth * 2)),
+            url: session.client.imageURL(for: item, kind: .logo, maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)),
             title: item.name ?? "",
             maxHeight: maxHeight,
             alignment: alignment
@@ -848,6 +849,7 @@ struct TitleArtView: View {
 /// `TitleArtView` for sources that resolve their own artwork URL, such as
 /// Seerr (which has no logos, so it always shows type).
 struct TitleArtImage: View {
+    @Environment(\.displayScale) private var displayScale
     let url: URL?
     let title: String
     var maxHeight: CGFloat = Metrics.logoMaxHeight
@@ -863,7 +865,7 @@ struct TitleArtImage: View {
     @ViewBuilder
     private var artwork: some View {
         if let url {
-            CachedAsyncImage(url: url, maxPixelSize: Int(Metrics.logoMaxWidth * 2)) { image in
+            CachedAsyncImage(url: url, maxPixelSize: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)) { image in
                 image
                     .resizable()
                     .scaledToFit()
@@ -901,6 +903,7 @@ struct CastCredit: Identifiable, Hashable {
 /// there is no person screen to open. Focus moving past it scrolls it into
 /// view.
 struct CastStrip: View {
+    @Environment(\.displayScale) private var displayScale
     private let people: [Person]
     private let credits: [CastCredit]?
 
@@ -929,7 +932,7 @@ struct CastStrip: View {
                     id: person.id,
                     name: person.name ?? "",
                     credit: credit(for: person),
-                    imageURL: session.client.personImageURL(for: person, maxWidth: Int(Metrics.castPortraitSize * 2))
+                    imageURL: session.client.personImageURL(for: person, maxWidth: ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale))
                 )
             }
     }
@@ -976,7 +979,7 @@ struct CastStrip: View {
         VStack(spacing: Metrics.Space.s) {
             CachedAsyncImage(
                 url: member.imageURL,
-                maxPixelSize: Int(Metrics.castPortraitSize * 2)
+                maxPixelSize: ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale)
             ) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
