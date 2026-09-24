@@ -111,6 +111,8 @@ struct SeerrGenreRail: View {
                         .padding(.top, Metrics.railTopPadding)
                         .padding(.bottom, Metrics.railBottomPadding)
                     }
+                    // Or the focus halo is cut off square at the rail edge.
+                    .scrollClipDisabled()
                 }
             }
         }
@@ -133,6 +135,7 @@ struct SeerrGenreRail: View {
 }
 
 private struct SeerrGenreCard: View {
+    @Environment(\.displayScale) private var displayScale
     let genre: SeerrGenre
     let mediaType: SeerrMediaType
 
@@ -143,7 +146,7 @@ private struct SeerrGenreCard: View {
             )
         ) {
             ZStack(alignment: .bottomLeading) {
-                CachedAsyncImage(url: backdropURL, maxPixelSize: Int(Metrics.landscapeWidth * 2)) { image in
+                CachedAsyncImage(url: backdropURL, maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Color.white.opacity(0.06)
@@ -176,6 +179,6 @@ private extension SeerrGenreCard {
     var backdropURL: URL? {
         guard !genre.backdrops.isEmpty else { return nil }
         let path = genre.backdrops[abs(genre.id) % genre.backdrops.count]
-        return SeerrClient.imageURL(path: path, width: Int(Metrics.landscapeWidth * 2))
+        return SeerrClient.imageURL(path: path, width: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale))
     }
 }
