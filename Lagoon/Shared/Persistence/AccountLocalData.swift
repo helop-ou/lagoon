@@ -7,6 +7,18 @@ import Foundation
 final class AccountLocalData {
     let defaults: UserDefaults
     let credentials: any AccountCredentialStorage
+    /// Every defaults key a store writes per account is one of these plus
+    /// the account id. A store that adds one belongs here, or forgetting the
+    /// account leaves it behind.
+    nonisolated static let perAccountKeyPrefixes: [String] = [
+        "libraries.",
+        LibrarySelection.keyPrefix,
+        "subtitles.preferences.",
+        "playback.trackPreferences.",
+        ThemeStore.keyPrefix,
+        "home.sectionPreferences.",
+        "search.recents.",
+    ]
     private static let pendingKey = "accounts.pendingCredentialRemoval"
     private static let pendingCookiesKey = "seerr.pendingCookieRemoval"
 
@@ -39,8 +51,7 @@ final class AccountLocalData {
 
     func beginRemoval(accountID: String) {
         pendingAccountIDs.insert(accountID)
-        for prefix in ["libraries.", "subtitles.preferences.", "playback.trackPreferences.", ThemeStore.keyPrefix,
-                       "home.sectionPreferences.", "search.recents."] {
+        for prefix in Self.perAccountKeyPrefixes {
             defaults.removeObject(forKey: prefix + accountID)
         }
         // Downloads are iOS only.
