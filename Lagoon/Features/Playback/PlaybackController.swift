@@ -623,17 +623,7 @@ final class PlaybackController {
             let previousResourcesRetired = await PlaybackLifecycleDiagnostics
                 .waitForMediaResourcesToRetire(timeout: .seconds(15))
             if !previousResourcesRetired {
-                let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
-                os_signpost(
-                    .event,
-                    log: PlaybackPerformance.log,
-                    name: "Playback Resource Retirement Timeout",
-                    signpostID: performanceSignpostID,
-                    "demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
-                    lifecycle.activeDemuxLoops,
-                    lifecycle.attachedRendererSets,
-                    lifecycle.footprintMB
-                )
+                signpostRetirementTimeout(scope: "start")
                 // Never attach a new engine to the display layer while the
                 // outgoing synchronizer still owns it; that stalls the
                 // autoplayed episode on Apple TV.
@@ -1191,19 +1181,7 @@ final class PlaybackController {
             preservingPlayerSurface: true
         )
         guard outgoingResourcesRetired else {
-            let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
-            os_signpost(
-                .event,
-                log: PlaybackPerformance.log,
-                name: "Playback Resource Retirement Timeout",
-                signpostID: performanceSignpostID,
-                "scope=handoff demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
-                lifecycle.activeDemuxLoops,
-                lifecycle.attachedRendererSets,
-                lifecycle.footprintMB
-            )
-            _ = beginStop()
-            errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
+            failRetirement(scope: "handoff")
             return
         }
         guard !isClosed else { return }
@@ -1349,6 +1327,29 @@ final class PlaybackController {
         return !engine.isPaused && !engine.isBuffering
     }
 
+    /// The outgoing engine still holds the display layer, so nothing new may
+    /// attach to it: stop and say so.
+    private func failRetirement(scope: StaticString) {
+        signpostRetirementTimeout(scope: scope)
+        beginStop()
+        errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
+    }
+
+    private func signpostRetirementTimeout(scope: StaticString) {
+        let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Playback Resource Retirement Timeout",
+            signpostID: performanceSignpostID,
+            "scope=%{public}@ demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
+            String(describing: scope) as NSString,
+            lifecycle.activeDemuxLoops,
+            lifecycle.attachedRendererSets,
+            lifecycle.footprintMB
+        )
+    }
+
     /// Swaps the item in one player session when the group moves on. Same
     /// stop-then-start as `playNextEpisode`, so the video surface survives,
     /// without the successor warm-up.
@@ -1357,7 +1358,12 @@ final class PlaybackController {
         isAdvancing = true
         defer { isAdvancing = false }
         let retired = await stop(preservingPreparedNext: false, preservingPlayerSurface: true)
-        guard retired, !isClosed, !Task.isCancelled, groupTransport != nil else { return }
+        guard retired else {
+            // Same as an episode handoff: an error, not a frozen frame.
+            if !isClosed { failRetirement(scope: "group") }
+            return
+        }
+        guard !isClosed, !Task.isCancelled, groupTransport != nil else { return }
         nextUp = nil
         didFinish = false
         errorMessage = nil
