@@ -218,7 +218,9 @@ Platform limits, verified on device:
   run-out, with the fill pinned to the last 5 s of the file.
 - **Track choices carry over by language and title, not ordinal**, since a
   commentary track on one episode shifts every ordinal below it.
-  Subtitles-off carries over as its own choice. An external sidecar whose URL
+  Subtitles-off carries over as its own choice. A carry that matches no
+  track on the next item falls back to the viewer's automatic pick, for
+  subtitles as for audio, never to the server's default. An external sidecar whose URL
   does not resolve must leave both the stream list and the engine's list, or
   later ordinals name the wrong track.
 - **A cancel outlives the card.** Back sets `nextUpDismissed`, but the credits
