@@ -140,7 +140,7 @@ if [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
     echo "    Tag the revision the archive was actually built from. Pass --rev"
     echo "    if that is not ${sha:0:9}."
     if [ "$dry_run" = false ]; then
-        [ -t 0 ] || die "cannot confirm without a terminal. Pass --rev explicitly."
+        [ -t 0 ] || die "this needs a yes from a terminal. Run it in one, not through a pipe or an agent."
         printf "    Tag %s anyway? [y/N] " "${sha:0:9}"
         read -r reply
         case "$reply" in [yY]*) ;; *) die "stopped" ;; esac
