@@ -16,7 +16,6 @@ nonisolated enum SyncCorrectionPolicy {
     static let maximumMultiplier = 1.5
     /// Seconds after a start instant while renderers settle; not drift.
     static let settleSeconds: Double = 1.5
-    static var settle: Duration { .seconds(settleSeconds) }
     static var interval: Duration { .seconds(window) }
 
     nonisolated enum Decision: Equatable, Sendable {
