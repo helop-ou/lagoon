@@ -78,7 +78,6 @@ nonisolated struct UserItemData: Decodable, Hashable {
     let playbackPositionTicks: Int64?
     let playedPercentage: Double?
     let played: Bool?
-    let unplayedItemCount: Int?
     let isFavorite: Bool?
 }
 
@@ -88,7 +87,6 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let type: MediaItemType
     let collectionType: String?
     let overview: String?
-    let taglines: [String]?
     let genres: [String]?
     let productionYear: Int?
     let communityRating: Double?
@@ -102,7 +100,6 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let seriesId: String?
     let seriesName: String?
     let seasonId: String?
-    let seasonName: String?
     let userData: UserItemData?
     let imageTags: [String: String]?
     let backdropImageTags: [String]?
@@ -121,7 +118,6 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         type = (try? c.decode(MediaItemType.self, forKey: "type")) ?? .other
         collectionType = try c.decodeIfPresent(String.self, forKey: "collectionType")
         overview = try c.decodeIfPresent(String.self, forKey: "overview")
-        taglines = try c.decodeIfPresent([String].self, forKey: "taglines")
         genres = try c.decodeIfPresent([String].self, forKey: "genres")
         productionYear = try c.decodeIfPresent(Int.self, forKey: "productionYear")
         communityRating = try c.decodeIfPresent(Double.self, forKey: "communityRating")
@@ -135,7 +131,6 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         seriesId = try c.decodeIfPresent(String.self, forKey: "seriesId")
         seriesName = try c.decodeIfPresent(String.self, forKey: "seriesName")
         seasonId = try c.decodeIfPresent(String.self, forKey: "seasonId")
-        seasonName = try c.decodeIfPresent(String.self, forKey: "seasonName")
         userData = try? c.decodeIfPresent(UserItemData.self, forKey: "userData")
         imageTags = try c.decodeIfPresent([String: String].self, forKey: "imageTags")
         backdropImageTags = try c.decodeIfPresent([String].self, forKey: "backdropImageTags")
@@ -206,7 +201,6 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     let isoType: String?
     let supportsDirectPlay: Bool?
     let supportsDirectStream: Bool?
-    let supportsTranscoding: Bool?
     let transcodingUrl: String?
     let transcodingSubProtocol: String?
     let runTimeTicks: Int64?
@@ -273,7 +267,6 @@ nonisolated struct RemoteSubtitleInfo: Decodable, Identifiable, Equatable {
     let threeLetterISOLanguageName: String?
     let providerName: String?
     let format: String?
-    let author: String?
     let comment: String?
     let communityRating: Double?
     let downloadCount: Int?
