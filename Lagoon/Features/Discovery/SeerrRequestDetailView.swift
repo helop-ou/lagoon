@@ -28,7 +28,7 @@ struct SeerrRequestDetailView: View {
                 // Use the shared scaffold: a hand-rolled page hugs its content
                 // and renders as a narrow centred box.
                 DetailPageScaffold(
-                    backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: 1280)
+                    backdropURL: SeerrClient.imageURL(path: details?.backdropPath, width: Metrics.detailBackdropRequestWidth)
                 ) {
                     DetailMetadataHeader(
                         subtitle: detailSubtitle,
