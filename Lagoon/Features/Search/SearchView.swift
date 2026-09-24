@@ -244,6 +244,8 @@ struct SearchView: View {
                     .padding(.top, Metrics.railTopPadding)
                     .padding(.bottom, Metrics.railBottomPadding)
                 }
+                // Or the focus halo is cut off square at the rail edge.
+                .scrollClipDisabled()
             }
             .padding(.top, Metrics.Space.xxl)
             .frame(maxWidth: .infinity, alignment: .leading)
