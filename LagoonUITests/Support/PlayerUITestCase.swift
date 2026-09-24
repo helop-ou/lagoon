@@ -112,15 +112,17 @@ class PlayerUITestCase: XCTestCase {
         line: UInt = #line,
         predicate: (RegressionState) -> Bool
     ) -> RegressionState {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = RegressionState("")
-        repeat {
-            latest = state(in: app)
-            if predicate(latest) { return latest }
-            Thread.sleep(forTimeInterval: 0.2)
-        } while Date() < deadline
-        XCTFail("Timed out waiting for player state. Latest: \(latest.raw)", file: file, line: line)
-        return latest
+        pollRegressionState(
+            in: app,
+            identifier: "player.regression.state",
+            timeout: timeout,
+            // A missing probe still counts as a (empty) state to evaluate.
+            evaluateWhenMissing: true,
+            label: "player state",
+            file: file,
+            line: line,
+            predicate: predicate
+        )
     }
 
     func state(in app: XCUIApplication) -> RegressionState {
@@ -137,17 +139,45 @@ class PlayerUITestCase: XCTestCase {
         line: UInt = #line,
         predicate: (RegressionState) -> Bool
     ) -> RegressionState {
+        pollRegressionState(
+            in: app,
+            identifier: "app.lifecycle.state",
+            timeout: timeout,
+            // Unlike waitForState, a missing probe is skipped rather than
+            // evaluated as empty.
+            evaluateWhenMissing: false,
+            label: "playback lifecycle",
+            file: file,
+            line: line,
+            predicate: predicate
+        )
+    }
+
+    @discardableResult
+    private func pollRegressionState(
+        in app: XCUIApplication,
+        identifier: String,
+        timeout: TimeInterval,
+        evaluateWhenMissing: Bool,
+        label: String,
+        file: StaticString,
+        line: UInt,
+        predicate: (RegressionState) -> Bool
+    ) -> RegressionState {
         let deadline = Date().addingTimeInterval(timeout)
         var latest = RegressionState("")
         repeat {
-            let element = app.descendants(matching: .any)["app.lifecycle.state"]
+            let element = app.descendants(matching: .any)[identifier]
             if element.exists {
                 latest = RegressionState(element.value as? String ?? "")
+                if predicate(latest) { return latest }
+            } else if evaluateWhenMissing {
+                latest = RegressionState("")
                 if predicate(latest) { return latest }
             }
             Thread.sleep(forTimeInterval: 0.2)
         } while Date() < deadline
-        XCTFail("Timed out waiting for playback lifecycle. Latest: \(latest.raw)", file: file, line: line)
+        XCTFail("Timed out waiting for \(label). Latest: \(latest.raw)", file: file, line: line)
         return latest
     }
 }
