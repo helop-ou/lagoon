@@ -15,7 +15,7 @@ nonisolated enum RegressionStateReset {
         "server.url",
         "server.name",
         "libraries.",
-        "library.selection.",
+        LibrarySelection.keyPrefix,
         "subtitles.preferences.",
         "playback.trackPreferences.",
         ThemeStore.keyPrefix,
