@@ -32,9 +32,6 @@ final class DownloadStore {
     /// What a download would cost, for the quality picker and the
     /// free-space gate.
     struct Estimate {
-        let quality: DownloadQuality
-        /// The quality actually fetched after the original fast path.
-        let effectiveQuality: DownloadQuality
         let bytes: Int64?
         let freeBytes: Int64?
         var exceedsFreeSpace: Bool {
@@ -123,11 +120,6 @@ final class DownloadStore {
     static let wifiOnlyKey = "downloads.wifiOnly"
 
     // MARK: - Account
-
-    /// Loads the manifest for an account, or clears it for nil.
-    func activate(accountID: String?) {
-        activate(accountID: accountID, owner: nil)
-    }
 
     /// SwiftUI can construct extra `SessionStore`s that announce a nil
     /// account, so a nil activation only counts from the owner that
@@ -261,8 +253,6 @@ final class DownloadStore {
     func estimate(for item: MediaItem, source: MediaSource, quality: DownloadQuality) -> Estimate {
         let effective = quality.effective(sourceSize: source.size, runTimeTicks: source.runTimeTicks ?? item.runTimeTicks)
         return Estimate(
-            quality: quality,
-            effectiveQuality: effective,
             bytes: effective.estimatedBytes(sourceSize: source.size, runTimeTicks: source.runTimeTicks ?? item.runTimeTicks),
             freeBytes: freeSpace()
         )
