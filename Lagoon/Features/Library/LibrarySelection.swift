@@ -156,14 +156,17 @@ nonisolated struct LibrarySelection: Codable, Equatable, Hashable {
         if let decade, !available.contains(decade) { self.decade = nil }
     }
 
+    /// Per account; `AccountLocalData` removes it with the account.
+    static let keyPrefix = "library.selection."
+
     static func restore(accountID: String, defaults: UserDefaults = .standard) -> Self {
-        guard let data = defaults.data(forKey: "library.selection.\(accountID)"),
+        guard let data = defaults.data(forKey: keyPrefix + accountID),
               let selection = try? JSONDecoder().decode(Self.self, from: data) else { return Self() }
         return selection
     }
 
     func save(accountID: String, defaults: UserDefaults = .standard) {
         guard let data = try? JSONEncoder().encode(self) else { return }
-        defaults.set(data, forKey: "library.selection.\(accountID)")
+        defaults.set(data, forKey: Self.keyPrefix + accountID)
     }
 }
