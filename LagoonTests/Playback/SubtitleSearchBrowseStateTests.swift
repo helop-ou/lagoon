@@ -86,7 +86,7 @@ struct SubtitleSearchBrowseStateTests {
         #expect(coordinator.isBrowsingResults)
         try await waitUntil { coordinator.phase != .searching }
         #expect(coordinator.results.count == 1)
-        #expect(BrowseStateURLProtocol.requests.contains("/Items/item-1/RemoteSearch/Subtitles/est"))
+        #expect(browseRequestPaths().contains("/Items/item-1/RemoteSearch/Subtitles/est"))
 
         coordinator.cycleLanguage()
         #expect(coordinator.phase == .searching)
@@ -99,7 +99,7 @@ struct SubtitleSearchBrowseStateTests {
         coordinator.startSearch()
         try await waitUntil { coordinator.phase == .idle }
         coordinator.closeResults()
-        let requestsBefore = BrowseStateURLProtocol.requests.count
+        let requestsBefore = browseRequestPaths().count
 
         coordinator.selectLanguage("est")
 
@@ -107,7 +107,7 @@ struct SubtitleSearchBrowseStateTests {
         #expect(coordinator.phase == .idle)
         #expect(!coordinator.isBrowsingResults)
         try await Task.sleep(for: .milliseconds(200))
-        #expect(BrowseStateURLProtocol.requests.count == requestsBefore)
+        #expect(browseRequestPaths().count == requestsBefore)
     }
 
     @Test @MainActor func afinishedDownloadReturnsToTheTrackList() async throws {
@@ -140,19 +140,18 @@ struct SubtitleSearchBrowseStateTests {
 
     // MARK: - Fixtures
 
+    private func browseRequestPaths() -> [String] {
+        StubURLProtocol.requests(host: "browse.test").map { $0.url?.path ?? "" }
+    }
+
     @MainActor
     private func makeCoordinator(
         engine: SampleBufferPlayerEngine? = nil
     ) -> SubtitleSearchCoordinator {
-        BrowseStateURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [BrowseStateURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "subtitle-browse-test",
-            sessionConfiguration: configuration
+        StubURLProtocol.register(host: "browse.test", handler: browseStateResponse)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "browse.test", deviceId: "subtitle-browse-test", token: "test-token", userId: "user-1"
         )
-        client.configure(serverURL: URL(string: "https://browse.test")!)
-        client.activateSession(token: "test-token", userId: "user-1")
 
         let coordinator = SubtitleSearchCoordinator(
             downloadedSubtitlePoller: DownloadedSubtitlePoller(refreshDelays: [.zero])
@@ -176,117 +175,77 @@ struct SubtitleSearchBrowseStateTests {
         attempts: Int = 300,
         condition: @MainActor () -> Bool
     ) async throws {
-        for _ in 0..<attempts {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(20))
+        try await Polling.untilMainActor(
+            timeout: .milliseconds(attempts * 20), pollInterval: .milliseconds(20), condition: condition
+        )
+        if !condition() {
+            Issue.record("Condition never became true")
         }
-        Issue.record("Condition never became true")
     }
 }
 
 /// Fake Jellyfin: one language with a good and a refused result, one with a
 /// single result, and the permission probe.
-private nonisolated final class BrowseStateURLProtocol: URLProtocol, @unchecked Sendable {
-    private static let lock = NSLock()
-    private nonisolated(unsafe) static var recorded: [String] = []
+private func browseStateResponse(to request: URLRequest) throws -> (Int, [String: String], Data) {
+    guard let url = request.url else { throw URLError(.badURL) }
 
-    static var requests: [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recorded
+    let payload: Data
+    let status: Int
+    switch (request.httpMethod ?? "GET", url.path) {
+    case ("GET", "/Users/Me"):
+        payload = Data(#"{ "Id": "user-1", "Name": "Tester", "Policy": { "EnableSubtitleManagement": true } }"#.utf8)
+        status = 200
+    case ("GET", "/Items/item-1/RemoteSearch/Subtitles/eng"):
+        payload = Data(#"""
+        [{
+          "Id": "good",
+          "Name": "English provider subtitle",
+          "ThreeLetterISOLanguageName": "eng",
+          "ProviderName": "Test Provider",
+          "Format": "srt"
+        }, {
+          "Id": "broken",
+          "Name": "Refused provider subtitle",
+          "ThreeLetterISOLanguageName": "eng",
+          "ProviderName": "Test Provider",
+          "Format": "srt"
+        }]
+        """#.utf8)
+        status = 200
+    case ("GET", "/Items/item-1/RemoteSearch/Subtitles/est"):
+        payload = Data(#"""
+        [{
+          "Id": "eesti",
+          "Name": "Eesti subtiitrid",
+          "ThreeLetterISOLanguageName": "est",
+          "ProviderName": "Test Provider",
+          "Format": "srt"
+        }]
+        """#.utf8)
+        status = 200
+    case ("GET", "/Providers/Subtitles/Subtitles/good"):
+        payload = Data(#"""
+        1
+        00:00:01,000 --> 00:00:03,000
+        Downloaded subtitle cue
+        """#.utf8)
+        status = 200
+    case ("GET", "/Providers/Subtitles/Subtitles/broken"):
+        // A 400 skips Jellyfin's save fallback, so no retries to wait on.
+        payload = Data()
+        status = 400
+    case ("POST", "/Videos/item-1/Subtitles"):
+        payload = Data()
+        status = 204
+    default:
+        payload = Data()
+        status = 404
     }
 
-    static func reset() {
-        lock.lock()
-        recorded = []
-        lock.unlock()
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "browse.test"
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        guard let url = request.url else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
-        Self.lock.lock()
-        Self.recorded.append(url.path)
-        Self.lock.unlock()
-
-        let payload: Data
-        let status: Int
-        switch (request.httpMethod ?? "GET", url.path) {
-        case ("GET", "/Users/Me"):
-            payload = Data(#"{ "Id": "user-1", "Name": "Tester", "Policy": { "EnableSubtitleManagement": true } }"#.utf8)
-            status = 200
-        case ("GET", "/Items/item-1/RemoteSearch/Subtitles/eng"):
-            payload = Data(#"""
-            [{
-              "Id": "good",
-              "Name": "English provider subtitle",
-              "ThreeLetterISOLanguageName": "eng",
-              "ProviderName": "Test Provider",
-              "Format": "srt"
-            }, {
-              "Id": "broken",
-              "Name": "Refused provider subtitle",
-              "ThreeLetterISOLanguageName": "eng",
-              "ProviderName": "Test Provider",
-              "Format": "srt"
-            }]
-            """#.utf8)
-            status = 200
-        case ("GET", "/Items/item-1/RemoteSearch/Subtitles/est"):
-            payload = Data(#"""
-            [{
-              "Id": "eesti",
-              "Name": "Eesti subtiitrid",
-              "ThreeLetterISOLanguageName": "est",
-              "ProviderName": "Test Provider",
-              "Format": "srt"
-            }]
-            """#.utf8)
-            status = 200
-        case ("GET", "/Providers/Subtitles/Subtitles/good"):
-            payload = Data(#"""
-            1
-            00:00:01,000 --> 00:00:03,000
-            Downloaded subtitle cue
-            """#.utf8)
-            status = 200
-        case ("GET", "/Providers/Subtitles/Subtitles/broken"):
-            // A 400 skips Jellyfin's save fallback, so no retries to wait on.
-            payload = Data()
-            status = 400
-        case ("POST", "/Videos/item-1/Subtitles"):
-            payload = Data()
-            status = 204
-        default:
-            payload = Data()
-            status = 404
-        }
-
-        guard let response = HTTPURLResponse(
-            url: url,
-            statusCode: status,
-            httpVersion: "HTTP/1.1",
-            headerFields: [
-                "Content-Type": url.path.hasPrefix("/Providers/Subtitles/Subtitles/") && status == 200
-                    ? "application/x-subrip"
-                    : "application/json",
-            ]
-        ) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        if !payload.isEmpty { client?.urlProtocol(self, didLoad: payload) }
-        client?.urlProtocolDidFinishLoading(self)
-    }
-
-    override func stopLoading() {}
+    let headers = [
+        "Content-Type": url.path.hasPrefix("/Providers/Subtitles/Subtitles/") && status == 200
+            ? "application/x-subrip"
+            : "application/json",
+    ]
+    return (status, headers, payload)
 }

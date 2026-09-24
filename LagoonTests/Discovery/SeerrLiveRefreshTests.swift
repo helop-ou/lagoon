@@ -135,7 +135,7 @@ struct SeerrRequestDetailRefreshTests {
         let clients = makeClients(request: Fixtures.downloadingRequest)
         _ = try await clients.seerr.request(id: 41)
 
-        let recorded = try #require(SeerrDetailURLProtocol.records.first)
+        let recorded = try #require(SeerrDetailFixture.records.first)
         #expect(recorded.cachePolicy == .reloadIgnoringLocalCacheData)
     }
 
@@ -147,12 +147,12 @@ struct SeerrRequestDetailRefreshTests {
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin)
         #expect(model.details?.displayTitle == "Arrival")
         #expect(model.currentRequest.downloadProgress?.percentText == "62%")
-        #expect(SeerrDetailURLProtocol.paths.contains("/api/v1/movie/603"))
+        #expect(SeerrDetailFixture.paths.contains("/api/v1/movie/603"))
 
-        SeerrDetailURLProtocol.clearRecords()
+        SeerrDetailFixture.clearRecords()
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin, isRefresh: true)
 
-        #expect(SeerrDetailURLProtocol.paths == ["/api/v1/request/41"])
+        #expect(SeerrDetailFixture.paths == ["/api/v1/request/41"])
         #expect(model.details?.displayTitle == "Arrival")
     }
 
@@ -164,22 +164,22 @@ struct SeerrRequestDetailRefreshTests {
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin)
         #expect(model.jellyfinItem == nil)
 
-        SeerrDetailURLProtocol.setRequest(Fixtures.availableRequest)
-        SeerrDetailURLProtocol.setDetails(Fixtures.availableDetails)
-        SeerrDetailURLProtocol.clearRecords()
+        SeerrDetailFixture.setRequest(Fixtures.availableRequest)
+        SeerrDetailFixture.setDetails(Fixtures.availableDetails)
+        SeerrDetailFixture.clearRecords()
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin, isRefresh: true)
 
         #expect(model.jellyfinItem?.id == "jellyfin-arrival")
-        #expect(SeerrDetailURLProtocol.paths == [
+        #expect(SeerrDetailFixture.paths == [
             "/api/v1/request/41",
             "/api/v1/movie/603",
             "/Users/user/Items/jellyfin-arrival",
         ])
 
-        SeerrDetailURLProtocol.clearRecords()
+        SeerrDetailFixture.clearRecords()
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin, isRefresh: true)
 
-        #expect(SeerrDetailURLProtocol.paths == ["/api/v1/request/41"])
+        #expect(SeerrDetailFixture.paths == ["/api/v1/request/41"])
         #expect(model.jellyfinItem?.id == "jellyfin-arrival")
     }
 
@@ -188,7 +188,7 @@ struct SeerrRequestDetailRefreshTests {
         let model = SeerrRequestDetailModel(request: try decodedRequest(Fixtures.pendingRequest))
 
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin)
-        SeerrDetailURLProtocol.setFailing(true)
+        SeerrDetailFixture.setFailing(true)
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin, isRefresh: true)
 
         #expect(model.errorMessage == nil)
@@ -208,7 +208,7 @@ struct SeerrRequestDetailRefreshTests {
         #expect(model.details == nil)
         #expect(model.errorMessage == nil)
 
-        SeerrDetailURLProtocol.setFailing(true)
+        SeerrDetailFixture.setFailing(true)
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin, isRefresh: true)
 
         #expect(model.errorMessage == nil)
@@ -218,7 +218,7 @@ struct SeerrRequestDetailRefreshTests {
     @Test func aFailureBeforeAnyGoodSnapshotStillReachesTheViewer() async throws {
         let clients = makeClients(request: Fixtures.downloadingRequest)
         let model = SeerrRequestDetailModel(request: try decodedRequest(Fixtures.pendingRequest))
-        SeerrDetailURLProtocol.setFailing(true)
+        SeerrDetailFixture.setFailing(true)
 
         await model.load(client: clients.seerr, jellyfin: clients.jellyfin, isRefresh: true)
         #expect(!model.hasLoadedOnce)
@@ -230,24 +230,15 @@ struct SeerrRequestDetailRefreshTests {
     }
 
     private func makeClients(request: String) -> (seerr: SeerrClient, jellyfin: JellyfinClient) {
-        SeerrDetailURLProtocol.reset(request: request, details: Fixtures.details)
-        let seerr = SeerrClient(session: URLSession(configuration: stubConfiguration()), requestTimeout: 5)
+        SeerrDetailFixture.reset(request: request, details: Fixtures.details)
+        StubURLProtocol.register(host: "seerr.detail.test", handler: SeerrDetailFixture.respond)
+        StubURLProtocol.register(host: "jellyfin.detail.test", handler: SeerrDetailFixture.respond)
+        let seerr = SeerrClient(session: URLSession(configuration: StubURLProtocol.configuration()), requestTimeout: 5)
         seerr.configure(serverURL: URL(string: "https://seerr.detail.test")!)
         seerr.setSessionCookie("session")
 
-        let jellyfin = JellyfinClient(
-            deviceId: "seerr-detail-tests",
-            sessionConfiguration: stubConfiguration()
-        )
-        jellyfin.configure(serverURL: URL(string: "https://jellyfin.detail.test")!)
-        jellyfin.activateSession(token: "token", userId: "user")
+        let jellyfin = StubURLProtocol.makeJellyfinClient(host: "jellyfin.detail.test", deviceId: "seerr-detail-tests")
         return (seerr, jellyfin)
-    }
-
-    private func stubConfiguration() -> URLSessionConfiguration {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SeerrDetailURLProtocol.self]
-        return configuration
     }
 
     private func decodedRequest(_ json: String) throws -> SeerrMediaRequest {
@@ -277,9 +268,12 @@ private nonisolated struct RecordedDetailRequest: Sendable {
     let cachePolicy: URLRequest.CachePolicy
 }
 
-/// Serves one Seerr request, its TMDB details and Jellyfin item; can go dark
-/// on command to simulate an outage.
-private nonisolated final class SeerrDetailURLProtocol: URLProtocol, @unchecked Sendable {
+/// Fixture state for `SeerrRequestDetailRefreshTests`, spanning both the
+/// Seerr and Jellyfin hosts so `paths` reflects call order across both,
+/// matching the original single-recorder behavior. Serves one Seerr
+/// request, its TMDB details and Jellyfin item; can go dark on command to
+/// simulate an outage.
+private enum SeerrDetailFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recorded: [RecordedDetailRequest] = []
     private nonisolated(unsafe) static var requestJSON = ""
@@ -329,46 +323,19 @@ private nonisolated final class SeerrDetailURLProtocol: URLProtocol, @unchecked 
         lock.unlock()
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "seerr.detail.test" || request.url?.host == "jellyfin.detail.test"
-    }
+    static func respond(to request: URLRequest) throws -> (Int, [String: String], Data) {
+        guard let url = request.url else { throw URLError(.badURL) }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        guard let url = request.url else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
-
-        Self.lock.lock()
-        Self.recorded.append(RecordedDetailRequest(
-            path: url.path,
-            cachePolicy: request.cachePolicy
-        ))
-        let shouldFail = Self.isFailing
+        lock.lock()
+        recorded.append(RecordedDetailRequest(path: url.path, cachePolicy: request.cachePolicy))
+        let shouldFail = isFailing
         let body = Self.body(for: url.path)
-        Self.lock.unlock()
+        lock.unlock()
 
-        if shouldFail {
-            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
-            return
-        }
-        guard let body, let response = HTTPURLResponse(
-            url: url,
-            statusCode: 200,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
-        ) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        if shouldFail { throw URLError(.notConnectedToInternet) }
+        guard let body else { throw URLError(.badServerResponse) }
+        return (200, ["Content-Type": "application/json"], Data(body.utf8))
     }
-
-    override func stopLoading() {}
 
     /// Called with the lock held.
     private static func body(for path: String) -> String? {

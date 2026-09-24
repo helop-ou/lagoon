@@ -698,15 +698,11 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test @MainActor func remoteSubtitleUserFlowDownloadsValidCuesAndActivatesTrack() async throws {
-        SubtitleDownloadURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "subtitle-download-test",
-            sessionConfiguration: configuration
+        SubtitleDownloadFixture.reset()
+        StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "subtitle.test", deviceId: "subtitle-download-test", token: "test-token", userId: "user-1"
         )
-        client.configure(serverURL: URL(string: "https://subtitle.test")!)
-        client.activateSession(token: "test-token", userId: "user-1")
 
         let engine = SampleBufferPlayerEngine()
         let coordinator = SubtitleSearchCoordinator(
@@ -741,7 +737,7 @@ struct PlayerSystemIntegrationTests {
         #expect(added.isExternal == true)
         #expect(added.isHearingImpaired == true)
         try await waitUntil {
-            SubtitleDownloadURLProtocol.requests.contains {
+            SubtitleDownloadFixture.requests.contains {
                 $0.method == "POST" && $0.path == "/Videos/item-1/Subtitles"
             }
         }
@@ -752,7 +748,7 @@ struct PlayerSystemIntegrationTests {
         #expect(track.languageTag == "eng")
         #expect(track.isHearingImpaired)
 
-        let requests = SubtitleDownloadURLProtocol.requests
+        let requests = SubtitleDownloadFixture.requests
         #expect(requests.contains {
             $0.method == "GET"
                 && $0.path == "/Items/item-1/RemoteSearch/Subtitles/eng"
@@ -776,15 +772,11 @@ struct PlayerSystemIntegrationTests {
     }
 
     @Test @MainActor func remoteSubtitleSearchKeepsResultsWhenAnotherLanguageFails() async throws {
-        SubtitleDownloadURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "subtitle-search-test",
-            sessionConfiguration: configuration
+        SubtitleDownloadFixture.reset()
+        StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "subtitle.test", deviceId: "subtitle-search-test", token: "test-token", userId: "user-1"
         )
-        client.configure(serverURL: URL(string: "https://subtitle.test")!)
-        client.activateSession(token: "test-token", userId: "user-1")
 
         let coordinator = SubtitleSearchCoordinator()
         coordinator.configure(
@@ -803,24 +795,20 @@ struct PlayerSystemIntegrationTests {
 
         #expect(coordinator.phase == .idle)
         #expect(coordinator.results.count == 2)
-        #expect(SubtitleDownloadURLProtocol.requests.contains {
+        #expect(SubtitleDownloadFixture.requests.contains {
             $0.path == "/Items/item-1/RemoteSearch/Subtitles/fra"
         })
-        #expect(SubtitleDownloadURLProtocol.requests.contains {
+        #expect(SubtitleDownloadFixture.requests.contains {
             $0.path == "/Items/item-1/RemoteSearch/Subtitles/eng"
         })
     }
 
     @Test @MainActor func anAccountWithoutSubtitleManagementIsToldSoBeforeAnyRequest() async throws {
-        SubtitleDownloadURLProtocol.reset(subtitleManagement: false)
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "subtitle-permission-test",
-            sessionConfiguration: configuration
+        SubtitleDownloadFixture.reset(subtitleManagement: false)
+        StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "subtitle.test", deviceId: "subtitle-permission-test", token: "test-token", userId: "user-1"
         )
-        client.configure(serverURL: URL(string: "https://subtitle.test")!)
-        client.activateSession(token: "test-token", userId: "user-1")
 
         let coordinator = SubtitleSearchCoordinator()
         coordinator.configure(
@@ -841,21 +829,17 @@ struct PlayerSystemIntegrationTests {
         // permission, so check once and spend no provider request.
         #expect(coordinator.phase == .notPermitted)
         #expect(coordinator.results.isEmpty)
-        #expect(!SubtitleDownloadURLProtocol.requests.contains {
+        #expect(!SubtitleDownloadFixture.requests.contains {
             $0.path.contains("RemoteSearch")
         })
     }
 
     @Test @MainActor func aForbiddenProviderFetchNeverRetriesThroughJellyfin() async throws {
-        SubtitleDownloadURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "subtitle-forbidden-test",
-            sessionConfiguration: configuration
+        SubtitleDownloadFixture.reset()
+        StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "subtitle.test", deviceId: "subtitle-forbidden-test", token: "test-token", userId: "user-1"
         )
-        client.configure(serverURL: URL(string: "https://subtitle.test")!)
-        client.activateSession(token: "test-token", userId: "user-1")
 
         let engine = SampleBufferPlayerEngine()
         let coordinator = SubtitleSearchCoordinator(
@@ -881,22 +865,18 @@ struct PlayerSystemIntegrationTests {
 
         // Jellyfin's save path refetches from the provider; after a 403 that
         // only spends quota.
-        #expect(!SubtitleDownloadURLProtocol.requests.contains {
+        #expect(!SubtitleDownloadFixture.requests.contains {
             $0.method == "POST" && $0.path.contains("RemoteSearch")
         })
         #expect(engine.subtitleTracks.isEmpty)
     }
 
     @Test @MainActor func missingProviderFileExplainsRemovalOrDownloadLimit() async throws {
-        SubtitleDownloadURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SubtitleDownloadURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "subtitle-failure-test",
-            sessionConfiguration: configuration
+        SubtitleDownloadFixture.reset()
+        StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "subtitle.test", deviceId: "subtitle-failure-test", token: "test-token", userId: "user-1"
         )
-        client.configure(serverURL: URL(string: "https://subtitle.test")!)
-        client.activateSession(token: "test-token", userId: "user-1")
 
         let engine = SampleBufferPlayerEngine()
         let coordinator = SubtitleSearchCoordinator(
@@ -937,11 +917,12 @@ struct PlayerSystemIntegrationTests {
         attempts: Int = 200,
         condition: @MainActor () -> Bool
     ) async throws {
-        for _ in 0..<attempts {
-            if condition() { return }
-            try await Task.sleep(for: .milliseconds(10))
+        try await Polling.untilMainActor(
+            timeout: .milliseconds(attempts * 10), pollInterval: .milliseconds(10), condition: condition
+        )
+        if !condition() {
+            Issue.record("Timed out waiting for the subtitle workflow")
         }
-        Issue.record("Timed out waiting for the subtitle workflow")
     }
 
     private func playbackInfo(_ json: String) throws -> PlaybackInfoResponse {
@@ -969,19 +950,22 @@ private nonisolated struct RecordedSubtitleRequest: Sendable {
     let body: String?
 }
 
-/// Fake Jellyfin transport. PlaybackInfo stays stale, so the coordinator must
-/// fetch and parse the provider's bytes before activating the track.
-private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unchecked Sendable {
+/// Fixture state for the subtitle-download flow tests: a fake Jellyfin
+/// transport where PlaybackInfo stays stale, so the coordinator must fetch
+/// and parse the provider's bytes before activating the track. The body is
+/// read once at request time (URLRequest's body stream can only be drained
+/// once), so it is captured into the recorded request rather than re-read
+/// later from the stub's own request log.
+private enum SubtitleDownloadFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recordedRequests: [RecordedSubtitleRequest] = []
+    private nonisolated(unsafe) static var userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": true } }"#
 
     static var requests: [RecordedSubtitleRequest] {
         lock.lock()
         defer { lock.unlock() }
         return recordedRequests
     }
-
-    private nonisolated(unsafe) static var userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": true } }"#
 
     static func reset(subtitleManagement: Bool = true) {
         lock.lock()
@@ -990,25 +974,15 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
         lock.unlock()
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "subtitle.test"
-    }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
-        request
-    }
-
-    override func startLoading() {
-        guard let url = request.url else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
-            return
-        }
+    static func respond(to request: URLRequest) throws -> (Int, [String: String], Data) {
+        guard let url = request.url else { throw URLError(.badURL) }
         let percentEncodedPath = URLComponents(
             url: url,
             resolvingAgainstBaseURL: false
         )?.percentEncodedPath ?? url.path
-        Self.lock.lock()
-        Self.recordedRequests.append(RecordedSubtitleRequest(
+
+        lock.lock()
+        recordedRequests.append(RecordedSubtitleRequest(
             method: request.httpMethod ?? "GET",
             path: url.path,
             percentEncodedPath: percentEncodedPath,
@@ -1016,7 +990,8 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
             authorization: request.value(forHTTPHeaderField: "Authorization"),
             body: bodyString(from: request)
         ))
-        Self.lock.unlock()
+        let policyPayload = userPolicyPayload
+        lock.unlock()
 
         let payload: Data
         let status: Int
@@ -1060,7 +1035,7 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
             payload = Data()
             status = 403
         case ("GET", "/Users/Me"):
-            payload = Data(Self.userPolicyPayload.utf8)
+            payload = Data(policyPayload.utf8)
             status = 200
         case ("POST", "/Items/item-1/RemoteSearch/Subtitles/missing-provider-file"):
             // Jellyfin 10.11 returns 204 even when its internal provider
@@ -1075,26 +1050,12 @@ private nonisolated final class SubtitleDownloadURLProtocol: URLProtocol, @unche
             status = 404
         }
 
-        guard let response = HTTPURLResponse(
-            url: url,
-            statusCode: status,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": url.path.hasPrefix("/Providers/Subtitles/Subtitles/") && status == 200
-                          ? "application/x-subrip" : "application/json"]
-        ) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        if !payload.isEmpty {
-            client?.urlProtocol(self, didLoad: payload)
-        }
-        client?.urlProtocolDidFinishLoading(self)
+        let headers = ["Content-Type": url.path.hasPrefix("/Providers/Subtitles/Subtitles/") && status == 200
+                      ? "application/x-subrip" : "application/json"]
+        return (status, headers, payload)
     }
 
-    override func stopLoading() {}
-
-    private func bodyString(from request: URLRequest) -> String? {
+    private static func bodyString(from request: URLRequest) -> String? {
         if let body = request.httpBody {
             return String(data: body, encoding: .utf8)
         }

@@ -14,11 +14,8 @@ struct PlaybackAutomationTests {
 
     /// Wait for a countdown rather than sleeping past it: the main actor is
     /// shared with every suite, so a fixed sleep flakes under load.
-    private func eventually(_ condition: () -> Bool) async {
-        let deadline = ContinuousClock.now + .seconds(3)
-        while !condition(), ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+    private func eventually(_ condition: @MainActor () -> Bool) async {
+        try? await Polling.untilMainActor(timeout: .seconds(3), pollInterval: .milliseconds(10), condition: condition)
     }
 
     private func defaults(skip: SkipMode = .autoDelay, autoplay: AutoplayMode = .autoDelay) -> UserDefaults {

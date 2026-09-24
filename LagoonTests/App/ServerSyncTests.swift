@@ -52,14 +52,14 @@ struct ServerSyncTests {
         let client = makeClient()
         let model = HomeViewModel()
 
-        ServerSyncURLProtocol.setRevision(1)
+        ServerSyncFixture.setRevision(1)
         await model.load(client: client, accountID: "account")
         #expect(model.resume.first?.id == "resume-1")
         #expect(model.nextUp.first?.id == "next-1")
         #expect(model.favorites.first?.id == "favorite-1")
         #expect(model.latestRails.first?.items.first?.id == "latest-1")
 
-        ServerSyncURLProtocol.setRevision(2)
+        ServerSyncFixture.setRevision(2)
         await model.refreshServerContent(
             client: client,
             homeSectionPreferences: HomeSectionPreferenceValues()
@@ -76,7 +76,7 @@ struct ServerSyncTests {
         let model = HomeViewModel()
 
         await model.load(client: client, accountID: "account")
-        ServerSyncURLProtocol.setFailing(true)
+        ServerSyncFixture.setFailing(true)
         await model.refreshServerContent(
             client: client,
             homeSectionPreferences: HomeSectionPreferenceValues()
@@ -94,27 +94,23 @@ struct ServerSyncTests {
         let model = HomeViewModel()
         await model.load(client: client, accountID: "account")
         #expect(!model.resume.isEmpty)
-        ServerSyncURLProtocol.setRevision(0)
+        ServerSyncFixture.setRevision(0)
         await model.refreshProgress(client: client)
         #expect(model.resume.isEmpty)
         #expect(model.nextUp.first?.id == "next-1")
     }
 
     private func makeClient() -> JellyfinClient {
-        ServerSyncURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [ServerSyncURLProtocol.self]
-        let client = JellyfinClient(
-            deviceId: "server-sync-tests",
-            sessionConfiguration: configuration
-        )
-        client.configure(serverURL: URL(string: "https://jellyfin.test")!)
-        client.activateSession(token: "token", userId: "user")
-        return client
+        ServerSyncFixture.reset()
+        StubURLProtocol.register(host: "jellyfin.test", handler: ServerSyncFixture.respond)
+        return StubURLProtocol.makeJellyfinClient(host: "jellyfin.test", deviceId: "server-sync-tests")
     }
 }
 
-private nonisolated final class ServerSyncURLProtocol: URLProtocol, @unchecked Sendable {
+/// Fixture state for `ServerSyncTests`. Tests mutate `revision`/`isFailing`
+/// after `makeClient()` already built the client, so the registered
+/// `StubURLProtocol` handler reads this live rather than a fixed capture.
+private enum ServerSyncFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var revision = 1
     private nonisolated(unsafe) static var isFailing = false
@@ -138,41 +134,20 @@ private nonisolated final class ServerSyncURLProtocol: URLProtocol, @unchecked S
         lock.unlock()
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        request.url?.host == "jellyfin.test"
-    }
+    static func respond(to request: URLRequest) throws -> (Int, [String: String], Data) {
+        guard let url = request.url else { throw URLError(.badServerResponse) }
 
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        guard let url = request.url,
-              let response = HTTPURLResponse(
-                url: url,
-                statusCode: 200,
-                httpVersion: "HTTP/1.1",
-                headerFields: ["Content-Type": "application/json"]
-              ) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
-            return
-        }
-
-        Self.lock.lock()
-        let currentRevision = Self.revision
-        let shouldFail = Self.isFailing
-        Self.lock.unlock()
+        lock.lock()
+        let currentRevision = revision
+        let shouldFail = isFailing
+        lock.unlock()
 
         if shouldFail || (currentRevision == 0 && url.path == "/Shows/NextUp") {
-            client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
-            return
+            throw URLError(.notConnectedToInternet)
         }
 
-        let body = Self.body(for: url, revision: currentRevision)
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data(body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        return (200, ["Content-Type": "application/json"], Data(body(for: url, revision: currentRevision).utf8))
     }
-
-    override func stopLoading() {}
 
     private static func body(for url: URL, revision: Int) -> String {
         switch url.path {

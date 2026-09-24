@@ -222,16 +222,12 @@ struct LibraryBrowseTests {
     }
 
     @Test func catalogueYearsAreUserScopedAndUnboundedByPagingOrCurrentFilters() async throws {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [LibraryQueryURLProtocol.self]
-        let client = JellyfinClient(deviceId: "library-tests", sessionConfiguration: config)
-        client.configure(serverURL: URL(string: "https://library.test")!)
-        client.activateSession(token: "token", userId: "user")
+        let client = makeClient()
         for kind in LibraryMediaKind.allCases {
             for libraryID: String? in [nil, "cinema"] {
                 let years = try await client.libraryYears(LibraryYearScope(kind: kind, libraryID: libraryID))
                 #expect(years == [1978, 2001, 2009, 2001, 2032])
-                let url = try #require(LibraryQueryURLProtocol.lastURL)
+                let url = try #require(StubURLProtocol.requests(host: "library.test").last?.url)
                 #expect(url.path == "/Items/Filters")
                 let query = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!.map { ($0.name, $0.value ?? "") })
                 var expected = ["UserId": "user", "IncludeItemTypes": kind.includeTypes.map(\.rawValue).joined(separator: ",")]
@@ -404,17 +400,13 @@ struct LibraryBrowseTests {
     }
 
     @Test func libraryQueryReachesJellyfinWithCombinedFiltersAndPaging() async throws {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [LibraryQueryURLProtocol.self]
-        let client = JellyfinClient(deviceId: "library-tests", sessionConfiguration: config)
-        client.configure(serverURL: URL(string: "https://library.test")!)
-        client.activateSession(token: "token", userId: "user")
+        let client = makeClient()
         let selection = LibrarySelection(
             kind: .movies, sort: .rating, libraryID: "cinema", genre: "Science Fiction", decade: LibraryDecade(rawValue: 2000),
             unwatchedOnly: true, favoritesOnly: true, only4K: true
         )
         _ = try await client.libraryItems(selection, startIndex: 60, limit: 60)
-        let url = try #require(LibraryQueryURLProtocol.lastURL)
+        let url = try #require(StubURLProtocol.requests(host: "library.test").last?.url)
         let query = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!.map { ($0.name, $0.value ?? "") })
         #expect(url.path == "/Users/user/Items")
         #expect(query["ParentId"] == "cinema")
@@ -430,21 +422,17 @@ struct LibraryBrowseTests {
     }
 
     @Test func decadeQueryWorksForEveryMediaTypeAndAllDecadesOmitsYears() async throws {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [LibraryQueryURLProtocol.self]
-        let client = JellyfinClient(deviceId: "library-tests", sessionConfiguration: config)
-        client.configure(serverURL: URL(string: "https://library.test")!)
-        client.activateSession(token: "token", userId: "user")
+        let client = makeClient()
         for kind in LibraryMediaKind.allCases {
             var selection = LibrarySelection(kind: kind, genre: "Drama", decade: LibraryDecade(rawValue: 2010))
             _ = try await client.libraryItems(selection, startIndex: 0, limit: 60)
-            let url = try #require(LibraryQueryURLProtocol.lastURL)
+            let url = try #require(StubURLProtocol.requests(host: "library.test").last?.url)
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!
             #expect(query.first { $0.name == "Years" }?.value == "2010,2011,2012,2013,2014,2015,2016,2017,2018,2019")
             #expect(query.first { $0.name == "IncludeItemTypes" }?.value == kind.includeTypes.map(\.rawValue).joined(separator: ","))
             selection.decade = nil
             _ = try await client.libraryItems(selection, startIndex: 0, limit: 60)
-            let unfilteredURL = try #require(LibraryQueryURLProtocol.lastURL)
+            let unfilteredURL = try #require(StubURLProtocol.requests(host: "library.test").last?.url)
             let unfiltered = URLComponents(url: unfilteredURL, resolvingAgainstBaseURL: false)!.queryItems!
             #expect(!unfiltered.contains { $0.name == "Years" })
             #expect(unfiltered.first { $0.name == "Genres" }?.value == "Drama")
@@ -458,30 +446,14 @@ struct LibraryBrowseTests {
         ])
         return try JSONDecoder().decode(ItemsPage.self, from: data)
     }
-}
 
-private nonisolated final class LibraryQueryURLProtocol: URLProtocol, @unchecked Sendable {
-    private static let lock = NSLock()
-    private nonisolated(unsafe) static var recordedURL: URL?
-    static var lastURL: URL? {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedURL
+    private func makeClient() -> JellyfinClient {
+        StubURLProtocol.register(host: "library.test") { request in
+            let body = request.url?.path == "/Items/Filters"
+                ? #"{"Years":[1978,2001,2009,2001,2032]}"#
+                : #"{"Items":[],"TotalRecordCount":0}"#
+            return (200, ["Content-Type": "application/json"], Data(body.utf8))
+        }
+        return StubURLProtocol.makeJellyfinClient(host: "library.test", deviceId: "library-tests")
     }
-    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "library.test" }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func startLoading() {
-        guard let url = request.url else { return }
-        Self.lock.lock()
-        Self.recordedURL = url
-        Self.lock.unlock()
-        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        let body = url.path == "/Items/Filters"
-            ? #"{"Years":[1978,2001,2009,2001,2032]}"#
-            : #"{"Items":[],"TotalRecordCount":0}"#
-        client?.urlProtocol(self, didLoad: Data(body.utf8))
-        client?.urlProtocolDidFinishLoading(self)
-    }
-    override func stopLoading() {}
 }

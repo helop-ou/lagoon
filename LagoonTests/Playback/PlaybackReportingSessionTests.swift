@@ -193,11 +193,8 @@ struct PlaybackReportingSessionTests {
         return weakLifetime
     }
 
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(15)
-        while !condition(), ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+    private func waitUntil(_ condition: @MainActor () -> Bool) async throws {
+        try await Polling.untilMainActor(timeout: .seconds(15), pollInterval: .milliseconds(10), condition: condition)
         try #require(condition(), "The controlled reporting request did not reach its expected state")
     }
 }

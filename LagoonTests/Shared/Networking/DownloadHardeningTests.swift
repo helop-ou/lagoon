@@ -233,13 +233,12 @@ struct DownloadHardeningTests {
     private static func track(_ path: String, data: Data? = nil) -> ExternalSubtitleTrack {
         ExternalSubtitleTrack(url: url("/" + path), preloadedData: data, title: path, language: "en", select: true)
     }
-    private func eventually(_ predicate: () -> Bool) async throws {
-        for _ in 0..<600 {
-            if predicate() { return }
-            try await Task.sleep(for: .milliseconds(5))
+    private func eventually(_ predicate: @MainActor () -> Bool) async throws {
+        try await Polling.untilMainActor(timeout: .milliseconds(600 * 5), pollInterval: .milliseconds(5), condition: predicate)
+        if !predicate() {
+            Issue.record("Timed out waiting for the observable result")
+            throw URLError(.timedOut)
         }
-        Issue.record("Timed out waiting for the observable result")
-        throw URLError(.timedOut)
     }
 }
 

@@ -163,9 +163,8 @@ struct PlaybackSuccessorPreparationTests {
                      streamURL: URL(string: "https://media.test/\(sourceID).mkv")!, method: .directPlay)
     }
 
-    private func waitUntil(_ predicate: () -> Bool) async {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !predicate(), ContinuousClock.now < deadline { await Task.yield() }
+    private func waitUntil(_ predicate: @MainActor () -> Bool) async {
+        try? await Polling.untilMainActor(timeout: .seconds(5), condition: predicate)
         #expect(predicate())
     }
 }

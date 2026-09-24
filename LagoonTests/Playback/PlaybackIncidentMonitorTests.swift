@@ -62,10 +62,7 @@ struct PlaybackIncidentMonitorTests {
     ) async throws {
         // Waits on scheduling, not the interval (SamplingClock drives that).
         // Parallel decoder suites can hog the simulator for seconds.
-        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
-        while !condition(), ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await Polling.untilMainActor(timeout: .seconds(10), pollInterval: .milliseconds(1), condition: condition)
         try #require(condition(), sourceLocation: sourceLocation)
     }
 
