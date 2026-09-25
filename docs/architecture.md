@@ -160,7 +160,11 @@ wrapper. [Design system](design-system.md) owns the visual rules.
   Right from Settings, the last tab, since focusing a tab selects it. It
   shows over every content tab's root and every Settings page
   (`MainTabView.showsProfileButton`); like Refresh, a pushed detail hides it
-  and takes it out of accessibility.
+  and swaps its identifier to `profile.button.inactive`. Down goes into the
+  page, never sideways to the tab bar: Home's hero, or Settings' first
+  category. tvOS does not restore focus after a cover closes, so the button
+  takes focus back itself when the picker it opened is dismissed
+  (`TopChromeButton.reclaimsFocusAfterPresentation`).
 - Top Shelf reads a sanitized local snapshot and artwork. The extension gets
   no credentials and makes no network calls. Keep its extension product type
   and `_NSExtensionMain` entry point.
