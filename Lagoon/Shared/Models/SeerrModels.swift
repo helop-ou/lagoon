@@ -10,15 +10,8 @@ nonisolated struct SeerrServerStatus: Decodable, Equatable {
 
 nonisolated struct SeerrPublicSettings: Decodable, Equatable {
     let initialized: Bool
-    let applicationTitle: String?
-    let mediaServerLogin: Bool?
-    let jellyfinExternalHost: String?
     let mediaServerType: Int?
-    let partialRequestsEnabled: Bool?
     let enableSpecialEpisodes: Bool?
-    let movie4kEnabled: Bool?
-    let series4kEnabled: Bool?
-    let locale: String?
 }
 
 nonisolated struct SeerrUser: Decodable, Hashable, Identifiable {
@@ -27,7 +20,6 @@ nonisolated struct SeerrUser: Decodable, Hashable, Identifiable {
     let username: String?
     let displayName: String?
     let jellyfinUsername: String?
-    let avatar: String?
     let permissions: Int
 
     var name: String {
@@ -332,7 +324,6 @@ nonisolated struct SeerrDownloadProgress: Hashable {
 nonisolated struct SeerrDiscoverPage: Decodable, Equatable {
     let page: Int
     let totalPages: Int
-    let totalResults: Int
     let results: [SeerrDiscoverResult]
 }
 
@@ -586,7 +577,6 @@ nonisolated struct SeerrSeason: Decodable, Hashable, Identifiable {
     let name: String?
     let seasonNumber: Int
     let episodeCount: Int?
-    let airDate: String?
     let posterPath: String?
 
     var displayName: String { name ?? "Season \(seasonNumber)" }
@@ -667,7 +657,6 @@ nonisolated struct SeerrRequestedSeason: Decodable, Hashable, Identifiable {
 nonisolated struct SeerrPageInfo: Decodable, Equatable {
     let page: Int
     let pages: Int
-    let pageSize: Int?
     let results: Int
 }
 
@@ -682,8 +671,6 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let type: SeerrMediaType?
     let media: SeerrRequestMedia?
     let requestedBy: SeerrUser?
-    let createdAt: String?
-    let updatedAt: String?
     let is4k: Bool?
     let seasons: [SeerrRequestedSeason]?
     /// The Radarr/Sonarr quality profile and server. Ids only; the names
@@ -698,8 +685,6 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
         type = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .type)
         media = try container.decodeIfPresent(SeerrRequestMedia.self, forKey: .media)
         requestedBy = try container.decodeIfPresent(SeerrUser.self, forKey: .requestedBy)
-        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
-        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
         is4k = try container.decodeIfPresent(Bool.self, forKey: .is4k)
         seasons = try container.decodeIfPresent([SeerrRequestedSeason].self, forKey: .seasons)
         profileId = try container.decodeIfPresent(Int.self, forKey: .profileId)
@@ -707,7 +692,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, status, type, media, requestedBy, createdAt, updatedAt
+        case id, status, type, media, requestedBy
         case is4k, seasons, profileId, serverId
     }
 

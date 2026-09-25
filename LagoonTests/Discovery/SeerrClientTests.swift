@@ -239,7 +239,6 @@ struct SeerrClientTests {
             username: "user",
             displayName: nil,
             jellyfinUsername: nil,
-            avatar: nil,
             permissions: permissions
         )
     }
