@@ -1796,7 +1796,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             )
 
             remote.press(.menu)
-            let cleanup = waitForLifecycle(in: app, timeout: 10) {
+            let cleanup = waitForState(in: app, timeout: 10, probe: .lifecycle) {
                 $0.int("engines") == 0
                     && $0.int("controllers") == 0
                     && $0.int("demux") == 0
@@ -1874,7 +1874,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         add(activeDiagnostics)
 
         remote.press(.menu)
-        let cleanup = waitForLifecycle(in: app, timeout: 10) {
+        let cleanup = waitForState(in: app, timeout: 10, probe: .lifecycle) {
             $0.int("engines") == 0
                 && $0.int("controllers") == 0
                 && $0.int("demux") == 0
@@ -2024,7 +2024,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [dismissed], timeout: 20), .completed, "the player did not dismiss")
         // The lifecycle probe exists only in Debug, and this test runs in Release.
         if app.descendants(matching: .any)["app.lifecycle.state"].exists {
-            let cleanup = waitForLifecycle(in: app, timeout: 15) {
+            let cleanup = waitForState(in: app, timeout: 15, probe: .lifecycle) {
                 $0.int("engines") == 0
                     && $0.int("controllers") == 0
                     && $0.int("demux") == 0
@@ -2066,7 +2066,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         waitForState(in: app, timeout: 12) { $0.double("time") > firstStart + 3 }
 
         remote.press(.menu)
-        let firstCleanup = waitForLifecycle(in: app, timeout: 10) {
+        let firstCleanup = waitForState(in: app, timeout: 10, probe: .lifecycle) {
             $0.int("engines") == 0
                 && $0.int("controllers") == 0
                 && $0.int("demux") == 0
@@ -2125,7 +2125,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             )
 
             remote.press(.menu)
-            let cleanup = waitForLifecycle(in: app, timeout: 10) {
+            let cleanup = waitForState(in: app, timeout: 10, probe: .lifecycle) {
                 $0.int("engines") == 0
                     && $0.int("controllers") == 0
                     && $0.int("demux") == 0
@@ -2155,7 +2155,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         waitForState(in: app, timeout: 60) { $0.int("ready") == 1 }
 
         remote.press(.menu)
-        let cleanup = waitForLifecycle(in: app, timeout: 10) {
+        let cleanup = waitForState(in: app, timeout: 10, probe: .lifecycle) {
             $0.int("engines") == 0
                 && $0.int("controllers") == 0
                 && $0.int("demux") == 0
@@ -2165,7 +2165,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
 
         // After the injected delay, a cancelled startup must stay cancelled.
         Thread.sleep(forTimeInterval: 6)
-        let settled = waitForLifecycle(in: app, timeout: 2) {
+        let settled = waitForState(in: app, timeout: 2, probe: .lifecycle) {
             $0.int("engines") == 0
                 && $0.int("controllers") == 0
                 && $0.int("demux") == 0

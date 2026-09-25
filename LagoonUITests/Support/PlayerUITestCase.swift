@@ -94,21 +94,26 @@ class PlayerUITestCase: XCTestCase {
     func waitForState(
         in app: XCUIApplication,
         timeout: TimeInterval,
+        probe: RegressionProbe = .player,
         file: StaticString = #filePath,
         line: UInt = #line,
         predicate: (RegressionState) -> Bool
     ) -> RegressionState {
-        pollRegressionState(
-            in: app,
-            identifier: "player.regression.state",
-            timeout: timeout,
-            // A missing probe still counts as a (empty) state to evaluate.
-            evaluateWhenMissing: true,
-            label: "player state",
-            file: file,
-            line: line,
-            predicate: predicate
-        )
+        let deadline = Date().addingTimeInterval(timeout)
+        var latest = RegressionState("")
+        repeat {
+            let element = app.descendants(matching: .any)[probe.identifier]
+            if element.exists {
+                latest = RegressionState(element.value as? String ?? "")
+                if predicate(latest) { return latest }
+            } else if probe.evaluateWhenMissing {
+                latest = RegressionState("")
+                if predicate(latest) { return latest }
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        } while Date() < deadline
+        XCTFail("Timed out waiting for \(probe.label). Latest: \(latest.raw)", file: file, line: line)
+        return latest
     }
 
     func state(in app: XCUIApplication) -> RegressionState {
@@ -116,55 +121,36 @@ class PlayerUITestCase: XCTestCase {
         guard element.exists else { return RegressionState("") }
         return RegressionState(element.value as? String ?? "")
     }
+}
 
-    @discardableResult
-    func waitForLifecycle(
-        in app: XCUIApplication,
-        timeout: TimeInterval,
-        file: StaticString = #filePath,
-        line: UInt = #line,
-        predicate: (RegressionState) -> Bool
-    ) -> RegressionState {
-        pollRegressionState(
-            in: app,
-            identifier: "app.lifecycle.state",
-            timeout: timeout,
-            // Unlike waitForState, a missing probe is skipped rather than
-            // evaluated as empty.
-            evaluateWhenMissing: false,
-            label: "playback lifecycle",
-            file: file,
-            line: line,
-            predicate: predicate
-        )
+/// Which accessibility probe `waitForState` polls.
+enum RegressionProbe {
+    /// The playback probe. A missing element still counts as an (empty)
+    /// state to evaluate.
+    case player
+    /// The app lifecycle probe. Unlike `.player`, a missing element is
+    /// skipped rather than evaluated as empty.
+    case lifecycle
+
+    var identifier: String {
+        switch self {
+        case .player: "player.regression.state"
+        case .lifecycle: "app.lifecycle.state"
+        }
     }
 
-    @discardableResult
-    private func pollRegressionState(
-        in app: XCUIApplication,
-        identifier: String,
-        timeout: TimeInterval,
-        evaluateWhenMissing: Bool,
-        label: String,
-        file: StaticString,
-        line: UInt,
-        predicate: (RegressionState) -> Bool
-    ) -> RegressionState {
-        let deadline = Date().addingTimeInterval(timeout)
-        var latest = RegressionState("")
-        repeat {
-            let element = app.descendants(matching: .any)[identifier]
-            if element.exists {
-                latest = RegressionState(element.value as? String ?? "")
-                if predicate(latest) { return latest }
-            } else if evaluateWhenMissing {
-                latest = RegressionState("")
-                if predicate(latest) { return latest }
-            }
-            Thread.sleep(forTimeInterval: 0.2)
-        } while Date() < deadline
-        XCTFail("Timed out waiting for \(label). Latest: \(latest.raw)", file: file, line: line)
-        return latest
+    var evaluateWhenMissing: Bool {
+        switch self {
+        case .player: true
+        case .lifecycle: false
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .player: "player state"
+        case .lifecycle: "playback lifecycle"
+        }
     }
 }
 
