@@ -431,48 +431,15 @@ struct PlayerControlPanel: View {
     private var audioOptions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Options")
-            #if os(iOS)
-            Stepper {
-                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                    Text("Audio Delay")
-                    Text(String(format: "%+.1f s", audioDelay))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            } onIncrement: {
-                onSetAudioDelay(audioDelay + 0.1)
-            } onDecrement: {
-                onSetAudioDelay(audioDelay - 0.1)
-            }
-            .accessibilityValue(String(format: "%.1f seconds", audioDelay))
-            .accessibilityIdentifier("player.audioDelay")
-            #else
-            HStack(spacing: Metrics.Space.m) {
-                Text("Audio Delay")
-                    .font(.callout)
-                    .fixedSize()
-                    .layoutPriority(1)
-                Spacer()
-                Button {
-                    onSetAudioDelay(audioDelay - 0.1)
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .accessibilityIdentifier("player.audioDelay.decrease")
-                Text(String(format: "%+.1f s", audioDelay))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(audioDelay == 0 ? .secondary : .primary)
-                    .fixedSize()
-                    .layoutPriority(1)
-                    .accessibilityIdentifier("player.audioDelay.value")
-                Button {
-                    onSetAudioDelay(audioDelay + 0.1)
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityIdentifier("player.audioDelay.increase")
-            }
-            #endif
+            adjustmentRow(
+                "Audio Delay",
+                value: String(format: "%+.1f s", audioDelay),
+                isDefault: audioDelay == 0,
+                accessibilityValue: String(format: "%.1f seconds", audioDelay),
+                identifier: "player.audioDelay",
+                onIncrement: { onSetAudioDelay(audioDelay + 0.1) },
+                onDecrement: { onSetAudioDelay(audioDelay - 0.1) }
+            )
         }
     }
 
@@ -519,49 +486,67 @@ struct PlayerControlPanel: View {
     private var videoOptions: some View {
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Options")
-            #if os(iOS)
-            Stepper {
-                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                    Text("Playback Speed")
-                    Text(PlaybackRatePolicy.title(playbackRate))
-                        .font(.callout.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-            } onIncrement: {
-                onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: 1))
-            } onDecrement: {
-                onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: -1))
-            }
-            .accessibilityValue(String(format: "%.2f times normal speed", playbackRate))
-            .accessibilityIdentifier("player.playbackRate")
-            #else
-            HStack(spacing: Metrics.Space.m) {
-                Text("Playback Speed")
-                    .font(.callout)
-                    .fixedSize()
-                    .layoutPriority(1)
-                Spacer()
-                Button {
-                    onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: -1))
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .accessibilityIdentifier("player.playbackRate.decrease")
-                Text(PlaybackRatePolicy.title(playbackRate))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(playbackRate == 1 ? .secondary : .primary)
-                    .fixedSize()
-                    .layoutPriority(1)
-                    .accessibilityIdentifier("player.playbackRate.value")
-                Button {
-                    onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: 1))
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityIdentifier("player.playbackRate.increase")
-            }
-            #endif
+            adjustmentRow(
+                "Playback Speed",
+                value: PlaybackRatePolicy.title(playbackRate),
+                isDefault: playbackRate == 1,
+                accessibilityValue: String(format: "%.2f times normal speed", playbackRate),
+                identifier: "player.playbackRate",
+                onIncrement: { onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: 1)) },
+                onDecrement: { onSetPlaybackRate(PlaybackRatePolicy.stepped(from: playbackRate, by: -1)) }
+            )
         }
+    }
+
+    /// A native stepper on iOS. tvOS has none, so it gets minus and plus
+    /// buttons around the value, which reads secondary at its default.
+    private func adjustmentRow(
+        _ title: LocalizedStringKey,
+        value: String,
+        isDefault: Bool,
+        accessibilityValue: String,
+        identifier: String,
+        onIncrement: @escaping () -> Void,
+        onDecrement: @escaping () -> Void
+    ) -> some View {
+        #if os(iOS)
+        Stepper {
+            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                Text(title)
+                Text(value)
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        } onIncrement: {
+            onIncrement()
+        } onDecrement: {
+            onDecrement()
+        }
+        .accessibilityValue(accessibilityValue)
+        .accessibilityIdentifier(identifier)
+        #else
+        HStack(spacing: Metrics.Space.m) {
+            Text(title)
+                .font(.callout)
+                .fixedSize()
+                .layoutPriority(1)
+            Spacer()
+            Button(action: onDecrement) {
+                Image(systemName: "minus")
+            }
+            .accessibilityIdentifier("\(identifier).decrease")
+            Text(value)
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(isDefault ? .secondary : .primary)
+                .fixedSize()
+                .layoutPriority(1)
+                .accessibilityIdentifier("\(identifier).value")
+            Button(action: onIncrement) {
+                Image(systemName: "plus")
+            }
+            .accessibilityIdentifier("\(identifier).increase")
+        }
+        #endif
     }
 
     /// Either choosing a track or browsing results, never both.
