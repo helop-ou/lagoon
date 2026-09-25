@@ -29,6 +29,7 @@ screen-specific copies.
 | `downloadRingLineWidth` | Not used | 2.5: download progress ring stroke |
 | `downloadMarkSize` | Not used | 18: download progress ring |
 | `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's "downloaded" and "watched" badges and their corner inset |
+| `profilePortraitSize` / `groupedProfilePortraitSize` | 200 / 130 | 84 / 84: a profile's round portrait in "Who's watching?", one server / grouped by server |
 | `themeSwatchSize` | Not used | 28: swatch in Settings › Appearance |
 | `qrCodeSize` / `qrCodeMinimumQuietZone` | 420 / 32 | 220 / 16, gallery only. A code scans from about ten times its width. The real quiet zone is derived from the code |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
@@ -112,6 +113,13 @@ notes](reference/design-system.md#themes).
 - **Title art:** `TitleArtView` shows a library title's Jellyfin logo and
   `TitleArtImage` any logo URL; both fall back to the name in type. Seerr
   titles use the Jellyfin logo once the title is in the library.
+- **Profile picker:** round `ProfilePortrait`s with the name beneath. On
+  tvOS only the portrait is the button, `.buttonStyle(.card)` with
+  `.buttonBorderShape(.circle)`, so the system focus lift follows the circle;
+  borderless and plain styles draw a square platter. Several servers put each
+  server's name, address and status dot beside its row on tvOS and above its
+  grid on iOS, so three servers fit one TV screen. The active profile carries a
+  check mark only when the picker is opened from the app.
 - **Top 10 shelves:** landscape cards with an oversized rank beside each. The
   rank sits outside the focusable card, so focus lift and accessibility stay
   with the native control.
