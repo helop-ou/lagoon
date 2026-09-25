@@ -39,17 +39,10 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
         self.policy = policy
         self.isEnabled = isEnabled
         self.directory = directory ?? Self.defaultDirectory
-        if let session {
-            self.session = session
-        } else {
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.urlCache = nil
-            configuration.httpCookieStorage = nil
-            configuration.httpShouldSetCookies = false
-            configuration.timeoutIntervalForRequest = 20
-            configuration.waitsForConnectivity = false
-            self.session = URLSession(configuration: configuration)
-        }
+        self.session = session ?? UncachedSession.make(
+            waitsForConnectivity: false,
+            timeoutIntervalForRequest: 20
+        )
     }
 
     static var defaultDirectory: URL {

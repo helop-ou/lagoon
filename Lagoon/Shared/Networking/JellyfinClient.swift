@@ -498,15 +498,10 @@ final class JellyfinClient {
 
     // MARK: - Server probe (pre-auth, arbitrary URL)
 
-    private nonisolated static let serverProbeSession: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.urlCache = nil
-        configuration.httpCookieStorage = nil
-        configuration.httpShouldSetCookies = false
-        configuration.waitsForConnectivity = true
-        configuration.timeoutIntervalForResource = 15
-        return URLSession(configuration: configuration)
-    }()
+    private nonisolated static let serverProbeSession: URLSession = UncachedSession.make(
+        waitsForConnectivity: true,
+        timeoutIntervalForResource: 15
+    )
 
     /// The profile picker's status dot: a quick, unauthenticated answer or
     /// none. Never waits for connectivity, unlike `fetchPublicInfo`.

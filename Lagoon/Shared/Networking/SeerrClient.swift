@@ -52,13 +52,7 @@ final class SeerrClient {
     }
 
     private nonisolated static func uncachedSession() -> URLSession {
-        let configuration = URLSessionConfiguration.default
-        configuration.urlCache = nil
-        configuration.httpCookieStorage = nil
-        configuration.httpShouldSetCookies = false
-        configuration.waitsForConnectivity = true
-        configuration.timeoutIntervalForResource = 20
-        return URLSession(configuration: configuration)
+        UncachedSession.make(base: .default, waitsForConnectivity: true, timeoutIntervalForResource: 20)
     }
 
     func configure(serverURL: URL) {
