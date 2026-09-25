@@ -1099,13 +1099,6 @@ final class PlaybackController {
                 self.audioSession.simulateMediaServicesResetForRegression()
             }
         }
-        if UserDefaults.standard.bool(forKey: "debug.regressionInjectAudioRendererFailure") {
-            Task { [weak self, weak engine] in
-                try? await Task.sleep(for: .seconds(4))
-                guard let self, let engine, self.engine === engine else { return }
-                engine.simulateAudioRendererFailureForRegression()
-            }
-        }
     }
     #endif
 
