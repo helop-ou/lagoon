@@ -81,6 +81,12 @@ extension View {
     }
 }
 
+extension EnvironmentValues {
+    /// Opens "Who's watching?" over the app, keeping the current profile.
+    /// `MainTabView` provides the action.
+    @Entry var openProfilePicker: (@MainActor () -> Void)?
+}
+
 #if os(iOS)
 extension EnvironmentValues {
     /// Shows the downloads list on the Library tab. Settings cannot push it:
