@@ -159,9 +159,10 @@ Platform limits, verified on device:
   known, playing or paused. Only a live stream (`duration == 0`) falls back to
   blind ±10 s seeks.
 - Playback continues behind the chip, and nothing is restored on cancel. The
-  _fill_ shows the live position (`fillMotion` stays on `liveMotion` on tvOS;
-  easing per update stutters) while the _knob_ walks ahead. Touch is the
-  reverse: the thumb drags the fill.
+  fill, knob, chip and elapsed label all follow the scrub target while
+  scrubbing and the live position otherwise, through one `Playhead` fraction
+  and curve: an ease per scrub step, linear between the engine's position
+  updates. Touch works the same way, with the thumb dragging the fill.
 - A lone press is still a 10 s skip: the scrub commits itself after
   `ScrubMetrics.runExpiry` plus `ScrubMetrics.selfCommit` (600 ms each) of
   quiet. Both are hardware-tuned.
