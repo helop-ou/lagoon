@@ -370,45 +370,29 @@ struct EpisodeCard: View {
     }
 
     private var artwork: some View {
-            ZStack(alignment: .bottomLeading) {
-                CachedAsyncImage(
-                    url: session.client.imageURL(for: episode, kind: .thumb, maxWidth: ArtworkSizing.pixels(for: cardWidth, displayScale: displayScale)),
-                    maxPixelSize: ArtworkSizing.pixels(for: cardWidth, displayScale: displayScale)
-                ) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Color.white.opacity(0.08)
+        LandscapeArtwork(
+            imageURL: session.client.imageURL(for: episode, kind: .thumb, maxWidth: ArtworkSizing.pixels(for: cardWidth, displayScale: displayScale)),
+            maxPixelSize: ArtworkSizing.pixels(for: cardWidth, displayScale: displayScale),
+            width: cardWidth,
+            height: cardHeight,
+            showsMetadata: true,
+            progress: episode.playbackProgress
+        ) {
+            VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                if let label = episode.episodeLabel {
+                    Text(label)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.secondary)
                 }
-                .frame(width: cardWidth, height: cardHeight)
-                .clipped()
-
-                LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .bottom, endPoint: .top)
-                    .frame(height: cardHeight * 0.55)
-                    .frame(maxWidth: .infinity, alignment: .bottom)
-
-                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                    if let label = episode.episodeLabel {
-                        Text(label)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(episode.name ?? "")
-                        .font(.footnote.bold())
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, Metrics.Space.m)
-                .padding(.bottom, episode.playbackProgress == nil ? 10 : 20)
-
-                if let progress = episode.playbackProgress {
-                    ItemProgressBar(progress: progress)
-                }
+                Text(episode.name ?? "")
+                    .font(.footnote.bold())
+                    .lineLimit(1)
             }
-            .frame(width: cardWidth, height: cardHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-            .downloadedBadge(itemID: episode.id, inset: Metrics.cardMarkInset) {
-                if isWatched {
-                    WatchedMark()
-                }
+        }
+        .downloadedBadge(itemID: episode.id, inset: Metrics.cardMarkInset) {
+            if isWatched {
+                WatchedMark()
             }
+        }
     }
 }

@@ -119,6 +119,9 @@ notes](reference/design-system.md#themes).
     `.frame(maxWidth:/maxHeight: .infinity, alignment:)`, so `ItemProgressBar`
     and the Seerr `StatusCapsule` can share one `ZStack` with no imposed
     alignment.
+  - Landscape tiles (`LandscapeCard`, `EpisodeCard`) share `LandscapeArtwork`
+    for the 16:9 clip, bottom metadata wash and progress bar; each supplies
+    its own `metadata` closure for the title block.
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
     `WatchedMark`); `String.appendingDownloadedSuffix(itemID:)` appends the

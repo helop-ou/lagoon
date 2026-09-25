@@ -202,46 +202,79 @@ struct LandscapeCard: View {
     }
 
     private var artwork: some View {
+        LandscapeArtwork(
+            imageURL: thumbURL,
+            maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale),
+            showsMetadata: showsMetadata || thumbURL == nil,
+            progress: item.playbackProgress
+        ) {
+            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                Text(item.railTitle)
+                    .font(.footnote.bold())
+                    .lineLimit(1)
+                if let subtitle = item.railSubtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .downloadedBadge(itemID: item.id)
+    }
+}
+
+/// 16:9 artwork with a clip, an optional bottom-gradient metadata wash and a
+/// playback-progress bar. Shared by landscape rail cards and episode tiles;
+/// `metadata` draws the caller's own title block inside the wash, and a
+/// corner mark is the caller's `.downloadedBadge`.
+struct LandscapeArtwork<Metadata: View>: View {
+    let imageURL: URL?
+    let maxPixelSize: Int
+    var width: CGFloat = Metrics.landscapeWidth
+    var height: CGFloat = Metrics.landscapeHeight
+    let showsMetadata: Bool
+    let progress: Double?
+    @ViewBuilder var metadata: () -> Metadata
+
+    var body: some View {
         ZStack(alignment: .bottomLeading) {
             CachedAsyncImage(
-                url: thumbURL,
-                maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
+                url: imageURL,
+                maxPixelSize: maxPixelSize
             ) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Color.white.opacity(0.06)
             }
-            .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
+            .frame(width: width, height: height)
             .clipped()
 
-            // No artwork: show the name.
-            if showsMetadata || thumbURL == nil {
-                LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .top)
-                    .frame(height: Metrics.landscapeHeight * 0.55)
-                    .frame(maxWidth: .infinity, alignment: .bottom)
+            if showsMetadata {
+                LinearGradient(
+                    colors: [.black.opacity(Metrics.landscapeMetadataGradientOpacity), .clear],
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+                .frame(height: height * 0.55)
+                .frame(maxWidth: .infinity, alignment: .bottom)
 
-                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                    Text(item.railTitle)
-                        .font(.footnote.bold())
-                        .lineLimit(1)
-                    if let subtitle = item.railSubtitle {
-                        Text(subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-                .padding(.horizontal, Metrics.Space.m)
-                .padding(.bottom, item.playbackProgress == nil ? 12 : 22)
+                metadata()
+                    .padding(.horizontal, Metrics.Space.m)
+                    .padding(
+                        .bottom,
+                        progress == nil
+                            ? Metrics.landscapeMetadataPadding
+                            : Metrics.landscapeMetadataPaddingWithProgress
+                    )
             }
 
-            if let progress = item.playbackProgress {
+            if let progress {
                 ItemProgressBar(progress: progress)
             }
         }
-        .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
+        .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-        .downloadedBadge(itemID: item.id)
     }
 }
 

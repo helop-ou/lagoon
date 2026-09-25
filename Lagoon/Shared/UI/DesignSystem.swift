@@ -195,6 +195,13 @@ enum Metrics {
 
     static let cardCornerRadius: CGFloat = 12
     static let cardArtRadius: CGFloat = 10
+    /// Opacity of the bottom gradient wash behind a landscape tile's
+    /// metadata text, shared by rail cards and episode tiles.
+    static let landscapeMetadataGradientOpacity: Double = 0.85
+    /// Bottom padding under a landscape tile's metadata text: tighter with
+    /// no progress bar than when reserving room above one.
+    static let landscapeMetadataPadding: CGFloat = 12
+    static let landscapeMetadataPaddingWithProgress: CGFloat = 22
     /// The focused card's artwork halo: blurred so no edge reads as a shape,
     /// and faint so it doesn't compete with the artwork.
     static let focusHaloBlur: CGFloat = 36
