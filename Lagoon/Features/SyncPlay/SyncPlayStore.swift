@@ -459,8 +459,6 @@ final class SyncPlayStore {
                 disconnect()
             case .notice(let notice):
                 post(notice)
-            case .accessDenied:
-                break
             }
         }
     }

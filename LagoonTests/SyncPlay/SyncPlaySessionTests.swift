@@ -50,7 +50,7 @@ struct SyncPlaySessionTests {
         let effects = session.apply(try Self.update("""
         {"GroupId":"\(Self.groupID)","Type":"GroupLeft","Data":"ea961538-2d21-4f9c-9313-c26fbd3bad89"}
         """))
-        #expect(effects.contains(.left(reason: .leftGroup)))
+        #expect(effects == [.left, .notice(.left(.leftGroup))])
         #expect(!session.isJoined)
         #expect(session.lastCommand == nil)
     }
@@ -59,7 +59,7 @@ struct SyncPlaySessionTests {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
         let effects = session.apply(try Self.update(#"{"Type":"NotInGroup"}"#))
-        #expect(effects.contains(.left(reason: .notInGroup)))
+        #expect(effects == [.left, .notice(.left(.notInGroup))])
         #expect(!session.isJoined)
     }
 

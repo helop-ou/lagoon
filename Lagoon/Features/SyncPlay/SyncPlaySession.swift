@@ -8,10 +8,8 @@ import Foundation
 nonisolated enum SyncPlaySessionEffect: Equatable, Sendable {
     /// Resolve the item and open the player there, paused.
     case loadItem(itemId: String, playlistItemId: String, positionSeconds: Double)
-    case left(reason: SyncPlayLeaveReason)
+    case left
     case notice(SyncPlayNotice)
-    /// The group plays from a library this account cannot see.
-    case accessDenied
 }
 
 nonisolated enum SyncPlayLeaveReason: Equatable, Sendable {
@@ -96,15 +94,15 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
             return [.notice(.userLeft(name))]
         case .groupLeft:
             reset()
-            return [.left(reason: .leftGroup), .notice(.left(.leftGroup))]
+            return [.left, .notice(.left(.leftGroup))]
         case .notInGroup:
             reset()
-            return [.left(reason: .notInGroup), .notice(.left(.notInGroup))]
+            return [.left, .notice(.left(.notInGroup))]
         case .groupDoesNotExist:
             reset()
-            return [.left(reason: .groupDoesNotExist), .notice(.left(.groupDoesNotExist))]
+            return [.left, .notice(.left(.groupDoesNotExist))]
         case .libraryAccessDenied:
-            return [.accessDenied, .notice(.accessDenied)]
+            return [.notice(.accessDenied)]
         case .stateUpdate:
             guard let stateUpdate = update.stateUpdate, stateUpdate.state != state else { return [] }
             state = stateUpdate.state
