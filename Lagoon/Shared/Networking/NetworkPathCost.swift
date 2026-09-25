@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(Network)
 import Network
 #endif
@@ -44,11 +45,10 @@ nonisolated enum MeteredPathPolicy {
 /// The current path cost, kept live by `NWPathMonitor`. Read once per
 /// `PlaybackInfo`; a path change mid-title deliberately does not
 /// re-negotiate.
-nonisolated final class NetworkPathObserver: @unchecked Sendable {
+nonisolated final class NetworkPathObserver: Sendable {
     static let shared = NetworkPathObserver()
 
-    private let lock = NSLock()
-    private var cost: NetworkPathCost = .unrestricted
+    private let cost = OSAllocatedUnfairLock<NetworkPathCost>(initialState: .unrestricted)
     #if canImport(Network)
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "ee.helop.lagoon.networkpath")
@@ -58,8 +58,8 @@ nonisolated final class NetworkPathObserver: @unchecked Sendable {
     func start() {
         #if canImport(Network)
         monitor.pathUpdateHandler = { [weak self] path in
-            self?.lock.withLock {
-                self?.cost = NetworkPathCost(
+            self?.cost.withLock {
+                $0 = NetworkPathCost(
                     isExpensive: path.isExpensive,
                     isConstrained: path.isConstrained
                 )
@@ -72,11 +72,11 @@ nonisolated final class NetworkPathObserver: @unchecked Sendable {
     /// `.unrestricted` until the monitor reports, so a cold-launch first
     /// negotiation over cellular may miss the cap once.
     var current: NetworkPathCost {
-        lock.withLock { cost }
+        cost.withLock { $0 }
     }
 
     /// Testing seam; the monitor overwrites this on its next update.
     func override(_ cost: NetworkPathCost) {
-        lock.withLock { self.cost = cost }
+        self.cost.withLock { $0 = cost }
     }
 }
