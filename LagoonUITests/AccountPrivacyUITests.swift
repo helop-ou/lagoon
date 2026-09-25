@@ -51,9 +51,9 @@ final class AccountPrivacyUITests: XCTestCase {
         XCTAssertFalse(app.buttons["A private search"].exists)
         attachScreenshot(of: app, named: "account-b-searches")
 
-        // Adding from the picker closes it first, then opens sign-in.
-        openAccountSettings(in: app)
-        select(app.buttons["settings.account.switch"])
+        // Adding from the picker closes it first, then opens sign-in. This
+        // time the picker comes from the chrome, not the Account page.
+        openProfilePickerFromChrome(in: app)
         let add = app.buttons["account.add"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
         #if os(tvOS)
@@ -112,6 +112,27 @@ final class AccountPrivacyUITests: XCTestCase {
         XCUIRemote.shared.press(.down)
         #else
         tab.tap()
+        #endif
+    }
+
+    /// tvOS: the profile button, Right from the last tab. iOS: Switch
+    /// Profile at the top of Settings, whose tab shows the portrait.
+    private func openProfilePickerFromChrome(in app: XCUIApplication) {
+        selectTab("Settings", in: app)
+        #if os(tvOS)
+        let button = app.buttons["profile.button"]
+        XCTAssertTrue(button.waitForExistence(timeout: 5))
+        for _ in 0..<10 where !button.hasFocus
+            && !app.tabBars.buttons.allElementsBoundByIndex.contains(where: \.hasFocus) {
+            XCUIRemote.shared.press(.up)
+        }
+        for _ in 0..<3 where !button.hasFocus { XCUIRemote.shared.press(.right) }
+        XCTAssertTrue(button.hasFocus)
+        attachScreenshot(of: app, named: "profile-button-focused")
+        XCUIRemote.shared.press(.select)
+        #else
+        attachScreenshot(of: app, named: "settings-root-profile")
+        select(app.buttons["settings.root.switchProfile"])
         #endif
     }
 
