@@ -70,6 +70,7 @@ private struct TVProfileControl: UIViewRepresentable {
             coordinator.moveDownAction?()
         }
         button.topChromeOffsetChanged = { coordinator.topChromeOffsetChanged($0) }
+        button.reclaimsFocusAfterPresentation = true
         return button
     }
 
@@ -89,10 +90,7 @@ private struct TVProfileControl: UIViewRepresentable {
         button.allowsFocus = allowsFocus
         button.accessibilityLabel = "Switch Profile"
         button.accessibilityValue = profileName
-        button.accessibilityIdentifier = "profile.button"
-        // SwiftUI's accessibilityHidden does not reach the UIKit button.
-        button.isAccessibilityElement = tracksTopChrome
-        button.accessibilityElementsHidden = !tracksTopChrome
+        button.accessibilityIdentifier = tracksTopChrome ? "profile.button" : "profile.button.inactive"
     }
 
     /// The portrait inside a thin glass ring, the size of Refresh's circle;
