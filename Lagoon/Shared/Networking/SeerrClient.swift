@@ -127,8 +127,19 @@ final class SeerrClient {
 
     // MARK: - Discovery
 
+    /// The movie or TV route segment for a media type. Every route folded
+    /// through this treats anything but `.movie` as TV, matching each
+    /// route's existing fallback.
+    private func routeSegment(for mediaType: SeerrMediaType, movie: String, tv: String) -> String {
+        mediaType == .movie ? movie : tv
+    }
+
+    private func pageQuery(_ page: Int) -> [URLQueryItem] {
+        [URLQueryItem(name: "page", value: String(page))]
+    }
+
     func trending(page: Int = 1, mediaType: SeerrMediaType? = nil) async throws -> SeerrDiscoverPage {
-        var query = [URLQueryItem(name: "page", value: String(page))]
+        var query = pageQuery(page)
         if let mediaType {
             query.append(URLQueryItem(name: "mediaType", value: mediaType.rawValue))
         }
@@ -136,23 +147,23 @@ final class SeerrClient {
     }
 
     func discover(_ mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
-        let path = mediaType == .movie ? "discover/movies" : "discover/tv"
-        return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
+        let path = routeSegment(for: mediaType, movie: "discover/movies", tv: "discover/tv")
+        return try await get(path, query: pageQuery(page))
     }
 
     func upcoming(_ mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
-        let path = mediaType == .movie ? "discover/movies/upcoming" : "discover/tv/upcoming"
-        return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
+        let path = routeSegment(for: mediaType, movie: "discover/movies/upcoming", tv: "discover/tv/upcoming")
+        return try await get(path, query: pageQuery(page))
     }
 
     /// The viewer's watchlist. Called `PLEX_WATCHLIST` in Jellyseerr's
     /// slider enum, but it is the local watchlist on Jellyfin.
     func watchlist(page: Int = 1) async throws -> SeerrDiscoverPage {
-        try await get("discover/watchlist", query: [URLQueryItem(name: "page", value: String(page))])
+        try await get("discover/watchlist", query: pageQuery(page))
     }
 
     func genres(_ mediaType: SeerrMediaType) async throws -> [SeerrGenre] {
-        let path = mediaType == .movie ? "discover/genreslider/movie" : "discover/genreslider/tv"
+        let path = routeSegment(for: mediaType, movie: "discover/genreslider/movie", tv: "discover/genreslider/tv")
         return try await get(path)
     }
 
@@ -161,10 +172,12 @@ final class SeerrClient {
         genreID: Int,
         page: Int = 1
     ) async throws -> SeerrDiscoverPage {
-        let path = mediaType == .movie
-            ? "discover/movies/genre/\(genreID)"
-            : "discover/tv/genre/\(genreID)"
-        return try await get(path, query: [URLQueryItem(name: "page", value: String(page))])
+        let path = routeSegment(
+            for: mediaType,
+            movie: "discover/movies/genre/\(genreID)",
+            tv: "discover/tv/genre/\(genreID)"
+        )
+        return try await get(path, query: pageQuery(page))
     }
 
     /// The owner's Discover rows. Built-ins come back as type and order
@@ -174,38 +187,25 @@ final class SeerrClient {
     }
 
     func search(query term: String, page: Int = 1) async throws -> SeerrDiscoverPage {
-        try await get("search", query: [
-            URLQueryItem(name: "query", value: term),
-            URLQueryItem(name: "page", value: String(page)),
-        ])
+        try await get("search", query: [URLQueryItem(name: "query", value: term)] + pageQuery(page))
     }
 
     func details(id: Int, mediaType: SeerrMediaType) async throws -> SeerrMediaDetails {
-        switch mediaType {
-        case .movie:
-            return try await get("movie/\(id)")
-        case .tv:
-            return try await get("tv/\(id)")
-        case .person:
+        guard mediaType != .person else {
             throw SeerrError.server(400, "People do not have requestable media details.")
         }
+        let path = routeSegment(for: mediaType, movie: "movie", tv: "tv")
+        return try await get("\(path)/\(id)")
     }
 
     /// TMDB recommendations. Not `similar`, which is keyword-matched and
     /// much weaker.
     func recommendations(id: Int, mediaType: SeerrMediaType, page: Int = 1) async throws -> SeerrDiscoverPage {
-        switch mediaType {
-        case .movie:
-            return try await get("movie/\(id)/recommendations", query: [
-                URLQueryItem(name: "page", value: String(page)),
-            ])
-        case .tv:
-            return try await get("tv/\(id)/recommendations", query: [
-                URLQueryItem(name: "page", value: String(page)),
-            ])
-        case .person:
+        guard mediaType != .person else {
             throw SeerrError.server(400, "People do not have recommendations.")
         }
+        let path = routeSegment(for: mediaType, movie: "movie", tv: "tv")
+        return try await get("\(path)/\(id)/recommendations", query: pageQuery(page))
     }
 
     // MARK: - Requests
@@ -296,7 +296,7 @@ final class SeerrClient {
 
     /// Configured servers for a media type. Readable without admin.
     func services(_ mediaType: SeerrMediaType) async throws -> [SeerrService] {
-        try await get("service/\(mediaType == .movie ? "radarr" : "sonarr")")
+        try await get("service/\(routeSegment(for: mediaType, movie: "radarr", tv: "sonarr"))")
     }
 
     /// Quality profile names for a `MediaRequest.profileId`.
@@ -304,9 +304,8 @@ final class SeerrClient {
         _ mediaType: SeerrMediaType,
         serverID: Int
     ) async throws -> [SeerrQualityProfile] {
-        let details: SeerrServiceDetails = try await get(
-            "service/\(mediaType == .movie ? "radarr" : "sonarr")/\(serverID)"
-        )
+        let service = routeSegment(for: mediaType, movie: "radarr", tv: "sonarr")
+        let details: SeerrServiceDetails = try await get("service/\(service)/\(serverID)")
         return details.profiles
     }
 
