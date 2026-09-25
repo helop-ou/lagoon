@@ -84,14 +84,14 @@ final class HomeViewModel {
                 sortBy: "CommunityRating",
                 sortOrder: "Descending",
                 limit: 300,
-                fields: "Genres,CommunityRating,PrimaryImageAspectRatio"
+                fields: "Genres,CommunityRating"
             )
             async let showGenreArtworkCandidates = try? client.items(
                 includeTypes: [.series],
                 sortBy: "CommunityRating",
                 sortOrder: "Descending",
                 limit: 300,
-                fields: "Genres,CommunityRating,PrimaryImageAspectRatio"
+                fields: "Genres,CommunityRating"
             )
 
             let rails = await loadLatestRails(libraries: libraries, client: client)
@@ -605,7 +605,7 @@ final class HomeViewModel {
                 includeTypes: [.movie, .series],
                 startIndex: startIndex,
                 limit: pageSize,
-                fields: "ProviderIds,Overview,Genres,PrimaryImageAspectRatio"
+                fields: "ProviderIds,Overview,Genres"
             ) else { return nil }
 
             guard identity == client.sessionIdentity, !Task.isCancelled else { return nil }
