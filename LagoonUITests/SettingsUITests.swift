@@ -11,7 +11,7 @@ final class SettingsUITests: XCTestCase {
     func testCategoryBindingsSurviveNavigation() {
         let app = launchSettings()
         defer { app.terminate() }
-        attach("settings-root")
+        attachFullScreenshot(named: "settings-root")
 
         openCategory("playback", title: "Playback", in: app)
         let originalSkip = selectedChoice(control("settings.playback.skipMode", in: app),
@@ -26,7 +26,7 @@ final class SettingsUITests: XCTestCase {
         let originalCellular = toggleValue(cellular)
         tapToggle(cellular, in: app)
         expectValue(cellular, originalCellular == "1" ? "0" : "1")
-        attach("settings-playback")
+        attachFullScreenshot(named: "settings-playback")
         goBack(to: "Settings", in: app)
         openCategory("playback", title: "Playback", in: app)
         expectValue(control("settings.playback.skipMode", in: app), changedSkip)
@@ -42,7 +42,7 @@ final class SettingsUITests: XCTestCase {
         choose("Original Audio", for: "settings.audio.default", page: "Audio", in: app)
         XCTAssertTrue(control("settings.audio.preferred", in: app).exists)
         XCTAssertTrue(control("settings.audio.fallback", in: app).exists)
-        attach("settings-audio")
+        attachFullScreenshot(named: "settings-audio")
         goBack(to: "Settings", in: app)
         openCategory("audio", title: "Audio", in: app)
         expectValue(control("settings.audio.default", in: app), "Original Audio")
@@ -55,7 +55,7 @@ final class SettingsUITests: XCTestCase {
         // Whatever the permission result, it must not replace the page.
         let availability = control("settings.subtitles.search", in: app)
         reveal(availability, in: app)
-        attach("settings-subtitles")
+        attachFullScreenshot(named: "settings-subtitles")
         openAppearance(in: app)
         // Set the baseline through the UI: the tvOS regression flag resets
         // appearance whenever the Settings root reappears.
@@ -68,7 +68,7 @@ final class SettingsUITests: XCTestCase {
         tapToggle(systemStyle, in: app)
         expectValue(systemStyle, "0")
         choose("Large", for: "settings.subtitles.size", page: "Subtitle Appearance", in: app)
-        attach("settings-subtitle-appearance")
+        attachFullScreenshot(named: "settings-subtitle-appearance")
         goBack(to: "Subtitles", in: app)
         expectValue(control("settings.subtitles.appearance", in: app), "Lagoon")
         goBack(to: "Settings", in: app)
@@ -92,7 +92,7 @@ final class SettingsUITests: XCTestCase {
         let originalReports = toggleValue(reports)
         tapToggle(reports, in: app)
         expectValue(reports, originalReports == "1" ? "0" : "1")
-        attach("settings-diagnostics")
+        attachFullScreenshot(named: "settings-diagnostics")
         goBack(to: "Settings", in: app)
         openCategory("diagnostics", title: "Advanced", in: app)
         reveal(reports, in: app)
@@ -105,7 +105,7 @@ final class SettingsUITests: XCTestCase {
     func testCategoriesRemainReachableAtLargestAccessibilityTextSize() {
         let app = launchSettings(contentSize: "UICTContentSizeCategoryAccessibilityXXXL")
         defer { app.terminate() }
-        attach("settings-accessibility-root")
+        attachFullScreenshot(named: "settings-accessibility-root")
         for (category, title, identifier) in [
             ("playback", "Playback", "settings.playback.fullQualityOnMetered"),
             ("audio", "Audio", "settings.audio.fallback"),
@@ -115,7 +115,7 @@ final class SettingsUITests: XCTestCase {
             openCategory(category, title: title, in: app)
             let lastControl = control(identifier, in: app)
             reveal(lastControl, in: app)
-            attach("settings-accessibility-\(category)")
+            attachFullScreenshot(named: "settings-accessibility-\(category)")
             goBack(to: "Settings", in: app)
         }
     }
@@ -127,9 +127,9 @@ final class SettingsUITests: XCTestCase {
         let pink = app.staticTexts["Baby Pink"].firstMatch
         XCTAssertTrue(pink.waitForExistence(timeout: 5))
         pink.tap()
-        attach("baby-pink-appearance")
+        attachFullScreenshot(named: "baby-pink-appearance")
         goBack(to: "Settings", in: app)
-        attach("baby-pink-settings")
+        attachFullScreenshot(named: "baby-pink-settings")
 
         openCategory("about", title: "About", in: app)
         app.buttons["Changelog"].tap()
@@ -137,15 +137,15 @@ final class SettingsUITests: XCTestCase {
         let current = control("settings.changelog.100", in: app)
         XCTAssertTrue(current.exists)
         XCTAssertTrue(app.staticTexts["New features"].firstMatch.waitForExistence(timeout: 5))
-        attach("baby-pink-changelog")
+        attachFullScreenshot(named: "baby-pink-changelog")
         app.swipeUp()
-        attach("baby-pink-changelog-scroll")
+        attachFullScreenshot(named: "baby-pink-changelog-scroll")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.navigationBars["About"].waitForExistence(timeout: 5))
         goBack(to: "Settings", in: app)
         openCategory("appearance", title: "Appearance", in: app)
         // Screenshot the theme after the round trip, then restore the default.
-        attach("baby-pink-appearance-return")
+        attachFullScreenshot(named: "baby-pink-appearance-return")
         app.staticTexts["Lagoon"].firstMatch.tap()
     }
 
@@ -258,15 +258,5 @@ final class SettingsUITests: XCTestCase {
                        "Expected \(element.identifier) to show \(value)")
     }
 
-    private func attach(_ name: String) {
-        let screenshot = XCUIScreen.main.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        if let directory = ProcessInfo.processInfo.environment["LAGOON_UI_SCREENSHOT_DIR"], !directory.isEmpty {
-            try? screenshot.pngRepresentation.write(to: URL(fileURLWithPath: directory).appendingPathComponent("\(name).png"))
-        }
-    }
 }
 #endif
