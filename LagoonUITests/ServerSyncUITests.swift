@@ -171,6 +171,85 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable after returning to the top")
     }
 
+    /// The profile button mirrors Refresh at the top right: same size and
+    /// chrome, reached Right from Settings, and Back from the picker it opens
+    /// returns focus to it.
+    func testTvOSProfileButtonMirrorsRefreshAndReturnsFromThePicker() throws {
+        let app = launch(interval: 60)
+        let tabBar = app.tabBars.firstMatch
+        let homeTab = app.tabBars.buttons["Home"]
+        let settingsTab = app.tabBars.buttons["Settings"]
+        let profile = app.buttons["profile.button"]
+        XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
+        XCTAssertTrue(profile.waitForExistence(timeout: 20))
+        let hero = try requireHomeHero(in: app)
+        XCTAssertFalse(profile.hasFocus, "The profile button must not take initial focus")
+        XCTAssertGreaterThan(profile.frame.minX, settingsTab.frame.maxX)
+
+        focusTabBar(app, tab: homeTab, stepping: .left)
+        // Mirrors Refresh's leading alignment, measured the same way.
+        XCTAssertEqual(
+            profile.frame.maxX - 4,
+            hero.frame.maxX,
+            accuracy: 2,
+            "The profile button's glass does not share the hero's resting trailing edge"
+        )
+        let refresh = app.buttons["server.refresh.home"]
+        XCTAssertEqual(profile.frame.midY, refresh.frame.midY, accuracy: 1)
+        XCTAssertEqual(profile.frame.size.height, refresh.frame.size.height, accuracy: 1)
+        attachScreenshot(of: app, named: "profile-home-tab-bar")
+
+        // Home content scrolls the chrome away; the button goes with it.
+        let restingDelta = profile.frame.midY - tabBar.frame.midY
+        remote.press(.down)
+        for _ in 0..<4 {
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertLessThan(tabBar.frame.maxY, 0, "The test did not scroll past the top chrome")
+        XCTAssertEqual(profile.frame.midY - tabBar.frame.midY, restingDelta, accuracy: 2)
+        XCTAssertFalse(profile.isHittable, "The profile button stayed over the lower rails")
+
+        focusTabBar(app, tab: settingsTab, stepping: .right)
+        for _ in 0..<3 where !profile.hasFocus {
+            remote.press(.right)
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        XCTAssertTrue(profile.hasFocus, "The profile button was not reachable Right from Settings")
+        XCTAssertEqual(profile.frame.midY, tabBar.frame.midY, accuracy: 2)
+        XCTAssertLessThanOrEqual(profile.frame.height, tabBar.frame.height + 8)
+        XCTAssertGreaterThanOrEqual(profile.frame.minX - settingsTab.frame.maxX, 32)
+        attachScreenshot(of: app, named: "profile-focused")
+
+        remote.press(.left)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(settingsTab.hasFocus, "Left from the profile button did not return to Settings")
+        remote.press(.right)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(profile.hasFocus)
+
+        // The bootstrap activates an unstored account, so this picker lists
+        // no profiles; AccountPrivacyUITests covers the current profile.
+        remote.press(.select)
+        let add = app.buttons["account.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 8), "The profile button did not open the picker")
+        attachScreenshot(of: app, named: "profile-picker")
+
+        remote.press(.menu)
+        XCTAssertTrue(waitForNonexistence(of: add, timeout: 8), "Back did not close the picker")
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertTrue(profile.hasFocus, "Back from the picker did not return focus to the profile button")
+
+        remote.press(.down)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(
+            app.buttons["settings.category.playback"].hasFocus,
+            "Down from the profile button did not go to Settings' first category"
+        )
+        attachScreenshot(of: app, named: "profile-down-into-settings")
+    }
+
     func testRefreshKeepsItsChromeOffsetAcrossADetailRoundTrip() throws {
         let app = launch(interval: 60)
         let tabBar = app.tabBars.firstMatch
@@ -209,9 +288,14 @@ final class ServerSyncUITests: XCTestCase {
             waitForNonexistence(of: refresh, timeout: 8),
             "Refresh remained exposed over the pushed detail"
         )
+        XCTAssertTrue(
+            waitForNonexistence(of: app.buttons["profile.button"], timeout: 8),
+            "The profile button remained exposed over the pushed detail"
+        )
 
         remote.press(.menu)
         XCTAssertTrue(refresh.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons["profile.button"].waitForExistence(timeout: 8))
         Thread.sleep(forTimeInterval: 0.5)
 
         let returnedTabBarFrame = tabBar.frame
@@ -331,6 +415,12 @@ final class ServerSyncUITests: XCTestCase {
             "-debug.serverSyncRegression", "YES",
             "-debug.serverSyncIntervalSeconds", String(interval),
         ]
+        // A supplied fixture server has a Home hero; the demo may not.
+        for key in ["LAGOON_REGRESSION_SERVER", "LAGOON_REGRESSION_USER", "LAGOON_REGRESSION_PASS"] {
+            if let value = ProcessInfo.processInfo.environment[key] {
+                app.launchEnvironment[key] = value
+            }
+        }
         app.launch()
         return app
     }
