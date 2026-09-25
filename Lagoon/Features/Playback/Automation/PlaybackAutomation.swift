@@ -37,9 +37,19 @@ final class PlaybackAutomation {
     /// A skip that came due while buffering, owed once the picture moves.
     private var deferredSkip: MediaSegment?
 
-    /// Back was pressed on the Up Next card. Outlives the card, so the end of
-    /// the file does not undo the answer.
-    private(set) var nextUpDismissed = false
+    /// What Back on the Up Next card said. Outlives the card, so the end of
+    /// the file keeps the answer.
+    enum NextUpAnswer: Equatable {
+        case none
+        /// In Automatic mode, before the file's last seconds: the viewer is
+        /// watching the credits and still expects the next episode. The card
+        /// returns for the final countdown.
+        case notYet
+        /// Back during the final countdown, or in card mode: this episode is
+        /// the last one.
+        case stay
+    }
+    private(set) var nextUpAnswer: NextUpAnswer = .none
 
     @ObservationIgnored var onSkip: ((MediaSegment) -> Void)?
     @ObservationIgnored var onPlayNext: (() -> Void)?
@@ -78,7 +88,7 @@ final class PlaybackAutomation {
     }
 
     var autoplaysOnFinish: Bool {
-        autoplayMode == .autoDelay && !nextUpDismissed && hasNextUp
+        autoplayMode == .autoDelay && nextUpAnswer != .stay && hasNextUp
     }
 
     /// Closing or handing off: no countdown may act on a gone engine.
@@ -96,7 +106,7 @@ final class PlaybackAutomation {
     func beginItem(segments: [MediaSegment]) {
         self.segments = segments
         handledSegmentIDs.removeAll()
-        nextUpDismissed = false
+        nextUpAnswer = .none
         position = 0
         duration = 0
         hasPosition = false
@@ -175,12 +185,17 @@ final class PlaybackAutomation {
         onPlayNext?()
     }
 
-    /// Back on the card means "no", with or without a countdown. Returns
-    /// whether the card was up.
+    /// Back on the card. In Automatic mode the first one means "not yet",
+    /// unless the final countdown is already running; after that, and in card
+    /// mode, it means "stay". Returns whether the card was up.
     @discardableResult
     func dismissNextUp() -> Bool {
         guard showsNextUp else { return false }
-        nextUpDismissed = true
+        let finalStart = NextUpPolicy.finalCountdownStart(duration: duration)
+        let isBeforeFinalCountdown = finalStart.map { position < $0 } ?? false
+        nextUpAnswer = autoplayMode == .autoDelay && nextUpAnswer == .none && isBeforeFinalCountdown
+            ? .notYet
+            : .stay
         cancelNextUpCountdown()
         evaluate()
         return true
@@ -223,20 +238,31 @@ final class PlaybackAutomation {
     }
 
     private func evaluateNextUp() {
-        let cardStart = NextUpPolicy.cardStart(
+        let offeredStart = NextUpPolicy.cardStart(
             hasEpisode: hasNextUp,
             autoplayMode: autoplayMode,
             duration: duration,
             outroStart: outroStart
         )
-        let countdownStart = NextUpPolicy.countdownStart(
-            cardStart: cardStart,
-            outroStart: outroStart,
-            duration: duration
-        )
+        // "Not yet" moves the card, countdown and all, to the file's last
+        // seconds.
+        let cardStart: Double?
+        let countdownStart: Double?
+        if nextUpAnswer == .notYet, let offeredStart,
+           let finalStart = NextUpPolicy.finalCountdownStart(duration: duration) {
+            cardStart = max(offeredStart, finalStart)
+            countdownStart = cardStart
+        } else {
+            cardStart = offeredStart
+            countdownStart = NextUpPolicy.countdownStart(
+                cardStart: offeredStart,
+                outroStart: outroStart,
+                duration: duration
+            )
+        }
         nextUpCardStart = cardStart
         let shows: Bool
-        if let cardStart, hasPosition, !isSuppressed, !nextUpDismissed {
+        if let cardStart, hasPosition, !isSuppressed, nextUpAnswer != .stay {
             shows = position >= cardStart
         } else {
             shows = false
