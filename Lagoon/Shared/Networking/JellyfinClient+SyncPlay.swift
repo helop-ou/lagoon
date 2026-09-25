@@ -377,24 +377,12 @@ extension JellyfinClient {
         try await postVoid("SyncPlay/Pause")
     }
 
-    func syncPlayStop() async throws {
-        try await postVoid("SyncPlay/Stop")
-    }
-
     func syncPlaySeek(positionTicks: Int64) async throws {
         try await postVoid("SyncPlay/Seek", body: SyncPlaySeekRequest(positionTicks: positionTicks))
     }
 
     func syncPlayNextItem(playlistItemId: String) async throws {
         try await postVoid("SyncPlay/NextItem", body: SyncPlayItemRequest(playlistItemId: playlistItemId))
-    }
-
-    func syncPlayPreviousItem(playlistItemId: String) async throws {
-        try await postVoid("SyncPlay/PreviousItem", body: SyncPlayItemRequest(playlistItemId: playlistItemId))
-    }
-
-    func syncPlaySetPlaylistItem(playlistItemId: String) async throws {
-        try await postVoid("SyncPlay/SetPlaylistItem", body: SyncPlayItemRequest(playlistItemId: playlistItemId))
     }
 
     /// Tells the group this client is not ready; everyone else waits.
