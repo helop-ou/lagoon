@@ -131,23 +131,8 @@ final class SyncPlayStore {
     /// opens first.
     @discardableResult
     func createGroup(named name: String) async -> Bool {
-        guard let client else { return false }
-        let generation = contextGeneration
-        errorMessage = nil
-        connect()
-        guard await socketReady() else {
-            guard isCurrent(generation, client: client) else { return false }
-            return fail("Couldn't connect to the group. Try again.")
-        }
-        guard isCurrent(generation, client: client) else { return false }
-        do {
+        await connectAndRequest(failureMessage: "Couldn't create the group. Try again.") { client in
             try await client.syncPlayCreateGroup(named: name)
-            guard isCurrent(generation, client: client) else { return false }
-            announceCapabilities()
-            return true
-        } catch {
-            guard isCurrent(generation, client: client) else { return false }
-            return fail("Couldn't create the group. Try again.")
         }
     }
 
@@ -192,6 +177,22 @@ final class SyncPlayStore {
 
     @discardableResult
     func join(groupId: String) async -> Bool {
+        await connectAndRequest(failureMessage: "Couldn't join the group. It may have ended. Try again.") { client in
+            try await client.syncPlayJoin(groupId: groupId)
+        } onSuccess: {
+            Diagnostics.record(.syncPlayJoin)
+        }
+    }
+
+    /// Opens the socket, then makes the group's own request (create or
+    /// join) and announces capabilities on success. Shared by `createGroup`
+    /// and `join(groupId:)`, which differ only in the request and what a
+    /// success reports.
+    private func connectAndRequest(
+        failureMessage: String.LocalizationValue,
+        request: (JellyfinClient) async throws -> Void,
+        onSuccess: () -> Void = {}
+    ) async -> Bool {
         guard let client else { return false }
         let generation = contextGeneration
         errorMessage = nil
@@ -202,14 +203,14 @@ final class SyncPlayStore {
         }
         guard isCurrent(generation, client: client) else { return false }
         do {
-            try await client.syncPlayJoin(groupId: groupId)
+            try await request(client)
             guard isCurrent(generation, client: client) else { return false }
-            Diagnostics.record(.syncPlayJoin)
+            onSuccess()
             announceCapabilities()
             return true
         } catch {
             guard isCurrent(generation, client: client) else { return false }
-            return fail("Couldn't join the group. It may have ended. Try again.")
+            return fail(failureMessage)
         }
     }
 
