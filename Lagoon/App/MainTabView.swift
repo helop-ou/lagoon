@@ -40,6 +40,7 @@ struct MainTabView: View {
     @State private var refreshTopChromeOffset: CGFloat = 0
     #endif
     @FocusState private var homeHeroFocused: Bool
+    @FocusState private var settingsFirstCategoryFocused: Bool
     @State private var showsProfilePicker = false
     @State private var addsProfileAfterPicker = false
     /// The active profile's portrait for the chrome: the top-right button on
@@ -258,10 +259,19 @@ struct MainTabView: View {
         homeHeroFocused = true
     }
 
-    /// Down from the profile button takes Home's hero, as from Refresh.
+    /// Down from the profile button goes into the page below it, not to the
+    /// tab bar beside it: Home's hero, as from Refresh, or Settings' first
+    /// category, the tab it is reached from.
     private var profileMoveDownAction: (@MainActor @Sendable () -> Void)? {
-        guard selectedTab == .home else { return nil }
-        return focusHomeHero
+        switch selectedTab {
+        case .home: focusHomeHero
+        case .settings: focusSettingsFirstCategory
+        case .discover, .library, .search: nil
+        }
+    }
+
+    private func focusSettingsFirstCategory() {
+        settingsFirstCategoryFocused = true
     }
 
     /// Like Refresh, only over a content tab's root with nothing pushed. In
@@ -344,7 +354,7 @@ struct MainTabView: View {
 
             Tab(value: MainTabSelection.settings) {
                 NavigationStack {
-                    SettingsView()
+                    SettingsView(firstCategoryFocus: $settingsFirstCategoryFocused)
                         .themedChrome()
                 }
                 #if os(iOS)
