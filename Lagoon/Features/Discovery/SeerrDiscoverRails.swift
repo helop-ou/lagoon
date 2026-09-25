@@ -44,11 +44,15 @@ struct SeerrDiscoverRail: View {
                     destination: .catalog(source)
                 )
             } else if let message = loader.errorMessage {
-                placeholder { InlineRetryView(message: message) { retryID += 1 } }
+                RailPlaceholder(title: source.title) {
+                    InlineRetryView(message: message) { retryID += 1 }
+                }
             } else if !loader.didLoad {
                 // Also covers "not started": a zero-height row in a LazyVStack
                 // is never built, so its `.task` would never run.
-                placeholder { ProgressView().accessibilityLabel("Loading \(source.title)") }
+                RailPlaceholder(title: source.title) {
+                    ProgressView().accessibilityLabel("Loading \(source.title)")
+                }
             }
             // Loaded but empty draws nothing; an empty watchlist is normal.
         }
@@ -60,16 +64,6 @@ struct SeerrDiscoverRail: View {
             )
         }
         .accessibilityIdentifier("seerr.rail.\(source.id)")
-    }
-
-    private func placeholder<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            Text(source.title)
-                .font(.headline)
-            content()
-        }
-        .padding(.horizontal, Metrics.screenGutter)
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
     }
 }
 
@@ -86,14 +80,9 @@ struct SeerrGenreRail: View {
         Group {
             if genres.isEmpty, !didLoad {
                 // A zero-height row is never built, so its `.task` never runs.
-                VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                    Text(title)
-                        .font(.headline)
-                    ProgressView()
-                        .accessibilityLabel("Loading \(title)")
+                RailPlaceholder(title: title) {
+                    ProgressView().accessibilityLabel("Loading \(title)")
                 }
-                .padding(.horizontal, Metrics.screenGutter)
-                .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
             } else if !genres.isEmpty {
                 RailShelf(title: title) {
                     ForEach(genres) { genre in

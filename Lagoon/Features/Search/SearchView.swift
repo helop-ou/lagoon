@@ -304,9 +304,7 @@ struct SearchView: View {
         canRetry: Bool,
         retry: @escaping () -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-            Text(title)
-                .font(.headline)
+        RailPlaceholder(title: title, minHeight: 120) {
             if isLoading {
                 ProgressView()
                     .accessibilityLabel("Searching \(title)")
@@ -320,8 +318,6 @@ struct SearchView: View {
                 }
             }
         }
-        .padding(.horizontal, Metrics.screenGutter)
-        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
     }
 
     private var normalizedSearch: String {
