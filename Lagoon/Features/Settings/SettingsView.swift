@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.openProfilePicker) private var openProfilePicker
 
     // Visible in Release: TestFlight is the only way to test Atmos/HDR on hardware.
     @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
@@ -30,6 +31,16 @@ struct SettingsView: View {
 
     private enum SubtitleSearchAvailability {
         case checking, available, notEnabled, unknown
+    }
+
+    /// Over the app when it can be, so Back returns here; otherwise the
+    /// session's own picker.
+    private func switchProfile() {
+        if let openProfilePicker {
+            openProfilePicker()
+        } else {
+            session.showAccountPicker()
+        }
     }
 
     private func refreshSubtitleSearchAvailability() async {
@@ -316,10 +327,8 @@ struct SettingsView: View {
                 }
 
                 TVSettingsSection("Account Actions") {
-                    if session.accounts.count > 1 {
-                        settingsAction("Switch User", id: "switch") { session.showAccountPicker() }
-                    }
-                    settingsAction("Add Account", id: "add") { session.addAccount() }
+                    settingsAction("Switch Profile", id: "switch") { switchProfile() }
+                    settingsAction("Add Profile", id: "add") { session.addAccount() }
                     settingsAction("Sign Out", id: "signOut", role: .destructive) {
                         pendingAccountAction = .signOut
                     }
@@ -483,11 +492,9 @@ struct SettingsView: View {
             }
 
             Section {
-                if session.accounts.count > 1 {
-                    Button("Switch User") { session.showAccountPicker() }
-                        .accessibilityIdentifier("settings.account.switch")
-                }
-                Button("Add Account") { session.addAccount() }
+                Button("Switch Profile") { switchProfile() }
+                    .accessibilityIdentifier("settings.account.switch")
+                Button("Add Profile") { session.addAccount() }
                     .accessibilityIdentifier("settings.account.add")
                 confirmingAccountActions {
                     Button("Sign Out", role: .destructive) {
