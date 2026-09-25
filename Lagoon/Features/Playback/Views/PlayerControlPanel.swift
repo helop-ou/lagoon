@@ -294,6 +294,7 @@ struct PlayerControlPanel: View {
         .accessibilityIdentifier("player.together.leave")
     }
 
+    #if os(tvOS)
     private var tabCard: some View {
         tabContent
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -310,6 +311,7 @@ struct PlayerControlPanel: View {
                 .allowsHitTesting(false)
         }
     }
+    #endif
 
     @ViewBuilder
     private var infoCard: some View {
@@ -895,22 +897,18 @@ struct PlayerControlPanel: View {
     }
 }
 
+#if os(tvOS)
+/// tvOS only: iOS lays the panel out as a `Form`.
 private enum PlayerPanelMetrics {
-    #if os(tvOS)
     static let maxWidth: CGFloat = 1_440
     static let cardPadding: CGFloat = 24
     static let posterWidth: CGFloat = 112
+    static let posterHeight = posterWidth * 1.5
     static let audioTrackColumnWidth: CGFloat = 720
     static let audioOptionsColumnWidth: CGFloat = 520
     static let videoTrackColumnWidth: CGFloat = 560
-    #else
-    static let maxWidth: CGFloat = .infinity
-    static let cardPadding: CGFloat = 20
-    static let posterWidth: CGFloat = 88
-    #endif
-
-    static let posterHeight = posterWidth * 1.5
 }
+#endif
 
 /// Observation boundary between the playback clock and the panel. Observes
 /// only what the panel shows; `Equatable` stops parent updates walking the
