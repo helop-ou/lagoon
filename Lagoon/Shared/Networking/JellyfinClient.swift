@@ -62,6 +62,14 @@ final class JellyfinClient {
     private var subtitleManagementAllowed: Bool?
     private var contentDownloadingAllowed: Bool?
     private var videoTranscodingAllowed: Bool?
+    /// The in-flight `Users/Me` fetch behind `refreshPolicy()`, so a screen
+    /// warming several flags in a row shares one request.
+    private struct PolicyFetch {
+        let id: UUID
+        let identity: SessionIdentity?
+        let task: Task<UserDto?, Never>
+    }
+    private var policyFetch: PolicyFetch?
 
     /// For view code that must answer synchronously, e.g. a menu body. `nil`
     /// until resolved; a `.task` should call `canDownloadContent()` to warm it.
@@ -135,24 +143,65 @@ final class JellyfinClient {
         return copy
     }
 
+    /// One `Users/Me` fetch that resolves subtitle, download and transcode
+    /// permissions together and caches all three, so a caller warming
+    /// several in a row sends one request instead of one per flag.
+    /// Concurrent callers join the same in-flight fetch.
+    ///
+    /// Returns the fetched user, or nil when the server didn't answer (the
+    /// caller falls back to whatever it has cached). Throws
+    /// `CancellationError` when this session stopped being current while
+    /// the request was in flight; a caller must not apply that answer.
+    private func refreshPolicy() async throws -> UserDto? {
+        let fetch: PolicyFetch
+        // Only join a fetch started for the still-current session; one
+        // left over from an account switch answers the wrong account.
+        if let policyFetch, policyFetch.identity == sessionIdentity {
+            fetch = policyFetch
+        } else {
+            let identity = sessionIdentity
+            let id = UUID()
+            let task = Task<UserDto?, Never> {
+                let user = try? await self.currentUser()
+                // A newer fetch may already have replaced this one.
+                if self.policyFetch?.id == id { self.policyFetch = nil }
+                return user
+            }
+            fetch = PolicyFetch(id: id, identity: identity, task: task)
+            policyFetch = fetch
+        }
+        let user = await fetch.task.value
+        guard fetch.identity == sessionIdentity, !Task.isCancelled else { throw CancellationError() }
+        guard let user else { return nil }
+        subtitleManagementAllowed = user.policy?.allowsSubtitleManagement ?? true
+        if user.policy?.isAdministrator == true {
+            contentDownloadingAllowed = true
+            videoTranscodingAllowed = true
+        } else {
+            if let allowed = user.policy?.enableContentDownloading {
+                contentDownloadingAllowed = allowed
+            }
+            if let allowed = user.policy?.enableVideoPlaybackTranscoding {
+                videoTranscodingAllowed = allowed
+            }
+        }
+        return user
+    }
+
     /// Whether this account may use the remote-subtitle endpoints (403
     /// otherwise). An unreachable server answers `true`: a network problem
     /// must not read as a permissions problem.
     func canManageSubtitles() async -> Bool {
         if let subtitleManagementAllowed { return subtitleManagementAllowed }
-        guard let user = try? await currentUser() else { return true }
-        let allowed = user.policy?.allowsSubtitleManagement ?? true
-        subtitleManagementAllowed = allowed
-        return allowed
+        guard let user = try? await refreshPolicy() else { return true }
+        return user.policy?.allowsSubtitleManagement ?? true
     }
 
     /// Re-asks the server, for a flag changed after sign-in. nil when
     /// unreachable, so Settings can say "couldn't check".
     func refreshSubtitlePermission() async -> Bool? {
-        guard let user = try? await currentUser() else { return nil }
-        let allowed = user.policy?.allowsSubtitleManagement ?? true
-        subtitleManagementAllowed = allowed
-        return allowed
+        guard let user = try? await refreshPolicy() else { return nil }
+        return user.policy?.allowsSubtitleManagement ?? true
     }
 
     /// Whether the account may download. Unlike subtitles, unknown means no.
@@ -166,20 +215,12 @@ final class JellyfinClient {
     /// (nil the first time) rather than flipping to no.
     @discardableResult
     func refreshContentDownloadingPermission() async -> Bool? {
-        let identity = sessionIdentity
-        let user = try? await currentUser()
+        let user: UserDto?
         // Never hand an old session's caller the new account's policy.
-        guard identity == sessionIdentity, !Task.isCancelled else { return nil }
+        do { user = try await refreshPolicy() } catch { return nil }
         guard let user else { return contentDownloadingAllowed }
-        if user.policy?.isAdministrator == true {
-            contentDownloadingAllowed = true
-            return true
-        }
-        let allowed = user.policy?.enableContentDownloading
-        if let allowed {
-            contentDownloadingAllowed = allowed
-        }
-        return allowed ?? contentDownloadingAllowed
+        if user.policy?.isAdministrator == true { return true }
+        return user.policy?.enableContentDownloading ?? contentDownloadingAllowed
     }
 
     /// Whether the server will build a High/Standard transcoded download.
@@ -192,19 +233,11 @@ final class JellyfinClient {
     /// Same contract as `refreshContentDownloadingPermission()`.
     @discardableResult
     func refreshVideoTranscodingPermission() async -> Bool? {
-        let identity = sessionIdentity
-        let user = try? await currentUser()
-        guard identity == sessionIdentity, !Task.isCancelled else { return nil }
+        let user: UserDto?
+        do { user = try await refreshPolicy() } catch { return nil }
         guard let user else { return videoTranscodingAllowed }
-        if user.policy?.isAdministrator == true {
-            videoTranscodingAllowed = true
-            return true
-        }
-        let allowed = user.policy?.enableVideoPlaybackTranscoding
-        if let allowed {
-            videoTranscodingAllowed = allowed
-        }
-        return allowed ?? videoTranscodingAllowed
+        if user.policy?.isAdministrator == true { return true }
+        return user.policy?.enableVideoPlaybackTranscoding ?? videoTranscodingAllowed
     }
 
     func currentUser() async throws -> UserDto {

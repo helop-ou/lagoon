@@ -224,6 +224,31 @@ struct SessionExpiryTests {
         #expect(client.cachedVideoTranscodingAllowed == true)
     }
 
+    /// Subtitle, download and transcode permissions share one `Users/Me`
+    /// fetch: three concurrent callers still answer from a single response.
+    @Test func oneUsersMeRequestAnswersAllThreePermissionFlags() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SessionExpiryProtocol.self]
+        let client = JellyfinClient(deviceId: "policy-test", sessionConfiguration: config)
+        client.configure(serverURL: try #require(URL(string: "https://policy.invalid")))
+        client.activateSession(token: "token", userId: "user")
+        SessionExpiryProtocol.reset()
+        SessionExpiryProtocol.setReply(.http(200, #"""
+        {"Id":"user","Policy":{"EnableSubtitleManagement":false,"EnableContentDownloading":true,"EnableVideoPlaybackTranscoding":false}}
+        """#))
+
+        async let subtitlesAllowed = client.canManageSubtitles()
+        async let downloadsAllowed = client.canDownloadContent()
+        async let transcodingAllowed = client.canTranscodeForDownload()
+        let results = await (subtitlesAllowed, downloadsAllowed, transcodingAllowed)
+
+        #expect(results.0 == false)
+        #expect(results.1 == true)
+        #expect(results.2 == false)
+        let policyRequests = SessionExpiryProtocol.requests.filter { $0.url?.path.hasSuffix("Users/Me") == true }
+        #expect(policyRequests.count == 1)
+    }
+
     private final class Fixture {
         let suite = "SessionExpiryTests.\(UUID().uuidString)"
         let defaults: UserDefaults
