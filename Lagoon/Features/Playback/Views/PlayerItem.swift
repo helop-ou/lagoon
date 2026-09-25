@@ -10,6 +10,4 @@ nonisolated struct PlayerItem: Identifiable {
     var startPosition: Double?
     /// Hold on the first frame; a group member starts at the agreed instant.
     var startPaused = false
-    /// Tells one group queue entry from the next.
-    var groupPlaylistItemId: String?
 }

@@ -148,8 +148,7 @@ struct MainTabView: View {
             playerItem = PlayerItem(
                 media: play.media,
                 startPosition: play.startSeconds,
-                startPaused: true,
-                groupPlaylistItemId: play.playlistItemId
+                startPaused: true
             )
         }
         // On the TabView so a Top Shelf selection plays from any tab.
