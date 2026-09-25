@@ -173,7 +173,7 @@ struct PosterLayout: DynamicProperty {
 
 #if os(iOS)
 /// How many poster columns fit. Pure, so the Dynamic Type rule is testable.
-nonisolated enum PosterGridSizing {
+enum PosterGridSizing {
     /// Larger text widens the cards; smaller text must not shrink them, or
     /// one step below the default squeezes a fourth column onto a phone.
     static func columnCount(
