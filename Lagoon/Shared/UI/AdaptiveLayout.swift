@@ -122,10 +122,13 @@ struct PosterLayout: DynamicProperty {
         let baseMinimum = UIDevice.current.userInterfaceIdiom == .pad
             ? Metrics.padGridPosterMinimum
             : Metrics.phoneGridPosterMinimum
-        let typeScale = scaledWidth / Metrics.posterWidth
-        let minimum = min(baseMinimum * typeScale, Metrics.accessibilityPosterWidth)
         let spacing = Metrics.cardSpacing
-        let count = max(1, Int(((availableWidth + spacing) / (minimum + spacing)).rounded(.down)))
+        let count = PosterGridSizing.columnCount(
+            availableWidth: availableWidth,
+            baseMinimum: baseMinimum,
+            scaledPosterWidth: scaledWidth,
+            spacing: spacing
+        )
         let cardWidth = ((availableWidth - spacing * CGFloat(count - 1)) / CGFloat(count)).rounded(.down)
         return PosterGrid(
             columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: count),
@@ -167,6 +170,24 @@ struct PosterLayout: DynamicProperty {
     var imageWidth: Int { ArtworkSizing.pixels(for: width, displayScale: displayScale) }
     var imageSize: Int { ArtworkSizing.pixels(for: height, displayScale: displayScale) }
 }
+
+#if os(iOS)
+/// How many poster columns fit. Pure, so the Dynamic Type rule is testable.
+nonisolated enum PosterGridSizing {
+    /// Larger text widens the cards; smaller text must not shrink them, or
+    /// one step below the default squeezes a fourth column onto a phone.
+    static func columnCount(
+        availableWidth: CGFloat,
+        baseMinimum: CGFloat,
+        scaledPosterWidth: CGFloat,
+        spacing: CGFloat
+    ) -> Int {
+        let typeScale = max(scaledPosterWidth / Metrics.posterWidth, 1)
+        let minimum = min(baseMinimum * typeScale, Metrics.accessibilityPosterWidth)
+        return max(1, Int(((availableWidth + spacing) / (minimum + spacing)).rounded(.down)))
+    }
+}
+#endif
 
 nonisolated enum ArtworkSizing {
     static func pixels(for points: CGFloat, displayScale: CGFloat) -> Int {
