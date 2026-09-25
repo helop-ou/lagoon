@@ -165,15 +165,11 @@ struct MainTabView: View {
                     PlaybackLifecycleRegressionProbe()
                 }
                 if UserDefaults.standard.bool(forKey: "debug.playerRegression") {
-                    Text("Player fixture resolution")
-                        .font(.system(size: 1))
-                        .foregroundStyle(.clear)
-                        .frame(width: 1, height: 1)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Player fixture resolution")
-                        .accessibilityValue(regressionResolution)
-                        .accessibilityIdentifier("player.regression.resolution")
-                        .allowsHitTesting(false)
+                    RegressionProbe(
+                        label: "Player fixture resolution",
+                        identifier: "player.regression.resolution",
+                        value: regressionResolution
+                    )
                 }
             }
         }
@@ -842,14 +838,11 @@ private struct PlaybackLifecycleRegressionProbe: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.2)) { _ in
             let snapshot = PlaybackLifecycleDiagnostics.snapshot()
-            Text("Playback lifecycle")
-                .font(.system(size: 1))
-                .foregroundStyle(.clear)
-                .frame(width: 1, height: 1)
-                .accessibilityElement(children: .ignore)
-                .accessibilityIdentifier("app.lifecycle.state")
-                .accessibilityValue(snapshot.regressionValue)
-                .allowsHitTesting(false)
+            RegressionProbe(
+                label: "Playback lifecycle",
+                identifier: "app.lifecycle.state",
+                value: snapshot.regressionValue
+            )
         }
     }
 }

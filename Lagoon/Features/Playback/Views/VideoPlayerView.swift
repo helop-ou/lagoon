@@ -343,18 +343,12 @@ struct VideoPlayerView: View {
 
 #if DEBUG
     /// Carries the bench line for the frame-loss UI regression to read.
-    /// Extracted so `body` type-checks in reasonable time.
-    @ViewBuilder
     private func frameLossRegressionProbe(bench: String) -> some View {
-        Text("Frame-loss regression")
-            .font(.system(size: 1))
-            .foregroundStyle(.clear)
-            .frame(width: 1, height: 1)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Frame-loss regression")
-            .accessibilityValue(bench)
-            .accessibilityIdentifier("player.regression.frameLoss")
-            .allowsHitTesting(false)
+        RegressionProbe(
+            label: "Frame-loss regression",
+            identifier: "player.regression.frameLoss",
+            value: bench
+        )
     }
 #endif
 

@@ -68,25 +68,25 @@ struct RootView: View {
         .overlay(alignment: .topLeading) {
             if UserDefaults.standard.bool(forKey: "debug.serverSyncRegression") {
                 VStack {
-                    regressionProbe(
+                    RegressionProbe(
                         label: "Server sync generation",
-                        value: serverSync.generation,
-                        identifier: "server.sync.generation"
+                        identifier: "server.sync.generation",
+                        value: "\(serverSync.generation)"
                     )
-                    regressionProbe(
+                    RegressionProbe(
                         label: "Periodic Home refreshes",
-                        value: serverSync.refreshCount(.home, trigger: .periodic),
-                        identifier: "server.sync.periodic.home"
+                        identifier: "server.sync.periodic.home",
+                        value: "\(serverSync.refreshCount(.home, trigger: .periodic))"
                     )
-                    regressionProbe(
+                    RegressionProbe(
                         label: "Foreground Home refreshes",
-                        value: serverSync.refreshCount(.home, trigger: .foreground),
-                        identifier: "server.sync.foreground.home"
+                        identifier: "server.sync.foreground.home",
+                        value: "\(serverSync.refreshCount(.home, trigger: .foreground))"
                     )
-                    regressionProbe(
+                    RegressionProbe(
                         label: "Manual Home refreshes",
-                        value: serverSync.refreshCount(.home, trigger: .manual),
-                        identifier: "server.sync.manual.home"
+                        identifier: "server.sync.manual.home",
+                        value: "\(serverSync.refreshCount(.home, trigger: .manual))"
                     )
                 }
             }
@@ -96,18 +96,4 @@ struct RootView: View {
         }
         #endif
     }
-
-    #if DEBUG
-    private func regressionProbe(label: String, value: Int, identifier: String) -> some View {
-        Text(label)
-            .font(.system(size: 1))
-            .foregroundStyle(.clear)
-            .frame(width: 1, height: 1)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(label)
-            .accessibilityValue("\(value)")
-            .accessibilityIdentifier(identifier)
-            .allowsHitTesting(false)
-    }
-    #endif
 }
