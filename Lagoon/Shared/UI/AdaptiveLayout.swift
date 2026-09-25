@@ -160,13 +160,12 @@ struct PosterLayout: DynamicProperty {
         Metrics.Space.s
         #endif
     }
-    var columns: [GridItem] {
-        #if os(tvOS)
-        Metrics.posterGridColumns
-        #else
+    #if os(iOS)
+    /// The grid before it has been measured.
+    private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: width), spacing: Metrics.cardSpacing)]
-        #endif
     }
+    #endif
     var imageWidth: Int { ArtworkSizing.pixels(for: width, displayScale: displayScale) }
     var imageSize: Int { ArtworkSizing.pixels(for: height, displayScale: displayScale) }
 }
