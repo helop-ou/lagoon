@@ -130,6 +130,10 @@ struct CustomPlayerView<Surface: View>: View {
         #if os(tvOS)
         MenuPressGate(onMenu: {
             handleMenu()
+        }, canTakeSelect: {
+            !panelOpen
+        }, onSelect: {
+            handleSelect()
         }, onRemoteTouchTap: {
             handleRemoteTouchTap()
         }) {
@@ -537,39 +541,41 @@ struct CustomPlayerView<Surface: View>: View {
             .onTapGesture(count: 2, coordinateSpace: .local) { point in
                 handleTouchSeek(at: point)
             }
-        #endif
             .onTapGesture {
-                #if os(tvOS)
-                traceInput("select via=onTapGesture")
-                #endif
                 guard !panelOpen else { return }
-                #if os(tvOS)
-                // Select: commit scrub, Skip, Up Next, then play/pause.
-                if let target = scrubTarget {
-                    commitScrub(to: target, resume: true)
-                } else if let segment = automation.activeSegment, automation.skipMode != .instant {
-                    // Not focusable: taking focus would move `onMoveCommand`
-                    // off the surface and break scrubbing.
-                    PlayerInputTrace.log("select -> skip")
-                    skip(segment)
-                } else if automation.showsNextUp {
-                    // Not focusable either, and for the same reason.
-                    PlayerInputTrace.log("select -> play next")
-                    automation.playNext()
-                } else {
-                    PlayerInputTrace.log("select -> toggle pause")
-                    requestTogglePause()
-                    pokeControls()
-                }
-                #else
                 if controlsVisible {
                     controlsVisible = false
                 } else {
                     pokeControls()
                 }
-                #endif
             }
+        #endif
     }
+
+    #if os(tvOS)
+    /// Select: commit scrub, Skip, Up Next, then play/pause. MenuPressGate
+    /// delivers it, never the surface's `onTapGesture` (see its comment).
+    private func handleSelect() {
+        traceInput("select via=pressesEnded")
+        guard !panelOpen else { return }
+        if let target = scrubTarget {
+            commitScrub(to: target, resume: true)
+        } else if let segment = automation.activeSegment, automation.skipMode != .instant {
+            // Not focusable: taking focus would move `onMoveCommand`
+            // off the surface and break scrubbing.
+            PlayerInputTrace.log("select -> skip")
+            skip(segment)
+        } else if automation.showsNextUp {
+            // Not focusable either, and for the same reason.
+            PlayerInputTrace.log("select -> play next")
+            automation.playNext()
+        } else {
+            PlayerInputTrace.log("select -> toggle pause")
+            requestTogglePause()
+            pokeControls()
+        }
+    }
+    #endif
 
     private func pokeControls() {
         controlsVisible = true
