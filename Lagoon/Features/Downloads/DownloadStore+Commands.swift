@@ -99,17 +99,40 @@ extension DownloadStore {
         rebuildArtworkIndex()
         save()
 
-        var request = authorization.request(for: url, timeoutInterval: 10 * 60)
-        request.allowsExpensiveNetworkAccess = !wifiOnly
-        request.allowsConstrainedNetworkAccess = !wifiOnly
+        beginTransfer(
+            .request(url: url, authorization: authorization),
+            itemID: item.id, fileName: fileName, accountKey: accountKey, attemptToken: UUID().uuidString
+        )
+        Self.log.info("started \(item.id, privacy: .public) quality \(effectiveQuality.rawValue, privacy: .public)")
+    }
 
-        let attemptToken = UUID().uuidString
-        let task = session.downloadTask(with: request)
-        task.taskDescription = DownloadTaskDescription(itemID: item.id, fileName: fileName, accountKey: accountKey, attemptToken: attemptToken).raw
-        manifest.markStarted(item.id, taskIdentifier: task.taskIdentifier, attemptToken: attemptToken)
+    /// How a transfer's download task is created: a fresh request honoring
+    /// the wifi-only setting, or saved resume data.
+    private enum TransferSource {
+        case request(url: URL, authorization: MediaRequestAuthorization)
+        case resumeData(Data)
+    }
+
+    /// Creates the transfer's download task, wires its identifying info
+    /// into the task description, marks it started, and begins it. Shared
+    /// by a fresh start and both branches of `resume`.
+    private func beginTransfer(
+        _ source: TransferSource, itemID: String, fileName: String, accountKey: String, attemptToken: String
+    ) {
+        let task: URLSessionDownloadTask
+        switch source {
+        case .request(let url, let authorization):
+            var request = authorization.request(for: url, timeoutInterval: 10 * 60)
+            request.allowsExpensiveNetworkAccess = !wifiOnly
+            request.allowsConstrainedNetworkAccess = !wifiOnly
+            task = session.downloadTask(with: request)
+        case .resumeData(let data):
+            task = session.downloadTask(withResumeData: data)
+        }
+        task.taskDescription = DownloadTaskDescription(itemID: itemID, fileName: fileName, accountKey: accountKey, attemptToken: attemptToken).raw
+        manifest.markStarted(itemID, taskIdentifier: task.taskIdentifier, attemptToken: attemptToken)
         save()
         task.resume()
-        Self.log.info("started \(item.id, privacy: .public) quality \(effectiveQuality.rawValue, privacy: .public)")
     }
 
     fileprivate func transferURL(itemID: String, source: MediaSource, quality: DownloadQuality, client: JellyfinClient) throws -> URL {
@@ -186,11 +209,7 @@ extension DownloadStore {
 
         if let resumeFile = entry.resumeDataFile,
            let data = try? Data(contentsOf: (accountDirectory ?? baseDirectory).appending(path: resumeFile)) {
-            let task = session.downloadTask(withResumeData: data)
-            task.taskDescription = DownloadTaskDescription(itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken).raw
-            manifest.markStarted(itemID, taskIdentifier: task.taskIdentifier, attemptToken: attemptToken)
-            save()
-            task.resume()
+            beginTransfer(.resumeData(data), itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken)
             return
         }
 
@@ -202,14 +221,10 @@ extension DownloadStore {
             return
         }
 
-        var request = authorization.request(for: url, timeoutInterval: 10 * 60)
-        request.allowsExpensiveNetworkAccess = !wifiOnly
-        request.allowsConstrainedNetworkAccess = !wifiOnly
-        let task = session.downloadTask(with: request)
-        task.taskDescription = DownloadTaskDescription(itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken).raw
-        manifest.markStarted(itemID, taskIdentifier: task.taskIdentifier, attemptToken: attemptToken)
-        save()
-        task.resume()
+        beginTransfer(
+            .request(url: url, authorization: authorization),
+            itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken
+        )
     }
 
     /// Artwork can be shared (episodes of one series), so files another
