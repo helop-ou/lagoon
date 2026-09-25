@@ -59,6 +59,16 @@ ID. Pinning the start matters: otherwise the previous run's progress report
 moves the next run into a different scene. These overrides only apply with the
 bench enabled and have no Settings UI. On hardware, read the HUD's Bench line.
 
+Two view-cost switches exist for A/B runs, through `--set` or as launch
+arguments. They work in Release, like the rest of the bench, because the
+numbers that matter come from Apple TV hardware:
+
+- `debug.benchBareSurface` draws only the video surface, with no chrome
+  above it, to test whether composition over an HDR frame costs frames.
+- `debug.benchFlatCues` skips rasterizing subtitle cues. The cue shadow and
+  background filtered every frame dropped frames on Apple TV HDR, and
+  `drawingGroup()` fixed it; this switch undoes the fix for comparison.
+
 The bench, the passthrough timeline and the EL NAL filter are covered by
 `LagoonTests`, because timestamp jitter, bitstream mangling and measurement
 discipline are pure logic a simulator pass cannot pin down.
