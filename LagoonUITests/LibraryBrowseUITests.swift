@@ -36,7 +36,7 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertTrue(summary.label.contains("Drama"))
         XCTAssertTrue(summary.label.contains("Unwatched"))
         XCTAssertEqual(filters.value as? String, "3 active")
-        capture(app, name: "Decade With Genre And Unwatched")
+        attachScreenshot(of: app, named: "Decade With Genre And Unwatched")
 
         relaunchKeepingState(app)
         openLibrary(app)
@@ -68,7 +68,7 @@ final class LibraryBrowseUITests: XCTestCase {
 
         let posters = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "media.poster."))
         XCTAssertTrue(posters.firstMatch.waitForExistence(timeout: 20))
-        capture(app, name: "Unified Library")
+        attachScreenshot(of: app, named: "Unified Library")
 
         let picker = app.descendants(matching: .any)["library.kind"]
         XCTAssertTrue(picker.exists, app.debugDescription)
@@ -78,14 +78,14 @@ final class LibraryBrowseUITests: XCTestCase {
         let summary = app.staticTexts["library.filters.summary"]
         if summary.exists { try chooseFilter(app, title: "Clear Filters") }
         move(to: picker, direction: .left)
-        capture(app, name: "Native Media Type Picker Focused")
+        attachScreenshot(of: app, named: "Native Media Type Picker Focused")
 
         // Browsing another option and pressing Back must leave Movies selected.
         remote.press(.select)
         let shows = menuCell(app, title: "Shows")
         XCTAssertTrue(shows.waitForExistence(timeout: 5))
         move(to: shows, direction: .down)
-        capture(app, name: "Media Type Menu Before Selection")
+        attachScreenshot(of: app, named: "Media Type Menu Before Selection")
         remote.press(.menu)
         XCTAssertTrue(shows.waitForNonExistence(timeout: 5))
         XCTAssertEqual(picker.value as? String, "Movies")
@@ -113,14 +113,14 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertFalse(menuCell(app, title: "Source").exists)
         XCTAssertFalse(menuCell(app, title: "Library").exists)
         XCTAssertTrue(menuCell(app, title: "4K Only").exists)
-        capture(app, name: "Movie Filters")
+        attachScreenshot(of: app, named: "Movie Filters")
         move(to: unwatched, direction: .down)
         remote.press(.select)
         XCTAssertTrue(unwatched.waitForNonExistence(timeout: 5))
         Thread.sleep(forTimeInterval: 0.5)
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         XCTAssertTrue(summary.label.contains("Unwatched"))
-        capture(app, name: "Filtered Movies")
+        attachScreenshot(of: app, named: "Filtered Movies")
 
         try chooseFilter(app, title: "4K Only")
         XCTAssertTrue(summary.label.contains("4K"))
@@ -152,7 +152,7 @@ final class LibraryBrowseUITests: XCTestCase {
             return
         }
         XCTAssertEqual(picker.value as? String, "Movies", "Selection remains visible after focus leaves the picker")
-        capture(app, name: "Native Picker Unfocused")
+        attachScreenshot(of: app, named: "Native Picker Unfocused")
         let itemID = poster.identifier.replacingOccurrences(of: "media.poster.", with: "")
         remote.press(.select)
         let detail = app.descendants(matching: .any)["detail.item.\(itemID)"]
@@ -162,7 +162,7 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertTrue(poster.hasFocus)
 
         for _ in 0..<5 { remote.press(.down) }
-        capture(app, name: "Library Scrolled")
+        attachScreenshot(of: app, named: "Library Scrolled")
         let tab = app.tabBars.buttons["Library"]
         move(to: tab, direction: .up, limit: 30)
         XCTAssertTrue(tab.hasFocus)
@@ -172,7 +172,7 @@ final class LibraryBrowseUITests: XCTestCase {
         openLibrary(app)
         XCTAssertEqual(app.descendants(matching: .any)["library.sort"].value as? String, "Recently Added")
         XCTAssertEqual(picker.value as? String, "Movies")
-        capture(app, name: "Library Restored")
+        attachScreenshot(of: app, named: "Library Restored")
     }
 
     /// Relaunches without resetting state, to check what the first launch persisted.
@@ -253,7 +253,7 @@ final class LibraryBrowseUITests: XCTestCase {
             XCTFail("Missing filter option: \(title)")
         }
         move(to: option, direction: direction, limit: 24)
-        if submenu == "Decade" { capture(app, name: "Decade Menu") }
+        if submenu == "Decade" { attachScreenshot(of: app, named: "Decade Menu") }
         remote.press(.select)
         XCTAssertTrue(option.waitForNonExistence(timeout: 5))
         Thread.sleep(forTimeInterval: 0.5)
@@ -271,13 +271,6 @@ final class LibraryBrowseUITests: XCTestCase {
         // A SwiftUI Menu's identifier is on a wrapper; focus is on a child.
         element.hasFocus || element.descendants(matching: .any)
             .allElementsBoundByIndex.contains(where: \.hasFocus)
-    }
-
-    private func capture(_ app: XCUIApplication, name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
     }
 
     private func menuCell(_ app: XCUIApplication, title: String) -> XCUIElement {

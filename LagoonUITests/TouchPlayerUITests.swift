@@ -44,12 +44,12 @@ final class TouchPlayerUITests: PlayerUITestCase {
             tapCenter(of: playPause)
         }
         waitForState(in: app, timeout: 5) { $0.int("paused") == 1 }
-        snapshot(app, name: "transport")
+        attachFullScreenshot(named: "touch-transport")
 
 
         let beforeForwardSeek = state(in: app).double("time")
         surface.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).doubleTap()
-        snapshot(app, name: "double-tap")
+        attachFullScreenshot(named: "touch-double-tap")
         // The 0.7 s glyph may be gone before XCTest returns, so assert the seek.
         waitForState(in: app, timeout: 5) { $0.double("time") >= beforeForwardSeek + 8 }
 
@@ -80,7 +80,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         start.press(forDuration: 0.2, thenDragTo: end)
         waitForState(in: app, timeout: 8) { $0.double("lastScrub") > 100 && $0.int("scrubbing") == 0 }
         revealTransportIfNeeded()
-        snapshot(app, name: "after-scrub")
+        attachFullScreenshot(named: "touch-after-scrub")
 
         // Icon-only buttons still need VoiceOver labels.
         let playPauseLabel = playPause.label
@@ -124,13 +124,13 @@ final class TouchPlayerUITests: PlayerUITestCase {
 
         revealTransportIfNeeded()
         try assertTransportAutoHides()
-        snapshot(app, name: "auto-hidden")
+        attachFullScreenshot(named: "touch-auto-hidden")
 
         // A tap after a completed auto-hide must reveal and hide again.
         revealTransportIfNeeded()
         XCTAssertTrue(app.buttons["player.skipBack"].isHittable)
         XCTAssertTrue(app.buttons["player.skipForward"].isHittable)
-        snapshot(app, name: "revealed-again")
+        attachFullScreenshot(named: "touch-revealed-again")
         try assertTransportAutoHides()
 
         revealTransportIfNeeded()
@@ -162,7 +162,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
             .press(forDuration: 0.05, thenDragTo: surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)))
         let tabs = app.descendants(matching: .any)["player.panel.tabs"]
         XCTAssertTrue(tabs.waitForExistence(timeout: 5), "a swipe up should open the options panel")
-        snapshot(app, name: "swipe-up-panel")
+        attachFullScreenshot(named: "touch-swipe-up-panel")
         app.buttons["player.panel.close"].tap()
         XCTAssertTrue(tabs.waitForNonExistence(timeout: 5))
 
@@ -205,21 +205,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         Thread.sleep(forTimeInterval: 6)
         XCTAssertTrue(probe.exists, "the player should still be up after its presentation settles")
         XCTAssertGreaterThan(state(in: app).double("time"), startTime, "playback should still be advancing")
-        snapshot(app, name: "detail-page-player")
-    }
-
-    /// Also writes a PNG to `LAGOON_UI_SCREENSHOT_DIR` when it is set.
-    private func snapshot(_ app: XCUIApplication, name: String) {
-        // An app capture can crop the landscape player to portrait bounds.
-        let screenshot = XCUIScreen.main.screenshot()
-        let attachment = XCTAttachment(screenshot: screenshot)
-        attachment.name = "touch-\(name)"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        guard let directory = ProcessInfo.processInfo.environment["LAGOON_UI_SCREENSHOT_DIR"],
-              !directory.isEmpty else { return }
-        let url = URL(fileURLWithPath: directory).appendingPathComponent("touch-\(name).png")
-        try? screenshot.pngRepresentation.write(to: url)
+        attachFullScreenshot(named: "touch-detail-page-player")
     }
 
     // MARK: - Helpers
