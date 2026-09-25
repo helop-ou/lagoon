@@ -104,9 +104,14 @@ notes](reference/design-system.md#themes).
 
 ## Components
 
-- **Browsing:** reuse `MediaRail` and the media cards. Titles go beneath
-  posters. Horizontal gutters stay inside scroll content; keep focus padding.
-  tvOS Library has five columns; iOS uses `PosterLayout`.
+- **Browsing:** reuse `MediaRail` and the media cards. Every horizontal shelf
+  (`MediaRail`, `SeerrMediaRail`, `TopTenRail`, `CollectionRail`, `GenreRail`,
+  the Seerr genre and search rails) is built on the shared `RailShelf`, which
+  owns the heading, the iOS "See All" link, the gutter/rail paddings and
+  `.scrollClipDisabled()`; `RailPlaceholder` matches its shape while a shelf
+  loads or fails. Titles go beneath posters. Horizontal gutters stay inside
+  scroll content; keep focus padding. tvOS Library has five columns; iOS uses
+  `PosterLayout`.
 - **Chip rows** (Discover's Movies/Shows/Requests, the Requests filters) stay
   one row everywhere. On a phone the row scrolls horizontally, with the gutter
   as a content margin and no glyphs, and never folds into a column. The TV
