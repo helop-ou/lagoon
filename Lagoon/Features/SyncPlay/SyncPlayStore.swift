@@ -20,17 +20,6 @@ nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
 /// join and close on leave.
 @Observable
 final class SyncPlayStore {
-    /// `unknown` means not asked or could not ask, never a denial.
-    enum Availability: Equatable, Sendable {
-        case unknown
-        case unavailable
-        case joinOnly
-        case createAndJoin
-
-        var canJoin: Bool { self == .joinOnly || self == .createAndJoin }
-        var canCreate: Bool { self == .createAndJoin }
-    }
-
     nonisolated struct Entry: Identifiable, Equatable, Sendable {
         let id: Int
         let notice: SyncPlayNotice
@@ -38,7 +27,8 @@ final class SyncPlayStore {
 
     static let noticeCapacity = 8
 
-    private(set) var availability: Availability = .unknown
+    /// `unknown` means not asked or could not ask, never a denial.
+    private(set) var availability: SyncPlayAccess = .unknown
     private(set) var errorMessage: String?
     private(set) var groups: [SyncPlayGroup] = []
     private(set) var session = SyncPlayGroupSession()
@@ -96,23 +86,18 @@ final class SyncPlayStore {
 
     func refreshAvailability() async {
         guard let client else {
-            availability = .unavailable
+            availability = .none
             return
         }
         let generation = contextGeneration
         guard await client.isSyncPlayAvailable() else {
             guard !Task.isCancelled, generation == contextGeneration, self.client === client else { return }
-            availability = .unavailable
+            availability = .none
             return
         }
         let access = await client.syncPlayAccess()
         guard !Task.isCancelled, generation == contextGeneration, self.client === client else { return }
-        switch access {
-        case .createAndJoinGroups: availability = .createAndJoin
-        case .joinGroups: availability = .joinOnly
-        case .none: availability = .unavailable
-        case .unknown: availability = .unknown
-        }
+        availability = access
     }
 
     @discardableResult

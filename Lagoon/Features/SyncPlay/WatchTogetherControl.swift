@@ -19,7 +19,7 @@ struct WatchTogetherControl: View {
 
     var body: some View {
         Group {
-            if syncPlay.availability.canJoin {
+            if syncPlay.availability.canJoinGroups {
                 control
             }
         }

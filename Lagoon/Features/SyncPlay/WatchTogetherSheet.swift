@@ -180,7 +180,7 @@ struct WatchTogetherSheet: View {
         }
 
         // Jellyfin can allow joining without creating.
-        if syncPlay.availability.canCreate {
+        if syncPlay.availability.canCreateGroups {
             section("Start a Group", footer: "The group starts on this title, where you left off.") {
                 TextField("Group name", text: $name)
                     .onChange(of: name) { _, updated in
@@ -251,7 +251,7 @@ struct WatchTogetherSheet: View {
 
     private func pollGroups() async {
         while !Task.isCancelled {
-            if !syncPlay.isJoined, syncPlay.availability.canJoin {
+            if !syncPlay.isJoined, syncPlay.availability.canJoinGroups {
                 await syncPlay.refreshGroups()
             }
             do { try await Task.sleep(for: Self.listCadence) } catch { return }
