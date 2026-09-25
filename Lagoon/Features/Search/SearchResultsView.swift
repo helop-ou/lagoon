@@ -80,26 +80,17 @@ struct SearchResultsView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var model = SearchResultsViewModel()
     @State private var loadID = 0
-    private let layout = PosterLayout()
-    @State private var gridWidth: CGFloat = 0
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Metrics.Space.xl) {
                 Text(query).font(.title.bold()).accessibilityAddTraits(.isHeader)
-                let grid = layout.grid(fitting: gridWidth)
-                LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
-                    ForEach(model.items) { item in
-                        Group {
-                            switch item {
-                            case .library(let item): PosterCard(item: item)
-                            case .seerr(let item): SeerrMediaCard(item: item)
-                            }
-                        }
+                PosterGridView(items: model.items) { item in
+                    switch item {
+                    case .library(let item): PosterCard(item: item)
+                    case .seerr(let item): SeerrMediaCard(item: item)
                     }
                 }
-                .environment(\.posterCardWidth, grid.cardWidth)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                 if model.isLoading, model.items.isEmpty {
                     // Focusable, unlike a bare spinner: with nothing to focus,
                     // Menu quits the app.

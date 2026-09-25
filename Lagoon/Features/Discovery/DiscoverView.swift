@@ -274,10 +274,6 @@ struct SeerrCatalogView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @State private var viewModel = SeerrCatalogViewModel()
 
-    let posterLayout = PosterLayout()
-    @State private var gridWidth: CGFloat = 0
-    private var grid: PosterGrid { posterLayout.grid(fitting: gridWidth) }
-
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Metrics.Space.xxl) {
@@ -296,21 +292,15 @@ struct SeerrCatalogView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
-                    LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
-                        ForEach(viewModel.items) { item in
-                            SeerrMediaCard(item: item)
-                                .onAppear {
-                                    guard item.id == viewModel.items.suffix(5).first?.id else { return }
-                                    Task { await viewModel.loadNext(source: source, client: seerr.client) }
-                                }
-                        }
+                    PosterGridView(items: viewModel.items, onNearEnd: {
+                        Task { await viewModel.loadNext(source: source, client: seerr.client) }
+                    }, card: { item in
+                        SeerrMediaCard(item: item)
+                    }, trailing: {
                         if viewModel.isLoading {
-                            let width = grid.cardWidth ?? Metrics.posterWidth
-                            ProgressView().frame(width: width, height: (width * 3 / 2).rounded())
+                            SeerrCatalogLoadingCell()
                         }
-                    }
-                    .environment(\.posterCardWidth, grid.cardWidth)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
+                    })
 
                     if let error = viewModel.errorMessage, !viewModel.isLoading {
                         InlineRetryView(message: error) {
@@ -337,4 +327,14 @@ struct SeerrCatalogView: View {
     }
 
     private var catalogTitle: String { source.title }
+}
+
+/// The trailing cell while a catalog page is loading, sized like a poster
+/// in the same grid.
+private struct SeerrCatalogLoadingCell: View {
+    let layout = PosterLayout()
+
+    var body: some View {
+        ProgressView().frame(width: layout.width, height: layout.height)
+    }
 }

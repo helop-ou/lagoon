@@ -170,6 +170,55 @@ struct PosterLayout: DynamicProperty {
     var imageSize: Int { ArtworkSizing.pixels(for: height, displayScale: displayScale) }
 }
 
+/// A paged poster grid: the `LazyVGrid` sized by `PosterLayout`, the
+/// `posterCardWidth` environment injection, and the geometry read that
+/// measures it, shared by every browse screen that pages cards. A screen
+/// keeps its own loading, error and footer chrome around this; it owns only
+/// the grid itself.
+struct PosterGridView<Item: Identifiable, Card: View, Trailing: View>: View {
+    let items: [Item]
+    /// Fires once per appearance when an item nears the end of the loaded
+    /// set, so the caller can request the next page. `nil` when a screen
+    /// pages with another control instead, such as a manual "Load More"
+    /// button.
+    var onNearEnd: (() -> Void)?
+    @ViewBuilder var card: (Item) -> Card
+    /// An extra cell after the items, such as an in-grid loading spinner.
+    @ViewBuilder var trailing: () -> Trailing
+
+    @State private var gridWidth: CGFloat = 0
+    private let layout = PosterLayout()
+
+    var body: some View {
+        let grid = layout.grid(fitting: gridWidth)
+        LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                card(item)
+                    .onAppear {
+                        guard let onNearEnd, index >= items.count - grid.columnCount * 3 else { return }
+                        onNearEnd()
+                    }
+            }
+            trailing()
+        }
+        .environment(\.posterCardWidth, grid.cardWidth)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
+    }
+}
+
+extension PosterGridView where Trailing == EmptyView {
+    init(
+        items: [Item],
+        onNearEnd: (() -> Void)? = nil,
+        @ViewBuilder card: @escaping (Item) -> Card
+    ) {
+        self.items = items
+        self.onNearEnd = onNearEnd
+        self.card = card
+        self.trailing = { EmptyView() }
+    }
+}
+
 #if os(iOS)
 /// How many poster columns fit. Pure, so the Dynamic Type rule is testable.
 enum PosterGridSizing {

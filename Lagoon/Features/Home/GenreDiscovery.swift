@@ -236,10 +236,6 @@ struct GenreLibraryView: View {
     @Environment(SessionStore.self) private var session
     @State private var viewModel = GenreLibraryViewModel()
 
-    let posterLayout = PosterLayout()
-    @State private var gridWidth: CGFloat = 0
-    private var grid: PosterGrid { posterLayout.grid(fitting: gridWidth) }
-
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
@@ -267,25 +263,18 @@ struct GenreLibraryView: View {
                             .accessibilityIdentifier("genre.library.title")
                         #endif
 
-                        LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
-                            ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
-                                PosterCard(item: item)
-                                    .itemUserDataMenu(item: item)
-                                    .onAppear {
-                                        if index >= viewModel.items.count - grid.columnCount * 3 {
-                                            Task {
-                                                await viewModel.loadMore(
-                                                    client: session.client,
-                                                    genre: genre,
-                                                    includeTypes: includeTypes
-                                                )
-                                            }
-                                        }
-                                    }
+                        PosterGridView(items: viewModel.items, onNearEnd: {
+                            Task {
+                                await viewModel.loadMore(
+                                    client: session.client,
+                                    genre: genre,
+                                    includeTypes: includeTypes
+                                )
                             }
+                        }) { item in
+                            PosterCard(item: item)
+                                .itemUserDataMenu(item: item)
                         }
-                        .environment(\.posterCardWidth, grid.cardWidth)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
                     }
                     .padding(.horizontal, Metrics.screenGutter)
                     .padding(.vertical, Metrics.Space.xxl)
