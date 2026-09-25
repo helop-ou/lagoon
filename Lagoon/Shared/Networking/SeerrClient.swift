@@ -470,7 +470,7 @@ final class SeerrClient {
     }
 }
 
-private struct ResponsePayload: @unchecked Sendable {
+private struct ResponsePayload: Sendable {
     let data: Data
     let response: URLResponse
 }
