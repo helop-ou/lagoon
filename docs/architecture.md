@@ -68,6 +68,13 @@ Accounts:
 - Add Account uses a separate draft session seeded with the current server
   but no credentials. A successful, current verification commits and
   activates it; cancel leaves the active Jellyfin and Seerr sessions intact.
+- "Who's watching?" is the `choosingAccount` phase at launch and after
+  sign-out. Settings opens the same `AccountPickerView` over the app through
+  `openProfilePicker` (a full-screen cover on tvOS, a sheet on iOS), leaving
+  the active account in place: Back or choosing it again closes the picker,
+  and Add Profile closes it before the draft session opens. Profiles group by
+  server (`ProfileGrouping`), most recently activated first; activation
+  stamps `lastUsedAt`, so compare accounts by `id`, never whole.
 - Sign-out revokes and forgets the account and clears its local data.
 - Seerr sessions are scoped to the Jellyfin account and the Seerr origin.
 
