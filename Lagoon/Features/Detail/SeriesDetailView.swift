@@ -366,12 +366,7 @@ struct EpisodeCard: View {
         if isWatched {
             parts.append(String(localized: "watched"))
         }
-        #if os(iOS)
-        if DownloadStore.shared.isDownloaded(episode.id) {
-            parts.append(String(localized: "downloaded"))
-        }
-        #endif
-        return parts.joined(separator: ", ")
+        return parts.joined(separator: ", ").appendingDownloadedSuffix(itemID: episode.id)
     }
 
     private var artwork: some View {
@@ -410,18 +405,10 @@ struct EpisodeCard: View {
             }
             .frame(width: cardWidth, height: cardHeight)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-            .overlay(alignment: .topTrailing) {
-                HStack(spacing: Metrics.Space.xs) {
-                    if isWatched {
-                        WatchedMark()
-                    }
-                    #if os(iOS)
-                    if DownloadStore.shared.isDownloaded(episode.id) {
-                        DownloadedMark()
-                    }
-                    #endif
+            .downloadedBadge(itemID: episode.id, inset: Metrics.cardMarkInset) {
+                if isWatched {
+                    WatchedMark()
                 }
-                .padding(Metrics.cardMarkInset)
             }
     }
 }

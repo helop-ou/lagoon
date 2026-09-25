@@ -112,6 +112,10 @@ notes](reference/design-system.md#themes).
   loads or fails. Titles go beneath posters. Horizontal gutters stay inside
   scroll content; keep focus padding. tvOS Library has five columns; iOS uses
   `PosterLayout`.
+  - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
+    marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
+    `WatchedMark`); `String.appendingDownloadedSuffix(itemID:)` appends the
+    matching accessibility suffix without an `#if` at each call site.
 - **Chip rows** (Discover's Movies/Shows/Requests, the Requests filters) stay
   one row everywhere. On a phone the row scrolls horizontally, with the gutter
   as a content margin and no glyphs, and never folds into a column. The TV

@@ -32,9 +32,6 @@ struct PosterCard: View {
                 }
                 .frame(width: layout.width, height: layout.height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-                #if os(iOS)
-                .overlay(alignment: .topTrailing) { downloadedBadge }
-                #endif
             }
             .cardButtonStyle()
             .artworkFocusHue(url: posterURL, cornerRadius: Metrics.cardArtRadius)
@@ -44,6 +41,7 @@ struct PosterCard: View {
             caption
         }
         .frame(width: layout.width)
+        .downloadedBadge(itemID: item.id)
     }
 
     private var posterURL: URL? {
@@ -54,23 +52,8 @@ struct PosterCard: View {
         )
     }
 
-    #if os(iOS)
-    @ViewBuilder
-    private var downloadedBadge: some View {
-        if DownloadStore.shared.isDownloaded(item.id) {
-            DownloadedMark()
-                .padding(Metrics.Space.xs)
-        }
-    }
-    #endif
-
     private var posterAccessibilityLabel: String {
-        let name = item.name ?? "Item"
-        #if os(iOS)
-        return DownloadStore.shared.isDownloaded(item.id) ? "\(name), downloaded" : name
-        #else
-        return name
-        #endif
+        (item.name ?? "Item").appendingDownloadedSuffix(itemID: item.id)
     }
 
     /// Fixed height keeps grid rows aligned.
@@ -138,11 +121,7 @@ struct LandscapeCard: View {
     }
 
     private var landscapeAccessibilityLabel: String {
-        #if os(iOS)
-        DownloadStore.shared.isDownloaded(item.id) ? "\(item.railTitle), downloaded" : item.railTitle
-        #else
-        item.railTitle
-        #endif
+        item.railTitle.appendingDownloadedSuffix(itemID: item.id)
     }
 
     private var thumbURL: URL? {
@@ -193,14 +172,7 @@ struct LandscapeCard: View {
         }
         .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-        #if os(iOS)
-        .overlay(alignment: .topTrailing) {
-            if DownloadStore.shared.isDownloaded(item.id) {
-                DownloadedMark()
-                    .padding(Metrics.Space.xs)
-            }
-        }
-        #endif
+        .downloadedBadge(itemID: item.id)
     }
 }
 
@@ -319,6 +291,44 @@ private extension View {
             .frame(width: Metrics.cardMarkSize, height: Metrics.cardMarkSize)
             .background(Circle().fill(.black.opacity(0.6)))
             .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// The "downloaded" badge in a card's top-trailing corner, iOS only.
+    /// `leading` draws beside it in the same corner group on both platforms
+    /// (e.g. `WatchedMark`, which is not download-gated).
+    @ViewBuilder
+    func downloadedBadge<Leading: View>(
+        itemID: String,
+        inset: CGFloat = Metrics.Space.xs,
+        @ViewBuilder leading: () -> Leading = { EmptyView() }
+    ) -> some View {
+        overlay(alignment: .topTrailing) {
+            HStack(spacing: Metrics.Space.xs) {
+                leading()
+                #if os(iOS)
+                if DownloadStore.shared.isDownloaded(itemID) {
+                    DownloadedMark()
+                }
+                #endif
+            }
+            .padding(inset)
+        }
+    }
+}
+
+extension String {
+    /// Appends ", downloaded" for a downloaded item; downloads exist on iOS
+    /// only. Feeds a card's accessibility label without an `#if` at each
+    /// call site.
+    func appendingDownloadedSuffix(itemID: String) -> String {
+        #if os(iOS)
+        guard DownloadStore.shared.isDownloaded(itemID) else { return self }
+        return "\(self), \(String(localized: "downloaded"))"
+        #else
+        return self
+        #endif
     }
 }
 
