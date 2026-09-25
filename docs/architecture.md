@@ -69,8 +69,10 @@ Accounts:
   but no credentials. A successful, current verification commits and
   activates it; cancel leaves the active Jellyfin and Seerr sessions intact.
 - "Who's watching?" is the `choosingAccount` phase at launch and after
-  sign-out. Settings opens the same `AccountPickerView` over the app through
-  `openProfilePicker` (a full-screen cover on tvOS, a sheet on iOS), leaving
+  sign-out. The tvOS profile button, Settings' Switch Profile and, on iOS,
+  the row under the profile at the top of Settings open the same
+  `AccountPickerView` over the app through `openProfilePicker` (a
+  full-screen cover on tvOS, a sheet on iOS), leaving
   the active account in place: Back or choosing it again closes the picker,
   and Add Profile closes it before the draft session opens. Profiles group by
   server (`ProfileGrouping`), most recently activated first; activation
@@ -153,6 +155,12 @@ wrapper. [Design system](design-system.md) owns the visual rules.
   mounted but inert over pushed details, the offset lives at tab scope, and
   Down from Refresh goes to Home's hero. It must never stay hittable over
   lower rails.
+- The profile button mirrors Refresh at the top right on the same
+  `TopChromeButton`: focusable only while the tab bar has focus, reached
+  Right from Settings, the last tab, since focusing a tab selects it. It
+  shows over every content tab's root and every Settings page
+  (`MainTabView.showsProfileButton`); like Refresh, a pushed detail hides it
+  and takes it out of accessibility.
 - Top Shelf reads a sanitized local snapshot and artwork. The extension gets
   no credentials and makes no network calls. Keep its extension product type
   and `_NSExtensionMain` entry point.
