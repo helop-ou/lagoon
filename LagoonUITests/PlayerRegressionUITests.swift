@@ -1203,7 +1203,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
 
         // Matched on a fragment: XCUITest rejects queries over 128 characters.
         let olderNote = app.staticTexts
-            .matching(NSPredicate(format: "label CONTAINS %@", "exhausted provider allowance"))
+            .matching(NSPredicate(format: "label CONTAINS %@", "your server's reason"))
             .firstMatch
         XCTAssertFalse(olderNote.exists, "a collapsed build should not show its notes")
 
@@ -1355,7 +1355,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         moveFocus(to: build53, maxPresses: 80) { remote.press(.down) }
         remote.press(.select)
         let olderNote = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "exhausted provider allowance")
+            NSPredicate(format: "label CONTAINS %@", "your server's reason")
         ).firstMatch
         XCTAssertTrue(olderNote.waitForExistence(timeout: 5))
         capture("Baby Pink tvOS — deeply scrolled and expanded historical release notes")
