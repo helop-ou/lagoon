@@ -1608,8 +1608,8 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertTrue(subtitleTab.waitForExistence(timeout: 8))
         // The surface keeps focus until a tab accepts it (see CustomPlayerView).
         // One unmeasured round trip makes every iteration start the same way.
-        moveRight(toTab: "subtitles", in: app)
-        moveLeft(toTab: "info", in: app)
+        move(.right, toTab: "subtitles", in: app)
+        move(.left, toTab: "info", in: app)
 
         let options = XCTMeasureOptions()
         options.iterationCount = 5
@@ -2632,7 +2632,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         remote.press(.down)
         waitForState(in: app, timeout: 4) { $0.int("panel") == 1 }
         waitForPanelReveal()
-        moveRight(toTab: "subtitles", in: app)
+        move(.right, toTab: "subtitles", in: app)
         remote.press(.down) // Search, deliberately ahead of long track lists.
         waitForState(in: app, timeout: 4) { $0.string("focus") == "track-subtitle-search" }
         attachScreenshot(of: app, named: "Subtitle discovery ahead of track list")
@@ -2676,7 +2676,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         remote.press(.down)
         waitForState(in: app, timeout: 4) { $0.int("panel") == 1 }
         waitForPanelReveal()
-        moveRight(toTab: "subtitles", in: app)
+        move(.right, toTab: "subtitles", in: app)
         remote.press(.down) // Search
         remote.press(.down) // language
         remote.press(.down) // Off
@@ -2694,7 +2694,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         remote.press(.down)
         waitForState(in: app, timeout: 5) { $0.int("panel") == 1 }
         waitForPanelReveal()
-        moveRight(toTab: "subtitles", in: app)
+        move(.right, toTab: "subtitles", in: app)
         XCTAssertTrue(
             app.buttons["player.track.subtitle-off"].waitForExistence(timeout: 5),
             "the Subtitles tab must list the tracks"
@@ -2850,17 +2850,9 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         Thread.sleep(forTimeInterval: 0.6)
     }
 
-    private func moveRight(toTab target: String, in app: XCUIApplication) {
+    private func move(_ direction: XCUIRemote.Button, toTab target: String, in app: XCUIApplication) {
         for _ in 0..<3 where state(in: app).string("tab") != target {
-            remote.press(.right)
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        waitForState(in: app, timeout: 4) { $0.string("tab") == target }
-    }
-
-    private func moveLeft(toTab target: String, in app: XCUIApplication) {
-        for _ in 0..<3 where state(in: app).string("tab") != target {
-            remote.press(.left)
+            remote.press(direction)
             Thread.sleep(forTimeInterval: 0.15)
         }
         waitForState(in: app, timeout: 4) { $0.string("tab") == target }
