@@ -1157,15 +1157,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
-        let settingsTab = app.tabBars.buttons["Settings"]
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
-        let homeTab = app.tabBars.buttons["Home"]
-        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
-            remote.press(.up)
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
-        remote.press(.select)
+        openSettings(in: app)
 
         let about = app.descendants(matching: .any)["settings.category.about"]
         XCTAssertTrue(about.waitForExistence(timeout: 8))
@@ -1223,13 +1215,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
 
         let homeTab = app.tabBars.buttons["Home"]
         let settingsTab = app.tabBars.buttons["Settings"]
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
-        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
-            remote.press(.up)
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
-        remote.press(.select)
+        openSettings(in: app)
 
         let appearance = app.descendants(matching: .any)["settings.category.appearance"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 8))
@@ -1369,15 +1355,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
-        let settingsTab = app.tabBars.buttons["Settings"]
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
-        let homeTab = app.tabBars.buttons["Home"]
-        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
-            remote.press(.up)
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
-        remote.press(.select)
+        openSettings(in: app)
 
         let playback = app.descendants(matching: .any)["settings.category.playback"]
         XCTAssertTrue(playback.waitForExistence(timeout: 8))
@@ -2097,15 +2075,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         XCTAssertEqual(firstCleanup.int("unclean"), 0)
 
         // Settings must stay responsive while the first player's resources retire.
-        let settingsTab = app.tabBars.buttons["Settings"]
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 5))
-        let homeTab = app.tabBars.buttons["Home"]
-        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
-            remote.press(.up)
-            Thread.sleep(forTimeInterval: 0.1)
-        }
-        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
-        remote.press(.select)
+        openSettings(in: app, timeout: 5, focusStepInterval: 0.1)
         XCTAssertTrue(
             app.descendants(matching: .any)["settings.category.audio"].waitForExistence(timeout: 5)
         )
@@ -2897,15 +2867,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     private func openPlayerPanelPreview(in app: XCUIApplication) {
-        let settingsTab = app.tabBars.buttons["Settings"]
-        XCTAssertTrue(settingsTab.waitForExistence(timeout: 20))
-        let homeTab = app.tabBars.buttons["Home"]
-        for _ in 0..<8 where !homeTab.hasFocus && !settingsTab.hasFocus {
-            remote.press(.up)
-            Thread.sleep(forTimeInterval: 0.15)
-        }
-        moveFocus(to: settingsTab, maxPresses: 10) { remote.press(.right) }
-        remote.press(.select)
+        openSettings(in: app)
 
         let developer = app.descendants(matching: .any)["settings.category.developer"]
         XCTAssertTrue(developer.waitForExistence(timeout: 8))
