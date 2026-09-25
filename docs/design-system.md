@@ -30,6 +30,7 @@ screen-specific copies.
 | `downloadMarkSize` | Not used | 18: download progress ring |
 | `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's "downloaded" and "watched" badges and their corner inset |
 | `profilePortraitSize` / `groupedProfilePortraitSize` | 200 / 130 | 84 / 84: a profile's round portrait in "Who's watching?", one server / grouped by server |
+| `chromeProfilePortraitSize` | 44: the portrait in the top-right profile button, inside a glass ring the size of Refresh | 26: the Settings tab icon, drawn untinted |
 | `themeSwatchSize` | Not used | 28: swatch in Settings › Appearance |
 | `qrCodeSize` / `qrCodeMinimumQuietZone` | 420 / 32 | 220 / 16, gallery only. A code scans from about ten times its width. The real quiet zone is derived from the code |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
@@ -119,7 +120,10 @@ notes](reference/design-system.md#themes).
   borderless and plain styles draw a square platter. Several servers put each
   server's name, address and status dot beside its row on tvOS and above its
   grid on iOS, so three servers fit one TV screen. The active profile carries a
-  check mark only when the picker is opened from the app.
+  check mark only when the picker is opened from the app. UIKit controls and
+  tab items take the same portrait as a bitmap from `ProfilePortrait.image`,
+  so the profile looks the same in the picker, the tvOS chrome and the iOS
+  tab bar.
 - **Top 10 shelves:** landscape cards with an oversized rank beside each. The
   rank sits outside the focusable card, so focus lift and accessibility stay
   with the native control.
