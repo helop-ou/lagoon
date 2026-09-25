@@ -174,6 +174,9 @@ final class SessionStore {
         guard !expiredAccountIDs.contains(account.id),
               !localData.pendingAccountIDs.contains(account.id),
               let token = credentials.string(for: account.keychainAccount) else { return false }
+        var account = account
+        account.lastUsedAt = Date.now.timeIntervalSince1970
+        save(accounts: accounts.map { $0.id == account.id ? account : $0 })
         client.configure(serverURL: account.serverURL)
         client.activateSession(token: token, userId: account.userId)
         activeAccount = account
