@@ -46,7 +46,6 @@ enum Metrics {
     /// A profile's round portrait in the "Who's watching?" picker: one row
     /// when every profile is on one server, and smaller when rows are
     /// grouped by server, so three servers fit one screen.
-    static let accountTileSize: CGFloat = 220
     static let profilePortraitSize: CGFloat = 200
     static let groupedProfilePortraitSize: CGFloat = 130
     static let lockupSymbolHeight: CGFloat = 150
@@ -80,7 +79,6 @@ enum Metrics {
     static let railTopPadding: CGFloat = Space.m
     static let railBottomPadding: CGFloat = Space.xxl
     /// A profile's round portrait in the "Who's watching?" picker.
-    static let accountTileSize: CGFloat = 110
     static let profilePortraitSize: CGFloat = 84
     static let groupedProfilePortraitSize: CGFloat = 84
     static let touchAvatarSize: CGFloat = 64
