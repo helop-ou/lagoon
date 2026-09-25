@@ -25,6 +25,21 @@ private extension View {
             self.drawingGroup()
         }
     }
+
+    /// The styling a plain cue and an ASS cue share, rasterized.
+    func subtitleCue(_ style: SubtitleRenderStyle, alignment: TextAlignment) -> some View {
+        font(style.font)
+            .multilineTextAlignment(alignment)
+            .foregroundStyle(style.foregroundColor)
+            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
+            .padding(.horizontal, Metrics.Space.l)
+            .padding(.vertical, Metrics.Space.s)
+            .background(
+                style.backgroundColor.opacity(style.backgroundOpacity),
+                in: RoundedRectangle(cornerRadius: Metrics.cardArtRadius)
+            )
+            .rasterizedCue()
+    }
 }
 
 /// Full-screen player: transport, overlays and the options panel. Talks only
@@ -831,17 +846,7 @@ struct PlayerSubtitleText: View {
 
     var body: some View {
         Text(text)
-            .font(style.font)
-            .multilineTextAlignment(.center)
-            .foregroundStyle(style.foregroundColor)
-            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
-            .padding(.horizontal, Metrics.Space.l)
-            .padding(.vertical, Metrics.Space.s)
-            .background(
-                style.backgroundColor.opacity(style.backgroundOpacity),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .rasterizedCue()
+            .subtitleCue(style, alignment: .center)
             .padding(.bottom, style.bottomPadding)
             .accessibilityIdentifier(accessibilityIdentifier)
     }
@@ -857,17 +862,7 @@ struct PlayerStyledSubtitleText: View {
 
     var body: some View {
         styledText
-            .font(style.font)
-            .multilineTextAlignment(cue.alignment?.textAlignment ?? .center)
-            .foregroundStyle(style.foregroundColor)
-            .subtitleEdge(style.edgeStyle, color: style.edgeColor)
-            .padding(.horizontal, Metrics.Space.l)
-            .padding(.vertical, Metrics.Space.s)
-            .background(
-                style.backgroundColor.opacity(style.backgroundOpacity),
-                in: RoundedRectangle(cornerRadius: 10)
-            )
-            .rasterizedCue()
+            .subtitleCue(style, alignment: cue.alignment?.textAlignment ?? .center)
             .accessibilityLabel(cue.text)
             .accessibilityIdentifier(accessibilityIdentifier)
     }
