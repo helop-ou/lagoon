@@ -1,6 +1,5 @@
 import Foundation
 import LagoonEngine
-import Observation
 
 /// A track choice that can be stored, and its defaults namespace. The
 /// namespace belongs to the choice so no call site can write one kind into
@@ -27,7 +26,6 @@ nonisolated enum TrackLayoutFingerprint {
 /// carries to the rest. Written straight to `UserDefaults`, so it outlives
 /// the player.
 @MainActor
-@Observable
 final class TrackMemoryStore<Choice: RememberedTrackChoice> {
     private(set) var accountID: String?
     private var choices: [String: Choice] = [:]
