@@ -430,7 +430,7 @@ final class SeerrClient {
             if authenticated && http.statusCode == 401 {
                 throw SeerrError.unauthenticated
             }
-            let message = (try? decoder.decode(ErrorPayload.self, from: data).displayMessage)
+            let message = ServerErrorMessage.from(data)
                 ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
             throw SeerrError.server(http.statusCode, message)
         }
@@ -489,11 +489,4 @@ private nonisolated struct QuickConnectAuthentication: Encodable {
 private nonisolated struct JellyfinAuthentication: Encodable {
     let username: String
     let password: String
-}
-
-private nonisolated struct ErrorPayload: Decodable {
-    let message: String?
-    let error: String?
-
-    var displayMessage: String { message ?? error ?? "The Seerr request failed." }
 }
