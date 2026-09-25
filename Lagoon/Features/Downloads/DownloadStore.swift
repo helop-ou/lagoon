@@ -223,11 +223,6 @@ final class DownloadStore {
         return DownloadArtworkIndex.shared.url(imageItemID: key.imageItemID, type: key.type)
     }
 
-    /// The server's "Allow media downloading" policy.
-    func canDownload(client: JellyfinClient) async -> Bool {
-        await client.canDownloadContent()
-    }
-
     /// Re-asks the server, since an admin can grant the permission after
     /// sign-in. Unreachable counts as no.
     func refreshPermission(client: JellyfinClient) async {

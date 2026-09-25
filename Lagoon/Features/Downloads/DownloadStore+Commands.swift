@@ -30,7 +30,7 @@ extension DownloadStore {
             guard stillActive() else { throw StartError.accountChanged }
             guard preparationTokens[item.id] == preparation else { throw CancellationError() }
         }
-        let permitted = await canDownload(client: client)
+        let permitted = await client.canDownloadContent()
         try checkPreparation()
         guard permitted else { throw StartError.notPermitted }
 
