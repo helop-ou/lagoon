@@ -529,6 +529,25 @@ final class JellyfinClient {
         return URLSession(configuration: configuration)
     }()
 
+    /// The profile picker's status dot: a quick, unauthenticated answer or
+    /// none. Never waits for connectivity, unlike `fetchPublicInfo`.
+    private nonisolated static let reachabilitySession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.waitsForConnectivity = false
+        configuration.timeoutIntervalForRequest = 4
+        configuration.timeoutIntervalForResource = 4
+        return URLSession(configuration: configuration)
+    }()
+
+    nonisolated static func isReachable(_ serverURL: URL) async -> Bool {
+        let request = URLRequest(url: serverURL.appending(path: "System/Info/Public"))
+        guard let (_, response) = try? await reachabilitySession.data(for: request) else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
     nonisolated static func fetchPublicInfo(at serverURL: URL) async throws -> PublicSystemInfo {
         var request = URLRequest(url: serverURL.appending(path: "System/Info/Public"))
         request.timeoutInterval = 10
