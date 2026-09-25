@@ -129,19 +129,10 @@ private struct SeerrGenreCard: View {
                 .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
                 .clipped()
 
-                // The name has to hold over whatever still sits behind it.
-                LinearGradient(
-                    colors: [.black.opacity(0.85), .black.opacity(0.1)],
-                    startPoint: .bottom,
-                    endPoint: .top
-                )
-
-                Text(genre.name)
-                    .font(.headline)
-                    .padding(Metrics.Space.l)
+                GenreCardLabel(name: genre.name)
             }
             .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardCornerRadius, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
         }
         .cardButtonStyle()
         .accessibilityLabel(genre.name)

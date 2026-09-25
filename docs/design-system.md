@@ -122,6 +122,10 @@ notes](reference/design-system.md#themes).
   - Landscape tiles (`LandscapeCard`, `EpisodeCard`) share `LandscapeArtwork`
     for the 16:9 clip, bottom metadata wash and progress bar; each supplies
     its own `metadata` closure for the title block.
+  - Genre and collection cards (`GenreCard`, `CollectionCard`,
+    `SeerrGenreCard`) share `NamedArtworkBackground` (artwork, or a gradient
+    picked deterministically from the name) and `GenreCardLabel` (the
+    bottom-wash title, centered and multi-line on tvOS).
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
     `WatchedMark`); `String.appendingDownloadedSuffix(itemID:)` appends the

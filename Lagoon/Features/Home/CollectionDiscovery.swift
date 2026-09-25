@@ -118,9 +118,7 @@ struct CollectionRail: View {
 /// The name sits under the artwork, not over it: collection art often has
 /// the name painted in already, and a caption can wrap instead of truncating.
 private struct CollectionCard: View {
-    @Environment(\.displayScale) private var displayScale
     let collection: CollectionShelfItem
-    @Environment(SessionStore.self) private var session
 
     var body: some View {
         // Room for the `.card` focus lift, which scales the art about 10%.
@@ -157,9 +155,22 @@ private struct CollectionCard: View {
         )
     }
 
-    @ViewBuilder
     private var background: some View {
-        if let artwork = collection.artwork {
+        NamedArtworkBackground(name: collection.name, artwork: collection.artwork)
+    }
+}
+
+/// A landscape shelf card's artwork: the item's own image, or — with none —
+/// a gradient picked deterministically from its name, so a shelf of
+/// unillustrated genres or collections doesn't read as identical grey tiles.
+struct NamedArtworkBackground: View {
+    let name: String
+    let artwork: MediaItem?
+    @Environment(\.displayScale) private var displayScale
+    @Environment(SessionStore.self) private var session
+
+    var body: some View {
+        if let artwork {
             CachedAsyncImage(
                 url: session.client.imageURL(
                     for: artwork,
@@ -188,7 +199,7 @@ private struct CollectionCard: View {
             (Theme.accent.opacity(0.65), Theme.background),
             (Theme.palette.glowDepth.opacity(0.75), Theme.ground),
         ]
-        let paletteIndex = collection.name.utf8.reduce(0) {
+        let paletteIndex = name.utf8.reduce(0) {
             ($0 * 31 + Int($1)) % palettes.count
         }
         let palette = palettes[paletteIndex]

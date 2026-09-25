@@ -103,11 +103,9 @@ struct GenreRail: View {
 }
 
 private struct GenreCard: View {
-    @Environment(\.displayScale) private var displayScale
     let genre: GenreShelfItem
     let includeTypes: [MediaItemType]
     let identifier: String
-    @Environment(SessionStore.self) private var session
 
     var body: some View {
         NavigationLink(value: ContentNavigationRoute.genre(
@@ -115,24 +113,8 @@ private struct GenreCard: View {
             includeTypes: includeTypes
         )) {
             ZStack(alignment: .bottomLeading) {
-                background
-
-                LinearGradient(
-                    colors: titleWash,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-
-                Text(genre.name)
-                    .font(.title3.bold())
-                    #if os(tvOS)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    #else
-                    .lineLimit(1)
-                    #endif
-                    .padding(Metrics.Space.xl)
+                NamedArtworkBackground(name: genre.name, artwork: genre.artwork)
+                GenreCardLabel(name: genre.name)
             }
             .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
@@ -140,56 +122,6 @@ private struct GenreCard: View {
         .cardButtonStyle()
         .accessibilityLabel("\(genre.name) genre")
         .accessibilityIdentifier("home.genre.\(identifier).\(genre.id)")
-    }
-
-    private var titleWash: [Color] {
-        #if os(tvOS)
-        // Protect the centered title as well as the bottom of the artwork.
-        [.black.opacity(0.2), .black.opacity(0.6), .black.opacity(0.82)]
-        #else
-        [.clear, .black.opacity(0.82)]
-        #endif
-    }
-
-    @ViewBuilder
-    private var background: some View {
-        if let artwork = genre.artwork {
-            CachedAsyncImage(
-                url: session.client.imageURL(
-                    for: artwork,
-                    kind: .thumb,
-                    maxWidth: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
-                ),
-                maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
-            ) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                fallbackGradient
-            }
-            .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
-            .clipped()
-        } else {
-            fallbackGradient
-        }
-    }
-
-    private var fallbackGradient: some View {
-        let palettes: [(Color, Color)] = [
-            (Theme.accent.opacity(0.9), Theme.ground),
-            (Theme.palette.glowDepth.opacity(0.9), Theme.background),
-            (Theme.ground.opacity(0.9), Theme.palette.glowDepth),
-            (Theme.accent.opacity(0.65), Theme.background),
-            (Theme.palette.glowDepth.opacity(0.75), Theme.ground),
-        ]
-        let paletteIndex = genre.name.utf8.reduce(0) {
-            ($0 * 31 + Int($1)) % palettes.count
-        }
-        let palette = palettes[paletteIndex]
-        return LinearGradient(
-            colors: [palette.0, palette.1],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
     }
 }
 

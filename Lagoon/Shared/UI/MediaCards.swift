@@ -434,6 +434,39 @@ extension String {
     }
 }
 
+/// A landscape shelf card's title, drawn over a bottom gradient wash. Shared
+/// by `GenreCard` and `SeerrGenreCard`, so the two never drift in font,
+/// wrap rules or placement.
+struct GenreCardLabel: View {
+    let name: String
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            LinearGradient(colors: titleWash, startPoint: .top, endPoint: .bottom)
+
+            Text(name)
+                .font(.title3.bold())
+                #if os(tvOS)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #else
+                .lineLimit(1)
+                #endif
+                .padding(Metrics.Space.xl)
+        }
+    }
+
+    private var titleWash: [Color] {
+        #if os(tvOS)
+        // Protect the centered title as well as the bottom of the artwork.
+        [.black.opacity(0.2), .black.opacity(0.6), .black.opacity(0.82)]
+        #else
+        [.clear, .black.opacity(0.82)]
+        #endif
+    }
+}
+
 extension MediaItem {
     /// Fractional watch progress; nil when zero or at 95% and above.
     var playbackProgress: Double? {
