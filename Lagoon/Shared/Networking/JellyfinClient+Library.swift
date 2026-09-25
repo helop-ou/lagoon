@@ -290,17 +290,11 @@ extension JellyfinClient {
     /// The Favorites rail. Movies and series only: the favourite star
     /// targets the series, not episodes.
     func favorites(limit: Int = 16) async throws -> [MediaItem] {
-        let userId = try requireUserId()
-        let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
-            URLQueryItem(name: "Recursive", value: "true"),
-            URLQueryItem(name: "Filters", value: "IsFavorite"),
-            URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "SortBy", value: "SortName"),
-            URLQueryItem(name: "Limit", value: String(limit)),
-            URLQueryItem(name: "Fields", value: Self.defaultFields),
-            URLQueryItem(name: "ImageTypeLimit", value: "1"),
-        ])
-        return page.items
+        try await items(
+            includeTypes: [.movie, .series],
+            limit: limit,
+            filters: ["IsFavorite"]
+        ).items
     }
 
     // MARK: - User data
