@@ -17,6 +17,29 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.3.0 (111)
+
+September 2026
+
+**Switch profiles from anywhere, grouped by server.**
+
+### New features
+
+- Who's watching? groups profiles by server, shows whether each server is online, and puts the profile you used last first.
+- On Apple TV, a profile button at the top right, past Settings, opens Who's watching? and Back returns you to where you were.
+- On iPhone and iPad, the Settings tab shows your profile picture, and Settings starts with Switch Profile.
+
+### Improvements
+
+- Dismissing Up Next no longer cancels it: the card returns for the last five seconds and the next episode still plays.
+- 4K AV1 and VP9 titles use far less memory on Apple TV.
+
+### Bug fixes
+
+- On Apple TV, a single click on Skip Intro or Up Next works; it no longer takes a double click.
+- A title with a few damaged frames keeps playing instead of going black and switching to a transcode.
+- Poster grids on iPhone stay three across when the text size is smaller than the default.
+
 ## 0.2.2 (110)
 
 September 2026
