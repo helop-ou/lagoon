@@ -77,9 +77,7 @@ struct DownloadControl: View {
 
     /// Default first. Transcode qualities only when the account may transcode.
     private var orderedQualities: [DownloadQuality] {
-        let allowed: [DownloadQuality] = transcodingAllowed == true ? DownloadQuality.allCases : [.original]
-        guard allowed.contains(store.defaultQuality) else { return allowed }
-        return [store.defaultQuality] + allowed.filter { $0 != store.defaultQuality }
+        DownloadQuality.ordered(default: store.defaultQuality, transcodingAllowed: transcodingAllowed == true)
     }
 
     private var newDownloadMenu: some View {

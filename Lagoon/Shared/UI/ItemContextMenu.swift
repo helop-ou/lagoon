@@ -107,12 +107,10 @@ private struct ItemUserDataMenu: ViewModifier {
     /// Default quality first, as in `DownloadControl`. High and Standard need
     /// transcode permission; Original needs only download permission.
     private var downloadQualities: [DownloadQuality] {
-        let store = DownloadStore.shared
-        let allowed: [DownloadQuality] = session.client.cachedVideoTranscodingAllowed == true
-            ? DownloadQuality.allCases
-            : [.original]
-        guard allowed.contains(store.defaultQuality) else { return allowed }
-        return [store.defaultQuality] + allowed.filter { $0 != store.defaultQuality }
+        DownloadQuality.ordered(
+            default: DownloadStore.shared.defaultQuality,
+            transcodingAllowed: session.client.cachedVideoTranscodingAllowed == true
+        )
     }
     #endif
 

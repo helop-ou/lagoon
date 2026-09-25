@@ -35,6 +35,21 @@ struct DownloadQualityTests {
     @Test func effectiveNeverChangesTheOriginalRequest() {
         #expect(DownloadQuality.original.effective(sourceSize: 1, runTimeTicks: 1) == .original)
     }
+
+    @Test func orderedPutsTheDefaultFirstWhenTranscodingIsAllowed() {
+        let ordered = DownloadQuality.ordered(default: .standard, transcodingAllowed: true)
+        #expect(ordered == [.standard, .original, .high])
+    }
+
+    @Test func orderedDropsTranscodeQualitiesWhenNotAllowed() {
+        let ordered = DownloadQuality.ordered(default: .high, transcodingAllowed: false)
+        #expect(ordered == [.original])
+    }
+
+    @Test func orderedKeepsAllCasesWhenTheDefaultAlreadyLeadsThem() {
+        let ordered = DownloadQuality.ordered(default: .original, transcodingAllowed: true)
+        #expect(ordered == [.original, .high, .standard])
+    }
 }
 
 @Suite("Download artwork key")

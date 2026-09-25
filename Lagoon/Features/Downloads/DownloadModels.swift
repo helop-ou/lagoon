@@ -61,6 +61,15 @@ nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, S
         }
         return sourceSize <= estimate ? .original : self
     }
+
+    /// The default quality first, then the rest, restricted to `.original`
+    /// when the account isn't allowed to transcode. Shared by the quality
+    /// picker and the card's context menu.
+    static func ordered(default defaultQuality: DownloadQuality, transcodingAllowed: Bool) -> [DownloadQuality] {
+        let allowed: [DownloadQuality] = transcodingAllowed ? allCases : [.original]
+        guard allowed.contains(defaultQuality) else { return allowed }
+        return [defaultQuality] + allowed.filter { $0 != defaultQuality }
+    }
 }
 
 /// One title on disk or on its way. Carries enough metadata for the
