@@ -270,13 +270,15 @@ struct PlaybackAutomationTests {
         #expect(played)
     }
 
-    @Test func backOnTheCardStaysForTheRestOfTheEpisode() async throws {
+    @Test func backOnTheCardMeansNotYetAndTheCardReturnsForTheLastSeconds() async throws {
         let automation = automation(segments: [Self.intro, Self.outro])
         var played = false
         automation.onPlayNext = { played = true }
 
+        // Back at the credits: the viewer wants to watch them.
         automation.tick(position: 1_201, duration: 1_320)
         #expect(automation.dismissNextUp())
+        #expect(automation.nextUpAnswer == .notYet)
         #expect(!automation.showsNextUp)
         #expect(!automation.isCountingDown)
         try await Task.sleep(for: Self.settled)
@@ -284,8 +286,59 @@ struct PlaybackAutomationTests {
 
         automation.tick(position: 1_300, duration: 1_320)
         #expect(!automation.showsNextUp)
-        // Nor at the end of the file.
+        // The end of the file still advances.
+        #expect(automation.autoplaysOnFinish)
+
+        // The last five seconds bring the card back, counting down.
+        automation.tick(position: 1_315, duration: 1_320)
+        #expect(automation.showsNextUp)
+        #expect(automation.isCountingDown)
+        #expect(automation.nextUpCardStart == 1_315)
+        await eventually { played }
+        #expect(played)
+    }
+
+    @Test func backDuringTheFinalCountdownStaysOnThisEpisode() async throws {
+        let automation = automation(segments: [Self.intro, Self.outro])
+        var played = false
+        automation.onPlayNext = { played = true }
+
+        automation.tick(position: 1_201, duration: 1_320)
+        automation.dismissNextUp()
+        automation.tick(position: 1_316, duration: 1_320)
+        #expect(automation.isCountingDown)
+        #expect(automation.dismissNextUp())
+        #expect(automation.nextUpAnswer == .stay)
+        #expect(!automation.showsNextUp)
         #expect(!automation.autoplaysOnFinish)
+        try await Task.sleep(for: Self.settled)
+        #expect(!played)
+        automation.tick(position: 1_319, duration: 1_320)
+        #expect(!automation.showsNextUp)
+    }
+
+    @Test func backFirstSeenInTheLastSecondsStays() {
+        // No outro: the card appears 15 s out and counts down over the last 5.
+        // A first Back inside those 5 s already answers the final countdown.
+        let automation = automation()
+        automation.tick(position: 1_317, duration: 1_320)
+        #expect(automation.isCountingDown)
+        #expect(automation.dismissNextUp())
+        #expect(automation.nextUpAnswer == .stay)
+        #expect(!automation.autoplaysOnFinish)
+    }
+
+    @Test func withoutAnOutroNotYetWaitsForTheLastSeconds() {
+        let automation = automation()
+        automation.tick(position: 1_306, duration: 1_320)
+        #expect(automation.showsNextUp)
+        #expect(automation.dismissNextUp())
+        #expect(automation.nextUpAnswer == .notYet)
+        automation.tick(position: 1_314, duration: 1_320)
+        #expect(!automation.showsNextUp)
+        automation.tick(position: 1_315, duration: 1_320)
+        #expect(automation.showsNextUp)
+        #expect(automation.isCountingDown)
     }
 
     @Test func cardModeOffersAndNeverActsAlone() async throws {
@@ -306,8 +359,10 @@ struct PlaybackAutomationTests {
         let automation = automation(autoplay: .card, segments: [Self.intro, Self.outro])
         automation.tick(position: 1_201, duration: 1_320)
         #expect(automation.dismissNextUp())
+        // Card mode never acts alone, so there is no "not yet" to come back to.
+        #expect(automation.nextUpAnswer == .stay)
         #expect(!automation.showsNextUp)
-        automation.tick(position: 1_300, duration: 1_320)
+        automation.tick(position: 1_316, duration: 1_320)
         #expect(!automation.showsNextUp)
     }
 
@@ -331,7 +386,7 @@ struct PlaybackAutomationTests {
 
         automation.beginItem(segments: [Self.intro, Self.outro])
         automation.setNextUpAvailable(true)
-        #expect(!automation.nextUpDismissed)
+        #expect(automation.nextUpAnswer == .none)
         #expect(!automation.showsNextUp)
         automation.tick(position: 12, duration: 1_320)
         #expect(automation.activeSegment?.id == "intro")
