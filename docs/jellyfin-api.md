@@ -173,10 +173,12 @@ A landscape card with no artwork shows its title.
   subtitle management): offering a transfer the server refuses is worse than
   not offering it.
 - `canDownloadContent()` and `canTranscodeForDownload()` resolve the flags
-  from sign-in's policy or a lazy `Users/Me` refresh.
+  from sign-in's policy or a lazy `Users/Me` refresh. One `Users/Me` answer
+  sets all three flags (subtitles too), and concurrent callers share the
+  request in flight.
   `cachedContentDownloadingAllowed` and `cachedVideoTranscodingAllowed` answer
-  synchronously for menu bodies. The context menu warms both with a `.task`,
-  since a rail card cannot await one per tap.
+  synchronously for menu bodies. `DownloadStore.refreshPermission` warms them
+  once per account, since a rail card cannot await one per tap.
 - `EnableContentDownloading` decides whether the Download control or submenu
   appears. `EnableVideoPlaybackTranscoding` decides only the qualities:
   Original is always offered; High and Standard are server transcodes and are
