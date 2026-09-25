@@ -154,8 +154,6 @@ struct HomeView: View {
             recentlyAddedRails(collectionType: "movies")
         case HomeRowID.recentlyAddedShows:
             recentlyAddedRails(collectionType: "tvshows")
-        case HomeRowID.recentlyAddedOther:
-            recentlyAddedRails(collectionType: nil)
         case HomeRowID.movieGenres:
             GenreRail(
                 title: "Movie Genres",
@@ -183,16 +181,10 @@ struct HomeView: View {
         }
     }
 
-    /// Recently Added rails for one library kind. Nil collects anything that
-    /// is neither movies nor shows (nothing today, since `load` keeps only
-    /// those two).
+    /// Recently Added rails for one library kind.
     @ViewBuilder
-    private func recentlyAddedRails(collectionType: String?) -> some View {
-        let rails = viewModel.latestRails.filter {
-            collectionType == nil
-                ? !["movies", "tvshows"].contains($0.collectionType ?? "")
-                : $0.collectionType == collectionType
-        }
+    private func recentlyAddedRails(collectionType: String) -> some View {
+        let rails = viewModel.latestRails.filter { $0.collectionType == collectionType }
         ForEach(rails) { rail in
             MediaRail(
                 title: rail.title,

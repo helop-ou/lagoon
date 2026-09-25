@@ -15,11 +15,10 @@ nonisolated enum HomeRowID {
     static let favorites = "lagoon.favorites"
     static let recentlyAddedMovies = "lagoon.recentlyAddedMovies"
     static let recentlyAddedShows = "lagoon.recentlyAddedShows"
-    static let recentlyAddedOther = "lagoon.recentlyAddedOther"
     static let movieGenres = "lagoon.movieGenres"
     static let showGenres = "lagoon.showGenres"
 
-    /// The old single toggle for all three Recently Added rows. Read only.
+    /// The old single toggle for the Recently Added rows. Read only.
     static let legacyRecentlyAdded = "lagoon.recentlyAdded"
 
     /// Native row ids start with this; plugin rows use the server's section name.
@@ -199,12 +198,6 @@ nonisolated enum HomeSectionPreferenceResolver {
             source: .lagoon
         ),
         HomeSectionChoice(
-            id: HomeRowID.recentlyAddedOther,
-            title: "Recently Added in Other Libraries",
-            isEnabled: true,
-            source: .lagoon
-        ),
-        HomeSectionChoice(
             id: CollectionShelf.rowID,
             title: "Collections",
             isEnabled: true,
@@ -224,11 +217,10 @@ nonisolated enum HomeSectionPreferenceResolver {
 
     static let nativeIDs: Set<String> = Set(nativeChoices.map(\.id))
 
-    /// The three rows the single legacy Recently Added toggle became.
+    /// The rows the single legacy Recently Added toggle became.
     private static let recentlyAddedIDs: Set<String> = [
         HomeRowID.recentlyAddedMovies,
         HomeRowID.recentlyAddedShows,
-        HomeRowID.recentlyAddedOther,
     ]
 
     /// Folds a legacy layout into the single ordered list. Hidden rows and
@@ -251,7 +243,7 @@ nonisolated enum HomeSectionPreferenceResolver {
 
     private static func wasHidden(_ id: String, in hidden: Set<String>) -> Bool {
         if hidden.contains(id) { return true }
-        // One toggle governed all three, so all three inherit its answer.
+        // One toggle governed them all, so each inherits its answer.
         return recentlyAddedIDs.contains(id) && hidden.contains(HomeRowID.legacyRecentlyAdded)
     }
 

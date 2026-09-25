@@ -379,14 +379,13 @@ struct HomeRowPreferenceTests {
     }
 
     /// The old single Recently Added toggle carries to all three rows.
-    @Test func theSingleLegacyRecentlyAddedToggleHidesAllThreeRowsItBecame() throws {
+    @Test func theSingleLegacyRecentlyAddedToggleHidesEveryRowItBecame() throws {
         let values = try decoded(
             #"{"nativeRows":[{"id":"lagoon.recentlyAdded","isEnabled":false}]}"#
         )
 
         #expect(!values.isEnabled(HomeRowID.recentlyAddedMovies))
         #expect(!values.isEnabled(HomeRowID.recentlyAddedShows))
-        #expect(!values.isEnabled(HomeRowID.recentlyAddedOther))
     }
 
     @Test func aLegacyPluginOrderIsKeptAfterTheNativeBlock() throws {
@@ -447,7 +446,6 @@ struct HomeRowPreferenceTests {
 
         #expect(titles[HomeRowID.recentlyAddedMovies] == "Recently Added Movies")
         #expect(titles[HomeRowID.recentlyAddedShows] == "Recently Added Shows")
-        #expect(titles[HomeRowID.recentlyAddedOther] == "Recently Added in Other Libraries")
         #expect(titles[HomeRowID.legacyRecentlyAdded] == nil)
     }
 
@@ -462,7 +460,6 @@ struct HomeRowPreferenceTests {
             HomeRowID.favorites,
             HomeRowID.recentlyAddedMovies,
             HomeRowID.recentlyAddedShows,
-            HomeRowID.recentlyAddedOther,
             HomeRowID.movieGenres,
             HomeRowID.showGenres,
             HomeCuratedRows.ID.becauseYouWatched,
@@ -492,7 +489,6 @@ struct HomeRowPreferenceTests {
             HomeRowID.favorites,
             HomeRowID.recentlyAddedMovies,
             HomeRowID.recentlyAddedShows,
-            HomeRowID.recentlyAddedOther,
             HomeRowID.movieGenres,
             HomeRowID.showGenres,
             CollectionShelf.rowID,
