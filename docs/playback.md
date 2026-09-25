@@ -357,6 +357,9 @@ integration](reference/playback/system-integration.md).
   never becomes Select.**
 - Menu cancels scrubbing, then dismisses a skip or Up Next prompt in any
   mode, then closes the panel, then exits.
+- In Automatic mode a first Back on Up Next means "not yet": the card returns
+  for the last five seconds and the episode still rolls on. Only a Back
+  during that final countdown, or in card mode, stops autoplay.
 - Keep the mounted panel and remote command ordering intact.
 
 See [remote
