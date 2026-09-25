@@ -177,42 +177,14 @@ struct MainTabView: View {
         // On a cold launch the link arrives before the client exists; it
         // waits here instead of being dropped.
         .task(id: "\(deepLinks.pendingItemID ?? ""):\(deepLinkRetry)") {
-            guard let id = deepLinks.pendingItemID else { return }
-            guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
-                deepLinks.clear()
-                return
-            }
-            do {
-                let item = try await session.client.item(id: id)
-                guard !Task.isCancelled, deepLinks.pendingItemID == id,
-                      deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else { return }
+            await resolveDeepLinkItem(pendingID: \.pendingItemID) { item in
                 playerItem = PlayerItem(media: item)
-                deepLinks.pendingItemID = nil
-                deepLinkError = nil
-            } catch is CancellationError {
-            } catch {
-                guard deepLinks.pendingItemID == id else { return }
-                deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
             }
         }
         // Top Shelf More Info opens the detail page on Home's stack.
         .task(id: "\(deepLinks.pendingDetailItemID ?? ""):\(deepLinkRetry)") {
-            guard let id = deepLinks.pendingDetailItemID else { return }
-            guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
-                deepLinks.clear()
-                return
-            }
-            do {
-                let item = try await session.client.item(id: id)
-                guard !Task.isCancelled, deepLinks.pendingDetailItemID == id,
-                      deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else { return }
+            await resolveDeepLinkItem(pendingID: \.pendingDetailItemID) { item in
                 homeNavigationPath.append(ContentNavigationRoute.item(item))
-                deepLinks.pendingDetailItemID = nil
-                deepLinkError = nil
-            } catch is CancellationError {
-            } catch {
-                guard deepLinks.pendingDetailItemID == id else { return }
-                deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
             }
         }
         .alert("Couldn't Open Item", isPresented: Binding(
@@ -230,6 +202,32 @@ struct MainTabView: View {
             }
         } message: {
             Text(deepLinkError ?? "The item couldn't be loaded.")
+        }
+    }
+
+    /// Resolves a Top Shelf deep link once the signed-in client exists, and
+    /// hands the item to `onResolved`. Play and open-detail links differ only
+    /// in what happens with the resolved item.
+    private func resolveDeepLinkItem(
+        pendingID: ReferenceWritableKeyPath<DeepLinkRouter, String?>,
+        onResolved: (MediaItem) -> Void
+    ) async {
+        guard let id = deepLinks[keyPath: pendingID] else { return }
+        guard deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else {
+            deepLinks.clear()
+            return
+        }
+        do {
+            let item = try await session.client.item(id: id)
+            guard !Task.isCancelled, deepLinks[keyPath: pendingID] == id,
+                  deepLinks.isCurrent(itemID: id, accountID: session.activeAccount?.id) else { return }
+            onResolved(item)
+            deepLinks[keyPath: pendingID] = nil
+            deepLinkError = nil
+        } catch is CancellationError {
+        } catch {
+            guard deepLinks[keyPath: pendingID] == id else { return }
+            deepLinkError = "The item couldn't be loaded. Check the server connection and try again."
         }
     }
 
