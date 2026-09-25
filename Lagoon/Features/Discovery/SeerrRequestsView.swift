@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SeerrRequestsView: View {
     @Environment(SeerrSessionStore.self) private var seerr
-    @State private var viewModel = SeerrRequestsViewModel()
+    @State private var viewModel = SeerrPagingViewModel<SeerrMediaRequest>()
     @State private var filter = SeerrRequestFilter.all
     @State private var onlyMine = false
     @State private var refreshID = 0
@@ -24,7 +24,7 @@ struct SeerrRequestsView: View {
         }
         // Reconcile rows changed on a detail screen, on the stable root.
         .onAppear {
-            guard !viewModel.requests.isEmpty else { return }
+            guard !viewModel.items.isEmpty else { return }
             refreshID += 1
         }
         .accessibilityIdentifier("seerr.requests.list")
@@ -37,14 +37,14 @@ struct SeerrRequestsView: View {
                 pageTitle
                 controls(user: user)
 
-                if viewModel.isLoading, viewModel.requests.isEmpty {
+                if viewModel.isLoading, viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                         .accessibilityLabel("Loading Requests")
-                } else if let error = viewModel.errorMessage, viewModel.requests.isEmpty {
+                } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
                     ErrorStateView(message: error) { refreshID += 1 }
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                } else if viewModel.requests.isEmpty {
+                } else if viewModel.items.isEmpty {
                     VStack(spacing: Metrics.Space.m) {
                         Image(systemName: "tray")
                             .font(Typography.glyph)
@@ -54,35 +54,21 @@ struct SeerrRequestsView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 400)
                 } else {
-                    PosterGridView(items: viewModel.requests, onNearEnd: {
-                        Task {
-                            await viewModel.load(
-                                client: seerr.client,
-                                user: user,
-                                filter: filter,
-                                onlyMine: effectiveOnlyMine(for: user)
-                            )
-                        }
+                    PosterGridView(items: viewModel.items, onNearEnd: {
+                        Task { await load(user: user) }
                     }) { request in
                         SeerrRequestCard(request: request)
                     }
                 }
 
-                if viewModel.isLoading, !viewModel.requests.isEmpty {
+                if viewModel.isLoading, !viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(Metrics.Space.xxl)
                         .accessibilityLabel("Loading more requests")
-                } else if let error = viewModel.errorMessage, !viewModel.requests.isEmpty {
+                } else if let error = viewModel.errorMessage, !viewModel.items.isEmpty {
                     InlineRetryView(message: error) {
-                        Task {
-                            await viewModel.load(
-                                client: seerr.client,
-                                user: user,
-                                filter: filter,
-                                onlyMine: effectiveOnlyMine(for: user)
-                            )
-                        }
+                        Task { await load(user: user) }
                     }
                 }
             }
@@ -161,13 +147,19 @@ struct SeerrRequestsView: View {
     }
 
     private func reload(user: SeerrUser) async {
-        await viewModel.load(
-            client: seerr.client,
-            user: user,
-            filter: filter,
-            onlyMine: effectiveOnlyMine(for: user),
-            reset: true
-        )
+        await load(user: user, reset: true)
+    }
+
+    private func load(user: SeerrUser, reset: Bool = false) async {
+        await viewModel.load(reset: reset) { pageNumber in
+            let result = try await seerr.client.requests(
+                take: 20,
+                skip: (pageNumber - 1) * 20,
+                filter: filter,
+                requestedBy: effectiveOnlyMine(for: user) ? user.id : nil
+            )
+            return SeerrPage(items: result.results, page: result.pageInfo.page, totalPages: result.pageInfo.pages)
+        }
     }
 
     private func effectiveOnlyMine(for user: SeerrUser) -> Bool {

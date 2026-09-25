@@ -236,43 +236,10 @@ struct DiscoverView: View {
 
 }
 
-@Observable
-private final class SeerrCatalogViewModel {
-    var items: [SeerrDiscoverResult] = []
-    var page = 0
-    var totalPages = 1
-    var isLoading = false
-    var errorMessage: String?
-
-    func loadNext(source: SeerrCatalogSource, client: SeerrClient, reset: Bool = false) async {
-        guard !isLoading else { return }
-        if reset {
-            items = []
-            page = 0
-            totalPages = 1
-        }
-        guard page < totalPages else { return }
-        isLoading = true
-        defer { isLoading = false }
-        errorMessage = nil
-        do {
-            let result = try await client.page(for: source, page: page + 1)
-            guard !Task.isCancelled else { return }
-            let existing = Set(items.map(\.id))
-            items += result.results.filter { !existing.contains($0.id) }
-            page = result.page
-            totalPages = result.totalPages
-        } catch is CancellationError {
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-}
-
 struct SeerrCatalogView: View {
     let source: SeerrCatalogSource
     @Environment(SeerrSessionStore.self) private var seerr
-    @State private var viewModel = SeerrCatalogViewModel()
+    @State private var viewModel = SeerrPagingViewModel<SeerrDiscoverResult>()
 
     var body: some View {
         ScrollView {
@@ -288,12 +255,12 @@ struct SeerrCatalogView: View {
                         .accessibilityLabel("Loading \(catalogTitle)")
                 } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
                     ErrorStateView(message: error) {
-                        Task { await viewModel.loadNext(source: source, client: seerr.client, reset: true) }
+                        Task { await loadNext(reset: true) }
                     }
                     .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else {
                     PosterGridView(items: viewModel.items, onNearEnd: {
-                        Task { await viewModel.loadNext(source: source, client: seerr.client) }
+                        Task { await loadNext() }
                     }, card: { item in
                         SeerrMediaCard(item: item)
                     }, trailing: {
@@ -304,12 +271,7 @@ struct SeerrCatalogView: View {
 
                     if let error = viewModel.errorMessage, !viewModel.isLoading {
                         InlineRetryView(message: error) {
-                            Task {
-                                await viewModel.loadNext(
-                                    source: source,
-                                    client: seerr.client
-                                )
-                            }
+                            Task { await loadNext() }
                         }
                     }
                 }
@@ -320,13 +282,20 @@ struct SeerrCatalogView: View {
         .scrollClipDisabled()
         .background(Theme.background.ignoresSafeArea())
         .refreshable {
-            await viewModel.loadNext(source: source, client: seerr.client, reset: true)
+            await loadNext(reset: true)
         }
-        .task { await viewModel.loadNext(source: source, client: seerr.client) }
+        .task { await loadNext() }
         .accessibilityIdentifier("seerr.catalog.\(source.id)")
     }
 
     private var catalogTitle: String { source.title }
+
+    private func loadNext(reset: Bool = false) async {
+        await viewModel.load(reset: reset) { pageNumber in
+            let result = try await seerr.client.page(for: source, page: pageNumber)
+            return SeerrPage(items: result.results, page: result.page, totalPages: result.totalPages)
+        }
+    }
 }
 
 /// The trailing cell while a catalog page is loading, sized like a poster
