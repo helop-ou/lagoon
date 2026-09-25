@@ -582,6 +582,9 @@ nonisolated struct SeerrSeason: Decodable, Hashable, Identifiable {
     var displayName: String { name ?? "Season \(seasonNumber)" }
 }
 
+/// Backs both a title's own media info (discover results, media details) and
+/// a request's `media` reference: Jellyseerr sends the same shape either way,
+/// and readers pick whichever fields their context needs.
 nonisolated struct SeerrMediaInfo: Decodable, Hashable {
     let id: Int?
     let tmdbId: Int?
@@ -590,9 +593,7 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
     let status: Int?
     let status4k: Int?
     let externalServiceId: Int?
-    let externalServiceId4k: Int?
     let jellyfinMediaId: String?
-    let jellyfinMediaId4k: String?
     let requests: [SeerrRequestReference]?
     let seasons: [SeerrMediaSeasonStatus]?
     let downloadStatus: [SeerrDownloadItem]?
@@ -607,9 +608,7 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
         status = try container.decodeIfPresent(Int.self, forKey: .status)
         status4k = try container.decodeIfPresent(Int.self, forKey: .status4k)
         externalServiceId = try container.decodeIfPresent(Int.self, forKey: .externalServiceId)
-        externalServiceId4k = try container.decodeIfPresent(Int.self, forKey: .externalServiceId4k)
         jellyfinMediaId = try container.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
-        jellyfinMediaId4k = try container.decodeIfPresent(String.self, forKey: .jellyfinMediaId4k)
         requests = try container.decodeIfPresent([SeerrRequestReference].self, forKey: .requests)
         seasons = try container.decodeIfPresent([SeerrMediaSeasonStatus].self, forKey: .seasons)
         downloadStatus = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus)
@@ -618,11 +617,16 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, tmdbId, tvdbId, mediaType, status, status4k
-        case externalServiceId, externalServiceId4k, jellyfinMediaId, jellyfinMediaId4k
+        case externalServiceId, jellyfinMediaId
         case requests, seasons, downloadStatus, downloadStatus4k
     }
 
     var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
+
+    /// A 4K request is satisfied only by the 4K copy.
+    func availability(is4k: Bool) -> SeerrAvailabilityStatus {
+        .init(apiValue: is4k ? status4k : status)
+    }
 
     func downloadProgress(is4k: Bool = false) -> SeerrDownloadProgress? {
         SeerrDownloadProgress(items: (is4k ? downloadStatus4k : downloadStatus) ?? [])
@@ -669,7 +673,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let id: Int
     let status: Int
     let type: SeerrMediaType?
-    let media: SeerrRequestMedia?
+    let media: SeerrMediaInfo?
     let requestedBy: SeerrUser?
     let is4k: Bool?
     let seasons: [SeerrRequestedSeason]?
@@ -683,7 +687,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
         id = try container.decode(Int.self, forKey: .id)
         status = try container.decode(Int.self, forKey: .status)
         type = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .type)
-        media = try container.decodeIfPresent(SeerrRequestMedia.self, forKey: .media)
+        media = try container.decodeIfPresent(SeerrMediaInfo.self, forKey: .media)
         requestedBy = try container.decodeIfPresent(SeerrUser.self, forKey: .requestedBy)
         is4k = try container.decodeIfPresent(Bool.self, forKey: .is4k)
         seasons = try container.decodeIfPresent([SeerrRequestedSeason].self, forKey: .seasons)
@@ -714,47 +718,6 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
         type ?? media?.mediaType ?? (media?.tvdbId == nil ? .movie : .tv)
     }
     var tmdbID: Int? { media?.tmdbId }
-}
-
-nonisolated struct SeerrRequestMedia: Decodable, Hashable {
-    let id: Int?
-    let tmdbId: Int?
-    let tvdbId: Int?
-    let mediaType: SeerrMediaType?
-    let status: Int?
-    let status4k: Int?
-    let externalServiceId: Int?
-    let downloadStatus: [SeerrDownloadItem]?
-    let downloadStatus4k: [SeerrDownloadItem]?
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decodeIfPresent(Int.self, forKey: .id)
-        tmdbId = try container.decodeIfPresent(Int.self, forKey: .tmdbId)
-        tvdbId = try container.decodeIfPresent(Int.self, forKey: .tvdbId)
-        mediaType = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .mediaType)
-        status = try container.decodeIfPresent(Int.self, forKey: .status)
-        status4k = try container.decodeIfPresent(Int.self, forKey: .status4k)
-        externalServiceId = try container.decodeIfPresent(Int.self, forKey: .externalServiceId)
-        downloadStatus = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus)
-        downloadStatus4k = try container.decodeIfPresent([SeerrDownloadItem].self, forKey: .downloadStatus4k)
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, tmdbId, tvdbId, mediaType, status, status4k
-        case externalServiceId, downloadStatus, downloadStatus4k
-    }
-
-    var availability: SeerrAvailabilityStatus { .init(apiValue: status) }
-
-    /// A 4K request is satisfied only by the 4K copy.
-    func availability(is4k: Bool) -> SeerrAvailabilityStatus {
-        .init(apiValue: is4k ? status4k : status)
-    }
-
-    func downloadProgress(is4k: Bool) -> SeerrDownloadProgress? {
-        SeerrDownloadProgress(items: (is4k ? downloadStatus4k : downloadStatus) ?? [])
-    }
 }
 
 nonisolated struct SeerrQuickConnect: Decodable, Equatable {
