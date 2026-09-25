@@ -2,7 +2,7 @@
 
 Jellyfin client for tvOS 26 and iOS 26: one multiplatform SwiftUI app target,
 with unit and multiplatform UI test targets. Playback runs on the
-`LagoonEngine` package — Lagoon's own sample-buffer engine over vendored
+`LagoonEngine` package, Lagoon's own sample-buffer engine over vendored
 FFmpeg, now maintained in its own repository. There is no AVPlayer path and no
 third-party Swift dependency.
 
@@ -27,7 +27,7 @@ guide is right and this file needs fixing.
 | [Release](docs/release.md) | Build numbers, changelog, acknowledgements, licence, TestFlight, release gates |
 
 `docs/reference/` holds the engineering notes and measurements behind the
-guides. Keep routine session history out of the guides — see "Keeping this
+guides. Keep routine session history out of the guides: see "Keeping this
 clean" in docs/README.md.
 
 ## Session workflow
@@ -58,13 +58,13 @@ clean" in docs/README.md.
   is two repositories and two commits: cut a version there first, then move
   the pin here. To work on both at once, point Xcode at the sibling checkout
   (File, Add Package Dependencies, Add Local) and drop the override before
-  committing — a local override resolves nothing and pins nothing.
+  committing. A local override resolves nothing and pins nothing.
 - Verify UI changes in the simulator before calling them done. Build, then
   `simctl install/launch`, then drive focus with `osascript -e 'tell
-  application "System Events" to key code …'` — 125/126/123/124 are the
-  arrows, 36 select, 53 menu, and `keystroke "…"` types into the tvOS keyboard
-  — then `simctl io <udid> screenshot`. Exercise focus paths and deep scrolls,
-  not just the landing state.
+  application "System Events" to key code …'` (125/126/123/124 are the
+  arrows, 36 select, 53 menu, and `keystroke "…"` types into the tvOS
+  keyboard), then `simctl io <udid> screenshot`. Exercise focus paths and
+  deep scrolls, not just the landing state.
 - For end-to-end work, the public demo server supports the full flow including
   playback: `demo.jellyfin.org/stable`, user `demo`, empty password.
 - Report only what was verified. Before saying a change is done, run the
@@ -95,7 +95,7 @@ so you know to read that guide before touching the area.
   engine package behind the `PlayerEngine` protocol, and the player UI only
   talks to the protocol. Player views hold the engine through
   `@PlayerEngineRef`, never a strong reference, and closures handed to SwiftUI
-  never capture an engine — that one the engine cannot enforce for us, and it
+  never capture an engine. That one the engine cannot enforce for us, and it
   has regressed most often. A light Siri Remote touch-surface tap and a Select
   press are different inputs and never share a path. The delivery ladder
   descends only on the engine's verdict about the samples, and a `.delivery`

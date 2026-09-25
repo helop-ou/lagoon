@@ -9,7 +9,7 @@ TestFlight](https://testflight.apple.com/join/PwjnXuAt), or read more at
 
 ## Features
 
-- Connect by address (schemeless input works — Lagoon probes https/http and
+- Connect by address (schemeless input works: Lagoon probes https/http and
   Jellyfin's default `:8096`), sign in with password or **Quick Connect**
 - Featured banners on Home and Discover: swipe between titles on iPhone/iPad,
   or use Left/Right on Apple TV
@@ -112,8 +112,8 @@ For a specific need you already have covered, probably it is not. Lagoon aims
 to be simple enough that you can point a non-techy friend at it, have them
 sign in, and have it play, ideally without the server re-encoding anything.
 
-There are genuinely some very good clients out there and I won't be here,
-trying to advertise that my client is better than the other ones.
+There are some very good clients out there and I won't be here, trying to
+advertise that my client is better than the other ones.
 
 ### What formats are supported?
 

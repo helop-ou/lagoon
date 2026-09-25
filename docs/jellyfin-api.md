@@ -191,7 +191,7 @@ code knows which provider plugin answered.
 | --- | --- | --- |
 | Search | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}` | ISO 639-2; Apple/BCP-47 preferences are converted to three letters |
 | Fetch provider file | `GET Providers/Subtitles/Subtitles/{subtitleId}` | ids are opaque and stay one percent-encoded path component |
-| Persist fetched file | `POST Videos/{itemId}/Subtitles` | uploads the validated bytes as base64, avoiding a second provider download |
+| Persist fetched file | `POST Videos/{itemId}/Subtitles` | uploads the validated bytes as base64 to avoid a second provider download |
 | Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | for provider formats Lagoon cannot parse |
 
 **All four need the per-user `EnableSubtitleManagement` permission, off by

@@ -232,9 +232,9 @@ group, queue. `GroupPlaybackDriver` owns everything that touches playback,
 holding the controller weakly and the engine not at all.
 
 - **The viewer's transport is a request.** Play, pause, seek, skips, scrub
-  commit and the lock screen go to `groupTransport`, not the engine. Nothing
-  moves locally; the server's echo moves every member. Audio track,
-  subtitles, audio delay and speed stay local.
+  commit and the lock screen go to `groupTransport`. Nothing moves locally;
+  the server's echo moves every member. Audio track, subtitles, audio delay
+  and speed stay local.
 - **A report says where the engine is, not where it was.** `beginPlayback`
   anchors the clock before announcing the end of buffering. A Ready more than
   half a second off earns a corrective `Seek`, and a wrong report stalls the

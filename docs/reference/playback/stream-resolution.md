@@ -150,8 +150,8 @@ Mechanics:
 - The ladder belongs to one item and resets for the next.
 - `next` only moves down, so a stream that fails every way ends in the error
   overlay, not a restart loop.
-- A failure while the next attempt is still starting takes the terminal path
-  rather than tearing down an engine mid-flight.
+- A failure while the next attempt is still starting takes the terminal path.
+  It does not tear down an engine mid-flight.
 - `debug.regressionFailFirstDelivery` (`delivery` or `undecodable`) fails the
   first attempt on purpose, since this path only runs when something is
   broken.

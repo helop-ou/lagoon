@@ -208,7 +208,7 @@ notes](reference/design-system.md#themes).
 - Phone synopses show in full. Title art has a spoken title and header trait.
   Cast names and roles are combined; portraits are decorative.
 - The transport stays available with VoiceOver, with adjustable timeline
-  seeking and meaningful icon labels. Respect Reduce Motion explicitly for
+  seeking and descriptive icon labels. Respect Reduce Motion explicitly for
   symbol effects.
 - System caption appearance hides Lagoon settings that would have no effect.
 

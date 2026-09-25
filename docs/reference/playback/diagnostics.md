@@ -108,7 +108,7 @@ asserts none reach the envelope bytes.
 | `api.decodeFailed` | error | client, route token, kind, key | a 2xx body the app could not decode |
 
 Sentry groups on the fingerprint verbatim: `[code] + variant`. The build is a
-tag and part of the release, not the fingerprint. Values that vary per
+tag and part of the release; the fingerprint excludes it. Values that vary per
 occurrence (positions, durations) never enter a fingerprint.
 
 ## Detectors and thresholds

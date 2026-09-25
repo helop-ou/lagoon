@@ -49,7 +49,7 @@ fix its button style (see `.glassProminent` below), not the accent.
 **Backgrounds.** `BrandBackground` is flat, full-bleed Deep Navy, used by all
 three onboarding screens so they read as one place. Past onboarding, content
 plays against black. On iOS, server entry and sign-in put native text fields
-straight on that background: plain style, a subtle bottom divider, 44 pt
+straight on that background: plain style, a faint bottom divider, 44 pt
 minimum touch height; no `.roundedBorder` fields or grouped Form rows. tvOS
 keeps its centred column and glass buttons.
 

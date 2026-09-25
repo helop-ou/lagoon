@@ -43,8 +43,8 @@ Extra rules:
   ones belong to Continue Watching. Series detail Play still resumes, and
   autoplay has its own cursor. Recently Added TV resolves episodes to real,
   deduplicated series in latest-addition order, on load and refresh.
-- **An open library re-reads as many items as it had loaded**, keeping focus
-  and scroll identity rather than collapsing to page one.
+- **An open library re-reads as many items as it had loaded.** Focus and
+  scroll identity survive instead of collapsing to page one.
 
 `ServerRefreshModifier` gives top-level browse destinations a five-minute
 cadence and manual refresh. `MainTabView` passes the selected tab and an empty
@@ -211,8 +211,8 @@ The app composes; the extension only reads.
 - Once complete artwork exists it commits `snapshot-v2.json` atomically,
   prunes old generations and notifies TVServices. A stale worker deletes only
   its own directory; the extension never sees a half-written shelf.
-- The extension reads only that manifest, validating artwork paths and
-  rechecking the generation.
+- The extension reads only that manifest. It validates artwork paths and
+  rechecks the generation.
 - Switching accounts, entering the picker, forgetting and logout invalidate
   pending work and clear the snapshot. An empty resume result clears the
   shelf; a network failure keeps the last valid snapshot; an unrelated Next Up
@@ -344,7 +344,7 @@ Hero:
   refresh can reorder slides. If that ID disappears, it falls back to the
   first item.
 - iOS binds it to a paging ScrollView. tvOS handles Left/Right on one stable
-  NavigationLink that wraps at the ends, leaving Up/Down to the focus engine.
+  NavigationLink that wraps at the ends. Up/Down stays with the focus engine.
 - Rotation is a cancellable seven-second view task, separate from refresh.
   Its identity includes item IDs, selected ID and whether cycling is allowed,
   so a manual pick restarts the interval. It runs only while the hero is

@@ -241,9 +241,9 @@ Platform limits, verified on device:
 - The route **401s without credentials**, so `TrickplayLoader` builds its
   request through `MediaRequestAuthorization` (header, not URL).
 - A sheet is about 23 MB decoded, so the loader keeps its own two sheets
-  rather than using `ImageCache`. It caps responses at 16 MiB and its
-  compressed cache at 32 MiB, and cancels obsolete transfers while keeping the
-  previous frame.
+  separate from `ImageCache`. It caps responses at 16 MiB and its compressed
+  cache at 32 MiB, and cancels obsolete transfers while keeping the previous
+  frame.
 - Tile crops come from the _decoded_ sheet's size: decode caps sheets at
   3200 px, and the last sheet is only partly filled.
 

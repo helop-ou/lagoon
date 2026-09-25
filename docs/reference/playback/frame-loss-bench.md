@@ -67,8 +67,8 @@ discipline are pure logic a simulator pass cannot pin down.
 `os_proc_available_memory()` (0 in the simulator, real on device), and the
 progress loop emits a `Playback Memory` signpost every 10 s with both figures
 and the position. Watch the footprint's _slope_: a leak is a straight line
-that never plateaus, and jetsam leaves a `JetsamEvent` report rather than a
-crash. Anything above about 0.2 MB/s sustained over a few minutes needs
+that never plateaus, and jetsam leaves a `JetsamEvent` report; no crash report
+appears. Anything above about 0.2 MB/s sustained over a few minutes needs
 explaining.
 
 The decoded-frame memory ceilings (byte budget, P010 surface arithmetic) are

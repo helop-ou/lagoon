@@ -44,7 +44,7 @@ scripts/publish-release.sh <build>                # 10. tag and publish
 9. **Upload** as **App Store Connect**, not TestFlight Internal Only, with
    **Automatically manage version and build number** unticked. Add the build
    to the external group and wait for [Beta App Review](#external-testflight).
-10. **[Publish the release](#release-tags)**, after acceptance, not before.
+10. **[Publish the release](#release-tags)**, after acceptance.
 
 ## Version and changelog
 
