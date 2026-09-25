@@ -40,6 +40,8 @@ struct MainTabView: View {
     @State private var refreshTopChromeOffset: CGFloat = 0
     #endif
     @FocusState private var homeHeroFocused: Bool
+    @State private var showsProfilePicker = false
+    @State private var addsProfileAfterPicker = false
 
     var body: some View {
         primaryNavigation
@@ -62,6 +64,18 @@ struct MainTabView: View {
                     .offset(y: -Metrics.Space.m)
                     .onAppear { hasMountedServerRefresh = true }
             }
+        }
+        #endif
+        .environment(\.openProfilePicker, openProfilePicker)
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showsProfilePicker, onDismiss: addProfileAfterPicker) {
+            profilePicker
+        }
+        #else
+        .sheet(isPresented: $showsProfilePicker, onDismiss: addProfileAfterPicker) {
+            profilePicker
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         #endif
         .task(id: "\(session.activeAccount?.id ?? ""):\(serverSync.generation)") {
@@ -292,6 +306,25 @@ struct MainTabView: View {
         }
     }
     #endif
+
+    private func openProfilePicker() {
+        showsProfilePicker = true
+    }
+
+    private var profilePicker: some View {
+        AccountPickerView(isPresentedFromApp: true) {
+            addsProfileAfterPicker = true
+            showsProfilePicker = false
+        }
+    }
+
+    /// Two covers cannot overlap: RootView's add-profile cover waits until
+    /// the picker is gone.
+    private func addProfileAfterPicker() {
+        guard addsProfileAfterPicker else { return }
+        addsProfileAfterPicker = false
+        session.addAccount()
+    }
 
     /// Retries with backoff; the cached list stands in until a fetch succeeds.
     private func loadLibraries() async {
