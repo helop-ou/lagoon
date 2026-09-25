@@ -16,6 +16,11 @@ final class TopChromeButton: UIButton {
     private var tabBarDisplayLink: CADisplayLink?
     private var tabBarTrackingFramesRemaining = 0
     private var lastReportedTopChromeOffset: CGFloat = 0
+    private var awaitsReturnFromPresentation = false
+
+    /// tvOS leaves focus wherever SwiftUI's default lands after a cover
+    /// closes. A control that presents one takes focus back on return.
+    var reclaimsFocusAfterPresentation = false
 
     var moveDownAction: (@MainActor @Sendable () -> Void)?
     var topChromeOffsetChanged: (@MainActor @Sendable (CGFloat) -> Void)?
@@ -116,15 +121,27 @@ final class TopChromeButton: UIButton {
     @objc private func focusDidUpdate(_ notification: Notification) {
         guard let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey]
             as? UIFocusUpdateContext else { return }
+        if reclaimsFocusAfterPresentation {
+            let leftContent = isOutsideContent(context.nextFocusedItem)
+            if (context.previouslyFocusedItem as AnyObject?) === self, leftContent {
+                awaitsReturnFromPresentation = true
+            } else if awaitsReturnFromPresentation, !leftContent {
+                awaitsReturnFromPresentation = false
+                reclaimFocus()
+                return
+            }
+        }
         updateTopChromeFocusState(using: context.nextFocusedItem)
         startTrackingTabBar()
     }
 
     private func updateTopChromeFocusState(using focusedItem: (any UIFocusItem)?) {
-        guard let focusedView = focusedItem as? UIView else {
+        guard let focusedItem, let focusedView = hostingView(of: focusedItem) else {
             isTopChromeFocused = false
             return
         }
+        // Focus inside a presented screen leaves the state as it was.
+        if isOutsideContent(focusedItem) { return }
 
         var ancestor: UIView? = focusedView
         while let view = ancestor {
@@ -142,6 +159,34 @@ final class TopChromeButton: UIButton {
             ancestor = view.superview
         }
         isTopChromeFocused = false
+    }
+
+    /// In a presented screen rather than the tab hierarchy this sits in.
+    private func isOutsideContent(_ item: (any UIFocusItem)?) -> Bool {
+        guard let item, let view = hostingView(of: item),
+              let content = window?.rootViewController?.view else { return false }
+        return !view.isDescendant(of: content)
+    }
+
+    private func reclaimFocus() {
+        guard allowsFocus, tracksTopChrome else { return }
+        isTopChromeFocused = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let focusSystem = UIFocusSystem.focusSystem(for: self) else { return }
+            focusSystem.requestFocusUpdate(to: self)
+            focusSystem.updateFocusIfNeeded()
+        }
+    }
+
+    /// SwiftUI focus items are not always views; the nearest view that
+    /// hosts one says where it sits.
+    private func hostingView(of item: any UIFocusItem) -> UIView? {
+        var environment: (any UIFocusEnvironment)? = item
+        while let current = environment {
+            if let view = current as? UIView { return view }
+            environment = current.parentFocusEnvironment
+        }
+        return nil
     }
 
     private func captureRestingPosition(of tabBar: UITabBar) {
