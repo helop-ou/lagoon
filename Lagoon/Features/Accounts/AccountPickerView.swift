@@ -359,6 +359,24 @@ struct ProfilePortrait: View {
     }
 }
 
+extension ProfilePortrait {
+    /// The portrait as a bitmap, for UIKit controls and tab items, which take
+    /// an image rather than a view. The picture is loaded first, so the
+    /// render finds it in the cache instead of drawing the initials.
+    static func image(for account: StoredAccount, size: CGFloat, displayScale: CGFloat) async -> UIImage? {
+        let pixels = ArtworkSizing.pixels(for: size, displayScale: displayScale)
+        if let url = account.avatarURL(maxWidth: pixels) {
+            _ = await ImageCache.shared.load(url, maxPixelSize: pixels)
+        }
+        let renderer = ImageRenderer(
+            content: ProfilePortrait(account: account, size: size)
+                .environment(\.displayScale, displayScale)
+        )
+        renderer.scale = displayScale
+        return renderer.uiImage?.withRenderingMode(.alwaysOriginal)
+    }
+}
+
 /// A round portrait with its name underneath. On tvOS only the portrait is
 /// the button, with the system card focus shaped to the circle, and the name
 /// stays put below it like the system's own profile rows. Touch makes the
