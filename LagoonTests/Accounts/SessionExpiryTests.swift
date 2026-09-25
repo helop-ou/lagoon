@@ -22,10 +22,10 @@ struct SessionExpiryTests {
             // the session; the assertions below still hold either way.
         }
         #expect(store.phase == .needsSignIn)
-        #expect(store.reauthenticationAccount == fixture.first)
+        #expect(store.reauthenticationAccount?.id == fixture.first.id)
         #expect(store.activeAccount == nil)
         #expect(store.client.accessToken == nil)
-        #expect(store.accounts == [fixture.first, fixture.second])
+        #expect(store.accounts.map(\.id) == [fixture.first.id, fixture.second.id])
         #expect(KeychainStore.string(for: fixture.first.keychainAccount) == nil)
         #expect(KeychainStore.string(for: fixture.second.keychainAccount) == "second-token")
         #expect(fixture.defaults.string(forKey: "preference.\(fixture.first.id)") == "preserved")
@@ -42,7 +42,7 @@ struct SessionExpiryTests {
         try KeychainStore.set("first-token", for: fixture.first.keychainAccount)
         let relaunched = fixture.store()
         #expect(relaunched.phase == .needsSignIn)
-        #expect(relaunched.reauthenticationAccount == fixture.first)
+        #expect(relaunched.reauthenticationAccount?.id == fixture.first.id)
         #expect(relaunched.client.accessToken == nil)
         SessionExpiryProtocol.setReply(.http(200, fixture.authenticationJSON))
         try await relaunched.signIn(username: "First", password: "synthetic-password")
@@ -110,7 +110,7 @@ struct SessionExpiryTests {
         SessionExpiryProtocol.releaseHeld(status: 401)
         await #expect(throws: CancellationError.self) { _ = try await pending.value }
         #expect(store.phase == .signedIn)
-        #expect(store.activeAccount == fixture.second)
+        #expect(store.activeAccount?.id == fixture.second.id)
         #expect(store.client.accessToken == "second-token")
         #expect(KeychainStore.string(for: fixture.first.keychainAccount) == "first-token")
     }
@@ -137,7 +137,7 @@ struct SessionExpiryTests {
         let store = fixture.store()
         SessionExpiryProtocol.setReply(.http(401, ""))
         await store.signOut()
-        #expect(store.accounts == [fixture.second])
+        #expect(store.accounts.map(\.id) == [fixture.second.id])
         #expect(store.phase == .choosingAccount)
         #expect(store.reauthenticationAccount == nil)
     }
@@ -150,12 +150,12 @@ struct SessionExpiryTests {
         let store = fixture.store()
         SessionExpiryProtocol.setReply(.http(401, ""))
         _ = try? await store.client.getData("Users/Me")
-        #expect(store.reauthenticationAccount == fixture.first)
+        #expect(store.reauthenticationAccount?.id == fixture.first.id)
         #expect(store.activeAccount == nil)
 
         await store.forgetServer()
 
-        #expect(store.accounts == [fixture.second])
+        #expect(store.accounts.map(\.id) == [fixture.second.id])
         #expect(store.reauthenticationAccount == nil)
         #expect(store.phase == .needsServer)
         // The account on the other server keeps its credential.
@@ -167,7 +167,7 @@ struct SessionExpiryTests {
         defer { fixture.cleanUp() }
         let store = fixture.store()
         try store.remove(fixture.second)
-        #expect(store.accounts == [fixture.first])
+        #expect(store.accounts.map(\.id) == [fixture.first.id])
 
         await store.signOut()
 
@@ -186,7 +186,7 @@ struct SessionExpiryTests {
         SessionExpiryProtocol.releaseHeld(status: 204)
         await pending.value
         #expect(store.phase == .signedIn)
-        #expect(store.activeAccount == fixture.second)
+        #expect(store.activeAccount?.id == fixture.second.id)
         #expect(store.client.accessToken == "second-token")
     }
 

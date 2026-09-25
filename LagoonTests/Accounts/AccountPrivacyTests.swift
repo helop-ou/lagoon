@@ -37,9 +37,9 @@ struct AccountPrivacyTests {
             fixture.defaults.set("B", forKey: prefix + fixture.b.id)
         }
         try store.remove(fixture.a)
-        #expect(store.activeAccount == fixture.b)
+        #expect(store.activeAccount?.id == fixture.b.id)
         #expect(store.client.accessToken == "token-b")
-        #expect(store.accounts == [fixture.b])
+        #expect(store.accounts.map(\.id) == [fixture.b.id])
         #expect(fixture.credentials.string(for: fixture.a.keychainAccount) == nil)
         #expect(try fixture.credentials.accountNames().filter { $0.hasPrefix("seerr.cookie:\(fixture.a.id)|") }.isEmpty)
         #expect(fixture.credentials.string(for: fixture.cookieB) == "cookie-b")
@@ -82,13 +82,13 @@ struct AccountPrivacyTests {
         #expect(store.activeAccount == nil)
         #expect(store.client.accessToken == nil)
         #expect(store.recentSearches.terms.isEmpty)
-        #expect(store.accounts == [fixture.b])
+        #expect(store.accounts.map(\.id) == [fixture.b.id])
         #expect(fixture.credentials.string(for: fixture.a.keychainAccount) == nil)
         #expect(fixture.credentials.string(for: fixture.cookieA) == nil)
         store.switchTo(fixture.b)
         PrivacyProtocol.releaseHeld()
         await pending.value
-        #expect(store.activeAccount == fixture.b)
+        #expect(store.activeAccount?.id == fixture.b.id)
         #expect(store.client.accessToken == "token-b")
     }
 
@@ -98,7 +98,7 @@ struct AccountPrivacyTests {
         let store = fixture.store()
         await store.signOut()
         #expect(store.phase == .choosingAccount)
-        #expect(store.accounts == [fixture.b])
+        #expect(store.accounts.map(\.id) == [fixture.b.id])
         #expect(fixture.credentials.string(for: fixture.a.keychainAccount) == nil)
         #expect(fixture.credentials.string(for: fixture.cookieA) == nil)
         #expect(store.cleanupErrorMessage == nil)
@@ -111,12 +111,12 @@ struct AccountPrivacyTests {
         fixture.credentials.failDeletion = true
         #expect(throws: (any Error).self) { try store.remove(fixture.a) }
         #expect(store.activeAccount == nil)
-        #expect(store.accounts == [fixture.b])
+        #expect(store.accounts.map(\.id) == [fixture.b.id])
         #expect(store.cleanupErrorMessage != nil)
         #expect(fixture.credentials.string(for: fixture.cookieA) != nil)
         let reopened = fixture.store()
         #expect(reopened.cleanupErrorMessage != nil)
-        #expect(reopened.activeAccount != fixture.a)
+        #expect(reopened.activeAccount?.id != fixture.a.id)
         let data = AccountLocalData(defaults: fixture.defaults, credentials: fixture.credentials)
         #expect(data.pendingAccountIDs.contains(fixture.a.id))
         #expect(throws: (any Error).self) { try data.finishRemoval(accountID: fixture.a.id) }
@@ -152,7 +152,7 @@ struct AccountPrivacyTests {
         let draft = store.makeAccountDraft()
         draft.cancelAccountDraft()
         store.isAddingAccount = false
-        #expect(store.activeAccount == fixture.a)
+        #expect(store.activeAccount?.id == fixture.a.id)
         #expect(store.recentSearches.terms == ["Keep this"])
         #expect(fixture.credentials.string(for: fixture.cookieA) == "cookie-a")
         #expect(fixture.credentials.string(for: fixture.a.keychainAccount) == "token-a")

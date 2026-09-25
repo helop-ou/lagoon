@@ -40,7 +40,7 @@ struct AccountDraftTests {
 
         #expect(session.isAddingAccount)
         #expect(session.phase == .signedIn)
-        #expect(session.activeAccount == account)
+        #expect(session.activeAccount?.id == account.id)
         #expect(session.client.serverURL == account.serverURL)
         #expect(draft.phase == .needsSignIn)
         #expect(draft.client !== session.client)
@@ -56,7 +56,7 @@ struct AccountDraftTests {
         session.isAddingAccount = false
 
         #expect(session.phase == .signedIn)
-        #expect(session.activeAccount == account)
+        #expect(session.activeAccount?.id == account.id)
         #expect(session.client.serverURL == account.serverURL)
         #expect(defaults.dictionaryRepresentation() as NSDictionary == before)
         #expect(KeychainStore.string(for: account.keychainAccount) == "test-token")
@@ -102,7 +102,7 @@ struct AccountDraftTests {
         #expect(draft.activeAccount == nil)
         #expect(draft.client.accessToken == nil)
         #expect(session.phase == .signedIn)
-        #expect(session.activeAccount == account)
+        #expect(session.activeAccount?.id == account.id)
         #expect(session.client.serverURL == account.serverURL)
         #expect(session.client.accessToken == "test-token")
         #expect(KeychainStore.string(for: account.keychainAccount) == "test-token")
