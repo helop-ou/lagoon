@@ -3,7 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
-    @Environment(\.displayScale) private var displayScale
     @Environment(\.openProfilePicker) private var openProfilePicker
 
     // Visible in Release: TestFlight is the only way to test Atmos/HDR on hardware.
@@ -195,7 +194,7 @@ struct SettingsView: View {
 
     private var identityPanel: some View {
         VStack(spacing: Metrics.Space.l) {
-            identityAvatar(size: Metrics.settingsAvatarSize, font: .largeTitle)
+            identityAvatar(size: Metrics.settingsAvatarSize)
 
             VStack(spacing: Metrics.Space.xs) {
                 Text(session.userName ?? "—")
@@ -361,29 +360,17 @@ struct SettingsView: View {
 
     // MARK: - Identity avatar (both platforms)
 
-    /// The user's picture, or initials while loading and when there is none.
-    private func identityAvatar(size: CGFloat, font: Font) -> some View {
-        let pixels = ArtworkSizing.pixels(for: size, displayScale: displayScale)
-        // Keep the fill under the picture; a transparent upload would float.
-        return ZStack {
-            Circle().fill(.white.opacity(0.12))
-            CachedAsyncImage(url: session.activeAccount?.avatarURL(maxWidth: pixels), maxPixelSize: pixels) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Text(initials)
-                    .font(font.weight(.semibold))
-            }
+    /// The same portrait as the picker and the profile button, so a profile
+    /// looks alike everywhere.
+    @ViewBuilder
+    private func identityAvatar(size: CGFloat) -> some View {
+        if let account = session.activeAccount {
+            ProfilePortrait(account: account, size: size)
+        } else {
+            Circle()
+                .fill(.white.opacity(0.12))
+                .frame(width: size, height: size)
         }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-    }
-
-    private var initials: String {
-        let parts = (session.userName ?? "").split(separator: " ").prefix(2)
-        let letters = parts.compactMap(\.first)
-        return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 
     // MARK: - iOS: category list and native settings pages
@@ -398,9 +385,7 @@ struct SettingsView: View {
                     touchAccountSettings
                 } label: {
                     HStack(spacing: Metrics.Space.m) {
-                        if let account = session.activeAccount {
-                            ProfilePortrait(account: account, size: Metrics.touchAvatarSize)
-                        }
+                        identityAvatar(size: Metrics.touchAvatarSize)
                         VStack(alignment: .leading, spacing: Metrics.Space.xs) {
                             Text(session.userName ?? "Account")
                                 .font(.headline)
@@ -479,7 +464,7 @@ struct SettingsView: View {
         TouchSettingsPage("Account") {
             Section {
                 HStack(spacing: Metrics.Space.m) {
-                    identityAvatar(size: Metrics.touchAvatarSize, font: .title2)
+                    identityAvatar(size: Metrics.touchAvatarSize)
                     VStack(alignment: .leading, spacing: Metrics.Space.xs) {
                         Text(session.userName ?? "—")
                             .font(.headline)
