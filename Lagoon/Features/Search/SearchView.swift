@@ -213,15 +213,8 @@ struct SearchView: View {
     @ViewBuilder
     private var recentSearches: some View {
         if recents.terms.isEmpty {
-            VStack(spacing: Metrics.Space.l) {
-                Image(systemName: "magnifyingglass")
-                    .font(Typography.largeGlyph)
-                    .foregroundStyle(.tertiary)
-                Text("Recent searches will appear here")
-                    .font(.title3.bold())
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+            ErrorStateView(systemImage: "magnifyingglass", message: "Recent searches will appear here")
+                .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
         } else {
             // RailShelf's shape and focus-lift headroom, over terms.
             RailShelf(title: "Recent", spacing: Metrics.Space.m) {

@@ -45,13 +45,10 @@ struct SeerrRequestsView: View {
                     ErrorStateView(message: error) { refreshID += 1 }
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
                 } else if viewModel.items.isEmpty {
-                    VStack(spacing: Metrics.Space.m) {
-                        Image(systemName: "tray")
-                            .font(Typography.glyph)
-                            .foregroundStyle(.secondary)
-                        Text("No \(filter == .all ? "" : filter.title.lowercased() + " ")requests")
-                            .font(.title3)
-                    }
+                    ErrorStateView(
+                        systemImage: "tray",
+                        message: "No \(filter == .all ? "" : filter.title.lowercased() + " ")requests"
+                    )
                     .frame(maxWidth: .infinity, minHeight: 400)
                 } else {
                     PosterGridView(items: viewModel.items, onNearEnd: {

@@ -320,20 +320,7 @@ struct VideoPlayerView: View {
     }
 
     private func errorOverlay(_ message: String) -> some View {
-        VStack(spacing: Metrics.Space.l) {
-            Image(systemName: "play.slash")
-                .font(Typography.largeGlyph)
-                .foregroundStyle(.secondary)
-            Text(message)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 700)
-                .multilineTextAlignment(.center)
-            Button("Back") {
-                closePlayer()
-            }
-            .buttonStyle(.glass)
-        }
+        ErrorStateView(systemImage: "play.slash", message: message, actionTitle: "Back", retry: closePlayer)
         #if os(tvOS)
         .onExitCommand {
             closePlayer()
