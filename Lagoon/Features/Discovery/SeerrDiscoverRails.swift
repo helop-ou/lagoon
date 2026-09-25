@@ -71,7 +71,6 @@ struct SeerrDiscoverRail: View {
         .padding(.horizontal, Metrics.screenGutter)
         .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
     }
-
 }
 
 /// Like Home's `GenreRail`, over Seerr's genre list and its TMDB backdrops.
@@ -96,23 +95,10 @@ struct SeerrGenreRail: View {
                 .padding(.horizontal, Metrics.screenGutter)
                 .frame(maxWidth: .infinity, minHeight: 180, alignment: .leading)
             } else if !genres.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(title)
-                        .font(.headline)
-                        .padding(.leading, Metrics.screenGutter)
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: Metrics.cardSpacing) {
-                            ForEach(genres) { genre in
-                                SeerrGenreCard(genre: genre, mediaType: mediaType)
-                            }
-                        }
-                        .padding(.horizontal, Metrics.screenGutter)
-                        .padding(.top, Metrics.railTopPadding)
-                        .padding(.bottom, Metrics.railBottomPadding)
+                RailShelf(title: title) {
+                    ForEach(genres) { genre in
+                        SeerrGenreCard(genre: genre, mediaType: mediaType)
                     }
-                    // Or the focus halo is cut off square at the rail edge.
-                    .scrollClipDisabled()
                 }
             }
         }

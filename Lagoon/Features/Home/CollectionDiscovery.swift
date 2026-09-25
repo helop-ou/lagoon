@@ -105,23 +105,10 @@ struct CollectionRail: View {
 
     var body: some View {
         if !collections.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.headline)
-                    .padding(.leading, Metrics.screenGutter)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: Metrics.cardSpacing) {
-                        ForEach(collections) { collection in
-                            CollectionCard(collection: collection)
-                        }
-                    }
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.top, Metrics.railTopPadding)
-                    .padding(.bottom, Metrics.railBottomPadding)
+            RailShelf(title: title) {
+                ForEach(collections) { collection in
+                    CollectionCard(collection: collection)
                 }
-                // Or the focus halo is cut off square at the rail edge.
-                .scrollClipDisabled()
             }
             .accessibilityIdentifier("home.collections")
         }

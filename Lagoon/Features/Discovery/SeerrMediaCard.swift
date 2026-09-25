@@ -86,36 +86,16 @@ struct SeerrMediaRail: View {
     var destination: SeerrNavigationRoute?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(title).font(.headline)
-                #if os(iOS)
-                if let destination {
-                    Spacer()
-                    NavigationLink("See All", value: destination)
-                        .font(.callout)
-                        .accessibilityLabel("See all \(title)")
-                }
-                #endif
+        RailShelf(
+            title: title,
+            destination: destination,
+            seeAllIdentifier: "seerr.seeAll",
+            showsSeeAllCard: !requestableItems.isEmpty,
+            alignment: .top
+        ) {
+            ForEach(requestableItems) { item in
+                SeerrMediaCard(item: item)
             }
-            .padding(.horizontal, Metrics.screenGutter)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: Metrics.cardSpacing) {
-                    ForEach(requestableItems) { item in
-                        SeerrMediaCard(item: item)
-                    }
-                    #if os(tvOS)
-                    if let destination, !requestableItems.isEmpty {
-                        RailSeeAllCard(destination: destination, title: title, identifier: "seerr.seeAll")
-                    }
-                    #endif
-                }
-                .padding(.horizontal, Metrics.screenGutter)
-                .padding(.top, Metrics.railTopPadding)
-                .padding(.bottom, Metrics.railBottomPadding)
-            }
-            .scrollClipDisabled()
         }
     }
 

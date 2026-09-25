@@ -223,29 +223,17 @@ struct SearchView: View {
             }
             .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
         } else {
-            // MediaRail's shape and focus-lift headroom, over terms.
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Recent")
-                    .font(.headline)
-                    .padding(.leading, Metrics.screenGutter)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Metrics.Space.m) {
-                        ForEach(recents.terms, id: \.self) { term in
-                            Button(term) { searchText = term }
-                                .buttonStyle(.glass)
-                                .accessibilityIdentifier("search.recent")
-                        }
-                        // The HIG asks for a way to clear search history.
-                        Button("Clear", systemImage: "trash") { recents.clear() }
-                            .buttonStyle(.glass)
-                            .accessibilityIdentifier("search.recent.clear")
-                    }
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.top, Metrics.railTopPadding)
-                    .padding(.bottom, Metrics.railBottomPadding)
+            // RailShelf's shape and focus-lift headroom, over terms.
+            RailShelf(title: "Recent", spacing: Metrics.Space.m) {
+                ForEach(recents.terms, id: \.self) { term in
+                    Button(term) { searchText = term }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("search.recent")
                 }
-                // Or the focus halo is cut off square at the rail edge.
-                .scrollClipDisabled()
+                // The HIG asks for a way to clear search history.
+                Button("Clear", systemImage: "trash") { recents.clear() }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("search.recent.clear")
             }
             .padding(.top, Metrics.Space.xxl)
             .frame(maxWidth: .infinity, alignment: .leading)

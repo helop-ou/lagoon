@@ -88,27 +88,14 @@ struct GenreRail: View {
 
     var body: some View {
         if !genres.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.headline)
-                    .padding(.leading, Metrics.screenGutter)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: Metrics.cardSpacing) {
-                        ForEach(genres) { genre in
-                            GenreCard(
-                                genre: genre,
-                                includeTypes: includeTypes,
-                                identifier: identifier
-                            )
-                        }
-                    }
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.top, Metrics.railTopPadding)
-                    .padding(.bottom, Metrics.railBottomPadding)
+            RailShelf(title: title) {
+                ForEach(genres) { genre in
+                    GenreCard(
+                        genre: genre,
+                        includeTypes: includeTypes,
+                        identifier: identifier
+                    )
                 }
-                // Or the focus halo is cut off square at the rail edge.
-                .scrollClipDisabled()
             }
             .accessibilityIdentifier("home.genres.\(identifier)")
         }

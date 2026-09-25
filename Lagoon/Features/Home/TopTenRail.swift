@@ -8,22 +8,10 @@ struct TopTenRail: View {
 
     var body: some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.headline)
-                    .padding(.horizontal, Metrics.screenGutter)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: Metrics.cardSpacing) {
-                        ForEach(Array(items.prefix(10).enumerated()), id: \.element.id) { offset, item in
-                            rankedCard(item: item, rank: offset + 1)
-                        }
-                    }
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.top, Metrics.railTopPadding)
-                    .padding(.bottom, Metrics.railBottomPadding)
+            RailShelf(title: title) {
+                ForEach(Array(items.prefix(10).enumerated()), id: \.element.id) { offset, item in
+                    rankedCard(item: item, rank: offset + 1)
                 }
-                .scrollClipDisabled()
             }
         }
     }
