@@ -18,6 +18,8 @@ struct AccountPrivacyTests {
         #expect(store.seerr.client.sessionCookie == nil)
         #expect(store.recentSearches.terms.isEmpty)
         store.switchTo(fixture.b)
+        // Switching stamps the profile for the picker's "last used" order.
+        #expect(store.accounts.first { $0.id == fixture.b.id }?.lastUsedAt != nil)
         #expect(store.recentSearches.terms.isEmpty)
         store.recentSearches.record("B private search")
         store.showAccountPicker()
