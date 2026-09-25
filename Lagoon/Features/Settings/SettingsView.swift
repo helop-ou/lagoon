@@ -392,23 +392,28 @@ struct SettingsView: View {
     /// The tvOS categories, as native navigation and grouped Forms.
     private var touchForm: some View {
         ThemedForm {
+            // The profile heads Settings, as its portrait marks the tab.
             Section {
                 NavigationLink {
                     touchAccountSettings
                 } label: {
-                    Label {
+                    HStack(spacing: Metrics.Space.m) {
+                        if let account = session.activeAccount {
+                            ProfilePortrait(account: account, size: Metrics.touchAvatarSize)
+                        }
                         VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                            Text("Account")
-                            Text([session.userName, session.serverName].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption)
+                            Text(session.userName ?? "Account")
+                                .font(.headline)
+                            Text(session.serverName ?? "Jellyfin")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                    } icon: {
-                        Image(systemName: ContentIcon.Settings.account)
                     }
                 }
                 .accessibilityIdentifier("settings.category.account")
+                Button("Switch Profile") { switchProfile() }
+                    .accessibilityIdentifier("settings.root.switchProfile")
             }
 
             Section("Preferences") {
