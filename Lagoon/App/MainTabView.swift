@@ -513,6 +513,37 @@ struct MainTabView: View {
     #endif
     #endif
 
+    /// The regression harness's shared "series by name, then its episodes"
+    /// lookup. Callers distinguish the failure modes because they report
+    /// different `regressionResolution` values: a search failure is a
+    /// broken server (`error:`), a missing series is a missing fixture
+    /// (`missing:`).
+    private enum SeriesEpisodesLookup {
+        case resolved([MediaItem])
+        case seriesSearchFailed
+        case seriesNotFound
+        case episodeListFailed
+    }
+
+    private func episodesInSeries(named name: String) async -> SeriesEpisodesLookup {
+        guard let seriesPage = try? await session.client.items(
+            includeTypes: [.series],
+            searchTerm: name,
+            limit: 20
+        ) else {
+            return .seriesSearchFailed
+        }
+        guard let series = seriesPage.items.first(where: {
+            $0.name?.compare(name, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        }) else {
+            return .seriesNotFound
+        }
+        guard let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
+            return .episodeListFailed
+        }
+        return .resolved(episodes)
+    }
+
     private func launchBenchItemIfRequested() async {
         let regressionRun = UserDefaults.standard.bool(forKey: "debug.playerRegression")
         guard (UserDefaults.standard.bool(forKey: "debug.frameLossBench") || regressionRun),
@@ -531,29 +562,19 @@ struct MainTabView: View {
             // Keep "no such series" (`missing:`, skips the journey) apart
             // from "request failed" (`error:`, fails it), or a server without
             // the fixture reads as a broken player.
-            guard let seriesPage = try? await session.client.items(
-                includeTypes: [.series],
-                searchTerm: requestedSeries,
-                limit: 20
-            ) else {
+            let episodes: [MediaItem]
+            switch await episodesInSeries(named: requestedSeries) {
+            case .resolved(let found):
+                episodes = found
+            case .seriesSearchFailed:
                 print("RegressionResolve failed VC-1 series search=\"\(requestedSeries)\"")
                 regressionResolution = "error:VC-1 series search failed"
                 return
-            }
-            guard let series = seriesPage.items.first(where: {
-                $0.name?.compare(
-                    requestedSeries,
-                    options: [.caseInsensitive, .diacriticInsensitive]
-                ) == .orderedSame
-            }) else {
+            case .seriesNotFound:
                 print("RegressionResolve no VC-1 series named \"\(requestedSeries)\"")
                 regressionResolution = "missing:series \(requestedSeries)"
                 return
-            }
-            guard let episodes = try? await session.client.episodes(
-                seriesId: series.id,
-                seasonId: nil
-            ) else {
+            case .episodeListFailed:
                 print("RegressionResolve failed VC-1 episode list for \"\(requestedSeries)\"")
                 regressionResolution = "error:VC-1 episode list failed"
                 return
@@ -578,21 +599,7 @@ struct MainTabView: View {
            UserDefaults.standard.bool(forKey: "debug.regressionFindEpisodeWithSuccessor") {
             let episodeItems: [MediaItem]
             if let requestedSeries, !requestedSeries.isEmpty {
-                guard let seriesPage = try? await session.client.items(
-                    includeTypes: [.series],
-                    searchTerm: requestedSeries,
-                    limit: 20
-                ),
-                let series = seriesPage.items.first(where: {
-                    $0.name?.compare(
-                        requestedSeries,
-                        options: [.caseInsensitive, .diacriticInsensitive]
-                    ) == .orderedSame
-                }),
-                let episodes = try? await session.client.episodes(
-                    seriesId: series.id,
-                    seasonId: nil
-                ) else {
+                guard case .resolved(let episodes) = await episodesInSeries(named: requestedSeries) else {
                     print("RegressionResolve failed handoff series=\"\(requestedSeries)\"")
                     regressionResolution = "missing:requested handoff series"
                     return
@@ -748,18 +755,7 @@ struct MainTabView: View {
            UserDefaults.standard.bool(forKey: "debug.regressionFindSkippableEpisode"),
            let requestedSeries,
            !requestedSeries.isEmpty {
-            guard let seriesPage = try? await session.client.items(
-                includeTypes: [.series],
-                searchTerm: requestedSeries,
-                limit: 20
-            ),
-            let series = seriesPage.items.first(where: {
-                $0.name?.compare(
-                    requestedSeries,
-                    options: [.caseInsensitive, .diacriticInsensitive]
-                ) == .orderedSame
-            }),
-            let episodes = try? await session.client.episodes(seriesId: series.id, seasonId: nil) else {
+            guard case .resolved(let episodes) = await episodesInSeries(named: requestedSeries) else {
                 print("RegressionResolve failed series=\"\(requestedSeries)\"")
                 regressionResolution = "missing:requested skippable series"
                 return
