@@ -350,7 +350,9 @@ integration](reference/playback/system-integration.md).
 **tvOS:**
 
 - The video surface owns focus. Select prioritizes scrub, Skip, Up Next, then
-  play/pause.
+  play/pause. `MenuPressGate` takes Select from the responder chain, never
+  from the surface's `onTapGesture`: on a Siri Remote the click's touch lets
+  `onMoveCommand`'s swipe gesture swallow the tap.
 - **A light Siri Remote touch is a separate input that reveals controls. It
   never becomes Select.**
 - Menu cancels scrubbing, then dismisses a skip or Up Next prompt in any
