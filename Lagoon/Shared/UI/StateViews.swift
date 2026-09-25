@@ -36,14 +36,18 @@ struct InlineRetryView: View {
     }
 }
 
-/// Full-screen error with a retry button (which also keeps focus on-screen).
+/// Full-screen error, or any other empty state built from the same glyph,
+/// message and optional action. A `retry` also keeps focus on-screen on
+/// tvOS; a screen that already has a focusable element nearby can omit it.
 struct ErrorStateView: View {
+    var systemImage = "exclamationmark.triangle"
     let message: String
-    let retry: () -> Void
+    var actionTitle = "Try Again"
+    var retry: (() -> Void)?
 
     var body: some View {
         VStack(spacing: Metrics.Space.l) {
-            Image(systemName: "exclamationmark.triangle")
+            Image(systemName: systemImage)
                 .font(Typography.glyph)
                 .foregroundStyle(.secondary)
             Text(message)
@@ -51,8 +55,10 @@ struct ErrorStateView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 700)
-            Button("Try Again", action: retry)
-                .buttonStyle(.glass)
+            if let retry {
+                Button(actionTitle, action: retry)
+                    .buttonStyle(.glass)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
