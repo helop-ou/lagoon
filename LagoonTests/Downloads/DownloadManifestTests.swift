@@ -202,4 +202,17 @@ struct DownloadManifestTests {
         let manifest = try decoder.decode(DownloadManifest.self, from: Data(json.utf8))
         #expect(manifest.entry(for: "item1")?.attemptToken == nil)
     }
+
+    @Test func anEntryDecodesWithoutTheFieldsNothingReads() throws {
+        // A later build stops writing these; this one must still open its manifest.
+        let json = """
+        {"entries":[{"itemID":"item1","type":"Movie","title":"Lean Entry","quality":"original",
+        "fileName":"item1.mp4","mediaSourceID":"source1","receivedBytes":0,"state":"complete",
+        "artworkFiles":{}}],"pendingReports":[]}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let manifest = try decoder.decode(DownloadManifest.self, from: Data(json.utf8))
+        #expect(manifest.entry(for: "item1")?.isComplete == true)
+    }
 }
