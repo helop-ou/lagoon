@@ -155,21 +155,21 @@ struct PlayerScrubber: View {
                             .frame(width: max(width * (upper - lower), 1))
                             .offset(x: width * lower)
                     }
-                    .animation(liveMotion, value: bufferedRanges)
+                    .animation(Playhead.liveMotion, value: bufferedRanges)
                 } else if let bufferedFraction, bufferedFraction > 0 {
                     Capsule()
                         .fill(.white.opacity(0.42))
                         .frame(width: width * CGFloat(min(max(bufferedFraction, 0), 1)))
-                        .animation(liveMotion, value: bufferedFraction)
+                        .animation(Playhead.liveMotion, value: bufferedFraction)
                 }
                 UnevenRoundedRectangle(
                     topLeadingRadius: Metrics.scrubberHeight / 2,
                     bottomLeadingRadius: Metrics.scrubberHeight / 2
                 )
                     .fill(.white)
-                    .frame(width: max(width * fillFraction, Metrics.scrubberHeight))
+                    .frame(width: max(width * playheadFraction, Metrics.scrubberHeight))
                     // Glides between the engine's 0.1 s position updates.
-                    .animation(fillMotion, value: fillFraction)
+                    .animation(playheadMotion, value: playheadFraction)
                 chapterTicks(in: width)
             }
             // The marker is an overlay: as a ZStack child its height grew
@@ -214,12 +214,12 @@ struct PlayerScrubber: View {
             .frame(width: ScrubMetrics.markerWidth, height: ScrubMetrics.markerHeight)
             .offset(
                 x: min(
-                    max(width * knobFraction - ScrubMetrics.markerWidth / 2, 0),
+                    max(width * playheadFraction - ScrubMetrics.markerWidth / 2, 0),
                     max(width - ScrubMetrics.markerWidth, 0)
                 )
             )
             .opacity(isScrubbing ? 1 : 0)
-            .animation(scrubMotion, value: knobFraction)
+            .animation(playheadMotion, value: playheadFraction)
             .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
     }
 
@@ -253,11 +253,11 @@ struct PlayerScrubber: View {
                 .foregroundStyle(.white)
                 .frame(width: chipWidth)
                 .offset(
-                    x: min(max(width * knobFraction - chipWidth / 2, 0), max(width - chipWidth, 0)),
+                    x: min(max(width * playheadFraction - chipWidth / 2, 0), max(width - chipWidth, 0)),
                     y: -(Metrics.scrubberHeight + Metrics.Space.m)
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
-                .animation(scrubMotion, value: knobFraction)
+                .animation(playheadMotion, value: playheadFraction)
             }
         }
         .animation(.easeOut(duration: Motion.fast), value: isScrubbing)
@@ -307,32 +307,13 @@ struct PlayerScrubber: View {
         max(previewSize?.width ?? 0, ScrubMetrics.previewWidth)
     }
 
-    /// Reads `seconds`, never the engine, so it freezes while hidden.
-    private var knobFraction: CGFloat {
-        guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(seconds / engine.duration, 0), 1))
+    /// Reads `seconds`, never the engine's position, so it freezes while
+    /// hidden.
+    private var playheadFraction: CGFloat {
+        Playhead.fraction(seconds, of: engine.duration)
     }
 
-    private var progressFraction: CGFloat {
-        guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(seconds / engine.duration, 0), 1))
-    }
-
-    private var fillFraction: CGFloat {
-        isScrubbing ? knobFraction : progressFraction
-    }
-
-    /// Matched to the engine's position-update cadence.
-    private var liveMotion: Animation { .linear(duration: 0.25) }
-
-    /// Knob and fill must share a curve, or they drift apart.
-    private var scrubMotion: Animation {
-        isScrubbing ? .easeOut(duration: Motion.fast) : liveMotion
-    }
-
-    private var fillMotion: Animation {
-        isScrubbing ? scrubMotion : liveMotion
-    }
+    private var playheadMotion: Animation { Playhead.motion(isScrubbing: isScrubbing) }
 
     #if os(iOS)
     /// Only the release seeks: each intermediate seek would flush the
@@ -381,7 +362,7 @@ struct PlayerTimelineLabels: View {
     var body: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let fraction = isScrubbing ? knobFraction : progressFraction
+            let fraction = playheadFraction
             let labelWidth = ScrubMetrics.timeLabelWidth
             let center = min(
                 max(width * fraction, labelWidth / 2),
@@ -399,7 +380,7 @@ struct PlayerTimelineLabels: View {
                     )
                     .frame(width: labelWidth)
                     .offset(x: center - labelWidth / 2)
-                    .animation(scrubMotion, value: fraction)
+                    .animation(playheadMotion, value: fraction)
                     .accessibilityIdentifier(isScrubbing ? "player.scrub.chip" : "player.elapsed")
 
                 if !isScrubbing {
@@ -446,18 +427,28 @@ struct PlayerTimelineLabels: View {
         }
     }
 
-    private var knobFraction: CGFloat {
-        guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(seconds / engine.duration, 0), 1))
+    private var playheadFraction: CGFloat {
+        Playhead.fraction(seconds, of: engine.duration)
     }
 
-    private var progressFraction: CGFloat {
-        guard engine.duration > 0 else { return 0 }
-        return CGFloat(min(max(seconds / engine.duration, 0), 1))
+    private var playheadMotion: Animation { Playhead.motion(isScrubbing: isScrubbing) }
+}
+
+/// Where the playhead sits on the bar and how it moves. The fill, the knob,
+/// the preview chip and the elapsed label all follow the scrub target while
+/// scrubbing and the position otherwise, so they share one fraction and one
+/// curve, or they drift apart.
+enum Playhead {
+    /// Matched to the engine's position-update cadence.
+    static let liveMotion = Animation.linear(duration: 0.25)
+
+    static func motion(isScrubbing: Bool) -> Animation {
+        isScrubbing ? .easeOut(duration: Motion.fast) : liveMotion
     }
 
-    private var scrubMotion: Animation {
-        isScrubbing ? .easeOut(duration: Motion.fast) : .linear(duration: 0.25)
+    static func fraction(_ seconds: Double, of duration: Double) -> CGFloat {
+        guard duration > 0 else { return 0 }
+        return CGFloat(min(max(seconds / duration, 0), 1))
     }
 }
 
