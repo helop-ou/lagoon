@@ -218,13 +218,7 @@ final class SyncPlayStore {
         contextGeneration &+= 1
         let client = self.client
         let wasJoined = session.isJoined
-        driver?.detach()
-        session.reset()
-        driftMilliseconds = nil
-        ignoresWait = false
-        isPlayerOpen = false
-        pendingPlayRequest = nil
-        disconnect()
+        resetMembership(resetSession: true)
         if wasJoined {
             Diagnostics.record(.syncPlayLeave)
             try? await client?.syncPlayLeave()
@@ -400,13 +394,21 @@ final class SyncPlayStore {
     }
 
     private func teardown() {
+        resetMembership(resetSession: true)
+    }
+
+    /// Detaches the driver, closes the socket and clock, and clears the
+    /// playback-adjacent state a group leaves behind. `resetSession` is
+    /// false only for the `.left` effect: `SyncPlayGroupSession` already
+    /// reset itself inside `apply(_:)` before emitting that effect.
+    private func resetMembership(resetSession: Bool) {
         driver?.detach()
-        disconnect()
-        session.reset()
+        if resetSession { session.reset() }
         driftMilliseconds = nil
         ignoresWait = false
         isPlayerOpen = false
         pendingPlayRequest = nil
+        disconnect()
     }
 
     /// Inbound socket boundary, also exercised with recorded server messages.
@@ -451,12 +453,7 @@ final class SyncPlayStore {
                 }
             case .left:
                 contextGeneration &+= 1
-                driver?.detach()
-                driftMilliseconds = nil
-                ignoresWait = false
-                isPlayerOpen = false
-                pendingPlayRequest = nil
-                disconnect()
+                resetMembership(resetSession: false)
             case .notice(let notice):
                 post(notice)
             }
