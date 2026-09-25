@@ -234,11 +234,16 @@ Platform limits, verified on device:
   subtitles as for audio, never to the server's default. An external sidecar whose URL
   does not resolve must leave both the stream list and the engine's list, or
   later ordinals name the wrong track.
-- **A cancel outlives the card.** Back sets `nextUpDismissed`, but the credits
-  keep running and `didFinish` would autoplay over the "no". So
-  `onCancelNextUp` reaches `VideoPlayerView`, which holds the flag until the
-  next episode starts. `didFinish` still advances when nothing was cancelled,
-  and `playNextEpisode` is guarded by `isAdvancing` against running twice.
+- **Back on the card means "not yet" first.** In Automatic mode the first
+  Back hides the card, and `PlaybackAutomation.nextUpAnswer` becomes
+  `.notYet`: people dismiss it to watch the credits or a post-credits scene
+  and still expect the next episode. The card returns for the file's last
+  five seconds (`NextUpPolicy.finalCountdownStart`) with its countdown, and
+  the end of the file still advances. A Back during that final countdown,
+  any Back in card mode, or a first Back already inside the last five
+  seconds is `.stay`: the episode ends and nothing autoplays. The answer
+  lasts until the next item begins. `playNextEpisode` is guarded by
+  `isAdvancing`, so the countdown and `didFinish` cannot both advance.
 - The card is **not focusable**, like the skip pill, and shares the
   bottom-trailing shelf (intros are at the start, credits at the end). Its
   background is `.regularMaterial`: white credits show through any flat scrim.
