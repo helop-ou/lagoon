@@ -191,12 +191,13 @@ struct SessionExpiryTests {
     }
 
     private func waitForHeldRequest() async throws {
-        for _ in 0..<200 {
-            if SessionExpiryProtocol.hasHeldRequest { return }
-            try await Task.sleep(for: .milliseconds(5))
+        try await Polling.until(timeout: .seconds(1), pollInterval: .milliseconds(5)) {
+            SessionExpiryProtocol.hasHeldRequest
         }
-        Issue.record("The test request never reached the transport")
-        throw CancellationError()
+        guard SessionExpiryProtocol.hasHeldRequest else {
+            Issue.record("The test request never reached the transport")
+            throw CancellationError()
+        }
     }
 
     @Test(arguments: [false, true])

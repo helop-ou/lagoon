@@ -134,12 +134,13 @@ struct TopShelfPublisherTests {
         func wait() async { await withCheckedContinuation { continuation = $0 } }
         func release() { continuation?.resume(); continuation = nil }
         func waitUntilBlocked() async throws {
-            for _ in 0..<200 {
-                if continuation != nil { return }
-                try await Task.sleep(for: .milliseconds(5))
+            try await Polling.until(timeout: .seconds(1), pollInterval: .milliseconds(5)) {
+                continuation != nil
             }
-            Issue.record("The publisher did not reach the delayed artwork")
-            throw CancellationError()
+            guard continuation != nil else {
+                Issue.record("The publisher did not reach the delayed artwork")
+                throw CancellationError()
+            }
         }
     }
 }

@@ -126,9 +126,8 @@ struct SeriesDetailViewModelTests {
         SeriesDetailURLProtocol.holdNextEpisodes()
         let earlier = Task { await model.refreshEpisodes(client: client, seriesId: "show") }
         defer { SeriesDetailURLProtocol.release() }
-        let deadline = ContinuousClock.now + .seconds(5)
-        while !SeriesDetailURLProtocol.hasPending, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
+        try await Polling.until(timeout: .seconds(5), pollInterval: .milliseconds(10)) {
+            SeriesDetailURLProtocol.hasPending
         }
         try #require(SeriesDetailURLProtocol.hasPending)
 

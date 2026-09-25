@@ -56,9 +56,8 @@ struct SyncPlayAccountTests {
             messageType: "SyncPlayGroupUpdate", messageId: nil,
             payload: Data(#"{"GroupId":"group","Type":"PlayQueue","Data":{"Reason":"NewPlaylist","Playlist":[{"ItemId":"missing","PlaylistItemId":"entry"}],"PlayingItemIndex":0}}"#.utf8)
         ))
-        let deadline = ContinuousClock.now + .seconds(2)
-        while store.errorMessage?.contains("Rejoin") != true, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
+        try await Polling.untilMainActor(timeout: .seconds(2), pollInterval: .milliseconds(10)) {
+            store.errorMessage?.contains("Rejoin") == true
         }
         #expect(store.errorMessage?.contains("Rejoin") == true)
         #expect(store.pendingPlayRequest == nil)
