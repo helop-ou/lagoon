@@ -9,6 +9,9 @@ nonisolated struct StoredAccount: Codable, Identifiable, Hashable {
     let userName: String?
     /// Refreshed from `Users/Me` on activation. Older records decode without it.
     var primaryImageTag: String? = nil
+    /// Seconds since 1970 when this profile was last opened, for the
+    /// picker's order. Older records decode without it.
+    var lastUsedAt: TimeInterval? = nil
 
     /// Server and user id, never display names, so a rename cannot orphan
     /// the token or duplicate the account.
