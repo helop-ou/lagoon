@@ -174,7 +174,7 @@ extension DownloadStore {
     }
 
     private func applyPause(itemID: String, accountKey: String, attemptToken: String, resumeData: Data?) {
-        func apply(to manifest: inout DownloadManifest, directory: URL?) {
+        withManifest(atAccountKey: accountKey) { manifest, directory in
             guard let entry = manifest.entry(for: itemID),
                   entry.attemptToken == attemptToken, !entry.isComplete else { return }
             if resumeData == nil, let existing = entry.resumeDataFile, let directory {
@@ -182,14 +182,6 @@ extension DownloadStore {
             }
             let resumeFile = Self.storeResumeData(resumeData, itemID: itemID, directory: directory)
             manifest.markPaused(itemID, resumeDataFile: resumeFile)
-        }
-        if self.accountKey == accountKey {
-            apply(to: &manifest, directory: accountDirectory)
-            save()
-        } else {
-            Self.withStoredManifest(atAccountKey: accountKey) { manifest, directory in
-                apply(to: &manifest, directory: directory)
-            }
         }
     }
 

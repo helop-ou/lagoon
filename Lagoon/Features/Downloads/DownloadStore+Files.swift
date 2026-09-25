@@ -90,6 +90,22 @@ extension DownloadStore {
         saveManifest(manifest, at: manifestURL)
     }
 
+    /// Mutates the given account's manifest and persists the change: the
+    /// live manifest and `save()` when it is the active account, otherwise
+    /// the stored one via `withStoredManifest`. A background delegate report
+    /// can outlive an account switch, so it always routes through here
+    /// rather than assuming `self.manifest` is still the right one.
+    func withManifest(atAccountKey key: String, _ mutate: (inout DownloadManifest, URL?) -> Void) {
+        if key == accountKey {
+            mutate(&manifest, accountDirectory)
+            save()
+        } else {
+            Self.withStoredManifest(atAccountKey: key) { manifest, directory in
+                mutate(&manifest, directory)
+            }
+        }
+    }
+
     /// Returns the file name to record on the entry.
     @discardableResult
     static func storeResumeData(_ data: Data?, itemID: String, directory: URL?) -> String? {

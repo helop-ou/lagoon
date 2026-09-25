@@ -103,40 +103,24 @@ extension DownloadStore {
     /// recorded. Resume data is kept only for originals.
     func reportTransportFailure(accountKey: String, itemID: String, token: String, error: NSError, resumeData: Data?) {
         guard let reason = DownloadTransportFailure.failureDescription(domain: error.domain, code: error.code) else { return }
-        if accountKey == self.accountKey {
+        withManifest(atAccountKey: accountKey) { manifest, directory in
             guard let entry = manifest.entry(for: itemID), entry.attemptToken == token, entry.isActive else { return }
             let resumeFile = entry.quality == .original
-                ? Self.storeResumeData(resumeData, itemID: itemID, directory: accountDirectory)
+                ? Self.storeResumeData(resumeData, itemID: itemID, directory: directory)
                 : nil
             manifest.markFailed(itemID, reason: reason, resumeDataFile: resumeFile)
-            save()
-        } else {
-            Self.withStoredManifest(atAccountKey: accountKey) { manifest, directory in
-                guard let entry = manifest.entry(for: itemID), entry.attemptToken == token, entry.isActive else { return }
-                let resumeFile = entry.quality == .original
-                    ? Self.storeResumeData(resumeData, itemID: itemID, directory: directory)
-                    : nil
-                manifest.markFailed(itemID, reason: reason, resumeDataFile: resumeFile)
-            }
         }
     }
 
     /// Uses the in-memory manifest for the active account; a fresh copy from
     /// disk would discard unsaved progress and positions.
     func reportFinished(info: DownloadTaskDescription, status: Int, location: URL) {
-        if info.accountKey == accountKey, let accountDirectory {
+        withManifest(atAccountKey: info.accountKey) { manifest, directory in
+            guard let directory else { return }
             DownloadFileCompletion.apply(
                 info: info, status: status, location: location,
-                directory: accountDirectory, manifest: &manifest
+                directory: directory, manifest: &manifest
             )
-            save()
-        } else {
-            Self.withStoredManifest(atAccountKey: info.accountKey) { manifest, directory in
-                DownloadFileCompletion.apply(
-                    info: info, status: status, location: location,
-                    directory: directory, manifest: &manifest
-                )
-            }
         }
     }
 
