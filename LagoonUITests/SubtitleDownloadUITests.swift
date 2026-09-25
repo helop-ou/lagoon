@@ -141,7 +141,7 @@ final class SubtitleDownloadUITests: XCTestCase {
         // read the probe; the assertions after Select check the real action.
         guard element.identifier == "player.subtitleLoad.retry" else { return false }
         let value = app.descendants(matching: .any)["player.regression.state"].value as? String ?? ""
-        return value.split(separator: " ").contains("focus=track-subtitle-retry")
+        return RegressionState(value).string("focus") == "track-subtitle-retry"
     }
     #endif
 
@@ -152,8 +152,7 @@ final class SubtitleDownloadUITests: XCTestCase {
     }
 
     private func time(_ probe: XCUIElement) -> Double {
-        let pair = (probe.value as? String ?? "").split(separator: " ").first { $0.hasPrefix("time=") }
-        return Double(pair?.dropFirst(5) ?? "") ?? 0
+        RegressionState(probe.value as? String ?? "").double("time")
     }
 
     private func control(_ server: URL, path: String) async throws {

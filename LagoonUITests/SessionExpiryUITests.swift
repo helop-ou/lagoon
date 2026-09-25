@@ -81,12 +81,9 @@ final class SessionExpiryUITests: XCTestCase {
     private func waitForPlayback(_ probe: XCUIElement, method: String, minimumTime: Double) {
         let predicate = NSPredicate { element, _ in
             guard let raw = (element as? XCUIElement)?.value as? String else { return false }
-            let fields = Dictionary(raw.split(separator: " ").compactMap { token -> (String, String)? in
-                let pair = token.split(separator: "=", maxSplits: 1)
-                return pair.count == 2 ? (String(pair[0]), String(pair[1])) : nil
-            }, uniquingKeysWith: { _, latest in latest })
-            return fields["ready"] == "1" && fields["buffering"] == "0"
-                && fields["method"] == method && (Double(fields["time"] ?? "") ?? 0) >= minimumTime
+            let state = RegressionState(raw)
+            return state.int("ready") == 1 && state.int("buffering") == 0
+                && state.string("method") == method && state.double("time") >= minimumTime
         }
         expectation(for: predicate, evaluatedWith: probe)
         waitForExpectations(timeout: 35)
