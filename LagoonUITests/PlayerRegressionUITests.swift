@@ -832,15 +832,11 @@ final class PlayerRegressionUITests: PlayerUITestCase {
               let server = URL(string: address), server.host == "127.0.0.1" else {
             throw XCTSkip("Requires the synthetic subtitle provider fixture")
         }
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
+        let app = XCUIApplication.regression(extra: [
             "-debug.benchSearchTerm", "Session fixture movie",
             "-debug.regressionFindPlayable", "YES",
             "-playback.autoplayMode", "off",
-        ]
+        ])
         app.launchEnvironment = [
             "LAGOON_REGRESSION_SERVER": address,
             "LAGOON_REGRESSION_USER": "Fixture viewer",
@@ -1158,13 +1154,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// Builds open collapsed and expand on Select, and the list still
     /// scrolls, which on tvOS means focus has somewhere to go.
     func testChangelogBuildsExpandAndCollapse() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.settingsRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
         let settingsTab = app.tabBars.buttons["Settings"]
@@ -1224,13 +1214,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// Picks a theme, then navigates browse and settings. Screenshots wait
     /// for the bloom to end so they show the settled palette.
     func testBabyPinkThemeFocusBrowseAndDeepChangelogNavigation() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.settingsRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
         func capture(_ name: String) {
@@ -1382,13 +1366,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     func testTvOSSettingsHierarchyPickersAndHomeRowsNavigation() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.settingsRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
         let settingsTab = app.tabBars.buttons["Settings"]
@@ -1689,13 +1667,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     func testPlayerPanelPreviewPerformance() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.settingsRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
         openPlayerPanelPreview(in: app)
 
@@ -2474,12 +2446,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     func testNativeGenreShelfDetailNavigationAndBackStack() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-        ]
+        let app = XCUIApplication.regression()
         app.launch()
 
         XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 20))
@@ -2643,25 +2610,13 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     /// Seeds the search query, since typing on the tvOS keyboard is one
     /// glyph at a time.
     private func launchSeededSearchApp(query: String) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.searchRegressionQuery", query,
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.searchRegressionQuery", query])
         app.launch()
         return app
     }
 
     private func launchNavigationRegressionApp() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.navigationRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.navigationRegression", "YES"])
         app.launch()
         return app
     }

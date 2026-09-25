@@ -34,26 +34,12 @@ class PlayerUITestCase: XCTestCase {
         simulatorTranscode: Bool = true,
         extraArguments: [String] = []
     ) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.playbackHUD", playbackHUDEnabled ? "YES" : "NO",
-        ]
+        var extra = ["-debug.playbackHUD", playbackHUDEnabled ? "YES" : "NO"]
         if simulatorTranscode {
-            app.launchArguments += ["-debug.simulatorTranscode", "YES"]
+            extra += ["-debug.simulatorTranscode", "YES"]
         }
-        app.launchArguments += extraArguments
-        for key in [
-            "LAGOON_REGRESSION_SERVER",
-            "LAGOON_REGRESSION_USER",
-            "LAGOON_REGRESSION_PASS",
-        ] {
-            if let value = ProcessInfo.processInfo.environment[key] {
-                app.launchEnvironment[key] = value
-            }
-        }
+        extra += extraArguments
+        let app = XCUIApplication.regression(extra: extra, forwardFixtureServer: true)
         app.launch()
         return app
     }

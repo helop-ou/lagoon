@@ -150,21 +150,15 @@ final class SettingsUITests: XCTestCase {
     }
 
     private func launchSettings(contentSize: String = "UICTContentSizeCategoryL") -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
-            "-UIPreferredContentSizeCategoryName", contentSize,
-            // Keep report toggles away from the production diagnostics project.
-            "-diagnostics.sentryDSN", "http://key@127.0.0.1:9/1",
-        ]
-        for key in ["LAGOON_REGRESSION_SERVER", "LAGOON_REGRESSION_USER", "LAGOON_REGRESSION_PASS"] {
-            if let value = ProcessInfo.processInfo.environment[key] {
-                app.launchEnvironment[key] = value
-            }
-        }
+        let app = XCUIApplication.regression(
+            extra: [
+                "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                "-UIPreferredContentSizeCategoryName", contentSize,
+                // Keep report toggles away from the production diagnostics project.
+                "-diagnostics.sentryDSN", "http://key@127.0.0.1:9/1",
+            ],
+            forwardFixtureServer: true
+        )
         app.launch()
         // iPad exposes its adaptive tabs as buttons outside a TabBar element.
         let settings = app.buttons.matching(NSPredicate(format: "label == %@", "Settings")).firstMatch

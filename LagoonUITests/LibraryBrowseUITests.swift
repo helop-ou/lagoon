@@ -12,13 +12,7 @@ final class LibraryBrowseUITests: XCTestCase {
     }
 
     func testDecadeFiltersCombinePersistAndClear() throws {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.navigationRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.navigationRegression", "YES"])
         app.launch()
         openLibrary(app)
         chooseKind(app, title: "Shows")
@@ -66,13 +60,7 @@ final class LibraryBrowseUITests: XCTestCase {
     }
 
     func testLibraryFiltersSortingAndReturnNavigation() throws {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.navigationRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.navigationRegression", "YES"])
         app.launch()
         openLibrary(app)
         XCTAssertFalse(app.tabBars.buttons["Movies"].exists)

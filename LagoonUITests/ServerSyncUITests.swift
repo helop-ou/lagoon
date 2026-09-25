@@ -7,13 +7,7 @@ final class ServerSyncUITests: XCTestCase {
     private let remote = XCUIRemote.shared
 
     func testReturningToForegroundRequestsFreshServerContent() {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.serverSyncRegression", "YES",
-        ]
+        let app = XCUIApplication.regression(extra: ["-debug.serverSyncRegression", "YES"])
         app.launch()
 
         let probe = app.descendants(matching: .any)["server.sync.generation"]
@@ -407,20 +401,11 @@ final class ServerSyncUITests: XCTestCase {
     }
 
     private func launch(interval: Double) -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments = [
-            "-debug.playerRegression", "YES",
-            "-debug.regressionBootstrapPublicDemo", "YES",
-            "-debug.regressionResetState", "YES",
-            "-debug.serverSyncRegression", "YES",
-            "-debug.serverSyncIntervalSeconds", String(interval),
-        ]
         // A supplied fixture server has a Home hero; the demo may not.
-        for key in ["LAGOON_REGRESSION_SERVER", "LAGOON_REGRESSION_USER", "LAGOON_REGRESSION_PASS"] {
-            if let value = ProcessInfo.processInfo.environment[key] {
-                app.launchEnvironment[key] = value
-            }
-        }
+        let app = XCUIApplication.regression(
+            extra: ["-debug.serverSyncRegression", "YES", "-debug.serverSyncIntervalSeconds", String(interval)],
+            forwardFixtureServer: true
+        )
         app.launch()
         return app
     }
