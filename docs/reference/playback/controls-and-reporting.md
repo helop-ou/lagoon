@@ -51,10 +51,21 @@ four-second dwell. It never pauses, seeks, commits a scrub, accepts Skip or Up
 Next, or moves focus, and is ignored while the control panel is open.
 
 **A light touch-surface tap and a Select press are different inputs and never
-share a path.** On tvOS the surface's SwiftUI `onTapGesture` fires on the
-Select **press**, whose priority chain commits a scrub, skips an intro,
-accepts Up Next or toggles pause. So `MenuPressGate` owns a second
-`UITapGestureRecognizer`:
+share a path.** On tvOS `MenuPressGate` takes the Select **press** in
+`pressesEnded` and hands it to `handleSelect`, whose priority chain commits a
+scrub, skips an intro, accepts Up Next or toggles pause. The press is armed
+in `pressesBegan` only while the panel is closed, so a panel button's action
+cannot turn its own press into a pause.
+
+Select is never the surface's SwiftUI `onTapGesture`. On a Siri
+Remote every click also puts a touch on the clickpad, and SwiftUI builds
+`onMoveCommand` from a swipe gesture that competes with the tap for it. A
+lone click was lost, and only the second press of a double-click got
+through. The simulator sends presses without a touch, so its tap always won
+and every UI test passed. The responder chain sees every press on both.
+
+`MenuPressGate` also owns a second `UITapGestureRecognizer` for the light
+touch:
 
 - `allowedPressTypes = []` is Apple's documented switch from Select presses to
   taps on a touchpad-like surface.
@@ -68,8 +79,8 @@ the bar and resetting auto-hide cannot drift apart. XCUITest cannot produce a
 light touch-surface tap; this is checked only on a physical remote.
 
 `-debug.playerInputTrace YES` (Debug builds) logs a `PlayerInput` line for
-every press, the path that took it (gate recognizer, `pressesEnded`,
-`onTapGesture`, `onPlayPauseCommand`, touch tap) and the prompt, panel, scrub
+every press, the path that took it (gate recognizer, `pressesBegan` and
+`pressesEnded`, `onPlayPauseCommand`, touch tap) and the prompt, panel, scrub
 and focus state it found. It goes through `NSLog`, so it shows in
 `devicectl … --console` and in a simulator's unified log. Back and Select
 reach the player by different paths on a Siri Remote than in the simulator,
@@ -347,7 +358,7 @@ Two rules, both easy to break:
   property.** `isPaused`, `isBuffering`, `duration`, `subtitleLoadState` and
   `videoSize` change per item or action and are fine. `activeSegment` and
   `showsNextUp` read the position and are used only in `handleMenu`,
-  `onTapGesture`, `onMoveCommand` and `onPlayPauseCommand`; reads in a closure
+  `handleSelect`, `onMoveCommand` and `onPlayPauseCommand`; reads in a closure
   that runs later are not body reads.
 - **A leaf that can answer without the position must not read it.**
   `PlayerSkipOverlay` returns nil before reading `timePosition` when there is
