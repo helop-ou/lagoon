@@ -84,7 +84,9 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     let episodeNumber: Int?
     let productionYear: Int?
     let runTimeTicks: Int64?
-    let requestedQuality: DownloadQuality
+    /// Unread, like `eTag`, `runTimeTicks`, `createdAt` and `completedAt`.
+    /// Optional so a build that stops writing them still decodes here.
+    let requestedQuality: DownloadQuality?
     /// What is fetched, after the original fast path.
     let quality: DownloadQuality
     let fileName: String
@@ -109,7 +111,7 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     /// "imageItemID/ImageType" from the server image URL (an episode's
     /// series poster is keyed by the series) to file name.
     var artworkFiles: [String: String] = [:]
-    let createdAt: Date
+    let createdAt: Date?
     var completedAt: Date?
 
     var isComplete: Bool { state == .complete }
