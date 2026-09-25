@@ -476,7 +476,7 @@ struct CustomPlayerView<Surface: View>: View {
                     playheadPrefetchCount: playheadPrefetchCount,
                     handoffMilliseconds: handoffMilliseconds,
                     nextUpCardStart: automation.nextUpCardStart,
-                    isNextUpSuppressed: panelOpen || isScrubbing || automation.nextUpDismissed,
+                    isNextUpSuppressed: panelOpen || isScrubbing || automation.nextUpAnswer == .stay,
                     isScrubbing: isScrubbing,
                     isTransportVisible: transportVisible,
                     lastCommittedScrubTarget: lastCommittedScrubTarget,
