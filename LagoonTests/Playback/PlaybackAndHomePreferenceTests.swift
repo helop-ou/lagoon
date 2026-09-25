@@ -287,6 +287,18 @@ struct HomeRowPreferenceTests {
         #expect(reconciled.map(\.id).contains("MyList"))
     }
 
+    /// A retired native row would sit in Settings with nothing to draw.
+    @Test func aNativeRowLagoonNoLongerOffersIsDropped() {
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.insert(HomeSectionPreferenceRow(id: "lagoon.recentlyAddedOther", isEnabled: true), at: 3)
+        layout.append(HomeSectionPreferenceRow(id: "MyList", isEnabled: true))
+
+        let reconciled = HomeSectionPreferenceResolver.reconciled(layout, sections: [])
+
+        #expect(!reconciled.map(\.id).contains("lagoon.recentlyAddedOther"))
+        #expect(reconciled.map(\.id).contains("MyList"))
+    }
+
     @Test func reconcilingLeavesAnUnarrangedAccountAlone() {
         let reconciled = HomeSectionPreferenceResolver.reconciled([], sections: ["MyList"])
 

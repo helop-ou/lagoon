@@ -270,16 +270,19 @@ nonisolated enum HomeSectionPreferenceResolver {
         return ordered.filter { seen.insert($0.section).inserted }
     }
 
-    /// Brings an arrangement up to date. Only ever adds rows: a failed
-    /// `homeSections()` returns an empty catalogue, and pruning would wipe
-    /// the viewer's arrangement.
+    /// Brings an arrangement up to date. Plugin rows are only ever added: a
+    /// failed `homeSections()` returns an empty catalogue, and pruning would
+    /// wipe the viewer's arrangement. A native row Lagoon no longer offers
+    /// is dropped, since nothing could draw it.
     static func reconciled(
         _ layout: [HomeSectionPreferenceRow],
         sections: [String]
     ) -> [HomeSectionPreferenceRow] {
         guard !layout.isEmpty else { return [] }
         var seen = Set<String>()
-        var rows = layout.filter { seen.insert($0.id).inserted }
+        var rows = layout.filter {
+            (!HomeRowID.isNative($0.id) || nativeIDs.contains($0.id)) && seen.insert($0.id).inserted
+        }
 
         // New native rows go to their default position, not the bottom.
         for (index, choice) in nativeChoices.enumerated() where !seen.contains(choice.id) {
