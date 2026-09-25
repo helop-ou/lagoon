@@ -666,48 +666,41 @@ struct PlayerControlPanel: View {
     }
 
     private func subtitleResultList(_ search: SubtitleSearchCoordinator) -> some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
-                ForEach(search.results) { result in
-                    Button {
-                        search.startDownload(result)
-                    } label: {
-                        HStack(spacing: Metrics.Space.m) {
-                            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                                Text(result.name ?? String(localized: "Subtitle"))
-                                    .lineLimit(1)
-                                Text(subtitleResultDetails(result))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                            if search.phase == .downloading(result.id) {
-                                ProgressView()
-                            } else {
-                                Image(systemName: "arrow.down.circle")
-                            }
+        focusInsetList(
+            rowCount: search.results.count,
+            rowHeight: resultRowHeight,
+            maxHeight: resultListMaxHeight
+        ) {
+            ForEach(search.results) { result in
+                Button {
+                    search.startDownload(result)
+                } label: {
+                    HStack(spacing: Metrics.Space.m) {
+                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                            Text(result.name ?? String(localized: "Subtitle"))
+                                .lineLimit(1)
+                            Text(subtitleResultDetails(result))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Spacer(minLength: 0)
+                        if search.phase == .downloading(result.id) {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.down.circle")
+                        }
                     }
-                    .disabled(search.phase.isBusy)
-                    .focused(focus, equals: .track("\(Self.subtitleResultPrefix)\(result.id)"))
-                    .accessibilityIdentifier("player.subtitleResult.\(result.id)")
-                    #if os(iOS)
-                    .buttonStyle(.borderless)
-                    #endif
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .disabled(search.phase.isBusy)
+                .focused(focus, equals: .track("\(Self.subtitleResultPrefix)\(result.id)"))
+                .accessibilityIdentifier("player.subtitleResult.\(result.id)")
+                #if os(iOS)
+                .buttonStyle(.borderless)
+                #endif
             }
-            .padding(.horizontal, rowFocusInset)
-            .padding(.vertical, rowFocusInset)
         }
-        .padding(.horizontal, -rowFocusInset)
-        .frame(
-            maxHeight: min(
-                CGFloat(search.results.count) * (resultRowHeight + Metrics.Space.m) + rowFocusInset * 2,
-                resultListMaxHeight
-            )
-        )
     }
 
     @ViewBuilder
@@ -840,39 +833,57 @@ struct PlayerControlPanel: View {
         #else
         VStack(alignment: .leading, spacing: Metrics.Space.m) {
             cardHeader("Tracks")
-            ScrollView {
-                // Lazy: dozens of subtitle streams are normal.
-                LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    ForEach(rows, id: \.id) { row in
-                        Button {
-                            onSelect(row.id)
-                        } label: {
-                            HStack(spacing: Metrics.Space.s) {
-                                Image(systemName: "checkmark")
-                                    .font(.caption.bold())
-                                    .opacity(row.selected ? 1 : 0)
-                                Text(row.name)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            focusInsetList(
+                rowCount: rows.count,
+                rowHeight: trackRowHeight,
+                maxHeight: trackListMaxHeight
+            ) {
+                ForEach(rows, id: \.id) { row in
+                    Button {
+                        onSelect(row.id)
+                    } label: {
+                        HStack(spacing: Metrics.Space.s) {
+                            Image(systemName: "checkmark")
+                                .font(.caption.bold())
+                                .opacity(row.selected ? 1 : 0)
+                            Text(row.name)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
                         }
-                        .focused(focus, equals: .track(row.id))
-                        .accessibilityIdentifier("player.track.\(row.id)")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .focused(focus, equals: .track(row.id))
+                    .accessibilityIdentifier("player.track.\(row.id)")
                 }
-                .padding(.horizontal, rowFocusInset)
-                .padding(.vertical, rowFocusInset)
             }
-            .padding(.horizontal, -rowFocusInset)
-            .frame(
-                maxHeight: min(
-                    CGFloat(rows.count) * (trackRowHeight + Metrics.Space.m) + rowFocusInset * 2,
-                    trackListMaxHeight
-                )
-            )
         }
         #endif
+    }
+
+    /// Lazy, because dozens of subtitle streams are normal. The rows are
+    /// inset by `rowFocusInset` and the scroll view pulled back out by the
+    /// same amount, so a focused row is not clipped. The list is as tall as
+    /// its rows, up to `maxHeight`.
+    private func focusInsetList<Rows: View>(
+        rowCount: Int,
+        rowHeight: CGFloat,
+        maxHeight: CGFloat,
+        @ViewBuilder rows: () -> Rows
+    ) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: Metrics.Space.m) {
+                rows()
+            }
+            .padding(.horizontal, rowFocusInset)
+            .padding(.vertical, rowFocusInset)
+        }
+        .padding(.horizontal, -rowFocusInset)
+        .frame(
+            maxHeight: min(
+                CGFloat(rowCount) * (rowHeight + Metrics.Space.m) + rowFocusInset * 2,
+                maxHeight
+            )
+        )
     }
 
     private func cardHeader(_ text: LocalizedStringKey) -> some View {
