@@ -81,6 +81,14 @@ final class SampleBufferPictureInPicture: NSObject {
         isActive = false
         isTransitioning = false
     }
+
+    /// Detaches and drops the player's callbacks, for when the player goes.
+    func reset() {
+        onStarted = nil
+        onStopped = nil
+        onRestore = nil
+        detach()
+    }
 }
 
 extension SampleBufferPictureInPicture: AVPictureInPictureSampleBufferPlaybackDelegate {

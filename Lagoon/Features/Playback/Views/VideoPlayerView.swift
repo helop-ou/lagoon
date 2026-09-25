@@ -98,10 +98,7 @@ struct VideoPlayerView: View {
         #endif
         .task {
             registerPresentationCleanup? { [controller, pictureInPicture] in
-                pictureInPicture.onStarted = nil
-                pictureInPicture.onStopped = nil
-                pictureInPicture.onRestore = nil
-                pictureInPicture.detach()
+                pictureInPicture.reset()
                 controller.close()
             }
             pictureInPicture.onStarted = {
@@ -227,10 +224,7 @@ struct VideoPlayerView: View {
         .onDisappear {
             guard !leftForPictureInPicture else { return }
             applyDisplayMatch(nil)
-            pictureInPicture.onStarted = nil
-            pictureInPicture.onStopped = nil
-            pictureInPicture.onRestore = nil
-            pictureInPicture.detach()
+            pictureInPicture.reset()
             controller.close()
         }
     }
@@ -275,10 +269,7 @@ struct VideoPlayerView: View {
 
     private func closePlayer() {
         leftForPictureInPicture = false
-        pictureInPicture.onStarted = nil
-        pictureInPicture.onStopped = nil
-        pictureInPicture.onRestore = nil
-        pictureInPicture.detach()
+        pictureInPicture.reset()
         controller.close()
         if let onPresentationClose { onPresentationClose() } else { dismiss() }
     }
