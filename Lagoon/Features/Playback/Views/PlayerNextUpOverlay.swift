@@ -29,6 +29,13 @@ nonisolated enum NextUpPolicy {
         if outroStart != nil { return cardStart }
         return max(cardStart, duration - AutoplayMode.countdownSeconds)
     }
+
+    /// Where the card returns after "not yet": the file's last seconds, so
+    /// its countdown runs out as the episode does.
+    static func finalCountdownStart(duration: Double) -> Double? {
+        guard duration > 0 else { return nil }
+        return max(duration - AutoplayMode.countdownSeconds, 0)
+    }
 }
 
 /// Draws `PlaybackAutomation`'s state, which runs off the engine's clock so
