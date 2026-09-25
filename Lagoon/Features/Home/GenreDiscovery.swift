@@ -193,48 +193,18 @@ private struct GenreCard: View {
     }
 }
 
-@Observable
-private final class GenreLibraryViewModel {
-    var items: [MediaItem] = []
-    var isLoading = false
-    var errorMessage: String?
-
-    private var totalCount: Int?
-    private let pageSize = 60
-
-    private var hasMore: Bool {
-        totalCount.map { items.count < $0 } ?? true
-    }
-
-    func loadMore(
-        client: JellyfinClient,
-        genre: String,
-        includeTypes: [MediaItemType]
-    ) async {
-        guard !isLoading, hasMore else { return }
-        isLoading = true
-        errorMessage = nil
-        do {
-            let page = try await client.items(
-                includeTypes: includeTypes,
-                genres: [genre],
-                startIndex: items.count,
-                limit: pageSize
-            )
-            items.append(contentsOf: page.items)
-            totalCount = page.totalRecordCount
-        } catch {
-            errorMessage = "Couldn't load this genre."
-        }
-        isLoading = false
-    }
-}
-
 struct GenreLibraryView: View {
     let genre: String
     let includeTypes: [MediaItemType]
     @Environment(SessionStore.self) private var session
-    @State private var viewModel = GenreLibraryViewModel()
+    @State private var viewModel = LibraryViewModel()
+
+    private var selection: LibrarySelection {
+        var selection = LibrarySelection()
+        selection.kind = LibraryMediaKind(includeTypes: includeTypes)
+        selection.genre = genre
+        return selection
+    }
 
     var body: some View {
         ZStack {
@@ -244,13 +214,7 @@ struct GenreLibraryView: View {
                 LoadingView()
             } else if viewModel.items.isEmpty, let errorMessage = viewModel.errorMessage {
                 ErrorStateView(message: errorMessage) {
-                    Task {
-                        await viewModel.loadMore(
-                            client: session.client,
-                            genre: genre,
-                            includeTypes: includeTypes
-                        )
-                    }
+                    Task { await viewModel.loadMore(fetch: session.client.libraryItems) }
                 }
             } else {
                 ScrollView(showsIndicators: false) {
@@ -264,13 +228,7 @@ struct GenreLibraryView: View {
                         #endif
 
                         PosterGridView(items: viewModel.items, onNearEnd: {
-                            Task {
-                                await viewModel.loadMore(
-                                    client: session.client,
-                                    genre: genre,
-                                    includeTypes: includeTypes
-                                )
-                            }
+                            Task { await viewModel.loadMore(fetch: session.client.libraryItems) }
                         }) { item in
                             PosterCard(item: item)
                                 .itemUserDataMenu(item: item)
@@ -285,14 +243,8 @@ struct GenreLibraryView: View {
         #if os(iOS)
         .navigationTitle(genre)
         #endif
-        .task(id: genre + includeTypes.map(\.rawValue).joined()) {
-            if viewModel.items.isEmpty {
-                await viewModel.loadMore(
-                    client: session.client,
-                    genre: genre,
-                    includeTypes: includeTypes
-                )
-            }
+        .task(id: selection) {
+            await viewModel.load(selection: selection, fetch: session.client.libraryItems)
         }
         .accessibilityIdentifier("genre.library")
         .accessibilityValue("\(viewModel.items.count) items")

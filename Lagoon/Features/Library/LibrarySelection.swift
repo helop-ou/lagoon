@@ -35,6 +35,18 @@ nonisolated enum LibraryMediaKind: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+extension LibraryMediaKind {
+    /// A genre shelf's route carries a single Jellyfin item type. Anything
+    /// else, including both together, falls back to `.all`.
+    init(includeTypes: [MediaItemType]) {
+        switch Set(includeTypes) {
+        case [.movie]: self = .movies
+        case [.series]: self = .shows
+        default: self = .all
+        }
+    }
+}
+
 nonisolated enum LibrarySort: String, Codable, CaseIterable, Identifiable {
     case title, recentlyAdded, releaseDate, rating
 
