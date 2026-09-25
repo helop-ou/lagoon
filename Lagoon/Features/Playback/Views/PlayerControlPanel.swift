@@ -229,7 +229,7 @@ struct PlayerControlPanel: View {
                 // means you are in it.
                 cardHeader("In the Group")
                 if together.participants.isEmpty {
-                    Text("Just you so far.")
+                    Text(SyncPlayStateCopy.noOtherParticipants)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)

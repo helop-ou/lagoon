@@ -73,9 +73,6 @@ struct WatchTogetherHomeCard: View {
     }
 
     private var detail: String {
-        let people = syncPlay.session.participants
-        let state = SyncPlayStateCopy.title(for: syncPlay.session.state)
-        guard !people.isEmpty else { return state }
-        return "\(state) · \(people.joined(separator: ", "))"
+        SyncPlayStateCopy.summary(state: syncPlay.session.state, participants: syncPlay.session.participants)
     }
 }

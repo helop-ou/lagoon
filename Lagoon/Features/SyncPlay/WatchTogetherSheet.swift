@@ -138,7 +138,7 @@ struct WatchTogetherSheet: View {
             // A creator can get an empty participant list and no
             // `UserJoined`, so empty still means "you".
             if syncPlay.session.participants.isEmpty {
-                Text("Just you so far.")
+                Text(SyncPlayStateCopy.noOtherParticipants)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -231,9 +231,7 @@ struct WatchTogetherSheet: View {
     }
 
     private func summary(of group: SyncPlayGroup) -> String {
-        let state = SyncPlayStateCopy.title(for: group.state)
-        guard !group.participants.isEmpty else { return state }
-        return "\(state) · \(group.participants.joined(separator: ", "))"
+        SyncPlayStateCopy.summary(state: group.state, participants: group.participants)
     }
 
     private var defaultName: String {
@@ -334,4 +332,15 @@ nonisolated enum SyncPlayStateCopy {
         case .idle, .unknown: String(localized: "Nothing playing")
         }
     }
+
+    /// "state · participants", or just the state when nobody else is named.
+    static func summary(state: SyncPlayGroupState, participants: [String]) -> String {
+        let title = title(for: state)
+        guard !participants.isEmpty else { return title }
+        return "\(title) · \(participants.joined(separator: ", "))"
+    }
+
+    /// A creator can get an empty participant list and no `UserJoined`, so
+    /// this still reads as "you".
+    static let noOtherParticipants = String(localized: "Just you so far.")
 }
