@@ -65,7 +65,6 @@ nonisolated enum MediaItemType: String, Codable, Hashable {
     case season = "Season"
     case episode = "Episode"
     case boxSet = "BoxSet"
-    case collectionFolder = "CollectionFolder"
     case other
 
     init(from decoder: Decoder) throws {
