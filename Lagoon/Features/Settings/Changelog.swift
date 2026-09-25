@@ -47,6 +47,28 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.3.0",
+            build: "111",
+            released: "September 2026",
+            headline: "Switch profiles from anywhere, grouped by server.",
+            sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "Who's watching? groups profiles by server, shows whether each server is online, and puts the profile you used last first.",
+                    "On Apple TV, a profile button at the top right, past Settings, opens Who's watching? and Back returns you to where you were.",
+                    "On iPhone and iPad, the Settings tab shows your profile picture, and Settings starts with Switch Profile.",
+                ]),
+                ChangelogSection(category: .improvements, changes: [
+                    "Dismissing Up Next no longer cancels it: the card returns for the last five seconds and the next episode still plays.",
+                    "4K AV1 and VP9 titles use far less memory on Apple TV.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "On Apple TV, a single click on Skip Intro or Up Next works; it no longer takes a double click.",
+                    "A title with a few damaged frames keeps playing instead of going black and switching to a transcode.",
+                    "Poster grids on iPhone stay three across when the text size is smaller than the default.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.2.2",
             build: "110",
             released: "September 2026",
