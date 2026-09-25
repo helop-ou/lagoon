@@ -466,6 +466,16 @@ final class JellyfinClient {
         }
     }
 
+    /// A transport failure (not an HTTP status): a stale session throws
+    /// `CancellationError` instead, and everything else is reported once.
+    private func throwTransportFailure(_ error: Error, request: PreparedRequest, startedAt: TimeInterval) throws -> Never {
+        if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
+        if !request.probe {
+            APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+        }
+        throw error
+    }
+
     private func data(for request: PreparedRequest, maximumBytes: Int? = nil) async throws -> Data {
         let data: Data
         let status: Int
@@ -478,22 +488,14 @@ final class JellyfinClient {
                 data = body
                 status = code
             } catch {
-                if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
-                if !request.probe {
-                    APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
-                }
-                throw error
+                try throwTransportFailure(error, request: request, startedAt: startedAt)
             }
         } else {
             let response: URLResponse
             do {
                 (data, response) = try await session.data(for: request.request)
             } catch {
-                if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
-                if !request.probe {
-                    APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
-                }
-                throw error
+                try throwTransportFailure(error, request: request, startedAt: startedAt)
             }
             guard let http = response as? HTTPURLResponse else { throw JellyfinError.server(status: 0) }
             status = http.statusCode
