@@ -48,10 +48,6 @@ struct PlayerNextUpOverlay: View {
     let reduceMotion: Bool
     let hint: LocalizedStringKey
 
-    private var transientScaleTransition: AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9))
-    }
-
     var body: some View {
         let isCardVisible = automation.showsNextUp
         Group {
@@ -62,10 +58,7 @@ struct PlayerNextUpOverlay: View {
                     countdown: automation.nextUpTiming,
                     hint: hint
                 )
-                .transition(transientScaleTransition)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, Metrics.screenGutter)
-                .padding(.bottom, NextUpMetrics.bottomInset)
+                .playerCornerPrompt(reduceMotion: reduceMotion)
                 #if !os(tvOS)
                 // Touch has no Select, so the card takes the tap itself.
                 .onTapGesture { automation.playNext() }
@@ -130,7 +123,6 @@ struct PlayerNextUpCard: View {
                     .overlay(alignment: .leading) {
                         PlayerCountdownFill(countdown: countdown, fill: fill)
                     }
-                    .frame(height: NextUpMetrics.barHeight)
             }
 
             Text(hint)
@@ -140,7 +132,7 @@ struct PlayerNextUpCard: View {
         .padding(Metrics.Space.l)
         .frame(width: NextUpMetrics.width, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.panelCornerRadius))
-        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+        .playerCornerPromptShadow()
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
@@ -149,13 +141,10 @@ private nonisolated enum NextUpMetrics {
     #if os(tvOS)
     static let width: CGFloat = 520
     static let thumbnailWidth: CGFloat = 150
-    /// Clears the transport so the two never overlap, same as `SkipMetrics`.
-    static let bottomInset: CGFloat = 240
     static let barHeight: CGFloat = 6
     #else
     static let width: CGFloat = 300
     static let thumbnailWidth: CGFloat = 88
-    static let bottomInset: CGFloat = 130
     static let barHeight: CGFloat = 4
     #endif
     /// Run-out in seconds when there is no `Outro` segment.

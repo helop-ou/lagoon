@@ -27,10 +27,6 @@ struct PlayerSkipOverlay: View {
     /// A tap on the pill, handled like Select on tvOS.
     let onSkip: (MediaSegment) -> Void
 
-    private var transientScaleTransition: AnyTransition {
-        reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.9))
-    }
-
     var body: some View {
         let segment = automation.activeSegment
         let skipMode = automation.skipMode
@@ -41,10 +37,7 @@ struct PlayerSkipOverlay: View {
                     showsCountdown: skipMode == .autoDelay,
                     countdown: automation.skipTiming
                 )
-                .transition(transientScaleTransition)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                .padding(.trailing, Metrics.screenGutter)
-                .padding(.bottom, SkipMetrics.bottomInset)
+                .playerCornerPrompt(reduceMotion: reduceMotion)
             }
         }
         .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: segment?.id)
@@ -88,7 +81,7 @@ struct PlayerSkipPrompt: View {
             }
         }
         .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+        .playerCornerPromptShadow()
     }
 }
 
@@ -97,11 +90,8 @@ private enum SkipMetrics {
     #if os(tvOS)
     static let width: CGFloat = 260
     static let height: CGFloat = 56
-    /// Clears the transport so the two never overlap.
-    static let bottomInset: CGFloat = 240
     #else
     static let width: CGFloat = 170
     static let height: CGFloat = 40
-    static let bottomInset: CGFloat = 130
     #endif
 }
