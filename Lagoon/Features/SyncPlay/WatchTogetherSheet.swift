@@ -290,29 +290,20 @@ struct WatchTogetherSheet: View {
         #endif
     }
 
-    /// Borderless on touch: in a shared form row, an automatic button fires
-    /// its neighbour.
     private func actionButton(
         _ title: LocalizedStringKey,
         systemImage: String,
         identifier: String,
         action: @escaping () async -> Void
     ) -> some View {
-        Button {
-            perform(action)
-        } label: {
+        rowButton(identifier: identifier, action: action) {
             Label(title, systemImage: systemImage)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        #if os(tvOS)
-        .buttonStyle(.glass)
-        #else
-        .buttonStyle(.borderless)
-        #endif
-        .disabled(isWorking)
-        .accessibilityIdentifier(identifier)
     }
 
+    /// Borderless on touch: in a shared form row, an automatic button fires
+    /// its neighbour.
     private func rowButton<Label: View>(
         identifier: String,
         action: @escaping () async -> Void,
