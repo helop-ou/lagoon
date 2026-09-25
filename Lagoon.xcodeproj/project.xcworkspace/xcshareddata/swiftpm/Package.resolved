@@ -1,13 +1,13 @@
 {
-  "originHash" : "b1fe203efa1b6c475cb592018bc49f7ef6f00d3e802e0e601e92e19c65429168",
+  "originHash" : "7a4db165c32ac95e52e5164b4ded7eecacdcf25f0aea288701bb26e107cdd53a",
   "pins" : [
     {
       "identity" : "lagoon-engine",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/helop-ou/lagoon-engine.git",
       "state" : {
-        "revision" : "185c5293b7ba9b3ad6c72e27348e6ce973ec4ee5",
-        "version" : "1.0.5"
+        "revision" : "1cd37822c8af41ded35ea5475d9324541e5850ed",
+        "version" : "1.0.6"
       }
     }
   ],
