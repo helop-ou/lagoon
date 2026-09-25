@@ -42,6 +42,12 @@ struct MainTabView: View {
     @FocusState private var homeHeroFocused: Bool
     @State private var showsProfilePicker = false
     @State private var addsProfileAfterPicker = false
+    /// The active profile's portrait for the chrome: the top-right button on
+    /// tvOS, the Settings tab icon on iOS.
+    @State private var profileImage: UIImage?
+    /// Tab roots on screen; a pushed page takes its tab's root away.
+    @State private var visibleTabRoots: Set<MainTabSelection> = []
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         primaryNavigation
@@ -65,7 +71,34 @@ struct MainTabView: View {
                     .onAppear { hasMountedServerRefresh = true }
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if let account = session.activeAccount {
+                let moveDown: (@MainActor @Sendable () -> Void)? = profileMoveDownAction
+                ProfileButton(
+                    image: profileImage,
+                    profileName: account.displayName,
+                    isAvailable: showsProfileButton,
+                    moveDownAction: moveDown,
+                    action: openProfilePicker
+                )
+                    .padding(.trailing, Metrics.screenGutter)
+                    .offset(y: -Metrics.Space.m)
+            }
+        }
         #endif
+        .task(id: profileImageKey) {
+            guard let account = session.activeAccount else {
+                profileImage = nil
+                return
+            }
+            let image = await ProfilePortrait.image(
+                for: account,
+                size: Metrics.chromeProfilePortraitSize,
+                displayScale: displayScale
+            )
+            guard !Task.isCancelled else { return }
+            profileImage = image
+        }
         .environment(\.openProfilePicker, openProfilePicker)
         #if os(tvOS)
         .fullScreenCover(isPresented: $showsProfilePicker, onDismiss: addProfileAfterPicker) {
@@ -224,7 +257,32 @@ struct MainTabView: View {
     private func focusHomeHero() {
         homeHeroFocused = true
     }
+
+    /// Down from the profile button takes Home's hero, as from Refresh.
+    private var profileMoveDownAction: (@MainActor @Sendable () -> Void)? {
+        guard selectedTab == .home else { return nil }
+        return focusHomeHero
+    }
+
+    /// Like Refresh, only over a content tab's root with nothing pushed. In
+    /// Settings it stays on every page: it is reached Right from Settings'
+    /// tab, which stays focusable above them.
+    private var showsProfileButton: Bool {
+        switch selectedTab {
+        case .home: visibleTabRoots.contains(.home) && homeNavigationPath.isEmpty
+        case .discover: visibleTabRoots.contains(.discover) && discoverNavigationPath.isEmpty
+        case .library: visibleTabRoots.contains(.library) && libraryNavigationPath.isEmpty
+        case .search: visibleTabRoots.contains(.search) && searchNavigationPath.isEmpty
+        case .settings: true
+        }
+    }
     #endif
+
+    /// Redraws the portrait when the profile, its picture or its name changes.
+    private var profileImageKey: String {
+        guard let account = session.activeAccount else { return "" }
+        return "\(account.id)|\(account.primaryImageTag ?? "")|\(account.displayName)|\(displayScale)"
+    }
 
     private var primaryNavigation: some View {
         TabView(selection: $selectedTab) {
@@ -234,6 +292,7 @@ struct MainTabView: View {
                         isActive: selectedTab == .home && homeNavigationPath.isEmpty,
                         heroFocus: $homeHeroFocused
                     )
+                        .tabRoot(.home, in: $visibleTabRoots)
                         .contentNavigationDestinations()
                         .themedChrome()
                 }
@@ -244,6 +303,7 @@ struct MainTabView: View {
                     DiscoverView(
                         isActive: selectedTab == .discover && discoverNavigationPath.isEmpty
                     )
+                        .tabRoot(.discover, in: $visibleTabRoots)
                         .seerrNavigationDestinations()
                         .contentNavigationDestinations()
                         .themedChrome()
@@ -259,6 +319,7 @@ struct MainTabView: View {
                         isActive: selectedTab == .library && libraryNavigationPath.isEmpty
                     )
                         .id(session.activeAccount?.id)
+                        .tabRoot(.library, in: $visibleTabRoots)
                         .contentNavigationDestinations()
                         .themedChrome()
                 }
@@ -274,17 +335,14 @@ struct MainTabView: View {
             ) {
                 NavigationStack(path: $searchNavigationPath) {
                     SearchView()
+                        .tabRoot(.search, in: $visibleTabRoots)
                         .seerrNavigationDestinations()
                         .contentNavigationDestinations()
                         .themedChrome()
                 }
             }
 
-            Tab(
-                "Settings",
-                systemImage: ContentIcon.settings,
-                value: MainTabSelection.settings
-            ) {
+            Tab(value: MainTabSelection.settings) {
                 NavigationStack {
                     SettingsView()
                         .themedChrome()
@@ -292,8 +350,30 @@ struct MainTabView: View {
                 #if os(iOS)
                 .environment(\.showDownloadsList, showDownloadsList)
                 #endif
+            } label: {
+                settingsTabLabel
             }
         }
+    }
+
+    /// On iOS the gear gives way to the active profile's portrait, drawn
+    /// untinted; Settings is where the profile is switched.
+    @ViewBuilder
+    private var settingsTabLabel: some View {
+        #if os(iOS)
+        if let profileImage {
+            Label {
+                Text("Settings")
+            } icon: {
+                Image(uiImage: profileImage)
+                    .renderingMode(.original)
+            }
+        } else {
+            Label("Settings", systemImage: ContentIcon.settings)
+        }
+        #else
+        Label("Settings", systemImage: ContentIcon.settings)
+        #endif
     }
 
     #if os(iOS)
@@ -783,5 +863,19 @@ struct ItemDetailRouter: View {
         }
         .accessibilityIdentifier("detail.item.\(item.id)")
         .accessibilityValue(item.name ?? "Item")
+    }
+}
+
+private extension View {
+    /// Records whether a tab's root is on screen, for the tvOS profile
+    /// button. iOS has no use for it.
+    @ViewBuilder
+    func tabRoot(_ tab: MainTabSelection, in roots: Binding<Set<MainTabSelection>>) -> some View {
+        #if os(tvOS)
+        onAppear { roots.wrappedValue.insert(tab) }
+            .onDisappear { roots.wrappedValue.remove(tab) }
+        #else
+        self
+        #endif
     }
 }
