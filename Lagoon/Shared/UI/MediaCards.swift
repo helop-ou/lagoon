@@ -3,6 +3,125 @@ import SwiftUI
 // Focus: no custom scaling. Cards use the system `.card` lift and add only
 // an artwork-sampled halo.
 
+/// The 2:3 poster shape shared by every poster card: artwork, clip, focus
+/// and caption. `badge` draws over the artwork and positions itself (see
+/// `ItemProgressBar` and `StatusCapsule`); a corner mark is the caller's
+/// `.downloadedBadge`.
+struct PosterCardShell<Route: Hashable, Badge: View>: View {
+    let route: Route
+    let imageURL: URL?
+    let maxPixelSize: Int
+    let title: String
+    /// Shown in the placeholder while artwork loads; defaults to `title`.
+    let placeholderTitle: String?
+    let subtitle: String?
+    let accessibilityLabel: String
+    let accessibilityValue: String?
+    let accessibilityIdentifier: String
+    let badge: () -> Badge
+
+    let layout = PosterLayout()
+
+    init(
+        route: Route,
+        imageURL: URL?,
+        maxPixelSize: Int,
+        title: String,
+        placeholderTitle: String? = nil,
+        subtitle: String?,
+        accessibilityLabel: String,
+        accessibilityValue: String? = nil,
+        accessibilityIdentifier: String,
+        @ViewBuilder badge: @escaping () -> Badge = { EmptyView() }
+    ) {
+        self.route = route
+        self.imageURL = imageURL
+        self.maxPixelSize = maxPixelSize
+        self.title = title
+        self.placeholderTitle = placeholderTitle
+        self.subtitle = subtitle
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityValue = accessibilityValue
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.badge = badge
+    }
+
+    var body: some View {
+        // The gap must clear the focus lift: `.card` grows the poster ~20pt
+        // past its bottom edge.
+        VStack(alignment: .leading, spacing: layout.spacing) {
+            NavigationLink(value: route) {
+                ZStack {
+                    CachedAsyncImage(
+                        url: imageURL,
+                        maxPixelSize: maxPixelSize
+                    ) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        placeholder
+                    }
+                    .frame(width: layout.width, height: layout.height)
+                    .clipped()
+
+                    badge()
+                }
+                .frame(width: layout.width, height: layout.height)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            }
+            .cardButtonStyle()
+            .artworkFocusHue(url: imageURL, cornerRadius: Metrics.cardArtRadius)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityValueIfPresent(accessibilityValue)
+            .accessibilityIdentifier(accessibilityIdentifier)
+
+            caption
+        }
+        .frame(width: layout.width)
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Color.white.opacity(0.07)
+            Text(placeholderTitle ?? title)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(Metrics.Space.m)
+        }
+    }
+
+    /// Fixed height keeps grid rows aligned.
+    private var caption: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+            Text(title)
+                .font(.caption.weight(.medium))
+                .lineLimit(layout.captionLines)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(width: layout.width, alignment: .leading)
+        .frame(minHeight: layout.captionHeight, alignment: .topLeading)
+    }
+}
+
+private extension View {
+    /// SwiftUI's `accessibilityValue` always sets a value; this skips it
+    /// when there is none, instead of announcing an empty one.
+    @ViewBuilder
+    func accessibilityValueIfPresent(_ value: String?) -> some View {
+        if let value {
+            accessibilityValue(value)
+        } else {
+            self
+        }
+    }
+}
+
 /// 2:3 poster card that navigates to the item's detail page.
 ///
 /// Name and year sit **under** the artwork, never over the poster.
@@ -12,35 +131,17 @@ struct PosterCard: View {
     let layout = PosterLayout()
 
     var body: some View {
-        // The gap must clear the focus lift: `.card` grows the poster ~20pt
-        // past its bottom edge.
-        VStack(alignment: .leading, spacing: layout.spacing) {
-            NavigationLink(value: ContentNavigationRoute.item(item)) {
-                ZStack(alignment: .bottom) {
-                    CachedAsyncImage(
-                        url: posterURL,
-                        maxPixelSize: layout.imageSize
-                    ) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        placeholderLabel
-                    }
-                    .frame(width: layout.width, height: layout.height)
-                    .clipped()
-
-                    progressBar
-                }
-                .frame(width: layout.width, height: layout.height)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
-            }
-            .cardButtonStyle()
-            .artworkFocusHue(url: posterURL, cornerRadius: Metrics.cardArtRadius)
-            .accessibilityLabel(posterAccessibilityLabel)
-            .accessibilityIdentifier("media.poster.\(item.id)")
-
-            caption
+        PosterCardShell(
+            route: ContentNavigationRoute.item(item),
+            imageURL: posterURL,
+            maxPixelSize: layout.imageSize,
+            title: item.name ?? "",
+            subtitle: item.productionYear.map(String.init),
+            accessibilityLabel: (item.name ?? "Item").appendingDownloadedSuffix(itemID: item.id),
+            accessibilityIdentifier: "media.poster.\(item.id)"
+        ) {
+            progressBar
         }
-        .frame(width: layout.width)
         .downloadedBadge(itemID: item.id)
     }
 
@@ -50,38 +151,6 @@ struct PosterCard: View {
             kind: .primary,
             maxWidth: layout.imageWidth
         )
-    }
-
-    private var posterAccessibilityLabel: String {
-        (item.name ?? "Item").appendingDownloadedSuffix(itemID: item.id)
-    }
-
-    /// Fixed height keeps grid rows aligned.
-    private var caption: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-            Text(item.name ?? "")
-                .font(.caption.weight(.medium))
-                .lineLimit(layout.captionLines)
-            if let year = item.productionYear {
-                Text(String(year))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(width: layout.width, alignment: .leading)
-        .frame(minHeight: layout.captionHeight, alignment: .topLeading)
-    }
-
-    private var placeholderLabel: some View {
-        ZStack {
-            Color.white.opacity(0.07)
-            Text(item.name ?? "")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(Metrics.Space.m)
-        }
     }
 
     @ViewBuilder

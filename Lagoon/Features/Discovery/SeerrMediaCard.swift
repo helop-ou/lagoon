@@ -5,63 +5,20 @@ struct SeerrMediaCard: View {
     let layout = PosterLayout()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: layout.spacing) {
-            NavigationLink(value: route) {
-                ZStack(alignment: .topTrailing) {
-                    CachedAsyncImage(
-                        url: SeerrClient.imageURL(path: item.posterPath, width: layout.imageWidth),
-                        maxPixelSize: layout.imageSize
-                    ) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        ZStack {
-                            Color.white.opacity(0.07)
-                            Text(item.displayTitle)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(Metrics.Space.m)
-                        }
-                    }
-                    .frame(width: layout.width, height: layout.height)
-                    .clipped()
-
-                    if let status = visibleStatus {
-                        Text(status.title)
-                            .font(.caption2.bold())
-                            .padding(.horizontal, Metrics.Space.s)
-                            .padding(.vertical, Metrics.Space.xs)
-                            .background(.regularMaterial, in: Capsule())
-                            .padding(Metrics.Space.s)
-                    }
-                }
-                .frame(width: layout.width, height: layout.height)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+        PosterCardShell(
+            route: route,
+            imageURL: SeerrClient.imageURL(path: item.posterPath, width: layout.imageWidth),
+            maxPixelSize: layout.imageSize,
+            title: item.displayTitle,
+            subtitle: item.year,
+            accessibilityLabel: item.displayTitle,
+            accessibilityValue: visibleStatus?.title ?? "Not Requested",
+            accessibilityIdentifier: "seerr.media.\(mediaType.rawValue).\(item.id)"
+        ) {
+            if let visibleStatus {
+                StatusCapsule { Text(visibleStatus.title) }
             }
-            .cardButtonStyle()
-            .artworkFocusHue(
-                url: SeerrClient.imageURL(path: item.posterPath, width: layout.imageWidth),
-                cornerRadius: Metrics.cardArtRadius
-            )
-            .accessibilityLabel(item.displayTitle)
-            .accessibilityValue(visibleStatus?.title ?? "Not Requested")
-            .accessibilityIdentifier("seerr.media.\(mediaType.rawValue).\(item.id)")
-
-            VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                Text(item.displayTitle)
-                    .font(.caption.weight(.medium))
-                    .lineLimit(layout.captionLines)
-                if let year = item.year {
-                    Text(year)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(width: layout.width, alignment: .leading)
-            .frame(minHeight: layout.captionHeight, alignment: .topLeading)
         }
-        .frame(width: layout.width)
     }
 
     private var mediaType: SeerrMediaType {
@@ -76,6 +33,23 @@ struct SeerrMediaCard: View {
     private var visibleStatus: SeerrAvailabilityStatus? {
         let status = item.mediaInfo?.availability ?? .unknown
         return status.allowsRequesting ? nil : status
+    }
+}
+
+/// The material pill for a Seerr title's or request's status. Self-positions
+/// at the artwork's top-trailing corner, so it works inside `PosterCardShell`
+/// regardless of the shell's own stacking alignment.
+struct StatusCapsule<Label: View>: View {
+    @ViewBuilder var label: Label
+
+    var body: some View {
+        label
+            .font(.caption2.bold())
+            .padding(.horizontal, Metrics.Space.s)
+            .padding(.vertical, Metrics.Space.xs)
+            .background(.regularMaterial, in: Capsule())
+            .padding(Metrics.Space.s)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 }
 

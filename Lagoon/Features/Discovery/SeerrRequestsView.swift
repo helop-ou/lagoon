@@ -195,61 +195,24 @@ private struct SeerrRequestCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: layout.spacing) {
-            NavigationLink(value: SeerrNavigationRoute.request(request)) {
-                ZStack(alignment: .topTrailing) {
-                    CachedAsyncImage(
-                        url: SeerrClient.imageURL(path: details?.posterPath, width: layout.imageWidth),
-                        maxPixelSize: layout.imageSize
-                    ) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        ZStack {
-                            Color.white.opacity(0.07)
-                            Text(details?.displayTitle ?? "")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(Metrics.Space.m)
-                        }
-                    }
-                    .frame(width: layout.width, height: layout.height)
-                    .clipped()
-
-                    // One word: longer labels wrap and cover the artwork.
-                    SeerrStatusLabel(title: badgeTitle, symbol: badgeSymbol, motion: badgeMotion)
-                        .font(.caption2.bold())
-                        .labelStyle(.titleAndIcon)
-                        .lineLimit(1)
-                        .padding(.horizontal, Metrics.Space.s)
-                        .padding(.vertical, Metrics.Space.xs)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(Metrics.Space.s)
-                }
-                .frame(width: layout.width, height: layout.height)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+        PosterCardShell(
+            route: SeerrNavigationRoute.request(request),
+            imageURL: SeerrClient.imageURL(path: details?.posterPath, width: layout.imageWidth),
+            maxPixelSize: layout.imageSize,
+            title: details?.displayTitle ?? "Loading \(request.resolvedMediaType.title)…",
+            placeholderTitle: details?.displayTitle ?? "",
+            subtitle: request.requestedBy?.name,
+            accessibilityLabel: details?.displayTitle ?? "Request \(request.id)",
+            accessibilityValue: badgeTitle,
+            accessibilityIdentifier: "seerr.request.\(request.id)"
+        ) {
+            StatusCapsule {
+                // One word: longer labels wrap and cover the artwork.
+                SeerrStatusLabel(title: badgeTitle, symbol: badgeSymbol, motion: badgeMotion)
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
             }
-            .cardButtonStyle()
-            .accessibilityLabel(details?.displayTitle ?? "Request \(request.id)")
-            .accessibilityValue(badgeTitle)
-            .accessibilityIdentifier("seerr.request.\(request.id)")
-
-            VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                Text(details?.displayTitle ?? "Loading \(request.resolvedMediaType.title)…")
-                    .font(.caption.weight(.medium))
-                    .lineLimit(layout.captionLines)
-                if let name = request.requestedBy?.name {
-                    Text(name)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(width: layout.width, alignment: .leading)
-            .frame(minHeight: layout.captionHeight, alignment: .topLeading)
         }
-        .frame(width: layout.width)
         .task(id: request.id) {
             guard let tmdbID = request.tmdbID else { return }
             details = try? await seerr.client.details(id: tmdbID, mediaType: request.resolvedMediaType)

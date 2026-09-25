@@ -112,6 +112,13 @@ notes](reference/design-system.md#themes).
   loads or fails. Titles go beneath posters. Horizontal gutters stay inside
   scroll content; keep focus padding. tvOS Library has five columns; iOS uses
   `PosterLayout`.
+  - Poster cards (`PosterCard`, `SeerrMediaCard`, `SeerrRequestCard`) are thin
+    wrappers around `PosterCardShell`, which owns the placeholder, the 2:3
+    frame and clip, `.cardButtonStyle()`, focus hue and the caption. A
+    `badge` closure draws over the artwork and self-positions with its own
+    `.frame(maxWidth:/maxHeight: .infinity, alignment:)`, so `ItemProgressBar`
+    and the Seerr `StatusCapsule` can share one `ZStack` with no imposed
+    alignment.
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
     `WatchedMark`); `String.appendingDownloadedSuffix(itemID:)` appends the
