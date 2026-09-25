@@ -73,6 +73,14 @@ headline and viewer-visible changes. Tests require the installed version and
 build to have an entry. Builds from before the changelog are not
 reconstructed.
 
+**Check the top entry is still open.** The repository cannot tell you. A
+build goes out at upload but is tagged only after acceptance, and nothing
+records the archive in between, so an untagged top entry may already be on
+testers' devices. Ask whoever cuts builds before adding a line to it. If it
+has shipped, run `scripts/bump-build.sh` and open a new entry, moving any
+unshipped lines into it so the shipped entry describes only what that build
+carried.
+
 - One line per noticeable improvement, most useful first. Describe the fixed
   symptom and any setup needed.
 - One short sentence, two only when setup needs saying: what changed, never

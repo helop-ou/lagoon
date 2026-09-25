@@ -1,10 +1,10 @@
 # Lagoon — session notes
 
-Jellyfin client for tvOS 26 and iOS 26: one multiplatform SwiftUI app target,
-with unit and multiplatform UI test targets. Playback runs on the
-`LagoonEngine` package, Lagoon's own sample-buffer engine over vendored
-FFmpeg, now maintained in its own repository. There is no AVPlayer path and no
-third-party Swift dependency.
+Jellyfin client for tvOS 26 and iOS 26: one multiplatform SwiftUI app target
+and a Top Shelf extension, with unit and multiplatform UI test targets.
+Playback runs on the `LagoonEngine` package, Lagoon's own sample-buffer
+engine over vendored FFmpeg, now maintained in its own repository. There is
+no AVPlayer path and no third-party Swift dependency.
 
 ## Where the rules live
 
@@ -32,23 +32,35 @@ clean" in docs/README.md.
 
 ## Session workflow
 
-- Build, and keep both destinations green:
+- Build, and keep both destinations green. Run the two one after the other:
+  they share a DerivedData build database, and a concurrent pair fails one
+  with `database is locked` and exit 65, which looks like a compile error.
+  Parallel agents need their own `-derivedDataPath`.
 
   ```
   xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
   xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
   ```
 
-- Test. `LagoonTests` pins the engine's pure logic. Keep it green, and add
-  tests there when new logic is pure enough to pin down:
+- Test. `LagoonTests` covers the app's logic; the engine's tests live in its
+  repository. Keep it green, and add tests there when new logic is pure
+  enough to pin down:
 
   ```
   xcodebuild test -scheme Lagoon -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
   ```
 
+  A failing run hangs about ten minutes collecting simulator diagnostics, so
+  iterate on a suspect suite with `-only-testing:LagoonTests/<Suite>` and
+  keep the full run for the final check. UI journeys run under the
+  `LagoonHardwareRegression` scheme; see the [regression
+  lane](docs/reference/regression-lane.md).
 - Build numbers belong to the repo. Never let Xcode manage them at upload; see
   [Release](docs/release.md). A change a viewer would notice gets a line in
-  `Lagoon/Features/Settings/Changelog.swift`. An invisible one does not.
+  `Lagoon/Features/Settings/Changelog.swift`, then
+  `scripts/generate-changelog.sh` to regenerate `CHANGELOG.md`. An invisible
+  one does not. The top entry may already have shipped, so ask before adding
+  to it ([Release](docs/release.md#version-and-changelog)).
 - The only dependency is the `LagoonEngine` package, which carries the native
   libraries with it. Do not add another without serious deliberation. When you
   do, add its acknowledgement and licence text as [Release](docs/release.md)
