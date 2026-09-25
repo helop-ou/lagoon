@@ -39,14 +39,15 @@ extension DownloadStore {
             throw StartError.unsupportedItem
         }
 
-        let runTimeTicks = source.runTimeTicks ?? item.runTimeTicks
-        let effectiveQuality = quality.effective(sourceSize: source.size, runTimeTicks: runTimeTicks)
+        let resolved = Self.effectiveDownload(for: item, source: source, quality: quality)
+        let effectiveQuality = resolved.quality
+        let runTimeTicks = resolved.runTimeTicks
         if effectiveQuality != .original {
             let transcodingAllowed = await client.canTranscodeForDownload()
             try checkPreparation()
             guard transcodingAllowed else { throw StartError.notPermitted }
         }
-        let estimatedBytes = effectiveQuality.estimatedBytes(sourceSize: source.size, runTimeTicks: runTimeTicks)
+        let estimatedBytes = resolved.estimatedBytes
         if let estimatedBytes, let free = freeSpace(), estimatedBytes >= free {
             throw StartError.noSpace
         }

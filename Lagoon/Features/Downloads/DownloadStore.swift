@@ -246,11 +246,20 @@ final class DownloadStore {
     }
 
     func estimate(for item: MediaItem, source: MediaSource, quality: DownloadQuality) -> Estimate {
-        let effective = quality.effective(sourceSize: source.size, runTimeTicks: source.runTimeTicks ?? item.runTimeTicks)
-        return Estimate(
-            bytes: effective.estimatedBytes(sourceSize: source.size, runTimeTicks: source.runTimeTicks ?? item.runTimeTicks),
-            freeBytes: freeSpace()
-        )
+        let resolved = Self.effectiveDownload(for: item, source: source, quality: quality)
+        return Estimate(bytes: resolved.estimatedBytes, freeBytes: freeSpace())
+    }
+
+    /// The quality after `DownloadQuality.effective`'s downgrade, the
+    /// runtime it was sized against, and its estimated bytes. `estimate`
+    /// (the quality picker) and `start` (which must act on the same
+    /// quality it estimated) both go through this, so they can't disagree.
+    static func effectiveDownload(
+        for item: MediaItem, source: MediaSource, quality: DownloadQuality
+    ) -> (quality: DownloadQuality, runTimeTicks: Int64?, estimatedBytes: Int64?) {
+        let runTimeTicks = source.runTimeTicks ?? item.runTimeTicks
+        let effective = quality.effective(sourceSize: source.size, runTimeTicks: runTimeTicks)
+        return (effective, runTimeTicks, effective.estimatedBytes(sourceSize: source.size, runTimeTicks: runTimeTicks))
     }
 
     // MARK: - Commands
