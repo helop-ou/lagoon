@@ -296,3 +296,35 @@ private nonisolated final class ReportingURLProtocol: URLProtocol, @unchecked Se
         }
     }
 }
+
+/// A failure before the first frame must not report or restart from 0: the
+/// engine reads 0 until it has presented its start.
+@Suite("Playback reportable position")
+struct PlaybackReportablePositionTests {
+    @Test func theStartPointStandsUntilTheEngineHasStarted() {
+        let seconds = PlaybackController.reportablePosition(
+            engine: 0,
+            engineHasStarted: false,
+            lastKnown: 2865.7
+        )
+        #expect(seconds == 2865.7)
+    }
+
+    @Test func aStartedEngineIsTheTruth() {
+        let seconds = PlaybackController.reportablePosition(
+            engine: 2901.2,
+            engineHasStarted: true,
+            lastKnown: 2865.7
+        )
+        #expect(seconds == 2901.2)
+    }
+
+    @Test func noEngineKeepsTheLastKnownPosition() {
+        let seconds = PlaybackController.reportablePosition(
+            engine: nil,
+            engineHasStarted: true,
+            lastKnown: 2865.7
+        )
+        #expect(seconds == 2865.7)
+    }
+}
