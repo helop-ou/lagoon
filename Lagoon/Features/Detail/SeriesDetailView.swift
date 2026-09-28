@@ -20,6 +20,14 @@ final class SeriesDetailViewModel {
     /// Play button. Follows the season picker.
     var firstEpisode: MediaItem? { episodes.first }
 
+    /// The picked season's own trailers when the provider has any (rare),
+    /// else the show's.
+    var trailers: [RemoteTrailer]? {
+        let season = seasons.first { $0.id == selectedSeasonId }
+        if let own = season?.remoteTrailers, !own.isEmpty { return own }
+        return detail?.remoteTrailers
+    }
+
     func load(client: JellyfinClient, seriesId: String) async {
         guard !Task.isCancelled else { return }
         loadGeneration &+= 1
@@ -204,6 +212,7 @@ struct SeriesDetailView: View {
             }
         } secondary: {
             actionRow
+            TrailerButton(trailers: viewModel.trailers ?? item.remoteTrailers)
             #if os(iOS)
             if let episode = subject {
                 DownloadControl(item: episode)

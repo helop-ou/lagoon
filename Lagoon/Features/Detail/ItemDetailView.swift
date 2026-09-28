@@ -149,6 +149,7 @@ struct ItemDetailView: View {
                 #if os(tvOS)
                 .padding(.leading, Metrics.Space.l)
                 #endif
+            TrailerButton(trailers: displayed.remoteTrailers)
             #if os(iOS)
             DownloadControl(item: displayed)
             #endif
