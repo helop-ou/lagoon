@@ -25,6 +25,7 @@ September 2026
 
 ### Improvements
 
+- On Apple TV, the profile button sits beside Refresh at the top left, one press left from Home instead of past Settings.
 - Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.
 
 ### Bug fixes
