@@ -53,6 +53,7 @@ nonisolated enum Changelog {
             headline: "Request more seasons of a show you already have.",
             sections: [
                 ChangelogSection(category: .improvements, changes: [
+                    "Artwork fades in as it loads instead of popping in.",
                     "Switching profiles plays the new profile's theme animation once the picker has closed, instead of a clipped flash of the new colours.",
                     "Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.",
                     "On Apple TV, the profile button sits beside Refresh at the top left, one press left from Home instead of past Settings.",
