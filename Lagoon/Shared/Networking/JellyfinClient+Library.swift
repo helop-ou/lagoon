@@ -325,6 +325,8 @@ extension JellyfinClient {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Shows/\(seriesId)/Seasons", query: [
             URLQueryItem(name: "UserId", value: userId),
+            // A season's own trailer, where the provider has one.
+            URLQueryItem(name: "Fields", value: "RemoteTrailers"),
         ])
         return page.items
     }

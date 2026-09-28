@@ -109,6 +109,9 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let mediaSources: [MediaSource]?
     /// Only the single-item endpoint returns these; rail items have none.
     let people: [Person]?
+    /// Trailers hosted elsewhere, mostly YouTube, from the metadata provider.
+    /// The single-item endpoint returns them; lists only when asked.
+    let remoteTrailers: [RemoteTrailer]?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: AnyCodingKey.self)
@@ -139,6 +142,39 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         providerIds = try c.decodeIfPresent([String: String].self, forKey: "providerIds")
         mediaSources = try? c.decodeIfPresent([MediaSource].self, forKey: "mediaSources")
         people = try? c.decodeIfPresent([Person].self, forKey: "people")
+        remoteTrailers = (try? c.decodeIfPresent([RemoteTrailer.Entry].self, forKey: "remoteTrailers"))?
+            .compactMap(\.trailer)
+    }
+}
+
+/// A trailer on another site. One without a usable address decodes as nil
+/// and is dropped, rather than failing the item.
+nonisolated struct RemoteTrailer: Decodable, Hashable {
+    let url: URL
+    let name: String?
+
+    init(url: URL, name: String?) {
+        self.url = url
+        self.name = name
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        guard let address = try c.decodeIfPresent(String.self, forKey: "url"),
+              let url = URL(string: address) else {
+            throw DecodingError.dataCorruptedError(forKey: "url", in: c, debugDescription: "No trailer address")
+        }
+        self.url = url
+        name = try? c.decodeIfPresent(String.self, forKey: "name")
+    }
+
+    /// One list element, nil when unusable, so a bad entry drops alone.
+    struct Entry: Decodable {
+        let trailer: RemoteTrailer?
+
+        init(from decoder: Decoder) throws {
+            trailer = try? RemoteTrailer(from: decoder)
+        }
     }
 }
 
