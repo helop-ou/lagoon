@@ -23,6 +23,17 @@ final class AccountPrivacyUITests: XCTestCase {
         app.launchArguments = ["-debug.regressionBootstrapPublicDemo", "NO", "-session.activeAccountId", ""]
         app.launchEnvironment = [:]
         app.launch()
+        // Each profile shows what it is watching once its server answers;
+        // the fixture has something in progress for Privacy B only.
+        let watching = NSPredicate(format: "label == %@", "Privacy B, watching Session fixture movie")
+        let profileB = app.buttons["account.select.privacy-b"]
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: watching, object: profileB)], timeout: 10),
+            .completed,
+            "Privacy B did not show what it is watching"
+        )
+        XCTAssertEqual(app.buttons["account.select.privacy-a"].label, "Privacy A")
+        attachScreenshot(of: app, named: "picker-watching")
         chooseAccount("privacy-a", in: app)
         selectTab("Search", in: app)
         XCTAssertTrue(app.buttons["A private search"].waitForExistence(timeout: 5))

@@ -233,6 +233,9 @@ def main():
                 return self.reply({"Items": [movie] if "Movie" in types else [], "TotalRecordCount": 1})
             if path.startswith("/Sessions/"):
                 return self.reply({})
+            if path == "/Users/privacy-b/Items/Resume":
+                # The profile picker's "watching" line for Privacy B.
+                return self.reply({"Items": [movie], "TotalRecordCount": 1})
             if path.endswith("/Resume") or path.startswith(("/Shows/", "/MediaSegments/")):
                 return self.reply(empty)
             if path == "/media/master.m3u8":
