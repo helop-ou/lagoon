@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/helop-ou/lagoon-engine.git",
       "state" : {
-        "revision" : "143b047e09587a129b292fc3399e86fffb1a29b3",
-        "version" : "1.0.11"
+        "revision" : "8a352c55bb1c4dbc2c0fbcd8b26688885b3f3826",
+        "version" : "1.0.12"
       }
     }
   ],
