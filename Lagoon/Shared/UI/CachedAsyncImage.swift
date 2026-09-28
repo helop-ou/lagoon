@@ -2,7 +2,9 @@ import SwiftUI
 
 /// AsyncImage replacement backed by ImageCache. The synchronous cache probe
 /// in init renders cached artwork on the first frame, with no placeholder
-/// flash.
+/// flash. Artwork that has to be fetched fades in over its placeholder
+/// rather than popping in; cached artwork never fades, so going back to a
+/// screen doesn't replay it.
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     private let url: URL?
     private let maxPixelSize: Int
@@ -32,9 +34,10 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
             if let image {
                 content(Image(uiImage: image))
+                    .transition(.opacity)
             } else {
                 placeholder()
             }
@@ -51,7 +54,9 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
             image = nil
             let loaded = await ImageCache.shared.load(url, maxPixelSize: maxPixelSize)
             guard !Task.isCancelled else { return }
-            image = loaded
+            withAnimation(.easeOut(duration: Motion.standard)) {
+                image = loaded
+            }
         }
     }
 }
