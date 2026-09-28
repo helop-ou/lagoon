@@ -56,7 +56,7 @@ nonisolated enum Changelog {
                     "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
-                    "Dolby Vision films with gaps in their metadata keep playing in full quality instead of switching to a transcode at the same point every time.",
+                    "Dolby Vision titles with gaps in their metadata play smoothly in full quality instead of freezing or switching to a transcode at the same point every time.",
                     "More kinds of damaged video, including H.264, AV1 and VP9 titles, play through the damage instead of switching to a transcode.",
                     "Resuming a title that falls back to another playback mode keeps your place instead of starting over and clearing Continue Watching.",
                     "In Discover, a show that is available or still downloading offers Request More Seasons while any season is left to request.",
