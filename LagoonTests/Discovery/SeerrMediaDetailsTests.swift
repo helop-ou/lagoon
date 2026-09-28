@@ -81,4 +81,79 @@ struct SeerrMediaDetailsTests {
         #expect(details.contentRatings == nil)
         #expect(details.mediaInfo?.availability == .available)
     }
+
+    private func show(mediaInfo: String) throws -> SeerrMediaDetails {
+        try decode("""
+        {"id": 60625, "name": "Show",
+         "seasons": [
+           {"id": 100, "seasonNumber": 0, "name": "Specials"},
+           {"id": 101, "seasonNumber": 1}, {"id": 102, "seasonNumber": 2},
+           {"id": 103, "seasonNumber": 3}, {"id": 104, "seasonNumber": 4}
+         ],
+         "mediaInfo": \(mediaInfo)}
+        """)
+    }
+
+    private func requestable(_ details: SeerrMediaDetails, includingSpecials: Bool = false) -> [Int] {
+        details.requestableSeasons(includingSpecials: includingSpecials).map(\.seasonNumber)
+    }
+
+    @Test func anAvailableShowStillOffersASeasonNobodyRequested() throws {
+        let details = try show(mediaInfo: """
+        {"status": 5, "seasons": [
+          {"id": 1, "seasonNumber": 1, "status": 5}, {"id": 2, "seasonNumber": 2, "status": 5},
+          {"id": 3, "seasonNumber": 3, "status": 5}, {"id": 4, "seasonNumber": 4, "status": 1}
+        ]}
+        """)
+        #expect(requestable(details) == [4])
+    }
+
+    @Test func aProcessingShowOffersTheSeasonsOutsideItsRequest() throws {
+        let details = try show(mediaInfo: """
+        {"status": 3,
+         "seasons": [{"id": 1, "seasonNumber": 1, "status": 3}],
+         "requests": [{"id": 9, "status": 2, "seasons": [{"id": 1, "seasonNumber": 1, "status": 2}]}]}
+        """)
+        #expect(requestable(details) == [2, 3, 4])
+    }
+
+    @Test func aSeasonOnItsWayOrPartlyHereIsNotRequestableAgain() throws {
+        // Another user's request shows only as the season's status.
+        let details = try show(mediaInfo: """
+        {"status": 4, "seasons": [
+          {"id": 1, "seasonNumber": 1, "status": 2}, {"id": 2, "seasonNumber": 2, "status": 3},
+          {"id": 3, "seasonNumber": 3, "status": 4}, {"id": 4, "seasonNumber": 4, "status": 7}
+        ]}
+        """)
+        #expect(requestable(details) == [4])
+    }
+
+    @Test func declinedAnd4KRequestsLeaveTheirSeasonsRequestable() throws {
+        let details = try show(mediaInfo: """
+        {"status": 4,
+         "seasons": [{"id": 1, "seasonNumber": 1, "status": 5}],
+         "requests": [
+           {"id": 7, "status": 3, "seasons": [{"id": 2, "seasonNumber": 2}]},
+           {"id": 8, "status": 1, "is4k": true, "seasons": [{"id": 3, "seasonNumber": 3}]},
+           {"id": 9, "status": 1, "is4k": false, "seasons": [{"id": 4, "seasonNumber": 4}]}
+         ]}
+        """)
+        #expect(requestable(details) == [2, 3])
+    }
+
+    @Test func specialsAreRequestableOnlyWhenTheServerOffersThem() throws {
+        let details = try show(mediaInfo: #"{"status": 1}"#)
+        #expect(requestable(details) == [1, 2, 3, 4])
+        #expect(requestable(details, includingSpecials: true) == [0, 1, 2, 3, 4])
+    }
+
+    @Test func aFullyRequestedShowHasNothingLeftToRequest() throws {
+        let details = try show(mediaInfo: """
+        {"status": 5, "seasons": [
+          {"id": 1, "seasonNumber": 1, "status": 5}, {"id": 2, "seasonNumber": 2, "status": 5},
+          {"id": 3, "seasonNumber": 3, "status": 5}, {"id": 4, "seasonNumber": 4, "status": 5}
+        ]}
+        """)
+        #expect(requestable(details).isEmpty)
+    }
 }
