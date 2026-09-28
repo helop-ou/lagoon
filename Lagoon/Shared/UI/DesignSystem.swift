@@ -209,6 +209,20 @@ enum Metrics {
     /// and faint so it doesn't compete with the artwork.
     static let focusHaloBlur: CGFloat = 36
     static let focusHaloOpacity: Double = 0.55
+    /// A genre card's artwork under its name: blurred so a poster's own
+    /// painted-in title stops competing, desaturated and dimmed so the name
+    /// reads while the art stays recognisable. Lighter on the phone's
+    /// smaller cards.
+    #if os(tvOS)
+    static let genreArtworkBlur: CGFloat = 5
+    #else
+    static let genreArtworkBlur: CGFloat = 3
+    #endif
+    static let genreArtworkSaturation: Double = 0.7
+    static let genreArtworkDim: Double = 0.4
+    /// The soft shadow lifting a name drawn over artwork.
+    static let artworkTitleShadowRadius: CGFloat = 6
+    static let artworkTitleShadowOpacity: Double = 0.6
     static let badgeCornerRadius: CGFloat = 6
     static let panelCornerRadius: CGFloat = 32
 

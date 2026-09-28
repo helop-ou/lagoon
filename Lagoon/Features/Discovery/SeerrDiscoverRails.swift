@@ -127,6 +127,7 @@ private struct SeerrGenreCard: View {
                     Color.white.opacity(0.06)
                 }
                 .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
+                .genreArtworkTreatment()
                 .clipped()
 
                 GenreCardLabel(name: genre.name)

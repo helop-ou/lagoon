@@ -114,6 +114,7 @@ private struct GenreCard: View {
         )) {
             ZStack(alignment: .bottomLeading) {
                 NamedArtworkBackground(name: genre.name, artwork: genre.artwork)
+                    .genreArtworkTreatment()
                 GenreCardLabel(name: genre.name)
             }
             .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)

@@ -434,14 +434,15 @@ extension String {
     }
 }
 
-/// A landscape shelf card's title, drawn over a bottom gradient wash. Shared
-/// by `GenreCard` and `SeerrGenreCard`, so the two never drift in font,
-/// wrap rules or placement.
+/// A landscape shelf card's title, drawn over a dimming wash. Shared by
+/// `GenreCard` and `SeerrGenreCard`, so the two never drift in font, wrap
+/// rules or placement. The artwork beneath takes `genreArtworkTreatment()`.
 struct GenreCardLabel: View {
     let name: String
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
+            Color.black.opacity(Metrics.genreArtworkDim)
             LinearGradient(colors: titleWash, startPoint: .top, endPoint: .bottom)
 
             Text(name)
@@ -453,17 +454,30 @@ struct GenreCardLabel: View {
                 #else
                 .lineLimit(1)
                 #endif
+                .shadow(
+                    color: .black.opacity(Metrics.artworkTitleShadowOpacity),
+                    radius: Metrics.artworkTitleShadowRadius
+                )
                 .padding(Metrics.Space.xl)
         }
     }
 
     private var titleWash: [Color] {
         #if os(tvOS)
-        // Protect the centered title as well as the bottom of the artwork.
-        [.black.opacity(0.2), .black.opacity(0.6), .black.opacity(0.82)]
+        // The name is centred; the bottom still darkens toward the rail.
+        [.clear, .black.opacity(0.2), .black.opacity(0.5)]
         #else
-        [.clear, .black.opacity(0.82)]
+        [.clear, .black.opacity(0.6)]
         #endif
+    }
+}
+
+extension View {
+    /// Softens a genre card's artwork so the name over it reads, however
+    /// colourful the poster or whatever title is painted into it.
+    func genreArtworkTreatment() -> some View {
+        saturation(Metrics.genreArtworkSaturation)
+            .blur(radius: Metrics.genreArtworkBlur, opaque: true)
     }
 }
 
