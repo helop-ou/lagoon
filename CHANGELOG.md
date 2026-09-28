@@ -17,6 +17,20 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.3.1 (112)
+
+September 2026
+
+**Request more seasons of a show you already have.**
+
+### Improvements
+
+- Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.
+
+### Bug fixes
+
+- In Discover, a show that is available or still downloading offers Request More Seasons while any season is left to request.
+
 ## 0.3.0 (111)
 
 September 2026
