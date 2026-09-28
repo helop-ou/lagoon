@@ -102,6 +102,9 @@ struct ServerRefreshButton: View {
     /// Nonisolated storage for an immutable value passed to the UIKit
     /// control; the action itself runs on the main actor.
     nonisolated let moveDownAction: (@MainActor @Sendable () -> Void)?
+    /// Right, to the profile button beside it; see
+    /// `TopChromeButton.moveRightAction`.
+    nonisolated let moveRightAction: (@MainActor @Sendable () -> Void)?
     @Binding var topChromeOffset: CGFloat
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -114,6 +117,7 @@ struct ServerRefreshButton: View {
             allowsFocus: allowsFocus && target != nil,
             reduceMotion: reduceMotion,
             moveDownAction: moveDownAction,
+            moveRightAction: moveRightAction,
             topChromeOffsetChanged: { topChromeOffset = $0 },
             action: {
                 guard let target else { return }
@@ -128,10 +132,7 @@ struct ServerRefreshButton: View {
         // Follows the tab bar as TabView scrolls it out with the content.
         .offset(y: topChromeOffset)
         // Grows to about the tab capsule's height under focus expansion.
-        .frame(
-            width: Metrics.Space.xxl + Metrics.Space.xl,
-            height: Metrics.Space.xxl + Metrics.Space.xl
-        )
+        .frame(width: Metrics.topChromeButtonSize, height: Metrics.topChromeButtonSize)
         .task {
             // Let the selected tab take launch focus first.
             try? await Task.sleep(for: .milliseconds(500))
@@ -147,6 +148,7 @@ private struct TVServerRefreshControl: UIViewRepresentable {
     let allowsFocus: Bool
     let reduceMotion: Bool
     let moveDownAction: (@MainActor @Sendable () -> Void)?
+    let moveRightAction: (@MainActor @Sendable () -> Void)?
     let topChromeOffsetChanged: @MainActor @Sendable (CGFloat) -> Void
     let action: @MainActor () -> Void
 
@@ -190,6 +192,7 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         button.installMoveDownAction(isAvailable: moveDownAction != nil) {
             coordinator.moveDownAction?()
         }
+        button.moveRightAction = moveRightAction
         context.coordinator.isRefreshing = isRefreshing
         button.tracksTopChrome = target != nil
         button.allowsFocus = allowsFocus
