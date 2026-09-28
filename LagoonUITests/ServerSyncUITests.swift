@@ -117,8 +117,11 @@ final class ServerSyncUITests: XCTestCase {
         remote.press(.select)
         XCTAssertTrue(waitForValue(of: manualProbe, greaterThan: before, timeout: 8))
 
-        remote.press(.right)
-        Thread.sleep(forTimeInterval: 0.3)
+        // The profile button sits between Refresh and the tab bar.
+        for _ in 0..<3 where !homeTab.hasFocus {
+            remote.press(.right)
+            Thread.sleep(forTimeInterval: 0.3)
+        }
         XCTAssertTrue(homeTab.hasFocus)
         remote.press(.down)
         Thread.sleep(forTimeInterval: 0.3)
@@ -165,30 +168,24 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertTrue(refresh.hasFocus, "Refresh was not reachable after returning to the top")
     }
 
-    /// The profile button mirrors Refresh at the top right: same size and
-    /// chrome, reached Right from Settings, and Back from the picker it opens
-    /// returns focus to it.
-    func testTvOSProfileButtonMirrorsRefreshAndReturnsFromThePicker() throws {
+    /// The profile button sits beside Refresh at the top left, on the tab
+    /// bar's side of it: same size and chrome, one Left from Home, and Back
+    /// from the picker it opens returns focus to it.
+    func testTvOSProfileButtonSitsBesideRefreshAndReturnsFromThePicker() throws {
         let app = launch(interval: 60)
         let tabBar = app.tabBars.firstMatch
         let homeTab = app.tabBars.buttons["Home"]
-        let settingsTab = app.tabBars.buttons["Settings"]
         let profile = app.buttons["profile.button"]
+        let refresh = app.buttons["server.refresh.home"]
         XCTAssertTrue(homeTab.waitForExistence(timeout: 20))
         XCTAssertTrue(profile.waitForExistence(timeout: 20))
+        XCTAssertTrue(refresh.waitForExistence(timeout: 20))
         let hero = try requireHomeHero(in: app)
         XCTAssertFalse(profile.hasFocus, "The profile button must not take initial focus")
-        XCTAssertGreaterThan(profile.frame.minX, settingsTab.frame.maxX)
 
         focusTabBar(app, tab: homeTab, stepping: .left)
-        // Mirrors Refresh's leading alignment, measured the same way.
-        XCTAssertEqual(
-            profile.frame.maxX - 4,
-            hero.frame.maxX,
-            accuracy: 2,
-            "The profile button's glass does not share the hero's resting trailing edge"
-        )
-        let refresh = app.buttons["server.refresh.home"]
+        XCTAssertGreaterThan(profile.frame.minX, refresh.frame.maxX, "The profile button is not right of Refresh")
+        XCTAssertLessThan(profile.frame.maxX, homeTab.frame.minX, "The profile button is not left of the tab bar")
         XCTAssertEqual(profile.frame.midY, refresh.frame.midY, accuracy: 1)
         XCTAssertEqual(profile.frame.size.height, refresh.frame.size.height, accuracy: 1)
         attachScreenshot(of: app, named: "profile-home-tab-bar")
@@ -205,21 +202,27 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertEqual(profile.frame.midY - tabBar.frame.midY, restingDelta, accuracy: 2)
         XCTAssertFalse(profile.isHittable, "The profile button stayed over the lower rails")
 
-        focusTabBar(app, tab: settingsTab, stepping: .right)
-        for _ in 0..<3 where !profile.hasFocus {
-            remote.press(.right)
-            Thread.sleep(forTimeInterval: 0.3)
+        for _ in 0..<20 where !homeTab.hasFocus {
+            remote.press(.up)
+            Thread.sleep(forTimeInterval: 0.15)
         }
-        XCTAssertTrue(profile.hasFocus, "The profile button was not reachable Right from Settings")
-        XCTAssertEqual(profile.frame.midY, tabBar.frame.midY, accuracy: 2)
-        XCTAssertLessThanOrEqual(profile.frame.height, tabBar.frame.height + 8)
-        XCTAssertGreaterThanOrEqual(profile.frame.minX - settingsTab.frame.maxX, 32)
-        attachScreenshot(of: app, named: "profile-focused")
-
+        XCTAssertTrue(homeTab.hasFocus, "Navigating up did not restore the Home tab")
+        Thread.sleep(forTimeInterval: 0.5)
         remote.press(.left)
         Thread.sleep(forTimeInterval: 0.3)
-        XCTAssertTrue(settingsTab.hasFocus, "Left from the profile button did not return to Settings")
+        XCTAssertTrue(profile.hasFocus, "The profile button was not one Left from Home")
+        XCTAssertEqual(profile.frame.midY, tabBar.frame.midY, accuracy: 2)
+        attachScreenshot(of: app, named: "profile-focused")
+        remote.press(.left)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(refresh.hasFocus, "Refresh was not one Left from the profile button")
         remote.press(.right)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(profile.hasFocus, "Right from Refresh did not return to the profile button")
+        remote.press(.right)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertTrue(homeTab.hasFocus, "Right from the profile button did not return to Home")
+        remote.press(.left)
         Thread.sleep(forTimeInterval: 0.3)
         XCTAssertTrue(profile.hasFocus)
 
@@ -237,11 +240,8 @@ final class ServerSyncUITests: XCTestCase {
 
         remote.press(.down)
         Thread.sleep(forTimeInterval: 0.3)
-        XCTAssertTrue(
-            app.buttons["settings.category.playback"].hasFocus,
-            "Down from the profile button did not go to Settings' first category"
-        )
-        attachScreenshot(of: app, named: "profile-down-into-settings")
+        XCTAssertTrue(hero.hasFocus, "Down from the profile button did not go to Home's hero")
+        attachScreenshot(of: app, named: "profile-down-into-home")
     }
 
     func testRefreshKeepsItsChromeOffsetAcrossADetailRoundTrip() throws {
