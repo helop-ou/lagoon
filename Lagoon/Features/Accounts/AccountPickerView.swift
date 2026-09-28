@@ -23,6 +23,9 @@ struct AccountPickerView: View {
     @State private var errorMessage: String?
     @State private var accountToForget: StoredAccount?
     @State private var reachability: [URL: Reachability] = [:]
+    /// What each profile is watching, by account id, filled in as servers
+    /// answer.
+    @State private var activity: [String: String] = [:]
     #if os(tvOS)
     @Namespace private var pickerFocus
     #endif
@@ -229,6 +232,7 @@ struct AccountPickerView: View {
     private func portraitButton(_ account: StoredAccount, dimmed: Bool) -> some View {
         PortraitButton(
             title: account.displayName,
+            subtitle: activity[account.id],
             identifier: "account.select.\(account.userId)",
             size: portraitSize,
             dimmed: dimmed,
@@ -253,6 +257,7 @@ struct AccountPickerView: View {
     private var addPortrait: some View {
         PortraitButton(
             title: "Add Profile",
+            subtitle: nil,
             identifier: "account.add",
             size: portraitSize,
             dimmed: false,
@@ -307,14 +312,28 @@ struct AccountPickerView: View {
         }
     }
 
+    /// Servers answer independently: each status dot, then that server's
+    /// "watching" lines, lands as soon as it can. An offline server is never
+    /// asked for the lines.
     private func probeServers() async {
-        let urls = groups.map(\.serverURL)
-        await withTaskGroup(of: (URL, Bool).self) { tasks in
-            for url in urls {
-                tasks.addTask { (url, await JellyfinClient.isReachable(url)) }
+        await withTaskGroup(of: Void.self) { tasks in
+            for group in groups {
+                tasks.addTask { await probe(group) }
             }
-            for await (url, reachable) in tasks {
-                reachability[url] = reachable ? .online : .offline
+        }
+    }
+
+    private func probe(_ group: ProfileGrouping.ServerGroup) async {
+        let reachable = await JellyfinClient.isReachable(group.serverURL)
+        reachability[group.serverURL] = reachable ? .online : .offline
+        guard reachable else { return }
+        await withTaskGroup(of: (String, String?).self) { tasks in
+            for account in group.accounts {
+                tasks.addTask { (account.id, await session.latestResume(for: account)?.railTitle) }
+            }
+            for await (id, title) in tasks {
+                guard let title, !title.isEmpty else { continue }
+                withAnimation(.easeOut(duration: Motion.fast)) { activity[id] = title }
             }
         }
     }
@@ -393,6 +412,8 @@ extension ProfilePortrait {
 /// whole stack the target.
 private struct PortraitButton<Portrait: View>: View {
     let title: String
+    /// What the profile is watching, under the name.
+    let subtitle: String?
     let identifier: String
     let size: CGFloat
     let dimmed: Bool
@@ -412,7 +433,7 @@ private struct PortraitButton<Portrait: View>: View {
                 }
                 .buttonStyle(.card)
                 .buttonBorderShape(.circle)
-                .accessibilityLabel(title)
+                .accessibilityLabel(accessibilityTitle)
                 // Outside the button: the card clips its content to the circle.
                 .overlay(alignment: .bottomTrailing) { currentBadge }
             )
@@ -430,7 +451,7 @@ private struct PortraitButton<Portrait: View>: View {
                 .opacity(dimmed ? 0.5 : 1)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(title)
+            .accessibilityLabel(accessibilityTitle)
         )
         #endif
     }
@@ -472,12 +493,25 @@ private struct PortraitButton<Portrait: View>: View {
         }
     }
 
+    private var accessibilityTitle: String {
+        guard let subtitle else { return title }
+        return "\(title), watching \(subtitle)"
+    }
+
+    /// The watching line keeps its height while empty, so lines arriving
+    /// one server at a time never nudge the picker.
     private var name: some View {
-        Text(title)
-            .font(.callout.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .frame(maxWidth: size + Metrics.Space.xl)
-            .accessibilityHidden(true)
+        VStack(spacing: Metrics.Space.xs) {
+            Text(title)
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(subtitle ?? " ")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: size + Metrics.Space.xl)
+        .accessibilityHidden(true)
     }
 }
