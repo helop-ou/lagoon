@@ -40,10 +40,13 @@ struct MainTabView: View {
     @State private var refreshTopChromeOffset: CGFloat = 0
     #endif
     @FocusState private var homeHeroFocused: Bool
-    @FocusState private var settingsFirstCategoryFocused: Bool
+    #if os(tvOS)
+    @FocusState private var refreshFocused: Bool
+    @FocusState private var profileFocused: Bool
+    #endif
     @State private var showsProfilePicker = false
     @State private var addsProfileAfterPicker = false
-    /// The active profile's portrait for the chrome: the top-right button on
+    /// The active profile's portrait for the chrome: the top-left button on
     /// tvOS, the Settings tab icon on iOS.
     @State private var profileImage: UIImage?
     /// Tab roots on screen; a pushed page takes its tab's root away.
@@ -54,37 +57,48 @@ struct MainTabView: View {
         primaryNavigation
         #if os(tvOS)
         .overlay(alignment: .topLeading) {
-            if hasMountedServerRefresh || serverSync.activeTarget != nil {
-                // Bound to its isolation here: passed inline, the compiler
-                // treats it as callable from any actor. UIKit focus calls it
-                // on the main actor.
-                let moveDown: (@MainActor @Sendable () -> Void)? = activeRefreshMoveDownAction
-                ServerRefreshButton(
-                    target: serverSync.activeTarget,
-                    moveDownAction: moveDown,
-                    topChromeOffset: $refreshTopChromeOffset
-                )
-                    // Aligns the circle with the hero and rails. The focus
-                    // frame overhangs the glass slightly; the alignment UI
-                    // test allows for it.
-                    .padding(.leading, Metrics.screenGutter)
-                    .offset(y: -Metrics.Space.m)
-                    .onAppear { hasMountedServerRefresh = true }
+            // Refresh, then the profile button on the tab bar's side of it, so
+            // the profile is one Left from Home. One container: focus crosses
+            // between them, and the profile keeps its place where Refresh is
+            // hidden.
+            HStack(spacing: Metrics.Space.xl) {
+                if hasMountedServerRefresh || serverSync.activeTarget != nil {
+                    // Bound to its isolation here: passed inline, the compiler
+                    // treats it as callable from any actor. UIKit focus calls
+                    // it on the main actor.
+                    let moveDown: (@MainActor @Sendable () -> Void)? = activeRefreshMoveDownAction
+                    let moveRight: (@MainActor @Sendable () -> Void)? = refreshMoveRightAction
+                    ServerRefreshButton(
+                        target: serverSync.activeTarget,
+                        moveDownAction: moveDown,
+                        moveRightAction: moveRight,
+                        topChromeOffset: $refreshTopChromeOffset
+                    )
+                        .focused($refreshFocused)
+                        .onAppear { hasMountedServerRefresh = true }
+                } else {
+                    Color.clear
+                        .frame(width: Metrics.topChromeButtonSize, height: Metrics.topChromeButtonSize)
+                }
+                if let account = session.activeAccount {
+                    let moveDown: (@MainActor @Sendable () -> Void)? = profileMoveDownAction
+                    let moveLeft: (@MainActor @Sendable () -> Void)? = profileMoveLeftAction
+                    ProfileButton(
+                        image: profileImage,
+                        profileName: account.displayName,
+                        isAvailable: showsProfileButton,
+                        moveDownAction: moveDown,
+                        moveLeftAction: moveLeft,
+                        action: openProfilePicker
+                    )
+                        .focused($profileFocused)
+                }
             }
-        }
-        .overlay(alignment: .topTrailing) {
-            if let account = session.activeAccount {
-                let moveDown: (@MainActor @Sendable () -> Void)? = profileMoveDownAction
-                ProfileButton(
-                    image: profileImage,
-                    profileName: account.displayName,
-                    isAvailable: showsProfileButton,
-                    moveDownAction: moveDown,
-                    action: openProfilePicker
-                )
-                    .padding(.trailing, Metrics.screenGutter)
-                    .offset(y: -Metrics.Space.m)
-            }
+                // Aligns Refresh's circle with the hero and rails. The focus
+                // frame overhangs the glass slightly; the alignment UI test
+                // allows for it.
+                .padding(.leading, Metrics.screenGutter)
+                .offset(y: -Metrics.Space.m)
         }
         #endif
         .task(id: profileImageKey) {
@@ -252,24 +266,36 @@ struct MainTabView: View {
         homeHeroFocused = true
     }
 
-    /// Down from the profile button goes into the page below it, not to the
-    /// tab bar beside it: Home's hero, as from Refresh, or Settings' first
-    /// category, the tab it is reached from.
+    /// Down from the profile button goes into Home's hero, as from Refresh,
+    /// not sideways to the tab bar. It is reached Left from Home, and
+    /// focusing a tab selects it, so Home is the only tab it is reached from.
     private var profileMoveDownAction: (@MainActor @Sendable () -> Void)? {
-        switch selectedTab {
-        case .home: focusHomeHero
-        case .settings: focusSettingsFirstCategory
-        case .discover, .library, .search: nil
-        }
+        guard selectedTab == .home else { return nil }
+        return focusHomeHero
     }
 
-    private func focusSettingsFirstCategory() {
-        settingsFirstCategoryFocused = true
+    /// Left from the profile button to Refresh, where Refresh is shown.
+    private var profileMoveLeftAction: (@MainActor @Sendable () -> Void)? {
+        guard serverSync.activeTarget != nil else { return nil }
+        return focusRefresh
+    }
+
+    /// Right from Refresh to the profile button, where it is shown.
+    private var refreshMoveRightAction: (@MainActor @Sendable () -> Void)? {
+        guard session.activeAccount != nil, showsProfileButton else { return nil }
+        return focusProfile
+    }
+
+    private func focusRefresh() {
+        refreshFocused = true
+    }
+
+    private func focusProfile() {
+        profileFocused = true
     }
 
     /// Like Refresh, only over a content tab's root with nothing pushed. In
-    /// Settings it stays on every page: it is reached Right from Settings'
-    /// tab, which stays focusable above them.
+    /// Settings it stays on every page, showing who is signed in.
     private var showsProfileButton: Bool {
         switch selectedTab {
         case .home: visibleTabRoots.contains(.home) && homeNavigationPath.isEmpty
@@ -347,7 +373,7 @@ struct MainTabView: View {
 
             Tab(value: MainTabSelection.settings) {
                 NavigationStack {
-                    SettingsView(firstCategoryFocus: $settingsFirstCategoryFocused)
+                    SettingsView()
                         .themedChrome()
                 }
                 #if os(iOS)
