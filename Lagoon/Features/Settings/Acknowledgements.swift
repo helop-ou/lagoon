@@ -30,7 +30,7 @@ nonisolated enum Acknowledgements {
         ThirdPartyComponent(
             id: "ffmpeg",
             name: "FFmpeg",
-            version: "8.1.2",
+            version: "8.1.3",
             summary: "Reads the container and decodes audio and video the hardware cannot.",
             licenseName: "GNU LGPL 2.1 or later",
             copyright: "Copyright (c) 2000-2026 the FFmpeg developers",
@@ -38,7 +38,7 @@ nonisolated enum Acknowledgements {
             // engine release carries upstream's tarball, the patch and the
             // build script together.
             sourceURL: URL(string: "https://github.com/helop-ou/lagoon-engine/releases/tag/\(EngineVersion.current)")!,
-            notes: "All four libraries are built by lagoon-engine \(EngineVersion.current) from FFmpeg 8.1.2 in one configuration, with the network stack compiled out and one patch so HLS works without it (scripts/build-ffmpeg.py). The build enables no GPL, nonfree or version 3 components. The engine release linked here carries the complete source. This software is based in part on the work of the Independent JPEG Group.",
+            notes: "All four libraries are built by lagoon-engine \(EngineVersion.current) from FFmpeg 8.1.3 in one configuration, with the network stack compiled out and one patch so HLS works without it (scripts/build-ffmpeg.py). The build enables no GPL, nonfree or version 3 components. The engine release linked here carries the complete source. This software is based in part on the work of the Independent JPEG Group.",
             licenseFile: "ffmpeg",
             binaryTargets: ["Libavcodec", "Libavformat", "Libavutil", "Libswresample"]
         ),
