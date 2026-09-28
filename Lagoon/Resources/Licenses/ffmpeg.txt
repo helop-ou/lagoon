@@ -1,5 +1,5 @@
-FFmpeg 8.1.2 (libavcodec, libavformat, libavutil, libswresample)
-Upstream: https://github.com/FFmpeg/FFmpeg/tree/n8.1.2
+FFmpeg 8.1.3 (libavcodec, libavformat, libavutil, libswresample)
+Upstream: https://github.com/FFmpeg/FFmpeg/tree/n8.1.3
 Copyright (c) 2000-2026 the FFmpeg developers
 
 All four libraries are built by the lagoon-engine package from this release,
@@ -11,7 +11,7 @@ Public License, version 2.1 or later, printed below.
 
 Complete corresponding source: every lagoon-engine release on GitHub
 (https://github.com/helop-ou/lagoon-engine/releases) carries it as
-lagoon-engine-<version>-ffmpeg-8.1.2-source.tar.gz, with upstream's tarball,
+lagoon-engine-<version>-ffmpeg-8.1.3-source.tar.gz, with upstream's tarball,
 the patch and the build script. Lagoon's own source, which you can rebuild
 against a modified FFmpeg, is at https://github.com/helop-ou/lagoon.
 
