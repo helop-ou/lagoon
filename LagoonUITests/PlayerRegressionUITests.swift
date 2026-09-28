@@ -1010,6 +1010,203 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         )
     }
 
+    /// Automatic, hands off: the card counts down and the next episode
+    /// starts on the same surface.
+    func testAutomaticAutoplayRollsIntoTheNextEpisodeUnattended() throws {
+        let (app, first) = try launchNearEndOfHandoffEpisode(autoplayMode: "autoDelay")
+        let card = waitForState(in: app, timeout: 50) { $0.int("nextUp") == 1 }
+        XCTAssertEqual(card.string("item"), first.string("item"))
+        // Without an Outro marker the card shows for the last 15 s.
+        XCTAssertGreaterThan(card.double("time"), card.double("duration") - 17, "Card came up too early: \(card.raw)")
+        let handoff = waitForAutoplaySuccessor(in: app, after: first)
+        assertAutoplaySuccessorIsHealthy(handoff, in: app, first: first)
+    }
+
+    /// Automatic, first Back means "not yet": the card returns for the last
+    /// seconds and the episode still rolls on.
+    func testAutomaticAutoplayNotYetStillRollsOn() throws {
+        let (app, first) = try launchNearEndOfHandoffEpisode(autoplayMode: "autoDelay")
+        let card = waitForState(in: app, timeout: 50) { $0.int("nextUp") == 1 }
+        XCTAssertLessThan(
+            card.double("time"),
+            card.double("duration") - 6,
+            "The card appeared inside the final countdown: \(card.raw)"
+        )
+        remote.press(.menu)
+        let dismissed = waitForState(in: app, timeout: 3) { $0.int("nextUp") == 0 }
+        XCTAssertEqual(dismissed.string("item"), first.string("item"), "Back on the card changed episode")
+        XCTAssertEqual(dismissed.int("paused"), 0)
+        let handoff = waitForAutoplaySuccessor(in: app, after: first)
+        XCTAssertTrue(handoff.cardReturned, "The card did not return for the final countdown")
+        assertAutoplaySuccessorIsHealthy(handoff, in: app, first: first)
+    }
+
+    /// Automatic, Back during the final countdown means "stay": the player
+    /// closes at the end instead of rolling on.
+    func testAutomaticAutoplayBackDuringFinalCountdownClosesAtTheEnd() throws {
+        let (app, first) = try launchNearEndOfHandoffEpisode(autoplayMode: "autoDelay")
+        waitForState(in: app, timeout: 50) { $0.int("nextUp") == 1 }
+        remote.press(.menu)
+        waitForState(in: app, timeout: 3) { $0.int("nextUp") == 0 }
+        let returned = waitForState(in: app, timeout: 20) { $0.int("nextUp") == 1 }
+        XCTAssertEqual(returned.string("item"), first.string("item"))
+        XCTAssertGreaterThan(
+            returned.double("time"),
+            returned.double("duration") - 6,
+            "The card returned before the final countdown: \(returned.raw)"
+        )
+        remote.press(.menu)
+        assertPlayerClosesAtTheEndWithoutAdvancing(app, first: first)
+    }
+
+    /// An unanswered "Ask Every Time" card closes at the end like Off.
+    func testUnansweredAskCardClosesAtTheEnd() throws {
+        let (app, first) = try launchNearEndOfHandoffEpisode(autoplayMode: "card")
+        waitForState(in: app, timeout: 50) { $0.int("nextUp") == 1 }
+        assertPlayerClosesAtTheEndWithoutAdvancing(app, first: first)
+    }
+
+    func testAutoplayOffShowsNoCardAndClosesAtTheEnd() throws {
+        let (app, first) = try launchNearEndOfHandoffEpisode(autoplayMode: "off")
+        assertPlayerClosesAtTheEndWithoutAdvancing(app, first: first, forbidsCard: true)
+    }
+
+    private struct AutoplayHandoff {
+        var successor = RegressionState("")
+        var surfaceDisappeared = false
+        var cardReturned = false
+    }
+
+    private func launchNearEndOfHandoffEpisode(
+        autoplayMode: String
+    ) throws -> (XCUIApplication, RegressionState) {
+        let app = launchPlayer(
+            title: "episode-handoff-regression",
+            simulatorTranscode: false,
+            extraArguments: [
+                "-debug.regressionFindEpisodeWithSuccessor", "YES",
+                "-debug.regressionRequireDirectH264Successor", "YES",
+                "-debug.regressionStartNearEnd", "YES",
+                "-playback.skipMode", "button",
+                "-playback.autoplayMode", autoplayMode,
+            ]
+        )
+        try requireRegressionFixture(in: app)
+        let first = waitForState(in: app, timeout: 60) {
+            $0.int("ready") == 1
+                && $0.int("buffering") == 0
+                && !$0.string("item").isEmpty
+                && !$0.string("surface").isEmpty
+        }
+        XCTAssertGreaterThan(
+            first.double("time"),
+            first.double("duration") - 60,
+            "The fixture episode did not start near its end: \(first.raw)"
+        )
+        return (app, first)
+    }
+
+    /// Polls until another item is ready, noting whether the surface vanished
+    /// and whether the card came back on the first item after going away.
+    private func waitForAutoplaySuccessor(
+        in app: XCUIApplication,
+        after first: RegressionState,
+        timeout: TimeInterval = 60
+    ) -> AutoplayHandoff {
+        var handoff = AutoplayHandoff()
+        var cardWentAway = false
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            let probe = app.descendants(matching: .any)["player.regression.state"]
+            if probe.exists {
+                let current = RegressionState(probe.value as? String ?? "")
+                if current.string("item") == first.string("item") {
+                    if current.int("nextUp") == 0 { cardWentAway = true }
+                    if cardWentAway, current.int("nextUp") == 1 { handoff.cardReturned = true }
+                } else if current.int("ready") == 1, current.int("buffering") == 0 {
+                    handoff.successor = current
+                    break
+                }
+            } else {
+                handoff.surfaceDisappeared = true
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+        return handoff
+    }
+
+    private func assertAutoplaySuccessorIsHealthy(
+        _ handoff: AutoplayHandoff,
+        in app: XCUIApplication,
+        first: RegressionState
+    ) {
+        let successor = handoff.successor
+        XCTAssertFalse(successor.string("item").isEmpty, "No successor became ready")
+        XCTAssertNotEqual(successor.string("item"), first.string("item"))
+        XCTAssertFalse(handoff.surfaceDisappeared, "The player surface disappeared during the handoff")
+        XCTAssertEqual(
+            successor.string("surface"),
+            first.string("surface"),
+            "Autoplay replaced the AVSampleBufferDisplayLayer instead of reusing it"
+        )
+        XCTAssertEqual(successor.int("nextUp"), 0, "Up Next stayed up over the successor")
+        XCTAssertEqual(successor.int("paused"), 0, "The successor started paused")
+        XCTAssertGreaterThanOrEqual(successor.double("handoffMs"), 0)
+        XCTAssertLessThan(successor.double("handoffMs"), 20_000)
+        XCTAssertEqual(successor.int("engines"), 1)
+        XCTAssertEqual(successor.int("controllers"), 1)
+        XCTAssertEqual(successor.int("demux"), 1)
+        XCTAssertEqual(successor.int("renderers"), 1)
+        XCTAssertEqual(successor.int("unclean"), 0, successor.raw)
+
+        let startTime = successor.double("time")
+        let startStalls = successor.int("stalls")
+        Thread.sleep(forTimeInterval: 15)
+        let sustained = state(in: app)
+        XCTAssertEqual(sustained.string("item"), successor.string("item"))
+        XCTAssertGreaterThan(
+            sustained.double("time"),
+            startTime + 10,
+            "Successor playback did not sustain media-clock progress: \(sustained.raw)"
+        )
+        XCTAssertEqual(sustained.int("buffering"), 0)
+        XCTAssertLessThanOrEqual(sustained.int("stalls") - startStalls, 1)
+        XCTAssertEqual(sustained.int("unclean"), 0)
+    }
+
+    private func assertPlayerClosesAtTheEndWithoutAdvancing(
+        _ app: XCUIApplication,
+        first: RegressionState,
+        forbidsCard: Bool = false
+    ) {
+        let probe = app.descendants(matching: .any)["player.regression.state"]
+        let deadline = Date().addingTimeInterval(70)
+        var closed = false
+        var sawCard = false
+        var last = RegressionState("")
+        repeat {
+            // The player closes under this loop, and reading `value` after
+            // `exists` fails the test when it goes in between. A snapshot
+            // throws instead. Its value is truncated, but `item` and `nextUp`
+            // come first.
+            guard let snapshot = try? probe.snapshot() else {
+                closed = true
+                break
+            }
+            last = RegressionState(snapshot.value as? String ?? "")
+            XCTAssertEqual(last.string("item"), first.string("item"), "Advanced to another item: \(last.raw)")
+            if last.int("nextUp") == 1 { sawCard = true }
+            Thread.sleep(forTimeInterval: 0.2)
+        } while Date() < deadline
+        XCTAssertTrue(closed, "The player did not close at the end: \(last.raw)")
+        if forbidsCard {
+            XCTAssertFalse(sawCard, "Autoplay Off showed the Up Next card")
+        }
+        // Nothing reopens the next episode behind the viewer's back.
+        Thread.sleep(forTimeInterval: 5)
+        XCTAssertFalse(probe.exists, "The player reopened after closing")
+    }
+
     func testCachedHLSPlaybackCrossesSegmentBoundariesWithoutStalling() throws {
         let app = launchPlayer(
             title: "cached-hls-regression",
