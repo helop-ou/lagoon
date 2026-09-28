@@ -181,7 +181,7 @@ struct SeerrMediaDetailView: View {
         case .partiallyAvailable:
             if let jellyfinItem {
                 openInLagoonButton(jellyfinItem)
-            } else if canRequestMoreSeasons {
+            } else if canRequestMoreSeasons(details) {
                 requestMoreSeasonsButton(details, isPrimary: true)
             } else {
                 partiallyAvailableStatusButton
@@ -254,15 +254,23 @@ struct SeerrMediaDetailView: View {
         }
     }
 
-    /// On a partly available show: request the rest, or say only part is here.
+    /// Beside a show's primary action: request the seasons nobody has
+    /// asked for yet, or say only part is here.
     @ViewBuilder
     private func secondaryActions(_ details: SeerrMediaDetails) -> some View {
-        if availability == .partiallyAvailable, jellyfinItem != nil {
-            if canRequestMoreSeasons {
+        switch availability {
+        case .partiallyAvailable where jellyfinItem != nil:
+            if canRequestMoreSeasons(details) {
                 requestMoreSeasonsButton(details)
             } else {
                 partiallyAvailableStatusButton
             }
+        case .available, .pending, .processing:
+            if canRequestMoreSeasons(details) {
+                requestMoreSeasonsButton(details)
+            }
+        default:
+            EmptyView()
         }
     }
 
@@ -275,8 +283,12 @@ struct SeerrMediaDetailView: View {
         .accessibilityIdentifier("seerr.detail.open")
     }
 
-    private var canRequestMoreSeasons: Bool {
-        mediaType == .tv && seerr.user?.canRequest(.tv) == true
+    private func canRequestMoreSeasons(_ details: SeerrMediaDetails) -> Bool {
+        mediaType == .tv
+            && seerr.user?.canRequest(.tv) == true
+            && !details.requestableSeasons(
+                includingSpecials: seerr.publicSettings?.enableSpecialEpisodes == true
+            ).isEmpty
     }
 
     /// The primary button when nothing is playable yet; a pill otherwise.
@@ -547,9 +559,7 @@ struct SeerrSeasonRequestView: View {
     }
 
     private var visibleSeasons: [SeerrSeason] {
-        (details.seasons ?? []).filter {
-            $0.seasonNumber > 0 || seerr.publicSettings?.enableSpecialEpisodes == true
-        }
+        details.requestSeasons(includingSpecials: seerr.publicSettings?.enableSpecialEpisodes == true)
     }
 
     private var selectableSeasons: [SeerrSeason] { visibleSeasons.filter(isSelectable) }
@@ -597,21 +607,15 @@ struct SeerrSeasonRequestView: View {
     }
 
     private func isSelectable(_ season: SeerrSeason) -> Bool {
-        let available = details.mediaInfo?.seasons?.first(where: {
-            $0.seasonNumber == season.seasonNumber
-        })?.availability == .available
-        let requested = details.mediaInfo?.requests?.contains(where: { request in
-            request.requestStatus != .declined
-                && (request.seasons?.contains { $0.seasonNumber == season.seasonNumber } == true)
-        }) == true
-        return !available && !requested
+        details.canRequestSeason(season.seasonNumber)
     }
 
     private func seasonState(_ season: SeerrSeason) -> String {
-        if details.mediaInfo?.seasons?.first(where: { $0.seasonNumber == season.seasonNumber })?.availability == .available {
-            return "Available"
+        let status = details.mediaInfo?.seasons?.first { $0.seasonNumber == season.seasonNumber }?.availability
+        switch status {
+        case .available, .partiallyAvailable: return status?.title ?? ""
+        default: return String(localized: "Requested")
         }
-        return "Requested"
     }
 
     private func submit() {
