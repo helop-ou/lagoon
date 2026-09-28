@@ -115,22 +115,23 @@ final class AccountPrivacyUITests: XCTestCase {
         #endif
     }
 
-    /// tvOS: the profile button, Right from the last tab. iOS: Switch
-    /// Profile at the top of Settings, whose tab shows the portrait.
+    /// tvOS: the profile button, one Left from Home. iOS: Switch Profile at
+    /// the top of Settings, whose tab shows the portrait.
     private func openProfilePickerFromChrome(in app: XCUIApplication) {
-        selectTab("Settings", in: app)
         #if os(tvOS)
+        selectTab("Home", in: app)
         let button = app.buttons["profile.button"]
         XCTAssertTrue(button.waitForExistence(timeout: 5))
         for _ in 0..<10 where !button.hasFocus
             && !app.tabBars.buttons.allElementsBoundByIndex.contains(where: \.hasFocus) {
             XCUIRemote.shared.press(.up)
         }
-        for _ in 0..<3 where !button.hasFocus { XCUIRemote.shared.press(.right) }
+        for _ in 0..<8 where !button.hasFocus { XCUIRemote.shared.press(.left) }
         XCTAssertTrue(button.hasFocus)
         attachScreenshot(of: app, named: "profile-button-focused")
         XCUIRemote.shared.press(.select)
         #else
+        selectTab("Settings", in: app)
         attachScreenshot(of: app, named: "settings-root-profile")
         select(app.buttons["settings.root.switchProfile"])
         #endif
