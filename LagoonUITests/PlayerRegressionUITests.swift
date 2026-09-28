@@ -1563,11 +1563,15 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         let account = app.descendants(matching: .any)["settings.category.account"]
         moveFocus(to: account, maxPresses: 2) { remote.press(.down) }
         remote.press(.select)
+        let switchProfile = app.buttons["settings.account.switch"]
         let addAccount = app.buttons["settings.account.add"]
-        XCTAssertTrue(addAccount.waitForExistence(timeout: 5))
-        // Right from Back must cross the non-focusable Connection rows.
+        XCTAssertTrue(switchProfile.waitForExistence(timeout: 5))
+        // Right from Back must cross the non-focusable Connection rows and
+        // land on the first action, Switch Profile.
         remote.press(.right)
-        XCTAssertTrue(addAccount.hasFocus, "Account actions column was unreachable")
+        XCTAssertTrue(switchProfile.hasFocus, "Account actions column was unreachable")
+        remote.press(.down)
+        XCTAssertTrue(addAccount.hasFocus)
         attachScreenshot(of: app, named: "Account actions reachable past connection information")
         let accountBack = app.descendants(matching: .any)["settings.detail.back"]
         moveFocus(to: accountBack, maxPresses: 2) { remote.press(.left) }
