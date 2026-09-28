@@ -33,6 +33,7 @@ September 2026
 - More kinds of damaged video, including H.264, AV1 and VP9 titles, play through the damage instead of switching to a transcode.
 - A short Wi-Fi or server outage no longer stops playback or switches to a transcode; the video plays on from what it has buffered.
 - TrueHD, DTS and FLAC audio that changes channel layout or sample rate partway through no longer crashes playback or plays too fast.
+- TV recordings play: MPEG-TS files with AAC audio no longer stop a second in, and recordings that switch between SD and HD keep playing.
 - Resuming a title that falls back to another playback mode keeps your place instead of starting over and clearing Continue Watching.
 - In Discover, a show that is available or still downloading offers Request More Seasons while any season is left to request.
 
