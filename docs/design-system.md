@@ -32,6 +32,8 @@ screen-specific copies.
 | `profilePortraitSize` / `groupedProfilePortraitSize` | 200 / 130 | 84 / 84: a profile's round portrait in "Who's watching?", one server / grouped by server |
 | `chromeProfilePortraitSize` | 44: the portrait in the top-left profile button, inside a glass ring the size of Refresh | 26: the Settings tab icon, drawn untinted |
 | `topChromeButtonSize` | 64: Refresh and the profile button, side by side at the top left | Not used |
+| `genreArtworkBlur` / `genreArtworkSaturation` / `genreArtworkDim` | 5 / 0.7 / 0.4 | 3 / 0.7 / 0.4: a genre card's artwork under its name |
+| `artworkTitleShadowRadius` / `artworkTitleShadowOpacity` | 6 / 0.6 | 6 / 0.6: the shadow lifting a name drawn over artwork |
 | `themeSwatchSize` | Not used | 28: swatch in Settings › Appearance |
 | `qrCodeSize` / `qrCodeMinimumQuietZone` | 420 / 32 | 220 / 16, gallery only. A code scans from about ten times its width. The real quiet zone is derived from the code |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
@@ -126,7 +128,10 @@ notes](reference/design-system.md#themes).
   - Genre and collection cards (`GenreCard`, `CollectionCard`,
     `SeerrGenreCard`) share `NamedArtworkBackground` (artwork, or a gradient
     picked deterministically from the name) and `GenreCardLabel` (the
-    bottom-wash title, centered and multi-line on tvOS).
+    dimmed, shadowed title, centered and multi-line on tvOS). Genre cards
+    also soften their artwork with `genreArtworkTreatment()`, so a colourful
+    poster or one with its own title painted in never fights the genre
+    name; collection cards caption below the art and keep it untouched.
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
     `WatchedMark`); `String.appendingDownloadedSuffix(itemID:)` appends the
