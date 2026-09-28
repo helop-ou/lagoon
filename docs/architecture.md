@@ -155,16 +155,22 @@ wrapper. [Design system](design-system.md) owns the visual rules.
   mounted but inert over pushed details, the offset lives at tab scope, and
   Down from Refresh goes to Home's hero. It must never stay hittable over
   lower rails.
-- The profile button mirrors Refresh at the top right on the same
-  `TopChromeButton`: focusable only while the tab bar has focus, reached
-  Right from Settings, the last tab, since focusing a tab selects it. It
-  shows over every content tab's root and every Settings page
+- The profile button sits beside Refresh at the top left, on the tab bar's
+  side of it, on the same `TopChromeButton`: focusable only while the tab
+  bar or a top chrome control has focus, and one Left from Home, the first
+  tab. The tab bar claims every sideways move in the top chrome and SwiftUI
+  ignores a UIKit focus request, so Left to Refresh and Right back are
+  cancelled in `shouldUpdateFocus` and taken through `FocusState`, as Down
+  is. At the top right it was reached only Right from Settings, the last
+  tab, so from Home every tab lay in between. Refresh's slot stays mounted
+  where Refresh is hidden, so the button keeps its place. It shows over
+  every content tab's root and every Settings page
   (`MainTabView.showsProfileButton`); like Refresh, a pushed detail hides it
-  and swaps its identifier to `profile.button.inactive`. Down goes into the
-  page, never sideways to the tab bar: Home's hero, or Settings' first
-  category. tvOS does not restore focus after a cover closes, so the button
-  takes focus back itself when the picker it opened is dismissed
-  (`TopChromeButton.reclaimsFocusAfterPresentation`).
+  and swaps its identifier to `profile.button.inactive`. Focusing a tab
+  selects it, so it is reached only from Home, and Down goes to Home's hero,
+  never sideways to the tab bar. tvOS does not restore focus after a cover
+  closes, so the button takes focus back itself when the picker it opened is
+  dismissed (`TopChromeButton.reclaimsFocusAfterPresentation`).
 - Top Shelf reads a sanitized local snapshot and artwork. The extension gets
   no credentials and makes no network calls. Keep its extension product type
   and `_NSExtensionMain` entry point.
