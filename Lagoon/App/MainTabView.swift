@@ -46,6 +46,7 @@ struct MainTabView: View {
     #endif
     @State private var showsProfilePicker = false
     @State private var addsProfileAfterPicker = false
+    @State private var profileAfterPicker: StoredAccount?
     /// The active profile's portrait for the chrome: the top-left button on
     /// tvOS, the Settings tab icon on iOS.
     @State private var profileImage: UIImage?
@@ -116,11 +117,11 @@ struct MainTabView: View {
         }
         .environment(\.openProfilePicker, openProfilePicker)
         #if os(tvOS)
-        .fullScreenCover(isPresented: $showsProfilePicker, onDismiss: addProfileAfterPicker) {
+        .fullScreenCover(isPresented: $showsProfilePicker, onDismiss: finishProfilePicker) {
             profilePicker
         }
         #else
-        .sheet(isPresented: $showsProfilePicker, onDismiss: addProfileAfterPicker) {
+        .sheet(isPresented: $showsProfilePicker, onDismiss: finishProfilePicker) {
             profilePicker
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
@@ -421,18 +422,31 @@ struct MainTabView: View {
     }
 
     private var profilePicker: some View {
-        AccountPickerView(isPresentedFromApp: true) {
-            addsProfileAfterPicker = true
-            showsProfilePicker = false
-        }
+        AccountPickerView(
+            isPresentedFromApp: true,
+            onAddProfile: {
+                addsProfileAfterPicker = true
+                showsProfilePicker = false
+            },
+            onSwitchProfile: { account in
+                profileAfterPicker = account
+                showsProfilePicker = false
+            }
+        )
     }
 
-    /// Two covers cannot overlap: RootView's add-profile cover waits until
-    /// the picker is gone.
-    private func addProfileAfterPicker() {
-        guard addsProfileAfterPicker else { return }
-        addsProfileAfterPicker = false
-        session.addAccount()
+    /// Both wait until the picker is gone. Two covers cannot overlap, so
+    /// RootView's add-profile cover has to. A switch done under the closing
+    /// picker repaints it in the new profile's theme on its way out; after
+    /// it, the new profile arrives whole, under its theme's bloom.
+    private func finishProfilePicker() {
+        if let account = profileAfterPicker {
+            profileAfterPicker = nil
+            session.switchTo(account)
+        } else if addsProfileAfterPicker {
+            addsProfileAfterPicker = false
+            session.addAccount()
+        }
     }
 
     /// Retries with backoff; the cached list stands in until a fetch succeeds.

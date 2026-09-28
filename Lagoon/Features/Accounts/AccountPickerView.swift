@@ -14,6 +14,9 @@ struct AccountPickerView: View {
     /// In-app only: adding a profile opens its own cover, so the presenter
     /// closes the picker first and adds once it is gone.
     var onAddProfile: (() -> Void)?
+    /// In-app only: the presenter closes the picker first and switches once
+    /// it is gone, so the picker never repaints in the new profile's theme.
+    var onSwitchProfile: ((StoredAccount) -> Void)?
 
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
@@ -292,9 +295,16 @@ struct AccountPickerView: View {
             session.switchTo(account)
             return
         }
-        dismiss()
-        guard account.id != session.activeAccount?.id else { return }
-        session.switchTo(account)
+        guard account.id != session.activeAccount?.id else {
+            dismiss()
+            return
+        }
+        if let onSwitchProfile {
+            onSwitchProfile(account)
+        } else {
+            dismiss()
+            session.switchTo(account)
+        }
     }
 
     private func probeServers() async {
