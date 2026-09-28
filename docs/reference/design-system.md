@@ -375,8 +375,13 @@ the regression reset clears it.
 `bloomMotif` drifting up through it for under two seconds. Baby Pink's motif is
 flowers; Lagoon's is the jellyfish, beating as it rises with the same
 `JellyfishGeometry` as the sign-in screens. A new theme names its motif in
-`AppTheme.bloomMotif`. Reduce Motion makes it a plain fade. It plays only for
-a viewer's choice, never when loading a saved theme.
+`AppTheme.bloomMotif`. Reduce Motion makes it a plain fade. It plays for a
+viewer's choice and when switching to another profile, in that profile's
+theme (`ThemeStore.bloomCount`); never at launch, and never on returning to
+the same profile. An in-app switch waits until the picker has closed
+(`MainTabView.finishProfilePicker`): switching under the closing picker
+repainted it in the new theme on its way out, which looked like a clipped
+bloom.
 
 The tvOS player panel uses regular material for content with separate glass
 tabs and actions; iOS uses a native resizable options sheet.
