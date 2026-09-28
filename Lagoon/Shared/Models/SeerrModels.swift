@@ -399,6 +399,31 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
     var date: String? { releaseDate ?? firstAirDate }
     var year: String? { date.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 } }
 
+    /// A show's seasons as the request sheet lists them. Specials only when
+    /// the server offers them.
+    func requestSeasons(includingSpecials: Bool) -> [SeerrSeason] {
+        (seasons ?? []).filter { $0.seasonNumber > 0 || includingSpecials }
+    }
+
+    /// Nothing of the season is in the library or on its way, and no live
+    /// request covers it. Asked per season because the show's own status
+    /// does not answer it: Seerr keeps a show Available or Processing while
+    /// seasons nobody requested remain.
+    func canRequestSeason(_ seasonNumber: Int) -> Bool {
+        let status = mediaInfo?.seasons?.first { $0.seasonNumber == seasonNumber }?.availability ?? .unknown
+        // A 4K request leaves the standard copy requestable.
+        let requested = mediaInfo?.requests?.contains { request in
+            request.is4k != true
+                && request.requestStatus != .declined
+                && request.seasons?.contains { $0.seasonNumber == seasonNumber } == true
+        } == true
+        return status.allowsRequesting && !requested
+    }
+
+    func requestableSeasons(includingSpecials: Bool) -> [SeerrSeason] {
+        requestSeasons(includingSpecials: includingSpecials).filter { canRequestSeason($0.seasonNumber) }
+    }
+
     /// The viewer's region's certification, else the US one (as Jellyfin
     /// falls back), else nil rather than an unfamiliar foreign label.
     func officialRating(region: String? = Locale.current.region?.identifier) -> String? {
