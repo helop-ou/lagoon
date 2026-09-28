@@ -261,7 +261,9 @@ Player layout and auto-hide are in
 Use `CachedAsyncImage` with an explicit `maxPixelSize`, never `AsyncImage`.
 `ArtworkSizing` converts display size to pixels, and a size change reloads.
 The loader gives synchronous cache hits, off-main thumbnail decoding,
-coalesced requests and per-caller cancellation.
+coalesced requests and per-caller cancellation. Artwork that has to be fetched
+fades in over its placeholder (`Motion.standard`); a memory-cache hit draws on
+the first frame and never fades, so returning to a screen doesn't replay it.
 
 | Limit | Value |
 | --- | --- |
