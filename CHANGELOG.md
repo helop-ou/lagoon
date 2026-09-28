@@ -25,6 +25,7 @@ September 2026
 
 ### Improvements
 
+- Movie and show pages have a Trailer button that opens the trailer in YouTube.
 - Who's watching? shows what each profile is in the middle of under its name.
 - Artwork fades in as it loads instead of popping in.
 - Switching profiles plays the new profile's theme animation once the picker has closed, instead of a clipped flash of the new colours.
