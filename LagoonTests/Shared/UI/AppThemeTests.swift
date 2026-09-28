@@ -28,18 +28,37 @@ struct AppThemeTests {
         #expect(defaults.string(forKey: ThemeStore.key("server|me")) == nil)
     }
 
-    @Test func aChoiceCountsAsASelectionButLoadingOneDoesNot() {
+    @Test func aChoiceBloomsButLoadingAtLaunchDoesNot() {
         let store = ThemeStore(defaults: defaults())
         store.configure(accountID: "a")
-        #expect(store.selectionCount == 0)
+        #expect(store.bloomCount == 0)
         store.select(.babyPink)
-        #expect(store.selectionCount == 1)
+        #expect(store.bloomCount == 1)
         store.select(.babyPink)
-        #expect(store.selectionCount == 1)
-        store.configure(accountID: "b")
+        #expect(store.bloomCount == 1)
+    }
+
+    @Test func switchingToAnotherProfileBloomsInItsTheme() {
+        let defaults = defaults()
+        defaults.set("babyPink", forKey: ThemeStore.key("b"))
+        let store = ThemeStore(defaults: defaults)
         store.configure(accountID: "a")
+        store.configure(accountID: "b")
         #expect(store.theme == .babyPink)
-        #expect(store.selectionCount == 1)
+        #expect(store.bloomCount == 1)
+        // Through the picker's nil, too.
+        store.configure(accountID: nil)
+        store.configure(accountID: "a")
+        #expect(store.theme == .lagoon)
+        #expect(store.bloomCount == 2)
+    }
+
+    @Test func returningToTheSameProfileDoesNotBloom() {
+        let store = ThemeStore(defaults: defaults())
+        store.configure(accountID: "a")
+        store.configure(accountID: nil)
+        store.configure(accountID: "a")
+        #expect(store.bloomCount == 0)
     }
 
     @Test func noAccountMeansTheBrandThemeAndNothingSaved() {
