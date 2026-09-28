@@ -3,7 +3,7 @@ import Symbols
 import UIKit
 
 /// A glass control in the tvOS top chrome, beside the tab bar: focusable
-/// only while the tab bar (or the control itself) has focus, so it never
+/// only while the tab bar or a top chrome control has focus, so it never
 /// takes focus from content, and it follows the tab bar as TabView scrolls
 /// it away with the content.
 final class TopChromeButton: UIButton {
@@ -23,6 +23,11 @@ final class TopChromeButton: UIButton {
     var reclaimsFocusAfterPresentation = false
 
     var moveDownAction: (@MainActor @Sendable () -> Void)?
+    /// Toward the chrome control beside this one. The tab bar claims every
+    /// sideways move in the top chrome, and SwiftUI refuses a UIKit focus
+    /// request, so the move is cancelled and FocusState takes it, as Down.
+    var moveLeftAction: (@MainActor @Sendable () -> Void)?
+    var moveRightAction: (@MainActor @Sendable () -> Void)?
     var topChromeOffsetChanged: (@MainActor @Sendable (CGFloat) -> Void)?
 
     /// Installs the Down override only where the destination has a hero. A
@@ -69,6 +74,20 @@ final class TopChromeButton: UIButton {
     }
 
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        let sideways: (@MainActor @Sendable () -> Void)? = if context.focusHeading.contains(.left) {
+            moveLeftAction
+        } else if context.focusHeading.contains(.right) {
+            moveRightAction
+        } else {
+            nil
+        }
+        if isFocused, let sideways {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isFocused else { return }
+                sideways()
+            }
+            return false
+        }
         guard context.focusHeading.contains(.down),
               isFocused,
               moveDownAction != nil else {
@@ -145,7 +164,9 @@ final class TopChromeButton: UIButton {
 
         var ancestor: UIView? = focusedView
         while let view = ancestor {
-            if view === self {
+            // Another chrome control counts too: Refresh and the profile
+            // button sit side by side, and focus moves between them.
+            if view is TopChromeButton {
                 isTopChromeFocused = true
                 return
             }
