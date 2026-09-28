@@ -4,12 +4,14 @@ import XCTest
 /// The Sign Out row is on the pushed Account page, but its confirmation is
 /// attached to the settings root. This pins that the row shows it.
 ///
-/// Never confirms: it would revoke the simulator's real session.
+/// Launches through the regression bootstrap, so it runs signed in to the
+/// public demo on any simulator. Still never confirms: signing out would
+/// revoke the session the rest of the journey relies on.
 @MainActor
 final class SignOutUITests: XCTestCase {
     func testSignOutRowPresentsItsConfirmation() {
         continueAfterFailure = false
-        let app = XCUIApplication()
+        let app = XCUIApplication.regression()
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 30))
 
