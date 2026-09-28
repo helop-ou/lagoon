@@ -47,6 +47,20 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.3.1",
+            build: "112",
+            released: "September 2026",
+            headline: "Request more seasons of a show you already have.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "In Discover, a show that is available or still downloading offers Request More Seasons while any season is left to request.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.3.0",
             build: "111",
             released: "September 2026",
