@@ -214,6 +214,15 @@ final class SessionStore {
         }
     }
 
+    /// What a profile is in the middle of, for the picker. nil when its
+    /// sign-in is gone, pending or expired; never starts a re-sign-in.
+    func latestResume(for account: StoredAccount) async -> MediaItem? {
+        guard !expiredAccountIDs.contains(account.id),
+              !localData.pendingAccountIDs.contains(account.id),
+              let token = credentials.string(for: account.keychainAccount) else { return nil }
+        return await client.peekResume(serverURL: account.serverURL, userId: account.userId, token: token)
+    }
+
     /// Every Jellyfin call is user-scoped, so the rest follows on its own.
     func switchTo(_ account: StoredAccount) {
         connectionGeneration += 1

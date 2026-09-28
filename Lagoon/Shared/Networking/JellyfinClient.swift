@@ -557,6 +557,33 @@ final class JellyfinClient {
         return (response as? HTTPURLResponse)?.statusCode == 200
     }
 
+    /// The profile picker's "watching" line: a profile's most recent resume
+    /// item, read with that profile's own token. Kept off the active session,
+    /// so a rejected token never counts as this session expiring, and as
+    /// quick as the status dot: the picker never waits on it.
+    private static let peekTimeout: TimeInterval = 4
+
+    func peekResume(serverURL: URL, userId: String, token: String) async -> MediaItem? {
+        guard var components = URLComponents(
+            url: serverURL.appending(path: "Users/\(userId)/Items/Resume"),
+            resolvingAgainstBaseURL: false
+        ) else { return nil }
+        components.queryItems = [
+            URLQueryItem(name: "Limit", value: "1"),
+            URLQueryItem(name: "MediaTypes", value: "Video"),
+        ]
+        guard let url = components.url else { return nil }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = Self.peekTimeout
+        request.setValue(authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let page = try? Self.decoder.decode(ItemsPage.self, from: data) else { return nil }
+        return page.items.first
+    }
+
     nonisolated static func fetchPublicInfo(at serverURL: URL) async throws -> PublicSystemInfo {
         var request = URLRequest(url: serverURL.appending(path: "System/Info/Public"))
         request.timeoutInterval = 10
