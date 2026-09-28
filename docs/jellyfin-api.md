@@ -76,13 +76,23 @@ playback, remote revocation and sign-in against a loopback synthetic server.
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
 | Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`; **never** for autoplay, see below |
 | Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
-| Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | |
+| Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | seasons ask for `Fields=RemoteTrailers` |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order |
 
 List calls pass `Fields=Overview,Genres,…,OriginalLanguage` through
 `JellyfinClient.defaultFields`, because lists omit those fields by default.
+
+**Trailers are provider links.** `RemoteTrailers` (`Url`, optional `Name`)
+comes with the item detail; nearly every entry is YouTube, and a season
+almost never has its own, so a series page offers the show's unless the
+picked season has one. An entry without a usable `Url` is dropped on its own.
+`TrailerLink` prefers an official trailer, then any trailer, then other
+clips, then teasers. tvOS has no browser, so there it opens only YouTube
+links, as `youtube://watch/<id>` in the YouTube app; iOS opens the web link,
+which the YouTube app claims when it is installed. Local trailers
+(`LocalTrailerCount`) are not offered yet.
 
 **Recently Added Shows must normalize Latest's groups.** With the default
 `GroupItems=true`, a group with one new episode comes back as an `Episode`,
