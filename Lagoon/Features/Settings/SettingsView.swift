@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct SettingsView: View {
-    /// tvOS: the first category, where Down from the profile button lands.
-    let firstCategoryFocus: FocusState<Bool>.Binding
-
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(\.openProfilePicker) private var openProfilePicker
@@ -231,7 +228,6 @@ struct SettingsView: View {
                     detail: "\(skipMode.shortTitle) · \(autoplayMode.shortTitle)",
                     id: "playback"
                 ) { playbackSettings }
-                    .focused(firstCategoryFocus)
 
                 settingsDestination(
                     "Audio",
