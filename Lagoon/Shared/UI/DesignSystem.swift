@@ -48,8 +48,11 @@ enum Metrics {
     /// grouped by server, so three servers fit one screen.
     static let profilePortraitSize: CGFloat = 200
     static let groupedProfilePortraitSize: CGFloat = 130
-    /// The active profile's portrait in the top-right chrome button.
+    /// The active profile's portrait in the top-left chrome button.
     static let chromeProfilePortraitSize: CGFloat = 44
+    /// Refresh and the profile button: one glass circle each, side by side
+    /// at the top left.
+    static let topChromeButtonSize: CGFloat = Space.xxl + Space.xl
     static let lockupSymbolHeight: CGFloat = 150
     /// A smaller lockup for a screen that already has a title of its own.
     static let lockupHeaderSymbolHeight: CGFloat = 64
