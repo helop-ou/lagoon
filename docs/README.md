@@ -20,9 +20,8 @@ you are changing. The guides describe the code as it is today.
   This repository documents what Lagoon negotiates, presents and reports.
 - **`reference/`** holds the reasoning and measurements behind the guides:
   [playback](reference/playback/README.md),
-  [architecture](reference/architecture.md), [design](reference/design-system.md),
-  the [regression lane](reference/regression-lane.md) and [anime
-  support](reference/anime-support.md). Some describe
+  [architecture](reference/architecture.md), [design](reference/design-system.md)
+  and the [regression lane](reference/regression-lane.md). Some describe
   experiments on a specific build; the code may have moved on.
 
 Generated files. Each script takes `--check` to fail on drift instead of
