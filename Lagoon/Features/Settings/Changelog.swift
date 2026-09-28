@@ -53,6 +53,7 @@ nonisolated enum Changelog {
             headline: "Request more seasons of a show you already have.",
             sections: [
                 ChangelogSection(category: .improvements, changes: [
+                    "Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.",
                     "On Apple TV, the profile button sits beside Refresh at the top left, one press left from Home instead of past Settings.",
                     "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
                 ]),
