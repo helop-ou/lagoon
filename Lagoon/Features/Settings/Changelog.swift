@@ -56,6 +56,7 @@ nonisolated enum Changelog {
                     "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
+                    "Resuming a title that falls back to another playback mode keeps your place instead of starting over and clearing Continue Watching.",
                     "In Discover, a show that is available or still downloading offers Request More Seasons while any season is left to request.",
                 ]),
             ]
