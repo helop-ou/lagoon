@@ -74,9 +74,14 @@ Accounts:
   `AccountPickerView` over the app through `openProfilePicker` (a
   full-screen cover on tvOS, a sheet on iOS), leaving
   the active account in place: Back or choosing it again closes the picker,
-  and Add Profile closes it before the draft session opens. Profiles group by
-  server (`ProfileGrouping`), most recently activated first; activation
-  stamps `lastUsedAt`, so compare accounts by `id`, never whole.
+  and Add Profile or choosing another profile closes it before the draft
+  session opens or the switch happens. Profiles group by server
+  (`ProfileGrouping`), most recently activated first; activation stamps
+  `lastUsedAt`, so compare accounts by `id`, never whole. Under each name the
+  picker shows what that profile is watching: one `Items/Resume` per profile
+  with its own token (`SessionStore.latestResume(for:)`), sent only once its
+  server answered the status probe, off the active session so a rejected
+  token never starts a re-sign-in, and filled in as answers land.
 - Sign-out revokes and forgets the account and clears its local data.
 - Seerr sessions are scoped to the Jellyfin account and the Seerr origin.
 
