@@ -2,10 +2,9 @@
 import SwiftUI
 import UIKit
 
-/// The active profile at the top right, opening "Who's watching?". It
-/// mirrors Refresh at the top left on the same control, so it is reached
-/// from the tab bar (Right from the last tab) and never takes focus from
-/// content.
+/// The active profile at the top left, beside Refresh, opening "Who's
+/// watching?". It is Refresh's control, so it is reached from the tab bar
+/// (Left from Home) and never takes focus from content.
 struct ProfileButton: View {
     let image: UIImage?
     let profileName: String
@@ -13,6 +12,8 @@ struct ProfileButton: View {
     /// offset is lost, as with Refresh.
     let isAvailable: Bool
     nonisolated let moveDownAction: (@MainActor @Sendable () -> Void)?
+    /// Left, to Refresh beside it; see `TopChromeButton.moveLeftAction`.
+    nonisolated let moveLeftAction: (@MainActor @Sendable () -> Void)?
     let action: @MainActor () -> Void
     @State private var allowsFocus = false
     @State private var topChromeOffset: CGFloat = 0
@@ -24,6 +25,7 @@ struct ProfileButton: View {
             allowsFocus: allowsFocus && isAvailable,
             tracksTopChrome: isAvailable,
             moveDownAction: moveDownAction,
+            moveLeftAction: moveLeftAction,
             topChromeOffsetChanged: { [offset = $topChromeOffset] in offset.wrappedValue = $0 },
             action: { action() }
         )
@@ -31,10 +33,7 @@ struct ProfileButton: View {
         .allowsHitTesting(isAvailable)
         .accessibilityHidden(!isAvailable)
         .offset(y: topChromeOffset)
-        .frame(
-            width: Metrics.Space.xxl + Metrics.Space.xl,
-            height: Metrics.Space.xxl + Metrics.Space.xl
-        )
+        .frame(width: Metrics.topChromeButtonSize, height: Metrics.topChromeButtonSize)
         .task {
             // Let the selected tab take launch focus first.
             try? await Task.sleep(for: .milliseconds(500))
@@ -50,6 +49,7 @@ private struct TVProfileControl: UIViewRepresentable {
     let allowsFocus: Bool
     let tracksTopChrome: Bool
     let moveDownAction: (@MainActor @Sendable () -> Void)?
+    let moveLeftAction: (@MainActor @Sendable () -> Void)?
     let topChromeOffsetChanged: @MainActor @Sendable (CGFloat) -> Void
     let action: @MainActor () -> Void
 
@@ -82,6 +82,7 @@ private struct TVProfileControl: UIViewRepresentable {
         button.installMoveDownAction(isAvailable: moveDownAction != nil) {
             coordinator.moveDownAction?()
         }
+        button.moveLeftAction = moveLeftAction
         if coordinator.image !== image || button.configuration?.image == nil {
             coordinator.image = image
             button.configuration = configuration(for: image)
