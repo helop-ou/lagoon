@@ -17,16 +17,19 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
-## 0.3.1 (112)
+## 0.4.0 (112)
 
 September 2026
 
-**Request more seasons of a show you already have.**
+**Watch a title's trailer, and see what each profile is in the middle of.**
 
-### Improvements
+### New features
 
 - Movie and show pages have a Trailer button that opens the trailer in YouTube.
 - Who's watching? shows what each profile is in the middle of under its name.
+
+### Improvements
+
 - Artwork fades in as it loads instead of popping in.
 - Switching profiles plays the new profile's theme animation once the picker has closed, instead of a clipped flash of the new colours.
 - Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.
