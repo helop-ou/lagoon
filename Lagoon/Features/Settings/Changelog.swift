@@ -47,14 +47,16 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
-            version: "0.3.1",
+            version: "0.4.0",
             build: "112",
             released: "September 2026",
-            headline: "Request more seasons of a show you already have.",
+            headline: "Watch a title's trailer, and see what each profile is in the middle of.",
             sections: [
-                ChangelogSection(category: .improvements, changes: [
+                ChangelogSection(category: .newFeatures, changes: [
                     "Movie and show pages have a Trailer button that opens the trailer in YouTube.",
                     "Who's watching? shows what each profile is in the middle of under its name.",
+                ]),
+                ChangelogSection(category: .improvements, changes: [
                     "Artwork fades in as it loads instead of popping in.",
                     "Switching profiles plays the new profile's theme animation once the picker has closed, instead of a clipped flash of the new colours.",
                     "Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.",
