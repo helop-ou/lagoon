@@ -151,6 +151,9 @@ final class PlaybackController {
     @ObservationIgnored private let diagnosticSampler = PlaybackDiagnosticsSampler()
     private var isClosed = false
     private var lastKnownPosition: Double = 0
+    /// Whether the current engine has presented its start. Until then its
+    /// `timePosition` reads 0 rather than the requested start.
+    private var engineHasStarted = false
     private var nextUpTask: Task<Void, Never>?
     @ObservationIgnored private let successorPreparation = PlaybackSuccessorPreparation()
     /// Guards the hand-off: `didFinish` and an expiring countdown can both
@@ -678,6 +681,7 @@ final class PlaybackController {
             engine.setVideoOutputSuspended(videoOutputSuspended)
             engine.onPlaybackStarted = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
+                self.engineHasStarted = true
                 self.finishEpisodeHandoff(outcome: "ready")
                 self.incidents.playbackReady(engine: engine)
                 #if DEBUG
@@ -706,6 +710,7 @@ final class PlaybackController {
                 }
             }
             playbackIdentity = media.id
+            engineHasStarted = false
             self.engine = engine
             guard let playerInfo else { throw JellyfinError.unplayable }
             automation.beginItem(segments: playerInfo.segments)
@@ -1447,12 +1452,32 @@ final class PlaybackController {
         nowPlaying.updateTimeline()
     }
 
+    private var currentPosition: Double {
+        Self.reportablePosition(
+            engine: engine?.timePosition,
+            engineHasStarted: engineHasStarted,
+            lastKnown: lastKnownPosition
+        )
+    }
+
+    /// Where playback is, for reports and restarts. The start point stands
+    /// until the engine has presented it, so a failure before the first
+    /// frame never reports or restarts from 0.
+    nonisolated static func reportablePosition(
+        engine: Double?,
+        engineHasStarted: Bool,
+        lastKnown: Double
+    ) -> Double {
+        guard let engine, engineHasStarted else { return lastKnown }
+        return engine
+    }
+
     private func startProgressLoop() {
         reporting?.startProgress(snapshot: { [weak self] in
             guard let self, let engine = self.engine else { return nil }
-            self.lastKnownPosition = engine.timePosition
+            self.lastKnownPosition = self.currentPosition
             self.nowPlaying.updateTimeline()
-            return .init(seconds: engine.timePosition, isPaused: engine.isPaused)
+            return .init(seconds: self.lastKnownPosition, isPaused: engine.isPaused)
         }, didReport: { [weak self] in
             self?.prepareNextIfNeeded()
         })
@@ -1476,7 +1501,7 @@ final class PlaybackController {
             successorPreparation.cancel()
         }
         subtitleSearch.detach()
-        let seconds = engine?.timePosition ?? lastKnownPosition
+        let seconds = currentPosition
         lastKnownPosition = seconds
         incidents.endAttempt(engine: engine, outcome: stopOutcome)
 
@@ -1558,7 +1583,7 @@ final class PlaybackController {
     }
 
     private func handleEngineError(_ failure: PlaybackEngineFailure, engine: SampleBufferPlayerEngine) {
-        lastKnownPosition = engine.timePosition
+        lastKnownPosition = currentPosition
         let canFallBack = !isClosed && !isFallingBack && currentMedia != nil && client != nil
         let next = canFallBack ? PlaybackFallbackPolicy.next(after: delivery, cause: failure.cause) : nil
         incidents.engineFailed(failure, delivery: delivery, next: next, engine: engine)
@@ -1635,7 +1660,7 @@ final class PlaybackController {
         // takes the terminal path instead of tearing down a starting engine.
         defer { isFallingBack = false }
         guard !isClosed, let client, let media = currentMedia else { return }
-        let resumeAt = engine?.timePosition ?? lastKnownPosition
+        let resumeAt = currentPosition
         // Tell the group now: the replacement buffers before its callbacks
         // are wired, and its Ready must read as a new state.
         onBufferingChanged?(true)
