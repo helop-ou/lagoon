@@ -29,6 +29,7 @@ September 2026
 
 ### Bug fixes
 
+- Dolby Vision films with gaps in their metadata keep playing in full quality instead of switching to a transcode at the same point every time.
 - Resuming a title that falls back to another playback mode keeps your place instead of starting over and clearing Continue Watching.
 - In Discover, a show that is available or still downloading offers Request More Seasons while any season is left to request.
 
