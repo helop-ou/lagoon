@@ -117,11 +117,14 @@ final class ThemeStore {
 
     private(set) var theme: AppTheme = .lagoon
     private(set) var accountID: String?
-    /// Bumped only by the viewer's choice, never by loading a saved one, so
-    /// the bloom doesn't play on account switches.
-    private(set) var selectionCount = 0
+    /// Bumped when the bloom should play: the viewer chose a theme, or
+    /// switched from one profile to another, which then arrives in its own
+    /// theme. Never at launch, and never by returning to the same profile.
+    private(set) var bloomCount = 0
     private let defaults: UserDefaults
     @ObservationIgnored private var activeOwner: ObjectIdentifier?
+    /// The last profile pointed at, kept through the picker's nil.
+    @ObservationIgnored private var lastAccountID: String?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -141,12 +144,14 @@ final class ThemeStore {
         self.accountID = accountID
         guard let accountID else { return }
         theme = Self.storedTheme(for: accountID, in: defaults)
+        if let lastAccountID, lastAccountID != accountID { bloomCount &+= 1 }
+        lastAccountID = accountID
     }
 
     func select(_ theme: AppTheme) {
         guard theme != self.theme else { return }
         self.theme = theme
-        selectionCount &+= 1
+        bloomCount &+= 1
         guard let accountID else { return }
         defaults.set(theme.rawValue, forKey: Self.key(accountID))
     }

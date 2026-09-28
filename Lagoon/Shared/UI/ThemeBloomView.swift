@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Plays when a theme is chosen: a bloom of the new accent with the theme's
-/// motif drifting up, under two seconds. Ignores touches and focus.
+/// Plays when a theme is chosen or another profile arrives in its own: a
+/// bloom of the new accent with the theme's motif drifting up, under two
+/// seconds. Ignores touches and focus.
 ///
 /// Reduce Motion keeps only the fade.
 struct ThemeBloomOverlay: View {
@@ -36,7 +37,7 @@ struct ThemeBloomOverlay: View {
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .onChange(of: ThemeStore.shared.selectionCount) { _, count in
+        .onChange(of: ThemeStore.shared.bloomCount) { _, count in
             bloom = Bloom(accent: Theme.accent, motif: Theme.current.bloomMotif, startedAt: .now, seed: count)
             Task {
                 try? await Task.sleep(for: .seconds(Self.duration))
