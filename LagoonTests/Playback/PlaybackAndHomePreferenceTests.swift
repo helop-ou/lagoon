@@ -9,14 +9,31 @@ struct PlaybackLanguagePreferenceTests {
         default isDefault: Bool = false,
         original: Bool = false,
         forced: Bool = false,
-        hearingImpaired: Bool = false
+        hearingImpaired: Bool = false,
+        title: String? = nil
     ) -> TrackSelectionCandidate {
         TrackSelectionCandidate(
             language: language,
             isDefault: isDefault,
             isOriginal: original,
             isForced: forced,
-            isHearingImpaired: hearingImpaired
+            isHearingImpaired: hearingImpaired,
+            isTitledForced: TrackSelectionPolicy.titleNamesForcedTrack(title)
+        )
+    }
+
+    private func subtitle(
+        _ mode: SubtitleDefaultMode,
+        _ streams: [TrackSelectionCandidate],
+        audio: String,
+        serverDefault: Int? = nil
+    ) -> Int? {
+        TrackSelectionPolicy.subtitleOrdinal(
+            mode: mode,
+            candidates: streams,
+            serverDefault: serverDefault,
+            preferredLanguages: ["en"],
+            selectedAudioLanguage: audio
         )
     }
 
@@ -109,6 +126,83 @@ struct PlaybackLanguagePreferenceTests {
             preferredLanguages: ["en"],
             selectedAudioLanguage: "eng"
         ) == 2)
+    }
+
+    @Test func signsAndSongsTitlesAreRecognisedAsWholeWords() {
+        for title in ["Signs & Songs", "signs/songs", "English [S&S]", "Songs", "English (Forced)", "SIGNS"] {
+            #expect(TrackSelectionPolicy.titleNamesForcedTrack(title), "\(title)")
+        }
+        for title in [nil, "", "English", "English SDH", "Full Dialogue", "Designs", "Unforced", "Brass & Strings"] {
+            #expect(!TrackSelectionPolicy.titleNamesForcedTrack(title), "\(title ?? "nil")")
+        }
+    }
+
+    @Test func smartPicksAnUnflaggedSignsTrackForEnglishAudioAndDialogueForJapanese() {
+        // The signs track is Jellyfin's default, which once made it the
+        // full-dialogue choice too.
+        let streams = [
+            candidate("eng", default: true, title: "Signs & Songs"),
+            candidate("eng", title: "Dialogue"),
+        ]
+
+        #expect(subtitle(.smart, streams, audio: "eng") == 1)
+        #expect(subtitle(.forcedOnly, streams, audio: "eng") == 1)
+        #expect(subtitle(.smart, streams, audio: "jpn") == 2)
+        #expect(subtitle(.always, streams, audio: "jpn") == 2)
+    }
+
+    @Test func aRealForcedFlagOutranksATitledSignsTrack() {
+        let streams = [
+            candidate("eng", title: "Signs & Songs"),
+            candidate("eng", forced: true, title: "English"),
+            candidate("eng", title: "Full"),
+        ]
+
+        #expect(subtitle(.smart, streams, audio: "eng") == 2)
+        #expect(subtitle(.forcedOnly, streams, audio: "eng") == 2)
+        #expect(subtitle(.smart, streams, audio: "jpn") == 3)
+    }
+
+    @Test func aFlaggedForcedTrackInAnotherLanguageOutranksATitledOneAsFallback() {
+        let streams = [
+            candidate("jpn", title: "Signs"),
+            candidate("jpn", title: "Full"),
+            candidate("est", forced: true),
+        ]
+
+        #expect(subtitle(.forcedOnly, streams, audio: "eng") == 3)
+    }
+
+    @Test func ordinaryReleasesSelectWhatTheyDidBeforeTitlesCounted() {
+        let layouts: [[(language: String, forced: Bool, hearingImpaired: Bool, title: String?)]] = [
+            // A film called Signs, its release name on every track.
+            [("eng", false, false, "Signs.2002.1080p.BluRay"), ("eng", false, true, "Signs.2002.1080p.BluRay")],
+            // A lone track is never taken for a signs track.
+            [("eng", false, false, "English (Songs)"), ("est", false, false, nil)],
+            // A flagged forced track beside a full one.
+            [("eng", true, false, "Forced"), ("eng", false, false, "English"), ("est", false, true, nil)],
+            // Untitled tracks, as most movies and shows carry them.
+            [("eng", false, false, nil), ("eng", false, true, "SDH"), ("est", false, false, nil)],
+        ]
+        for layout in layouts {
+            let titled = layout.map {
+                candidate($0.language, forced: $0.forced, hearingImpaired: $0.hearingImpaired, title: $0.title)
+            }
+            let untitled = layout.map {
+                candidate($0.language, forced: $0.forced, hearingImpaired: $0.hearingImpaired)
+            }
+            for mode in SubtitleDefaultMode.allCases {
+                for audio in ["eng", "jpn"] {
+                    for serverDefault in [nil, 1] {
+                        #expect(
+                            subtitle(mode, titled, audio: audio, serverDefault: serverDefault)
+                                == subtitle(mode, untitled, audio: audio, serverDefault: serverDefault),
+                            "\(mode) \(audio) \(layout.map(\.title))"
+                        )
+                    }
+                }
+            }
+        }
     }
 
     @Test func jellyfinOriginalMetadataDecodesWithoutBreakingOlderResponses() throws {
