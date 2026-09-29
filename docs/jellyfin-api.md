@@ -157,6 +157,15 @@ For the next episode, use `Shows/{seriesId}/Episodes` with
 regardless of watch state. With no `SeasonId` it walks the whole series, so a
 binge crosses season boundaries. (`adjacentTo` returns siblings instead.)
 
+**Specials and double episodes.** With "display specials within seasons" on,
+the server lists a special inside the season it aired in, by
+`AirsBeforeSeasonNumber`/`AirsBeforeEpisodeNumber`, and the series-wide walk
+above follows the same order. Lagoon never reorders episodes, so the series
+page, autoplay and Up Next agree. A special keeps `ParentIndexNumber` 0 wherever
+it appears, which is all its "Special 1" label needs; the `Airs*` fields only
+come with `Fields=SpecialEpisodeNumbers` and are not requested.
+`IndexNumberEnd` marks a double episode (`E1–2`) and comes without asking.
+
 ## Images
 
 `imageURL(for:kind:maxWidth:)` builds `Items/{id}/Images/{type}` URLs with the
