@@ -177,13 +177,19 @@ Platform limits, verified on device:
 - iOS seeks on release only; seeking per drag update would flush and
   re-demux every frame.
 
-**Skip intro/recap:**
+**Skip intro, recap and credits:**
 
 - `GET MediaSegments/{itemId}` is native to Jellyfin 10.10+, whatever plugin
   fills it. `includeSegmentTypes` wants _repeated_ query params and 400s on a
   comma-joined list, so filtering is client-side.
-- Only `Intro` and `Recap` are skippable. `Preview` and `Commercial` appear
-  mid-film in real libraries; `Outro` hands off to the next episode.
+- `Intro` and `Recap` are always skippable. `Preview` and `Commercial` never
+  are: they appear mid-film in real libraries. An `Outro` is Skip Credits
+  only when more than 15 s of file follows it, counting a `Preview` straight
+  after it as more credits, so anime's post-credits scenes are reachable.
+  Otherwise it hands off to Up Next. The threshold is Up Next's run-out, so
+  the pill and the card never share the corner. `SkipSegmentPolicy` decides
+  this in the app; the engine's `Kind.isSkippable` still says intro and
+  recap only.
 - Episodes quite often have **two `Intro` segments**, and one can start at
   tick 0. Both cases are handled; do not "simplify" to first-of-each.
 - `SkipMode`: auto after delay (default: 5 s fill then commit), instant, or
@@ -225,9 +231,10 @@ Platform limits, verified on device:
   `Shows/{seriesId}/Episodes?startItemId=<current>&Limit=2` and takes index 1.
   It checks that item 0 _is_ the anchor; a mismatch means the server started
   from the top, and rolling into episode 1 is worse than doing nothing.
-- **Two anchors.** With an `Outro` segment, the card appears at its start and
-  counts down from there. Without one, the card appears on a fixed 15 s
-  run-out, with the fill pinned to the last 5 s of the file.
+- **Two anchors.** With an `Outro` segment that runs to the end, the card
+  appears at its start and counts down from there. Without one, or when the
+  outro is skippable credits, the card appears on a fixed 15 s run-out, with
+  the fill pinned to the last 5 s of the file.
 - **Track choices carry over by language and title, not ordinal**, since a
   commentary track on one episode shifts every ordinal below it.
   Subtitles-off carries over as its own choice. A carry that matches no
