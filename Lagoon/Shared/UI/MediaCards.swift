@@ -504,11 +504,7 @@ extension MediaItem {
 
     var episodeLabel: String? {
         guard type == .episode else { return nil }
-        switch (parentIndexNumber, indexNumber) {
-        case let (season?, episode?): return "S\(season) E\(episode)"
-        case let (nil, episode?): return "E\(episode)"
-        default: return nil
-        }
+        return EpisodeLabel.text(season: parentIndexNumber, episode: indexNumber, episodeEnd: indexNumberEnd)
     }
 
     var runtimeLabel: String? {
@@ -519,5 +515,24 @@ extension MediaItem {
             return "\(minutes / 60) h \(minutes % 60) min"
         }
         return "\(minutes) min"
+    }
+}
+
+/// "S1 E3", "S1 E1–2" for a double episode, "Special 2" for season 0.
+///
+/// Jellyfin keeps a special's season number at 0 even when it lists it
+/// inside the season it aired in, so the label holds wherever it appears.
+nonisolated enum EpisodeLabel {
+    static func text(season: Int?, episode: Int?, episodeEnd: Int?) -> String? {
+        let numbers = episode.map { episode in
+            episodeEnd.map { $0 > episode ? "\(episode)–\($0)" : "\(episode)" } ?? "\(episode)"
+        }
+        switch (season, numbers) {
+        case (0, let numbers?): return String(localized: "Special \(numbers)")
+        case (0, nil): return String(localized: "Special")
+        case let (season?, numbers?): return "S\(season) E\(numbers)"
+        case let (nil, numbers?): return "E\(numbers)"
+        default: return nil
+        }
     }
 }

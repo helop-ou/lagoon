@@ -95,6 +95,8 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let originalLanguage: String?
     let childCount: Int?
     let indexNumber: Int?
+    /// The last number of a double episode (`E1–2`); nil for a single one.
+    let indexNumberEnd: Int?
     let parentIndexNumber: Int?
     let seriesId: String?
     let seriesName: String?
@@ -129,6 +131,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         originalLanguage = try c.decodeIfPresent(String.self, forKey: "originalLanguage")
         childCount = try c.decodeIfPresent(Int.self, forKey: "childCount")
         indexNumber = try c.decodeIfPresent(Int.self, forKey: "indexNumber")
+        indexNumberEnd = try c.decodeIfPresent(Int.self, forKey: "indexNumberEnd")
         parentIndexNumber = try c.decodeIfPresent(Int.self, forKey: "parentIndexNumber")
         seriesId = try c.decodeIfPresent(String.self, forKey: "seriesId")
         seriesName = try c.decodeIfPresent(String.self, forKey: "seriesName")
