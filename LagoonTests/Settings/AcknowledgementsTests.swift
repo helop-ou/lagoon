@@ -1,4 +1,5 @@
 import Foundation
+import Libass
 import Libavutil
 import Libdav1d
 import lcms2
@@ -101,6 +102,11 @@ struct AcknowledgementsTests {
         #expect(try entry("dav1d").version == dav1d)
         let lcms = Int(cmsGetEncodedCMMversion())
         #expect(try entry("lcms2").version == "\(lcms / 1000).\(lcms % 1000 / 10)")
+        // libass packs its version as hex digits, 0.17.5 as 0x01705000.
+        let ass = String(format: "%08x", ass_library_version())
+        let digits = Array(ass)
+        let libass = "\(Int(String(digits[0]))!).\(Int(String(digits[1...2]))!).\(Int(String(digits[3...4]))!)"
+        #expect(try entry("libass").version == libass, "linked libass reports \(ass)")
     }
 
     @Test func trademarkNoticeNamesJellyfinAndApple() {

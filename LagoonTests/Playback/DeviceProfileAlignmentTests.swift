@@ -350,6 +350,28 @@ struct DeviceProfileAlignmentTests {
         #expect(unguarded.map(\.codec) == ["h264", "mpeg2video"])
     }
 
+    @Test func hi10PIsOfferedBecauseTheEngineDecodesItInSoftware() {
+        let h264 = DeviceProfile.everything.codecProfiles.first { $0.codec == "h264" }
+        let profiles = h264?.conditions.first { $0.property == "VideoProfile" }?.value
+            .split(separator: "|") ?? []
+        #expect(profiles.contains("high 10"))
+        // Offering it is only safe while the engine keeps it off VideoToolbox,
+        // which has no High 10 decoder.
+        let capabilities = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_H264, capabilities: capabilities, highBitDepth: true
+        ))
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, highBitDepth: true))
+    }
+
+    @Test func sidecarScriptsAreRequestedAsScriptsNotVTT() {
+        for format in ["ass", "ssa"] {
+            #expect(DeviceProfile.everything.subtitleProfiles.contains {
+                $0.format == format && $0.method == "External"
+            })
+        }
+    }
+
     @Test func interlacedH264IsRoutedToTheSoftwareDecoderAndProgressiveIsNot() {
         // The demuxer's field-order check splits H.264: interlaced decodes in
         // software, which deinterlaces; progressive stays on VideoToolbox.
