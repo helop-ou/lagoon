@@ -91,6 +91,8 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     let seriesName: String?
     let seasonNumber: Int?
     let episodeNumber: Int?
+    /// A double episode's last number. Optional for older manifests.
+    var episodeNumberEnd: Int?
     let productionYear: Int?
     let runTimeTicks: Int64?
     /// Unread, like `eTag`, `runTimeTicks`, `createdAt` and `completedAt`.
@@ -134,8 +136,8 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     }
 
     var episodeLabel: String? {
-        guard type == .episode, let seasonNumber, let episodeNumber else { return nil }
-        return "S\(seasonNumber) E\(episodeNumber)"
+        guard type == .episode, seasonNumber != nil, episodeNumber != nil else { return nil }
+        return EpisodeLabel.text(season: seasonNumber, episode: episodeNumber, episodeEnd: episodeNumberEnd)
     }
 }
 

@@ -90,6 +90,7 @@ extension DownloadStore {
             itemID: item.id, type: item.type, title: item.name ?? item.id,
             seriesID: item.seriesId, seriesName: item.seriesName,
             seasonNumber: item.parentIndexNumber, episodeNumber: item.indexNumber,
+            episodeNumberEnd: item.indexNumberEnd,
             productionYear: item.productionYear, runTimeTicks: runTimeTicks,
             requestedQuality: quality, quality: effectiveQuality, fileName: fileName,
             mediaSourceID: source.id, eTag: source.eTag,
