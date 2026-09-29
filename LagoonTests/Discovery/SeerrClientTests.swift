@@ -213,6 +213,32 @@ struct SeerrClientTests {
         }
     }
 
+    @Test func proxyHeadersReachSignInAndEveryLaterRequest() async throws {
+        let store = ServerHeaderStore(credentials: MemoryAccountCredentials())
+        try store.setHeaders([
+            CustomHTTPHeader(name: "CF-Access-Client-Id", value: "id.access"),
+            CustomHTTPHeader(name: "CF-Access-Client-Secret", value: "secret"),
+        ], forHost: "SEERR.test")
+        let client = makeClient(serverHeaders: store)
+        client.configure(serverURL: URL(string: "https://seerr.test/base")!)
+
+        _ = try await client.authenticateQuickConnect(secret: "secret-1")
+        _ = try await client.currentUser()
+
+        let requests = SeerrMockURLProtocol.requests
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { $0.proxyClientID == "id.access" })
+        // The session cookie is Seerr's own and is not displaced.
+        #expect(requests[1].cookie == "connect.sid=s%3Asession.signature")
+    }
+
+    @Test func aServerWithoutHeadersIsAskedExactlyAsBefore() async throws {
+        let client = makeClient(serverHeaders: ServerHeaderStore(credentials: MemoryAccountCredentials()))
+        client.configure(serverURL: URL(string: "https://seerr.test/base")!)
+        _ = try await client.status()
+        #expect(SeerrMockURLProtocol.requests.first?.proxyClientID == nil)
+    }
+
     @Test func anAuthProxyAnsweringWithAWebPageIsNotBlamedOnSeerr() async throws {
         let client = makeClient()
         client.configure(serverURL: URL(string: "https://seerr.test/access")!)
@@ -222,13 +248,17 @@ struct SeerrClientTests {
         }
     }
 
-    private func makeClient(requestTimeout: TimeInterval = 20) -> SeerrClient {
+    private func makeClient(
+        requestTimeout: TimeInterval = 20,
+        serverHeaders: ServerHeaderStore = ServerHeaderStore(credentials: MemoryAccountCredentials())
+    ) -> SeerrClient {
         SeerrMockURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [SeerrMockURLProtocol.self]
         return SeerrClient(
             session: URLSession(configuration: configuration),
-            requestTimeout: requestTimeout
+            requestTimeout: requestTimeout,
+            serverHeaders: serverHeaders
         )
     }
 
@@ -252,6 +282,7 @@ private nonisolated struct RecordedSeerrRequest: Sendable {
     let cookie: String?
     let body: String?
     let handlesCookies: Bool
+    let proxyClientID: String?
 }
 
 private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Sendable {
@@ -290,7 +321,8 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             query: url.query,
             cookie: request.value(forHTTPHeaderField: "Cookie"),
             body: body,
-            handlesCookies: request.httpShouldHandleCookies
+            handlesCookies: request.httpShouldHandleCookies,
+            proxyClientID: request.value(forHTTPHeaderField: "CF-Access-Client-Id")
         ))
         Self.lock.unlock()
 
