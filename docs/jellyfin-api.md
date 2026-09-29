@@ -79,11 +79,12 @@ optional custom headers under Advanced, such as a Cloudflare service token.
   probe, images, trickplay, the socket, downloads, and the engine's media
   requests through `MediaRequestAuthorization.additionalHeaders`.
 - `ServerHeaderRedirectGuard` on the app's sessions, the download session's
-  delegate and the engine's media transport drop them when a redirect leaves
-  the host or HTTPS. Engine 1.1.0's `BoundedDownload` (images, trickplay,
-  sidecar subtitles) does not yet; its fix waits for the next engine
-  release. Diagnostics record method and path only, so a value never
-  reaches a report.
+  delegate, and the engine's media transport and `BoundedDownload` (images,
+  trickplay, sidecar subtitles; from engine 1.1.1) drop them when a
+  redirect leaves the host or HTTPS. Foundation forwards custom headers
+  across hosts on its own, so every session that carries them needs this.
+  Diagnostics record method and path only, so a value never reaches a
+  report.
 
 ## Library endpoints
 
