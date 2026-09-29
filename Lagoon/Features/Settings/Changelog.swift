@@ -62,6 +62,7 @@ nonisolated enum Changelog {
                     "Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.",
                     "On Apple TV, the profile button sits beside Refresh at the top left, one press left from Home instead of past Settings.",
                     "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
+                    "Watching a dub in your own language, a subtitle track named Signs & Songs or Forced is picked automatically even when the file doesn't flag it as forced, so signs and song lyrics are translated.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
                     "Dolby Vision titles with gaps in their metadata play smoothly in full quality instead of freezing or switching to a transcode at the same point every time.",
