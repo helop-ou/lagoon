@@ -128,7 +128,9 @@ nonisolated enum DeviceProfile {
                     ProfileCondition(
                         condition: "EqualsAny",
                         property: "VideoProfile",
-                        value: "high|main|baseline|constrained baseline",
+                        // High 10 (Hi10P) has no hardware decoder; the engine
+                        // decodes it in software.
+                        value: "high|main|baseline|constrained baseline|high 10",
                         isRequired: false
                     ),
                     ProfileCondition(
@@ -243,6 +245,10 @@ nonisolated enum DeviceProfile {
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
             SubtitleProfile(format: "vtt", method: "External"),
+            // Sidecar scripts as they are, for libass; converted to vtt they
+            // lose their styles and placement.
+            SubtitleProfile(format: "ass", method: "External"),
+            SubtitleProfile(format: "ssa", method: "External"),
             // Without these the server burns subtitles in, forcing a transcode.
             SubtitleProfile(format: "subrip", method: "Embed"),
             SubtitleProfile(format: "srt", method: "Embed"),
