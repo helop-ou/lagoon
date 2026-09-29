@@ -63,6 +63,7 @@ nonisolated enum Changelog {
                     "Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.",
                     "On Apple TV, the profile button sits beside Refresh at the top left, one press left from Home instead of past Settings.",
                     "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
+                    "Specials read Special 1 instead of S0 E1, and double episodes show both numbers, such as S14 E1–2, on episode cards, in the player and on the Up Next card.",
                     "Watching a dub in your own language, a subtitle track named Signs & Songs or Forced is picked automatically even when the file doesn't flag it as forced, so signs and song lyrics are translated.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
