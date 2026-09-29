@@ -27,10 +27,10 @@ struct PlaybackSettingsView: View {
         ) {
             TVSettingsSection(
                 "Playback Behavior",
-                footer: "These choices apply automatically whenever an intro, recap, or next episode is available."
+                footer: "These choices apply automatically whenever an intro, recap, credits, or next episode is available."
             ) {
                 TVSettingsMenuPicker(
-                    title: "Skip Intros & Recaps",
+                    title: "Skip Intros, Recaps & Credits",
                     valueTitle: skipMode.shortTitle,
                     accessibilityIdentifier: "settings.playback.skipMode",
                     selection: $skipModeRaw,
@@ -60,7 +60,7 @@ struct PlaybackSettingsView: View {
     private var touchSettings: some View {
         TouchSettingsPage("Playback") {
             Section("Playback Behavior") {
-                Picker("Skip Intros & Recaps", selection: $skipModeRaw) {
+                Picker("Skip Intros, Recaps & Credits", selection: $skipModeRaw) {
                     ForEach(SkipMode.allCases) { mode in
                         Text(mode.title).tag(mode.rawValue)
                     }
