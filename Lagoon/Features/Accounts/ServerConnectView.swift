@@ -8,6 +8,8 @@ struct ServerConnectView: View {
     @State private var errorMessage: String?
     @State private var localNetworkAccessDenied = false
     @State private var connectionTask: Task<Void, Never>?
+    @State private var headers: [CustomHTTPHeader] = []
+    @State private var showsAdvanced = false
 
     var body: some View {
         ZStack {
@@ -30,6 +32,7 @@ struct ServerConnectView: View {
                     .padding(.vertical, Metrics.Space.l)
 
                     addressField
+                    advancedSection
                     connectButton
                         .buttonStyle(.glass)
                         .controlSize(.large)
@@ -51,31 +54,41 @@ struct ServerConnectView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             #else
-            VStack(spacing: Metrics.Space.l) {
-                LagoonLockup()
-                Text("Connect to your Jellyfin server")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, Metrics.Space.l)
+            // Scrolls once the custom headers are open, and stays centred
+            // while everything fits; focus moving down brings fields into view.
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: Metrics.Space.l) {
+                        LagoonLockup()
+                        Text("Connect to your Jellyfin server")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.bottom, Metrics.Space.l)
 
-                addressField
-                connectButton
-                    .buttonStyle(.glass)
+                        addressField
+                        advancedSection
+                            .buttonStyle(.glass)
+                        connectButton
+                            .buttonStyle(.glass)
 
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.callout)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.callout)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        // Legal information before any account. Last, so the
+                        // address field keeps the initial focus.
+                        AboutLagoonButton()
+                            .padding(.top, Metrics.Space.xl)
+                    }
+                    .frame(maxWidth: 700)
+                    .padding(.horizontal, Metrics.screenGutter)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-
-                // Legal information before any account. Last, so the address
-                // field keeps the initial focus.
-                AboutLagoonButton()
-                    .padding(.top, Metrics.Space.xl)
+                .scrollClipDisabled()
             }
-            .frame(maxWidth: 700)
-            .padding(.horizontal, Metrics.screenGutter)
             #endif
         }
         .onDisappear { connectionTask?.cancel() }
@@ -97,6 +110,28 @@ struct ServerConnectView: View {
             .onSubmit(connect)
     }
 
+    /// Custom headers for a server behind an access proxy. Collapsed and
+    /// empty unless asked for, so nothing changes for anyone else.
+    @ViewBuilder
+    private var advancedSection: some View {
+        if showsAdvanced {
+            VStack(alignment: .leading, spacing: Metrics.Space.s) {
+                Text("Custom Headers")
+                    .font(.headline)
+                CustomHeaderFields(headers: $headers, identifierPrefix: "server", underlined: true)
+                Text(CustomHeaderFields.footer)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            Button("Advanced") {
+                showsAdvanced = true
+                if headers.isEmpty { headers = [CustomHTTPHeader()] }
+            }
+            .accessibilityIdentifier("server.advanced")
+        }
+    }
+
     private var connectButton: some View {
         Button(action: connect) {
             if isConnecting {
@@ -115,18 +150,39 @@ struct ServerConnectView: View {
         isConnecting = true
         errorMessage = nil
         localNetworkAccessDenied = false
+        // Saved before the first request, which the proxy answers too.
+        let undoHeaders: @Sendable () -> Void
+        do {
+            undoHeaders = try ServerHeaderStore.shared.stage(headers, for: address, service: .jellyfin)
+        } catch let problem as CustomHTTPHeader.Problem {
+            errorMessage = problem.message
+            isConnecting = false
+            return
+        } catch {
+            errorMessage = "Lagoon couldn't save the custom headers. Try again."
+            isConnecting = false
+            return
+        }
         connectionTask = Task {
             defer { isConnecting = false }
             do {
                 try await session.connect(to: address)
             } catch is CancellationError {
+                undoHeaders()
             } catch ServerAddress.Failure.invalid {
+                undoHeaders()
                 errorMessage = ServerAddress.Failure.invalid.localizedDescription
             } catch LocalNetworkAccess.Failure.denied {
+                undoHeaders()
                 localNetworkAccessDenied = true
                 errorMessage = LocalNetworkAccess.Failure.denied.localizedDescription
             } catch {
-                if !Task.isCancelled { errorMessage = "Couldn't reach a Jellyfin server at that address. Check the address and network connection, then try again." }
+                undoHeaders()
+                if !Task.isCancelled {
+                    errorMessage = headers.contains { !$0.trimmedName.isEmpty }
+                        ? "Couldn't reach a Jellyfin server at that address. Check the address, the custom headers and the network connection, then try again."
+                        : "Couldn't reach a Jellyfin server at that address. Check the address and network connection, then try again."
+                }
             }
         }
     }

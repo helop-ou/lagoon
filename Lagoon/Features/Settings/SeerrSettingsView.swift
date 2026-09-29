@@ -8,6 +8,7 @@ struct SeerrSettingsView: View {
     static let serverFooter: LocalizedStringKey = "Seerr and Jellyseerr instances using the standard /api/v1 API are supported. Artwork comes from TMDB through Seerr. This product uses the TMDB API but is not endorsed or certified by TMDB."
 
     @State private var serverAddress = ""
+    @State private var headers: [CustomHTTPHeader] = []
     @State private var username = ""
     @State private var password = ""
     @State private var quickConnectCode: String?
@@ -89,6 +90,13 @@ struct SeerrSettingsView: View {
             }
         }
 
+        if seerr.configuredURL == nil {
+            TVSettingsSection("Custom Headers", footer: CustomHeaderFields.footer) {
+                CustomHeaderFields(headers: $headers, identifierPrefix: "settings.seerr")
+                    .buttonStyle(.glass)
+            }
+        }
+
         if seerr.isConfigured {
             TVSettingsSection("Jellyfin Account") {
                 if let user = seerr.user {
@@ -141,6 +149,16 @@ struct SeerrSettingsView: View {
                 Text("Server")
             } footer: {
                 Text(Self.serverFooter)
+            }
+
+            if seerr.configuredURL == nil {
+                Section {
+                    CustomHeaderFields(headers: $headers, identifierPrefix: "settings.seerr")
+                } header: {
+                    Text("Custom Headers")
+                } footer: {
+                    Text(CustomHeaderFields.footer)
+                }
             }
 
             if let errorMessage = errorMessage ?? seerr.errorMessage {
@@ -272,13 +290,26 @@ struct SeerrSettingsView: View {
         // A saved connection may restore after the prefill; retry it when the field is empty.
         let input = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         let address = input.isEmpty ? seerr.configuredURL?.absoluteString ?? "" : input
+        // Saved before the first request, which the proxy answers too.
+        let undoHeaders: @Sendable () -> Void
+        do {
+            undoHeaders = try ServerHeaderStore.shared.stage(headers, for: address, service: .seerr)
+        } catch let problem as CustomHTTPHeader.Problem {
+            errorMessage = problem.message
+            return
+        } catch {
+            errorMessage = "Lagoon couldn't save the custom headers. Try again."
+            return
+        }
         isWorking = true
         errorMessage = nil
         Task {
             do {
                 try await seerr.connect(to: address)
                 serverAddress = seerr.configuredURL?.absoluteString ?? serverAddress
+                headers = []
             } catch {
+                undoHeaders()
                 errorMessage = error.localizedDescription
             }
             isWorking = false
