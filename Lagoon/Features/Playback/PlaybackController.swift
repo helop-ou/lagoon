@@ -977,7 +977,8 @@ final class PlaybackController {
             isDefault: stream.isDefault == true,
             isOriginal: stream.isOriginal == true,
             isForced: stream.isForced == true,
-            isHearingImpaired: stream.isHearingImpaired == true
+            isHearingImpaired: stream.isHearingImpaired == true,
+            isTitledForced: TrackSelectionPolicy.titleNamesForcedTrack(stream.title)
         )
     }
 
@@ -993,11 +994,22 @@ final class PlaybackController {
             ? .alwaysOn
             : MACaptionAppearanceGetDisplayType(.user)
         let preferred = SubtitlePreferencesStore.deduplicated(preferredLanguages)
+        let resolved = TrackSelectionPolicy.resolvingTitledForced(subtitles.map(selectionCandidate))
+        let isForced = resolved.map(\.isForced)
 
         func best(requireForced: Bool) -> Int? {
-            let candidates = subtitles.enumerated().filter { _, stream in
-                !requireForced || stream.isForced == true
+            let tracks = subtitles.enumerated().filter { offset, _ in
+                !requireForced || isForced[offset]
             }
+            if requireForced { return pick(in: tracks) }
+            // Full dialogue: a forced or signs-titled track only when nothing
+            // else fits.
+            return pick(in: tracks.filter { !isForced[$0.offset] && !resolved[$0.offset].isTitledForced })
+                ?? pick(in: tracks.filter { !isForced[$0.offset] })
+                ?? pick(in: tracks)
+        }
+
+        func pick(in candidates: [(offset: Int, element: MediaStream)]) -> Int? {
             for language in preferred {
                 if let match = candidates.first(where: { _, stream in
                     SubtitlePreferencesStore.normalizedLanguage(stream.language ?? "") == language

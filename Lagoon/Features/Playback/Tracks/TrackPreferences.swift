@@ -140,17 +140,62 @@ final class TrackPreferencesStore {
     }
 }
 
-/// A stream reduced to the facts that may influence automatic selection. No
-/// title: "Original" is metadata, not a naming convention.
+/// A stream reduced to the facts that may influence automatic selection.
+/// "Original" is metadata, not a naming convention, so the only thing read
+/// from a title is the signs-and-songs convention.
 nonisolated struct TrackSelectionCandidate: Equatable {
     let language: String?
     let isDefault: Bool
     let isOriginal: Bool
     let isForced: Bool
     let isHearingImpaired: Bool
+    /// Titled "Signs & Songs", "S&S", "Forced" and the like. Counts as forced
+    /// only through `resolvingTitledForced`.
+    var isTitledForced = false
 }
 
 nonisolated enum TrackSelectionPolicy {
+    /// Anime releases often ship a signs-and-songs track without the forced
+    /// flag. Whole words only, so "Signs" inside another word never counts.
+    static func titleNamesForcedTrack(_ title: String?) -> Bool {
+        guard let title else { return false }
+        let lowered = title.lowercased()
+        let words = lowered.split { !$0.isLetter && !$0.isNumber }
+        if words.contains(where: { ["signs", "songs", "forced"].contains($0) }) {
+            return true
+        }
+        return lowered.split { !$0.isLetter && !$0.isNumber && $0 != "&" }.contains("s&s")
+    }
+
+    /// Marks a titled signs-and-songs track as forced where the flag is
+    /// missing. Only where no track of its language is flagged forced, so a
+    /// real flag always wins, and only beside a track of that language not
+    /// titled that way: a lone track, or a release name repeated on every
+    /// track (a film called "Signs"), never changes what an ordinary movie
+    /// or show selects.
+    static func resolvingTitledForced(
+        _ candidates: [TrackSelectionCandidate]
+    ) -> [TrackSelectionCandidate] {
+        func language(_ candidate: TrackSelectionCandidate) -> String? {
+            candidate.language.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+        }
+        let byLanguage = Dictionary(grouping: candidates, by: language)
+        return candidates.map { candidate in
+            guard candidate.isTitledForced, !candidate.isForced,
+                  let siblings = byLanguage[language(candidate)],
+                  !siblings.contains(where: \.isForced),
+                  siblings.contains(where: { !$0.isTitledForced }) else { return candidate }
+            return TrackSelectionCandidate(
+                language: candidate.language,
+                isDefault: candidate.isDefault,
+                isOriginal: candidate.isOriginal,
+                isForced: true,
+                isHearingImpaired: candidate.isHearingImpaired,
+                isTitledForced: true
+            )
+        }
+    }
+
     static func audioOrdinal(
         mode: AudioDefaultMode,
         candidates: [TrackSelectionCandidate],
@@ -184,6 +229,11 @@ nonisolated enum TrackSelectionPolicy {
         preferredLanguages: [String],
         selectedAudioLanguage: String?
     ) -> Int? {
+        let flagged = candidates
+        let candidates = resolvingTitledForced(candidates)
+        // Any forced track at all, one Jellyfin flagged before a titled one.
+        let anyForced = rankedSubtitle(flagged.enumerated().filter { $0.element.isForced })
+            ?? rankedSubtitle(candidates.enumerated().filter { $0.element.isForced })
         switch mode {
         case .system:
             return serverDefault
@@ -194,7 +244,7 @@ nonisolated enum TrackSelectionPolicy {
                 in: candidates,
                 preferredLanguages: preferredLanguages,
                 requireForced: true
-            ) ?? rankedSubtitle(candidates.enumerated().filter { $0.element.isForced }) ?? 0
+            ) ?? anyForced ?? 0
         case .always:
             return bestSubtitle(
                 in: candidates,
@@ -209,7 +259,7 @@ nonisolated enum TrackSelectionPolicy {
                     in: candidates,
                     preferredLanguages: preferred,
                     requireForced: true
-                ) ?? rankedSubtitle(candidates.enumerated().filter { $0.element.isForced }) ?? 0
+                ) ?? anyForced ?? 0
             }
             return bestSubtitle(
                 in: candidates,
@@ -253,13 +303,17 @@ nonisolated enum TrackSelectionPolicy {
     private static func rankedSubtitle(
         _ candidates: [(offset: Int, element: TrackSelectionCandidate)]
     ) -> Int? {
-        candidates.max { lhs, rhs in
-            let left = (lhs.element.isForced ? 0 : 4)
-                + (lhs.element.isDefault ? 2 : 0)
-                + (lhs.element.isHearingImpaired ? 0 : 1)
-            let right = (rhs.element.isForced ? 0 : 4)
-                + (rhs.element.isDefault ? 2 : 0)
-                + (rhs.element.isHearingImpaired ? 0 : 1)
+        // A titled signs track left unresolved, beside a flagged forced one,
+        // is still no full-dialogue track.
+        func score(_ candidate: TrackSelectionCandidate) -> Int {
+            (candidate.isForced ? 0 : 8)
+                + (candidate.isTitledForced && !candidate.isForced ? 0 : 4)
+                + (candidate.isDefault ? 2 : 0)
+                + (candidate.isHearingImpaired ? 0 : 1)
+        }
+        return candidates.max { lhs, rhs in
+            let left = score(lhs.element)
+            let right = score(rhs.element)
             return left == right ? lhs.offset > rhs.offset : left < right
         }.map { $0.offset + 1 }
     }
