@@ -27,6 +27,7 @@ September 2026
 
 - Movie and show pages have a Trailer button that opens the trailer in YouTube.
 - Who's watching? shows what each profile is in the middle of under its name.
+- Servers behind an access proxy such as Cloudflare Access, Authelia or Authentik connect: add the proxy's headers under Advanced when connecting to Jellyfin or Seerr.
 - Styled subtitles, common in anime, look as their authors made them: karaoke, signs placed on screen, and the fonts the file carries, from the file or from a separate .ass file.
 - Episodes with a scene after the credits offer Skip Credits, which lands on the scene, following your Skip Intros, Recaps & Credits setting. Up Next waits until the scene ends.
 
