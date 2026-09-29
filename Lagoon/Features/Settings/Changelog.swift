@@ -55,6 +55,7 @@ nonisolated enum Changelog {
                 ChangelogSection(category: .newFeatures, changes: [
                     "Movie and show pages have a Trailer button that opens the trailer in YouTube.",
                     "Who's watching? shows what each profile is in the middle of under its name.",
+                    "Episodes with a scene after the credits offer Skip Credits, which lands on the scene, following your Skip Intros, Recaps & Credits setting. Up Next waits until the scene ends.",
                 ]),
                 ChangelogSection(category: .improvements, changes: [
                     "Artwork fades in as it loads instead of popping in.",
