@@ -67,6 +67,54 @@ nonisolated enum Acknowledgements {
             binaryTargets: ["lcms2"]
         ),
         ThirdPartyComponent(
+            id: "libass",
+            name: "libass",
+            version: "0.17.5",
+            summary: "Draws styled ASS/SSA subtitles, karaoke and signs in the fonts a file carries.",
+            licenseName: "ISC",
+            copyright: "Copyright (C) 2006-2016 libass contributors",
+            sourceURL: URL(string: "https://github.com/libass/libass/tree/0.17.5")!,
+            notes: "Built by lagoon-engine with FreeType, FriBidi and HarfBuzz into one static library (scripts/build-libass.sh).",
+            licenseFile: "libass",
+            binaryTargets: ["Libass"]
+        ),
+        ThirdPartyComponent(
+            id: "freetype",
+            name: "FreeType",
+            version: "2.14.3",
+            summary: "Rasterizes the glyphs libass draws.",
+            licenseName: "FreeType License",
+            copyright: "Copyright (C) 2006-2026 by David Turner, Robert Wilhelm, and Werner Lemberg",
+            sourceURL: URL(string: "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz")!,
+            notes: "Built by lagoon-engine inside its libass library, under the FreeType License rather than the GPL alternative.",
+            licenseFile: "freetype",
+            binaryTargets: []
+        ),
+        ThirdPartyComponent(
+            id: "fribidi",
+            name: "GNU FriBidi",
+            version: "1.0.17",
+            summary: "Orders right-to-left subtitle text for libass.",
+            licenseName: "GNU LGPL 2.1 or later",
+            copyright: "Copyright (C) 1999-2017 Dov Grobgeld, Behdad Esfahbod and Sharif FarsiWeb, Inc",
+            sourceURL: URL(string: "https://github.com/fribidi/fribidi/releases/tag/v1.0.17")!,
+            notes: "Built unmodified by lagoon-engine inside its libass library; each engine release attaches the complete source.",
+            licenseFile: "fribidi",
+            binaryTargets: []
+        ),
+        ThirdPartyComponent(
+            id: "harfbuzz",
+            name: "HarfBuzz",
+            version: "14.5.0",
+            summary: "Shapes subtitle text for libass, joining and positioning glyphs.",
+            licenseName: "MIT (Old MIT)",
+            copyright: "Copyright (C) 2010-2022 Google, Inc. and the HarfBuzz contributors",
+            sourceURL: URL(string: "https://github.com/harfbuzz/harfbuzz/tree/14.5.0")!,
+            notes: "Built by lagoon-engine inside its libass library, with only its FreeType integration.",
+            licenseFile: "harfbuzz",
+            binaryTargets: []
+        ),
+        ThirdPartyComponent(
             id: "uavs3d",
             name: "uavs3d",
             version: "1.2 (0e20d2c)",
