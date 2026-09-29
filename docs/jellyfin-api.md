@@ -65,6 +65,26 @@ Session expiry:
 `python3 scripts/test-session-recovery.py` exercises direct and native HLS
 playback, remote revocation and sign-in against a loopback synthetic server.
 
+**Servers behind a forward-auth proxy.** Cloudflare Access, Authelia and
+Authentik answer before Jellyfin or Seerr does, so the connect screens take
+optional custom headers under Advanced, such as a Cloudflare service token.
+
+- `ServerHeaderStore` keeps them per host, not per address, because
+  connecting tries several schemes and ports for the host the viewer typed.
+  They live in the keychain, and go with the last account on that host (for
+  Seerr, with "Change Seerr Server").
+- They are sent only over HTTPS, and never replace a header Lagoon sets:
+  `Authorization`, `Cookie` and the other reserved names are refused.
+- Every request to the host carries them: API calls, sign-in and the server
+  probe, images, trickplay, the socket, downloads, and the engine's media
+  requests through `MediaRequestAuthorization.additionalHeaders`.
+- `ServerHeaderRedirectGuard` on the app's sessions, the download session's
+  delegate and the engine's media transport drop them when a redirect leaves
+  the host or HTTPS. Engine 1.1.0's `BoundedDownload` (images, trickplay,
+  sidecar subtitles) does not yet; its fix waits for the next engine
+  release. Diagnostics record method and path only, so a value never
+  reaches a report.
+
 ## Library endpoints
 
 | Purpose | Endpoint | Quirk |
