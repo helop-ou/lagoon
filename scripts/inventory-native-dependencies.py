@@ -91,8 +91,8 @@ def main():
             })
         targets.append(target)
     # libavcodec, libavformat, libavutil, libswresample, dav1d, lcms2,
-    # uavs3d, libdovi.
-    if len(targets) != 8:
+    # uavs3d, libdovi, and libass (with FreeType, FriBidi and HarfBuzz inside).
+    if len(targets) != 9:
         raise ValueError(f"Native target set changed ({len(targets)}); review the inventory before regenerating")
     report = {"scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
               "engine": {"version": pin["state"]["version"], "revision": revision},

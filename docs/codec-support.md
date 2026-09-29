@@ -26,7 +26,7 @@ notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/codecs
 | Codec | Conditions |
 | --- | --- |
 | `hevc` | Video profile one of `main`, `main 10`; Video range type one of `SDR`, `HDR10`, `HLG`, `DOVI`, `DOVIWithHDR10`, `DOVIWithHDR10Plus`, `DOVIWithHLG`, `DOVIWithSDR`, `DOVIWithEL`, `DOVIWithELHDR10Plus`, `HDR10Plus`; Video level at most `183`; Is interlaced is not `true` |
-| `h264` | Video profile one of `high`, `main`, `baseline`, `constrained baseline`; Video range type one of `SDR`; Video level at most `52` |
+| `h264` | Video profile one of `high`, `main`, `baseline`, `constrained baseline`, `high 10`; Video range type one of `SDR`; Video level at most `52` |
 | `av1` | Video profile one of `main`; Video range type one of `SDR`, `HDR10`, `HLG`, `HDR10Plus`; Video bit depth at most `10`; Is interlaced is not `true` |
 | `vp9` | Video profile one of `profile 0`, `profile 2`; Video range type one of `SDR`, `HDR10`, `HLG`, `HDR10Plus`; Video bit depth at most `10`; Width at most `1920`; Height at most `1080`; Is interlaced is not `true` |
 | `vc1` | Video range type one of `SDR`; Video bit depth at most `8`; Width at most `1920`; Height at most `1080`; Is interlaced is not `true` |
@@ -53,7 +53,7 @@ where the picture is not the original file.
 ## Subtitles
 
 - **Embedded in the file, decoded by Lagoon** — `subrip`, `srt`, `ass`, `ssa`, `mov_text`, `webvtt`, `vtt`, `pgssub`, `pgs`, `dvdsub`, `dvbsub`
-- **Sidecar files** — `vtt`
+- **Sidecar files** — `vtt`, `ass`, `ssa`
 - **Delivered with an HLS transcode** — `vtt`
 
 ## Reading this table
