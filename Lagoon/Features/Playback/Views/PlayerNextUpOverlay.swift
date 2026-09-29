@@ -4,6 +4,9 @@ import SwiftUI
 /// When the Up Next card and its countdown are due. Pure, so the player,
 /// the card and the regression probe agree.
 nonisolated enum NextUpPolicy {
+    /// Run-out in seconds when there is no `Outro` segment.
+    static let fallbackLeadIn: Double = 15
+
     /// At the outro, or else a short fixed run-out, so the card never
     /// covers the closing scene.
     static func cardStart(
@@ -14,7 +17,7 @@ nonisolated enum NextUpPolicy {
     ) -> Double? {
         guard hasEpisode, autoplayMode != .off, duration > 0 else { return nil }
         if let outroStart { return outroStart }
-        return duration - NextUpMetrics.fallbackLeadIn
+        return duration - fallbackLeadIn
     }
 
     /// With an outro the countdown runs from the credits' first frame.
@@ -147,6 +150,4 @@ private nonisolated enum NextUpMetrics {
     static let thumbnailWidth: CGFloat = 88
     static let barHeight: CGFloat = 4
     #endif
-    /// Run-out in seconds when there is no `Outro` segment.
-    static let fallbackLeadIn: Double = 15
 }

@@ -2,9 +2,10 @@ import Foundation
 import LagoonEngine
 import Observation
 
-/// The player's two timed decisions, skipping an intro or recap and rolling
-/// into the next episode, driven by the engine's clock rather than a view
-/// body so they keep working with the phone locked or in Picture in Picture.
+/// The player's two timed decisions, skipping an intro, recap or credits
+/// and rolling into the next episode, driven by the engine's clock rather
+/// than a view body so they keep working with the phone locked or in Picture
+/// in Picture.
 ///
 /// The overlays only draw this, so the pill and Select cannot disagree.
 /// `SkipSegmentPolicy` and `NextUpPolicy` decide where; this decides when,
@@ -203,8 +204,10 @@ final class PlaybackAutomation {
 
     // MARK: - Evaluation
 
+    /// Credits with a scene after them are skipped instead, and Up Next
+    /// waits for the end of the file as if there were no outro.
     private var outroStart: Double? {
-        segments.first { $0.kind == .outro }?.start
+        SkipSegmentPolicy.endingCredits(in: segments, duration: duration)?.start
     }
 
     private func evaluate() {
@@ -215,7 +218,12 @@ final class PlaybackAutomation {
     private func evaluateSkip() {
         let segment: MediaSegment? = isSuppressed || !hasPosition
             ? nil
-            : SkipSegmentPolicy.activeSegment(in: segments, at: position, handled: handledSegmentIDs)
+            : SkipSegmentPolicy.activeSegment(
+                in: segments,
+                at: position,
+                handled: handledSegmentIDs,
+                duration: duration
+            )
         guard segment?.id != activeSegment?.id else { return }
         activeSegment = segment
         cancelSkipCountdown()
