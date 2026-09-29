@@ -44,6 +44,8 @@ struct PlaybackAutomationTests {
 
     nonisolated private static let intro = MediaSegment(id: "intro", kind: .intro, start: 10, end: 70)
     nonisolated private static let outro = MediaSegment(id: "outro", kind: .outro, start: 1_200, end: 1_320)
+    /// An ending song with a minute of scene after it, as anime often has.
+    nonisolated private static let credits = MediaSegment(id: "credits", kind: .outro, start: 1_200, end: 1_260)
 
     // MARK: - Skip
 
@@ -232,6 +234,88 @@ struct PlaybackAutomationTests {
         #expect(automation.activeSegment == nil)
         automation.isSuppressed = false
         #expect(automation.activeSegment?.id == "intro")
+    }
+
+    // MARK: - Credits
+
+    @Test func creditsWithASceneAfterThemCountDownToTheScene() async throws {
+        let automation = automation(segments: [Self.intro, Self.credits])
+        var landed: Double?
+        automation.onSkip = { landed = $0.end }
+
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.activeSegment?.id == "credits")
+        #expect(SkipSegmentPolicy.title(for: Self.credits) == "Skip Credits")
+        // Up Next waits for the end of the scene.
+        #expect(!automation.showsNextUp)
+        #expect(automation.nextUpCardStart == 1_305)
+
+        await eventually { landed == 1_260 }
+        #expect(landed == 1_260)
+        automation.tick(position: 1_260, duration: 1_320)
+        #expect(automation.activeSegment == nil)
+        #expect(!automation.showsNextUp)
+    }
+
+    @Test func creditsFollowTheButtonAndInstantModes() async throws {
+        let button = automation(skip: .button, segments: [Self.credits])
+        var buttonLanded: Double?
+        button.onSkip = { buttonLanded = $0.end }
+        button.tick(position: 1_201, duration: 1_320)
+        #expect(button.activeSegment?.id == "credits")
+        #expect(button.skipTiming == nil)
+        try await Task.sleep(for: Self.settled)
+        #expect(buttonLanded == nil)
+        #expect(button.dismissSkip())
+        #expect(button.activeSegment == nil)
+
+        let instant = automation(skip: .instant, segments: [Self.credits])
+        var instantLanded: Double?
+        instant.onSkip = { instantLanded = $0.end }
+        instant.tick(position: 1_201, duration: 1_320)
+        #expect(instantLanded == 1_260)
+    }
+
+    @Test func creditsThatRunToTheEndStillHandOffToUpNext() {
+        // Ten seconds of black after the credits is no scene.
+        let nearEnd = MediaSegment(id: "outro", kind: .outro, start: 1_200, end: 1_310)
+        for segments in [[Self.outro], [nearEnd]] {
+            let automation = automation(skip: .instant, segments: segments)
+            var skipped = false
+            automation.onSkip = { _ in skipped = true }
+            automation.tick(position: 1_201, duration: 1_320)
+            #expect(automation.activeSegment == nil)
+            #expect(!skipped)
+            #expect(automation.nextUpCardStart == 1_200)
+            #expect(automation.showsNextUp)
+        }
+    }
+
+    @Test func aNextEpisodePreviewAfterTheCreditsCountsAsCredits() {
+        let preview = MediaSegment(id: "preview", kind: .preview, start: 1_262, end: 1_320)
+        let automation = automation(segments: [Self.credits, preview])
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.activeSegment == nil)
+        #expect(automation.nextUpCardStart == 1_200)
+    }
+
+    @Test func thePillAndTheCardNeverShareTheCorner() {
+        // The shortest scene that still earns a skip.
+        let credits = MediaSegment(id: "credits", kind: .outro, start: 1_200, end: 1_304)
+        let automation = automation(skip: .button, segments: [credits])
+        automation.tick(position: 1_303.9, duration: 1_320)
+        #expect(automation.activeSegment?.id == "credits")
+        #expect(!automation.showsNextUp)
+        automation.tick(position: 1_305, duration: 1_320)
+        #expect(automation.activeSegment == nil)
+        #expect(automation.showsNextUp)
+    }
+
+    @Test func creditsWaitForTheDuration() {
+        // Without a duration a scene after the credits cannot be told apart
+        // from the end of the file.
+        #expect(SkipSegmentPolicy.activeSegment(in: [Self.credits], at: 1_201, handled: [], duration: 0) == nil)
+        #expect(SkipSegmentPolicy.endingCredits(in: [Self.credits], duration: 0) == nil)
     }
 
     // MARK: - Up Next
