@@ -321,6 +321,12 @@ final class SessionStore {
         if !accounts.contains(where: { $0.serverURL == account.serverURL }) {
             defaults.removeObject(forKey: AccountLocalData.seerrServerKey(account))
         }
+        // A proxy's headers belong to the host, so they go with its last
+        // account.
+        if let host = account.serverURL.host(),
+           !accounts.contains(where: { $0.serverURL.host()?.lowercased() == host.lowercased() }) {
+            ServerHeaderStore.shared.removeHeaders(forHost: host)
+        }
         if removedActiveAccount {
             connectionGeneration += 1
             TopShelfStore.clear()

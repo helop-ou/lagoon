@@ -283,6 +283,12 @@ final class SeerrSessionStore {
 
     func forgetServer() async {
         let remote = client.sessionSnapshot()
+        // The proxy headers go with the server, unless Jellyfin shares its
+        // host and still needs them.
+        if let host = configuredURL?.host(),
+           activeAccount?.serverURL.host()?.lowercased() != host.lowercased() {
+            ServerHeaderStore.shared.removeHeaders(forHost: host)
+        }
         activationTask?.cancel()
         activationToken = UUID()
         isLoading = false

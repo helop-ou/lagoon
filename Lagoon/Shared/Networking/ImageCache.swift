@@ -74,7 +74,11 @@ final class ImageCache {
                 }
                 let id = UUID()
                 let task = Task { [weak self, downloader] in
-                    let data = try? await downloader.data(from: url, limit: DownloadLimit.artwork, content: .image)
+                    let data = try? await downloader.data(
+                        for: URLRequest(url: url).withServerHeaders(),
+                        limit: DownloadLimit.artwork,
+                        content: .image
+                    )
                     let image: UIImage?
                     if let data, !Task.isCancelled {
                         image = await Task.detached(priority: .utility) {

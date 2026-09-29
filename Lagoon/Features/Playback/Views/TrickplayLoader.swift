@@ -134,7 +134,7 @@ final class TrickplayLoader {
 
     private nonisolated static func fetch(_ url: URL, authorization: MediaRequestAuthorization?) async -> Data? {
         let request = authorization?.request(for: url, timeoutInterval: 30) ?? {
-            var request = URLRequest(url: url)
+            var request = URLRequest(url: url).withServerHeaders()
             request.timeoutInterval = 30
             return request
         }()

@@ -2,7 +2,7 @@ import Foundation
 
 /// A `URLSession` with no shared cache and no cookie jar, so a client's
 /// traffic never touches another client's storage or the app's shared URL
-/// cache.
+/// cache. Redirects never carry a server's proxy headers to another host.
 nonisolated enum UncachedSession {
     static func make(
         base: URLSessionConfiguration = .ephemeral,
@@ -21,6 +21,10 @@ nonisolated enum UncachedSession {
         if let timeoutIntervalForResource {
             configuration.timeoutIntervalForResource = timeoutIntervalForResource
         }
-        return URLSession(configuration: configuration)
+        return URLSession(
+            configuration: configuration,
+            delegate: ServerHeaderRedirectGuard.shared,
+            delegateQueue: nil
+        )
     }
 }

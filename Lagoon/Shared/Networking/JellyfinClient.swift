@@ -106,7 +106,7 @@ final class JellyfinClient {
         config.timeoutIntervalForRequest = 30
         // API calls bypass the URL cache; see `request(for:)`.
         config.urlCache = nil
-        session = URLSession(configuration: config)
+        session = URLSession(configuration: config, delegate: ServerHeaderRedirectGuard.shared, delegateQueue: nil)
         downloads = BoundedDownload(configuration: config)
     }
 
@@ -278,7 +278,8 @@ final class JellyfinClient {
             origin: serverURL,
             headerName: "Authorization",
             headerValue: authorizationHeader(token: accessToken),
-            queryNames: ["apikey", "api_key"]
+            queryNames: ["apikey", "api_key"],
+            additionalHeaders: ServerHeaderStore.shared.fields(for: serverURL)
         )
     }
 
@@ -451,6 +452,7 @@ final class JellyfinClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
         }
+        ServerHeaderStore.shared.apply(to: &request)
         return PreparedRequest(request: request, session: authenticated ? sessionIdentity : nil, probe: probe)
     }
 
@@ -548,11 +550,11 @@ final class JellyfinClient {
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 4
         configuration.timeoutIntervalForResource = 4
-        return URLSession(configuration: configuration)
+        return URLSession(configuration: configuration, delegate: ServerHeaderRedirectGuard.shared, delegateQueue: nil)
     }()
 
     nonisolated static func isReachable(_ serverURL: URL) async -> Bool {
-        let request = URLRequest(url: serverURL.appending(path: "System/Info/Public"))
+        let request = URLRequest(url: serverURL.appending(path: "System/Info/Public")).withServerHeaders()
         guard let (_, response) = try? await reachabilitySession.data(for: request) else { return false }
         return (response as? HTTPURLResponse)?.statusCode == 200
     }
@@ -578,6 +580,7 @@ final class JellyfinClient {
         request.timeoutInterval = Self.peekTimeout
         request.setValue(authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        ServerHeaderStore.shared.apply(to: &request)
         guard let (data, response) = try? await session.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let page = try? Self.decoder.decode(ItemsPage.self, from: data) else { return nil }
@@ -585,7 +588,7 @@ final class JellyfinClient {
     }
 
     nonisolated static func fetchPublicInfo(at serverURL: URL) async throws -> PublicSystemInfo {
-        var request = URLRequest(url: serverURL.appending(path: "System/Info/Public"))
+        var request = URLRequest(url: serverURL.appending(path: "System/Info/Public")).withServerHeaders()
         request.timeoutInterval = 10
         let data: Data
         let response: URLResponse

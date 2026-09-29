@@ -37,15 +37,17 @@ final class SeerrClient {
     private(set) var sessionCookie: String?
 
     private let session: URLSession
+    private let serverHeaders: ServerHeaderStore
     private let requestTimeout: TimeInterval
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private var configurationGeneration = 0
 
     /// Its own session, never `.shared`, so nothing touches the shared URL
-    /// cache. Tests pass their own.
-    init(session: URLSession? = nil, requestTimeout: TimeInterval = 20) {
+    /// cache. Tests pass their own, and their own header store.
+    init(session: URLSession? = nil, requestTimeout: TimeInterval = 20, serverHeaders: ServerHeaderStore = .shared) {
         self.session = session ?? Self.uncachedSession()
+        self.serverHeaders = serverHeaders
         self.requestTimeout = requestTimeout
         decoder = JSONDecoder()
         encoder = JSONEncoder()
@@ -386,6 +388,8 @@ final class SeerrClient {
             guard let sessionCookie else { throw SeerrError.unauthenticated }
             request.setValue("connect.sid=\(sessionCookie)", forHTTPHeaderField: "Cookie")
         }
+        // Sign-in included: a forward-auth proxy answers before Seerr does.
+        serverHeaders.apply(to: &request)
 
         let responsePayload: ResponsePayload
         let startedAt = ProcessInfo.processInfo.systemUptime

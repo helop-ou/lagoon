@@ -24,6 +24,17 @@ extension DownloadStore {
 
         /// Persists file and manifest before returning, so relaunch recovery
         /// never depends on a queued Task.
+        /// A redirect never carries a server's proxy headers to another host.
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest,
+            completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            completionHandler(ServerHeaderStore.shared.redirected(request, from: response.url ?? task.originalRequest?.url))
+        }
+
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
             guard let info = DownloadTaskDescription.parse(downloadTask.taskDescription) else { return }
             let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0

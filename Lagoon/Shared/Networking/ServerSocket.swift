@@ -115,7 +115,7 @@ final class ServerSocket {
         }
         let configuration = URLSessionConfiguration.default
         configuration.urlCache = nil
-        session = URLSession(configuration: configuration)
+        session = URLSession(configuration: configuration, delegate: ServerHeaderRedirectGuard.shared, delegateQueue: nil)
     }
 
     func connect() {
@@ -159,7 +159,7 @@ final class ServerSocket {
     /// against a proxy that then answers nothing.
     private func receiveUntilFailure() async -> Bool {
         guard let url else { return false }
-        let task = session.webSocketTask(with: url)
+        let task = session.webSocketTask(with: URLRequest(url: url).withServerHeaders())
         socketTask = task
         task.resume()
         var opened = false
