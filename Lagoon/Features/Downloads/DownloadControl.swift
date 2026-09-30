@@ -156,6 +156,10 @@ struct DownloadControl: View {
             return String(localized: "Sign in again to start downloads.")
         case .noSpace:
             return String(localized: "There isn't enough free space on this device for this download.")
+        case .redirectedOffServer:
+            return String(localized: "The server's sign-in proxy sent the download to another address. Check the custom headers for this server.")
+        case .serverUnreachable:
+            return String(localized: "Couldn't reach the server to start the download. Check the connection and try again.")
         }
     }
 

@@ -91,8 +91,8 @@ final class DownloadStore {
         self.delegate = delegate
 
         // A background session follows redirects itself and never asks its
-        // delegate, so nothing here can strip a proxy's headers from one that
-        // leaves the server; docs/jellyfin-api.md records the gap.
+        // delegate, so a transfer carrying a proxy's headers is checked with
+        // `DownloadRedirectCheck` before it starts.
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = false
@@ -273,6 +273,10 @@ final class DownloadStore {
         case notPermitted
         case noSpace
         case unsupportedItem
+        /// The server's proxy redirects the download to another host, which
+        /// would receive its headers; see `DownloadRedirectCheck`.
+        case redirectedOffServer
+        case serverUnreachable
     }
 
     // MARK: - Background session lifecycle

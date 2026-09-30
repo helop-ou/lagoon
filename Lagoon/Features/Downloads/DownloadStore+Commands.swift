@@ -55,6 +55,15 @@ extension DownloadStore {
         guard let url = try? transferURL(itemID: item.id, source: source, quality: effectiveQuality, client: client) else {
             throw StartError.unsupportedItem
         }
+        if DownloadRedirectCheck.isNeeded(for: authorization) {
+            let outcome = await DownloadRedirectCheck.check(authorization.request(for: url))
+            try checkPreparation()
+            switch outcome {
+            case .staysOnServer: break
+            case .leavesServer: throw StartError.redirectedOffServer
+            case .unreachable: throw StartError.serverUnreachable
+            }
+        }
 
         // Local playback needs the snapshot, so refuse without one.
         let snapshotData = try await client.itemData(id: item.id)
@@ -200,25 +209,52 @@ extension DownloadStore {
         }
 
         let attemptToken = UUID().uuidString
-
+        let url = snapshotItem(for: itemID).flatMap { item in
+            (item.mediaSources?.first(where: { $0.id == entry.mediaSourceID }) ?? item.mediaSources?.first)
+                .flatMap { try? transferURL(itemID: itemID, source: $0, quality: entry.quality, client: client) }
+        }
+        let transfer: TransferSource
         if let resumeFile = entry.resumeDataFile,
            let data = try? Data(contentsOf: (accountDirectory ?? baseDirectory).appending(path: resumeFile)) {
-            beginTransfer(.resumeData(data), itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken)
-            return
-        }
-
-        guard let item = snapshotItem(for: itemID),
-              let source = item.mediaSources?.first(where: { $0.id == entry.mediaSourceID }) ?? item.mediaSources?.first,
-              let url = try? transferURL(itemID: itemID, source: source, quality: entry.quality, client: client) else {
+            transfer = .resumeData(data)
+        } else if let url {
+            transfer = .request(url: url, authorization: authorization)
+        } else {
             manifest.markFailed(itemID, reason: "The saved item details are missing", resumeDataFile: nil)
             save()
             return
         }
 
-        beginTransfer(
-            .request(url: url, authorization: authorization),
-            itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken
-        )
+        guard DownloadRedirectCheck.isNeeded(for: authorization) else {
+            beginTransfer(transfer, itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken)
+            return
+        }
+        // Resume data repeats the original request, so its URL is checked too.
+        guard let url else {
+            manifest.markFailed(itemID, reason: "The saved item details are missing", resumeDataFile: entry.resumeDataFile)
+            save()
+            return
+        }
+        let preparation = UUID()
+        preparationTokens[itemID] = preparation
+        Task {
+            let outcome = await DownloadRedirectCheck.check(authorization.request(for: url))
+            guard preparationTokens[itemID] == preparation else { return }
+            preparationTokens.removeValue(forKey: itemID)
+            guard self.accountKey == accountKey,
+                  let current = manifest.entry(for: itemID),
+                  current.state == .paused || current.state == .failed else { return }
+            switch outcome {
+            case .staysOnServer:
+                beginTransfer(transfer, itemID: itemID, fileName: entry.fileName, accountKey: accountKey, attemptToken: attemptToken)
+            case .leavesServer:
+                manifest.markFailed(itemID, reason: "The server's sign-in proxy sent the download elsewhere", resumeDataFile: current.resumeDataFile)
+                save()
+            case .unreachable:
+                manifest.markFailed(itemID, reason: "Couldn't reach the server to resume this download", resumeDataFile: current.resumeDataFile)
+                save()
+            }
+        }
     }
 
     /// Artwork can be shared (episodes of one series), so files another
