@@ -362,8 +362,8 @@ Where it applies:
   `Theme.background` like browse screens.
 - Only the player's panel and the DEBUG Developer page keep the system form.
 - Every page's backdrop is `ThemePageBackground`, through
-  `.themedPageBackground()` (`ThemedForm` uses it too), so a theme's ornament
-  reaches every page without the page knowing.
+  `.themedPageBackground()` (`ThemedForm` uses it too), so Spooky's cobwebs
+  reach every page without the page knowing.
 - tvOS's tab bar keeps the system glass.
 
 **Account ownership.** `SessionStore` points `ThemeStore.shared` at the active
@@ -392,7 +392,7 @@ repainted it in the new theme on its way out, which looked like a clipped
 bloom.
 
 **The season.** `ThemeStore` resolves a profile's theme with
-`ThemeStore.theme(for:in:on:calendar:)`: a saved Baby Pink or Spooky wins;
+`ThemeStore.theme(for:in:on:)`: a saved Baby Pink or Spooky wins;
 otherwise `AppTheme.seasonal(on:)` (Spooky when the viewer's calendar says
 October) unless `appearance.seasonDeclined.<accountID>` holds this year,
 which `select(.lagoon)` writes during the season. Nothing is saved when the
@@ -403,18 +403,16 @@ is a per-account key like the theme's, removed with the account and by the
 regression reset. The tvOS Appearance UI test expects Spooky as the starting
 value in October.
 
-**Ornaments.** A theme may decorate pages beyond its colours
-(`AppTheme.ornament`). Spooky's is `.haunted`: `CobwebGeometry` cobwebs in the
-page's top corners, behind content, drawn in `palette.cobweb` (white warmed by
-the accent, at 0.16 opacity; `Metrics.cobwebSize` 300 on tvOS, 130 on iOS,
-their threads angled off the screen edges so none reads as a border); and a
-small `GhostGeometry` ghost bobbing above `LoadingView` and `ErrorStateView`'s
-glyph (`ThemeStateGhost`, `Metrics.stateGhostSize`, one bob per
-`Motion.ghostBob`, still under Reduce Motion). Ghosts are pale
-(`palette.ghost`), never the accent, and their faces are cut out with an
-even-odd fill so they read over anything. Its bloom motif is `.ghosts`. An
-ornament never covers text or artwork, and never reaches the player or Top
-Shelf.
+**Haunted.** Spooky decorates pages as well as colouring them
+(`AppTheme.isHaunted`): `CobwebGeometry` cobwebs in the top corners of
+`ThemePageBackground`, behind content (white warmed by the accent at 0.16
+opacity; `Metrics.cobwebSize` 300 on tvOS, 130 on iOS; the threads angle off
+the screen edges so none reads as a border), and a small `GhostGeometry`
+ghost bobbing above `LoadingView` and `ErrorStateView`'s glyph
+(`ThemeStateGhost`, still under Reduce Motion). Ghosts are pale, never the
+accent, with faces cut out by an even-odd fill so they read over anything.
+Its bloom motif is `.ghosts`. Neither covers text or artwork, and neither
+reaches the player or Top Shelf.
 
 The tvOS player panel uses regular material for content with separate glass
 tabs and actions; iOS uses a native resizable options sheet.
