@@ -391,6 +391,18 @@ the same profile. An in-app switch waits until the picker has closed
 repainted it in the new theme on its way out, which looked like a clipped
 bloom.
 
+**The season.** `ThemeStore` resolves a profile's theme with
+`ThemeStore.theme(for:in:on:calendar:)`: a saved Baby Pink or Spooky wins;
+otherwise `AppTheme.seasonal(on:)` (Spooky when the viewer's calendar says
+October) unless `appearance.seasonDeclined.<accountID>` holds this year,
+which `select(.lagoon)` writes during the season. Nothing is saved when the
+season applies itself, so November finds the default again. `RootView` calls
+`refreshSeason()` on every return to the foreground, so a month boundary
+crossed while the app slept turns the theme without a bloom. The declined key
+is a per-account key like the theme's, removed with the account and by the
+regression reset. The tvOS Appearance UI test expects Spooky as the starting
+value in October.
+
 **Ornaments.** A theme may decorate pages beyond its colours
 (`AppTheme.ornament`). Spooky's is `.haunted`: `CobwebGeometry` cobwebs in the
 page's top corners, behind content, drawn in `palette.cobweb` (white warmed by
