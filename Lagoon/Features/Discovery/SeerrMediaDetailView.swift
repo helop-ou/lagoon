@@ -437,9 +437,8 @@ struct SeerrMediaDetailView: View {
 
     private func runtimeText(_ details: SeerrMediaDetails) -> String? {
         let minutes = details.runtime ?? details.episodeRunTime?.first
-        guard let minutes, minutes > 0 else { return nil }
-        if minutes < 60 { return "\(minutes) min" }
-        return "\(minutes / 60) h \(minutes % 60) min"
+        guard let minutes else { return nil }
+        return MediaItem.runtimeLabel(minutes: minutes)
     }
 
     private struct Popup {

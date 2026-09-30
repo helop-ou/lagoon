@@ -81,7 +81,7 @@ struct PosterCardShell<Route: Hashable, Badge: View>: View {
 
     private var placeholder: some View {
         ZStack {
-            Color.white.opacity(0.07)
+            Color.artworkPlaceholder
             Text(placeholderTitle ?? title)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -245,7 +245,7 @@ struct LandscapeArtwork<Metadata: View>: View {
             ) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
-                Color.white.opacity(0.06)
+                Color.artworkPlaceholder
             }
             .frame(width: width, height: height)
             .clipped()
@@ -509,7 +509,11 @@ extension MediaItem {
 
     var runtimeLabel: String? {
         guard let runTimeTicks else { return nil }
-        let minutes = Int(Ticks.seconds(runTimeTicks) / 60)
+        return Self.runtimeLabel(minutes: Int(Ticks.seconds(runTimeTicks) / 60))
+    }
+
+    /// "45 min", "1 h 30 min"; nil for a runtime of zero or less.
+    static func runtimeLabel(minutes: Int) -> String? {
         guard minutes > 0 else { return nil }
         if minutes >= 60 {
             return "\(minutes / 60) h \(minutes % 60) min"
