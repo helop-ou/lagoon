@@ -71,19 +71,27 @@ optional custom headers under Advanced, such as a Cloudflare service token.
 
 - `ServerHeaderStore` keeps them per host, not per address, because
   connecting tries several schemes and ports for the host the viewer typed.
-  They live in the keychain, and go with the last account on that host (for
-  Seerr, with "Change Seerr Server").
-- They are sent only over HTTPS, and never replace a header Lagoon sets:
-  `Authorization`, `Cookie` and the other reserved names are refused.
+  They live in the keychain. `SessionStore.releaseServerHeaders` removes a
+  host's once no account's server and no Seerr saved for one is on it: when
+  an account is removed, a Seerr server is forgotten, or a server is left
+  before its first sign-in.
+- They are sent only over HTTPS and WSS, and never replace a header Lagoon
+  sets: `Authorization`, `Cookie`, Jellyfin's token headers and the ones
+  URLSession owns are refused, and so is a value with a control character.
 - Every request to the host carries them: API calls, sign-in and the server
-  probe, images, trickplay, the socket, downloads, and the engine's media
-  requests through `MediaRequestAuthorization.additionalHeaders`.
-- `ServerHeaderRedirectGuard` on the app's sessions, the download session's
-  delegate, and the engine's media transport and `BoundedDownload` (images,
-  trickplay, sidecar subtitles; from engine 1.1.1) drop them when a
-  redirect leaves the host or HTTPS. Foundation forwards custom headers
-  across hosts on its own, so every session that carries them needs this.
-  Diagnostics record method and path only, so a value never reaches a
+  probe, images, Top Shelf artwork, trickplay, the socket, downloads, and the
+  engine's media requests through `MediaRequestAuthorization.additionalHeaders`.
+- `ServerHeaderRedirectGuard` on the app's sessions, and the engine's media
+  transport and `BoundedDownload` (images, trickplay, sidecar subtitles; from
+  engine 1.1.1), drop them when a redirect leaves the host or HTTPS, and add
+  them when an HTTP request is upgraded to HTTPS on the same host. Foundation
+  forwards custom headers across hosts on its own, so every session that
+  carries them needs this.
+- **Downloads are the exception.** A background session follows redirects
+  without asking its delegate, so a download redirected to another host
+  takes the headers with it. Jellyfin's download and stream endpoints do not
+  redirect; a proxy that rejects the token redirects to its own login page.
+- Diagnostics record method and path only, so a value never reaches a
   report.
 
 ## Library endpoints
