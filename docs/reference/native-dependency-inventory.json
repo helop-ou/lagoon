@@ -1,8 +1,8 @@
 {
   "scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
   "engine": {
-    "version": "1.1.1",
-    "revision": "0e3455f25fa6651afc5daca093ca2fe607d34085"
+    "version": "1.1.2",
+    "revision": "ecc9a65a9944498bd57f7da98dd4f7b07c51d58c"
   },
   "package_sha256": "653662d0728f1e9b071a2eca251cfb1722d5130ff760eb66c368ff83fef15516",
   "dependencies": [
@@ -467,13 +467,9 @@
           "architectures": [
             "arm64"
           ],
-          "sha256": "e5d42de274fbf40d4412231e33fc4a6de4d758c0f672abd227379efc5dbe5739",
+          "sha256": "d0b07c4254221f768d92451a6e5bb13a6f9c9676b90b06b3d751640805d9dfc2",
           "file_type": "current ar archive",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat"
-            ]
-          }
+          "required_reason_imports": {}
         },
         {
           "id": "ios-arm64_x86_64-simulator",
@@ -481,13 +477,9 @@
             "arm64",
             "x86_64"
           ],
-          "sha256": "874335b3f2dcdd9bfa9b706131672a90d307402506ddcb5ef537915e12191104",
+          "sha256": "f33a9b72f961e2a62bb8a5bf9098c31272e640dfcec6d946074e08ec1a9590e4",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat"
-            ]
-          }
+          "required_reason_imports": {}
         },
         {
           "id": "macos-arm64_x86_64",
@@ -495,26 +487,18 @@
             "arm64",
             "x86_64"
           ],
-          "sha256": "23eac6cfd5d7c1d23b912316d4af86093771d2ccfe4f807ecdba14315ce3c97e",
+          "sha256": "762679a93ffc3d9594f71ad9279d17af492e0a860fec36db2d8a18f8eac3ed91",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat"
-            ]
-          }
+          "required_reason_imports": {}
         },
         {
           "id": "tvos-arm64",
           "architectures": [
             "arm64"
           ],
-          "sha256": "53adb761b8d93f85cf767137df82225f7cd34cd4cd5dca888d7d3e8d857b9bbb",
+          "sha256": "6aeddeb09e27a92c2c23ccc2dff21522eec5aa235c248d72ca2e085def408d9d",
           "file_type": "current ar archive",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat"
-            ]
-          }
+          "required_reason_imports": {}
         },
         {
           "id": "tvos-arm64_x86_64-simulator",
@@ -522,13 +506,9 @@
             "arm64",
             "x86_64"
           ],
-          "sha256": "451cdc1c36df8741a1666600b05a42bcf3194a3be1dce31c2564db185cd5ad95",
+          "sha256": "c93b8aa13bc174add9302a95ae213a10a085b59be6c6822445fccf01f4382926",
           "file_type": "Mach-O universal binary with 2 architectures: [x86_64:current ar archive] [arm64]",
-          "required_reason_imports": {
-            "FileTimestamp": [
-              "_fstat"
-            ]
-          }
+          "required_reason_imports": {}
         }
       ]
     },
