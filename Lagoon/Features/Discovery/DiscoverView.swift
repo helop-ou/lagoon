@@ -150,14 +150,14 @@ struct DiscoverView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 700)
+                .frame(maxWidth: Metrics.readableWidth)
             // Automatic sign-in is the normal path, so its failure shows here.
             if seerr.isConfigured, let message = seerr.errorMessage {
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 700)
+                    .frame(maxWidth: Metrics.readableWidth)
             }
             NavigationLink(value: SeerrNavigationRoute.settings) {
                 Text(seerr.isConfigured ? "Sign In" : "Set Up Seerr")

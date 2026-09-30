@@ -98,7 +98,7 @@ struct PlayerNextUpCard: View {
                 ) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    Color.white.opacity(0.08)
+                    Color.artworkPlaceholder
                 }
                 .frame(
                     width: NextUpMetrics.thumbnailWidth,

@@ -205,7 +205,7 @@ struct CustomPlayerView<Surface: View>: View {
                         Label("Subtitles couldn't load. Open Subtitles to retry or choose another track.", systemImage: "exclamationmark.triangle")
                             .font(.callout)
                             .padding(Metrics.Space.l)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.Space.l))
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardCornerRadius))
                             .padding(.horizontal, Metrics.screenGutter)
                             .padding(.top, Metrics.Space.xl)
                             .accessibilityIdentifier("player.subtitleLoad.notice")

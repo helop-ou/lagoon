@@ -61,7 +61,7 @@ struct WatchTogetherControl: View {
     private var glyph: some View {
         Image(systemName: "person.2.fill")
             .fontWeight(syncPlay.isJoined ? .bold : .regular)
-            .opacity(syncPlay.isJoined ? 1 : 0.55)
+            .stateGlyph(isOn: syncPlay.isJoined)
     }
 
     private var label: LocalizedStringKey {

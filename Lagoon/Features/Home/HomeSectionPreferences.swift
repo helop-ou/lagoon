@@ -530,7 +530,7 @@ struct HomeRowsSettingsView: View {
                                 }
                                 Spacer(minLength: Metrics.Space.xl)
                                 Image(systemName: choice.isEnabled ? "checkmark.circle.fill" : "circle")
-                                    .opacity(choice.isEnabled ? 1 : 0.55)
+                                    .stateGlyph(isOn: choice.isEnabled)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -542,7 +542,7 @@ struct HomeRowsSettingsView: View {
                             preferences.move(choice.id, by: -1)
                         } label: {
                             Image(systemName: "arrow.up")
-                                .frame(width: 28, height: 28)
+                                .frame(width: Metrics.inlineIconButtonSize, height: Metrics.inlineIconButtonSize)
                         }
                         .buttonStyle(.glass)
                         .disabled(index == 0)
@@ -552,7 +552,7 @@ struct HomeRowsSettingsView: View {
                             preferences.move(choice.id, by: 1)
                         } label: {
                             Image(systemName: "arrow.down")
-                                .frame(width: 28, height: 28)
+                                .frame(width: Metrics.inlineIconButtonSize, height: Metrics.inlineIconButtonSize)
                         }
                         .buttonStyle(.glass)
                         .disabled(index == preferences.choices.count - 1)

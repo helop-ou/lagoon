@@ -131,7 +131,7 @@ struct SubtitleAppearanceSettingsView: View {
     private var subtitlePreview: some View {
         let style = subtitlePreferences.renderStyle
         return ZStack(alignment: .bottom) {
-            RoundedRectangle(cornerRadius: 18)
+            RoundedRectangle(cornerRadius: Metrics.settingsRowCornerRadius)
                 .fill(
                     LinearGradient(
                         colors: [.indigo.opacity(0.45), .black.opacity(0.9)],
@@ -148,7 +148,7 @@ struct SubtitleAppearanceSettingsView: View {
                 .padding(.vertical, Metrics.Space.s)
                 .background(
                     style.backgroundColor.opacity(style.backgroundOpacity),
-                    in: RoundedRectangle(cornerRadius: 10)
+                    in: RoundedRectangle(cornerRadius: Metrics.cardArtRadius)
                 )
                 .padding(.bottom, Metrics.Space.l)
         }

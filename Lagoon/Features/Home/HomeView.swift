@@ -44,7 +44,7 @@ struct HomeView: View {
                             row(id)
                         }
 
-                        Color.clear.frame(height: 60)
+                        Color.clear.frame(height: Metrics.homeBottomPadding)
                     }
                 }
                 .scrollClipDisabled()

@@ -54,7 +54,7 @@ struct ErrorStateView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 700)
+                .frame(maxWidth: Metrics.readableWidth)
             if let retry {
                 Button(actionTitle, action: retry)
                     .buttonStyle(.glass)

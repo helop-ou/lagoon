@@ -55,7 +55,7 @@ struct SignInView: View {
                     AboutLagoonButton()
                         .padding(.top, Metrics.Space.l)
                 }
-                .frame(maxWidth: 700)
+                .frame(maxWidth: Metrics.readableWidth)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Metrics.screenGutter)
                 .padding(.vertical, Metrics.Space.section)
@@ -186,7 +186,7 @@ struct SignInView: View {
 
                 AboutLagoonButton()
             }
-            .frame(maxWidth: 700)
+            .frame(maxWidth: Metrics.readableWidth)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, Metrics.screenGutter)
             .padding(.vertical, Metrics.Space.xl)
@@ -214,7 +214,7 @@ struct SignInView: View {
         VStack(spacing: Metrics.Space.m) {
             Text(code)
                 .font(Typography.quickConnectCode)
-                .tracking(6)
+                .tracking(Typography.quickConnectCodeTracking)
             Text("Enter this code under Quick Connect in any signed-in Jellyfin app.")
                 .font(.callout)
                 .foregroundStyle(.secondary)

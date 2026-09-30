@@ -141,6 +141,6 @@ struct ItemActionRow: View {
         Image(systemName: symbol)
             // Weight, not colour: a tinted label vanishes when focused.
             .fontWeight(on ? .bold : .regular)
-            .opacity(on ? 1 : 0.55)
+            .stateGlyph(isOn: on)
     }
 }

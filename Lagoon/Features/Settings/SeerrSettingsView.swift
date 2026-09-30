@@ -204,7 +204,7 @@ struct SeerrSettingsView: View {
             VStack(spacing: Metrics.Space.m) {
                 Text(quickConnectCode)
                     .font(Typography.quickConnectCode)
-                    .tracking(6)
+                    .tracking(Typography.quickConnectCodeTracking)
                     .accessibilityIdentifier("settings.seerr.quickConnectCode")
                 Text("Enter this code under Quick Connect in Jellyfin. Lagoon will finish signing in automatically.")
                     .font(.callout)
@@ -272,8 +272,8 @@ struct SeerrSettingsView: View {
     private func infoRow(_ title: LocalizedStringKey, value: String) -> some View {
         TVSettingsActionLabel(title, value: value)
             .padding(.horizontal, Metrics.Space.l)
-            .frame(minHeight: 66)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .frame(minHeight: Metrics.settingsRowMinHeight)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.settingsRowCornerRadius))
     }
     #endif
 

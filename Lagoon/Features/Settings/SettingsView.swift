@@ -339,8 +339,8 @@ struct SettingsView: View {
     private func settingsInfo(_ title: LocalizedStringKey, value: String) -> some View {
         TVSettingsActionLabel(title, value: value)
             .padding(.horizontal, Metrics.Space.l)
-            .frame(minHeight: 66)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .frame(minHeight: Metrics.settingsRowMinHeight)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.settingsRowCornerRadius))
     }
 
     private func settingsAction(

@@ -252,14 +252,7 @@ struct PlayerControlPanel: View {
         Button {
             onSetIgnoreWait?(!together.ignoresWait)
         } label: {
-            HStack(spacing: Metrics.Space.xl) {
-                Text("Ignore Waiting")
-                Spacer(minLength: Metrics.Space.xl)
-                Image(systemName: together.ignoresWait ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .opacity(together.ignoresWait ? 1 : 0.55)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            TVCheckmarkToggleLabel(title: "Ignore Waiting", isOn: together.ignoresWait)
         }
         .buttonStyle(.glass)
         .focused(focus, equals: .track(Self.togetherIgnoreWaitID))
@@ -359,13 +352,13 @@ struct PlayerControlPanel: View {
                     .resizable()
                     .scaledToFit()
             } placeholder: {
-                Color.white.opacity(0.1)
+                Color.artworkPlaceholder
             }
             .frame(
                 width: PlayerPanelMetrics.posterWidth,
                 height: PlayerPanelMetrics.posterHeight
             )
-            .background(.white.opacity(0.06))
+            .background(Color.artworkPlaceholder)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
 
             VStack(alignment: .leading, spacing: Metrics.Space.s) {

@@ -47,7 +47,7 @@ struct ServerConnectView: View {
 
                     AboutLagoonButton()
                 }
-                .frame(maxWidth: 700)
+                .frame(maxWidth: Metrics.readableWidth)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Metrics.screenGutter)
                 .padding(.vertical, Metrics.Space.xl)
@@ -83,7 +83,7 @@ struct ServerConnectView: View {
                         AboutLagoonButton()
                             .padding(.top, Metrics.Space.xl)
                     }
-                    .frame(maxWidth: 700)
+                    .frame(maxWidth: Metrics.readableWidth)
                     .padding(.horizontal, Metrics.screenGutter)
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }

@@ -349,7 +349,7 @@ struct EpisodeCard: View {
     @Environment(\.displayScale) private var displayScale
     @FocusState private var isFocused: Bool
 
-    private var cardWidth: CGFloat { Metrics.landscapeWidth * 0.89 }
+    private var cardWidth: CGFloat { Metrics.landscapeWidth * Metrics.episodeCardWidthRatio }
     private var cardHeight: CGFloat { (cardWidth * 9 / 16).rounded() }
 
     var body: some View {

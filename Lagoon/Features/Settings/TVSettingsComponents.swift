@@ -243,19 +243,12 @@ struct TVSettingsToggle: View {
         Button {
             isOn.toggle()
         } label: {
-            HStack(spacing: Metrics.Space.xl) {
-                Text(title)
-                Spacer(minLength: Metrics.Space.xl)
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .opacity(isOn ? 1 : 0.55)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            TVCheckmarkToggleLabel(title: title, isOn: isOn)
         }
         .buttonStyle(.glass)
         .accessibilityValue(isOn ? "On" : "Off")
         .padding(.horizontal, Metrics.Space.l)
-        .frame(minHeight: 66)
+        .frame(minHeight: Metrics.settingsRowMinHeight)
     }
 }
 #endif

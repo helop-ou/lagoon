@@ -12,7 +12,7 @@ struct RailSeeAllCard<Route: Hashable>: View {
         VStack(alignment: .leading, spacing: layout.spacing) {
             NavigationLink(value: destination) {
                 ZStack {
-                    Color.white.opacity(0.07)
+                    Color.artworkPlaceholder
                     VStack(spacing: Metrics.Space.m) {
                         Image(systemName: "arrow.forward")
                             .font(.title2)

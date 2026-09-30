@@ -138,10 +138,9 @@ struct DownloadsView: View {
             switch entry.state {
             case .queued, .downloading:
                 Button("Pause") { store.pause(entry.itemID) }
-                    .tint(.orange)
             case .paused, .failed:
                 Button("Resume") { store.resume(entry.itemID, client: session.client) }
-                    .tint(.blue)
+                    .tint(Theme.palette.controlTint)
             case .complete:
                 EmptyView()
             }
@@ -160,10 +159,10 @@ struct DownloadsView: View {
                 CachedAsyncImage(url: url, maxPixelSize: Int(thumbWidth * 3)) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    Color.white.opacity(0.08)
+                    Color.artworkPlaceholder
                 }
             } else {
-                Color.white.opacity(0.08)
+                Color.artworkPlaceholder
             }
         }
         .frame(width: thumbWidth, height: thumbHeight)

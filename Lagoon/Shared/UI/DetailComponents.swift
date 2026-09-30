@@ -822,7 +822,7 @@ private struct DetailOverview: View {
             .foregroundStyle(.primary)
             #endif
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 1000, alignment: .leading)
+            .frame(maxWidth: Metrics.detailOverviewWidth, alignment: .leading)
             .accessibilityIdentifier("detail.overview")
     }
 }
@@ -983,7 +983,7 @@ struct CastStrip: View {
                 image.resizable().scaledToFill()
             } placeholder: {
                 ZStack {
-                    Color.white.opacity(0.08)
+                    Color.artworkPlaceholder
                     Image(systemName: "person.fill")
                         .font(.title)
                         .foregroundStyle(.tertiary)

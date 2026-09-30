@@ -124,7 +124,7 @@ private struct SeerrGenreCard: View {
                 CachedAsyncImage(url: backdropURL, maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
-                    Color.white.opacity(0.06)
+                    Color.artworkPlaceholder
                 }
                 .frame(width: Metrics.landscapeWidth, height: Metrics.landscapeHeight)
                 .genreArtworkTreatment()
