@@ -86,20 +86,30 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
-/// Custom headers per server host, for a Jellyfin or Seerr server behind a
-/// forward-auth proxy. Keyed by host, not address, because connecting tries
-/// several schemes and ports for the one host the viewer typed. Sent only over
-/// HTTPS and its socket form, WSS: a fallback to plain HTTP must never carry a
-/// proxy secret in clear.
+/// Custom headers for a Jellyfin or Seerr server behind a forward-auth proxy.
+/// Sent only over HTTPS and its socket form, WSS: a fallback to plain HTTP
+/// must never carry a proxy secret in clear.
 ///
-/// Names and values live together in the keychain, since the values are
+/// Stored per host, in scopes. While connecting, headers sit in the host-wide
+/// scope, because connecting tries several schemes and ports for the host the
+/// viewer typed; once a server answers, `narrow(toServer:)` moves them to that
+/// server's port and path. So a Jellyfin and a Seerr on one host, at different
+/// ports or paths, keep separate headers, and a request gets the most specific
+/// scope that covers it.
+///
+/// One keychain item per host holds every scope, since the values are
 /// credentials. Reads are cached, because every request asks.
 nonisolated final class ServerHeaderStore: @unchecked Sendable {
     static let shared = ServerHeaderStore(credentials: SystemAccountCredentials())
 
+    /// A port and a path prefix on one host, as "443/jellyfin"; "" covers the
+    /// whole host.
+    typealias Scope = String
+    static let hostWide: Scope = ""
+
     private let credentials: AccountCredentialStorage
     private let lock = NSLock()
-    private var cache: [String: [CustomHTTPHeader]] = [:]
+    private var cache: [String: [Scope: [CustomHTTPHeader]]] = [:]
 
     init(credentials: AccountCredentialStorage) {
         self.credentials = credentials
@@ -109,34 +119,119 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
         "server-headers:\(host.lowercased())"
     }
 
-    func headers(forHost host: String?) -> [CustomHTTPHeader] {
-        guard let host = host?.lowercased(), !host.isEmpty else { return [] }
+    /// The scope a server's base URL, or a request to it, falls in.
+    static func scope(for url: URL) -> Scope {
+        "\(port(of: url))\(normalizedPath(url.path()))"
+    }
+
+    private static func port(of url: URL) -> Int {
+        url.port ?? (["https", "wss"].contains(url.scheme?.lowercased()) ? 443 : 80)
+    }
+
+    private static func normalizedPath(_ path: String) -> String {
+        let trimmed = path.split(separator: "/").joined(separator: "/")
+        return trimmed.isEmpty ? "" : "/" + trimmed.lowercased()
+    }
+
+    private func scopes(forHost host: String) -> [Scope: [CustomHTTPHeader]] {
         lock.lock()
         defer { lock.unlock() }
         if let cached = cache[host] { return cached }
-        let stored = credentials.string(for: Self.keychainAccount(forHost: host))
-            .flatMap { try? JSONDecoder().decode([CustomHTTPHeader].self, from: Data($0.utf8)) } ?? []
-        cache[host] = stored
-        return stored
+        let stored = credentials.string(for: Self.keychainAccount(forHost: host)).map { Data($0.utf8) }
+        let decoded = stored.flatMap { try? JSONDecoder().decode([Scope: [CustomHTTPHeader]].self, from: $0) }
+            // Stored before scopes existed: the whole host.
+            ?? stored.flatMap { try? JSONDecoder().decode([CustomHTTPHeader].self, from: $0) }.map { [Self.hostWide: $0] }
+            ?? [:]
+        cache[host] = decoded
+        return decoded
     }
 
-    /// Replaces the host's headers; an empty list removes them.
-    func setHeaders(_ headers: [CustomHTTPHeader], forHost host: String) throws {
-        let host = host.lowercased()
+    private func save(_ scopes: [Scope: [CustomHTTPHeader]], forHost host: String) throws {
+        let kept = scopes.filter { !$0.value.isEmpty }
         let account = Self.keychainAccount(forHost: host)
-        if headers.isEmpty {
+        if kept.isEmpty {
             try? credentials.delete(account)
         } else {
-            let data = try JSONEncoder().encode(headers)
+            let data = try JSONEncoder().encode(kept)
             try credentials.set(String(decoding: data, as: UTF8.self), for: account)
         }
         lock.lock()
-        cache[host] = headers
+        cache[host] = kept
         lock.unlock()
     }
 
+    /// Every header stored for the host, in any scope: what a redirect off the
+    /// host must strip.
+    func headers(forHost host: String?) -> [CustomHTTPHeader] {
+        guard let host = host?.lowercased(), !host.isEmpty else { return [] }
+        return scopes(forHost: host).sorted { $0.key < $1.key }.flatMap(\.value)
+    }
+
+    /// The headers of the most specific scope covering `url`.
+    func headers(for url: URL) -> [CustomHTTPHeader] {
+        guard let host = url.host()?.lowercased(), !host.isEmpty else { return [] }
+        let port = "\(Self.port(of: url))"
+        let path = Self.normalizedPath(url.path())
+        let matching = scopes(forHost: host).filter { scope, _ in
+            guard scope != Self.hostWide else { return true }
+            guard scope.hasPrefix(port) else { return false }
+            let scopePath = scope.dropFirst(port.count)
+            guard scopePath.isEmpty || scopePath.hasPrefix("/") else { return false }
+            return scopePath.isEmpty || path == scopePath || path.hasPrefix(scopePath + "/")
+        }
+        return matching.max { $0.key.count < $1.key.count }?.value ?? []
+    }
+
+    /// Replaces one scope's headers on the host; an empty list removes them.
+    func setHeaders(_ headers: [CustomHTTPHeader], forHost host: String, scope: Scope = hostWide) throws {
+        let host = host.lowercased()
+        var scopes = scopes(forHost: host)
+        scopes[scope] = headers
+        try save(scopes, forHost: host)
+    }
+
+    /// Replaces the headers of the server at `url`.
+    func setHeaders(_ headers: [CustomHTTPHeader], forServer url: URL) throws {
+        guard let host = url.host() else { return }
+        try setHeaders(headers, forHost: host, scope: Self.scope(for: url))
+    }
+
+    /// Every scope on the host.
     func removeHeaders(forHost host: String) {
-        try? setHeaders([], forHost: host)
+        try? save([:], forHost: host.lowercased())
+    }
+
+    func removeHeaders(forServer url: URL) {
+        try? setHeaders([], forServer: url)
+    }
+
+    /// Saves validated headers for the host `input` names, host-wide, before
+    /// the first request to it. Returns an undo that puts back what was
+    /// staged before, for a connection that fails.
+    @discardableResult
+    func stage(
+        _ headers: [CustomHTTPHeader],
+        for input: String,
+        service: ServerAddress.Service
+    ) throws -> (@Sendable () -> Void) {
+        let valid = try CustomHTTPHeader.validated(headers).get()
+        guard !valid.isEmpty,
+              let host = ServerAddress.candidateURLs(for: input, service: service).first?.host() else {
+            return {}
+        }
+        let previous = scopes(forHost: host.lowercased())[Self.hostWide] ?? []
+        try setHeaders(valid, forHost: host)
+        return { [self] in try? setHeaders(previous, forHost: host) }
+    }
+
+    /// Moves headers staged for the whole host to the server that answered.
+    /// A server reached over plain HTTP could never receive them, so they go.
+    func narrow(toServer url: URL) {
+        guard let host = url.host()?.lowercased() else { return }
+        var scopes = scopes(forHost: host)
+        guard let staged = scopes.removeValue(forKey: Self.hostWide), !staged.isEmpty else { return }
+        if Self.isSecure(url) { scopes[Self.scope(for: url)] = staged }
+        try? save(scopes, forHost: host)
     }
 
     static func isSecure(_ url: URL?) -> Bool {
@@ -147,7 +242,7 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
     func fields(for url: URL?) -> [String: String] {
         guard let url, Self.isSecure(url) else { return [:] }
         return Dictionary(
-            headers(forHost: url.host()).map { ($0.name, $0.value) },
+            headers(for: url).map { ($0.name, $0.value) },
             uniquingKeysWith: { first, _ in first }
         )
     }

@@ -58,24 +58,3 @@ private struct UnderlinedField: ViewModifier {
         #endif
     }
 }
-
-extension ServerHeaderStore {
-    /// Saves validated headers for the host `input` names, before the first
-    /// request to it. Returns an undo that removes them again if they were
-    /// new, for a connection that fails.
-    @discardableResult
-    func stage(
-        _ headers: [CustomHTTPHeader],
-        for input: String,
-        service: ServerAddress.Service
-    ) throws -> (@Sendable () -> Void) {
-        let valid = try CustomHTTPHeader.validated(headers).get()
-        guard !valid.isEmpty,
-              let host = ServerAddress.candidateURLs(for: input, service: service).first?.host() else {
-            return {}
-        }
-        let previous = self.headers(forHost: host)
-        try setHeaders(valid, forHost: host)
-        return { [self] in try? setHeaders(previous, forHost: host) }
-    }
-}
