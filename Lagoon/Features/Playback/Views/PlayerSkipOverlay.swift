@@ -43,12 +43,13 @@ nonisolated enum SkipSegmentPolicy {
     }
 
     /// A next-episode preview straight after the credits is more credits, not
-    /// a scene worth landing on.
+    /// a scene worth landing on, and so is another outro that overlaps or
+    /// follows them: providers can return the credits twice, or in parts.
     private static func creditsEnd(_ outro: MediaSegment, in segments: [MediaSegment]) -> Double {
         var end = outro.end
-        for preview in segments.filter({ $0.kind == .preview }).sorted(by: { $0.start < $1.start })
-        where preview.start >= outro.start && preview.start <= end + minimumSceneAfterCredits {
-            end = max(end, preview.end)
+        for next in segments.filter({ $0.kind == .preview || $0.kind == .outro }).sorted(by: { $0.start < $1.start })
+        where next.end > outro.start && next.start <= end + minimumSceneAfterCredits {
+            end = max(end, next.end)
         }
         return end
     }

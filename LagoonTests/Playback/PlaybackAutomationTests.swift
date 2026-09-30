@@ -299,6 +299,28 @@ struct PlaybackAutomationTests {
         #expect(automation.nextUpCardStart == 1_200)
     }
 
+    @Test func overlappingOrBackToBackOutrosCountAsOneRunOfCredits() {
+        // Two providers, or credits delivered in parts, must not put the
+        // pill over credits that run to the end.
+        let layouts: [[MediaSegment]] = [
+            [Self.credits, MediaSegment(id: "again", kind: .outro, start: 1_200, end: 1_320)],
+            [Self.credits, MediaSegment(id: "rest", kind: .outro, start: 1_260, end: 1_320)],
+            [MediaSegment(id: "early", kind: .outro, start: 1_190, end: 1_320), Self.credits],
+        ]
+        for segments in layouts {
+            let automation = automation(skip: .button, segments: segments)
+            automation.tick(position: 1_201, duration: 1_320)
+            #expect(automation.activeSegment == nil, "\(segments.map(\.id))")
+            #expect(automation.showsNextUp, "\(segments.map(\.id))")
+        }
+        // A real scene between two outros still earns the skip.
+        let apart = [Self.credits, MediaSegment(id: "tag", kind: .outro, start: 1_300, end: 1_320)]
+        let automation = automation(skip: .button, segments: apart)
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.activeSegment?.id == "credits")
+        #expect(!automation.showsNextUp)
+    }
+
     @Test func thePillAndTheCardNeverShareTheCorner() {
         // The shortest scene that still earns a skip.
         let credits = MediaSegment(id: "credits", kind: .outro, start: 1_200, end: 1_304)
