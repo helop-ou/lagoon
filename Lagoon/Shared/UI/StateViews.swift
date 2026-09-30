@@ -5,7 +5,10 @@ import SwiftUI
 /// the navigation stack.
 struct LoadingView: View {
     var body: some View {
-        ProgressView("Loading")
+        VStack(spacing: Metrics.Space.l) {
+            ThemeStateGhost()
+            ProgressView("Loading")
+        }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .focusable()
             .accessibilityIdentifier("state.loading")
@@ -47,6 +50,7 @@ struct ErrorStateView: View {
 
     var body: some View {
         VStack(spacing: Metrics.Space.l) {
+            ThemeStateGhost()
             Image(systemName: systemImage)
                 .font(Typography.glyph)
                 .foregroundStyle(.secondary)
