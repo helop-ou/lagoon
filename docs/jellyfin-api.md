@@ -87,10 +87,13 @@ optional custom headers under Advanced, such as a Cloudflare service token.
   them when an HTTP request is upgraded to HTTPS on the same host. Foundation
   forwards custom headers across hosts on its own, so every session that
   carries them needs this.
-- **Downloads are the exception.** A background session follows redirects
-  without asking its delegate, so a download redirected to another host
-  takes the headers with it. Jellyfin's download and stream endpoints do not
-  redirect; a proxy that rejects the token redirects to its own login page.
+- Downloads run on a background session, which follows redirects without
+  asking its delegate. So before a transfer that carries the headers starts
+  or resumes, `DownloadRedirectCheck` sends a HEAD request that follows
+  nothing, and refuses the transfer if the URL redirects off the host or off
+  HTTPS, as a proxy that rejects the token does to its login page. What it
+  cannot see is a redirect that first appears after the check, while the
+  system runs the transfer.
 - Diagnostics record method and path only, so a value never reaches a
   report.
 
