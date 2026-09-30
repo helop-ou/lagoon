@@ -256,6 +256,25 @@ enum Metrics {
     static let cardMarkInset: CGFloat = Space.xs
     #endif
     static let touchTarget: CGFloat = 44
+    /// A column of text or controls that should not stretch across a wide screen.
+    static let readableWidth: CGFloat = 700
+    /// The detail page synopsis.
+    static let detailOverviewWidth: CGFloat = 1000
+    /// The tvOS settings list row.
+    static let settingsRowMinHeight: CGFloat = 66
+    static let settingsRowCornerRadius: CGFloat = 18
+    /// The hero's page dots.
+    static let heroDotSize: CGFloat = 8
+    static let heroActiveDotWidth: CGFloat = 24
+    /// Runway under Home's last rail.
+    static let homeBottomPadding: CGFloat = 60
+    /// An episode card is this share of `landscapeWidth`.
+    static let episodeCardWidthRatio: CGFloat = 0.89
+    /// Glyph frame inside a small inline glass button, like the Home section
+    /// reorder arrows.
+    static let inlineIconButtonSize: CGFloat = 28
+    /// A state glyph when off: weight and opacity, not colour.
+    static let offStateGlyphOpacity: Double = 0.55
 }
 
 /// The only allowed escapes from the Dynamic Type scale: symbols used as
@@ -267,6 +286,7 @@ enum Typography {
     static let largeGlyph: Font = .system(size: 56)
     /// Monospaced so the digits don't jitter as the code polls.
     static let quickConnectCode: Font = .system(size: 42, weight: .bold, design: .monospaced)
+    static let quickConnectCodeTracking: CGFloat = 6
     /// Oversized display number used by the ranked Home shelves.
     #if os(tvOS)
     static let topTenRank: Font = .system(size: 190, weight: .black, design: .rounded)
@@ -280,6 +300,8 @@ enum Motion {
     static let standard: TimeInterval = 0.4   // layer swaps, state transitions
     static let slow: TimeInterval = 0.6       // hero slide change
     static let crossfade: TimeInterval = 0.8  // backdrop / ambient-glow crossfade
+    /// The incoming hero text's fade, and its delay, after the old text has left.
+    static let heroTextIn: TimeInterval = 0.3
 }
 
 // Brand colors are only for branding: progress fills, the lockup, selection
@@ -298,6 +320,11 @@ extension Color {
     nonisolated static let lagoonInk = Color(red: 0x07 / 255, green: 0x16 / 255, blue: 0x1D / 255)
     /// Mist, the light ground Ink sits on.
     nonisolated static let lagoonMist = Color(red: 0xE9 / 255, green: 0xF1 / 255, blue: 0xF2 / 255)
+}
+
+extension Color {
+    /// The fill behind artwork that has not loaded or does not exist.
+    static let artworkPlaceholder = Color.white.opacity(0.07)
 }
 
 /// SF Symbols for navigation targets, in one place so tabs, pickers and
@@ -351,6 +378,9 @@ extension View {
         buttonStyle(.plain)
         #endif
     }
+
+    /// A glyph that shows an on/off state by weight and opacity, not colour.
+    func stateGlyph(isOn: Bool) -> some View { opacity(isOn ? 1 : Metrics.offStateGlyphOpacity) }
 }
 
 /// The onboarding screens' background: the theme's `ground` (Deep Navy under
