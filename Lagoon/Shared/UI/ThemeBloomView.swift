@@ -139,8 +139,8 @@ private struct ThemeBloomFrame: View {
                 drifter.fill(Self.flower(radius: height / 2), with: ink)
             case .jellyfish:
                 let beat = local * 2.5 + delay * 3
-                let contraction = Swimmer.contraction(of: beat, squeeze: 0.3)
-                let trail = Swimmer.thrust(of: beat - 0.16, squeeze: 0.3)
+                let contraction = Swimmer.contraction(of: beat, squeeze: Swimmer.squeeze)
+                let trail = Swimmer.thrust(of: beat - Swimmer.tentacleLag, squeeze: Swimmer.squeeze)
                 drifter.translateBy(x: 0, y: -height * 0.25 * contraction)
                 drifter.rotate(by: .radians(0.2 * sin(local * .pi * 2 + spin)))
                 let unit = height / JellyfishGeometry.canvas.height

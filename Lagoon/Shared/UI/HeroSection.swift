@@ -225,8 +225,8 @@ struct HeroSection<Route: Hashable>: View {
                 // The button stays outside this transitioning subtree so focus
                 // survives slide changes; a plain crossfade double-exposes text.
                 .transition(reduceMotion ? .identity : .asymmetric(
-                    insertion: .opacity.animation(.easeIn(duration: 0.3).delay(0.3)),
-                    removal: .opacity.animation(.easeOut(duration: 0.2))
+                    insertion: .opacity.animation(.easeIn(duration: Motion.heroTextIn).delay(Motion.heroTextIn)),
+                    removal: .opacity.animation(.easeOut(duration: Motion.fast))
                 ))
                 #endif
             }
@@ -294,7 +294,7 @@ struct HeroSection<Route: Hashable>: View {
                 ForEach(items.indices, id: \.self) { dot in
                     Capsule()
                         .fill(dot == index ? Color.white : Color.white.opacity(0.35))
-                        .frame(width: dot == index ? 24 : 8, height: 8)
+                        .frame(width: dot == index ? Metrics.heroActiveDotWidth : Metrics.heroDotSize, height: Metrics.heroDotSize)
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: Motion.fast), value: index)
