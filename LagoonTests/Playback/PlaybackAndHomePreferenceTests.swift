@@ -132,7 +132,12 @@ struct PlaybackLanguagePreferenceTests {
         for title in ["Signs & Songs", "signs/songs", "English [S&S]", "Songs", "English (Forced)", "SIGNS"] {
             #expect(TrackSelectionPolicy.titleNamesForcedTrack(title), "\(title)")
         }
-        for title in [nil, "", "English", "English SDH", "Full Dialogue", "Designs", "Unforced", "Brass & Strings"] {
+        for title in [
+            nil, "", "English", "English SDH", "Full Dialogue", "Designs", "Unforced", "Brass & Strings",
+            // Full tracks that name what they carry.
+            "English (Songs & Signs included)", "English (Non-Forced)", "Not Forced", "Full + Signs",
+            "Dialogue + Songs", "Signs & Songs (SDH)", "English (Full, incl. Signs)",
+        ] {
             #expect(!TrackSelectionPolicy.titleNamesForcedTrack(title), "\(title ?? "nil")")
         }
     }
@@ -181,6 +186,9 @@ struct PlaybackLanguagePreferenceTests {
             [("eng", false, false, "English (Songs)"), ("est", false, false, nil)],
             // A flagged forced track beside a full one.
             [("eng", true, false, "Forced"), ("eng", false, false, "English"), ("est", false, true, nil)],
+            // A full track that names the signs it carries, beside SDH.
+            [("eng", false, false, "English (Songs & Signs included)"), ("eng", false, true, "English SDH")],
+            [("eng", false, false, "English (Non-Forced)"), ("eng", false, true, "English SDH")],
             // Untitled tracks, as most movies and shows carry them.
             [("eng", false, false, nil), ("eng", false, true, "SDH"), ("est", false, false, nil)],
         ]

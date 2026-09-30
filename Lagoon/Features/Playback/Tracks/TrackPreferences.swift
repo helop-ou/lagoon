@@ -156,16 +156,26 @@ nonisolated struct TrackSelectionCandidate: Equatable {
 
 nonisolated enum TrackSelectionPolicy {
     /// Anime releases often ship a signs-and-songs track without the forced
-    /// flag. Whole words only, so "Signs" inside another word never counts.
+    /// flag. Whole words only, so "Signs" inside another word never counts,
+    /// and never a title that says the track is more than that: "English
+    /// (Songs & Signs included)" and "Non-Forced" are full dialogue.
     static func titleNamesForcedTrack(_ title: String?) -> Bool {
         guard let title else { return false }
         let lowered = title.lowercased()
         let words = lowered.split { !$0.isLetter && !$0.isNumber }
+        if words.contains(where: fullDialogueWords.contains) { return false }
         if words.contains(where: { ["signs", "songs", "forced"].contains($0) }) {
             return true
         }
         return lowered.split { !$0.isLetter && !$0.isNumber && $0 != "&" }.contains("s&s")
     }
+
+    /// Words that mark a titled track as the full dialogue, whatever else
+    /// its title names.
+    private static let fullDialogueWords: Set<Substring> = [
+        "full", "dialogue", "dialog", "complete", "non", "not", "no",
+        "incl", "include", "included", "includes", "including", "plus", "sdh", "cc",
+    ]
 
     /// Marks a titled signs-and-songs track as forced where the flag is
     /// missing. Only where no track of its language is flagged forced, so a
