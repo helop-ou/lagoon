@@ -22,6 +22,9 @@ final class SeerrSessionStore {
     private var activationTask: Task<Void, Never>?
     /// One attempt per activation, so a server with Quick Connect off is not re-asked.
     private var hasAttemptedJellyfinSignIn = false
+    /// Set by the owning `SessionStore`, which knows every account that may
+    /// still need a host's proxy headers.
+    @ObservationIgnored var releaseServerHeaders: (String?) -> Void = { _ in }
 
     init(client: SeerrClient = SeerrClient(), defaults: UserDefaults = .standard,
          localData: AccountLocalData? = nil) {
@@ -283,12 +286,7 @@ final class SeerrSessionStore {
 
     func forgetServer() async {
         let remote = client.sessionSnapshot()
-        // The proxy headers go with the server, unless Jellyfin shares its
-        // host and still needs them.
-        if let host = configuredURL?.host(),
-           activeAccount?.serverURL.host()?.lowercased() != host.lowercased() {
-            ServerHeaderStore.shared.removeHeaders(forHost: host)
-        }
+        let host = configuredURL?.host()
         activationTask?.cancel()
         activationToken = UUID()
         isLoading = false
@@ -302,6 +300,8 @@ final class SeerrSessionStore {
         status = nil
         publicSettings = nil
         user = nil
+        // After the address is forgotten, so this server no longer counts.
+        releaseServerHeaders(host)
         if remote.sessionCookie != nil { try? await remote.logout() }
     }
 

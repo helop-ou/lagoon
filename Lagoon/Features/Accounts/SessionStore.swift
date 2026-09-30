@@ -37,6 +37,7 @@ final class SessionStore {
     private let localData: AccountLocalData
     private let credentials: any AccountCredentialStorage
     private let publicInfo: @Sendable (URL) async throws -> PublicSystemInfo
+    private let serverHeaders: ServerHeaderStore
     private var draftCancelled = false
     private var pendingAuthentication: AuthenticationResult?
     private var connectionGeneration = 0
@@ -68,8 +69,10 @@ final class SessionStore {
          sessionConfiguration: URLSessionConfiguration = .default,
          credentials: any AccountCredentialStorage = SystemAccountCredentials(),
          seerrClient: SeerrClient? = nil,
+         serverHeaders: ServerHeaderStore = .shared,
          publicInfo: @escaping @Sendable (URL) async throws -> PublicSystemInfo = JellyfinClient.fetchPublicInfo) {
         self.defaults = defaults
+        self.serverHeaders = serverHeaders
         self.sessionConfiguration = sessionConfiguration
         self.credentials = credentials
         self.publicInfo = publicInfo
@@ -87,6 +90,7 @@ final class SessionStore {
         }
         client = JellyfinClient(deviceId: deviceId, sessionConfiguration: sessionConfiguration)
         client.onSessionExpired = { [weak self] identity in self?.sessionExpired(identity) }
+        seerr.releaseServerHeaders = { [weak self] host in self?.releaseServerHeaders(forHosts: [host]) }
         if !accountDraft {
             #if DEBUG
             // Regression lane: clear what an earlier run left before restore()
@@ -280,7 +284,10 @@ final class SessionStore {
 
     /// Reuses the active server's address and name, never its user or credentials.
     func makeAccountDraft() -> SessionStore {
-        let draft = SessionStore(accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration, credentials: credentials, publicInfo: publicInfo)
+        let draft = SessionStore(
+            accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration,
+            credentials: credentials, serverHeaders: serverHeaders, publicInfo: publicInfo
+        )
         if let account = activeAccount {
             draft.client.configure(serverURL: account.serverURL)
             draft.serverName = account.serverName
@@ -296,6 +303,8 @@ final class SessionStore {
         draftCancelled = true
         connectionGeneration += 1
         pendingAuthentication = nil
+        // Headers staged for a server that never gained an account.
+        releaseServerHeaders(forHosts: [client.serverURL?.host()])
         client.clearSession()
     }
 
@@ -317,16 +326,12 @@ final class SessionStore {
         localData.beginRemoval(accountID: account.id)
         expiredAccountIDs.remove(account.id)
         let removedActiveAccount = activeAccount?.id == account.id || reauthenticationAccount?.id == account.id
+        let seerrHost = Self.seerrHost(for: account, defaults: defaults)
         save(accounts: accounts.filter { $0.id != account.id })
         if !accounts.contains(where: { $0.serverURL == account.serverURL }) {
             defaults.removeObject(forKey: AccountLocalData.seerrServerKey(account))
         }
-        // A proxy's headers belong to the host, so they go with its last
-        // account.
-        if let host = account.serverURL.host(),
-           !accounts.contains(where: { $0.serverURL.host()?.lowercased() == host.lowercased() }) {
-            ServerHeaderStore.shared.removeHeaders(forHost: host)
-        }
+        releaseServerHeaders(forHosts: [account.serverURL.host(), seerrHost])
         if removedActiveAccount {
             connectionGeneration += 1
             TopShelfStore.clear()
@@ -374,6 +379,29 @@ final class SessionStore {
     private func loadAccounts() -> [StoredAccount] {
         guard let data = defaults.data(forKey: DefaultsKey.accounts) else { return [] }
         return (try? JSONDecoder().decode([StoredAccount].self, from: data)) ?? []
+    }
+
+    /// A proxy's headers belong to a host, so they go once no account's
+    /// server and no Seerr server saved for one is on it. Read from storage,
+    /// not `accounts`, because an account draft holds none.
+    func releaseServerHeaders(forHosts hosts: [String?]) {
+        let inUse = Self.serverHostsInUse(accounts: loadAccounts(), defaults: defaults)
+        for host in Set(hosts.compactMap { $0?.lowercased() }) where !inUse.contains(host) {
+            serverHeaders.removeHeaders(forHost: host)
+        }
+    }
+
+    static func serverHostsInUse(accounts: [StoredAccount], defaults: UserDefaults) -> Set<String> {
+        var hosts: Set<String> = []
+        for account in accounts {
+            if let host = account.serverURL.host() { hosts.insert(host.lowercased()) }
+            if let host = seerrHost(for: account, defaults: defaults) { hosts.insert(host.lowercased()) }
+        }
+        return hosts
+    }
+
+    private static func seerrHost(for account: StoredAccount, defaults: UserDefaults) -> String? {
+        defaults.string(forKey: AccountLocalData.seerrServerKey(account)).flatMap(URL.init(string:))?.host()
     }
 
     private func save(accounts list: [StoredAccount]) {
@@ -591,6 +619,7 @@ final class SessionStore {
 
     func forgetServer() async {
         connectionGeneration += 1
+        let serverHost = client.serverURL?.host()
         // A re-authenticating account is never the active one; keep it past
         // the reset or it stays in the picker with no way to remove it.
         let reauthenticating = reauthenticationAccount
@@ -602,6 +631,7 @@ final class SessionStore {
             serverName = nil
             userName = nil
             phase = .needsServer
+            releaseServerHeaders(forHosts: [serverHost])
             return
         }
         // Invalidate now; after revocation, leave any later account alone.
@@ -615,6 +645,8 @@ final class SessionStore {
         defaults.removeObject(forKey: DefaultsKey.serverName)
         serverName = nil
         phase = .needsServer
+        // A server left before its first sign-in has no account to take them.
+        releaseServerHeaders(forHosts: [serverHost])
         async let jellyfinLogout: Void? = try? remote.logout()
         async let seerrLogout: Void? = linkedRemote.sessionCookie == nil ? nil : try? linkedRemote.logout()
         _ = await (jellyfinLogout, seerrLogout)
