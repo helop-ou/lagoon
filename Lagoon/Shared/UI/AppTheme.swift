@@ -47,27 +47,14 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// What a profile on the default theme wears for a season: Spooky through
-    /// October, in the viewer's own calendar. Nil the rest of the year.
-    static func seasonal(on date: Date, calendar: Calendar = .current) -> AppTheme? {
-        calendar.component(.month, from: date) == 10 ? .spooky : nil
+    /// What a profile on the default theme wears this month: Spooky in
+    /// October, nothing otherwise.
+    static func seasonal(on date: Date) -> AppTheme? {
+        Calendar.current.component(.month, from: date) == 10 ? .spooky : nil
     }
 
-    /// Decoration the theme adds to pages, beyond its colours.
-    var ornament: ThemeOrnament? {
-        switch self {
-        case .lagoon, .babyPink: nil
-        case .spooky: .haunted
-        }
-    }
-}
-
-/// A theme's decoration. It sits behind content or beside a state's glyph,
-/// never over text or artwork, and never in the player or Top Shelf.
-nonisolated enum ThemeOrnament: Equatable, Sendable {
-    /// Cobwebs in a page's top corners, and a ghost in loading and empty
-    /// states.
-    case haunted
+    /// Cobwebs in the page corners and a ghost in loading and empty states.
+    var isHaunted: Bool { self == .spooky }
 }
 
 /// The roles a theme fills. A theme colours brand moments (progress,
@@ -145,16 +132,13 @@ extension ThemePalette {
         surface: Color(red: 0x21 / 255, green: 0x15 / 255, blue: 0x2A / 255),
         glowDepth: Color(red: 0x5C / 255, green: 0x2E / 255, blue: 0x91 / 255),
         controlTint: Color(red: 0xFF / 255, green: 0xB8 / 255, blue: 0x70 / 255),
-        // Purple, not the orange: glows blushed orange read as autumn, not
-        // as night.
+        // Purple: an orange blush turned every page brown.
         artworkTint: Color(red: 0x5C / 255, green: 0x2E / 255, blue: 0x91 / 255),
         chrome: Color(red: 0x2B / 255, green: 0x14 / 255, blue: 0x33 / 255).opacity(0.25)
     )
 
-    /// A ghost's pale body, warmed a little by the accent.
+    /// A ghost is white, warmed a little by the accent.
     var ghost: Color { Color.white.mix(with: accent, by: 0.12) }
-    /// Cobweb threads: faint, so they read as atmosphere, not as lines.
-    var cobweb: Color { Color.white.mix(with: accent, by: 0.2).opacity(0.16) }
 }
 
 /// Which theme is on. The choice belongs to the Jellyfin profile, not the
@@ -172,15 +156,13 @@ final class ThemeStore {
     private(set) var bloomCount = 0
     private let defaults: UserDefaults
     private let now: () -> Date
-    private let calendar: Calendar
     @ObservationIgnored private var activeOwner: ObjectIdentifier?
     /// The last profile pointed at, kept through the picker's nil.
     @ObservationIgnored private var lastAccountID: String?
 
-    init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init, calendar: Calendar = .current) {
+    init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init) {
         self.defaults = defaults
         self.now = now
-        self.calendar = calendar
     }
 
     /// Points the store at a profile, or at none (keeps the current theme,
@@ -196,7 +178,7 @@ final class ThemeStore {
         guard self.accountID != accountID else { return }
         self.accountID = accountID
         guard let accountID else { return }
-        theme = Self.theme(for: accountID, in: defaults, on: now(), calendar: calendar)
+        theme = Self.theme(for: accountID, in: defaults, on: now())
         if let lastAccountID, lastAccountID != accountID { bloomCount &+= 1 }
         lastAccountID = accountID
     }
@@ -207,29 +189,30 @@ final class ThemeStore {
         bloomCount &+= 1
         guard let accountID else { return }
         defaults.set(theme.rawValue, forKey: Self.key(accountID))
-        // Choosing the default during a season opts this profile out of it
-        // until next year's.
-        let date = now()
-        if theme == .lagoon, AppTheme.seasonal(on: date, calendar: calendar) != nil {
-            defaults.set(calendar.component(.year, from: date), forKey: Self.seasonKey(accountID))
+        // Lagoon chosen in October keeps Lagoon until next October.
+        if theme == .lagoon, AppTheme.seasonal(on: now()) != nil {
+            defaults.set(Self.year(of: now()), forKey: Self.seasonKey(accountID))
         }
     }
 
-    /// Puts on or takes off the seasonal theme when the season has turned
-    /// while the app ran. No bloom: nobody chose it.
+    /// Follows the month turning while the app ran. No bloom.
     func refreshSeason() {
         guard let accountID else { return }
-        let resolved = Self.theme(for: accountID, in: defaults, on: now(), calendar: calendar)
+        let resolved = Self.theme(for: accountID, in: defaults, on: now())
         if resolved != theme { theme = resolved }
     }
 
-    /// What a profile wears on `date`: its choice, or the seasonal theme
-    /// while it keeps the default and has not turned this season down.
-    static func theme(for accountID: String, in defaults: UserDefaults, on date: Date, calendar: Calendar) -> AppTheme {
+    /// The saved choice, or the seasonal theme for a profile on the default
+    /// that has not declined it this year.
+    static func theme(for accountID: String, in defaults: UserDefaults, on date: Date) -> AppTheme {
         let saved = storedTheme(for: accountID, in: defaults)
-        guard saved == .lagoon, let seasonal = AppTheme.seasonal(on: date, calendar: calendar) else { return saved }
-        let declined = defaults.integer(forKey: seasonKey(accountID)) == calendar.component(.year, from: date)
-        return declined ? .lagoon : seasonal
+        guard saved == .lagoon, let seasonal = AppTheme.seasonal(on: date),
+              defaults.integer(forKey: seasonKey(accountID)) != year(of: date) else { return saved }
+        return seasonal
+    }
+
+    private static func year(of date: Date) -> Int {
+        Calendar.current.component(.year, from: date)
     }
 
     /// The saved theme, or `.lagoon` when none or unknown.
@@ -269,25 +252,20 @@ enum Theme {
     }
 }
 
-/// Behind every page: the theme's background and, when the theme has one,
-/// its ornament, faint in the top corners.
+/// Behind every page: the theme's background, and cobwebs in the top
+/// corners when it is haunted.
 struct ThemePageBackground: View {
     var body: some View {
         ZStack(alignment: .top) {
             Theme.background
-            ThemeCornerOrnament()
+            if Theme.current.isHaunted { cobwebs }
         }
         .ignoresSafeArea()
     }
-}
 
-/// The ornament's corner pieces, mirrored left and right. Nothing for a
-/// theme without one.
-struct ThemeCornerOrnament: View {
-    var body: some View {
-        if Theme.current.ornament == .haunted {
-            let color = Theme.palette.cobweb
-            Canvas { context, size in
+    private var cobwebs: some View {
+        let color = Color.white.mix(with: Theme.accent, by: 0.2).opacity(0.16)
+        return Canvas { context, size in
                 let web = CobwebGeometry.path(size: Metrics.cobwebSize)
                 let style = StrokeStyle(lineWidth: Metrics.cobwebLineWidth, lineCap: .round)
                 context.stroke(web, with: .color(color), style: style)
@@ -299,17 +277,16 @@ struct ThemeCornerOrnament: View {
             .frame(height: Metrics.cobwebSize)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-        }
     }
 }
 
-/// A small ghost bobbing above a loading or empty state's glyph, for a
-/// theme that haunts. Reduce Motion holds it still.
+/// A small ghost bobbing above a loading or empty state's glyph, when the
+/// theme is haunted. Still under Reduce Motion.
 struct ThemeStateGhost: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        if Theme.current.ornament == .haunted {
+        if Theme.current.isHaunted {
             let color = Theme.palette.ghost
             TimelineView(.animation(paused: reduceMotion)) { timeline in
                 let phase = timeline.date.timeIntervalSinceReferenceDate / Motion.ghostBob * 2 * .pi
@@ -332,7 +309,6 @@ struct ThemeStateGhost: View {
 }
 
 extension View {
-    /// The page backdrop every screen uses, with the theme's ornament.
     func themedPageBackground() -> some View {
         background { ThemePageBackground() }
     }

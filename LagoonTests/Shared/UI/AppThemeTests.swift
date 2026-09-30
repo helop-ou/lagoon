@@ -165,9 +165,7 @@ struct AppThemeTests {
     }
 
     @Test func onlySpookyHauntsAndItBloomsGhosts() {
-        #expect(AppTheme.spooky.ornament == .haunted)
-        #expect(AppTheme.lagoon.ornament == nil)
-        #expect(AppTheme.babyPink.ornament == nil)
+        #expect(AppTheme.allCases.filter(\.isHaunted) == [.spooky])
         #expect(AppTheme.spooky.bloomMotif == .ghosts)
         // Its forms, bars and glows follow it, as Baby Pink's do.
         let palette = AppTheme.spooky.palette

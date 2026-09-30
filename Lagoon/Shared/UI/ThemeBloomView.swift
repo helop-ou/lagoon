@@ -11,7 +11,6 @@ struct ThemeBloomOverlay: View {
 
     private struct Bloom: Equatable {
         let accent: Color
-        let ghostColor: Color
         let motif: BloomMotif
         let startedAt: Date
         let seed: Int
@@ -26,7 +25,6 @@ struct ThemeBloomOverlay: View {
                     let progress = min(1, timeline.date.timeIntervalSince(bloom.startedAt) / Self.duration)
                     ThemeBloomFrame(
                         accent: bloom.accent,
-                        ghostColor: bloom.ghostColor,
                         motif: bloom.motif,
                         progress: progress,
                         seed: bloom.seed,
@@ -40,10 +38,7 @@ struct ThemeBloomOverlay: View {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onChange(of: ThemeStore.shared.bloomCount) { _, count in
-            bloom = Bloom(
-                accent: Theme.accent, ghostColor: Theme.palette.ghost,
-                motif: Theme.current.bloomMotif, startedAt: .now, seed: count
-            )
+            bloom = Bloom(accent: Theme.accent, motif: Theme.current.bloomMotif, startedAt: .now, seed: count)
             Task {
                 try? await Task.sleep(for: .seconds(Self.duration))
                 if bloom?.seed == count {
@@ -81,7 +76,6 @@ nonisolated enum BloomMotif: Equatable, Sendable {
 /// One frame of the bloom, drawn for a progress between 0 and 1.
 private struct ThemeBloomFrame: View {
     let accent: Color
-    let ghostColor: Color
     let motif: BloomMotif
     let progress: Double
     let seed: Int
@@ -157,8 +151,6 @@ private struct ThemeBloomFrame: View {
                 drifter.translateBy(x: -JellyfishGeometry.canvas.width / 2, y: -JellyfishGeometry.canvas.height / 2)
                 JellyfishGeometry.stroke(in: &drifter, contraction: contraction, trail: trail, with: ink)
             case .ghosts:
-                // Pale bodies, not the accent: a ghost is white. They sway as
-                // they rise, hems rippling.
                 drifter.rotate(by: .radians(0.25 * sin(local * .pi * 3 + spin)))
                 let width = height * GhostGeometry.aspect
                 let ghost = GhostGeometry.path(
@@ -167,7 +159,7 @@ private struct ThemeBloomFrame: View {
                 )
                 drifter.fill(
                     ghost,
-                    with: .color(ghostColor.opacity(0.7 * sin(local * .pi))),
+                    with: .color(Color.white.mix(with: accent, by: 0.12).opacity(0.7 * sin(local * .pi))),
                     style: GhostGeometry.fillStyle
                 )
             }
