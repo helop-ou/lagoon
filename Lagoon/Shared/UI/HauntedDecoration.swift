@@ -25,7 +25,7 @@ struct HauntedDecoration: View {
         #if os(iOS)
         reduceMotion || playerHub?.request != nil
         #else
-        reduceMotion
+        reduceMotion || PlayerPresence.shared.isPlayerUp
         #endif
     }
 }

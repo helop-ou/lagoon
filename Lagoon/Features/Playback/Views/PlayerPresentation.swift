@@ -10,7 +10,10 @@ extension View {
         modifier(PlayerPresentationRequest(item: item, onDismiss: onDismiss))
         #else
         fullScreenCover(item: item, onDismiss: onDismiss) { player in
-            VideoPlayerView(playerItem: player).preferredColorScheme(.dark)
+            VideoPlayerView(playerItem: player)
+                .preferredColorScheme(.dark)
+                .onAppear { PlayerPresence.shared.playerAppeared() }
+                .onDisappear { PlayerPresence.shared.playerDisappeared() }
         }
         #endif
     }
@@ -23,6 +26,23 @@ extension View {
     }
     #endif
 }
+
+#if os(tvOS)
+/// Whether a player is on screen. The cover hides the pages but does not
+/// stop their animations, so decoration that redraws reads this to rest
+/// under playback. iOS asks `PlayerPresentationHub` instead.
+@MainActor
+@Observable
+final class PlayerPresence {
+    static let shared = PlayerPresence()
+
+    private var presented = 0
+    var isPlayerUp: Bool { presented > 0 }
+
+    func playerAppeared() { presented += 1 }
+    func playerDisappeared() { presented = max(0, presented - 1) }
+}
+#endif
 
 #if os(iOS)
 /// The single place iOS playback is presented from. Never present from
