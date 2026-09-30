@@ -35,7 +35,7 @@ struct AppearanceSettingsView: View {
     private var remoteSettings: some View {
         TVSettingsPage(
             "Appearance",
-            description: "Choose the colours Lagoon wears on this profile. The brand's aqua and navy, or a softer pink for those who love it."
+            description: "Choose the colours Lagoon wears on this profile. The brand's aqua and navy, a softer pink for those who love it, or something spookier."
         ) {
             TVSettingsSection("Theme", footer: LocalizedStringKey(footer)) {
                 TVSettingsMenuPicker(

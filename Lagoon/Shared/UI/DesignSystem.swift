@@ -275,6 +275,17 @@ enum Metrics {
     static let inlineIconButtonSize: CGFloat = 28
     /// A state glyph when off: weight and opacity, not colour.
     static let offStateGlyphOpacity: Double = 0.55
+    /// A haunted theme's corner cobweb and its thread, and the ghost above a
+    /// loading or empty state.
+    #if os(tvOS)
+    static let cobwebSize: CGFloat = 300
+    static let cobwebLineWidth: CGFloat = 1.5
+    static let stateGhostSize: CGFloat = 60
+    #else
+    static let cobwebSize: CGFloat = 130
+    static let cobwebLineWidth: CGFloat = 1
+    static let stateGhostSize: CGFloat = 34
+    #endif
 }
 
 /// The only allowed escapes from the Dynamic Type scale: symbols used as
@@ -302,6 +313,8 @@ enum Motion {
     static let crossfade: TimeInterval = 0.8  // backdrop / ambient-glow crossfade
     /// The incoming hero text's fade, and its delay, after the old text has left.
     static let heroTextIn: TimeInterval = 0.3
+    /// One rise and fall of a haunted theme's state ghost.
+    static let ghostBob: TimeInterval = 2.4
 }
 
 // Brand colors are only for branding: progress fills, the lockup, selection

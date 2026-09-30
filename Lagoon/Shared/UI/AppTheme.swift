@@ -7,6 +7,7 @@ import SwiftUI
 nonisolated enum AppTheme: String, CaseIterable, Identifiable {
     case lagoon
     case babyPink
+    case spooky
 
     var id: String { rawValue }
 
@@ -14,6 +15,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .lagoon: String(localized: "Lagoon")
         case .babyPink: String(localized: "Baby Pink")
+        case .spooky: String(localized: "Spooky")
         }
     }
 
@@ -23,6 +25,8 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
             String(localized: "The Twin Shores palette: aqua accents over deep navy and black.")
         case .babyPink:
             String(localized: "Soft pink accents over a deep rose ground. Still Lagoon, only prettier.")
+        case .spooky:
+            String(localized: "Pumpkin orange over midnight, with cobwebs in the corners and a ghost or two. Still Lagoon, only haunted.")
         }
     }
 
@@ -30,6 +34,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .lagoon: .lagoon
         case .babyPink: .babyPink
+        case .spooky: .spooky
         }
     }
 
@@ -38,8 +43,25 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         switch self {
         case .lagoon: .jellyfish
         case .babyPink: .flowers
+        case .spooky: .ghosts
         }
     }
+
+    /// Decoration the theme adds to pages, beyond its colours.
+    var ornament: ThemeOrnament? {
+        switch self {
+        case .lagoon, .babyPink: nil
+        case .spooky: .haunted
+        }
+    }
+}
+
+/// A theme's decoration. It sits behind content or beside a state's glyph,
+/// never over text or artwork, and never in the player or Top Shelf.
+nonisolated enum ThemeOrnament: Equatable, Sendable {
+    /// Cobwebs in a page's top corners, and a ghost in loading and empty
+    /// states.
+    case haunted
 }
 
 /// The roles a theme fills. A theme colours brand moments (progress,
@@ -106,6 +128,27 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
         chrome: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255).opacity(0.25)
     )
+}
+
+extension ThemePalette {
+    /// Pumpkin orange over a midnight aubergine, with a purple glow.
+    static let spooky = ThemePalette(
+        accent: Color(red: 0xFF / 255, green: 0x8C / 255, blue: 0x1A / 255),
+        ground: Color(red: 0x2B / 255, green: 0x14 / 255, blue: 0x33 / 255),
+        background: Color(red: 0x11 / 255, green: 0x0B / 255, blue: 0x14 / 255),
+        surface: Color(red: 0x21 / 255, green: 0x15 / 255, blue: 0x2A / 255),
+        glowDepth: Color(red: 0x5C / 255, green: 0x2E / 255, blue: 0x91 / 255),
+        controlTint: Color(red: 0xFF / 255, green: 0xB8 / 255, blue: 0x70 / 255),
+        // Purple, not the orange: glows blushed orange read as autumn, not
+        // as night.
+        artworkTint: Color(red: 0x5C / 255, green: 0x2E / 255, blue: 0x91 / 255),
+        chrome: Color(red: 0x2B / 255, green: 0x14 / 255, blue: 0x33 / 255).opacity(0.25)
+    )
+
+    /// A ghost's pale body, warmed a little by the accent.
+    var ghost: Color { Color.white.mix(with: accent, by: 0.12) }
+    /// Cobweb threads: faint, so they read as atmosphere, not as lines.
+    var cobweb: Color { Color.white.mix(with: accent, by: 0.2).opacity(0.16) }
 }
 
 /// Which theme is on. The choice belongs to the Jellyfin profile, not the
@@ -187,6 +230,75 @@ enum Theme {
     }
 }
 
+/// Behind every page: the theme's background and, when the theme has one,
+/// its ornament, faint in the top corners.
+struct ThemePageBackground: View {
+    var body: some View {
+        ZStack(alignment: .top) {
+            Theme.background
+            ThemeCornerOrnament()
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// The ornament's corner pieces, mirrored left and right. Nothing for a
+/// theme without one.
+struct ThemeCornerOrnament: View {
+    var body: some View {
+        if Theme.current.ornament == .haunted {
+            let color = Theme.palette.cobweb
+            Canvas { context, size in
+                let web = CobwebGeometry.path(size: Metrics.cobwebSize)
+                let style = StrokeStyle(lineWidth: Metrics.cobwebLineWidth, lineCap: .round)
+                context.stroke(web, with: .color(color), style: style)
+                var right = context
+                right.translateBy(x: size.width, y: 0)
+                right.scaleBy(x: -1, y: 1)
+                right.stroke(web, with: .color(color), style: style)
+            }
+            .frame(height: Metrics.cobwebSize)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+/// A small ghost bobbing above a loading or empty state's glyph, for a
+/// theme that haunts. Reduce Motion holds it still.
+struct ThemeStateGhost: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if Theme.current.ornament == .haunted {
+            let color = Theme.palette.ghost
+            TimelineView(.animation(paused: reduceMotion)) { timeline in
+                let phase = timeline.date.timeIntervalSinceReferenceDate / Motion.ghostBob * 2 * .pi
+                Canvas { context, size in
+                    let height = size.height * 0.88
+                    let width = height * GhostGeometry.aspect
+                    let lift = reduceMotion ? 0 : (sin(phase) + 1) / 2 * (size.height - height)
+                    let rect = CGRect(x: (size.width - width) / 2, y: size.height - height - lift, width: width, height: height)
+                    context.fill(
+                        GhostGeometry.path(in: rect, wave: reduceMotion ? 0 : phase * 2),
+                        with: .color(color.opacity(0.85)),
+                        style: GhostGeometry.fillStyle
+                    )
+                }
+            }
+            .frame(width: Metrics.stateGhostSize, height: Metrics.stateGhostSize)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+extension View {
+    /// The page backdrop every screen uses, with the theme's ornament.
+    func themedPageBackground() -> some View {
+        background { ThemePageBackground() }
+    }
+}
+
 /// The container for every settings-style form on iOS, so all forms follow
 /// the theme.
 #if !os(tvOS)
@@ -200,7 +312,7 @@ struct ThemedForm<Content: View>: View {
     var body: some View {
         Form { content.listRowBackground(Theme.surface) }
             .scrollContentBackground(.hidden)
-            .background(Theme.background.ignoresSafeArea())
+            .themedPageBackground()
             .themedChrome()
     }
 }
