@@ -1432,7 +1432,9 @@ final class PlayerRegressionUITests: PlayerUITestCase {
         }
         XCTAssertTrue(theme.waitForExistence(timeout: 5))
         focusThemeControl()
-        XCTAssertEqual(theme.valueDescription, "Lagoon")
+        // A profile on the default wears Spooky through October.
+        let defaultTheme = Calendar.current.component(.month, from: Date()) == 10 ? "Spooky" : "Lagoon"
+        XCTAssertEqual(theme.valueDescription, defaultTheme)
         remote.press(.select)
         selectNativeMenuOption("Baby Pink", in: app, menuIndex: 1)
         let pinkSelected = XCTNSPredicateExpectation(

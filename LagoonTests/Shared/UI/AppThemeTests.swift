@@ -5,6 +5,16 @@ import Testing
 @Suite("App theme")
 @MainActor
 struct AppThemeTests {
+    /// Mid-month, so no time zone moves them across a month boundary.
+    nonisolated static let september = date(2026, 9, 15)
+    nonisolated static let october = date(2026, 10, 15)
+
+    nonisolated private static func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        Calendar(identifier: .gregorian).date(from: DateComponents(
+            timeZone: TimeZone(identifier: "UTC"), year: year, month: month, day: day, hour: 12
+        ))!
+    }
+
     private func defaults() -> UserDefaults {
         let suite = "AppThemeTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -14,7 +24,7 @@ struct AppThemeTests {
 
     @Test func themeFollowsTheProfile() {
         let defaults = defaults()
-        let store = ThemeStore(defaults: defaults)
+        let store = ThemeStore(defaults: defaults, now: { Self.september })
         store.configure(accountID: "server|partner")
         store.select(.babyPink)
         #expect(store.theme == .babyPink)
@@ -29,7 +39,7 @@ struct AppThemeTests {
     }
 
     @Test func aChoiceBloomsButLoadingAtLaunchDoesNot() {
-        let store = ThemeStore(defaults: defaults())
+        let store = ThemeStore(defaults: defaults(), now: { Self.september })
         store.configure(accountID: "a")
         #expect(store.bloomCount == 0)
         store.select(.babyPink)
@@ -41,7 +51,7 @@ struct AppThemeTests {
     @Test func switchingToAnotherProfileBloomsInItsTheme() {
         let defaults = defaults()
         defaults.set("babyPink", forKey: ThemeStore.key("b"))
-        let store = ThemeStore(defaults: defaults)
+        let store = ThemeStore(defaults: defaults, now: { Self.september })
         store.configure(accountID: "a")
         store.configure(accountID: "b")
         #expect(store.theme == .babyPink)
@@ -54,7 +64,7 @@ struct AppThemeTests {
     }
 
     @Test func returningToTheSameProfileDoesNotBloom() {
-        let store = ThemeStore(defaults: defaults())
+        let store = ThemeStore(defaults: defaults(), now: { Self.september })
         store.configure(accountID: "a")
         store.configure(accountID: nil)
         store.configure(accountID: "a")
@@ -63,7 +73,7 @@ struct AppThemeTests {
 
     @Test func noAccountMeansTheBrandThemeAndNothingSaved() {
         let defaults = defaults()
-        let store = ThemeStore(defaults: defaults)
+        let store = ThemeStore(defaults: defaults, now: { Self.september })
         store.configure(accountID: nil)
         store.select(.babyPink)
         #expect(store.theme == .babyPink)
@@ -75,7 +85,7 @@ struct AppThemeTests {
     @Test func aStrayStoreCannotDetachTheOwnersProfile() {
         let defaults = defaults()
         defaults.set("babyPink", forKey: ThemeStore.key("a"))
-        let store = ThemeStore(defaults: defaults)
+        let store = ThemeStore(defaults: defaults, now: { Self.september })
         let ownerObject = NSObject(), strayObject = NSObject()
         let owner = ObjectIdentifier(ownerObject), stray = ObjectIdentifier(strayObject)
         store.configure(accountID: "a", owner: owner)
@@ -90,7 +100,7 @@ struct AppThemeTests {
 
     @Test func nobodyActiveKeepsTheLastProfilesThemeUntilAnotherSignsIn() {
         let defaults = defaults()
-        let store = ThemeStore(defaults: defaults)
+        let store = ThemeStore(defaults: defaults, now: { Self.september })
         store.configure(accountID: "partner")
         store.select(.babyPink)
         store.configure(accountID: nil)
@@ -143,7 +153,7 @@ struct AppThemeTests {
 
     @Test func spookyIsAProfilesChoiceLikeAnyOther() {
         let defaults = defaults()
-        let store = ThemeStore(defaults: defaults)
+        let store = ThemeStore(defaults: defaults, now: { Self.september })
         store.configure(accountID: "server|me")
         store.select(.spooky)
         #expect(defaults.string(forKey: ThemeStore.key("server|me")) == "spooky")
@@ -184,5 +194,80 @@ struct AppThemeTests {
         #expect(bounds.maxX <= 100.01 && bounds.maxY <= 100.01)
         // Its threads leave the corner, but none runs along an edge.
         #expect(bounds.width > 90 && bounds.height > 90)
+    }
+
+    // MARK: - October
+
+    @Test func aProfileOnTheDefaultWearsSpookyThroughOctoberOnly() {
+        #expect(AppTheme.seasonal(on: Self.october) == .spooky)
+        #expect(AppTheme.seasonal(on: Self.september) == nil)
+        #expect(AppTheme.seasonal(on: Self.date(2026, 11, 15)) == nil)
+
+        let defaults = defaults()
+        var today = Self.october
+        let store = ThemeStore(defaults: defaults, now: { today })
+        // Never chose, or chose the default before October: both haunted.
+        store.configure(accountID: "new")
+        #expect(store.theme == .spooky)
+        defaults.set("lagoon", forKey: ThemeStore.key("old"))
+        store.configure(accountID: "old")
+        #expect(store.theme == .spooky)
+        // Nothing was saved for them by the season.
+        #expect(defaults.string(forKey: ThemeStore.key("new")) == nil)
+
+        today = Self.date(2026, 11, 1)
+        store.refreshSeason()
+        #expect(store.theme == .lagoon)
+    }
+
+    @Test func aChosenThemeIsNeverReplacedBySpooky() {
+        let defaults = defaults()
+        defaults.set("babyPink", forKey: ThemeStore.key("a"))
+        let store = ThemeStore(defaults: defaults, now: { Self.october })
+        store.configure(accountID: "a")
+        #expect(store.theme == .babyPink)
+    }
+
+    @Test func choosingLagoonInOctoberKeepsItUntilNextOctober() {
+        let defaults = defaults()
+        var today = Self.october
+        let store = ThemeStore(defaults: defaults, now: { today })
+        store.configure(accountID: "a")
+        #expect(store.theme == .spooky)
+        store.select(.lagoon)
+        #expect(store.theme == .lagoon)
+        store.configure(accountID: "b")
+        store.configure(accountID: "a")
+        #expect(store.theme == .lagoon)
+
+        today = Self.date(2027, 10, 5)
+        store.refreshSeason()
+        #expect(store.theme == .spooky)
+    }
+
+    @Test func choosingSpookyKeepsItAfterOctober() {
+        let defaults = defaults()
+        var today = Self.october
+        let store = ThemeStore(defaults: defaults, now: { today })
+        store.configure(accountID: "a")
+        store.select(.babyPink)
+        store.select(.spooky)
+        today = Self.date(2026, 11, 20)
+        store.refreshSeason()
+        #expect(store.theme == .spooky)
+    }
+
+    @Test func theSeasonTurningIsNotABloom() {
+        var today = Self.september
+        let store = ThemeStore(defaults: defaults(), now: { today })
+        store.configure(accountID: "a")
+        today = Self.october
+        store.refreshSeason()
+        #expect(store.theme == .spooky)
+        #expect(store.bloomCount == 0)
+    }
+
+    @Test func forgettingAnAccountForgetsItsSeasonChoiceToo() {
+        #expect(AccountLocalData.perAccountKeyPrefixes.contains(ThemeStore.seasonKeyPrefix))
     }
 }
