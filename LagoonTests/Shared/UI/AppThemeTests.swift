@@ -140,4 +140,49 @@ struct AppThemeTests {
         #expect(blushed != artwork)
         #expect(blushed.colors.count == artwork.colors.count)
     }
+
+    @Test func spookyIsAProfilesChoiceLikeAnyOther() {
+        let defaults = defaults()
+        let store = ThemeStore(defaults: defaults)
+        store.configure(accountID: "server|me")
+        store.select(.spooky)
+        #expect(defaults.string(forKey: ThemeStore.key("server|me")) == "spooky")
+        store.configure(accountID: "server|partner")
+        #expect(store.theme == .lagoon)
+        store.configure(accountID: "server|me")
+        #expect(store.theme == .spooky)
+        #expect(AppTheme.allCases == [.lagoon, .babyPink, .spooky])
+    }
+
+    @Test func onlySpookyHauntsAndItBloomsGhosts() {
+        #expect(AppTheme.spooky.ornament == .haunted)
+        #expect(AppTheme.lagoon.ornament == nil)
+        #expect(AppTheme.babyPink.ornament == nil)
+        #expect(AppTheme.spooky.bloomMotif == .ghosts)
+        // Its forms, bars and glows follow it, as Baby Pink's do.
+        let palette = AppTheme.spooky.palette
+        #expect(palette.surface != nil)
+        #expect(palette.chrome != nil)
+        #expect(palette.glow(for: ArtworkPalette(colors: [.red, .green])) != ArtworkPalette(colors: [.red, .green]))
+    }
+
+    @Test func aGhostFitsItsRectAndItsFaceIsCutOut() {
+        let rect = CGRect(x: 10, y: 20, width: 50, height: 60)
+        for wave in stride(from: 0.0, through: 6.3, by: 0.7) {
+            let bounds = GhostGeometry.path(in: rect, wave: wave).boundingRect
+            #expect(rect.insetBy(dx: -0.5, dy: -0.5).contains(bounds), "wave \(wave)")
+        }
+        let ghost = GhostGeometry.path(in: rect)
+        // The body is filled; an eye is a hole in it.
+        #expect(ghost.contains(CGPoint(x: rect.minX + 25, y: rect.minY + 12), eoFill: true))
+        #expect(!ghost.contains(CGPoint(x: rect.minX + 16, y: rect.minY + 24), eoFill: true))
+    }
+
+    @Test func aCobwebStaysInItsCornerSquare() {
+        let bounds = CobwebGeometry.path(size: 100).boundingRect
+        #expect(bounds.minX >= -0.01 && bounds.minY >= -0.01)
+        #expect(bounds.maxX <= 100.01 && bounds.maxY <= 100.01)
+        // Its threads leave the corner, but none runs along an edge.
+        #expect(bounds.width > 90 && bounds.height > 90)
+    }
 }
