@@ -129,6 +129,80 @@ struct ServerHeaderTests {
     }
 }
 
+/// Headers live in scopes on a host: host-wide while connecting, then the
+/// server that answered.
+@Suite("Server proxy header scopes")
+struct ServerHeaderScopeTests {
+    private let jf = [CustomHTTPHeader(name: "X-Token", value: "jf")]
+    private let seerr = [CustomHTTPHeader(name: "X-Token", value: "seerr")]
+
+    private func fields(_ store: ServerHeaderStore, _ address: String) -> [String: String] {
+        store.fields(for: URL(string: address)!)
+    }
+
+    @Test func eachRequestGetsTheMostSpecificScopeCoveringIt() throws {
+        let store = ServerHeaderStore(credentials: MemoryAccountCredentials())
+        try store.setHeaders(jf, forServer: URL(string: "https://media.example.com/Jellyfin/")!)
+        try store.setHeaders(seerr, forServer: URL(string: "https://media.example.com:5055")!)
+
+        #expect(fields(store, "https://media.example.com/jellyfin/Items?x=1") == ["X-Token": "jf"])
+        #expect(fields(store, "wss://media.example.com/jellyfin/socket") == ["X-Token": "jf"])
+        #expect(fields(store, "https://media.example.com:5055/api/v1/status") == ["X-Token": "seerr"])
+        // Neither covers these: another path, a path that only starts alike,
+        // another port.
+        #expect(fields(store, "https://media.example.com/other") == [:])
+        #expect(fields(store, "https://media.example.com/jellyfinx/Items") == [:])
+        #expect(fields(store, "https://media.example.com:50555/api") == [:])
+        // A redirect off the host strips every scope's names.
+        #expect(Set(store.headers(forHost: "media.example.com").map(\.value)) == ["jf", "seerr"])
+    }
+
+    @Test func stagingIsHostWideUntilAServerAnswers() throws {
+        let store = ServerHeaderStore(credentials: MemoryAccountCredentials())
+        try store.setHeaders(jf, forServer: URL(string: "https://media.example.com/jellyfin")!)
+
+        try store.stage(seerr, for: "media.example.com/seerr", service: .seerr)
+        // While Seerr connects, Jellyfin keeps its own.
+        #expect(fields(store, "https://media.example.com/jellyfin/Items") == ["X-Token": "jf"])
+        #expect(fields(store, "https://media.example.com/seerr/api/v1/status") == ["X-Token": "seerr"])
+
+        store.narrow(toServer: URL(string: "https://media.example.com/seerr")!)
+        #expect(fields(store, "https://media.example.com/seerr/api/v1/status") == ["X-Token": "seerr"])
+        #expect(fields(store, "https://media.example.com/other") == [:])
+        #expect(fields(store, "https://media.example.com/jellyfin/Items") == ["X-Token": "jf"])
+    }
+
+    @Test func aServerReachedOverPlainHTTPDropsWhatWasStaged() throws {
+        let store = ServerHeaderStore(credentials: MemoryAccountCredentials())
+        try store.stage(jf, for: "192.168.1.5", service: .jellyfin)
+        store.narrow(toServer: URL(string: "http://192.168.1.5:8096")!)
+        #expect(store.headers(forHost: "192.168.1.5").isEmpty)
+    }
+
+    @Test func headersStoredBeforeScopesCoverTheWholeHost() throws {
+        let credentials = MemoryAccountCredentials()
+        let legacy = try JSONEncoder().encode(jf)
+        try credentials.set(String(decoding: legacy, as: UTF8.self), for: ServerHeaderStore.keychainAccount(forHost: "media.example.com"))
+        let store = ServerHeaderStore(credentials: credentials)
+        #expect(fields(store, "https://media.example.com/anything") == ["X-Token": "jf"])
+    }
+
+    @Test func anHTTPAddressUpgradedOnItsHostIsKeptAsHTTPS() {
+        func base(_ requested: String, _ final: String?) -> String {
+            ServerProbe.baseURL(URL(string: requested)!, answeredBy: final.flatMap(URL.init(string:))).absoluteString
+        }
+        #expect(base("http://media.example.com", "https://media.example.com/System/Info/Public") == "https://media.example.com")
+        #expect(base("http://media.example.com/jellyfin", "https://media.example.com/jellyfin/System/Info/Public")
+            == "https://media.example.com/jellyfin")
+        // Not an upgrade on the same host: kept as typed.
+        #expect(base("http://media.example.com", "https://login.example.net/System/Info/Public") == "http://media.example.com")
+        #expect(base("http://media.example.com", "http://media.example.com/System/Info/Public") == "http://media.example.com")
+        #expect(base("http://media.example.com", "https://media.example.com/login") == "http://media.example.com")
+        #expect(base("https://media.example.com", "https://media.example.com/System/Info/Public") == "https://media.example.com")
+        #expect(base("http://media.example.com", nil) == "http://media.example.com")
+    }
+}
+
 /// A proxy's headers are a credential, so they leave the keychain once no
 /// account's server and no Seerr saved for one is on their host.
 @Suite("Server proxy header lifecycle", .serialized)
@@ -160,7 +234,7 @@ struct ServerHeaderLifecycleTests {
                 credentials: MemoryAccountCredentials(),
                 seerrClient: SeerrClient(session: URLSession(configuration: configuration)),
                 serverHeaders: headers,
-                publicInfo: { _ in PublicSystemInfo(serverName: "Fixture", version: "10.11.0", id: "fixture") }
+                publicInfo: { ServerProbe(info: PublicSystemInfo(serverName: "Fixture", version: "10.11.0", id: "fixture"), baseURL: $0) }
             )
         }
 
@@ -171,11 +245,27 @@ struct ServerHeaderLifecycleTests {
         deinit { defaults.removePersistentDomain(forName: suite) }
     }
 
-    @Test func hostsInUseAreEveryAccountsServerAndItsSeerr() throws {
+    @Test func serversInUseAreEveryAccountsServerAndItsSeerr() throws {
         let fixture = try Fixture(accounts: [first, other])
         fixture.saveSeerr("https://Seerr.Lifecycle.test:5055", for: first)
-        #expect(SessionStore.serverHostsInUse(accounts: [first, other], defaults: fixture.defaults)
-            == ["jf.lifecycle.test", "other.lifecycle.test", "seerr.lifecycle.test"])
+        #expect(SessionStore.serversInUse(accounts: [first, other], defaults: fixture.defaults).map(\.absoluteString)
+            == ["https://jf.lifecycle.test", "https://Seerr.Lifecycle.test:5055", "https://other.lifecycle.test"])
+    }
+
+    @Test func aJellyfinAndASeerrOnOneHostKeepTheirOwnHeaders() throws {
+        let jellyfin = StoredAccount(serverURL: URL(string: "https://media.lifecycle.test/jellyfin")!, serverName: "JF",
+                                     userId: "one", userName: "One")
+        let fixture = try Fixture(accounts: [jellyfin])
+        fixture.saveSeerr("https://media.lifecycle.test/seerr", for: jellyfin)
+        try fixture.headers.setHeaders([CustomHTTPHeader(name: "X-Token", value: "jf")], forServer: jellyfin.serverURL)
+        try fixture.headers.setHeaders([CustomHTTPHeader(name: "X-Token", value: "seerr")],
+                                       forServer: URL(string: "https://media.lifecycle.test/seerr")!)
+        let store = fixture.store()
+
+        fixture.defaults.removeObject(forKey: AccountLocalData.seerrServerKey(jellyfin))
+        store.seerr.releaseServerHeaders(URL(string: "https://media.lifecycle.test/seerr"))
+        #expect(fixture.headers.fields(for: URL(string: "https://media.lifecycle.test/seerr/api/v1/status")) == [:])
+        #expect(fixture.headers.fields(for: URL(string: "https://media.lifecycle.test/jellyfin/Items")) == ["X-Token": "jf"])
     }
 
     @Test func removingTheLastAccountOnAHostTakesItsAndItsSeerrsHeaders() throws {
@@ -203,11 +293,11 @@ struct ServerHeaderLifecycleTests {
         let store = fixture.store()
 
         fixture.defaults.removeObject(forKey: AccountLocalData.seerrServerKey(first))
-        store.seerr.releaseServerHeaders("seerr.lifecycle.test")
+        store.seerr.releaseServerHeaders(URL(string: "https://seerr.lifecycle.test"))
         #expect(!fixture.headers.headers(forHost: "seerr.lifecycle.test").isEmpty)
 
         fixture.defaults.removeObject(forKey: AccountLocalData.seerrServerKey(other))
-        store.seerr.releaseServerHeaders("seerr.lifecycle.test")
+        store.seerr.releaseServerHeaders(URL(string: "https://seerr.lifecycle.test"))
         #expect(fixture.headers.headers(forHost: "seerr.lifecycle.test").isEmpty)
     }
 
@@ -227,6 +317,27 @@ struct ServerHeaderLifecycleTests {
         try await again.connect(to: "https://other.lifecycle.test")
         again.cancelAccountDraft()
         #expect(!fixture.headers.headers(forHost: "other.lifecycle.test").isEmpty)
+    }
+
+    @Test func anAddressUpgradedToHTTPSIsKeptAsHTTPSWithItsHeaders() async throws {
+        let suite = "ServerHeaderLifecycleTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let headers = ServerHeaderStore(credentials: MemoryAccountCredentials())
+        let store = SessionStore(
+            accountDraft: true, defaults: defaults, credentials: MemoryAccountCredentials(), serverHeaders: headers,
+            publicInfo: { url in
+                ServerProbe(
+                    info: PublicSystemInfo(serverName: "Fixture", version: "10.11.0", id: "fixture"),
+                    baseURL: ServerProbe.baseURL(url, answeredBy: URL(string: "https://jf.lifecycle.test/System/Info/Public"))
+                )
+            }
+        )
+        try headers.stage(token, for: "http://jf.lifecycle.test", service: .jellyfin)
+        try await store.connect(to: "http://jf.lifecycle.test")
+        #expect(store.client.serverURL?.absoluteString == "https://jf.lifecycle.test")
+        // What playback's authorization is built from.
+        #expect(headers.fields(for: store.client.serverURL) == ["CF-Access-Client-Secret": "secret"])
     }
 
     @Test func changingServerBeforeTheFirstSignInTakesItsStagedHeaders() async throws {

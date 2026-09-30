@@ -50,7 +50,7 @@ struct LocalNetworkAccessTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let probe = SetupProbe()
         let store = SessionStore(accountDraft: true, defaults: defaults, credentials: MemoryAccountCredentials(),
-                                 publicInfo: { try await probe.info(at: $0) })
+                                 publicInfo: { ServerProbe(info: try await probe.info(at: $0), baseURL: $0) })
         do {
             try await store.connect(to: "jellyfin.local")
             Issue.record("Denied setup must not advance to sign-in")

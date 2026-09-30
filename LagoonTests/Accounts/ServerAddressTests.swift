@@ -90,7 +90,7 @@ struct ServerAddressTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let probe = AddressProbe()
         let store = SessionStore(accountDraft: true, defaults: defaults, credentials: MemoryAccountCredentials(),
-                                 publicInfo: { try await probe.info(at: $0) })
+                                 publicInfo: { ServerProbe(info: try await probe.info(at: $0), baseURL: $0) })
         try await store.connect(to: "media.example/jellyfin")
         #expect(await probe.attempts.count == 3)
         #expect(store.client.serverURL?.absoluteString == "http://media.example:8096/jellyfin")
@@ -104,7 +104,7 @@ struct ServerAddressTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let probe = AddressProbe()
         let store = SessionStore(accountDraft: true, defaults: defaults, credentials: MemoryAccountCredentials(),
-                                 publicInfo: { try await probe.info(at: $0) })
+                                 publicInfo: { ServerProbe(info: try await probe.info(at: $0), baseURL: $0) })
         do {
             try await store.connect(to: "https://user:secret@media.example")
             Issue.record("Credentials embedded in an address must be rejected")
