@@ -17,6 +17,7 @@ final class SeerrSessionStore {
 
     private let defaults: UserDefaults
     private let localData: AccountLocalData
+    private let serverHeaders: ServerHeaderStore
     private var activeAccount: StoredAccount?
     private var activationToken = UUID()
     private var activationTask: Task<Void, Never>?
@@ -24,12 +25,13 @@ final class SeerrSessionStore {
     private var hasAttemptedJellyfinSignIn = false
     /// Set by the owning `SessionStore`, which knows every account that may
     /// still need a host's proxy headers.
-    @ObservationIgnored var releaseServerHeaders: (String?) -> Void = { _ in }
+    @ObservationIgnored var releaseServerHeaders: (URL?) -> Void = { _ in }
 
     init(client: SeerrClient = SeerrClient(), defaults: UserDefaults = .standard,
-         localData: AccountLocalData? = nil) {
+         localData: AccountLocalData? = nil, serverHeaders: ServerHeaderStore = .shared) {
         self.client = client
         self.defaults = defaults
+        self.serverHeaders = serverHeaders
         self.localData = localData ?? AccountLocalData(defaults: defaults, credentials: SystemAccountCredentials())
     }
 
@@ -130,6 +132,7 @@ final class SeerrSessionStore {
                 }
 
                 let normalizedURL = client.serverURL ?? candidate
+                serverHeaders.narrow(toServer: normalizedURL)
                 configuredURL = normalizedURL
                 status = resolvedStatus
                 publicSettings = resolvedSettings
@@ -286,7 +289,7 @@ final class SeerrSessionStore {
 
     func forgetServer() async {
         let remote = client.sessionSnapshot()
-        let host = configuredURL?.host()
+        let server = configuredURL
         activationTask?.cancel()
         activationToken = UUID()
         isLoading = false
@@ -301,7 +304,7 @@ final class SeerrSessionStore {
         publicSettings = nil
         user = nil
         // After the address is forgotten, so this server no longer counts.
-        releaseServerHeaders(host)
+        releaseServerHeaders(server)
         if remote.sessionCookie != nil { try? await remote.logout() }
     }
 

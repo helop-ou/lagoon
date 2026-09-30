@@ -114,3 +114,28 @@ nonisolated enum ServerAddress {
         return true
     }
 }
+
+/// What answered a connection attempt: the server's public info, and the
+/// base URL to keep for it.
+nonisolated struct ServerProbe {
+    let info: PublicSystemInfo
+    let baseURL: URL
+
+    private static let probePath = "/System/Info/Public"
+
+    /// A plain HTTP address that the server, or a proxy in front of it,
+    /// upgraded to HTTPS on the same host is kept as HTTPS, so every later
+    /// request, playback included, can carry the proxy's headers. Any other
+    /// redirect leaves the address as typed.
+    static func baseURL(_ requested: URL, answeredBy final: URL?) -> URL {
+        guard requested.scheme?.lowercased() == "http", let final,
+              final.scheme?.lowercased() == "https",
+              final.host()?.lowercased() == requested.host()?.lowercased(),
+              var components = URLComponents(url: final, resolvingAgainstBaseURL: false),
+              components.path.lowercased().hasSuffix(probePath.lowercased()) else { return requested }
+        components.path = String(components.path.dropLast(probePath.count))
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? requested
+    }
+}

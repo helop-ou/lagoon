@@ -587,7 +587,7 @@ final class JellyfinClient {
         return page.items.first
     }
 
-    nonisolated static func fetchPublicInfo(at serverURL: URL) async throws -> PublicSystemInfo {
+    nonisolated static func fetchPublicInfo(at serverURL: URL) async throws -> ServerProbe {
         var request = URLRequest(url: serverURL.appending(path: "System/Info/Public")).withServerHeaders()
         request.timeoutInterval = 10
         let data: Data
@@ -600,7 +600,10 @@ final class JellyfinClient {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw JellyfinError.invalidServerURL
         }
-        return try decoder.decode(PublicSystemInfo.self, from: data)
+        return ServerProbe(
+            info: try decoder.decode(PublicSystemInfo.self, from: data),
+            baseURL: ServerProbe.baseURL(serverURL, answeredBy: http.url)
+        )
     }
 }
 
