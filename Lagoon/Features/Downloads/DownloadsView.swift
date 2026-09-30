@@ -17,7 +17,7 @@ struct DownloadsView: View {
                 list
             }
         }
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         .navigationTitle("Downloads")
         .accessibilityIdentifier("downloads.view")
         .toolbar {

@@ -178,7 +178,7 @@ struct SearchView: View {
             .padding(.bottom, Metrics.Space.section)
         }
         .scrollClipDisabled()
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         // On the content, never the NavigationStack, or the field overlays
         // pushed detail pages.
         .searchable(text: $searchText, prompt: "Search your library and Seerr")

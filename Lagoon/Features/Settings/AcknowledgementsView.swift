@@ -178,7 +178,7 @@ struct AcknowledgementsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(Metrics.screenGutter)
         }
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         .navigationTitle(component.name)
         .navigationBarTitleDisplayMode(.inline)
     }

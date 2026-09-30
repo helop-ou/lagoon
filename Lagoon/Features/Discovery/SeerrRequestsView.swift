@@ -15,7 +15,7 @@ struct SeerrRequestsView: View {
                 signedOutContent
             }
         }
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         // Keep the fetch on the stable root: on the loading branches, each
         // isLoading change cancels the task and spins forever.
         .task(id: seerr.user.map(loadID) ?? "signed-out") {

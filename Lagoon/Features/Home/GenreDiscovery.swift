@@ -141,7 +141,7 @@ struct GenreLibraryView: View {
 
     var body: some View {
         ZStack {
-            Theme.background.ignoresSafeArea()
+            ThemePageBackground()
 
             if viewModel.items.isEmpty, viewModel.isLoading {
                 LoadingView()

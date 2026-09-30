@@ -189,7 +189,7 @@ struct SettingsView: View {
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // Matches `TVSettingsPage`: the app's background, not the system grey.
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
     }
 
     private var identityPanel: some View {

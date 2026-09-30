@@ -167,7 +167,7 @@ struct ChangelogView: View {
         .accessibilityIdentifier("settings.changelog")
         #else
         notes
-            .background(Theme.background.ignoresSafeArea())
+            .themedPageBackground()
             .navigationTitle("Changelog")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

@@ -75,7 +75,7 @@ struct TVSettingsPage<Content: View>: View {
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // The app's background; otherwise Settings inherits the system grey.
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         .navigationBarBackButtonHidden(true)
         .onExitCommand { dismiss() }
     }

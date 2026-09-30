@@ -101,7 +101,7 @@ struct DiscoverView: View {
             .padding(.bottom, Metrics.Space.section)
         }
         .scrollClipDisabled()
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         .serverRefreshable(
             .discover,
             isActive: isActive,
@@ -280,7 +280,7 @@ struct SeerrCatalogView: View {
             .padding(.vertical, Metrics.Space.xxl)
         }
         .scrollClipDisabled()
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         .refreshable {
             await loadNext(reset: true)
         }

@@ -42,7 +42,7 @@ struct LibraryView: View {
             .padding(.bottom, Metrics.detailBottomPadding)
         }
         .scrollClipDisabled()
-        .background(Theme.background.ignoresSafeArea())
+        .themedPageBackground()
         #if os(iOS)
         .navigationTitle("Library")
         .safeAreaInset(edge: .top) {
