@@ -183,7 +183,7 @@ private struct ThemeBloomFrame: View {
 }
 
 /// Deterministic, so the layout is fixed per bloom, not per frame.
-private struct SeededGenerator: RandomNumberGenerator {
+nonisolated struct SeededGenerator: RandomNumberGenerator {
     private var state: UInt64
 
     init(seed: UInt64) {

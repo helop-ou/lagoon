@@ -186,12 +186,15 @@ struct AppThemeTests {
         #expect(!ghost.contains(CGPoint(x: rect.minX + 16, y: rect.minY + 24), eoFill: true))
     }
 
-    @Test func aCobwebStaysInItsCornerSquare() {
-        let bounds = CobwebGeometry.path(size: 100).boundingRect
+    @Test func aCobwebStaysInItsCornerAndEachCornerDiffers() {
+        let left = CobwebGeometry.web(size: 100, seed: 3)
+        let bounds = left.threads.boundingRect.union(left.spiral.boundingRect)
         #expect(bounds.minX >= -0.01 && bounds.minY >= -0.01)
         #expect(bounds.maxX <= 100.01 && bounds.maxY <= 100.01)
-        // Its threads leave the corner, but none runs along an edge.
-        #expect(bounds.width > 90 && bounds.height > 90)
+        #expect(bounds.contains(left.perch))
+        // Same seed, same web; another seed, another web.
+        #expect(CobwebGeometry.web(size: 100, seed: 3).spiral.description == left.spiral.description)
+        #expect(CobwebGeometry.web(size: 100, seed: 11).spiral.description != left.spiral.description)
     }
 
     // MARK: - October

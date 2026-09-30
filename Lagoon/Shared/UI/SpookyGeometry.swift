@@ -42,36 +42,78 @@ nonisolated enum GhostGeometry {
     static let fillStyle = FillStyle(eoFill: true)
 }
 
-/// A corner cobweb: threads fanning from the top-left corner of a square,
-/// joined by rings that sag toward it. Mirror it for the top-right corner.
+/// A corner cobweb, fanning from the top-left corner of a square: uneven
+/// threads, and a capture spiral whose rings widen outward and sag toward the
+/// corner, with a few broken. `seed` makes each corner's web its own.
 nonisolated enum CobwebGeometry {
-    /// Angles of the threads from the top edge toward the left edge. None
-    /// lies on an edge, where it would read as a border.
-    private static let threadAngles: [Double] = [7, 26, 45, 64, 83]
-    /// Where the rings cross each thread, as shares of the web's size.
-    private static let ringRadii: [Double] = [0.2, 0.38, 0.56, 0.74]
-    /// How far each ring segment sags toward the corner.
-    private static let sag = 0.14
+    struct Web {
+        let threads: Path
+        let spiral: Path
+        /// A point on the web, for a spider to sit on or hang from.
+        let perch: CGPoint
+    }
 
-    static func path(size: Double) -> Path {
-        func point(angle: Double, radius: Double) -> CGPoint {
+    static func web(size: Double, seed: UInt64) -> Web {
+        var random = SeededGenerator(seed: seed)
+        let count = 9
+        // Kept off the screen edges, where a thread reads as a border.
+        let angles = (0..<count).map { index in
+            6 + 78 * Double(index) / Double(count - 1) + .random(in: -3...3, using: &random)
+        }
+        let lengths = angles.map { _ in Double.random(in: 0.75...1, using: &random) }
+        func point(_ angle: Double, _ radius: Double) -> CGPoint {
             let radians = angle * .pi / 180
             return CGPoint(x: cos(radians) * radius * size, y: sin(radians) * radius * size)
         }
-        var path = Path()
-        for (index, angle) in threadAngles.enumerated() {
-            // Outer threads run the full size, inner ones a little short.
-            let length = index == 0 || index == threadAngles.count - 1 ? 1.0 : 0.9
-            path.move(to: .zero)
-            path.addLine(to: point(angle: angle, radius: length))
+
+        var threads = Path()
+        for (angle, length) in zip(angles, lengths) {
+            threads.move(to: .zero)
+            threads.addLine(to: point(angle, length))
         }
-        for radius in ringRadii {
-            for (from, to) in zip(threadAngles, threadAngles.dropFirst()) {
-                let start = point(angle: from, radius: radius)
-                let end = point(angle: to, radius: radius)
-                let middle = point(angle: (from + to) / 2, radius: radius * (1 - sag))
-                path.move(to: start)
-                path.addQuadCurve(to: end, control: middle)
+        var spiral = Path()
+        var radius = 0.08
+        while radius < 0.95 {
+            for index in 0..<(count - 1) {
+                let near = radius * .random(in: 0.96...1.04, using: &random)
+                let far = radius * .random(in: 0.96...1.04, using: &random)
+                let broken = Double.random(in: 0...1, using: &random) < 0.07
+                guard !broken, near < lengths[index], far < lengths[index + 1] else { continue }
+                let sag = Double.random(in: 0.04...0.13, using: &random)
+                spiral.move(to: point(angles[index], near))
+                spiral.addQuadCurve(
+                    to: point(angles[index + 1], far),
+                    control: point((angles[index] + angles[index + 1]) / 2, (near + far) / 2 * (1 - sag))
+                )
+            }
+            radius += 0.04 + radius * 0.1
+        }
+        // Low on a steep thread: out of the way of controls near the corner.
+        return Web(threads: threads, spiral: spiral, perch: point(angles[count - 2], 0.55))
+    }
+}
+
+/// A small spider: a round abdomen, a head, and four bent legs a side, drawn
+/// about `center` in a box `size` across.
+nonisolated enum SpiderGeometry {
+    static func body(at center: CGPoint, size: Double) -> Path {
+        var path = Path()
+        path.addEllipse(in: CGRect(x: center.x - size * 0.22, y: center.y - size * 0.05, width: size * 0.44, height: size * 0.52))
+        path.addEllipse(in: CGRect(x: center.x - size * 0.14, y: center.y - size * 0.3, width: size * 0.28, height: size * 0.28))
+        return path
+    }
+
+    static func legs(at center: CGPoint, size: Double) -> Path {
+        var path = Path()
+        for side in [-1.0, 1.0] {
+            for index in 0..<4 {
+                let row = Double(index)
+                let hip = CGPoint(x: center.x + side * size * 0.1, y: center.y - size * (0.12 - row * 0.07))
+                let knee = CGPoint(x: center.x + side * size * (0.38 + row * 0.03), y: hip.y - size * (0.2 - row * 0.1))
+                let foot = CGPoint(x: center.x + side * size * (0.5 + row * 0.02), y: hip.y + size * (0.12 + row * 0.1))
+                path.move(to: hip)
+                path.addLine(to: knee)
+                path.addLine(to: foot)
             }
         }
         return path
