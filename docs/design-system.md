@@ -46,7 +46,10 @@ screen-specific copies.
 | `inlineIconButtonSize` | 28 | 28: glyph frame in a small inline glass button, like the Home section reorder arrows |
 | `offStateGlyphOpacity` | 0.55 | 0.55: a state glyph when off |
 | `cobwebSize` / `cobwebLineWidth` | 300 / 1.5 | 130 / 1: a haunted theme's corner cobweb and its thread |
+| `cobwebSpiderSize` | 48 | 22: a cobweb's spider |
+| `cobwebSitterShare` / `cobwebHangerShare` / `cobwebDropShare` | 0.62 / 1 / 0.42 | 0.3 / 0.1 / 0.3: where the spiders sit and hang from on the steepest radial, and the hanging one's longest thread, as shares of the web. The phone's are high, in the band a Home hero leaves open |
 | `stateGhostSize` | 60 | 34: the ghost above a loading or empty state |
+| `flyingGhostSize` | 120 | 56: a ghost crossing a haunted page's background |
 
 - `Metrics.Space`: `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
   `xxl=40`, `section=56`. Use it for internal spacing; gutters and card sizes
@@ -55,7 +58,9 @@ screen-specific copies.
   use `heroCornerRadius` 16. tvOS heroes keep the native card shape.
 - `Motion`: fast 0.2, standard 0.4, slow 0.6, crossfade 0.8 seconds, and
   `heroTextIn` 0.3 (the incoming hero text's fade and its delay), and
-  `ghostBob` 2.4 (one rise and fall of a haunted theme's state ghost).
+  `ghostBob` 2.4 (one rise and fall of a haunted theme's state ghost),
+  `spiderDrop` 20 (one lowering and climb of its hanging spider) and
+  `ghostCrossing` 16 (a ghost's crossing of the background).
 
 Type is semantic: `largeTitle` for screen titles, `title2` for the player
 title, `title3` for section headings and the touch detail page's wide Play,

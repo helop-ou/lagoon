@@ -404,19 +404,47 @@ regression reset. The tvOS Appearance UI test expects Spooky as the starting
 value in October.
 
 **Haunted.** Spooky decorates pages as well as colouring them
-(`AppTheme.isHaunted`): `CobwebGeometry` cobwebs in the top corners of
-`ThemePageBackground`, behind content, and a `SpiderGeometry` spider in each,
-sitting in the left and hanging from the right. The webs are seeded, so the
-corners differ but never change: nine uneven threads kept off the screen
-edges and a spiral that widens outward, faded from the corner by a radial
-gradient (`Metrics.cobwebSize` 300 on tvOS, 130 on iOS). The spiders sit low
-on a steep thread, clear of the controls near each corner. Then a small
-`GhostGeometry`
-ghost bobbing above `LoadingView` and `ErrorStateView`'s glyph
-(`ThemeStateGhost`, still under Reduce Motion). Ghosts are pale, never the
-accent, with faces cut out by an even-odd fill so they read over anything.
-Its bloom motif is `.ghosts`. Neither covers text or artwork, and neither
-reaches the player or Top Shelf.
+(`AppTheme.isHaunted`). `ThemePageBackground` draws `HauntedDecoration`
+behind content:
+
+- **Cobwebs** (`CobwebGeometry`) in the top corners, seeded, so the corners
+  differ but never change. Each has a hub set out from the corner, twelve
+  radials running to a straight frame thread tied to both screen edges, and a
+  capture spiral that follows the frame and droops between radials, with a
+  few strands broken. They fade from the hub by a radial gradient
+  (`Metrics.cobwebSize` 300 on tvOS, 130 on iOS). A web that was only a fan
+  from the corner, with no hub or frame, read as a seashell.
+- **Spiders** (`SpiderGeometry`), seen from above: head with palps, a
+  teardrop abdomen with the accent's hourglass, four jointed legs a side, the
+  front pairs reaching forward. They are drawn in one layer so overlapping
+  legs do not show through each other. One sits on the left web and one
+  hangs head-down from the right, both on the web's steepest radial
+  (`Metrics.cobwebSitterShare`, `cobwebHangerShare`), clear of the controls
+  near each corner; the phone's sit high, because the Home hero covers
+  everything below the status bar. The hanging spider lowers itself and
+  climbs back over `Motion.spiderDrop` (`SpiderDrop`), swaying a little. It is
+  the only part of the webs that redraws, in its own small canvas at 30 fps.
+- **Passing ghosts** (`GhostFlight`): one crosses the page every two to four
+  minutes, every one to two and a half after 19:00, and a flock of three
+  every 45 to 90 seconds from 17:00 on 31 October until morning. The wait
+  starts when a page appears, so a page left sooner never shows one. A ghost
+  enters and leaves wholly off the page over `Motion.ghostCrossing`, mostly
+  high up, where a Home hero leaves the backdrop open, and slips behind
+  artwork elsewhere. It is a soft glow with a body fading toward its hem;
+  a flat fill read as a grey sticker. The layer redraws only while one is in
+  the air.
+
+Nothing moves under Reduce Motion or while the player is up. The iOS player
+is presented `.overFullScreen`, so the pages stay live under it and
+`HauntedDecoration` reads `PlayerPresentationHub.request`. tvOS has no such
+signal and relies on the player's `fullScreenCover` hiding the pages; that
+the spider's timeline stops under it has not been measured.
+
+A small `GhostGeometry` ghost also bobs above `LoadingView` and
+`ErrorStateView`'s glyph (`ThemeStateGhost`, still under Reduce Motion).
+Ghosts are pale, never the accent, with faces cut out by an even-odd fill so
+they read over anything. Spooky's bloom motif is `.ghosts`. None of this
+covers text or artwork, and none of it reaches the player or Top Shelf.
 
 The tvOS player panel uses regular material for content with separate glass
 tabs and actions; iOS uses a native resizable options sheet.
