@@ -252,59 +252,15 @@ enum Theme {
     }
 }
 
-/// Behind every page: the theme's background, and cobwebs in the top
-/// corners when it is haunted.
+/// Behind every page: the theme's background, and its cobwebs, spiders and
+/// passing ghosts when it is haunted.
 struct ThemePageBackground: View {
     var body: some View {
         ZStack(alignment: .top) {
             Theme.background
-            if Theme.current.isHaunted { cobwebs }
+            if Theme.current.isHaunted { HauntedDecoration() }
         }
         .ignoresSafeArea()
-    }
-
-    private var cobwebs: some View {
-        let silk = Color.white.mix(with: Theme.accent, by: 0.2)
-        return Canvas { context, size in
-            Self.draw(in: &context, seed: 3, silk: silk, spiderHangs: false)
-            var right = context
-            right.translateBy(x: size.width, y: 0)
-            right.scaleBy(x: -1, y: 1)
-            Self.draw(in: &right, seed: 11, silk: silk, spiderHangs: true)
-        }
-        // Room below the webs for the hanging spider.
-        .frame(height: Metrics.cobwebSize * 1.2)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    /// One corner's web, brightest at the corner, and its spider.
-    private static func draw(in context: inout GraphicsContext, seed: UInt64, silk: Color, spiderHangs: Bool) {
-        let size = Metrics.cobwebSize
-        let line = Metrics.cobwebLineWidth
-        let web = CobwebGeometry.web(size: size, seed: seed)
-        let fade = GraphicsContext.Shading.radialGradient(
-            Gradient(colors: [silk.opacity(0.3), silk.opacity(0.04)]),
-            center: .zero, startRadius: 0, endRadius: size
-        )
-        context.stroke(web.threads, with: fade, style: StrokeStyle(lineWidth: line, lineCap: .round))
-        context.stroke(web.spiral, with: fade, style: StrokeStyle(lineWidth: line * 0.7, lineCap: .round))
-
-        let spiderSize = size * 0.12
-        var spider = web.perch
-        if spiderHangs {
-            spider.y += size * 0.3
-            var drop = Path()
-            drop.move(to: web.perch)
-            drop.addLine(to: CGPoint(x: spider.x, y: spider.y - spiderSize * 0.3))
-            context.stroke(drop, with: .color(silk.opacity(0.2)), lineWidth: line * 0.7)
-        }
-        context.stroke(
-            SpiderGeometry.legs(at: spider, size: spiderSize),
-            with: .color(silk.opacity(0.45)),
-            style: StrokeStyle(lineWidth: max(1, spiderSize * 0.06), lineCap: .round, lineJoin: .round)
-        )
-        context.fill(SpiderGeometry.body(at: spider, size: spiderSize), with: .color(silk.opacity(0.5)))
     }
 }
 

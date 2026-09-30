@@ -275,16 +275,29 @@ enum Metrics {
     static let inlineIconButtonSize: CGFloat = 28
     /// A state glyph when off: weight and opacity, not colour.
     static let offStateGlyphOpacity: Double = 0.55
-    /// A haunted theme's corner cobweb and its thread, and the ghost above a
-    /// loading or empty state.
+    /// A haunted theme's corner cobweb, its thread and its spiders, the ghost
+    /// above a loading or empty state, and a ghost crossing the background.
     #if os(tvOS)
     static let cobwebSize: CGFloat = 300
     static let cobwebLineWidth: CGFloat = 1.5
+    static let cobwebSpiderSize: CGFloat = 48
+    /// How far down its web's steepest radial each spider sits and hangs
+    /// from, and the hanging one's longest thread, as a share of the web.
+    /// The phone's are high, in the band a Home hero leaves open.
+    static let cobwebSitterShare: CGFloat = 0.62
+    static let cobwebHangerShare: CGFloat = 1
+    static let cobwebDropShare: CGFloat = 0.42
     static let stateGhostSize: CGFloat = 60
+    static let flyingGhostSize: CGFloat = 120
     #else
     static let cobwebSize: CGFloat = 130
     static let cobwebLineWidth: CGFloat = 1
+    static let cobwebSpiderSize: CGFloat = 22
+    static let cobwebSitterShare: CGFloat = 0.3
+    static let cobwebHangerShare: CGFloat = 0.1
+    static let cobwebDropShare: CGFloat = 0.3
     static let stateGhostSize: CGFloat = 34
+    static let flyingGhostSize: CGFloat = 56
     #endif
 }
 
@@ -315,6 +328,10 @@ enum Motion {
     static let heroTextIn: TimeInterval = 0.3
     /// One rise and fall of a haunted theme's state ghost.
     static let ghostBob: TimeInterval = 2.4
+    /// One lowering and climb of a haunted theme's hanging spider.
+    static let spiderDrop: TimeInterval = 20
+    /// A ghost's crossing of a haunted page's background.
+    static let ghostCrossing: TimeInterval = 16
 }
 
 // Brand colors are only for branding: progress fills, the lockup, selection

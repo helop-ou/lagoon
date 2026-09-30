@@ -191,10 +191,82 @@ struct AppThemeTests {
         let bounds = left.threads.boundingRect.union(left.spiral.boundingRect)
         #expect(bounds.minX >= -0.01 && bounds.minY >= -0.01)
         #expect(bounds.maxX <= 100.01 && bounds.maxY <= 100.01)
-        #expect(bounds.contains(left.perch))
+        // The hub sits out from the corner, and both spiders stay on the web.
+        #expect(left.hub.x > 15 && left.hub.y > 15)
+        #expect(bounds.contains(left.onSteepRadial(0.3)))
+        #expect(bounds.contains(left.onSteepRadial(1)))
+        #expect(left.steep.y > left.hub.y)
         // Same seed, same web; another seed, another web.
         #expect(CobwebGeometry.web(size: 100, seed: 3).spiral.description == left.spiral.description)
         #expect(CobwebGeometry.web(size: 100, seed: 11).spiral.description != left.spiral.description)
+    }
+
+    @Test func aSpiderIsAboutAsBigAsItsBox() {
+        let head = CGPoint(x: 50, y: 50)
+        let spider = SpiderGeometry.legs(at: head, size: 20).boundingRect
+            .union(SpiderGeometry.body(at: head, size: 20).boundingRect)
+        #expect(spider.width > 20 && spider.width < 28)
+        #expect(spider.height > 18 && spider.height < 26)
+        #expect(spider.contains(SpiderGeometry.marking(at: head, size: 20).boundingRect))
+    }
+
+    @Test func theHangingSpiderRestsLowersPausesAndClimbs() {
+        let period = 20.0
+        #expect(SpiderDrop.reach(at: 2, period: period) == 0)
+        #expect(SpiderDrop.reach(at: 7.5, period: period) > 0.4)
+        #expect(SpiderDrop.reach(at: 7.5, period: period) < 0.6)
+        #expect(SpiderDrop.reach(at: 11, period: period) == 1)
+        #expect(SpiderDrop.reach(at: 42, period: period) == 0)
+        // Never a jump: a thirtieth of a second moves it only a little.
+        for step in 0..<600 {
+            let time = Double(step) / 30
+            let change = abs(SpiderDrop.reach(at: time + 1.0 / 30, period: period) - SpiderDrop.reach(at: time, period: period))
+            #expect(change < 0.02, "at \(time)")
+        }
+    }
+
+    @Test func ghostsFlyMoreOftenAfterDarkAndInAFlockOnHalloweenNight() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "Europe/Tallinn"))
+        func date(_ month: Int, _ day: Int, _ hour: Int) throws -> Date {
+            try #require(calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour)))
+        }
+        var random = SeededGenerator(seed: 7)
+
+        let day = GhostFlight.plan(at: try date(10, 12, 14), calendar: calendar, using: &random)
+        #expect(day.ghosts.count == 1)
+        #expect(GhostFlight.dayWait.contains(day.wait))
+
+        let night = GhostFlight.plan(at: try date(10, 12, 22), calendar: calendar, using: &random)
+        #expect(night.ghosts.count == 1)
+        #expect(GhostFlight.nightWait.contains(night.wait))
+
+        for (month, dayOfMonth, hour) in [(10, 31, 18), (11, 1, 2)] {
+            let halloween = GhostFlight.plan(at: try date(month, dayOfMonth, hour), calendar: calendar, using: &random)
+            #expect(halloween.ghosts.count == 3)
+            #expect(GhostFlight.halloweenWait.contains(halloween.wait))
+            #expect(Set(halloween.ghosts.map(\.leftward)).count == 1)
+        }
+        #expect(!GhostFlight.isHalloweenNight(try date(10, 31, 12), calendar: calendar))
+        #expect(!GhostFlight.isHalloweenNight(try date(11, 1, 9), calendar: calendar))
+    }
+
+    @Test func aGhostEntersAndLeavesOffThePage() {
+        let page = CGSize(width: 1000, height: 600)
+        let ghost = GhostFlight.Ghost(lane: 0.4, leftward: false, start: 2, scale: 1, phase: 0)
+        #expect(GhostFlight.pose(of: ghost, elapsed: 1, crossing: 10, in: page, height: 100) == nil)
+        #expect(GhostFlight.pose(of: ghost, elapsed: 13, crossing: 10, in: page, height: 100) == nil)
+        let entering = GhostFlight.pose(of: ghost, elapsed: 2, crossing: 10, in: page, height: 100)
+        let leaving = GhostFlight.pose(of: ghost, elapsed: 12, crossing: 10, in: page, height: 100)
+        // Its centre is at least half a ghost off either side.
+        #expect((entering?.center.x ?? 0) <= -50)
+        #expect((leaving?.center.x ?? 0) >= 1050)
+        #expect(entering?.opacity == 0)
+        #expect(GhostFlight.pose(of: ghost, elapsed: 7, crossing: 10, in: page, height: 100)?.opacity == 1)
+        let backwards = GhostFlight.Ghost(lane: 0.4, leftward: true, start: 0, scale: 1, phase: 0)
+        #expect((GhostFlight.pose(of: backwards, elapsed: 0, crossing: 10, in: page, height: 100)?.center.x ?? 0) >= 1050)
+        let plan = GhostFlight.Plan(wait: 0, ghosts: [ghost, backwards])
+        #expect(GhostFlight.duration(of: plan, crossing: 10) == 12)
     }
 
     // MARK: - October
