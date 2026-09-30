@@ -45,6 +45,8 @@ screen-specific copies.
 | `episodeCardWidthRatio` | 0.89 | 0.89: an episode card's share of `landscapeWidth` |
 | `inlineIconButtonSize` | 28 | 28: glyph frame in a small inline glass button, like the Home section reorder arrows |
 | `offStateGlyphOpacity` | 0.55 | 0.55: a state glyph when off |
+| `cobwebSize` / `cobwebLineWidth` | 300 / 1.5 | 130 / 1: a haunted theme's corner cobweb and its thread |
+| `stateGhostSize` | 60 | 34: the ghost above a loading or empty state |
 
 - `Metrics.Space`: `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
   `xxl=40`, `section=56`. Use it for internal spacing; gutters and card sizes
@@ -52,7 +54,8 @@ screen-specific copies.
 - Radii: card 12, artwork 10, badge 6, panel 32. iOS Home and Discover heroes
   use `heroCornerRadius` 16. tvOS heroes keep the native card shape.
 - `Motion`: fast 0.2, standard 0.4, slow 0.6, crossfade 0.8 seconds, and
-  `heroTextIn` 0.3 (the incoming hero text's fade and its delay).
+  `heroTextIn` 0.3 (the incoming hero text's fade and its delay), and
+  `ghostBob` 2.4 (one rise and fall of a haunted theme's state ghost).
 
 Type is semantic: `largeTitle` for screen titles, `title2` for the player
 title, `title3` for section headings and the touch detail page's wide Play,
@@ -79,9 +82,9 @@ connect code's letter spacing is `Typography.quickConnectCodeTracking` (6).
 ## Themes
 
 A theme is a `ThemePalette` of eight roles: `accent`, `ground`, `background`,
-`surface`, `glowDepth`, `controlTint`, `artworkTint` and `chrome`. Two exist:
-`AppTheme.lagoon` over true black and `AppTheme.babyPink`. Keep the list short;
-each theme is checked over every screen.
+`surface`, `glowDepth`, `controlTint`, `artworkTint` and `chrome`. Three exist:
+`AppTheme.lagoon` over true black, `AppTheme.babyPink` and `AppTheme.spooky`.
+Keep the list short; each theme is checked over every screen.
 
 - **Read colours from `Theme.accent`, `.ground`, `.background` and `.glow`
   inside `body`**, never brand tokens or `Color.black`. That is what makes a
@@ -90,6 +93,10 @@ each theme is checked over every screen.
   black.
 - **A grouped form on iOS is a `ThemedForm`**, never a bare `Form` or `List`.
   It themes page, rows and bars, so a new settings page needs nothing else.
+- **A page's backdrop is `.themedPageBackground()`**, not a bare
+  `Theme.background`, so a theme's ornament (Spooky's cobwebs) reaches it.
+  Ornaments sit behind content or beside a state's glyph, never over text or
+  artwork.
 - **The player surface, its overlays, subtitles and Top Shelf stay pure
   black**, outside the theme.
 - **tvOS controls are never tinted.** `themedControls()` and `themedChrome()`

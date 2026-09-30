@@ -347,6 +347,11 @@ Palettes:
 - `AppTheme.babyPink`: `#FFB7CF` accent, `#5E2848` rose ground, `#1F1019`
   background, `#33182A` rows; the accent as both tints, and a faint wash of
   the ground as chrome.
+- `AppTheme.spooky`: `#FF8C1A` pumpkin accent, `#2B1433` aubergine ground,
+  `#110B14` background, `#21152A` rows, `#5C2E91` purple glow; controls in
+  pale pumpkin `#FFB870`. Its artwork tint is the purple, not the accent: an
+  orange blush turned every page brown, which read as autumn rather than
+  night.
 
 Where it applies:
 
@@ -356,6 +361,9 @@ Where it applies:
 - Plain scrolling pages (changelog, a licence, Seerr requests) sit on
   `Theme.background` like browse screens.
 - Only the player's panel and the DEBUG Developer page keep the system form.
+- Every page's backdrop is `ThemePageBackground`, through
+  `.themedPageBackground()` (`ThemedForm` uses it too), so a theme's ornament
+  reaches every page without the page knowing.
 - tvOS's tab bar keeps the system glass.
 
 **Account ownership.** `SessionStore` points `ThemeStore.shared` at the active
@@ -382,6 +390,19 @@ the same profile. An in-app switch waits until the picker has closed
 (`MainTabView.finishProfilePicker`): switching under the closing picker
 repainted it in the new theme on its way out, which looked like a clipped
 bloom.
+
+**Ornaments.** A theme may decorate pages beyond its colours
+(`AppTheme.ornament`). Spooky's is `.haunted`: `CobwebGeometry` cobwebs in the
+page's top corners, behind content, drawn in `palette.cobweb` (white warmed by
+the accent, at 0.16 opacity; `Metrics.cobwebSize` 300 on tvOS, 130 on iOS,
+their threads angled off the screen edges so none reads as a border); and a
+small `GhostGeometry` ghost bobbing above `LoadingView` and `ErrorStateView`'s
+glyph (`ThemeStateGhost`, `Metrics.stateGhostSize`, one bob per
+`Motion.ghostBob`, still under Reduce Motion). Ghosts are pale
+(`palette.ghost`), never the accent, and their faces are cut out with an
+even-odd fill so they read over anything. Its bloom motif is `.ghosts`. An
+ornament never covers text or artwork, and never reaches the player or Top
+Shelf.
 
 The tvOS player panel uses regular material for content with separate glass
 tabs and actions; iOS uses a native resizable options sheet.
