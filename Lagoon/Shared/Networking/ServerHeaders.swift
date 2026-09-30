@@ -16,11 +16,14 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
     var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     var trimmedValue: String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    /// Headers Lagoon sets itself or URLSession owns; a proxy header may not
-    /// replace them.
+    /// Headers Lagoon sets itself, Jellyfin reads as its own token, or
+    /// URLSession owns; a proxy header may not replace them.
     static let reservedNames: Set<String> = [
         "authorization", "cookie", "host", "content-type", "content-length",
         "accept", "connection", "range", "user-agent",
+        "proxy-authorization", "proxy-authenticate", "www-authenticate",
+        "transfer-encoding", "upgrade",
+        "x-emby-authorization", "x-emby-token", "x-mediabrowser-token",
     ]
 
     /// An RFC 9110 token: what a header name may contain.
@@ -30,11 +33,17 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
         return !name.isEmpty && name.unicodeScalars.allSatisfy(allowed.contains)
     }
 
+    /// No control characters, so a value can never end the header line.
+    static func isValidValue(_ value: String) -> Bool {
+        !value.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+    }
+
     enum Problem: Error, Equatable {
         case invalidName(String)
         case reservedName(String)
         case duplicateName(String)
         case missingValue(String)
+        case invalidValue(String)
 
         var message: String {
             switch self {
@@ -46,6 +55,8 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
                 "\(name) is listed twice."
             case .missingValue(let name):
                 "\(name) needs a value."
+            case .invalidValue(let name):
+                "\(name) has a character a header can't carry, such as a line break."
             }
         }
     }
@@ -60,9 +71,13 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
             let value = header.trimmedValue
             if name.isEmpty && value.isEmpty { continue }
             guard isValidName(name) else { return .failure(.invalidName(name)) }
-            guard !reservedNames.contains(name.lowercased()) else { return .failure(.reservedName(name)) }
+            let lowered = name.lowercased()
+            guard !reservedNames.contains(lowered), !lowered.hasPrefix("sec-websocket-") else {
+                return .failure(.reservedName(name))
+            }
             guard seen.insert(name.lowercased()).inserted else { return .failure(.duplicateName(name)) }
             guard !value.isEmpty else { return .failure(.missingValue(name)) }
+            guard isValidValue(value) else { return .failure(.invalidValue(name)) }
             var clean = CustomHTTPHeader(name: name, value: value)
             clean.id = header.id
             kept.append(clean)
@@ -74,7 +89,8 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
 /// Custom headers per server host, for a Jellyfin or Seerr server behind a
 /// forward-auth proxy. Keyed by host, not address, because connecting tries
 /// several schemes and ports for the one host the viewer typed. Sent only over
-/// HTTPS: a fallback to plain HTTP must never carry a proxy secret in clear.
+/// HTTPS and its socket form, WSS: a fallback to plain HTTP must never carry a
+/// proxy secret in clear.
 ///
 /// Names and values live together in the keychain, since the values are
 /// credentials. Reads are cached, because every request asks.
@@ -123,9 +139,13 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
         try? setHeaders([], forHost: host)
     }
 
-    /// The headers for `url`, when it is HTTPS; empty otherwise.
+    static func isSecure(_ url: URL?) -> Bool {
+        ["https", "wss"].contains(url?.scheme?.lowercased())
+    }
+
+    /// The headers for `url`, when it is HTTPS or WSS; empty otherwise.
     func fields(for url: URL?) -> [String: String] {
-        guard let url, url.scheme?.lowercased() == "https" else { return [:] }
+        guard let url, Self.isSecure(url) else { return [:] }
         return Dictionary(
             headers(forHost: url.host()).map { ($0.name, $0.value) },
             uniquingKeysWith: { first, _ in first }
@@ -141,15 +161,17 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
     }
 
     /// A redirect keeps a host's headers only while it stays on that host
-    /// over HTTPS. Otherwise they are removed, and the new host's applied.
+    /// over HTTPS. Otherwise they are removed. Either way the new target's are
+    /// applied, so an upgrade from HTTP to HTTPS on the same host gains them.
     func redirected(_ request: URLRequest, from original: URL?) -> URLRequest {
         guard let original else { return request }
-        let staysOnHost = request.url?.host()?.lowercased() == original.host()?.lowercased()
-            && request.url?.scheme?.lowercased() == "https"
-        guard !staysOnHost else { return request }
         var request = request
-        for header in headers(forHost: original.host()) {
-            request.setValue(nil, forHTTPHeaderField: header.name)
+        let staysOnHost = request.url?.host()?.lowercased() == original.host()?.lowercased()
+            && Self.isSecure(request.url)
+        if !staysOnHost {
+            for header in headers(forHost: original.host()) {
+                request.setValue(nil, forHTTPHeaderField: header.name)
+            }
         }
         apply(to: &request)
         return request

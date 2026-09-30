@@ -75,7 +75,7 @@ final class ImageCache {
                 let id = UUID()
                 let task = Task { [weak self, downloader] in
                     let data = try? await downloader.data(
-                        for: URLRequest(url: url).withServerHeaders(),
+                        for: URLRequest(url: url, timeoutInterval: 30).withServerHeaders(),
                         limit: DownloadLimit.artwork,
                         content: .image
                     )

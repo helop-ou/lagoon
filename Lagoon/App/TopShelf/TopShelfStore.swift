@@ -160,7 +160,11 @@ enum TopShelfStore {
     }
 
     private static func data(at url: URL) async -> Data? {
-        try? await BoundedDownload.shared.data(from: url, limit: DownloadLimit.artwork, content: .image)
+        try? await BoundedDownload.shared.data(
+            for: URLRequest(url: url, timeoutInterval: 30).withServerHeaders(),
+            limit: DownloadLimit.artwork,
+            content: .image
+        )
     }
     #else
     static func publish(_ items: [MediaItem], client: JellyfinClient, identity: JellyfinClient.SessionIdentity?) {}
