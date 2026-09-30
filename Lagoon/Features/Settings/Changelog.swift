@@ -47,6 +47,27 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.5.0",
+            build: "113",
+            released: "October 2026",
+            headline: "A Spooky theme for October, styled anime subtitles, and servers behind an access proxy.",
+            sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "A Spooky theme joins Settings › Appearance: pumpkin orange over midnight, with cobwebs in the corners and a ghost or two.",
+                    "Through October, profiles that never chose a theme wear Spooky. Choose Lagoon in Appearance to keep it.",
+                    "Servers behind an access proxy such as Cloudflare Access, Authelia or Authentik connect: add the proxy's headers under Advanced when connecting to Jellyfin or Seerr.",
+                    "Styled subtitles, common in anime, look as their authors made them: karaoke, signs placed on screen, and the fonts the file carries, from the file or from a separate .ass file.",
+                    "Episodes with a scene after the credits offer Skip Credits, which lands on the scene, following your Skip Intros, Recaps & Credits setting. Up Next waits until the scene ends.",
+                ]),
+                ChangelogSection(category: .improvements, changes: [
+                    "10-bit H.264 (Hi10P) videos, common in older anime releases, play directly instead of being converted by the server.",
+                    "Specials read Special 1 instead of S0 E1, and double episodes show both numbers, such as S14 E1–2, on episode cards, in the player and on the Up Next card.",
+                    "Watching a dub in your own language, a subtitle track named Signs & Songs or Forced is picked automatically even when the file doesn't flag it as forced, so signs and song lyrics are translated.",
+                    "Switching to a subtitle track built into the file shows the line already on screen straight away, without a pause in the picture.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.4.0",
             build: "112",
             released: "September 2026",
@@ -55,9 +76,6 @@ nonisolated enum Changelog {
                 ChangelogSection(category: .newFeatures, changes: [
                     "Movie and show pages have a Trailer button that opens the trailer in YouTube.",
                     "Who's watching? shows what each profile is in the middle of under its name.",
-                    "Servers behind an access proxy such as Cloudflare Access, Authelia or Authentik connect: add the proxy's headers under Advanced when connecting to Jellyfin or Seerr.",
-                    "Styled subtitles, common in anime, look as their authors made them: karaoke, signs placed on screen, and the fonts the file carries, from the file or from a separate .ass file.",
-                    "Episodes with a scene after the credits offer Skip Credits, which lands on the scene, following your Skip Intros, Recaps & Credits setting. Up Next waits until the scene ends.",
                 ]),
                 ChangelogSection(category: .improvements, changes: [
                     "Artwork fades in as it loads instead of popping in.",
@@ -65,9 +83,6 @@ nonisolated enum Changelog {
                     "Genre cards soften and dim their artwork, so the genre name stays readable over colourful posters.",
                     "On Apple TV, the profile button sits beside Refresh at the top left, one press left from Home instead of past Settings.",
                     "Home Rows no longer offers Recently Added in Other Libraries, a row that never showed anything.",
-                    "10-bit H.264 (Hi10P) videos, common in older anime releases, play directly instead of being converted by the server.",
-                    "Specials read Special 1 instead of S0 E1, and double episodes show both numbers, such as S14 E1–2, on episode cards, in the player and on the Up Next card.",
-                    "Watching a dub in your own language, a subtitle track named Signs & Songs or Forced is picked automatically even when the file doesn't flag it as forced, so signs and song lyrics are translated.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
                     "Dolby Vision titles with gaps in their metadata play smoothly in full quality instead of freezing or switching to a transcode at the same point every time.",
