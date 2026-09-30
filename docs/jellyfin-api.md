@@ -69,12 +69,19 @@ playback, remote revocation and sign-in against a loopback synthetic server.
 Authentik answer before Jellyfin or Seerr does, so the connect screens take
 optional custom headers under Advanced, such as a Cloudflare service token.
 
-- `ServerHeaderStore` keeps them per host, not per address, because
-  connecting tries several schemes and ports for the host the viewer typed.
-  They live in the keychain. `SessionStore.releaseServerHeaders` removes a
-  host's once no account's server and no Seerr saved for one is on it: when
-  an account is removed, a Seerr server is forgotten, or a server is left
-  before its first sign-in.
+- `ServerHeaderStore` keeps them in the keychain, one item per host holding
+  scopes. While connecting they are host-wide, because connecting tries
+  several schemes and ports for the host the viewer typed; once a server
+  answers, `narrow(toServer:)` moves them to its port and path. A Jellyfin
+  and a Seerr on one host, at different ports or paths, keep separate
+  headers, and a request gets the most specific scope covering it.
+- `SessionStore.releaseServerHeaders` removes a server's once no account's
+  server and no Seerr saved for one is that server, and every scope on the
+  host once nothing on it is: when an account is removed, a Seerr server is
+  forgotten, or a server is left before its first sign-in.
+- A plain HTTP address that the server or its proxy upgrades to HTTPS on the
+  same host is saved as HTTPS (`ServerProbe.baseURL`), so playback, which
+  takes the headers from the saved address, carries them too.
 - They are sent only over HTTPS and WSS, and never replace a header Lagoon
   sets: `Authorization`, `Cookie`, Jellyfin's token headers and the ones
   URLSession owns are refused, and so is a value with a control character.
