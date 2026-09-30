@@ -405,9 +405,13 @@ value in October.
 
 **Haunted.** Spooky decorates pages as well as colouring them
 (`AppTheme.isHaunted`): `CobwebGeometry` cobwebs in the top corners of
-`ThemePageBackground`, behind content (white warmed by the accent at 0.16
-opacity; `Metrics.cobwebSize` 300 on tvOS, 130 on iOS; the threads angle off
-the screen edges so none reads as a border), and a small `GhostGeometry`
+`ThemePageBackground`, behind content, and a `SpiderGeometry` spider in each,
+sitting in the left and hanging from the right. The webs are seeded, so the
+corners differ but never change: nine uneven threads kept off the screen
+edges and a spiral that widens outward, faded from the corner by a radial
+gradient (`Metrics.cobwebSize` 300 on tvOS, 130 on iOS). The spiders sit low
+on a steep thread, clear of the controls near each corner. Then a small
+`GhostGeometry`
 ghost bobbing above `LoadingView` and `ErrorStateView`'s glyph
 (`ThemeStateGhost`, still under Reduce Motion). Ghosts are pale, never the
 accent, with faces cut out by an even-odd fill so they read over anything.
