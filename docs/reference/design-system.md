@@ -436,9 +436,12 @@ behind content:
 
 Nothing moves under Reduce Motion or while the player is up. The iOS player
 is presented `.overFullScreen`, so the pages stay live under it and
-`HauntedDecoration` reads `PlayerPresentationHub.request`. tvOS has no such
-signal and relies on the player's `fullScreenCover` hiding the pages; that
-the spider's timeline stops under it has not been measured.
+`HauntedDecoration` reads `PlayerPresentationHub.request`. On tvOS the
+player's `fullScreenCover` hides the pages without stopping their timelines:
+on the Apple TV the hanging spider kept redrawing at the display's 24 Hz
+under a film. So the cover's content counts itself on and off screen in
+`PlayerPresence`, and the decoration rests while `isPlayerUp`; measured on
+the TV, no spider frames during playback and back as soon as it closed.
 
 A small `GhostGeometry` ghost also bobs above `LoadingView` and
 `ErrorStateView`'s glyph (`ThemeStateGhost`, still under Reduce Motion).
