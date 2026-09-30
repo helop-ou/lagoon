@@ -17,10 +17,13 @@ struct AppearanceSettingsView: View {
     }
 
     private var footer: String {
-        if let name = session.userName {
-            return String(localized: "Saved for \(name). Every Jellyfin user on this device keeps their own theme.")
+        let saved = if let name = session.userName {
+            String(localized: "Saved for \(name). Every Jellyfin user on this device keeps their own theme.")
+        } else {
+            String(localized: "Saved for this profile. Every Jellyfin user on this device keeps their own theme.")
         }
-        return String(localized: "Saved for this profile. Every Jellyfin user on this device keeps their own theme.")
+        guard AppTheme.seasonal(on: .now) != nil else { return saved }
+        return saved + " " + String(localized: "Through October, a profile on Lagoon wears Spooky. Choose Lagoon to keep it.")
     }
 
     var body: some View {

@@ -49,6 +49,8 @@ struct RootView: View {
         // The only place foreground invalidation happens: mounted trees do
         // not re-run `task` on return, so advance the shared generation.
         .onChange(of: scenePhase, initial: true) { _, phase in
+            // October may have begun or ended while the app slept.
+            if phase == .active { ThemeStore.shared.refreshSeason() }
             guard phase == .active, session.phase == .signedIn else { return }
             serverSync.requestRefresh()
             #if os(tvOS)

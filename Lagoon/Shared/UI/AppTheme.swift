@@ -47,6 +47,12 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
+    /// What a profile on the default theme wears for a season: Spooky through
+    /// October, in the viewer's own calendar. Nil the rest of the year.
+    static func seasonal(on date: Date, calendar: Calendar = .current) -> AppTheme? {
+        calendar.component(.month, from: date) == 10 ? .spooky : nil
+    }
+
     /// Decoration the theme adds to pages, beyond its colours.
     var ornament: ThemeOrnament? {
         switch self {
@@ -165,12 +171,16 @@ final class ThemeStore {
     /// theme. Never at launch, and never by returning to the same profile.
     private(set) var bloomCount = 0
     private let defaults: UserDefaults
+    private let now: () -> Date
+    private let calendar: Calendar
     @ObservationIgnored private var activeOwner: ObjectIdentifier?
     /// The last profile pointed at, kept through the picker's nil.
     @ObservationIgnored private var lastAccountID: String?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init, calendar: Calendar = .current) {
         self.defaults = defaults
+        self.now = now
+        self.calendar = calendar
     }
 
     /// Points the store at a profile, or at none (keeps the current theme,
@@ -186,7 +196,7 @@ final class ThemeStore {
         guard self.accountID != accountID else { return }
         self.accountID = accountID
         guard let accountID else { return }
-        theme = Self.storedTheme(for: accountID, in: defaults)
+        theme = Self.theme(for: accountID, in: defaults, on: now(), calendar: calendar)
         if let lastAccountID, lastAccountID != accountID { bloomCount &+= 1 }
         lastAccountID = accountID
     }
@@ -197,6 +207,29 @@ final class ThemeStore {
         bloomCount &+= 1
         guard let accountID else { return }
         defaults.set(theme.rawValue, forKey: Self.key(accountID))
+        // Choosing the default during a season opts this profile out of it
+        // until next year's.
+        let date = now()
+        if theme == .lagoon, AppTheme.seasonal(on: date, calendar: calendar) != nil {
+            defaults.set(calendar.component(.year, from: date), forKey: Self.seasonKey(accountID))
+        }
+    }
+
+    /// Puts on or takes off the seasonal theme when the season has turned
+    /// while the app ran. No bloom: nobody chose it.
+    func refreshSeason() {
+        guard let accountID else { return }
+        let resolved = Self.theme(for: accountID, in: defaults, on: now(), calendar: calendar)
+        if resolved != theme { theme = resolved }
+    }
+
+    /// What a profile wears on `date`: its choice, or the seasonal theme
+    /// while it keeps the default and has not turned this season down.
+    static func theme(for accountID: String, in defaults: UserDefaults, on date: Date, calendar: Calendar) -> AppTheme {
+        let saved = storedTheme(for: accountID, in: defaults)
+        guard saved == .lagoon, let seasonal = AppTheme.seasonal(on: date, calendar: calendar) else { return saved }
+        let declined = defaults.integer(forKey: seasonKey(accountID)) == calendar.component(.year, from: date)
+        return declined ? .lagoon : seasonal
     }
 
     /// The saved theme, or `.lagoon` when none or unknown.
@@ -206,9 +239,15 @@ final class ThemeStore {
     }
 
     nonisolated static let keyPrefix = "appearance.theme."
+    /// The year a profile chose the default during the season.
+    nonisolated static let seasonKeyPrefix = "appearance.seasonDeclined."
 
     static func key(_ accountID: String) -> String {
         keyPrefix + accountID
+    }
+
+    static func seasonKey(_ accountID: String) -> String {
+        seasonKeyPrefix + accountID
     }
 }
 

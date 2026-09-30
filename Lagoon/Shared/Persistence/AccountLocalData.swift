@@ -16,6 +16,7 @@ final class AccountLocalData {
         "subtitles.preferences.",
         "playback.trackPreferences.",
         ThemeStore.keyPrefix,
+        ThemeStore.seasonKeyPrefix,
         "home.sectionPreferences.",
         "search.recents.",
     ]
