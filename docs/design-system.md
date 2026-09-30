@@ -37,19 +37,29 @@ screen-specific copies.
 | `themeSwatchSize` | Not used | 28: swatch in Settings › Appearance |
 | `qrCodeSize` / `qrCodeMinimumQuietZone` | 420 / 32 | 220 / 16, gallery only. A code scans from about ten times its width. The real quiet zone is derived from the code |
 | Rail top / bottom padding | 48 / 96 | 12 / 40 |
+| `readableWidth` | 700 | 700: a column of text or controls that should not stretch across a wide screen |
+| `detailOverviewWidth` | 1000 | 1000: the detail page synopsis |
+| `settingsRowMinHeight` / `settingsRowCornerRadius` | 66 / 18 | 66 / 18: the tvOS settings list row, and the subtitle preview's corner |
+| `heroDotSize` / `heroActiveDotWidth` | 8 / 24 | 8 / 24: the hero's page dots |
+| `homeBottomPadding` | 60 | 60: runway under Home's last rail |
+| `episodeCardWidthRatio` | 0.89 | 0.89: an episode card's share of `landscapeWidth` |
+| `inlineIconButtonSize` | 28 | 28: glyph frame in a small inline glass button, like the Home section reorder arrows |
+| `offStateGlyphOpacity` | 0.55 | 0.55: a state glyph when off |
 
 - `Metrics.Space`: `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
   `xxl=40`, `section=56`. Use it for internal spacing; gutters and card sizes
   have their own tokens.
 - Radii: card 12, artwork 10, badge 6, panel 32. iOS Home and Discover heroes
   use `heroCornerRadius` 16. tvOS heroes keep the native card shape.
-- `Motion`: fast 0.2, standard 0.4, slow 0.6, crossfade 0.8 seconds.
+- `Motion`: fast 0.2, standard 0.4, slow 0.6, crossfade 0.8 seconds, and
+  `heroTextIn` 0.3 (the incoming hero text's fade and its delay).
 
 Type is semantic: `largeTitle` for screen titles, `title2` for the player
 title, `title3` for section headings and the touch detail page's wide Play,
 `headline` for rails and cards, `callout` for synopses, metadata and control
 labels, footnote/caption for supporting labels. Display glyphs and logo-like
-type use named `Typography` values, never raw `.system(size:)`.
+type use named `Typography` values, never raw `.system(size:)`. The quick
+connect code's letter spacing is `Typography.quickConnectCodeTracking` (6).
 
 ## Brand and materials
 
@@ -62,6 +72,9 @@ type use named `Typography` values, never raw `.system(size:)`.
 - `AccentColor` stays white. iOS controls take the theme's `controlTint`,
   never the asset.
 - Ordinary UI uses `.primary`, `.secondary`, `.tertiary`, fills and materials.
+- `Color.artworkPlaceholder` is the fill behind artwork that has not loaded or
+  does not exist. Use it for every poster, backdrop and thumbnail placeholder.
+- `.stateGlyph(isOn:)` shows an on/off glyph by weight and opacity, not colour.
 
 ## Themes
 
