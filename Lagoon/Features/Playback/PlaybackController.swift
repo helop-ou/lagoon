@@ -1447,10 +1447,10 @@ final class PlaybackController {
             var parts: [String] = []
             if let codec = video.codec { parts.append(codec.uppercased()) }
             if let width = video.width {
-                parts.append(Self.resolutionClass(width: width))
+                parts.append(MediaQuality.resolutionClass(width: width))
             }
             if let range = video.videoRangeType, range != "SDR" {
-                parts.append(Self.rangeLabel(range))
+                parts.append(MediaQuality.rangeLabel(range))
             }
             if let width = video.width, let height = video.height { parts.append("\(width)×\(height)") }
             if let fps = video.realFrameRate { parts.append("\(String(format: "%g", fps)) fps") }
@@ -1480,8 +1480,8 @@ final class PlaybackController {
     private static func videoToken(for video: MediaStream?) -> String? {
         guard let video, let codec = video.codec else { return nil }
         var qualifiers: [String] = []
-        if let width = video.width { qualifiers.append(resolutionClass(width: width)) }
-        if let range = video.videoRangeType, range != "SDR" { qualifiers.append(rangeLabel(range)) }
+        if let width = video.width { qualifiers.append(MediaQuality.resolutionClass(width: width)) }
+        if let range = video.videoRangeType, range != "SDR" { qualifiers.append(MediaQuality.rangeLabel(range)) }
         var token = codec.uppercased()
         if !qualifiers.isEmpty {
             token += " (\(qualifiers.joined(separator: " ")))"
@@ -1489,36 +1489,15 @@ final class PlaybackController {
         return token
     }
 
-    // "Dolby Digital+ Atmos 5.1".
+    // "Dolby Digital+ Atmos 5.1", named as the detail page's badges name it.
     private static func audioToken(for audio: MediaStream?) -> String? {
         guard let audio, let codec = audio.codec else { return nil }
-        var name = switch codec.lowercased() {
-        case "eac3": "Dolby Digital+"
-        case "ac3": "Dolby Digital"
-        case "truehd": "Dolby TrueHD"
-        case "dts": "DTS"
-        default: codec.uppercased()
-        }
+        var name = MediaQuality.audioName(codec)
         if audio.profile?.localizedCaseInsensitiveContains("atmos") == true {
             name += " Atmos"
         }
-        let layout: String? = switch audio.channels {
-        case 8: "7.1"
-        case 6: "5.1"
-        case 2: "2.0"
-        case 1: "1.0"
-        default: audio.channels.map { "\($0)ch" }
-        }
+        let layout = audio.channels.map { MediaQuality.channelLayout($0) ?? "\($0)ch" }
         return [name, layout].compactMap(\.self).joined(separator: " ")
-    }
-
-    // Shared with the detail page's badges via MediaQuality.
-    private static func resolutionClass(width: Int) -> String {
-        MediaQuality.resolutionClass(width: width)
-    }
-
-    private static func rangeLabel(_ range: String) -> String {
-        MediaQuality.rangeLabel(range)
     }
 
     /// The attempt's end, as the diagnostics history names it.
