@@ -26,13 +26,17 @@ final class PlaybackAudioSession {
 
     func activate(isPlaying: @escaping () -> Bool) throws {
         deactivateNotificationsOnly()
+        try configureAndActivateSession()
+        isActive = true
+        installNotifications(isPlaying: isPlaying)
+        onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
+    }
+
+    /// The one session configuration, for first activation and for rebuilding
+    /// after the media server resets.
+    private func configureAndActivateSession() throws {
         #if os(iOS)
-        try session.setCategory(
-            .playback,
-            mode: .moviePlayback,
-            policy: .longFormVideo,
-            options: []
-        )
+        try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo, options: [])
         #else
         // longFormVideo is an iOS route-sharing policy; tvOS already owns the
         // long-form route.
@@ -40,9 +44,6 @@ final class PlaybackAudioSession {
         #endif
         try session.setSupportsMultichannelContent(true)
         try session.setActive(true)
-        isActive = true
-        installNotifications(isPlaying: isPlaying)
-        onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
     }
 
     func deactivate() {
@@ -171,13 +172,7 @@ final class PlaybackAudioSession {
         isActive = false
         wasPlayingBeforeInterruption = false
         do {
-            #if os(iOS)
-            try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo, options: [])
-            #else
-            try session.setCategory(.playback, mode: .moviePlayback, options: [])
-            #endif
-            try session.setSupportsMultichannelContent(true)
-            try session.setActive(true)
+            try configureAndActivateSession()
             isActive = true
             onMediaServicesReset?()
             onRouteAvailabilityChanged?(isExternalPlaybackRouteActive)
@@ -220,7 +215,8 @@ final class NowPlayingCoordinator {
     /// Where a transport command goes, so system controls reach the same
     /// interception point as the player chrome. In a SyncPlay group they become
     /// server requests. Track selection, rate and the timeline are this
-    /// viewer's and are not routed.
+    /// viewer's and are not routed. Nil only after `stop`: a command then does
+    /// nothing, because falling back to the engine could bypass that routing.
     private var transport: PlayerTransportActions?
     private var commandTargets: [(MPRemoteCommand, Any)] = []
     private var nowPlayingInfo: [String: Any] = [:]
@@ -231,7 +227,7 @@ final class NowPlayingCoordinator {
         info: PlayerItemInfo,
         itemID: String,
         engine: any PlayerEngine,
-        transport: PlayerTransportActions? = nil,
+        transport: PlayerTransportActions,
         replacingActiveSession: Bool = false
     ) {
         reset(publishStopped: !replacingActiveSession)
@@ -310,17 +306,17 @@ final class NowPlayingCoordinator {
         let center = MPRemoteCommandCenter.shared()
         add(center.playCommand) { [weak self] _ in
             guard let self else { return }
-            if let transport = self.transport { transport.play() } else { self.engine?.play() }
+            self.transport?.play()
             self.updateTimeline()
         }
         add(center.pauseCommand) { [weak self] _ in
             guard let self else { return }
-            if let transport = self.transport { transport.pause() } else { self.engine?.pause() }
+            self.transport?.pause()
             self.updateTimeline()
         }
         add(center.togglePlayPauseCommand) { [weak self] _ in
             guard let self else { return }
-            if let transport = self.transport { transport.togglePause() } else { self.engine?.togglePause() }
+            self.transport?.togglePause()
             self.updateTimeline()
         }
         center.skipForwardCommand.preferredIntervals = [10]
@@ -333,11 +329,7 @@ final class NowPlayingCoordinator {
         }
         add(center.changePlaybackPositionCommand) { [weak self] event in
             guard let self, let position = event as? MPChangePlaybackPositionCommandEvent else { return }
-            if let transport = self.transport {
-                transport.seek(position.positionTime, false)
-            } else {
-                self.engine?.seek(to: position.positionTime)
-            }
+            self.transport?.seek(position.positionTime, false)
             self.updateTimeline()
         }
         center.changePlaybackRateCommand.supportedPlaybackRates = PlaybackRatePolicy.supported.map {
@@ -364,7 +356,7 @@ final class NowPlayingCoordinator {
     }
 
     private func seek(by seconds: Double) {
-        if let transport { transport.seekBy(seconds) } else { engine?.seek(by: seconds) }
+        transport?.seekBy(seconds)
         updateTimeline()
     }
 
