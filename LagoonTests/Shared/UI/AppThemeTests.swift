@@ -181,9 +181,11 @@ struct AppThemeTests {
             #expect(rect.insetBy(dx: -0.5, dy: -0.5).contains(bounds), "wave \(wave)")
         }
         let ghost = GhostGeometry.path(in: rect)
-        // The body is filled; an eye is a hole in it.
+        // The body is filled; an eye is a hole in it. Probed off the eyes'
+        // centre line, where the ellipses' curve joints sit and the
+        // containment test miscounts crossings.
         #expect(ghost.contains(CGPoint(x: rect.minX + 25, y: rect.minY + 12), eoFill: true))
-        #expect(!ghost.contains(CGPoint(x: rect.minX + 16, y: rect.minY + 24), eoFill: true))
+        #expect(!ghost.contains(CGPoint(x: rect.minX + 16, y: rect.minY + 22), eoFill: true))
     }
 
     @Test func aCobwebStaysInItsCornerAndEachCornerDiffers() {
