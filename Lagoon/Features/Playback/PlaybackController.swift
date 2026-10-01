@@ -984,36 +984,37 @@ final class PlaybackController {
         let resolved = TrackSelectionPolicy.resolvingTitledForced(subtitles.map(selectionCandidate))
         let isForced = resolved.map(\.isForced)
 
-        func best(requireForced: Bool) -> Int? {
-            let tracks = subtitles.enumerated().filter { offset, _ in
-                !requireForced || isForced[offset]
-            }
-            if requireForced { return pick(in: tracks) }
-            // Full dialogue: a forced or signs-titled track only when nothing
-            // else fits.
-            return pick(in: tracks.filter { !isForced[$0.offset] && !resolved[$0.offset].isTitledForced })
-                ?? pick(in: tracks.filter { !isForced[$0.offset] })
-                ?? pick(in: tracks)
+        typealias Track = (offset: Int, element: MediaStream)
+
+        func first(in tracks: [Track]) -> Int? {
+            (tracks.first(where: { $0.element.isHearingImpaired == true }) ?? tracks.first)
+                .map { $0.offset + 1 }
         }
 
-        func pick(in candidates: [(offset: Int, element: MediaStream)]) -> Int? {
+        // Full dialogue: a forced or signs-titled track only when nothing
+        // else in that language fits. Language comes first, so a titled
+        // track in the viewer's language beats any track in another.
+        func best(requireForced: Bool) -> Int? {
+            let tracks = Array(subtitles.enumerated())
+            let tiers: [(Track) -> Bool] = requireForced
+                ? [{ isForced[$0.offset] }]
+                : [
+                    { !isForced[$0.offset] && !resolved[$0.offset].isTitledForced },
+                    { !isForced[$0.offset] },
+                    { _ in true },
+                ]
             for language in preferred {
-                if let match = candidates.first(where: { _, stream in
-                    SubtitlePreferencesStore.normalizedLanguage(stream.language ?? "") == language
-                        && stream.isHearingImpaired == true
-                }) {
-                    return match.offset + 1
+                let matching = tracks.filter {
+                    SubtitlePreferencesStore.normalizedLanguage($0.element.language ?? "") == language
                 }
-                if let match = candidates.first(where: { _, stream in
-                    SubtitlePreferencesStore.normalizedLanguage(stream.language ?? "") == language
-                }) {
-                    return match.offset + 1
+                for tier in tiers {
+                    if let match = first(in: matching.filter(tier)) { return match }
                 }
             }
-            if let match = candidates.first(where: { $0.element.isHearingImpaired == true }) {
-                return match.offset + 1
+            for tier in tiers {
+                if let match = first(in: tracks.filter(tier)) { return match }
             }
-            return candidates.first.map { $0.offset + 1 }
+            return nil
         }
 
         switch displayType {
