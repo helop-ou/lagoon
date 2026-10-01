@@ -24,6 +24,12 @@ final class ImageCache {
     }
     private var inFlight: [String: Load] = [:]
     private let downloader: BoundedDownload
+    #if os(iOS)
+    /// Where a downloaded title keeps a server image on disk, if it does.
+    /// Set by the Downloads feature at launch; nil reads everything from the
+    /// network.
+    var localArtworkURL: (@Sendable (URL) -> URL?)?
+    #endif
 
     init(downloader: BoundedDownload = .shared) { self.downloader = downloader }
 
@@ -43,7 +49,7 @@ final class ImageCache {
     /// A downloaded title's artwork from disk, decoded off-main like a
     /// network fetch.
     private func localImage(for url: URL, maxPixelSize: Int) async -> UIImage? {
-        guard let fileURL = DownloadStore.localArtworkURL(matching: url) else { return nil }
+        guard let fileURL = localArtworkURL?(url) else { return nil }
         return await Task.detached(priority: .utility) {
             guard let data = try? Data(contentsOf: fileURL) else { return nil }
             return ArtworkDecoder.image(from: data, maxPixelSize: maxPixelSize)

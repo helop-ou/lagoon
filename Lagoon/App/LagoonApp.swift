@@ -17,6 +17,7 @@ struct LagoonApp: App {
         // The background session must exist before the system delivers
         // events for transfers that outlived the process.
         _ = DownloadStore.shared
+        ImageCache.shared.localArtworkURL = DownloadStore.localArtworkURL(matching:)
         #endif
     }
 

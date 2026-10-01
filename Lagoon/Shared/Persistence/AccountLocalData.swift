@@ -50,15 +50,13 @@ final class AccountLocalData {
         pendingCookieKeys.remove(key)
     }
 
+    /// Clears the account's preferences now. Files and credentials stored
+    /// elsewhere are the caller's: downloads go with the session's removal.
     func beginRemoval(accountID: String) {
         pendingAccountIDs.insert(accountID)
         for prefix in Self.perAccountKeyPrefixes {
             defaults.removeObject(forKey: prefix + accountID)
         }
-        // Downloads are iOS only.
-        #if os(iOS)
-        DownloadStore.shared.removeAll(forAccountKey: DownloadStore.accountKey(for: accountID))
-        #endif
     }
 
     func finishRemoval(accountID: String) throws {

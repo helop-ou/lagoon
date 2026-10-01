@@ -326,6 +326,10 @@ final class SessionStore {
 
     func remove(_ account: StoredAccount) throws {
         localData.beginRemoval(accountID: account.id)
+        // Downloads are iOS only.
+        #if os(iOS)
+        DownloadStore.shared.removeAll(forAccountKey: DownloadStore.accountKey(for: account.id))
+        #endif
         expiredAccountIDs.remove(account.id)
         let removedActiveAccount = activeAccount?.id == account.id || reauthenticationAccount?.id == account.id
         let seerrServer = Self.seerrServer(for: account, defaults: defaults)
