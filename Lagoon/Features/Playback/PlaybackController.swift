@@ -115,10 +115,8 @@ final class PlaybackController {
     /// starts at the top of the ladder.
     private var delivery: PlaybackDelivery = .negotiated
     private var deliveryItemId: String?
-    private var resumeOverride: Double?
-    /// A caller's start position (a SyncPlay join), outranking every resume
-    /// rule for one start. Not `resumeOverride`, which the new-item reset
-    /// clears, and a group join is exactly when the item is new.
+    /// A position that outranks every resume rule for one start: a SyncPlay
+    /// join, or a fallback retry resuming where the failed rung stopped.
     private var startPositionOverride: Double?
     /// Load paused at the start position; a group member is started later
     /// by `playGroup(atHostTime:)`.
@@ -194,10 +192,7 @@ final class PlaybackController {
     /// embedded first, then external.
     private var audioStreams: [MediaStream] = []
     private var orderedSubtitleStreams: [MediaStream] = []
-    private var preferredAudioLanguages: [String] = []
-    private var preferredSubtitleLanguages: [String] = []
-    private var audioDefaultMode: AudioDefaultMode = .serverDefault
-    private var subtitleDefaultMode: SubtitleDefaultMode = .system
+    private var selection = TrackSelectionSettings()
     private var missingSubtitleMode: MissingSubtitleMode = .ask
     @ObservationIgnored private let audioSession = PlaybackAudioSession()
     @ObservationIgnored private let nowPlaying = NowPlayingCoordinator()
@@ -271,14 +266,21 @@ final class PlaybackController {
         startPosition: Double? = nil,
         startPaused: Bool = false
     ) async {
+        selection = TrackSelectionSettings(
+            audioMode: trackPreferences.audioMode,
+            subtitleMode: trackPreferences.subtitleMode,
+            preferredAudioLanguages: preferredAudioLanguages.isEmpty
+                ? Locale.preferredLanguages
+                : preferredAudioLanguages,
+            preferredSubtitleLanguages: preferredSubtitleLanguages.isEmpty
+                ? SubtitlePreferencesStore.systemCaptionLanguages
+                : preferredSubtitleLanguages
+        )
+        self.missingSubtitleMode = missingSubtitleMode
         await start(
             media: media,
             startFromBeginning: startFromBeginning,
             client: client,
-            trackPreferences: trackPreferences,
-            preferredAudioLanguages: preferredAudioLanguages,
-            preferredSubtitleLanguages: preferredSubtitleLanguages,
-            missingSubtitleMode: missingSubtitleMode,
             prepared: nil,
             startPosition: startPosition,
             startPaused: startPaused
@@ -289,10 +291,6 @@ final class PlaybackController {
         media: MediaItem,
         startFromBeginning: Bool,
         client: JellyfinClient,
-        trackPreferences: TrackPreferenceValues,
-        preferredAudioLanguages: [String],
-        preferredSubtitleLanguages: [String],
-        missingSubtitleMode: MissingSubtitleMode,
         prepared: PlaybackSuccessorPreparation.PreparedPlayback?,
         startPosition: Double? = nil,
         startPaused: Bool = false
@@ -324,7 +322,6 @@ final class PlaybackController {
             deliveryItemId = media.id
             delivery = .negotiated
             deliveryFallbacks = []
-            resumeOverride = nil
             skipsLocalPlayback = false
             #if DEBUG
             // Regression hook: force a rung so HLS cases run on a server that
@@ -337,15 +334,6 @@ final class PlaybackController {
             #endif
         }
         itemId = media.id
-        audioDefaultMode = trackPreferences.audioMode
-        subtitleDefaultMode = trackPreferences.subtitleMode
-        self.preferredAudioLanguages = preferredAudioLanguages.isEmpty
-            ? Locale.preferredLanguages
-            : preferredAudioLanguages
-        self.preferredSubtitleLanguages = preferredSubtitleLanguages.isEmpty
-            ? SubtitlePreferencesStore.systemCaptionLanguages
-            : preferredSubtitleLanguages
-        self.missingSubtitleMode = missingSubtitleMode
         // A download plays from disk with no server round trip. Checked
         // before a prepared successor, which describes a network stream.
         var localSource: MediaSource?
@@ -427,12 +415,11 @@ final class PlaybackController {
                 )
                 : nil
             var resumeSeconds = Self.resumeStartSeconds(
-                fallbackOverrideSeconds: startPositionOverride ?? resumeOverride,
+                fallbackOverrideSeconds: startPositionOverride,
                 startFromBeginning: startFromBeginning,
                 localResumeTicks: localResumeTicks,
                 serverPositionTicks: media.userData?.playbackPositionTicks
             )
-            resumeOverride = nil
             startPositionOverride = nil
             incidents.beginAttempt(
                 delivery: delivery,
@@ -493,10 +480,10 @@ final class PlaybackController {
                 initialAudioOrdinal = position + 1
             }
             initialAudioOrdinal = TrackSelectionPolicy.audioOrdinal(
-                mode: audioDefaultMode,
+                mode: selection.audioMode,
                 candidates: embeddedAudio.map(Self.selectionCandidate),
                 serverDefault: initialAudioOrdinal,
-                preferredLanguages: self.preferredAudioLanguages,
+                preferredLanguages: selection.preferredAudioLanguages,
                 originalLanguage: resolvedExtras.originalLanguage ?? media.originalLanguage
             )
             // A choice carried from the previous episode outranks the default.
@@ -561,18 +548,18 @@ final class PlaybackController {
                     ? embeddedAudio[ordinal - 1].language
                     : nil
             }
-            let automaticSubtitleOrdinal: Int? = subtitleDefaultMode == .system
+            let automaticSubtitleOrdinal: Int? = selection.subtitleMode == .system
                 ? Self.systemDefaultSubtitleOrdinal(
                     current: initialSubtitleOrdinal,
                     subtitles: orderedSubtitles,
                     selectedAudioLanguage: selectedAudioLanguage,
-                    preferredLanguages: self.preferredSubtitleLanguages
+                    preferredLanguages: selection.preferredSubtitleLanguages
                 )
                 : TrackSelectionPolicy.subtitleOrdinal(
-                    mode: subtitleDefaultMode,
+                    mode: selection.subtitleMode,
                     candidates: orderedSubtitles.map(Self.selectionCandidate),
                     serverDefault: initialSubtitleOrdinal,
-                    preferredLanguages: self.preferredSubtitleLanguages,
+                    preferredLanguages: selection.preferredSubtitleLanguages,
                     selectedAudioLanguage: selectedAudioLanguage
                 )
             policySubtitleOrdinal = automaticSubtitleOrdinal
@@ -735,7 +722,7 @@ final class PlaybackController {
                 transport: transportActions,
                 replacingActiveSession: handoffStartedAt != nil
             )
-            let preferredSet = Set(self.preferredSubtitleLanguages.compactMap(
+            let preferredSet = Set(selection.preferredSubtitleLanguages.compactMap(
                 SubtitlePreferencesStore.normalizedLanguage
             ))
             let hasSuitableLocalTrack = orderedSubtitles.contains {
@@ -750,7 +737,7 @@ final class PlaybackController {
                 itemID: itemId,
                 mediaSourceID: mediaSourceId,
                 streams: orderedSubtitles,
-                preferredLanguages: self.preferredSubtitleLanguages,
+                preferredLanguages: selection.preferredSubtitleLanguages,
                 missingMode: missingSubtitleMode,
                 hasSuitableLocalTrack: hasSuitableLocalTrack
             ) { [weak self] stream in
@@ -1179,7 +1166,7 @@ final class PlaybackController {
     /// starts, or Jellyfin leaves it unresolved instead of marking it played.
     func playNextEpisode() async {
         defer { isAutoplayPending = false }
-        guard !isAdvancing, let next = nextUp, let client else { return }
+        guard !isAdvancing, let next = nextUp, client != nil else { return }
         isAdvancing = true
         defer { isAdvancing = false }
         beginEpisodeHandoff(to: next)
@@ -1187,32 +1174,52 @@ final class PlaybackController {
         let prepared = await successorPreparation.preparedForHandoff()
         guard !isClosed else { return }
         captureTrackPreference()
-        let outgoingResourcesRetired = await stop(
-            preservingPreparedNext: true,
+        await restart(next, scope: "handoff", prepared: prepared, preservingPreparedNext: true)
+    }
+
+    /// Replaces the engine on the same surface: stop, wait for the outgoing
+    /// engine to release the display layer, then start. The one path for an
+    /// episode hand-off, a group item change and a delivery fallback.
+    ///
+    /// The new item resumes from its own position unless `startPosition`
+    /// says otherwise. `isStillWanted` is checked after the stop, when the
+    /// caller's reason to restart may have gone.
+    private func restart(
+        _ media: MediaItem,
+        scope: StaticString,
+        prepared: PlaybackSuccessorPreparation.PreparedPlayback? = nil,
+        preservingPreparedNext: Bool,
+        delivery rung: PlaybackDelivery? = nil,
+        startPosition: Double? = nil,
+        startPaused: Bool = false,
+        isStillWanted: () -> Bool = { true }
+    ) async {
+        guard let client else { return }
+        // Keep the display layer mounted. Destroying it leaves the old
+        // renderer registered as attached, and the retirement wait times out
+        // every time.
+        let retired = await stop(
+            preservingPreparedNext: preservingPreparedNext,
             preservingPlayerSurface: true
         )
-        guard outgoingResourcesRetired else {
-            failRetirement(scope: "handoff")
+        guard !isClosed else { return }
+        guard retired else {
+            failRetirement(scope: scope)
             return
         }
-        guard !isClosed else { return }
+        guard !Task.isCancelled, isStillWanted() else { return }
         // Don't let the old card reappear over a successor resumed near its end.
         nextUp = nil
         didFinish = false
         errorMessage = nil
-        // Resume: the next episode may have a position of its own.
+        if let rung { delivery = rung }
         await start(
-            media: next,
+            media: media,
             startFromBeginning: false,
             client: client,
-            trackPreferences: TrackPreferenceValues(
-                audioMode: audioDefaultMode,
-                subtitleMode: subtitleDefaultMode
-            ),
-            preferredAudioLanguages: preferredAudioLanguages,
-            preferredSubtitleLanguages: preferredSubtitleLanguages,
-            missingSubtitleMode: missingSubtitleMode,
-            prepared: prepared
+            prepared: prepared,
+            startPosition: startPosition,
+            startPaused: startPaused
         )
     }
 
@@ -1359,32 +1366,16 @@ final class PlaybackController {
     /// stop-then-start as `playNextEpisode`, so the video surface survives,
     /// without the successor warm-up.
     func startGroupItem(_ media: MediaItem, startPosition: Double) async {
-        guard !isAdvancing, !isClosed, let client else { return }
+        guard !isAdvancing, !isClosed, client != nil else { return }
         isAdvancing = true
         defer { isAdvancing = false }
-        let retired = await stop(preservingPreparedNext: false, preservingPlayerSurface: true)
-        guard retired else {
-            // Same as an episode handoff: an error, not a frozen frame.
-            if !isClosed { failRetirement(scope: "group") }
-            return
-        }
-        guard !isClosed, !Task.isCancelled, groupTransport != nil else { return }
-        nextUp = nil
-        didFinish = false
-        errorMessage = nil
-        await start(
-            media: media,
-            startFromBeginning: false,
-            client: client,
-            trackPreferences: TrackPreferenceValues(
-                audioMode: audioDefaultMode,
-                subtitleMode: subtitleDefaultMode
-            ),
-            preferredAudioLanguages: preferredAudioLanguages,
-            preferredSubtitleLanguages: preferredSubtitleLanguages,
-            missingSubtitleMode: missingSubtitleMode,
+        await restart(
+            media,
+            scope: "group",
+            preservingPreparedNext: false,
             startPosition: startPosition,
-            startPaused: true
+            startPaused: true,
+            isStillWanted: { groupTransport != nil }
         )
     }
 
@@ -1671,7 +1662,7 @@ final class PlaybackController {
         // Held across the restart: a failure while the next attempt starts
         // takes the terminal path instead of tearing down a starting engine.
         defer { isFallingBack = false }
-        guard !isClosed, let client, let media = currentMedia else { return }
+        guard !isClosed, client != nil, let media = currentMedia else { return }
         let resumeAt = currentPosition
         // Tell the group now: the replacement buffers before its callbacks
         // are wired, and its Ready must read as a new state.
@@ -1692,34 +1683,12 @@ final class PlaybackController {
             transition: "\(delivery.rawValue)→\(next.rawValue) · \(cause)",
             message: failure.message
         ))
-        // Keep the display layer mounted, as the hand-off does. Destroying it
-        // leaves the old renderer registered as attached, and the retirement
-        // wait times out every time.
-        let outgoingResourcesRetired = await stop(
+        await restart(
+            media,
+            scope: "fallback",
             preservingPreparedNext: true,
-            preservingPlayerSurface: true
-        )
-        guard !isClosed else { return }
-        guard outgoingResourcesRetired else {
-            errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
-            return
-        }
-        didFinish = false
-        errorMessage = nil
-        delivery = next
-        resumeOverride = resumeAt
-        await start(
-            media: media,
-            startFromBeginning: false,
-            client: client,
-            trackPreferences: TrackPreferenceValues(
-                audioMode: audioDefaultMode,
-                subtitleMode: subtitleDefaultMode
-            ),
-            preferredAudioLanguages: preferredAudioLanguages,
-            preferredSubtitleLanguages: preferredSubtitleLanguages,
-            missingSubtitleMode: missingSubtitleMode,
-            prepared: nil,
+            delivery: next,
+            startPosition: resumeAt,
             // In a group, prime and report Ready; the server starts playback.
             startPaused: groupTransport != nil
         )
