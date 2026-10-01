@@ -151,6 +151,23 @@ differs and off is a valid answer.
 - Subtitle search appends tracks mid-episode, so the write requires at least
   as many engine tracks as the captured layout, not exactly as many, and
   refuses an ordinal pointing at an appended track.
+- **System Setting follows the device's caption display type**: Forced Only,
+  Always On or Automatic. Within it the viewer's language comes before the
+  full-dialogue preference, so a signs-titled track in their language beats
+  a full track in another.
+
+### The track plan
+
+`PlaybackTrackPlan` owns one attempt's selection and is rebuilt with every
+engine. It applies, lowest first: automatic selection, the choice carried
+from the previous episode, the choice remembered for the show, then the bench
+hook. It also holds what recording a later choice needs: the scope, the
+layouts and what automatic selection picked. `PlaybackTrackPlanTests` pins the
+order; keep it.
+
+The carry matches audio on the file's `title` and subtitles on Jellyfin's
+`displayTitle`. The difference is deliberate: a subtitle's display title names
+its forced and SDH flags, which tell same-language tracks apart.
 
 ## Lifecycle and memory
 
@@ -164,6 +181,11 @@ guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md#lifecy
   engine strongly**: SwiftUI can keep old view values after an episode
   handoff. The engine cannot enforce this, and it has regressed most often.
 - Network reporting never blocks dismissal.
+- An episode hand-off, a Watch Together item change and a delivery fallback
+  replace the engine through one `restart`: stop with the surface kept, wait
+  for the outgoing engine to release the display layer, then start. If it
+  does not, the player stops with an error rather than attaching a new engine
+  to a layer the old one still owns.
 - The byte cache belongs to the engine. `prepare` takes an item ID and a
   delivery and decides whether to cache; `stageSuccessor` warms the next
   episode; `bufferState` feeds the scrub bar. Nothing here builds a cache

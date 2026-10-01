@@ -17,7 +17,7 @@ code.
 | `Lagoon/Features/Accounts/` | Connection, sign-in, account selection and session ownership |
 | `Lagoon/Features/{Home,Library,Discovery,Detail,Search,Settings}/` | Feature screens, models and local helpers |
 | `Lagoon/Features/Playback/` | The controller, and the audio session the player owns |
-| `Lagoon/Features/Playback/{Session,Automation,Tracks}/` | The delivery ladder, server reporting and successor negotiation; what happens when an episode ends; remembered track choices |
+| `Lagoon/Features/Playback/{Session,Automation,Tracks}/` | The delivery ladder, server reporting and successor negotiation; what happens when an episode ends; per-attempt track selection and remembered choices |
 | `Lagoon/Features/Playback/{Views,Subtitles,Diagnostics}/` | Player presentation, subtitle search and preferences, optional sampling |
 | `Lagoon/Features/Downloads/` | Offline downloads: the store, its background session, and the Downloads screens (iOS only) |
 | `Lagoon/Features/SyncPlay/` | Watch Together: group membership, the pure session reducer, and the driver that runs playback from a group |
