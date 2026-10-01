@@ -522,7 +522,10 @@ final class SubtitleSearchCoordinator {
                 try Task.checkCancellation()
                 guard generation == downloadGeneration else { return }
                 guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
-                engine.addExternalSubtitle(ExternalSubtitleTrack(
+                // The controller maps the selected track through its own stream list to
+                // carry the choice into the next episode. The server has no stream for
+                // this file until the upload lands, so add the candidate's description.
+                attach(ExternalSubtitleTrack(
                     url: file.url,
                     preloadedData: file.data,
                     title: candidate.name,
@@ -531,11 +534,7 @@ final class SubtitleSearchCoordinator {
                     isForced: candidate.isForced,
                     isHearingImpaired: candidate.isHearingImpaired,
                     isDownloaded: true
-                ))
-                // The controller maps the selected track through its own stream list to
-                // carry the choice into the next episode. The server has no stream for
-                // this file until the upload lands, so add the candidate's description.
-                onTrackAdded?(MediaStream(
+                ), described: MediaStream(
                     type: "Subtitle",
                     codec: candidate.format,
                     displayTitle: candidate.name,
@@ -556,9 +555,7 @@ final class SubtitleSearchCoordinator {
                     bitDepth: nil,
                     bitRate: nil,
                     realFrameRate: nil
-                ))
-                phase = .downloaded
-                finishBrowsing()
+                ), to: engine)
 
                 persistenceTask?.cancel()
                 persistenceTask = Task { [weak self] in
@@ -605,7 +602,7 @@ final class SubtitleSearchCoordinator {
             guard generation == downloadGeneration else { return }
             guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
             existingSignatures.insert(SubtitleStreamSignature(stream))
-            engine.addExternalSubtitle(ExternalSubtitleTrack(
+            attach(ExternalSubtitleTrack(
                 url: url,
                 title: stream.displayTitle ?? candidate.name,
                 language: stream.language ?? candidate.language,
@@ -613,10 +610,7 @@ final class SubtitleSearchCoordinator {
                 isForced: stream.isForced == true || candidate.isForced,
                 isHearingImpaired: stream.isHearingImpaired == true || candidate.isHearingImpaired,
                 isDownloaded: true
-            ))
-            onTrackAdded?(stream)
-            phase = .downloaded
-            finishBrowsing()
+            ), described: stream, to: engine)
         } catch is CancellationError {
             if generation == downloadGeneration { phase = .idle }
         } catch {
@@ -631,6 +625,19 @@ final class SubtitleSearchCoordinator {
                 ? .notPermitted
                 : .downloadFailed(failure.localizedDescription)
         }
+    }
+
+    /// Selects a downloaded track in the player and reports it, ending the
+    /// download. `stream` is how the controller sees the track afterwards.
+    private func attach(
+        _ track: ExternalSubtitleTrack,
+        described stream: MediaStream,
+        to engine: any PlayerEngine
+    ) {
+        engine.addExternalSubtitle(track)
+        onTrackAdded?(stream)
+        phase = .downloaded
+        finishBrowsing()
     }
 
     /// Returns to the track list without touching `phase`, so the "Downloaded
