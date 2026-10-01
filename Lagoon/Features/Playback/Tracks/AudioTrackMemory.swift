@@ -5,7 +5,7 @@ import LagoonEngine
 /// episode. Unlike `TrackSelectionCandidate`, codec and channels are here:
 /// they must never choose a track, but they describe the layout's shape,
 /// which decides whether a remembered position still applies.
-nonisolated struct AudioLayoutStream: Equatable {
+nonisolated struct AudioLayoutStream: Equatable, TrackLayoutEntry {
     let codec: String?
     let channels: Int?
     let language: String?
@@ -78,23 +78,13 @@ nonisolated enum AudioTrackMemoryPolicy {
     }
 
     /// The ordinal when the description names exactly one track, else nil.
-    /// Ambiguity is failure: Jellyfin synthesizes titles from codec and
-    /// channels, so several tracks can share one.
     static func uniqueDescriptiveOrdinal(
         matchingLanguage language: String?,
         title: String?,
         in streams: [AudioLayoutStream]
     ) -> Int? {
-        guard language != nil || title != nil else { return nil }
-        let exact = streams.indices.filter {
-            streams[$0].language == language && streams[$0].title == title
-        }
-        if exact.count == 1 { return exact[0] + 1 }
-        // Titles pick up episode noise ("English (SDH) - Forced"), so fall back to
-        // language, but only where it names one track.
-        guard exact.isEmpty, let language else { return nil }
-        let byLanguage = streams.indices.filter { streams[$0].language == language }
-        return byLanguage.count == 1 ? byLanguage[0] + 1 : nil
+        TrackLayoutMatch.uniqueDescriptiveOrdinal(
+            matchingLanguage: language, title: title, in: streams)
     }
 
     /// Last resort: the first track of the right language.
@@ -102,8 +92,7 @@ nonisolated enum AudioTrackMemoryPolicy {
         matchingLanguage language: String?,
         in streams: [AudioLayoutStream]
     ) -> Int? {
-        guard let language else { return nil }
-        return streams.firstIndex { $0.language == language }.map { $0 + 1 }
+        TrackLayoutMatch.approximateDescriptiveOrdinal(matchingLanguage: language, in: streams)
     }
 
     /// Description alone, for the in-session carry between episodes, which has
@@ -117,17 +106,13 @@ nonisolated enum AudioTrackMemoryPolicy {
             ?? approximateDescriptiveOrdinal(matchingLanguage: language, in: streams)
     }
 
-    /// Position, fenced by an identical layout. Reached only after description
-    /// fails, so it covers untagged releases and ones that tag several tracks
-    /// alike.
+    /// Position, fenced by an identical layout.
     static func positionalOrdinal(
         for choice: RememberedAudioChoice,
         in streams: [AudioLayoutStream]
     ) -> Int? {
-        guard !streams.isEmpty,
-              choice.layout == fingerprint(of: streams),
-              (1...streams.count).contains(choice.ordinal) else { return nil }
-        return choice.ordinal
+        TrackLayoutMatch.positionalOrdinal(
+            for: choice, in: streams, fingerprint: fingerprint(of: streams))
     }
 
     /// The whole ladder: unambiguous description, position against an unchanged
@@ -150,10 +135,7 @@ nonisolated enum AudioTrackMemoryPolicy {
     /// Landing back on the automatic choice drops the override, or the show
     /// would stay frozen against later preference changes. `automatic` is nil
     /// when policy named no track; the engine then starts on the first track.
-    enum Outcome: Equatable {
-        case remember(ordinal: Int)
-        case forget
-    }
+    typealias Outcome = TrackMemoryOutcome
 
     static func outcome(chosen ordinal: Int, automatic: Int?) -> Outcome {
         ordinal == (automatic ?? 1) ? .forget : .remember(ordinal: ordinal)

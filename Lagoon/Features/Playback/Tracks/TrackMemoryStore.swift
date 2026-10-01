@@ -9,6 +9,17 @@ nonisolated protocol RememberedTrackChoice: Codable, Equatable {
     /// Reference-date seconds, used only to evict the oldest entries. Not a
     /// `Date`: dates stay out of Codable.
     var updatedAt: Double { get }
+    /// 1-based, in the engine's ordinal space for this kind of track.
+    var ordinal: Int { get }
+    /// Fingerprint of the layout the ordinal was measured against.
+    var layout: String { get }
+}
+
+/// What a layout stream offers the description match: the two fields a
+/// remembered choice can name it by.
+nonisolated protocol TrackLayoutEntry {
+    var language: String? { get }
+    var title: String? { get }
 }
 
 /// A track layout's shape as one comparable string.
@@ -20,6 +31,62 @@ nonisolated enum TrackLayoutFingerprint {
             .map { fields in fields.map { "\($0.count):\($0)" }.joined() }
             .joined(separator: "|")
     }
+}
+
+/// The matching rungs audio and subtitle memory share. The policies stay
+/// separate types because their layouts and fingerprints differ, so each
+/// passes its own fingerprint in.
+nonisolated enum TrackLayoutMatch {
+    /// The ordinal when the description names exactly one track, else nil.
+    /// Ambiguity is failure: Jellyfin synthesizes titles from codec and
+    /// channels, and a release can tag several tracks alike (full, forced and
+    /// SDH all "English"), so language alone names none of them.
+    static func uniqueDescriptiveOrdinal<Entry: TrackLayoutEntry>(
+        matchingLanguage language: String?,
+        title: String?,
+        in streams: [Entry]
+    ) -> Int? {
+        guard language != nil || title != nil else { return nil }
+        let exact = streams.indices.filter {
+            streams[$0].language == language && streams[$0].title == title
+        }
+        if exact.count == 1 { return exact[0] + 1 }
+        // Titles pick up episode noise ("English (SDH) - Forced"), so fall back to
+        // language, but only where it names one track.
+        guard exact.isEmpty, let language else { return nil }
+        let byLanguage = streams.indices.filter { streams[$0].language == language }
+        return byLanguage.count == 1 ? byLanguage[0] + 1 : nil
+    }
+
+    /// Last resort: the first track of the right language. Maybe not the
+    /// variant the viewer picked, but never a language they cannot read.
+    static func approximateDescriptiveOrdinal<Entry: TrackLayoutEntry>(
+        matchingLanguage language: String?,
+        in streams: [Entry]
+    ) -> Int? {
+        guard let language else { return nil }
+        return streams.firstIndex { $0.language == language }.map { $0 + 1 }
+    }
+
+    /// Position, fenced by an identical layout. Reached only after description
+    /// fails, so it covers untagged releases and ones that tag several tracks
+    /// alike.
+    static func positionalOrdinal<Choice: RememberedTrackChoice, Entry>(
+        for choice: Choice,
+        in streams: [Entry],
+        fingerprint: String
+    ) -> Int? {
+        guard !streams.isEmpty,
+              choice.layout == fingerprint,
+              (1...streams.count).contains(choice.ordinal) else { return nil }
+        return choice.ordinal
+    }
+}
+
+/// What a viewer's track change does to the stored choice.
+nonisolated enum TrackMemoryOutcome: Equatable {
+    case remember(ordinal: Int)
+    case forget
 }
 
 /// Per-account track choices, scoped to a series so correcting one episode

@@ -4,7 +4,7 @@ import LagoonEngine
 /// One subtitle stream reduced to what identifies it again in a sibling
 /// episode. The flags describe the layout's shape: forced, hearing-impaired
 /// and external are what separate tracks sharing a language.
-nonisolated struct SubtitleLayoutStream: Equatable {
+nonisolated struct SubtitleLayoutStream: Equatable, TrackLayoutEntry {
     let language: String?
     let title: String?
     let isForced: Bool
@@ -91,14 +91,8 @@ nonisolated enum SubtitleTrackMemoryPolicy {
         title: String?,
         in streams: [SubtitleLayoutStream]
     ) -> Int? {
-        guard language != nil || title != nil else { return nil }
-        let exact = streams.indices.filter {
-            streams[$0].language == language && streams[$0].title == title
-        }
-        if exact.count == 1 { return exact[0] + 1 }
-        guard exact.isEmpty, let language else { return nil }
-        let byLanguage = streams.indices.filter { streams[$0].language == language }
-        return byLanguage.count == 1 ? byLanguage[0] + 1 : nil
+        TrackLayoutMatch.uniqueDescriptiveOrdinal(
+            matchingLanguage: language, title: title, in: streams)
     }
 
     /// Last resort: the first track of the right language. Maybe forced instead
@@ -107,8 +101,7 @@ nonisolated enum SubtitleTrackMemoryPolicy {
         matchingLanguage language: String?,
         in streams: [SubtitleLayoutStream]
     ) -> Int? {
-        guard let language else { return nil }
-        return streams.firstIndex { $0.language == language }.map { $0 + 1 }
+        TrackLayoutMatch.approximateDescriptiveOrdinal(matchingLanguage: language, in: streams)
     }
 
     /// Position, fenced by an identical layout. Reached only after description
@@ -117,10 +110,8 @@ nonisolated enum SubtitleTrackMemoryPolicy {
         for choice: RememberedSubtitleChoice,
         in streams: [SubtitleLayoutStream]
     ) -> Int? {
-        guard !streams.isEmpty,
-              choice.layout == fingerprint(of: streams),
-              (1...streams.count).contains(choice.ordinal) else { return nil }
-        return choice.ordinal
+        TrackLayoutMatch.positionalOrdinal(
+            for: choice, in: streams, fingerprint: fingerprint(of: streams))
     }
 
     /// The whole ladder. Off answers immediately: it names no track and holds
@@ -142,10 +133,7 @@ nonisolated enum SubtitleTrackMemoryPolicy {
     /// What a viewer's subtitle change does to the stored choice. `automatic` is
     /// nil where the engine starts with subtitles off, so turning them off there
     /// is no override, while turning off a server default is.
-    enum Outcome: Equatable {
-        case remember(ordinal: Int)
-        case forget
-    }
+    typealias Outcome = TrackMemoryOutcome
 
     static func outcome(chosen ordinal: Int, automatic: Int?) -> Outcome {
         ordinal == (automatic ?? offOrdinal) ? .forget : .remember(ordinal: ordinal)
