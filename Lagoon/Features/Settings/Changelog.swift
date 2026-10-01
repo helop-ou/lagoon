@@ -47,6 +47,20 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.5.1",
+            build: "114",
+            released: "October 2026",
+            headline: "Subtitles chosen by System Setting stay in your language.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "The player's Info panel names audio formats the same way as the title's page, such as TrueHD 7.1.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "With subtitles on System Setting, a track in your language is no longer passed over for one in another language when yours is named Signs & Songs or similar.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.5.0",
             build: "113",
             released: "October 2026",
