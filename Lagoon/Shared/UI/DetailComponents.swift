@@ -833,11 +833,11 @@ struct TitleArtView: View {
     let item: MediaItem
     var alignment: HorizontalAlignment = .leading
 
-    @Environment(SessionStore.self) private var session
+    @Environment(\.jellyfinClient) private var client
 
     var body: some View {
         TitleArtImage(
-            url: session.client.imageURL(for: item, kind: .logo, maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)),
+            url: client?.imageURL(for: item, kind: .logo, maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)),
             title: item.name ?? "",
             maxHeight: Metrics.logoMaxHeight,
             alignment: alignment
@@ -906,7 +906,7 @@ struct CastStrip: View {
     private let people: [Person]
     private let credits: [CastCredit]?
 
-    @Environment(SessionStore.self) private var session
+    @Environment(\.jellyfinClient) private var client
 
     init(people: [Person]) {
         self.people = people
@@ -931,7 +931,7 @@ struct CastStrip: View {
                     id: person.id,
                     name: person.name ?? "",
                     credit: credit(for: person),
-                    imageURL: session.client.personImageURL(for: person, maxWidth: ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale))
+                    imageURL: client?.personImageURL(for: person, maxWidth: ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale))
                 )
             }
     }

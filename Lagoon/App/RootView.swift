@@ -28,6 +28,10 @@ struct RootView: View {
         .themedControls()
         .overlay { ThemeBloomOverlay() }
         .environment(session)
+        .environment(\.jellyfinClient, session.client)
+        #if os(iOS)
+        .environment(\.itemDownloads, DownloadStore.shared)
+        #endif
         .environment(seerr)
         .environment(syncPlay)
         .environment(serverSync)

@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(iOS)
-import os
-#endif
 
 /// Long-press menu on any card: watched/unwatched and favourite, as in
 /// `ItemActionRow`.
@@ -12,7 +9,8 @@ private struct ItemUserDataMenu: ViewModifier {
     let item: MediaItem
     let onChange: (() async -> Void)?
 
-    @Environment(SessionStore.self) private var session
+    @Environment(\.jellyfinClient) private var client
+    @Environment(\.itemDownloads) private var downloads
     @State private var played: Bool?
     @State private var favorite: Bool?
 
@@ -31,7 +29,7 @@ private struct ItemUserDataMenu: ViewModifier {
                     mutate(
                         target: !isPlayed,
                         apply: { played = $0 },
-                        send: { try await session.client.setPlayed($0, itemId: item.id) }
+                        send: { try await requireClient().setPlayed($0, itemId: item.id) }
                     )
                 } label: {
                     Label(
@@ -45,7 +43,7 @@ private struct ItemUserDataMenu: ViewModifier {
                         mutate(
                             target: !isFavorite,
                             apply: { favorite = $0 },
-                            send: { try await session.client.setFavorite($0, itemId: item.id) }
+                            send: { try await requireClient().setFavorite($0, itemId: item.id) }
                         )
                     } label: {
                         Label(
@@ -55,9 +53,7 @@ private struct ItemUserDataMenu: ViewModifier {
                     }
                 }
 
-                #if os(iOS)
-                downloadMenuItems
-                #endif
+                downloads?.contextMenuItems(for: item)
             }
             // Rails recycle card views, so drop an override from the
             // previous item. Same guard as `ItemActionRow`.
@@ -67,52 +63,12 @@ private struct ItemUserDataMenu: ViewModifier {
             }
     }
 
-    #if os(iOS)
-    /// Movies and episodes only; others have no file of their own. A new
-    /// download gets `DownloadControl`'s quality picker.
-    @ViewBuilder
-    private var downloadMenuItems: some View {
-        if item.type == .movie || item.type == .episode {
-            let store = DownloadStore.shared
-            if store.isDownloaded(item.id) {
-                Button(role: .destructive) {
-                    store.delete(item.id)
-                } label: {
-                    Label("Delete Download", systemImage: "arrow.down.circle.fill")
-                }
-            } else if store.entry(for: item.id) != nil {
-                Button(role: .destructive) {
-                    store.delete(item.id)
-                } label: {
-                    Label("Cancel Download", systemImage: "xmark.circle")
-                }
-            } else if session.client.cachedContentDownloadingAllowed == true {
-                Menu {
-                    ForEach(downloadQualities) { quality in
-                        Button(quality.title) {
-                            Task {
-                                if let failure = await DownloadActions.start(item: item, quality: quality, session: session) {
-                                    DownloadStore.log.error("Context menu download failed: \(failure, privacy: .public)")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Download", systemImage: "arrow.down.circle")
-                }
-            }
-        }
+    /// A hierarchy without a signed-in account has no client; the
+    /// optimistic state then reverts.
+    private func requireClient() throws -> JellyfinClient {
+        guard let client else { throw CancellationError() }
+        return client
     }
-
-    /// Default quality first, as in `DownloadControl`. High and Standard need
-    /// transcode permission; Original needs only download permission.
-    private var downloadQualities: [DownloadQuality] {
-        DownloadQuality.ordered(
-            default: DownloadStore.shared.defaultQuality,
-            transcodingAllowed: session.client.cachedVideoTranscodingAllowed == true
-        )
-    }
-    #endif
 
     private func mutate(
         target: Bool,

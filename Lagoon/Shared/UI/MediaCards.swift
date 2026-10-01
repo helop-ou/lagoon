@@ -127,7 +127,8 @@ private extension View {
 /// Name and year sit **under** the artwork, never over the poster.
 struct PosterCard: View {
     let item: MediaItem
-    @Environment(SessionStore.self) private var session
+    @Environment(\.jellyfinClient) private var client
+    @Environment(\.itemDownloads) private var downloads
     let layout = PosterLayout()
 
     var body: some View {
@@ -137,7 +138,8 @@ struct PosterCard: View {
             maxPixelSize: layout.imageSize,
             title: item.name ?? "",
             subtitle: item.productionYear.map(String.init),
-            accessibilityLabel: (item.name ?? "Item").appendingDownloadedSuffix(itemID: item.id),
+            accessibilityLabel: (item.name ?? "Item")
+                .appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true),
             accessibilityIdentifier: "media.poster.\(item.id)"
         ) {
             progressBar
@@ -146,7 +148,7 @@ struct PosterCard: View {
     }
 
     private var posterURL: URL? {
-        session.client.imageURL(
+        client?.imageURL(
             for: item,
             kind: .primary,
             maxWidth: layout.imageWidth
@@ -167,7 +169,8 @@ struct LandscapeCard: View {
     let item: MediaItem
     var showsMetadata = false
     var action: (() -> Void)? = nil
-    @Environment(SessionStore.self) private var session
+    @Environment(\.jellyfinClient) private var client
+    @Environment(\.itemDownloads) private var downloads
     @Environment(\.displayScale) private var displayScale
 
     var body: some View {
@@ -190,11 +193,11 @@ struct LandscapeCard: View {
     }
 
     private var landscapeAccessibilityLabel: String {
-        item.railTitle.appendingDownloadedSuffix(itemID: item.id)
+        item.railTitle.appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true)
     }
 
     private var thumbURL: URL? {
-        session.client.imageURL(
+        client?.imageURL(
             for: item,
             kind: .thumb,
             maxWidth: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale)
@@ -406,11 +409,22 @@ extension View {
         inset: CGFloat = Metrics.Space.xs,
         @ViewBuilder leading: () -> Leading = { EmptyView() }
     ) -> some View {
-        overlay(alignment: .topTrailing) {
+        modifier(DownloadedBadge(itemID: itemID, inset: inset, leading: leading()))
+    }
+}
+
+private struct DownloadedBadge<Leading: View>: ViewModifier {
+    let itemID: String
+    let inset: CGFloat
+    let leading: Leading
+    @Environment(\.itemDownloads) private var downloads
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topTrailing) {
             HStack(spacing: Metrics.Space.xs) {
-                leading()
+                leading
                 #if os(iOS)
-                if DownloadStore.shared.isDownloaded(itemID) {
+                if downloads?.isDownloaded(itemID) == true {
                     DownloadedMark()
                 }
                 #endif
@@ -421,16 +435,10 @@ extension View {
 }
 
 extension String {
-    /// Appends ", downloaded" for a downloaded item; downloads exist on iOS
-    /// only. Feeds a card's accessibility label without an `#if` at each
-    /// call site.
-    func appendingDownloadedSuffix(itemID: String) -> String {
-        #if os(iOS)
-        guard DownloadStore.shared.isDownloaded(itemID) else { return self }
-        return "\(self), \(String(localized: "downloaded"))"
-        #else
-        return self
-        #endif
+    /// Appends ", downloaded" for a downloaded item, for a card's
+    /// accessibility label.
+    func appendingDownloadedSuffix(if isDownloaded: Bool) -> String {
+        isDownloaded ? "\(self), \(String(localized: "downloaded"))" : self
     }
 }
 

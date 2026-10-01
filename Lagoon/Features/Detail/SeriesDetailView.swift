@@ -346,6 +346,7 @@ struct EpisodeCard: View {
     let action: () -> Void
 
     @Environment(SessionStore.self) private var session
+    @Environment(\.itemDownloads) private var downloads
     @Environment(\.displayScale) private var displayScale
     @FocusState private var isFocused: Bool
 
@@ -375,7 +376,8 @@ struct EpisodeCard: View {
         if isWatched {
             parts.append(String(localized: "watched"))
         }
-        return parts.joined(separator: ", ").appendingDownloadedSuffix(itemID: episode.id)
+        return parts.joined(separator: ", ")
+            .appendingDownloadedSuffix(if: downloads?.isDownloaded(episode.id) == true)
     }
 
     private var artwork: some View {

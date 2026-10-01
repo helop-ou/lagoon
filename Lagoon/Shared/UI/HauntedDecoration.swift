@@ -6,10 +6,7 @@ import SwiftUI
 /// Motion or while the player is up.
 struct HauntedDecoration: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    #if os(iOS)
-    /// The iOS player covers the pages without removing them.
-    @Environment(PlayerPresentationHub.self) private var playerHub: PlayerPresentationHub?
-    #endif
+    @Environment(\.playerCover) private var playerCover
 
     var body: some View {
         let silk = Color.white.mix(with: Theme.accent, by: 0.2)
@@ -22,11 +19,7 @@ struct HauntedDecoration: View {
     }
 
     private var isStill: Bool {
-        #if os(iOS)
-        reduceMotion || playerHub?.request != nil
-        #else
-        reduceMotion || PlayerPresence.shared.isPlayerUp
-        #endif
+        reduceMotion || playerCover?.isPlayerUp == true
     }
 }
 

@@ -171,7 +171,10 @@ struct MainTabView: View {
         .playerPresentation(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded)
         #if os(iOS)
         .environment(playerHub)
+        .environment(\.playerCover, playerHub)
         .playerPresentationHost(playerHub)
+        #else
+        .environment(\.playerCover, PlayerPresence.shared)
         #endif
         #if DEBUG
         .overlay(alignment: .topLeading) {

@@ -33,7 +33,7 @@ extension View {
 /// under playback. iOS asks `PlayerPresentationHub` instead.
 @MainActor
 @Observable
-final class PlayerPresence {
+final class PlayerPresence: PlayerCoverState {
     static let shared = PlayerPresence()
 
     private var presented = 0
@@ -50,7 +50,7 @@ final class PlayerPresence {
 /// the destination drops, and the player closes a second after opening.
 @MainActor
 @Observable
-final class PlayerPresentationHub {
+final class PlayerPresentationHub: PlayerCoverState {
     struct Request {
         let item: PlayerItem
         /// Clears the requesting screen's item and runs its `onDismiss`.
@@ -58,6 +58,8 @@ final class PlayerPresentationHub {
     }
 
     private(set) var request: Request?
+
+    var isPlayerUp: Bool { request != nil }
 
     func present(_ item: PlayerItem, finish: @escaping () -> Void) {
         // A repeat request while one is up is a no-op.
@@ -124,7 +126,11 @@ private struct PlayerPresentationBridge: UIViewControllerRepresentable {
             onPictureInPictureRestore: { [weak coordinator] completion in
                 coordinator?.restore(completion: completion)
             }
-        ).environment(session).environment(syncPlay).preferredColorScheme(.dark)
+        )
+        .environment(session)
+        .environment(\.jellyfinClient, session.client)
+        .environment(syncPlay)
+        .preferredColorScheme(.dark)
         let host = UIHostingController(rootView: AnyView(player))
         // `.overFullScreen`, never `.fullScreen`: that removes the
         // presenting hierarchy and re-runs every `.task` underneath, the
