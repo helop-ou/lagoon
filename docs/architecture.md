@@ -33,6 +33,13 @@ Feature-owned state stays with its feature, even when another feature shows
 its controls. Settings binds to the playback and Home preference stores rather
 than keeping a copy.
 
+`Shared` never names a type a feature declares. A contract both sides speak,
+such as `LibrarySelection`, `PlaybackDelivery` or `StoredAccount`, lives in
+`Shared`. Feature state reaches shared views the other way round: the app
+injects the active `JellyfinClient`, the Downloads store as
+`ItemDownloadPresenting` and the player as `PlayerCoverState` through the
+environment, and Downloads sets `ImageCache.localArtworkURL` at launch.
+
 Home's row order is data. `HomeSectionPreferenceResolver` owns the default
 order, the viewer's arrangement and which rows are hidden; `HomeView` draws
 one row per resolved identifier. A new row needs both an entry in the
