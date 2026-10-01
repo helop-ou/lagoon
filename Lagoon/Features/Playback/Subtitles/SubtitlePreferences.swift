@@ -174,38 +174,31 @@ final class SubtitlePreferencesStore {
         systemRevision &+= 1
     }
 
+    private var languageOrder: LanguagePreferenceOrder {
+        LanguagePreferenceOrder(
+            overrides: values.languageOverrides,
+            system: Self.systemCaptionLanguages
+        )
+    }
+
     var preferredLanguages: [String] {
-        Self.deduplicated(values.languageOverrides + Self.systemCaptionLanguages)
+        languageOrder.preferred
     }
 
     var primaryLanguage: String? {
-        values.languageOverrides.first ?? Self.systemCaptionLanguages.first
+        languageOrder.primary
     }
 
     var fallbackLanguage: String? {
-        values.languageOverrides.dropFirst().first
-            ?? Self.systemCaptionLanguages.dropFirst().first
+        languageOrder.fallback
     }
 
     func setPrimaryLanguage(_ language: String?) {
-        var overrides = values.languageOverrides
-        if !overrides.isEmpty { overrides.removeFirst() }
-        if let language {
-            overrides.insert(language, at: 0)
-        }
-        values.languageOverrides = Self.deduplicated(overrides)
+        values.languageOverrides = languageOrder.settingPrimary(language)
     }
 
     func setFallbackLanguage(_ language: String?) {
-        var overrides = values.languageOverrides
-        if overrides.isEmpty, let primaryLanguage {
-            overrides = [primaryLanguage]
-        }
-        if overrides.count > 1 { overrides.remove(at: 1) }
-        if let language {
-            overrides.insert(language, at: min(1, overrides.count))
-        }
-        values.languageOverrides = Self.deduplicated(overrides)
+        values.languageOverrides = languageOrder.settingFallback(language)
     }
 
     var renderStyle: SubtitleRenderStyle {

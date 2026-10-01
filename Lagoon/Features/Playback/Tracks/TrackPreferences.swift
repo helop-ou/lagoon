@@ -96,37 +96,31 @@ final class TrackPreferencesStore {
         values = decoded
     }
 
-    var preferredAudioLanguages: [String] {
-        SubtitlePreferencesStore.deduplicated(
-            values.audioLanguageOverrides + Locale.preferredLanguages
+    private var audioLanguageOrder: LanguagePreferenceOrder {
+        LanguagePreferenceOrder(
+            overrides: values.audioLanguageOverrides,
+            system: Locale.preferredLanguages
         )
     }
 
+    var preferredAudioLanguages: [String] {
+        audioLanguageOrder.preferred
+    }
+
     var primaryAudioLanguage: String? {
-        values.audioLanguageOverrides.first
-            ?? Locale.preferredLanguages.first.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+        audioLanguageOrder.primary
     }
 
     var fallbackAudioLanguage: String? {
-        values.audioLanguageOverrides.dropFirst().first
-            ?? Locale.preferredLanguages.dropFirst().first.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+        audioLanguageOrder.fallback
     }
 
     func setPrimaryAudioLanguage(_ language: String?) {
-        var overrides = values.audioLanguageOverrides
-        if !overrides.isEmpty { overrides.removeFirst() }
-        if let language { overrides.insert(language, at: 0) }
-        values.audioLanguageOverrides = SubtitlePreferencesStore.deduplicated(overrides)
+        values.audioLanguageOverrides = audioLanguageOrder.settingPrimary(language)
     }
 
     func setFallbackAudioLanguage(_ language: String?) {
-        var overrides = values.audioLanguageOverrides
-        if overrides.isEmpty, let primaryAudioLanguage {
-            overrides = [primaryAudioLanguage]
-        }
-        if overrides.count > 1 { overrides.remove(at: 1) }
-        if let language { overrides.insert(language, at: min(1, overrides.count)) }
-        values.audioLanguageOverrides = SubtitlePreferencesStore.deduplicated(overrides)
+        values.audioLanguageOverrides = audioLanguageOrder.settingFallback(language)
     }
 
     private func persist() {
