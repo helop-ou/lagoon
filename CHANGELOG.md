@@ -17,6 +17,20 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.5.1 (114)
+
+October 2026
+
+**Subtitles chosen by System Setting stay in your language.**
+
+### Improvements
+
+- The player's Info panel names audio formats the same way as the title's page, such as TrueHD 7.1.
+
+### Bug fixes
+
+- With subtitles on System Setting, a track in your language is no longer passed over for one in another language when yours is named Signs & Songs or similar.
+
 ## 0.5.0 (113)
 
 October 2026
