@@ -140,6 +140,16 @@ final class TrackPreferencesStore {
     }
 }
 
+/// The device's caption setting, which `SubtitleDefaultMode.system` follows.
+/// The caller reads it from MediaAccessibility, so the policy stays pure.
+nonisolated enum SystemCaptionDisplay {
+    case forcedOnly
+    case automatic
+    case alwaysOn
+    /// A display type this build does not know; Jellyfin's default stands.
+    case unrecognized
+}
+
 /// A stream reduced to the facts that may influence automatic selection.
 /// "Original" is metadata, not a naming convention, so the only thing read
 /// from a title is the signs-and-songs convention.
@@ -237,7 +247,8 @@ nonisolated enum TrackSelectionPolicy {
         candidates: [TrackSelectionCandidate],
         serverDefault: Int?,
         preferredLanguages: [String],
-        selectedAudioLanguage: String?
+        selectedAudioLanguage: String?,
+        captionDisplay: SystemCaptionDisplay
     ) -> Int? {
         let flagged = candidates
         let candidates = resolvingTitledForced(candidates)
@@ -246,7 +257,13 @@ nonisolated enum TrackSelectionPolicy {
             ?? rankedSubtitle(candidates.enumerated().filter { $0.element.isForced })
         switch mode {
         case .system:
-            return serverDefault
+            return systemSubtitle(
+                display: captionDisplay,
+                candidates: candidates,
+                serverDefault: serverDefault,
+                preferredLanguages: preferredLanguages,
+                selectedAudioLanguage: selectedAudioLanguage
+            )
         case .off:
             return 0
         case .forcedOnly:
@@ -276,6 +293,72 @@ nonisolated enum TrackSelectionPolicy {
                 preferredLanguages: preferred,
                 requireForced: false
             ) ?? serverDefault ?? 0
+        }
+    }
+
+    /// Follows the device's caption setting. Jellyfin's default wins when
+    /// present, except under Forced Only. Unlike the other modes, a
+    /// hearing-impaired track is preferred within a language.
+    private static func systemSubtitle(
+        display: SystemCaptionDisplay,
+        candidates: [TrackSelectionCandidate],
+        serverDefault: Int?,
+        preferredLanguages: [String],
+        selectedAudioLanguage: String?
+    ) -> Int? {
+        let preferred = SubtitlePreferencesStore.deduplicated(preferredLanguages)
+
+        typealias Track = (offset: Int, element: TrackSelectionCandidate)
+
+        func first(in tracks: [Track]) -> Int? {
+            (tracks.first(where: { $0.element.isHearingImpaired }) ?? tracks.first)
+                .map { $0.offset + 1 }
+        }
+
+        // Full dialogue: a forced or signs-titled track only when nothing
+        // else in that language fits. Language comes first, so a titled
+        // track in the viewer's language beats any track in another.
+        func pick(in tracks: [Track], requireForced: Bool) -> Int? {
+            let tiers: [(Track) -> Bool] = requireForced
+                ? [{ $0.element.isForced }]
+                : [
+                    { !$0.element.isForced && !$0.element.isTitledForced },
+                    { !$0.element.isForced },
+                    { _ in true },
+                ]
+            for language in preferred {
+                let matching = tracks.filter {
+                    $0.element.language.flatMap(SubtitlePreferencesStore.normalizedLanguage) == language
+                }
+                for tier in tiers {
+                    if let match = first(in: matching.filter(tier)) { return match }
+                }
+            }
+            for tier in tiers {
+                if let match = first(in: tracks.filter(tier)) { return match }
+            }
+            return nil
+        }
+
+        func best(requireForced: Bool) -> Int? {
+            pick(in: Array(candidates.enumerated()), requireForced: requireForced)
+        }
+
+        switch display {
+        case .forcedOnly:
+            return best(requireForced: true) ?? 0
+        case .alwaysOn:
+            return serverDefault ?? best(requireForced: false) ?? 0
+        case .automatic:
+            if let serverDefault { return serverDefault }
+            if let forced = best(requireForced: true) { return forced }
+            let audio = selectedAudioLanguage.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+            if let primary = preferred.first, let audio, audio != primary {
+                return best(requireForced: false)
+            }
+            return 0
+        case .unrecognized:
+            return serverDefault
         }
     }
 

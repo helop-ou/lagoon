@@ -33,7 +33,8 @@ struct PlaybackLanguagePreferenceTests {
             candidates: streams,
             serverDefault: serverDefault,
             preferredLanguages: ["en"],
-            selectedAudioLanguage: audio
+            selectedAudioLanguage: audio,
+            captionDisplay: .automatic
         )
     }
 
@@ -88,14 +89,16 @@ struct PlaybackLanguagePreferenceTests {
             candidates: streams,
             serverDefault: nil,
             preferredLanguages: ["en"],
-            selectedAudioLanguage: "jpn"
+            selectedAudioLanguage: "jpn",
+            captionDisplay: .automatic
         ) == 1)
         #expect(TrackSelectionPolicy.subtitleOrdinal(
             mode: .smart,
             candidates: streams,
             serverDefault: nil,
             preferredLanguages: ["en"],
-            selectedAudioLanguage: "eng"
+            selectedAudioLanguage: "eng",
+            captionDisplay: .automatic
         ) == 2)
     }
 
@@ -110,21 +113,24 @@ struct PlaybackLanguagePreferenceTests {
             candidates: streams,
             serverDefault: 2,
             preferredLanguages: ["en"],
-            selectedAudioLanguage: "jpn"
+            selectedAudioLanguage: "jpn",
+            captionDisplay: .automatic
         ) == 0)
         #expect(TrackSelectionPolicy.subtitleOrdinal(
             mode: .forcedOnly,
             candidates: streams,
             serverDefault: 2,
             preferredLanguages: ["en"],
-            selectedAudioLanguage: "jpn"
+            selectedAudioLanguage: "jpn",
+            captionDisplay: .automatic
         ) == 1)
         #expect(TrackSelectionPolicy.subtitleOrdinal(
             mode: .always,
             candidates: streams,
             serverDefault: 1,
             preferredLanguages: ["en"],
-            selectedAudioLanguage: "eng"
+            selectedAudioLanguage: "eng",
+            captionDisplay: .automatic
         ) == 2)
     }
 
