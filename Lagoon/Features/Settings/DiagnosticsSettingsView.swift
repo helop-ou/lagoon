@@ -102,6 +102,8 @@ struct DiagnosticsSettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.frameLoss")
                 Toggle("Dolby Vision Compatibility Mode", isOn: $stripDoviEL)
                     .accessibilityIdentifier("settings.diagnostics.dovi")
+                Toggle("Buffer Transcoded Playback", isOn: $bufferTranscodes)
+                    .accessibilityIdentifier("settings.diagnostics.transcodeCache")
                 #if DEBUG
                 Toggle("Simulate Audio Starvation", isOn: $simulateAudioStarvation)
                     .accessibilityIdentifier("settings.diagnostics.audioStarvation")

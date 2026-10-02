@@ -16,7 +16,6 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
     case watchTogetherSheet
     case playerPanel
     case playerTransport
-    case legalAddress
 
     var id: String { rawValue }
 
@@ -34,7 +33,6 @@ private enum PlayerComponentPreview: String, CaseIterable, Identifiable {
         case .watchTogetherSheet: "Watch Together — Sheet"
         case .playerPanel: "Player Panel"
         case .playerTransport: "Player Transport"
-        case .legalAddress: "Legal Address — QR"
         }
     }
 
@@ -53,9 +51,6 @@ struct DeveloperSettingsView: View {
     @State private var showsPlayerPanelPreview = false
     @State private var showsPlayerTransportPreview = false
     @State private var showsWatchTogetherPreview = false
-    #if os(tvOS)
-    @State private var presentedLegalAddress: LegalAddress?
-    #endif
 
     var body: some View {
         #if os(tvOS)
@@ -93,9 +88,6 @@ struct DeveloperSettingsView: View {
         }
         .sheet(isPresented: $showsWatchTogetherPreview) {
             watchTogetherPreview
-        }
-        .sheet(item: $presentedLegalAddress) { address in
-            legalAddressPreview(address)
         }
         #else
         TouchSettingsPage("Developer") {
@@ -254,24 +246,6 @@ struct DeveloperSettingsView: View {
                 .accessibilityIdentifier("settings.developer.watchTogether.open")
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .legalAddress:
-            VStack(spacing: Metrics.Space.l) {
-                QRCodeView(text: Self.previewLegalAddressURL.absoluteString)
-                Text("Both legal addresses are still nil, so this is the only way to see the code until the site is live. Point a phone at it from where you actually sit, not from in front of the screen.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                #if os(tvOS)
-                Button {
-                    presentedLegalAddress = Self.previewLegalAddress
-                } label: {
-                    Label("Open the whole sheet", systemImage: "arrow.up.left.and.arrow.down.right")
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("settings.developer.legalAddress.open")
-                #endif
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .playerPanel:
             VStack(spacing: Metrics.Space.l) {
                 Image(systemName: "rectangle.inset.filled.and.person.filled")
@@ -315,24 +289,6 @@ struct DeveloperSettingsView: View {
         let json = Data(#"{"Id":"developer-preview","Name":"Rick and Morty","Type":"Episode"}"#.utf8)
         return try? JellyfinClient.decoder.decode(MediaItem.self, from: json)
     }()
-
-    /// A real address, so the QR code has its final size.
-    private static let previewLegalAddressURL = URL(string: "https://lagoon.helop.dev/privacy/")!
-
-    #if os(tvOS)
-    private static let previewLegalAddress = LegalAddress(
-        id: "settings.developer.legalAddress",
-        title: "Privacy Policy",
-        url: previewLegalAddressURL
-    )
-
-    @ViewBuilder
-    private func legalAddressPreview(_ address: LegalAddress) -> some View {
-        LegalAddressSheet(address: address)
-            .frame(width: Metrics.modalPanelSize.width)
-            .presentationSizing(.fitted)
-    }
-    #endif
 
     @ViewBuilder
     private var watchTogetherPreview: some View {
