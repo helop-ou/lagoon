@@ -1011,6 +1011,14 @@ nonisolated enum Changelog {
         bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
     }
 
+    /// "0.1 (13)"; the build is dropped when empty or equal to the version.
+    /// Not `JellyfinClient.appVersion`, which goes in the auth header as-is.
+    static func runningDisplayVersion(from bundle: Bundle = .main) -> String {
+        let short = version(from: bundle)
+        let number = build(from: bundle)
+        return number.isEmpty || number == short ? short : "\(short) (\(number))"
+    }
+
     /// The comparison takes plain strings so it can be exercised without
     /// standing up a bundle whose Info.plist says what a test needs.
     static func isRunning(_ entry: ChangelogEntry, version: String, build: String) -> Bool {

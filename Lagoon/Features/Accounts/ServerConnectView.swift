@@ -21,45 +21,32 @@ struct ServerConnectView: View {
             #if os(iOS)
             // Centred while everything fits, like the picker; scrolls once
             // the custom headers or the keyboard take the room.
-            GeometryReader { proxy in
-                ScrollView {
-                    VStack(spacing: Metrics.Space.xl) {
-                        VStack(spacing: Metrics.Space.l) {
-                            LagoonLockup(layout: .horizontal, symbolHeight: Metrics.lockupHeaderSymbolHeight)
-                            Text("Connect to your Jellyfin server")
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Metrics.Space.l)
-
-                        addressField
-                        advancedSection
-                            .buttonStyle(.glass)
-                        // Prominence from size, as on a detail page's Play.
-                        connectButton
-                            .buttonStyle(.glass)
-                            .controlSize(.extraLarge)
-                            .font(.title3.weight(.semibold))
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.callout)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
-                        }
-                        if localNetworkAccessDenied { LocalNetworkRecoveryView() }
-
-                        AboutLagoonButton()
-                    }
-                    .frame(maxWidth: Metrics.readableWidth)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, Metrics.screenGutter)
-                    .padding(.vertical, Metrics.Space.xl)
-                    .frame(minHeight: proxy.size.height)
+            OnboardingColumn {
+                VStack(spacing: Metrics.Space.l) {
+                    LagoonLockup(layout: .horizontal, symbolHeight: Metrics.lockupHeaderSymbolHeight)
+                    Text("Connect to your Jellyfin server")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                .scrollDismissesKeyboard(.interactively)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Metrics.Space.l)
+
+                addressField
+                advancedSection
+                    .buttonStyle(.glass)
+                // Prominence from size, as on a detail page's Play.
+                connectButton
+                    .buttonStyle(.glass)
+                    .controlSize(.extraLarge)
+                    .font(.title3.weight(.semibold))
+
+                if let errorMessage {
+                    OnboardingErrorText(errorMessage)
+                }
+                if localNetworkAccessDenied { LocalNetworkRecoveryView() }
+
+                AboutLagoonButton()
             }
             #else
             // Scrolls once the custom headers are open, and stays centred
@@ -109,9 +96,7 @@ struct ServerConnectView: View {
             .autocorrectionDisabled()
             .accessibilityIdentifier("server.address")
             #if os(iOS)
-            .textFieldStyle(.plain)
-            .frame(minHeight: Metrics.touchTarget)
-            .overlay(alignment: .bottom) { Divider() }
+            .modifier(UnderlinedField())
             .keyboardType(.URL)
             .submitLabel(.go)
             #endif

@@ -77,8 +77,8 @@ struct CustomHeaderFields: View {
 
 /// The onboarding field look on iPhone and iPad: plain, a touch target
 /// tall, over a hairline. tvOS keeps its system fields.
-private struct UnderlinedField: ViewModifier {
-    let isOn: Bool
+struct UnderlinedField: ViewModifier {
+    var isOn = true
 
     func body(content: Content) -> some View {
         #if os(iOS)

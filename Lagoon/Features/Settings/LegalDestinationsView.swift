@@ -159,9 +159,7 @@ struct AboutLagoonSheet: View {
         TVModalPanel(title: Text("About Lagoon")) {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 TVSettingsSection("Application") {
-                    ForEach(Self.applicationRows, id: \.title) { row in
-                        TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
-                    }
+                    ApplicationInfoRows()
                 }
 
                 LegalSettingsSection()
@@ -176,9 +174,7 @@ struct AboutLagoonSheet: View {
         NavigationStack {
             ThemedForm {
                 Section("Application") {
-                    ForEach(Self.applicationRows, id: \.title) { row in
-                        LabeledContent(row.title, value: row.value)
-                    }
+                    ApplicationInfoRows()
                 }
 
                 LegalSettingsSection()
@@ -194,19 +190,6 @@ struct AboutLagoonSheet: View {
         .accessibilityIdentifier("signin.about.sheet")
     }
     #endif
-
-    private struct Row {
-        let title: String
-        let value: String
-    }
-
-    private static var applicationRows: [Row] {
-        [
-            Row(title: "Name", value: "Lagoon"),
-            Row(title: "Version", value: Changelog.version()),
-            Row(title: "Build", value: Changelog.build()),
-        ]
-    }
 }
 
 /// Last in the onboarding column, never the initial focus.

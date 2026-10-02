@@ -24,9 +24,7 @@ struct AboutSettingsView: View {
             description: "Which build of Lagoon this is, and the server and device it is running against."
         ) {
             TVSettingsSection("Application") {
-                ForEach(applicationRows, id: \.title) { row in
-                    TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
-                }
+                ApplicationInfoRows(includesIdentifier: true)
 
                 Button {
                     showingChangelog = true
@@ -64,11 +62,9 @@ struct AboutSettingsView: View {
 
     #if !os(tvOS)
     private var phoneBody: some View {
-        ThemedForm {
+        TouchSettingsPage("About") {
             Section("Application") {
-                ForEach(applicationRows, id: \.title) { row in
-                    LabeledContent(row.title, value: row.value)
-                }
+                ApplicationInfoRows(includesIdentifier: true)
                 Button("Changelog") { showingChangelog = true }
             }
             LegalSettingsSection()
@@ -83,7 +79,6 @@ struct AboutSettingsView: View {
                 }
             }
         }
-        .navigationTitle("About")
         .sheet(isPresented: $showingChangelog) {
             NavigationStack { ChangelogView() }
         }
@@ -95,18 +90,6 @@ struct AboutSettingsView: View {
     private struct Row {
         let title: String
         let value: String
-    }
-
-    private var applicationRows: [Row] {
-        [
-            Row(title: "Name", value: "Lagoon"),
-            Row(title: "Version", value: Changelog.version()),
-            Row(title: "Build", value: Changelog.build()),
-            Row(
-                title: "Identifier",
-                value: Bundle.main.bundleIdentifier ?? "—"
-            ),
-        ]
     }
 
     private var serverRows: [Row] {
@@ -135,6 +118,35 @@ struct AboutSettingsView: View {
         Changelog.runningBuildIsListed()
             ? Changelog.entries.first?.displayVersion ?? ""
             : String(localized: "This build isn't listed")
+    }
+}
+
+/// The application's name, version and build, shared by Settings → About and
+/// the sign-in screens' About sheet. Rows go inside the caller's section.
+struct ApplicationInfoRows: View {
+    /// Settings → About also lists the bundle identifier.
+    var includesIdentifier = false
+
+    private var rows: [(title: String, value: String)] {
+        var rows = [
+            (title: "Name", value: "Lagoon"),
+            (title: "Version", value: Changelog.version()),
+            (title: "Build", value: Changelog.build()),
+        ]
+        if includesIdentifier {
+            rows.append((title: "Identifier", value: Bundle.main.bundleIdentifier ?? "—"))
+        }
+        return rows
+    }
+
+    var body: some View {
+        ForEach(rows, id: \.title) { row in
+            #if os(tvOS)
+            TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
+            #else
+            LabeledContent(row.title, value: row.value)
+            #endif
+        }
     }
 }
 

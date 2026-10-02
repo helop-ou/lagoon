@@ -1,12 +1,53 @@
 import SwiftUI
 
 struct SubtitleSettingsView: View {
-    let subtitlePreferences: SubtitlePreferencesStore
-    @Binding var subtitleMode: SubtitleDefaultMode
-    let subtitleSearchValue: String
-    let subtitleSearchFooter: LocalizedStringKey
-    let accountID: String?
-    let refreshSubtitleSearchAvailability: () async -> Void
+    @Environment(SessionStore.self) private var session
+    @Bindable var subtitlePreferences: SubtitlePreferencesStore
+    @Bindable var trackPreferences: TrackPreferencesStore
+    @State private var subtitleSearchAvailability: SubtitleSearchAvailability = .checking
+
+    private enum SubtitleSearchAvailability {
+        case checking, available, notEnabled, unknown
+    }
+
+    private var subtitleMode: SubtitleDefaultMode { trackPreferences.values.subtitleMode }
+    private var accountID: String? { session.activeAccount?.id }
+
+    private func refreshSubtitleSearchAvailability() async {
+        subtitleSearchAvailability = .checking
+        switch await session.client.refreshSubtitlePermission() {
+        case true: subtitleSearchAvailability = .available
+        case false: subtitleSearchAvailability = .notEnabled
+        case nil: subtitleSearchAvailability = .unknown
+        }
+    }
+
+    private var subtitleSearchValue: String {
+        switch subtitleSearchAvailability {
+        case .checking:
+            return String(localized: "Checking…")
+        case .available:
+            let server = session.serverName ?? String(localized: "your Jellyfin server")
+            return String(localized: "Available through \(server)")
+        case .notEnabled:
+            return String(localized: "Not enabled for this account")
+        case .unknown:
+            return String(localized: "Couldn't check")
+        }
+    }
+
+    private var subtitleSearchFooter: LocalizedStringKey {
+        switch subtitleSearchAvailability {
+        case .available:
+            "Your Jellyfin account may search for and download subtitles. Results come from the subtitle providers your server administrator has installed."
+        case .notEnabled:
+            "Ask your server administrator to turn on “Allow subtitle management” for your account. Subtitles are then found and saved by the server."
+        case .unknown:
+            "Lagoon couldn't reach the server to check. Subtitle search is decided by your Jellyfin account's permissions."
+        case .checking:
+            "Subtitle search is decided by your Jellyfin account's permissions."
+        }
+    }
 
     var body: some View {
         #if os(tvOS)
@@ -30,7 +71,7 @@ struct SubtitleSettingsView: View {
                 TVSettingsMenuPicker(
                     title: "Default Subtitles",
                     accessibilityIdentifier: "settings.subtitles.default",
-                    selection: $subtitleMode,
+                    selection: $trackPreferences.values.subtitleMode,
                     optionTitle: \.title
                 )
 
@@ -53,7 +94,7 @@ struct SubtitleSettingsView: View {
                 TVSettingsMenuPicker(
                     title: "When Subtitles Are Missing",
                     accessibilityIdentifier: "settings.subtitles.missing",
-                    selection: missingModeBinding,
+                    selection: $subtitlePreferences.values.missingMode,
                     optionTitle: \.title
                 )
             }
@@ -84,28 +125,18 @@ struct SubtitleSettingsView: View {
     private var touchSettings: some View {
         TouchSettingsPage("Subtitles") {
             Section("Subtitle Languages") {
-                Picker("Default", selection: $subtitleMode) {
+                Picker("Default", selection: $trackPreferences.values.subtitleMode) {
                     ForEach(SubtitleDefaultMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
                 .accessibilityIdentifier("settings.subtitles.default")
-                Picker("Preferred", selection: primaryLanguageBinding) {
-                    ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
-                        Text(SubtitlePreferencesStore.displayName(for: language))
-                            .tag(Optional(language))
-                    }
-                }
-                .accessibilityIdentifier("settings.subtitles.preferred")
-                Picker("Fallback", selection: fallbackLanguageBinding) {
-                    Text("None").tag(String?.none)
-                    ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
-                        Text(SubtitlePreferencesStore.displayName(for: language))
-                            .tag(Optional(language))
-                    }
-                }
-                .accessibilityIdentifier("settings.subtitles.fallback")
-                Picker("When Missing", selection: missingModeBinding) {
+                SettingsLanguagePickers(
+                    primary: primaryLanguageBinding,
+                    fallback: fallbackLanguageBinding,
+                    identifierPrefix: "settings.subtitles"
+                )
+                Picker("When Missing", selection: $subtitlePreferences.values.missingMode) {
                     ForEach(MissingSubtitleMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -154,17 +185,6 @@ struct SubtitleSettingsView: View {
         Binding(
             get: { subtitlePreferences.fallbackLanguage },
             set: { subtitlePreferences.setFallbackLanguage($0) }
-        )
-    }
-
-    private var missingModeBinding: Binding<MissingSubtitleMode> {
-        Binding(
-            get: { subtitlePreferences.values.missingMode },
-            set: { newValue in
-                var values = subtitlePreferences.values
-                values.missingMode = newValue
-                subtitlePreferences.values = values
-            }
         )
     }
 }

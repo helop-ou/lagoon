@@ -9,9 +9,10 @@ struct DownloadsSettingsView: View {
     @State private var confirmingDeleteAll = false
 
     var body: some View {
+        @Bindable var bindableStore = store
         TouchSettingsPage("Downloads") {
             Section {
-                Picker("Quality", selection: qualityBinding) {
+                Picker("Quality", selection: $bindableStore.defaultQuality) {
                     ForEach(DownloadQuality.allCases) { option in
                         Text(option.title).tag(option)
                     }
@@ -22,7 +23,7 @@ struct DownloadsSettingsView: View {
             }
 
             Section {
-                Toggle("Wi-Fi Only", isOn: wifiOnlyBinding)
+                Toggle("Wi-Fi Only", isOn: $bindableStore.wifiOnly)
                     .accessibilityIdentifier("settings.downloads.wifiOnly")
             } footer: {
                 Text("New downloads wait for Wi-Fi and pause in Low Data Mode. A download already under way keeps going.")
@@ -51,14 +52,6 @@ struct DownloadsSettingsView: View {
             Button("Delete All", role: .destructive) { store.deleteAll() }
             Button("Cancel", role: .cancel) {}
         }
-    }
-
-    private var qualityBinding: Binding<DownloadQuality> {
-        Binding(get: { store.defaultQuality }, set: { store.defaultQuality = $0 })
-    }
-
-    private var wifiOnlyBinding: Binding<Bool> {
-        Binding(get: { store.wifiOnly }, set: { store.wifiOnly = $0 })
     }
 
     private var storageText: String {

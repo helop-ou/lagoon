@@ -5,32 +5,10 @@ struct SettingsView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(\.openProfilePicker) private var openProfilePicker
 
-    // Visible in Release: TestFlight is the only way to test Atmos/HDR on hardware.
-    @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
-    @AppStorage(DiagnosticsPreference.reportingEnabledKey) private var diagnosticReports = DiagnosticsPreference.defaultReportingEnabled
-    @AppStorage("debug.frameLossBench") private var frameLossBench = false
-    @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
-    @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
-    #if DEBUG
-    /// One-shot, timed fault injections scheduled after playback starts.
-    @AppStorage("debug.simulateAudioStarvation") private var simulateAudioStarvation = false
-    @AppStorage("debug.simulateDeliveryStall") private var simulateDeliveryStall = false
-    /// Read once when an engine is created.
-    @AppStorage("debug.bufferOnAudioStarvation") private var bufferOnAudioStarvation = false
-    #endif
-    @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
-    @AppStorage(SkipMode.defaultsKey) private var skipModeRaw = SkipMode.autoDelay.rawValue
-    @AppStorage(AutoplayMode.defaultsKey) private var autoplayModeRaw = AutoplayMode.autoDelay.rawValue
-    @AppStorage(GroupPlaybackDriver.correctionDefaultsKey) private var correctsSyncDrift = true
     @State private var subtitlePreferences = SubtitlePreferencesStore()
     @State private var trackPreferences = TrackPreferencesStore()
     @State private var homePreferences = HomeSectionPreferencesStore()
-    @State private var subtitleSearchAvailability: SubtitleSearchAvailability = .checking
     @State private var pendingAccountAction: AccountAction?
-
-    private enum SubtitleSearchAvailability {
-        case checking, available, notEnabled, unknown
-    }
 
     /// Over the app when it can be, so Back returns here; otherwise the
     /// session's own picker.
@@ -39,42 +17,6 @@ struct SettingsView: View {
             openProfilePicker()
         } else {
             session.showAccountPicker()
-        }
-    }
-
-    private func refreshSubtitleSearchAvailability() async {
-        subtitleSearchAvailability = .checking
-        switch await session.client.refreshSubtitlePermission() {
-        case true: subtitleSearchAvailability = .available
-        case false: subtitleSearchAvailability = .notEnabled
-        case nil: subtitleSearchAvailability = .unknown
-        }
-    }
-
-    private var subtitleSearchValue: String {
-        switch subtitleSearchAvailability {
-        case .checking:
-            return String(localized: "Checking…")
-        case .available:
-            let server = session.serverName ?? String(localized: "your Jellyfin server")
-            return String(localized: "Available through \(server)")
-        case .notEnabled:
-            return String(localized: "Not enabled for this account")
-        case .unknown:
-            return String(localized: "Couldn't check")
-        }
-    }
-
-    private var subtitleSearchFooter: LocalizedStringKey {
-        switch subtitleSearchAvailability {
-        case .available:
-            "Your Jellyfin account may search for and download subtitles. Results come from the subtitle providers your server administrator has installed."
-        case .notEnabled:
-            "Ask your server administrator to turn on “Allow subtitle management” for your account. Subtitles are then found and saved by the server."
-        case .unknown:
-            "Lagoon couldn't reach the server to check. Subtitle search is decided by your Jellyfin account's permissions."
-        case .checking:
-            "Subtitle search is decided by your Jellyfin account's permissions."
         }
     }
 
@@ -101,55 +43,15 @@ struct SettingsView: View {
         }
     }
 
-    private var playbackSettings: some View {
-        PlaybackSettingsView(
-            skipModeRaw: $skipModeRaw,
-            autoplayModeRaw: $autoplayModeRaw,
-            allowFullQualityOnMetered: $allowFullQualityOnMetered,
-            correctsSyncDrift: $correctsSyncDrift
-        )
-    }
-
     private var audioSettings: some View {
-        AudioSettingsView(
-            audioMode: trackBinding(\.audioMode),
-            primaryLanguage: primaryAudioLanguageBinding,
-            fallbackLanguage: fallbackAudioLanguageBinding
-        )
+        AudioSettingsView(trackPreferences: trackPreferences)
     }
 
     private var subtitleSettings: some View {
         SubtitleSettingsView(
             subtitlePreferences: subtitlePreferences,
-            subtitleMode: trackBinding(\.subtitleMode),
-            subtitleSearchValue: subtitleSearchValue,
-            subtitleSearchFooter: subtitleSearchFooter,
-            accountID: session.activeAccount?.id,
-            refreshSubtitleSearchAvailability: refreshSubtitleSearchAvailability
+            trackPreferences: trackPreferences
         )
-    }
-
-    private var diagnosticsSettings: some View {
-        #if DEBUG
-        DiagnosticsSettingsView(
-            showPlaybackHUD: $showPlaybackHUD,
-            diagnosticReports: $diagnosticReports,
-            frameLossBench: $frameLossBench,
-            stripDoviEL: $stripDoviEL,
-            bufferTranscodes: $bufferTranscodes,
-            simulateAudioStarvation: $simulateAudioStarvation,
-            simulateDeliveryStall: $simulateDeliveryStall,
-            bufferOnAudioStarvation: $bufferOnAudioStarvation
-        )
-        #else
-        DiagnosticsSettingsView(
-            showPlaybackHUD: $showPlaybackHUD,
-            diagnosticReports: $diagnosticReports,
-            frameLossBench: $frameLossBench,
-            stripDoviEL: $stripDoviEL,
-            bufferTranscodes: $bufferTranscodes
-        )
-        #endif
     }
 
     /// Attach to the visible screen, never the settings root: on tvOS a
@@ -180,6 +82,10 @@ struct SettingsView: View {
     // MARK: - tvOS: identity | short settings hierarchy
 
     #if os(tvOS)
+    // Read here only for the Playback row's summary; the page owns the writes.
+    @AppStorage(SkipMode.defaultsKey) private var skipMode: SkipMode = .autoDelay
+    @AppStorage(AutoplayMode.defaultsKey) private var autoplayMode: AutoplayMode = .autoDelay
+
     private var splitLayout: some View {
         HStack(alignment: .top, spacing: Metrics.Space.section) {
             identityPanel
@@ -211,7 +117,7 @@ struct SettingsView: View {
                 }
             }
 
-            Text("Lagoon \(Bundle.main.displayVersion)")
+            Text("Lagoon \(Changelog.runningDisplayVersion())")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.top, Metrics.Space.s)
@@ -227,7 +133,7 @@ struct SettingsView: View {
                     "Playback",
                     detail: "\(skipMode.shortTitle) · \(autoplayMode.shortTitle)",
                     id: "playback"
-                ) { playbackSettings }
+                ) { PlaybackSettingsView() }
 
                 settingsDestination(
                     "Audio",
@@ -273,11 +179,11 @@ struct SettingsView: View {
                     "Advanced",
                     detail: "Playback Diagnostics",
                     id: "diagnostics"
-                ) { diagnosticsSettings }
+                ) { DiagnosticsSettingsView() }
 
                 settingsDestination(
                     "About",
-                    detail: Bundle.main.displayVersion,
+                    detail: Changelog.runningDisplayVersion(),
                     id: "about"
                 ) { AboutSettingsView() }
 
@@ -306,8 +212,6 @@ struct SettingsView: View {
         .accessibilityIdentifier("settings.category.\(id)")
     }
 
-    private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
-    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
     private var homeRowsDetail: String {
         if homePreferences.catalog.isEmpty { return "Lagoon Native" }
         return homePreferences.values.isCustomized ? "Custom" : "Native + Plugin"
@@ -396,7 +300,7 @@ struct SettingsView: View {
 
             Section("Preferences") {
                 touchSettingsDestination("Playback", systemImage: ContentIcon.Settings.playback, id: "playback") {
-                    playbackSettings
+                    PlaybackSettingsView()
                 }
                 touchSettingsDestination("Audio", systemImage: ContentIcon.Settings.audio, id: "audio") {
                     audioSettings
@@ -420,7 +324,7 @@ struct SettingsView: View {
 
             Section("Application") {
                 touchSettingsDestination("Advanced", systemImage: ContentIcon.Settings.advanced, id: "diagnostics") {
-                    diagnosticsSettings
+                    DiagnosticsSettingsView()
                 }
                 touchSettingsDestination("Downloads", systemImage: ContentIcon.Settings.downloads, id: "downloads") {
                     DownloadsSettingsView()
@@ -489,48 +393,8 @@ struct SettingsView: View {
         }
     }
     #endif
-
-    private var primaryAudioLanguageBinding: Binding<String?> {
-        Binding(
-            get: { trackPreferences.primaryAudioLanguage },
-            set: { trackPreferences.setPrimaryAudioLanguage($0) }
-        )
-    }
-
-    private var fallbackAudioLanguageBinding: Binding<String?> {
-        Binding(
-            get: { trackPreferences.fallbackAudioLanguage },
-            set: { trackPreferences.setFallbackAudioLanguage($0) }
-        )
-    }
-
-    private func trackBinding<T>(
-        _ keyPath: WritableKeyPath<TrackPreferenceValues, T>
-    ) -> Binding<T> {
-        Binding(
-            get: { trackPreferences.values[keyPath: keyPath] },
-            set: { newValue in
-                var values = trackPreferences.values
-                values[keyPath: keyPath] = newValue
-                trackPreferences.values = values
-            }
-        )
-    }
 }
 
 private enum AccountAction {
     case signOut
-}
-
-private extension Bundle {
-    /// "0.1 (13)"; the build is dropped when absent or equal to the version.
-    /// Not `JellyfinClient.appVersion`, which goes in the auth header as-is.
-    var displayVersion: String {
-        let short = object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1"
-        guard let build = object(forInfoDictionaryKey: "CFBundleVersion") as? String,
-              !build.isEmpty, build != short else {
-            return short
-        }
-        return "\(short) (\(build))"
-    }
 }

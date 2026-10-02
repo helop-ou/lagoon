@@ -98,7 +98,7 @@ struct DeveloperSettingsView: View {
             legalAddressPreview(address)
         }
         #else
-        Form {
+        TouchSettingsPage("Developer") {
             Section("Player Component") {
                 Picker("Component", selection: $selectedPreview) {
                     ForEach(PlayerComponentPreview.allCases) { preview in
@@ -114,7 +114,6 @@ struct DeveloperSettingsView: View {
                 }
             }
         }
-        .navigationTitle("Developer")
         .fullScreenCover(isPresented: $showsPlayerPanelPreview) {
             PlayerPanelComponentPreviewScreen()
         }

@@ -201,17 +201,11 @@ struct SeerrSettingsView: View {
     @ViewBuilder
     private var authenticationControls: some View {
         if let quickConnectCode {
-            VStack(spacing: Metrics.Space.m) {
-                Text(quickConnectCode)
-                    .font(Typography.quickConnectCode)
-                    .tracking(Typography.quickConnectCodeTracking)
-                    .accessibilityIdentifier("settings.seerr.quickConnectCode")
-                Text("Enter this code under Quick Connect in Jellyfin. Lagoon will finish signing in automatically.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                ProgressView()
-            }
+            QuickConnectCodeView(
+                code: quickConnectCode,
+                instructions: "Enter this code under Quick Connect in Jellyfin. Lagoon will finish signing in automatically.",
+                codeIdentifier: "settings.seerr.quickConnectCode"
+            )
             .frame(maxWidth: .infinity)
             .padding(.vertical, Metrics.Space.l)
         } else {

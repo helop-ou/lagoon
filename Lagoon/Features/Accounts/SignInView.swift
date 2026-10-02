@@ -107,9 +107,7 @@ struct SignInView: View {
             .autocorrectionDisabled()
             .accessibilityIdentifier("signin.username")
             #if os(iOS)
-            .textFieldStyle(.plain)
-            .frame(minHeight: Metrics.touchTarget)
-            .overlay(alignment: .bottom) { Divider() }
+            .modifier(UnderlinedField())
             .focused($focusedField, equals: .username)
             .submitLabel(.next)
             .onSubmit { focusedField = .password }
@@ -121,9 +119,7 @@ struct SignInView: View {
             .textContentType(.password)
             .accessibilityIdentifier("signin.password")
             #if os(iOS)
-            .textFieldStyle(.plain)
-            .frame(minHeight: Metrics.touchTarget)
-            .overlay(alignment: .bottom) { Divider() }
+            .modifier(UnderlinedField())
             .focused($focusedField, equals: .password)
             .submitLabel(.go)
             #endif
@@ -157,45 +153,32 @@ struct SignInView: View {
     #if os(iOS)
     private var touchForm: some View {
         // Centred while everything fits, like the picker.
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: Metrics.Space.xl) {
-                    heading
+        OnboardingColumn {
+            heading
 
-                    VStack(spacing: Metrics.Space.l) {
-                        usernameField
-                        passwordField
-                    }
-
-                    // Prominence from size, as on a detail page's Play.
-                    signInButton
-                        .buttonStyle(.glass)
-                        .controlSize(.extraLarge)
-                        .font(.title3.weight(.semibold))
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.callout)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    if quickConnectAvailable {
-                        quickConnectSection
-                    }
-
-                    changeServerButton
-                        .buttonStyle(.glass)
-
-                    AboutLagoonButton()
-                }
-                .frame(maxWidth: Metrics.readableWidth)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, Metrics.screenGutter)
-                .padding(.vertical, Metrics.Space.xl)
-                .frame(minHeight: proxy.size.height)
+            VStack(spacing: Metrics.Space.l) {
+                usernameField
+                passwordField
             }
-            .scrollDismissesKeyboard(.interactively)
+
+            // Prominence from size, as on a detail page's Play.
+            signInButton
+                .buttonStyle(.glass)
+                .controlSize(.extraLarge)
+                .font(.title3.weight(.semibold))
+
+            if let errorMessage {
+                OnboardingErrorText(errorMessage)
+            }
+
+            if quickConnectAvailable {
+                quickConnectSection
+            }
+
+            changeServerButton
+                .buttonStyle(.glass)
+
+            AboutLagoonButton()
         }
     }
     #endif
@@ -216,16 +199,10 @@ struct SignInView: View {
     }
 
     private func quickConnectDetails(code: String) -> some View {
-        VStack(spacing: Metrics.Space.m) {
-            Text(code)
-                .font(Typography.quickConnectCode)
-                .tracking(Typography.quickConnectCodeTracking)
-            Text("Enter this code under Quick Connect in any signed-in Jellyfin app.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            ProgressView()
-        }
+        QuickConnectCodeView(
+            code: code,
+            instructions: "Enter this code under Quick Connect in any signed-in Jellyfin app."
+        )
     }
 
     private var quickConnectButton: some View {

@@ -25,3 +25,33 @@ enum SettingsLanguageOptions {
     }
     #endif
 }
+
+#if !os(tvOS)
+import SwiftUI
+
+/// The touch Preferred and Fallback language pickers, shared by the audio and
+/// subtitle pages. Identifiers are `<prefix>.preferred` and `<prefix>.fallback`.
+struct SettingsLanguagePickers: View {
+    let primary: Binding<String?>
+    let fallback: Binding<String?>
+    let identifierPrefix: String
+
+    var body: some View {
+        Picker("Preferred", selection: primary) {
+            ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
+                Text(SubtitlePreferencesStore.displayName(for: language))
+                    .tag(Optional(language))
+            }
+        }
+        .accessibilityIdentifier("\(identifierPrefix).preferred")
+        Picker("Fallback", selection: fallback) {
+            Text("None").tag(String?.none)
+            ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
+                Text(SubtitlePreferencesStore.displayName(for: language))
+                    .tag(Optional(language))
+            }
+        }
+        .accessibilityIdentifier("\(identifierPrefix).fallback")
+    }
+}
+#endif

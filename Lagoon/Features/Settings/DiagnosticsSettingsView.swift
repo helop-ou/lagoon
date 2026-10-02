@@ -1,15 +1,18 @@
 import SwiftUI
 
 struct DiagnosticsSettingsView: View {
-    @Binding var showPlaybackHUD: Bool
-    @Binding var diagnosticReports: Bool
-    @Binding var frameLossBench: Bool
-    @Binding var stripDoviEL: Bool
-    @Binding var bufferTranscodes: Bool
+    // Visible in Release: TestFlight is the only way to test Atmos/HDR on hardware.
+    @AppStorage("debug.playbackHUD") private var showPlaybackHUD = false
+    @AppStorage(DiagnosticsPreference.reportingEnabledKey) private var diagnosticReports = DiagnosticsPreference.defaultReportingEnabled
+    @AppStorage("debug.frameLossBench") private var frameLossBench = false
+    @AppStorage("debug.stripDoviEL") private var stripDoviEL = false
+    @AppStorage("debug.experimentalPlaybackCache") private var bufferTranscodes = false
     #if DEBUG
-    @Binding var simulateAudioStarvation: Bool
-    @Binding var simulateDeliveryStall: Bool
-    @Binding var bufferOnAudioStarvation: Bool
+    /// One-shot, timed fault injections scheduled after playback starts.
+    @AppStorage("debug.simulateAudioStarvation") private var simulateAudioStarvation = false
+    @AppStorage("debug.simulateDeliveryStall") private var simulateDeliveryStall = false
+    /// Read once when an engine is created.
+    @AppStorage("debug.bufferOnAudioStarvation") private var bufferOnAudioStarvation = false
     #endif
 
     var body: some View {

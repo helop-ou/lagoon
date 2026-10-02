@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct PlaybackSettingsView: View {
-    @Binding var skipModeRaw: String
-    @Binding var autoplayModeRaw: String
-    @Binding var allowFullQualityOnMetered: Bool
-    @Binding var correctsSyncDrift: Bool
+    @AppStorage(SkipMode.defaultsKey) private var skipMode: SkipMode = .autoDelay
+    @AppStorage(AutoplayMode.defaultsKey) private var autoplayMode: AutoplayMode = .autoDelay
+    @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
+    @AppStorage(GroupPlaybackDriver.correctionDefaultsKey) private var correctsSyncDrift = true
 
     /// Why a Watch Together picture might nudge; shared by both platforms.
     private static let syncDriftFooter = LocalizedStringKey(
@@ -33,9 +33,9 @@ struct PlaybackSettingsView: View {
                     title: "Skip Intros, Recaps & Credits",
                     valueTitle: skipMode.shortTitle,
                     accessibilityIdentifier: "settings.playback.skipMode",
-                    selection: $skipModeRaw,
+                    selection: $skipMode,
                     options: SkipMode.allCases.map {
-                        TVSettingsOption(value: $0.rawValue, title: String(localized: $0.title))
+                        TVSettingsOption(value: $0, title: String(localized: $0.title))
                     }
                 )
 
@@ -43,9 +43,9 @@ struct PlaybackSettingsView: View {
                     title: "Play Next Episode",
                     valueTitle: autoplayMode.shortTitle,
                     accessibilityIdentifier: "settings.playback.autoplayMode",
-                    selection: $autoplayModeRaw,
+                    selection: $autoplayMode,
                     options: AutoplayMode.allCases.map {
-                        TVSettingsOption(value: $0.rawValue, title: String(localized: $0.title))
+                        TVSettingsOption(value: $0, title: String(localized: $0.title))
                     }
                 )
             }
@@ -60,16 +60,16 @@ struct PlaybackSettingsView: View {
     private var touchSettings: some View {
         TouchSettingsPage("Playback") {
             Section("Playback Behavior") {
-                Picker("Skip Intros, Recaps & Credits", selection: $skipModeRaw) {
+                Picker("Skip Intros, Recaps & Credits", selection: $skipMode) {
                     ForEach(SkipMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
+                        Text(mode.title).tag(mode)
                     }
                 }
                 .accessibilityIdentifier("settings.playback.skipMode")
 
-                Picker("Play Next Episode", selection: $autoplayModeRaw) {
+                Picker("Play Next Episode", selection: $autoplayMode) {
                     ForEach(AutoplayMode.allCases) { mode in
-                        Text(mode.title).tag(mode.rawValue)
+                        Text(mode.title).tag(mode)
                     }
                 }
                 .accessibilityIdentifier("settings.playback.autoplayMode")
@@ -100,7 +100,4 @@ struct PlaybackSettingsView: View {
         }
     }
     #endif
-
-    private var skipMode: SkipMode { SkipMode(rawValue: skipModeRaw) ?? .autoDelay }
-    private var autoplayMode: AutoplayMode { AutoplayMode(rawValue: autoplayModeRaw) ?? .autoDelay }
 }
