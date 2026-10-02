@@ -21,15 +21,21 @@ many builds.
 
 October 2026
 
-**Subtitles chosen by System Setting stay in your language.**
+**A clearer sign-in on iPhone and iPad, and subtitles chosen by System Setting stay in your language.**
 
 ### Improvements
 
+- Signing in on iPhone and iPad is easier to follow: the fields sit together in one card like the system's own sign-in, the screen is centred, and Sign In stands out.
+- On iPad, the sign-in fields and buttons keep a comfortable width instead of stretching across the screen.
+- Who's Watching opens full height when your profiles are on more than one server, so every profile and Add Profile are in view.
 - The player's Info panel names audio formats the same way as the title's page, such as TrueHD 7.1.
 
 ### Bug fixes
 
 - With subtitles on System Setting, a track in your language is no longer passed over for one in another language when yours is named Signs & Songs or similar.
+- On iPhone, a series page keeps its buttons on one row with the season picker below, instead of stacking them down the screen.
+- Profile names in Who's Watching no longer cut off at larger text sizes.
+- On iPhone, Discover's Connect Seerr prompt sits in the middle of the page and stays inside its margins at larger text sizes.
 
 ## 0.5.0 (113)
 
