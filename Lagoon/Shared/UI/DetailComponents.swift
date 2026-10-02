@@ -374,7 +374,8 @@ enum DetailLayout {
 ///   focus, accessory beneath.
 /// - Landscape phone: secondary, accessory, then primary on one line,
 ///   aligned on `detailPillCenter`.
-/// - Portrait phone: primary alone and wide, the rest in a row beneath.
+/// - Portrait phone: primary alone and wide, secondary in a centred row
+///   beneath that wraps when it cannot fit, accessory below that.
 ///
 /// The accessory is the series page's season picker.
 struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View {
@@ -425,12 +426,14 @@ struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View
                 primary
             }
         } else {
+            // The circles wrap rather than fold into a column, and the
+            // accessory takes a line of its own beneath them.
             VStack(spacing: Metrics.Space.m) {
                 primary
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                MetadataFlowLayout(spacing: Metrics.detailActionSpacing, alignment: .center) {
                     secondary
-                    accessory
                 }
+                accessory
             }
         }
         #endif
