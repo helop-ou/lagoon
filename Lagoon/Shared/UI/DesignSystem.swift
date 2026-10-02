@@ -99,6 +99,9 @@ enum Metrics {
     /// Landscape artwork as a portrait hero: this share of the window
     /// height, filled and centred, with the sides cropped.
     static let detailBackdropHeroShare: CGFloat = 0.6
+    /// The share of a page's height an empty state centres in, below the
+    /// page title (Discover's Connect Seerr).
+    static let emptyPageStateShare: CGFloat = 0.6
     /// How far the metadata block overlaps the poster hero, as a share of
     /// its height. The fade beneath it is drawn to match.
     static let detailPosterContentOverlap: CGFloat = 0.36

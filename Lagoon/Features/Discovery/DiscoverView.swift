@@ -64,12 +64,22 @@ struct DiscoverView: View {
                         .accessibilityLabel("Loading Discover")
                 } else if !seerr.isConnected {
                     pageHeader
+                    #if os(iOS)
+                    // Sits in the middle of the empty page, not under the
+                    // title. The clear spacer sets a minimum, so larger text
+                    // or a landscape phone still grows the state.
+                    ZStack {
+                        Color.clear
+                            .containerRelativeFrame(.vertical) { height, _ in
+                                height * Metrics.emptyPageStateShare
+                            }
+                        connectionState
+                    }
+                    .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                    #else
                     connectionState
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
-                        #if os(iOS)
-                        // Sits in the middle of the empty page, not under the title.
-                        .containerRelativeFrame(.vertical) { height, _ in max(height * 0.6, Metrics.heroHeight) }
-                        #endif
+                    #endif
                 } else if viewModel.isLoading, viewModel.hero.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
@@ -169,7 +179,9 @@ struct DiscoverView: View {
             .buttonStyle(.glass)
             .accessibilityIdentifier("seerr.setup")
         }
+        #if os(iOS)
         .padding(.horizontal, Metrics.screenGutter)
+        #endif
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
