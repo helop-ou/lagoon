@@ -66,6 +66,10 @@ struct DiscoverView: View {
                     pageHeader
                     connectionState
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
+                        #if os(iOS)
+                        // Sits in the middle of the empty page, not under the title.
+                        .containerRelativeFrame(.vertical) { height, _ in max(height * 0.6, Metrics.heroHeight) }
+                        #endif
                 } else if viewModel.isLoading, viewModel.hero.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, minHeight: Metrics.heroHeight)
@@ -165,6 +169,7 @@ struct DiscoverView: View {
             .buttonStyle(.glass)
             .accessibilityIdentifier("seerr.setup")
         }
+        .padding(.horizontal, Metrics.screenGutter)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
