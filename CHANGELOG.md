@@ -29,6 +29,7 @@ October 2026
 - On iPad, the sign-in fields and buttons keep a comfortable width instead of stretching across the screen.
 - Who's Watching opens full height when your profiles are on more than one server, so every profile and Add Profile are in view.
 - The player's Info panel names audio formats the same way as the title's page, such as TrueHD 7.1.
+- Settings › Advanced on iPhone and iPad offers Buffer Transcoded Playback, as on Apple TV.
 
 ### Bug fixes
 
