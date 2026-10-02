@@ -32,7 +32,7 @@ struct ServerConnectView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Metrics.Space.l)
 
-                addressField
+                OnboardingFieldGroup { addressField }
                 advancedSection
                     .buttonStyle(.glass)
                 // Prominence from size, as on a detail page's Play.
@@ -96,7 +96,7 @@ struct ServerConnectView: View {
             .autocorrectionDisabled()
             .accessibilityIdentifier("server.address")
             #if os(iOS)
-            .modifier(UnderlinedField())
+            .modifier(OnboardingField())
             .keyboardType(.URL)
             .submitLabel(.go)
             #endif
@@ -111,7 +111,7 @@ struct ServerConnectView: View {
             VStack(alignment: .leading, spacing: Metrics.Space.s) {
                 Text("Custom Headers")
                     .font(.headline)
-                CustomHeaderFields(headers: $headers, identifierPrefix: "server", underlined: true)
+                CustomHeaderFields(headers: $headers, identifierPrefix: "server", onboarding: true)
                 Text(CustomHeaderFields.footer)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

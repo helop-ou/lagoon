@@ -7,8 +7,8 @@ struct CustomHeaderFields: View {
     @Binding var headers: [CustomHTTPHeader]
     /// Where the fields are, for UI tests: "server" or "seerr".
     let identifierPrefix: String
-    /// Outside a Form, the fields take the onboarding address field's look.
-    var underlined = false
+    /// Outside a Form, each header's fields form an onboarding card.
+    var onboarding = false
 
     static let footer: LocalizedStringKey =
         "For a server behind an access proxy such as Cloudflare Access, Authelia or Authentik. Lagoon sends these with every request to that server, only over HTTPS, and keeps them in the keychain."
@@ -20,7 +20,7 @@ struct CustomHeaderFields: View {
                 // Outside a Form nothing separates one header from the next,
                 // so each keeps its fields and its Remove together.
                 VStack(alignment: .trailing, spacing: Metrics.Space.s) {
-                    fields($header, index: index)
+                    onboardingCard { fields($header, index: index) }
                     removeButton(header, index: index)
                         .font(.footnote)
                         .buttonStyle(.borderless)
@@ -43,7 +43,7 @@ struct CustomHeaderFields: View {
 
     private var usesOnboardingLayout: Bool {
         #if os(iOS)
-        underlined
+        onboarding
         #else
         false
         #endif
@@ -54,12 +54,12 @@ struct CustomHeaderFields: View {
         TextField("Header name", text: header.name, prompt: Text("CF-Access-Client-Id"))
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .modifier(UnderlinedField(isOn: underlined))
+            .modifier(OnboardingHeaderField(isOn: usesOnboardingLayout))
             .accessibilityIdentifier("\(identifierPrefix).header.\(index).name")
         SecureField("Value", text: header.value)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .modifier(UnderlinedField(isOn: underlined))
+            .modifier(OnboardingHeaderField(isOn: usesOnboardingLayout))
             .accessibilityIdentifier("\(identifierPrefix).header.\(index).value")
     }
 
@@ -75,21 +75,23 @@ struct CustomHeaderFields: View {
     }
 }
 
-/// The onboarding field look on iPhone and iPad: plain, a touch target
-/// tall, over a hairline. tvOS keeps its system fields.
-struct UnderlinedField: ViewModifier {
-    var isOn = true
+extension CustomHeaderFields {
+    @ViewBuilder
+    private func onboardingCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(iOS)
+        OnboardingFieldGroup { content() }
+        #else
+        content()
+        #endif
+    }
+}
+
+private struct OnboardingHeaderField: ViewModifier {
+    let isOn: Bool
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        if isOn {
-            content
-                .textFieldStyle(.plain)
-                .frame(minHeight: Metrics.touchTarget)
-                .overlay(alignment: .bottom) { Divider() }
-        } else {
-            content
-        }
+        if isOn { content.modifier(OnboardingField()) } else { content }
         #else
         content
         #endif

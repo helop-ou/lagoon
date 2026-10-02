@@ -107,7 +107,7 @@ struct SignInView: View {
             .autocorrectionDisabled()
             .accessibilityIdentifier("signin.username")
             #if os(iOS)
-            .modifier(UnderlinedField())
+            .modifier(OnboardingField())
             .focused($focusedField, equals: .username)
             .submitLabel(.next)
             .onSubmit { focusedField = .password }
@@ -119,7 +119,7 @@ struct SignInView: View {
             .textContentType(.password)
             .accessibilityIdentifier("signin.password")
             #if os(iOS)
-            .modifier(UnderlinedField())
+            .modifier(OnboardingField())
             .focused($focusedField, equals: .password)
             .submitLabel(.go)
             #endif
@@ -156,7 +156,7 @@ struct SignInView: View {
         OnboardingColumn {
             heading
 
-            VStack(spacing: Metrics.Space.l) {
+            OnboardingFieldGroup {
                 usernameField
                 passwordField
             }

@@ -133,6 +133,12 @@ enum Metrics {
     static let heroTextInset: CGFloat = 20
     static let lockupSymbolHeight: CGFloat = 78
     static let lockupHeaderSymbolHeight: CGFloat = 34
+    /// The onboarding column on iPad: fields and Sign In stay phone-sized
+    /// instead of stretching to the readable width.
+    static let onboardingColumnWidth: CGFloat = 440
+    /// An onboarding text field row inside its grouped card.
+    static let onboardingFieldHeight: CGFloat = 52
+    static let onboardingFieldCornerRadius: CGFloat = 22
     static let jellyfishAccentHeight: CGFloat = 38
     static let downloadRingLineWidth: CGFloat = 2.5
     /// The download progress ring and the poster's "downloaded" badge glyph.
