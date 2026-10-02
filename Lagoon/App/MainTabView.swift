@@ -123,7 +123,7 @@ struct MainTabView: View {
         #else
         .sheet(isPresented: $showsProfilePicker, onDismiss: finishProfilePicker) {
             profilePicker
-                .presentationDetents([.medium, .large])
+                .presentationDetents(profilePickerDetents)
                 .presentationDragIndicator(.visible)
         }
         #endif
@@ -423,6 +423,14 @@ struct MainTabView: View {
     private func openProfilePicker() {
         showsProfilePicker = true
     }
+
+    #if os(iOS)
+    /// Half height cuts a second server's profiles off mid-portrait, so
+    /// several servers open the picker full height.
+    private var profilePickerDetents: Set<PresentationDetent> {
+        ProfileGrouping.groups(session.accounts).count > 1 ? [.large] : [.medium, .large]
+    }
+    #endif
 
     private var profilePicker: some View {
         AccountPickerView(
