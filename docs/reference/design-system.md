@@ -463,7 +463,9 @@ orientations.
 - Portrait: the hero fills `detailBackdropHeroShare` of the height with the
   art's middle, cropped at the sides. Title, facts, a wide Play (capped at
   `detailPlayButtonMaxWidth`) and circular actions sit over its lower part,
-  with the full synopsis below.
+  with the full synopsis below. The circles keep one centred row and wrap
+  only when they cannot fit; a series page's season picker takes its own
+  line beneath them.
 - Landscape: the art fills the window, centred; a window wider than 16:9 trims
   top and bottom rather than padding the sides. Title art, actions and a
   smaller Play share one row along the lower part; facts and synopsis follow
