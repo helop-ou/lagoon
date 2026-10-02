@@ -26,6 +26,9 @@ struct AccountPickerView: View {
     /// What each profile is watching, by account id, filled in as servers
     /// answer.
     @State private var activity: [String: String] = [:]
+    /// Widens the name under each portrait with Dynamic Type, so a name that
+    /// fits at the default size still fits at a larger one.
+    @ScaledMetric(relativeTo: .callout) private var nameScale: CGFloat = 1
     #if os(tvOS)
     @Namespace private var pickerFocus
     #endif
@@ -40,6 +43,10 @@ struct AccountPickerView: View {
 
     private var portraitSize: CGFloat {
         groups.count > 1 ? Metrics.groupedProfilePortraitSize : Metrics.profilePortraitSize
+    }
+
+    private var nameWidth: CGFloat {
+        (portraitSize + Metrics.Space.xl) * nameScale
     }
 
     /// The iOS sheet sits over the app on the system's sheet background.
@@ -221,7 +228,7 @@ struct AccountPickerView: View {
             }
             if includesAdd { addPortrait }
         }
-        .frame(maxWidth: (portraitSize + Metrics.Space.xl) * CGFloat(max(columns, 1)) + Metrics.cardSpacing * CGFloat(max(columns - 1, 0)))
+        .frame(maxWidth: nameWidth * CGFloat(max(columns, 1)) + Metrics.cardSpacing * CGFloat(max(columns - 1, 0)))
         #endif
     }
 
@@ -235,6 +242,7 @@ struct AccountPickerView: View {
             subtitle: activity[account.id],
             identifier: "account.select.\(account.userId)",
             size: portraitSize,
+            nameWidth: nameWidth,
             dimmed: dimmed,
             isCurrent: isCurrent(account),
             focusNamespace: focusNamespace,
@@ -260,6 +268,7 @@ struct AccountPickerView: View {
             subtitle: nil,
             identifier: "account.add",
             size: portraitSize,
+            nameWidth: nameWidth,
             dimmed: false,
             isCurrent: false,
             focusNamespace: focusNamespace,
@@ -416,6 +425,7 @@ private struct PortraitButton<Portrait: View>: View {
     let subtitle: String?
     let identifier: String
     let size: CGFloat
+    let nameWidth: CGFloat
     let dimmed: Bool
     let isCurrent: Bool
     /// tvOS: where the current profile claims default focus.
@@ -511,7 +521,7 @@ private struct PortraitButton<Portrait: View>: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .frame(maxWidth: size + Metrics.Space.xl)
+        .frame(maxWidth: nameWidth)
         .accessibilityHidden(true)
     }
 }
