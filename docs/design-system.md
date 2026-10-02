@@ -181,7 +181,15 @@ notes](reference/design-system.md#themes).
   check mark only when the picker is opened from the app. UIKit controls and
   tab items take the same portrait as a bitmap from `ProfilePortrait.image`,
   so the profile looks the same in the picker, the tvOS chrome and the iOS
-  tab bar.
+  tab bar. Names widen with Dynamic Type rather than truncate. On iOS the
+  picker sheet opens full height when there are several servers, since half
+  height cuts the second server's row in two.
+- **Onboarding (iOS):** server connect and sign-in centre their column while
+  it fits, like the picker. Connect and Sign In take the detail Play's
+  prominence (extra-large glass, semibold title3); every other action is a
+  regular glass capsule, and About Lagoon is the footnote footer. Outside a
+  Form, `CustomHeaderFields` keeps each header's Remove under its own fields
+  and offers Add Header as a glass button.
 - **Top 10 shelves:** landscape cards with an oversized rank beside each. The
   rank sits outside the focusable card, so focus lift and accessibility stay
   with the native control.
