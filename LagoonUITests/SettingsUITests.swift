@@ -134,9 +134,14 @@ final class SettingsUITests: XCTestCase {
         openCategory("about", title: "About", in: app)
         app.buttons["Changelog"].tap()
         XCTAssertTrue(app.navigationBars["Changelog"].waitForExistence(timeout: 5))
-        let current = control("settings.changelog.100", in: app)
-        XCTAssertTrue(current.exists)
-        XCTAssertTrue(app.staticTexts["New features"].firstMatch.waitForExistence(timeout: 5))
+        // The newest entry, whichever build that is, opens expanded with its
+        // notes under category headings.
+        let entry = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'settings.changelog.'")).firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        let category = app.staticTexts
+            .matching(NSPredicate(format: "label IN %@", ["New features", "Improvements", "Bug fixes"])).firstMatch
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
         attachFullScreenshot(named: "baby-pink-changelog")
         app.swipeUp()
         attachFullScreenshot(named: "baby-pink-changelog-scroll")
