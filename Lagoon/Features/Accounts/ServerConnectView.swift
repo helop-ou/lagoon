@@ -19,40 +19,48 @@ struct ServerConnectView: View {
             JellyfishSwimLayer()
 
             #if os(iOS)
-            ScrollView {
-                VStack(spacing: Metrics.Space.xl) {
-                    VStack(spacing: Metrics.Space.l) {
-                        LagoonLockup(layout: .horizontal, symbolHeight: Metrics.lockupHeaderSymbolHeight)
-                        Text("Connect to your Jellyfin server")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+            // Centred while everything fits, like the picker; scrolls once
+            // the custom headers or the keyboard take the room.
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: Metrics.Space.xl) {
+                        VStack(spacing: Metrics.Space.l) {
+                            LagoonLockup(layout: .horizontal, symbolHeight: Metrics.lockupHeaderSymbolHeight)
+                            Text("Connect to your Jellyfin server")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Metrics.Space.l)
+
+                        addressField
+                        advancedSection
+                            .buttonStyle(.glass)
+                        // Prominence from size, as on a detail page's Play.
+                        connectButton
+                            .buttonStyle(.glass)
+                            .controlSize(.extraLarge)
+                            .font(.title3.weight(.semibold))
+
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.callout)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                        }
+                        if localNetworkAccessDenied { LocalNetworkRecoveryView() }
+
+                        AboutLagoonButton()
                     }
+                    .frame(maxWidth: Metrics.readableWidth)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, Metrics.Space.l)
-
-                    addressField
-                    advancedSection
-                    connectButton
-                        .buttonStyle(.glass)
-                        .controlSize(.large)
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.callout)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                    }
-                    if localNetworkAccessDenied { LocalNetworkRecoveryView() }
-
-                    AboutLagoonButton()
+                    .padding(.horizontal, Metrics.screenGutter)
+                    .padding(.vertical, Metrics.Space.xl)
+                    .frame(minHeight: proxy.size.height)
                 }
-                .frame(maxWidth: Metrics.readableWidth)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, Metrics.screenGutter)
-                .padding(.vertical, Metrics.Space.xl)
+                .scrollDismissesKeyboard(.interactively)
             }
-            .scrollDismissesKeyboard(.interactively)
             #else
             // Scrolls once the custom headers are open, and stays centred
             // while everything fits; focus moving down brings fields into view.

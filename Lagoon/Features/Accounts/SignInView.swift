@@ -156,42 +156,47 @@ struct SignInView: View {
 
     #if os(iOS)
     private var touchForm: some View {
-        ScrollView {
-            VStack(spacing: Metrics.Space.xl) {
-                heading
+        // Centred while everything fits, like the picker.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: Metrics.Space.xl) {
+                    heading
 
-                VStack(spacing: Metrics.Space.l) {
-                    usernameField
-                    passwordField
+                    VStack(spacing: Metrics.Space.l) {
+                        usernameField
+                        passwordField
+                    }
+
+                    // Prominence from size, as on a detail page's Play.
+                    signInButton
+                        .buttonStyle(.glass)
+                        .controlSize(.extraLarge)
+                        .font(.title3.weight(.semibold))
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    if quickConnectAvailable {
+                        quickConnectSection
+                    }
+
+                    changeServerButton
+                        .buttonStyle(.glass)
+
+                    AboutLagoonButton()
                 }
-
-                signInButton
-                    .buttonStyle(.glass)
-                    .controlSize(.large)
-
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.callout)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                }
-
-                if quickConnectAvailable {
-                    quickConnectSection
-                }
-
-                changeServerButton
-                    .buttonStyle(.plain)
-                    .frame(minHeight: Metrics.touchTarget)
-
-                AboutLagoonButton()
+                .frame(maxWidth: Metrics.readableWidth)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Metrics.screenGutter)
+                .padding(.vertical, Metrics.Space.xl)
+                .frame(minHeight: proxy.size.height)
             }
-            .frame(maxWidth: Metrics.readableWidth)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, Metrics.screenGutter)
-            .padding(.vertical, Metrics.Space.xl)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollDismissesKeyboard(.interactively)
     }
     #endif
 
