@@ -47,36 +47,23 @@ struct WatchTogetherSheet: View {
     @ViewBuilder
     private var page: some View {
         #if os(tvOS)
-        // A modal panel (title, scrolling content, Done), not
-        // `TVSettingsPage`, which is a full-screen destination.
-        VStack(spacing: 0) {
-            header
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                    if syncPlay.isJoined {
-                        joinedSections
-                    } else {
-                        browseSections
-                    }
+        // A modal panel, not `TVSettingsPage`, which is a full-screen
+        // destination. The panel's fixed size matters here: the polled group
+        // list would resize a fitted panel under focus.
+        TVModalPanel(
+            title: Text("Watch Together"),
+            // The explainer hides once joined.
+            subtitle: syncPlay.isJoined ? nil : Self.explainer,
+            doneIdentifier: "watchTogether.close"
+        ) {
+            VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                if syncPlay.isJoined {
+                    joinedSections
+                } else {
+                    browseSections
                 }
-                .padding(.horizontal, Metrics.Space.xl)
-                .padding(.bottom, Metrics.Space.xl)
             }
-
-            Button("Done") { dismiss() }
-                .buttonStyle(.glass)
-                .padding(Metrics.Space.l)
-                .accessibilityIdentifier("watchTogether.close")
         }
-        // tvOS ignores `presentationSizing` for custom content. Fixed size,
-        // because the polled group list would resize a fitted panel under focus.
-        .frame(
-            width: Metrics.modalPanelSize.width,
-            height: Metrics.modalPanelSize.height
-        )
-        .presentationSizing(.fitted)
-        .onExitCommand { dismiss() }
         #else
         NavigationStack {
             ThemedForm {
@@ -101,22 +88,7 @@ struct WatchTogetherSheet: View {
     }
 
     #if os(tvOS)
-    /// The explainer hides once joined.
-    private var header: some View {
-        VStack(spacing: Metrics.Space.s) {
-            Text("Watch Together")
-                .font(.title3.bold())
-
-            if !syncPlay.isJoined {
-                Text("Everyone in a group watches in step: play, pause and skip reach all of you, and the group waits for whoever is still loading.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(Metrics.Space.l)
-    }
+    private static let explainer: LocalizedStringKey = "Everyone in a group watches in step: play, pause and skip reach all of you, and the group waits for whoever is still loading."
     #endif
 
     // MARK: - Already in a group

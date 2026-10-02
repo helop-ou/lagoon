@@ -72,7 +72,7 @@ struct SeerrSettingsView: View {
             if let url = seerr.configuredURL {
                 ServerConnectionInfoView(url: url)
                 if let version = seerr.status?.version {
-                    infoRow("Version", value: version)
+                    TVSettingsInfoRow("Version", value: version)
                 }
             } else {
                 TextField("Seerr server address", text: $serverAddress)
@@ -100,8 +100,8 @@ struct SeerrSettingsView: View {
         if seerr.isConfigured {
             TVSettingsSection("Jellyfin Account") {
                 if let user = seerr.user {
-                    infoRow("User", value: user.name)
-                    infoRow("Access", value: permissionSummary(for: user))
+                    TVSettingsInfoRow("User", value: user.name)
+                    TVSettingsInfoRow("Access", value: permissionSummary(for: user))
                     Button("Disconnect Seerr Account") {
                         pendingConfirmation = .disconnect
                     }
@@ -267,15 +267,6 @@ struct SeerrSettingsView: View {
         }
         #endif
     }
-
-    #if os(tvOS)
-    private func infoRow(_ title: LocalizedStringKey, value: String) -> some View {
-        TVSettingsActionLabel(title, value: value)
-            .padding(.horizontal, Metrics.Space.l)
-            .frame(minHeight: Metrics.settingsRowMinHeight)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.settingsRowCornerRadius))
-    }
-    #endif
 
     private func workingLabel(_ title: LocalizedStringKey) -> some View {
         HStack {

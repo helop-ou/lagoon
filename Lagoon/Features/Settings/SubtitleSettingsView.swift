@@ -29,12 +29,9 @@ struct SubtitleSettingsView: View {
             ) {
                 TVSettingsMenuPicker(
                     title: "Default Subtitles",
-                    valueTitle: subtitleMode.title,
                     accessibilityIdentifier: "settings.subtitles.default",
                     selection: $subtitleMode,
-                    options: SubtitleDefaultMode.allCases.map {
-                        TVSettingsOption(value: $0, title: $0.title)
-                    }
+                    optionTitle: \.title
                 )
 
                 TVSettingsMenuPicker(
@@ -55,12 +52,9 @@ struct SubtitleSettingsView: View {
 
                 TVSettingsMenuPicker(
                     title: "When Subtitles Are Missing",
-                    valueTitle: subtitlePreferences.values.missingMode.title,
                     accessibilityIdentifier: "settings.subtitles.missing",
                     selection: missingModeBinding,
-                    options: MissingSubtitleMode.allCases.map {
-                        TVSettingsOption(value: $0, title: $0.title)
-                    }
+                    optionTitle: \.title
                 )
             }
 
@@ -68,7 +62,7 @@ struct SubtitleSettingsView: View {
                 "Subtitle Search",
                 footer: subtitleSearchFooter
             ) {
-                TVSettingsActionLabel("Availability", value: subtitleSearchValue)
+                TVSettingsRowLabel("Availability", value: subtitleSearchValue)
                     .accessibilityIdentifier("settings.subtitles.search")
             }
 
@@ -76,7 +70,7 @@ struct SubtitleSettingsView: View {
                 NavigationLink {
                     SubtitleAppearanceSettingsView(subtitlePreferences: subtitlePreferences)
                 } label: {
-                    TVSettingsNavigationLabel("Subtitle Appearance", detail: appearanceTitle)
+                    TVSettingsRowLabel("Subtitle Appearance", value: appearanceTitle, accessory: .navigation)
                 }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("settings.subtitles.appearance")

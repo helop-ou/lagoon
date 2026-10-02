@@ -26,12 +26,9 @@ struct AudioSettingsView: View {
             ) {
                 TVSettingsMenuPicker(
                     title: "Default Audio",
-                    valueTitle: audioMode.title,
                     accessibilityIdentifier: "settings.audio.default",
                     selection: $audioMode,
-                    options: AudioDefaultMode.allCases.map {
-                        TVSettingsOption(value: $0, title: $0.title)
-                    }
+                    optionTitle: \.title
                 )
 
                 TVSettingsMenuPicker(

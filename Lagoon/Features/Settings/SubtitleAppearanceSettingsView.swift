@@ -35,42 +35,30 @@ struct SubtitleAppearanceSettingsView: View {
                 if !subtitlePreferences.values.followsSystemAppearance {
                     TVSettingsMenuPicker(
                         title: "Size",
-                        valueTitle: subtitlePreferences.values.textSize.title,
                         accessibilityIdentifier: "settings.subtitles.size",
                         selection: subtitleBinding(\.textSize, customAppearance: true),
-                        options: SubtitleTextSize.allCases.map {
-                            TVSettingsOption(value: $0, title: $0.title)
-                        }
+                        optionTitle: \.title
                     )
 
                     TVSettingsMenuPicker(
                         title: "Edge",
-                        valueTitle: subtitlePreferences.values.edgeStyle.title,
                         accessibilityIdentifier: "settings.subtitles.edge",
                         selection: subtitleBinding(\.edgeStyle, customAppearance: true),
-                        options: SubtitleEdgeStyle.allCases.map {
-                            TVSettingsOption(value: $0, title: $0.title)
-                        }
+                        optionTitle: \.title
                     )
 
                     TVSettingsMenuPicker(
                         title: "Background",
-                        valueTitle: subtitlePreferences.values.background.title,
                         accessibilityIdentifier: "settings.subtitles.background",
                         selection: subtitleBinding(\.background, customAppearance: true),
-                        options: SubtitleBackground.allCases.map {
-                            TVSettingsOption(value: $0, title: $0.title)
-                        }
+                        optionTitle: \.title
                     )
 
                     TVSettingsMenuPicker(
                         title: "Position",
-                        valueTitle: subtitlePreferences.values.verticalPosition.title,
                         accessibilityIdentifier: "settings.subtitles.position",
                         selection: subtitleBinding(\.verticalPosition, customAppearance: true),
-                        options: SubtitleVerticalPosition.allCases.map {
-                            TVSettingsOption(value: $0, title: $0.title)
-                        }
+                        optionTitle: \.title
                     )
                 }
             }

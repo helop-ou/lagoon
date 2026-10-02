@@ -25,13 +25,13 @@ struct AboutSettingsView: View {
         ) {
             TVSettingsSection("Application") {
                 ForEach(applicationRows, id: \.title) { row in
-                    TVSettingsActionLabel(LocalizedStringKey(row.title), value: row.value)
+                    TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
                 }
 
                 Button {
                     showingChangelog = true
                 } label: {
-                    TVSettingsActionLabel("Changelog", value: changelogDetail)
+                    TVSettingsRowLabel("Changelog", value: changelogDetail)
                 }
                 .buttonStyle(.glass)
                 .accessibilityIdentifier("settings.about.changelog")
@@ -42,26 +42,20 @@ struct AboutSettingsView: View {
 
             TVSettingsSection("Server") {
                 ForEach(serverRows, id: \.title) { row in
-                    TVSettingsActionLabel(LocalizedStringKey(row.title), value: row.value)
+                    TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
                 }
             }
 
             TVSettingsSection("Device") {
                 ForEach(deviceRows, id: \.title) { row in
-                    TVSettingsActionLabel(LocalizedStringKey(row.title), value: row.value)
+                    TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
                 }
             }
         }
         .sheet(isPresented: $showingChangelog) {
             // No NavigationStack on tvOS: its title has no background and it
-            // halves the sheet's width. `presentationSizing` has no effect on
-            // a tvOS sheet with custom content.
+            // halves the sheet's width.
             ChangelogView()
-                .frame(
-                    width: Metrics.modalPanelSize.width,
-                    height: Metrics.modalPanelSize.height
-                )
-                .presentationSizing(.fitted)
         }
     }
     #endif
@@ -150,24 +144,17 @@ struct ChangelogView: View {
 
     var body: some View {
         #if os(tvOS)
-        // A plain stack, not safeAreaInset overlays: insets draw over the
-        // content, and giving them a material breaks the single background.
-        VStack(spacing: 0) {
-            Text("Changelog")
-                .font(.title3.bold())
-                .padding(Metrics.Space.l)
-
-            notes
-
-            Button("Done") { dismiss() }
-                .buttonStyle(.glass)
-                .padding(Metrics.Space.l)
+        TVModalPanel(title: Text("Changelog")) {
+            notesContent
         }
-        .onExitCommand { dismiss() }
         .accessibilityIdentifier("settings.changelog")
         #else
-        notes
-            .themedPageBackground()
+        ScrollView {
+            notesContent
+                .padding(.horizontal, Metrics.Space.xl)
+                .padding(.bottom, Metrics.Space.xl)
+        }
+        .themedPageBackground()
             .navigationTitle("Changelog")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -222,60 +209,56 @@ struct ChangelogView: View {
         }
     }
 
-    private var notes: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                if !Changelog.runningBuildIsListed() {
-                    // A development build may have no entry yet.
-                    Text("You're running \(Changelog.version()) (\(Changelog.build())), which has no changelog entry yet.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+    private var notesContent: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+            if !Changelog.runningBuildIsListed() {
+                // A development build may have no entry yet.
+                Text("You're running \(Changelog.version()) (\(Changelog.build())), which has no changelog entry yet.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
-                ForEach(Changelog.entries) { entry in
-                    VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                        Button {
-                            toggle(entry)
-                        } label: {
-                            entryHeader(entry)
-                        }
-                        .accessibilityIdentifier("settings.changelog.\(entry.build)")
+            ForEach(Changelog.entries) { entry in
+                VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                    Button {
+                        toggle(entry)
+                    } label: {
+                        entryHeader(entry)
+                    }
+                    .accessibilityIdentifier("settings.changelog.\(entry.build)")
 
-                        if expanded.contains(entry.id) {
-                            VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                                ForEach(entry.sections) { section in
-                                    VStack(alignment: .leading, spacing: Metrics.Space.s) {
-                                        Text(LocalizedStringKey(section.category.rawValue))
-                                            .accessibilityAddTraits(.isHeader)
-                                            .font(.callout.weight(.semibold))
-                                            .foregroundStyle(.primary)
+                    if expanded.contains(entry.id) {
+                        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+                            ForEach(entry.sections) { section in
+                                VStack(alignment: .leading, spacing: Metrics.Space.s) {
+                                    Text(LocalizedStringKey(section.category.rawValue))
+                                        .accessibilityAddTraits(.isHeader)
+                                        .font(.callout.weight(.semibold))
+                                        .foregroundStyle(.primary)
 
-                                        ForEach(section.changes, id: \.self) { change in
-                                            HStack(alignment: .top, spacing: Metrics.Space.s) {
-                                                Text("•")
-                                                    .accessibilityHidden(true)
-                                                Text(change)
-                                                    .fixedSize(horizontal: false, vertical: true)
-                                            }
-                                            .font(.callout)
-                                            .foregroundStyle(.secondary)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            #if os(tvOS)
-                                            // tvOS scrolls by focus; unfocusable text cannot scroll.
-                                            .focusable()
-                                            #endif
+                                    ForEach(section.changes, id: \.self) { change in
+                                        HStack(alignment: .top, spacing: Metrics.Space.s) {
+                                            Text("•")
+                                                .accessibilityHidden(true)
+                                            Text(change)
+                                                .fixedSize(horizontal: false, vertical: true)
                                         }
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        #if os(tvOS)
+                                        // tvOS scrolls by focus; unfocusable text cannot scroll.
+                                        .focusable()
+                                        #endif
                                     }
                                 }
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, Metrics.Space.xl)
-            .padding(.bottom, Metrics.Space.xl)
         }
     }
 }

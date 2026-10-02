@@ -118,51 +118,70 @@ struct TVSettingsSection<Content: View>: View {
     }
 }
 
-struct TVSettingsNavigationLabel: View {
-    let title: LocalizedStringKey
-    let detail: String?
+/// The label of every tvOS settings row: a title, an optional value, and an
+/// accessory glyph that says what the row does.
+struct TVSettingsRowLabel: View {
+    enum Accessory {
+        /// A plain row, or a button that acts.
+        case none
+        /// Pushes a page.
+        case navigation
+        /// Opens a pull-down menu.
+        case menu
+    }
 
-    init(
-        _ title: LocalizedStringKey,
-        detail: String? = nil
-    ) {
+    let title: LocalizedStringKey
+    let value: String?
+    let accessory: Accessory
+
+    init(_ title: LocalizedStringKey, value: String? = nil, accessory: Accessory = .none) {
         self.title = title
-        self.detail = detail
+        self.value = value
+        self.accessory = accessory
     }
 
     var body: some View {
-        HStack(spacing: Metrics.Space.l) {
+        HStack(spacing: accessory == .navigation ? Metrics.Space.l : Metrics.Space.xl) {
             Text(title)
             Spacer(minLength: Metrics.Space.xl)
-            if let detail {
-                Text(detail)
+            if let value {
+                Text(value)
                     .opacity(0.7)
                     .lineLimit(1)
             }
-            Image(systemName: "chevron.forward")
-                .font(.caption.bold())
-                .opacity(0.55)
+            if let glyph {
+                Image(systemName: glyph)
+                    .font(.caption.bold())
+                    .opacity(0.55)
+            }
         }
         .frame(maxWidth: .infinity)
     }
+
+    private var glyph: String? {
+        switch accessory {
+        case .none: nil
+        case .navigation: "chevron.forward"
+        case .menu: "chevron.up.chevron.down"
+        }
+    }
 }
 
-struct TVSettingsValueLabel: View {
+/// A read-only row: a title and its value on a material, not focusable.
+struct TVSettingsInfoRow: View {
     let title: LocalizedStringKey
     let value: String
 
+    init(_ title: LocalizedStringKey, value: String) {
+        self.title = title
+        self.value = value
+    }
+
     var body: some View {
-        HStack(spacing: Metrics.Space.xl) {
-            Text(title)
-            Spacer(minLength: Metrics.Space.xl)
-            Text(value)
-                .opacity(0.7)
-                .lineLimit(1)
-            Image(systemName: "chevron.up.chevron.down")
-                .font(.caption.bold())
-                .opacity(0.55)
-        }
-        .frame(maxWidth: .infinity)
+        TVSettingsRowLabel(title, value: value)
+            .padding(.horizontal, Metrics.Space.l)
+            .frame(minHeight: Metrics.settingsRowMinHeight)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.settingsRowCornerRadius))
     }
 }
 
@@ -177,10 +196,30 @@ struct TVSettingsOption<Value: Hashable>: Identifiable {
 /// labels to a value-only pill.
 struct TVSettingsMenuPicker<Value: Hashable>: View {
     let title: LocalizedStringKey
-    let valueTitle: String
+    /// Shown on the row; the selected option's title unless a caller's
+    /// display differs from its menu entries.
+    let valueTitle: String?
     let accessibilityIdentifier: String
     @Binding var selection: Value
     let options: [TVSettingsOption<Value>]
+
+    init(
+        title: LocalizedStringKey,
+        valueTitle: String? = nil,
+        accessibilityIdentifier: String,
+        selection: Binding<Value>,
+        options: [TVSettingsOption<Value>]
+    ) {
+        self.title = title
+        self.valueTitle = valueTitle
+        self.accessibilityIdentifier = accessibilityIdentifier
+        _selection = selection
+        self.options = options
+    }
+
+    private var resolvedValueTitle: String {
+        valueTitle ?? options.first { $0.value == selection }?.title ?? ""
+    }
 
     var body: some View {
         Menu {
@@ -195,37 +234,31 @@ struct TVSettingsMenuPicker<Value: Hashable>: View {
                 }
             }
         } label: {
-            TVSettingsValueLabel(title: title, value: valueTitle)
+            TVSettingsRowLabel(title, value: resolvedValueTitle, accessory: .menu)
         }
         .buttonStyle(.glass)
         // Keep automation, VoiceOver and focus on the Menu button, not its label children.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
-        .accessibilityValue(valueTitle)
+        .accessibilityValue(resolvedValueTitle)
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
-struct TVSettingsActionLabel: View {
-    let title: LocalizedStringKey
-    let value: String?
-
-    init(_ title: LocalizedStringKey, value: String? = nil) {
-        self.title = title
-        self.value = value
-    }
-
-    var body: some View {
-        HStack(spacing: Metrics.Space.xl) {
-            Text(title)
-            Spacer(minLength: Metrics.Space.xl)
-            if let value {
-                Text(value)
-                    .opacity(0.7)
-                    .lineLimit(1)
-            }
-        }
-        .frame(maxWidth: .infinity)
+extension TVSettingsMenuPicker where Value: CaseIterable {
+    /// One option per case, titled by `optionTitle`.
+    init(
+        title: LocalizedStringKey,
+        accessibilityIdentifier: String,
+        selection: Binding<Value>,
+        optionTitle: (Value) -> String
+    ) {
+        self.init(
+            title: title,
+            accessibilityIdentifier: accessibilityIdentifier,
+            selection: selection,
+            options: Value.allCases.map { TVSettingsOption(value: $0, title: optionTitle($0)) }
+        )
     }
 }
 

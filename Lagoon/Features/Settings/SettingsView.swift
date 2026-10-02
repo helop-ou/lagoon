@@ -300,7 +300,7 @@ struct SettingsView: View {
         @ViewBuilder destination: () -> Destination
     ) -> some View {
         NavigationLink(destination: destination) {
-            TVSettingsNavigationLabel(title, detail: detail)
+            TVSettingsRowLabel(title, value: detail, accessory: .navigation)
         }
         .buttonStyle(.glass)
         .accessibilityIdentifier("settings.category.\(id)")
@@ -320,9 +320,9 @@ struct SettingsView: View {
                 description: "View the active Jellyfin connection, switch between saved users, or add and remove an account."
             ) {
                 TVSettingsSection("Connection") {
-                    settingsInfo("Server", value: session.serverName ?? "Jellyfin")
-                    settingsInfo("Address", value: session.client.serverURL?.host() ?? "—")
-                    settingsInfo("User", value: session.userName ?? "—")
+                    TVSettingsInfoRow("Server", value: session.serverName ?? "Jellyfin")
+                    TVSettingsInfoRow("Address", value: session.client.serverURL?.host() ?? "—")
+                    TVSettingsInfoRow("User", value: session.userName ?? "—")
                 }
 
                 TVSettingsSection("Account Actions") {
@@ -336,13 +336,6 @@ struct SettingsView: View {
         }
     }
 
-    private func settingsInfo(_ title: LocalizedStringKey, value: String) -> some View {
-        TVSettingsActionLabel(title, value: value)
-            .padding(.horizontal, Metrics.Space.l)
-            .frame(minHeight: Metrics.settingsRowMinHeight)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: Metrics.settingsRowCornerRadius))
-    }
-
     private func settingsAction(
         _ title: LocalizedStringKey,
         id: String,
@@ -350,7 +343,7 @@ struct SettingsView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(role: role, action: action) {
-            TVSettingsActionLabel(title)
+            TVSettingsRowLabel(title)
         }
         .buttonStyle(.glass)
         .accessibilityIdentifier("settings.account.\(id)")

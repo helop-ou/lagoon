@@ -69,19 +69,16 @@ struct DeveloperSettingsView: View {
             ) {
                 TVSettingsMenuPicker(
                     title: "Component",
-                    valueTitle: selectedPreview.title,
                     accessibilityIdentifier: "settings.developer.component",
                     selection: $selectedPreview,
-                    options: PlayerComponentPreview.allCases.map {
-                        TVSettingsOption(value: $0, title: $0.title)
-                    }
+                    optionTitle: \.title
                 )
 
                 previewCanvas
 
                 if selectedPreview.hasCountdown {
                     Button(action: replayCountdown) {
-                        TVSettingsActionLabel("Replay Countdown")
+                        TVSettingsRowLabel("Replay Countdown")
                     }
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("settings.developer.replay")

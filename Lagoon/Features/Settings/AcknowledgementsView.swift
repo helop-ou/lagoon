@@ -24,32 +24,27 @@ struct AcknowledgementsView: View {
 
     #if os(tvOS)
     private var tvBody: some View {
-        // A plain stack, not safeAreaInset overlays, as in the changelog.
-        VStack(spacing: 0) {
-            Text(panelTitle)
-                .font(.title3.bold())
-                .padding(Metrics.Space.l)
-
-            if let component = readingLicense {
-                licenseParagraphs(for: component)
-            } else {
-                componentList
-            }
-
-            HStack(spacing: Metrics.Space.l) {
+        // Menu leaves the licence text first; one press never skips a level.
+        TVModalPanel(
+            title: Text(panelTitle),
+            scrollIdentity: readingLicense?.id,
+            onExit: {
+                if readingLicense == nil { dismiss() } else { closeLicense() }
+            },
+            leadingActions: {
                 if readingLicense != nil {
                     Button("Back") { closeLicense() }
                         .buttonStyle(.glass)
                 }
-                Button("Done") { dismiss() }
-                    .buttonStyle(.glass)
+            },
+            content: {
+                if let component = readingLicense {
+                    licenseParagraphs(for: component)
+                } else {
+                    componentList
+                }
             }
-            .padding(Metrics.Space.l)
-        }
-        // Menu leaves the licence text first; one press never skips a level.
-        .onExitCommand {
-            if readingLicense == nil { dismiss() } else { closeLicense() }
-        }
+        )
         .accessibilityIdentifier("settings.acknowledgements")
     }
 
@@ -58,51 +53,43 @@ struct AcknowledgementsView: View {
     }
 
     private var componentList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                ForEach(Acknowledgements.components) { component in
-                    VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                        Button {
-                            toggle(component)
-                        } label: {
-                            entryHeader(component)
-                        }
-                        .accessibilityIdentifier("settings.acknowledgements.\(component.id)")
-
-                        if expanded.contains(component.id) {
-                            entryDetail(component)
-                        }
+        VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+            ForEach(Acknowledgements.components) { component in
+                VStack(alignment: .leading, spacing: Metrics.Space.m) {
+                    Button {
+                        toggle(component)
+                    } label: {
+                        entryHeader(component)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                    .accessibilityIdentifier("settings.acknowledgements.\(component.id)")
 
-                trademarks
+                    if expanded.contains(component.id) {
+                        entryDetail(component)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, Metrics.Space.xl)
-            .padding(.bottom, Metrics.Space.xl)
+
+            trademarks
         }
     }
 
     private func licenseParagraphs(for component: ThirdPartyComponent) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                Text(component.licenseName)
-                    .font(.callout.weight(.medium))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: Metrics.Space.l) {
+            Text(component.licenseName)
+                .font(.callout.weight(.medium))
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Focusable so tvOS can scroll it. Down walks the text, then
-                // reaches Back and Done.
-                ForEach(Array(Self.paragraphs(of: component).enumerated()), id: \.offset) { _, paragraph in
-                    Text(paragraph)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .focusable()
-                }
+            // Focusable so tvOS can scroll it. Down walks the text, then
+            // reaches Back and Done.
+            ForEach(Array(Self.paragraphs(of: component).enumerated()), id: \.offset) { _, paragraph in
+                Text(paragraph)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .focusable()
             }
-            .padding(.horizontal, Metrics.Space.xl)
-            .padding(.bottom, Metrics.Space.xl)
         }
     }
 

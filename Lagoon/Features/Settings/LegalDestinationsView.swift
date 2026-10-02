@@ -25,7 +25,7 @@ struct LegalSettingsSection: View {
             Button {
                 showingAcknowledgements = true
             } label: {
-                TVSettingsActionLabel("Acknowledgements", value: Self.componentsValue)
+                TVSettingsRowLabel("Acknowledgements", value: Self.componentsValue)
             }
             .buttonStyle(.glass)
             .accessibilityIdentifier("settings.about.acknowledgements")
@@ -39,11 +39,6 @@ struct LegalSettingsSection: View {
         }
         .sheet(isPresented: $showingAcknowledgements) {
             AcknowledgementsView()
-                .frame(
-                    width: Metrics.modalPanelSize.width,
-                    height: Metrics.modalPanelSize.height
-                )
-                .presentationSizing(.fitted)
         }
         .sheet(item: $presentedAddress) { address in
             LegalAddressSheet(address: address)
@@ -61,7 +56,7 @@ struct LegalSettingsSection: View {
         Button {
             presentedAddress = LegalAddress(id: identifier, title: title, url: url)
         } label: {
-            TVSettingsActionLabel(title, value: LegalDestinations.displayAddress(url))
+            TVSettingsRowLabel(title, value: LegalDestinations.displayAddress(url))
         }
         .buttonStyle(.glass)
         .accessibilityIdentifier(identifier)
@@ -161,34 +156,17 @@ struct AboutLagoonSheet: View {
     private var tvBody: some View {
         // The changelog's panel shape: title, scrolling content, Done. No
         // NavigationStack — see `AcknowledgementsView`.
-        VStack(spacing: 0) {
-            Text("About Lagoon")
-                .font(.title3.bold())
-                .padding(Metrics.Space.l)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-                    TVSettingsSection("Application") {
-                        ForEach(Self.applicationRows, id: \.title) { row in
-                            TVSettingsActionLabel(LocalizedStringKey(row.title), value: row.value)
-                        }
+        TVModalPanel(title: Text("About Lagoon")) {
+            VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
+                TVSettingsSection("Application") {
+                    ForEach(Self.applicationRows, id: \.title) { row in
+                        TVSettingsRowLabel(LocalizedStringKey(row.title), value: row.value)
                     }
-
-                    LegalSettingsSection()
                 }
-                .padding(.horizontal, Metrics.Space.xl)
-                .padding(.bottom, Metrics.Space.xl)
-            }
 
-            Button("Done") { dismiss() }
-                .buttonStyle(.glass)
-                .padding(Metrics.Space.l)
+                LegalSettingsSection()
+            }
         }
-        .frame(
-            width: Metrics.modalPanelSize.width,
-            height: Metrics.modalPanelSize.height
-        )
-        .onExitCommand { dismiss() }
         .accessibilityIdentifier("signin.about.sheet")
     }
     #endif
@@ -246,12 +224,7 @@ struct AboutLagoonButton: View {
             #endif
             .accessibilityIdentifier("signin.about")
             .sheet(isPresented: $showingAbout) {
-                #if os(tvOS)
                 AboutLagoonSheet()
-                    .presentationSizing(.fitted)
-                #else
-                AboutLagoonSheet()
-                #endif
             }
     }
 }

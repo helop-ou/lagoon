@@ -223,6 +223,9 @@ notes](reference/design-system.md#themes).
   list of every row, each naming its source under its title. Reorder is Edit
   and drag on iOS, up/down glass buttons beside each row on the TV.
 - **Modals (tvOS):**
+  - `TVModalPanel` is the panel: Changelog, Acknowledgements, About Lagoon
+    and Watch Together use it. It owns the size, the Done button and Menu;
+    a panel with levels of its own passes `onExit`.
   - A sheet with custom content ignores `presentationSizing`, so the panel
     sets its size (`Metrics.modalPanelSize`) or fills the screen.
   - Layout is title, scrolling content, Done, in sequence, not

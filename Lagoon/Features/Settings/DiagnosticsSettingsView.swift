@@ -67,19 +67,19 @@ struct DiagnosticsSettingsView: View {
                 What Lagoon has handed to the Apple TV Home screen. The shelf itself only appears when Lagoon is in the top row. If titles are published here but the shelf stays on the Lagoon banner, the problem is the shelf rather than the app.
                 """
             ) {
-                TVSettingsActionLabel(
+                TVSettingsRowLabel(
                     "Shared Container",
                     value: status.containerAvailable ? "Available" : "Unavailable"
                 )
-                TVSettingsActionLabel("Titles Published", value: "\(status.publishedCount)")
-                TVSettingsActionLabel("Artwork Files", value: "\(status.artworkCount)")
-                TVSettingsActionLabel(
+                TVSettingsRowLabel("Titles Published", value: "\(status.publishedCount)")
+                TVSettingsRowLabel("Artwork Files", value: "\(status.artworkCount)")
+                TVSettingsRowLabel(
                     "Last Published",
                     value: status.lastPublished.map {
                         $0.formatted(date: .abbreviated, time: .shortened)
                     } ?? "Never"
                 )
-                TVSettingsActionLabel(
+                TVSettingsRowLabel(
                     "Last Attempt",
                     value: status.lastAttempt.map {
                         $0.formatted(date: .abbreviated, time: .shortened)
