@@ -213,6 +213,10 @@ notes](reference/design-system.md#themes).
     folds. Use `DetailCircleButton` and `DetailCircleMenu`, not
     `.buttonStyle(.glass)` with a circle: its pressed highlight is a
     label-sized capsule that shows through as a lozenge.
+  - The season picker beneath them is a `Menu` under
+    `.glassEffect(.regular.interactive(), in: .capsule)`, not a menu-style
+    `Picker` with `.buttonStyle(.glass)`: the picker took the style on some
+    launches only and drew as bare text on the rest.
   - Set the episode rail's `scrollPosition(id:)` only when the rail changes
     hands (load, season pick, after playback). Setting it while browsing makes
     the rail jump under a moving focus.
@@ -225,7 +229,10 @@ notes](reference/design-system.md#themes).
   notes](reference/design-system.md#detail-pages).
 
 - **Settings:** native category navigation on each platform. iOS uses Forms,
-  pickers, toggles and Edit/reorder; tvOS keeps remote focus. Home Rows is one
+  pickers, toggles and Edit/reorder; tvOS keeps remote focus. An iOS picker
+  opens as a menu on its row (`TouchSettingsPage`), like the TV's
+  `TVSettingsMenuPicker`; only a list too long for a menu, such as the
+  language pickers, pushes a page. Home Rows is one
   list of every row, each naming its source under its title. Reorder is Edit
   and drag on iOS, up/down glass buttons beside each row on the TV.
 - **Modals (tvOS):**
