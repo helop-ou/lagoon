@@ -37,21 +37,25 @@ struct SettingsLanguagePickers: View {
     let identifierPrefix: String
 
     var body: some View {
-        Picker("Preferred", selection: primary) {
-            ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
-                Text(SubtitlePreferencesStore.displayName(for: language))
-                    .tag(Optional(language))
+        // Every language the system knows: too long for a menu.
+        Group {
+            Picker("Preferred", selection: primary) {
+                ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
+                    Text(SubtitlePreferencesStore.displayName(for: language))
+                        .tag(Optional(language))
+                }
             }
-        }
-        .accessibilityIdentifier("\(identifierPrefix).preferred")
-        Picker("Fallback", selection: fallback) {
-            Text("None").tag(String?.none)
-            ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
-                Text(SubtitlePreferencesStore.displayName(for: language))
-                    .tag(Optional(language))
+            .accessibilityIdentifier("\(identifierPrefix).preferred")
+            Picker("Fallback", selection: fallback) {
+                Text("None").tag(String?.none)
+                ForEach(SettingsLanguageOptions.choices, id: \.self) { language in
+                    Text(SubtitlePreferencesStore.displayName(for: language))
+                        .tag(Optional(language))
+                }
             }
+            .accessibilityIdentifier("\(identifierPrefix).fallback")
         }
-        .accessibilityIdentifier("\(identifierPrefix).fallback")
+        .pickerStyle(.navigationLink)
     }
 }
 #endif

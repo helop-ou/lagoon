@@ -2,6 +2,10 @@
 import SwiftUI
 
 /// The native form treatment shared by the touch settings categories.
+///
+/// Pickers open as menus on the row, like the TV's `TVSettingsMenuPicker`.
+/// A pushed page per choice is kept for lists too long for a menu, such as
+/// `SettingsLanguagePickers`.
 struct TouchSettingsPage<Content: View>: View {
     let title: LocalizedStringKey
     let content: Content
@@ -13,7 +17,7 @@ struct TouchSettingsPage<Content: View>: View {
 
     var body: some View {
         ThemedForm { content }
-            .pickerStyle(.navigationLink)
+            .pickerStyle(.menu)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
     }
