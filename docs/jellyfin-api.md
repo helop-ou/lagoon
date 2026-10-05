@@ -104,6 +104,27 @@ optional custom headers under Advanced, such as a Cloudflare service token.
 - Diagnostics record method and path only, so a value never reaches a
   report.
 
+## Measuring the connection
+
+Settings → Playback → Maximum Quality on Auto asks before negotiating
+(`JellyfinClient.measureConnection`, HEL-262):
+
+- `GET System/Endpoint` answers `IsLocal` and `IsInNetwork` from the address
+  the server sees. Either one true means a server on this network, which
+  keeps the full envelope and is never probed. Behind a reverse proxy the
+  server sees the proxy's address unless its Known Proxies setting lists it,
+  so a remote viewer can read as local there.
+- `GET Playback/BitrateTest?size=N` returns N filler bytes (the demo server
+  rounds up to KiB). It is timed from the first response byte to the last
+  through `URLSessionTaskMetrics`, because time to the first byte is mostly
+  latency: half a second each on the public demo server. 1 MB first, then
+  8 MB when that reads 4 Mbit/s or more, since a short transfer ends before
+  TCP ramps up (0.5, 2 and 8 MiB read 8, 24 and 44 Mbit/s on one link).
+- Both are probes: a failure keeps today's ceiling and is never reported.
+  Results are kept per server for half an hour, or until the device moves to
+  another network (`NetworkPathObserver.generation`); a failure for two
+  minutes. A title's page starts the measurement, so Play rarely waits on it.
+
 ## Library endpoints
 
 | Purpose | Endpoint | Quirk |

@@ -102,6 +102,33 @@ Known limits, both deliberate:
 `boundedTo(_:width:height:)` **tightens** rather than skips when two bounds
 apply (fallback 1080p, metered 720p), so the smaller ceiling always wins.
 
+### What a remote link is offered
+
+Before HEL-262 a remote viewer on weak Wi-Fi was offered the full 120 Mbps
+envelope and direct-played 31–41 Mbps remuxes that stalled every few
+minutes. `PlaybackQualityLimit` now sets a ceiling from Settings → Playback →
+Maximum Quality, and `cappedToBitrate` applies it before the metered cap:
+
+- **Auto** measures a remote server (see [Measuring the
+  connection](../../jellyfin-api.md#measuring-the-connection)) and offers 70%
+  of what it read, never below 1 Mbit/s. A server on this network, or one
+  that did not answer, keeps the full envelope. On a metered path the probe
+  is skipped: the metered cap is lower anyway.
+- **A fixed maximum** applies everywhere, local servers included. **No
+  Limit** turns the cap off.
+- Like the metered cap, it brings `maxStaticBitrate` down with
+  `maxStreamingBitrate`, and resolution comes down in steps: 720p under
+  4 Mbit/s, 1080p under 20 Mbit/s. Above that it is left alone, so a remote 4K
+  file the link can carry still direct-plays.
+- **The lower quality after stalls** (`PlaybackQualityOffer`): three stalls
+  inside a minute bring up an offer in the player's corner, once per item.
+  Accepting re-negotiates on the same rung under a lower ceiling (70% of the
+  engine's measured link rate, or half the playing bitrate or the current
+  cap, whichever is lowest) and resumes at the playhead. The ceiling holds
+  for the rest of the player session. It is the viewer's choice and never a
+  step down the ladder: stalls say nothing about the samples. Not offered for
+  a download or in a Watch Together group.
+
 ### When playback fails: the delivery ladder
 
 Negotiation happens once, before the first frame. When the engine cannot

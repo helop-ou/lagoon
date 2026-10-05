@@ -74,6 +74,10 @@ Codecs:
   in views.
 - iOS metered-path limits apply to static and streaming bitrate offers and can
   be overridden in Playback settings.
+- Maximum Quality (Auto by default) caps a remote server below its measured
+  link, and repeated stalls offer the viewer a lower quality. Neither moves
+  the delivery ladder. See [what a remote link is
+  offered](reference/playback/stream-resolution.md#what-a-remote-link-is-offered).
 
 **HDR10+ needs no code.** VideoToolbox attaches the dynamic metadata to each
 decoded frame (an undocumented `HDR10PlusData` attachment with the T.35
@@ -371,14 +375,14 @@ integration](reference/playback/system-integration.md).
 
 **tvOS:**
 
-- The video surface owns focus. Select prioritizes scrub, Skip, Up Next, then
-  play/pause. `MenuPressGate` takes Select from the responder chain, never
+- The video surface owns focus. Select prioritizes scrub, Skip, Up Next, the
+  lower-quality offer, then play/pause. `MenuPressGate` takes Select from the responder chain, never
   from the surface's `onTapGesture`: on a Siri Remote the click's touch lets
   `onMoveCommand`'s swipe gesture swallow the tap.
 - **A light Siri Remote touch is a separate input that reveals controls. It
   never becomes Select.**
-- Menu cancels scrubbing, then dismisses a skip or Up Next prompt in any
-  mode, then closes the panel, then exits.
+- Menu cancels scrubbing, then dismisses a skip, Up Next or lower-quality
+  prompt in any mode, then closes the panel, then exits.
 - In Automatic mode a first Back on Up Next means "not yet": the card returns
   for the last five seconds and the episode still rolls on. Only a Back
   during that final countdown, or in card mode, stops autoplay.
