@@ -65,6 +65,13 @@ state are removed on teardown. The plist declares
   background suspends video the same way (`pictureRouteDidChange`). Before
   HEL-261 the check ran only on entering the background, so video kept
   decoding with nothing showing it.
+- Every engine is also told the app is in the background
+  (`setHostInBackground`), whether or not the picture is showing. The system
+  can take the VideoToolbox session there, as it did twice in five minutes on
+  a tester's iPhone in PiP. The engine rebuilds it once per fault burst, and
+  where a rebuild cannot hold it suspends video until the foreground rather
+  than reporting the samples undecodable, so the ladder never falls back to a
+  transcode, which decodes through VideoToolbox too.
 - tvOS still pauses on background via `scenePhase`; it has no lock screen.
 - `-debug.regressionNoAutomaticPiP YES` disables automatic PiP so the
   simulator (which cannot lock) reaches audio-only mode through Home.
