@@ -80,7 +80,8 @@ final class PlaybackController {
     /// iOS background with the picture off: every engine, including an
     /// autoplay successor, plays audio only until the app returns.
     private var videoOutputSuspended = false
-    /// iOS background, picture showing or not.
+    /// iOS background, picture showing or not. Every engine is told, so a
+    /// decode session the system takes there waits for the foreground.
     private var isInBackground = false
     /// Fires each time the engine anchors its first frame after a load or
     /// seek. Rewired onto each successor, so a SyncPlay driver never holds an
@@ -541,6 +542,7 @@ final class PlaybackController {
                 self.onBufferingChanged?(buffering)
             }
             engine.setVideoOutputSuspended(videoOutputSuspended)
+            engine.setHostInBackground(isInBackground)
             engine.onPlaybackStarted = { [weak self, weak engine] in
                 guard let self, let engine, self.engine === engine else { return }
                 self.engineHasStarted = true
@@ -1018,6 +1020,7 @@ final class PlaybackController {
     private func applicationDidEnterBackground() {
         guard !isClosed, engine != nil else { return }
         isInBackground = true
+        engine?.setHostInBackground(true)
         suspendBufferFill()
         suspendVideoIfUnseen()
         publishDisplayState()
@@ -1028,6 +1031,7 @@ final class PlaybackController {
         guard !isClosed else { return }
         isInBackground = false
         videoOutputSuspended = false
+        engine?.setHostInBackground(false)
         engine?.setVideoOutputSuspended(false)
         resumeBufferFill()
         publishDisplayState()
