@@ -45,7 +45,11 @@ Lagoon/Shared/Networking/APIDiagnostics.swift  request/decode failure classifica
   carries the display state (`appState`, `pictureInPicture`, `airPlay`,
   `videoSuspended`), republished whenever the app changes state, PiP starts or
   stops, or the route changes, so a background session fault says what showed
-  the picture.
+  the picture. It also carries `networkBitrate`, the engine's measure of what
+  the link delivers while busy, in bit/s like the title's `bitrate`. The
+  monitor refreshes it each sample (every two seconds while reporting is on)
+  when it moves by 100 kbit/s, so the engine's own stall reports say whether
+  the link could carry the title (HEL-262).
 - `report` validates fields, checks the suppressor, snapshots history and
   hands the incident to the sink, which serialises and writes on its own
   utility queue. Nothing else runs on a playback path.
