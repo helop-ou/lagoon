@@ -269,19 +269,35 @@ struct SeriesDetailView: View {
         VStack(alignment: .leading, spacing: Metrics.Space.s) {
             if !viewModel.seasons.isEmpty {
                 #if os(iOS)
-                Picker("Season", selection: Binding(
-                    get: { viewModel.selectedSeasonId },
-                    set: { id in
-                        guard let id else { return }
-                        Task { await showSeason(id) }
+                // A menu under an explicit glass capsule, like the circles
+                // above it: a menu-style Picker took `.buttonStyle(.glass)`
+                // on some launches only and drew as bare text on the rest.
+                Menu {
+                    Picker("Season", selection: Binding(
+                        get: { viewModel.selectedSeasonId },
+                        set: { id in
+                            guard let id else { return }
+                            Task { await showSeason(id) }
+                        }
+                    )) {
+                        ForEach(viewModel.seasons) { season in
+                            Text(season.name ?? "Season").tag(Optional(season.id))
+                        }
                     }
-                )) {
-                    ForEach(viewModel.seasons) { season in
-                        Text(season.name ?? "Season").tag(Optional(season.id))
+                } label: {
+                    HStack(spacing: Metrics.Space.xs) {
+                        Text(selectedSeasonName)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .imageScale(.small)
                     }
+                    .padding(.horizontal, Metrics.Space.m)
+                    .padding(.vertical, Metrics.Space.s)
+                    .contentShape(Capsule())
                 }
-                .pickerStyle(.menu)
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .accessibilityLabel("Season")
+                .accessibilityValue(selectedSeasonName)
                 .accessibilityIdentifier("series.season")
                 #else
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -307,6 +323,12 @@ struct SeriesDetailView: View {
             }
         }
     }
+
+    #if os(iOS)
+    private var selectedSeasonName: String {
+        viewModel.seasons.first { $0.id == viewModel.selectedSeasonId }?.name ?? "Season"
+    }
+    #endif
 
     private var episodesSection: some View {
         VStack(alignment: .leading, spacing: 0) {
