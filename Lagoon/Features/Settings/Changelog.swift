@@ -64,6 +64,7 @@ nonisolated enum Changelog {
                     "On iPhone, a series page keeps its buttons on one row with the season picker below, instead of stacking them down the screen.",
                     "Profile names in Who's Watching no longer cut off at larger text sizes.",
                     "On iPhone, Discover's Connect Seerr prompt sits in the middle of the page and stays inside its margins at larger text sizes.",
+                    "On iPhone, a video in Picture in Picture, or left playing with the phone locked, keeps its original quality instead of switching to a converted stream after a few minutes, and no longer stops playing.",
                 ]),
             ]
         ),
