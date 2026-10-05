@@ -140,6 +140,40 @@ struct PlaybackIncidentMonitorTests {
         #expect(failed.fields["videoSuspended"] == .bool(true))
     }
 
+    /// HEL-262: stall reports could not tell a slow link from an engine
+    /// problem. The link's rate rides on every incident, the engine's own
+    /// stall reports included, in the unit of the title's `bitrate`.
+    @Test func incidentsCarryTheLinksMeasuredRate() throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        let monitor = PlaybackIncidentMonitor(hub: hub)
+        monitor.beginAttempt(delivery: .negotiated, method: .directPlay, source: try Self.source(), cached: true, disc: false, resumeSeconds: 0)
+        monitor.observeLinkRate(bytesPerSecond: nil)
+        _ = hub.report(.playbackStall, level: .warning, variant: ["reprime", "video"])
+        #expect(sink.incidents.last?.fields["networkBitrate"] == nil)
+
+        // 1.6 MB/s is 12.8 Mbit/s: barely above the title's 12 Mbit/s.
+        monitor.observeLinkRate(bytesPerSecond: 1_600_000)
+        _ = hub.report(.playbackStall, level: .warning, variant: ["reprime", "video"])
+        let stall = try #require(sink.incidents.last)
+        #expect(stall.fields["networkBitrate"] == .int(12_800_000))
+        #expect(stall.fields["bitrate"] == .int(12_000_000))
+
+        // A new attempt starts unmeasured.
+        monitor.endAttempt(engine: nil, outcome: "stopped")
+        monitor.beginAttempt(delivery: .remux, method: .transcode, source: try Self.source(), cached: false, disc: false, resumeSeconds: 0)
+        _ = hub.report(.playbackStall, level: .warning, variant: ["sustained", "video"])
+        #expect(sink.incidents.last?.fields["networkBitrate"] == nil)
+    }
+
+    @Test func theLinkRateIsRoundedToATenthOfAMegabit() {
+        #expect(PlaybackIncidentMonitor.networkBitrate(nil) == nil)
+        #expect(PlaybackIncidentMonitor.networkBitrate(0) == nil)
+        #expect(PlaybackIncidentMonitor.networkBitrate(.infinity) == nil)
+        #expect(PlaybackIncidentMonitor.networkBitrate(1_234_567) == 9_900_000)
+        #expect(PlaybackIncidentMonitor.networkBitrate(5_000) == 0)
+    }
+
     @Test func aFallbackAbandonedByTheViewerSaysSo() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
