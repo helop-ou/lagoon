@@ -4,11 +4,17 @@ struct PlaybackSettingsView: View {
     @AppStorage(SkipMode.defaultsKey) private var skipMode: SkipMode = .autoDelay
     @AppStorage(AutoplayMode.defaultsKey) private var autoplayMode: AutoplayMode = .autoDelay
     @AppStorage(DeviceProfile.meteredOverrideKey) private var allowFullQualityOnMetered = false
+    @AppStorage(MaximumQuality.defaultsKey) private var maximumQuality: MaximumQuality = .auto
     @AppStorage(GroupPlaybackDriver.correctionDefaultsKey) private var correctsSyncDrift = true
 
     /// Why a Watch Together picture might nudge; shared by both platforms.
     private static let syncDriftFooter = LocalizedStringKey(
         "In a Watch Together group, Lagoon nudges the speed by a fraction to bring this device back in step, and jumps when it is a long way out. Turn it off if you would rather it left the picture alone."
+    )
+
+    /// Shared by both platforms.
+    private static let maximumQualityFooter = LocalizedStringKey(
+        "Auto plays the original file from a server on this network. For a server elsewhere, Lagoon measures the connection first and asks for a smaller version when the original would not keep up. A fixed maximum applies everywhere."
     )
 
     var body: some View {
@@ -50,6 +56,18 @@ struct PlaybackSettingsView: View {
                 )
             }
 
+            TVSettingsSection("Quality", footer: Self.maximumQualityFooter) {
+                TVSettingsMenuPicker(
+                    title: "Maximum Quality",
+                    valueTitle: maximumQuality.shortTitle,
+                    accessibilityIdentifier: "settings.playback.maximumQuality",
+                    selection: $maximumQuality,
+                    options: MaximumQuality.allCases.map {
+                        TVSettingsOption(value: $0, title: String(localized: $0.title))
+                    }
+                )
+            }
+
             TVSettingsSection("Watch Together", footer: Self.syncDriftFooter) {
                 TVSettingsToggle("Correct Sync Drift", isOn: $correctsSyncDrift)
                     .accessibilityIdentifier("settings.playback.syncDrift")
@@ -82,6 +100,19 @@ struct PlaybackSettingsView: View {
                 Text("Watch Together")
             } footer: {
                 Text(Self.syncDriftFooter)
+            }
+
+            Section {
+                Picker("Maximum Quality", selection: $maximumQuality) {
+                    ForEach(MaximumQuality.allCases) { quality in
+                        Text(quality.title).tag(quality)
+                    }
+                }
+                .accessibilityIdentifier("settings.playback.maximumQuality")
+            } header: {
+                Text("Quality")
+            } footer: {
+                Text(Self.maximumQualityFooter)
             }
 
             Section {
