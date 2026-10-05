@@ -35,9 +35,10 @@ nonisolated enum DiagnosticSchema {
     static let recoveryChoices: Set<String> = [
         "rendererFailed", "mediaServicesReset", "requiresFlush", "restartPoint",
         "stallReprime", "stallResume", "cacheFallback",
-        // A VideoToolbox session rebuilt rather than read as undecodable, and
-        // one that needed no rebuild.
-        "decodeSessionRebuilt", "decodeSessionIgnored",
+        // A VideoToolbox session rebuilt rather than read as undecodable, one
+        // that left video suspended until the foreground, and one that needed
+        // no rebuild.
+        "decodeSessionRebuilt", "decodeSessionParked", "decodeSessionIgnored",
     ]
     static let outcomeChoices: Set<String> = [
         "recovered", "reprimed", "failed", "exhausted", "cancelled", "ready",
@@ -107,6 +108,10 @@ nonisolated enum DiagnosticSchema {
         "availableMB": .double,
         "thermal": .choice(thermalChoices),
         "appState": .choice(appStateChoices),
+        // Where the picture goes while the app is away.
+        "pictureInPicture": .bool,
+        "airPlay": .bool,
+        "videoSuspended": .bool,
         "playedSeconds": .double,
         "elapsedMs": .double,
         "sinceSeekMs": .double,

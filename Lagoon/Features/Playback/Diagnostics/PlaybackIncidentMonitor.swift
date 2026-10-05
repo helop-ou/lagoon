@@ -171,6 +171,10 @@ final class PlaybackIncidentMonitor {
     private var lastStallCount = 0
     private var frequentStallsReported = false
     private var attemptEnded = true
+    /// Whether anything shows the picture while the app is away. Kept
+    /// across attempts, and inherited by every incident, the engine's
+    /// session faults included.
+    private var displayFields: [String: DiagnosticValue] = [:]
     /// Degradation is only assessed after uninterrupted sampling of the
     /// attempt.
     private(set) var sampledWholeAttempt = false
@@ -259,9 +263,22 @@ final class PlaybackIncidentMonitor {
     /// Fields every incident inherits until the attempt ends, including ones the
     /// engine reports itself.
     private func publishAmbientFields() {
-        var ambient = facts
+        var ambient = facts.merging(displayFields) { _, display in display }
         ambient["attempt"] = .string(attempt)
         hub.setAmbientFields(ambient)
+    }
+
+    /// The app moved between foreground and background, or picture in
+    /// picture, AirPlay or video suspension changed.
+    func setDisplayState(background: Bool, pictureInPicture: Bool, airPlay: Bool, videoSuspended: Bool) {
+        displayFields = [
+            "appState": .string(background ? "background" : "active"),
+            "pictureInPicture": .bool(pictureInPicture),
+            "airPlay": .bool(airPlay),
+            "videoSuspended": .bool(videoSuspended),
+        ]
+        guard !attemptEnded else { return }
+        publishAmbientFields()
     }
 
     /// Nothing negotiated or the engine never started. `stage` says how
@@ -513,10 +530,10 @@ final class PlaybackIncidentMonitor {
         ]
     }
 
-    /// The facts, the attempt, and how long ago the viewer last seeked or
-    /// switched a track, merged with `extra`.
+    /// The facts, the display state, the attempt, and how long ago the viewer
+    /// last seeked or switched a track, merged with `extra`.
     private func incidentFields(extra: [String: DiagnosticValue]) -> [String: DiagnosticValue] {
-        var fields = facts
+        var fields = facts.merging(displayFields) { _, display in display }
         // Negotiation failures precede the attempt; the schema rejects an empty
         // token.
         if !attempt.isEmpty {

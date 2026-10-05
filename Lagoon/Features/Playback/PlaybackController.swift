@@ -80,6 +80,8 @@ final class PlaybackController {
     /// iOS background with the picture off: every engine, including an
     /// autoplay successor, plays audio only until the app returns.
     private var videoOutputSuspended = false
+    /// iOS background, picture showing or not.
+    private var isInBackground = false
     /// Fires each time the engine anchors its first frame after a load or
     /// seek. Rewired onto each successor, so a SyncPlay driver never holds an
     /// engine.
@@ -796,7 +798,11 @@ final class PlaybackController {
             self?.nowPlaying.updateTimeline()
         }
         audioSession.onRouteAvailabilityChanged = { [weak self] active in
-            self?.isExternalPlaybackRouteActive = active
+            guard let self else { return }
+            self.isExternalPlaybackRouteActive = active
+            #if os(iOS)
+            self.pictureRouteDidChange()
+            #endif
         }
         audioSession.onError = { [weak self] error in
             guard let self, self.engine != nil else { return }
@@ -1000,23 +1006,60 @@ final class PlaybackController {
         automation.playNext()
     }
 
+    /// The app is away and neither picture in picture nor AirPlay shows the
+    /// picture, so decoding it is wasted and its session may be taken.
+    nonisolated static func videoIsUnseen(inBackground: Bool, pictureInPicture: Bool, airPlay: Bool) -> Bool {
+        inBackground && !pictureInPicture && !airPlay
+    }
+
     #if os(iOS)
     /// Locked or backgrounded: audio carries on, cache fill stops, and the
     /// picture is dropped unless PiP or AirPlay still shows it.
     private func applicationDidEnterBackground() {
         guard !isClosed, engine != nil else { return }
+        isInBackground = true
         suspendBufferFill()
-        guard !isPictureInPictureShowing(), !isExternalPlaybackRouteActive else { return }
-        videoOutputSuspended = true
-        engine?.setVideoOutputSuspended(true)
+        suspendVideoIfUnseen()
+        publishDisplayState()
     }
 
     /// Back on screen: the picture restarts from the playhead.
     private func applicationWillEnterForeground() {
         guard !isClosed else { return }
+        isInBackground = false
         videoOutputSuspended = false
         engine?.setVideoOutputSuspended(false)
         resumeBufferFill()
+        publishDisplayState()
+    }
+
+    /// Picture in picture started or stopped, or the AirPlay route changed.
+    /// Stopping either while the app is away leaves nothing to show the
+    /// picture, so video is suspended as backgrounding would have (HEL-261).
+    func pictureRouteDidChange() {
+        guard !isClosed, engine != nil else { return }
+        suspendVideoIfUnseen()
+        publishDisplayState()
+    }
+
+    private func suspendVideoIfUnseen() {
+        guard !videoOutputSuspended,
+              Self.videoIsUnseen(
+                  inBackground: isInBackground,
+                  pictureInPicture: isPictureInPictureShowing(),
+                  airPlay: isExternalPlaybackRouteActive
+              ) else { return }
+        videoOutputSuspended = true
+        engine?.setVideoOutputSuspended(true)
+    }
+
+    private func publishDisplayState() {
+        incidents.setDisplayState(
+            background: isInBackground,
+            pictureInPicture: isPictureInPictureShowing(),
+            airPlay: isExternalPlaybackRouteActive,
+            videoSuspended: videoOutputSuspended
+        )
     }
     #endif
 

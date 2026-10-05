@@ -101,7 +101,10 @@ struct VideoPlayerView: View {
                 pictureInPicture.reset()
                 controller.close()
             }
-            pictureInPicture.onStarted = {
+            pictureInPicture.onStarted = { [weak controller] in
+                #if os(iOS)
+                controller?.pictureRouteDidChange()
+                #endif
                 guard onPictureInPictureStarted != nil else { return }
                 leftForPictureInPicture = true
                 #if os(iOS)
@@ -109,7 +112,11 @@ struct VideoPlayerView: View {
                 #endif
                 onPictureInPictureStarted?()
             }
-            pictureInPicture.onStopped = {
+            pictureInPicture.onStopped = { [weak controller] in
+                #if os(iOS)
+                // In the background this leaves nothing showing the picture.
+                controller?.pictureRouteDidChange()
+                #endif
                 if leftForPictureInPicture { closePlayer() }
             }
             #if os(iOS)
