@@ -35,6 +35,7 @@ October 2026
 - Who's Watching opens full height when your profiles are on more than one server, so every profile and Add Profile are in view.
 - The player's Info panel names audio formats the same way as the title's page, such as TrueHD 7.1.
 - Settings › Advanced on iPhone and iPad offers Buffer Transcoded Playback, as on Apple TV.
+- Settings on iPhone and iPad open choices such as subtitle size and edge in a menu on the row, instead of a page for each one. Languages still open their own list.
 
 ### Bug fixes
 
@@ -42,6 +43,7 @@ October 2026
 - On iPhone, a series page keeps its buttons on one row with the season picker below, instead of stacking them down the screen.
 - Profile names in Who's Watching no longer cut off at larger text sizes.
 - On iPhone, Discover's Connect Seerr prompt sits in the middle of the page and stays inside its margins at larger text sizes.
+- On iPhone and iPad, a series page's season picker always draws as a button, instead of sometimes showing as bare text.
 - On iPhone, a video in Picture in Picture, or left playing with the phone locked, keeps its original quality instead of switching to a converted stream after a few minutes, and no longer stops playing.
 
 ## 0.5.0 (113)
