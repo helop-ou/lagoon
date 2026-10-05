@@ -92,6 +92,8 @@ struct CustomPlayerView<Surface: View>: View {
     var isWaitingForGroup = false
     var subtitleStyle: SubtitleRenderStyle = .fallback
     var subtitleSearch: SubtitleSearchCoordinator? = nil
+    /// A lower quality after repeated stalls; nil where nothing offers one.
+    var qualityOffer: PlaybackQualityOffer? = nil
     @ViewBuilder let surface: () -> Surface
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
@@ -255,6 +257,14 @@ struct CustomPlayerView<Surface: View>: View {
                     hint: hint
                 )
 
+                if let qualityOffer {
+                    PlayerQualityOfferOverlay(
+                        offer: qualityOffer,
+                        isSuppressed: isQualityOfferSuppressed,
+                        reduceMotion: reduceMotion
+                    )
+                }
+
                 PlayerTransportOverlay(
                     engine: engine,
                     info: info,
@@ -414,6 +424,8 @@ struct CustomPlayerView<Surface: View>: View {
         } else if automation.dismissNextUp() {
             // Same rule as the skip pill.
             PlayerInputTrace.log("menu -> dismiss up next")
+        } else if !isQualityOfferSuppressed, qualityOffer?.dismiss() == true {
+            PlayerInputTrace.log("menu -> keep quality")
         } else if panelOpen,
                   selectedTab == .subtitles,
                   let subtitleSearch,
@@ -584,6 +596,9 @@ struct CustomPlayerView<Surface: View>: View {
             // Not focusable either, and for the same reason.
             PlayerInputTrace.log("select -> play next")
             automation.playNext()
+        } else if let qualityOffer, qualityOffer.isVisible, !isQualityOfferSuppressed {
+            PlayerInputTrace.log("select -> lower quality")
+            qualityOffer.accept()
         } else {
             PlayerInputTrace.log("select -> toggle pause")
             requestTogglePause()
@@ -740,6 +755,13 @@ struct CustomPlayerView<Surface: View>: View {
     private func skip(_ segment: MediaSegment) {
         automation.skip(segment)
         pokeControls()
+    }
+
+    /// The corner is the skip pill's or Up Next's first, and nothing in it
+    /// shows over the panel or a scrub.
+    private var isQualityOfferSuppressed: Bool {
+        panelOpen || isScrubbing || automation.showsNextUp
+            || (automation.activeSegment != nil && automation.skipMode != .instant)
     }
 
     private var hint: LocalizedStringKey {

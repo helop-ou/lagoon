@@ -74,6 +74,17 @@ final class PlaybackController {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
     let automation = PlaybackAutomation()
+    /// The lower quality offered after repeated stalls (HEL-262).
+    let qualityOffer = PlaybackQualityOffer()
+    @ObservationIgnored private var qualityOfferPolicy = PlaybackQualityOfferPolicy()
+    /// Stalls of the current engine already counted.
+    @ObservationIgnored private var observedStallCount = 0
+    /// The ceiling the viewer accepted. Kept for the rest of the session:
+    /// the link that stalled one episode will stall the next.
+    @ObservationIgnored private var qualityCap: Int?
+    /// The playing source's bitrate, which the lower quality steps under.
+    @ObservationIgnored private var playingSourceBitrate: Int?
+    @ObservationIgnored private var isChangingQuality = false
     /// Set before the autoplay hand-off runs, so the view's end-of-file
     /// handling does not close the player underneath it.
     private(set) var isAutoplayPending = false
@@ -195,6 +206,9 @@ final class PlaybackController {
 
     init() {
         PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
+        qualityOffer.onAccept = { [weak self] in
+            Task { await self?.switchToLowerQuality() }
+        }
         #if os(iOS)
         // Not `scenePhase`: under the UIKit-presented player
         // (`PlayerPresentationHub`) it never changes.
@@ -299,6 +313,7 @@ final class PlaybackController {
             delivery = .negotiated
             deliveryFallbacks = []
             skipsLocalPlayback = false
+            qualityOfferPolicy = PlaybackQualityOfferPolicy()
             #if DEBUG
             // Regression hook: force a rung so HLS cases run on a server that
             // would direct-play everything. Raw value `remux` or `transcode`.
@@ -352,7 +367,11 @@ final class PlaybackController {
                 streamURL = prepared.streamURL
                 method = prepared.method
             } else {
-                var negotiated = try await client.playbackInfo(itemId: media.id, delivery: delivery)
+                var negotiated = try await client.playbackInfo(
+                    itemId: media.id,
+                    delivery: delivery,
+                    maxBitrate: qualityCap
+                )
                 guard negotiated.errorCode == nil,
                       var resolvedSource = negotiated.mediaSources.first else {
                     throw JellyfinError.unplayable
@@ -365,7 +384,11 @@ final class PlaybackController {
                 )
                 if delivery == .negotiated, let refusal = layout.directPlayRefusal {
                     skipDelivery(to: PlaybackFallbackPolicy.start(for: layout), refusal: refusal)
-                    negotiated = try await client.playbackInfo(itemId: media.id, delivery: delivery)
+                    negotiated = try await client.playbackInfo(
+                        itemId: media.id,
+                        delivery: delivery,
+                        maxBitrate: qualityCap
+                    )
                     guard negotiated.errorCode == nil,
                           let lowered = negotiated.mediaSources.first else {
                         throw JellyfinError.unplayable
@@ -378,6 +401,7 @@ final class PlaybackController {
             }
             mediaSourceId = source.id
             playMethod = method
+            playingSourceBitrate = source.bitrate
             // Read a disc image directly only when direct play serves the
             // image itself. Transcodes and downloads are ordinary streams.
             let discRequest: DiscPlaybackRequest? = !isLocalPlayback
@@ -535,11 +559,19 @@ final class PlaybackController {
                 guard let self, let engine, self.engine === engine else { return }
                 self.onEngineReady?()
             }
+            observedStallCount = 0
             engine.onBufferingChanged = { [weak self, weak engine] buffering in
                 guard let self, let engine, self.engine === engine else { return }
                 // A timed skip waits out a stall before seeking.
                 self.automation.isBuffering = buffering
                 self.onBufferingChanged?(buffering)
+                // The engine counts a stall just after it starts buffering.
+                if buffering {
+                    Task { @MainActor [weak self, weak engine] in
+                        guard let self, let engine, self.engine === engine else { return }
+                        self.noteStalls(engine.stallCount)
+                    }
+                }
             }
             engine.setVideoOutputSuspended(videoOutputSuspended)
             engine.setHostInBackground(isInBackground)
@@ -1263,6 +1295,7 @@ final class PlaybackController {
         nextUpTask = nil
         // A sleeping countdown must not wake on a gone engine.
         automation.invalidate()
+        qualityOffer.withdraw()
         if !preservingPreparedNext {
             successorPreparation.cancel()
         }
@@ -1457,6 +1490,56 @@ final class PlaybackController {
         )
     }
 
+    // MARK: - Lower quality after stalls
+
+    /// Offers a lower quality once repeated stalls show the link cannot keep
+    /// up. Not for a download, which has no link, nor in a group, where a
+    /// restart is the group's to make.
+    private func noteStalls(_ count: Int) {
+        guard count > observedStallCount else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        var offers = false
+        for _ in observedStallCount..<count {
+            offers = qualityOfferPolicy.recordStall(at: now) || offers
+        }
+        observedStallCount = count
+        guard offers, !isClosed, !isLocalPlayback, groupTransport == nil else { return }
+        qualityOffer.present()
+    }
+
+    /// Re-negotiates under a lower ceiling and resumes at the playhead, on
+    /// the same rung. The viewer asked for it, so it is not a fallback.
+    private func switchToLowerQuality() async {
+        guard !isClosed, !isFallingBack, !isChangingQuality, groupTransport == nil,
+              let client, let media = currentMedia else { return }
+        isChangingQuality = true
+        defer { isChangingQuality = false }
+        let link = engine?.bufferState.networkBytesPerSecond.map { Int($0 * 8) }
+        let currentCap: Int?
+        if let qualityCap {
+            currentCap = qualityCap
+        } else {
+            currentCap = await client.connectionBitrateCeiling()
+        }
+        let cap = PlaybackQualityLimit.loweredBitrate(
+            linkBitsPerSecond: link,
+            playingBitrate: playingSourceBitrate,
+            currentCap: currentCap
+        )
+        qualityCap = cap
+        deliveryFallbacks.append(PlaybackDeliveryFallbackRecord(
+            transition: "\(delivery.rawValue) · max " + String(format: "%.1f Mbps", Double(cap) / 1_000_000),
+            message: "Lower quality chosen after repeated stalls."
+        ))
+        captureTrackCarry()
+        await restart(
+            media,
+            scope: "quality",
+            preservingPreparedNext: true,
+            startPosition: currentPosition
+        )
+    }
+
     // The facts line, skipping anything the server didn't know.
     private func itemInfo(
         for media: MediaItem,
@@ -1553,6 +1636,7 @@ final class PlaybackController {
         if didFinish { return "finished" }
         if handoffStartedAt != nil { return "handoff" }
         if isFallingBack { return "fallback" }
+        if isChangingQuality { return "quality" }
         return "stopped"
     }
 

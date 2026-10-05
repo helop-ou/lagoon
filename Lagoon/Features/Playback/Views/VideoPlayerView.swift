@@ -376,7 +376,8 @@ struct VideoPlayerView: View {
                 onSetIgnoreWait: { ignore in Task { await syncPlay.setIgnoreWait(ignore) } },
                 isWaitingForGroup: syncPlay.isWaitingForGroup,
                 subtitleStyle: subtitlePreferences.renderStyle,
-                subtitleSearch: controller.subtitleSearch
+                subtitleSearch: controller.subtitleSearch,
+                qualityOffer: controller.qualityOffer
             ) { [weak engine] in
                 // Weak, like `PlayerEngineRef`: SwiftUI keeps copies of this
                 // closure past an episode handoff, and a strong capture

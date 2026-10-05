@@ -42,7 +42,7 @@ nonisolated enum DiagnosticSchema {
     ]
     static let outcomeChoices: Set<String> = [
         "recovered", "reprimed", "failed", "exhausted", "cancelled", "ready",
-        "finished", "stopped", "handoff", "fallback",
+        "finished", "stopped", "handoff", "fallback", "quality",
     ]
     static let trackChoices: Set<String> = ["audio", "subtitle"]
     static let trackSourceChoices: Set<String> = ["embedded", "external", "downloaded", "off"]
