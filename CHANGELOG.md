@@ -23,6 +23,11 @@ October 2026
 
 **A clearer sign-in on iPhone and iPad, and subtitles chosen by System Setting stay in your language.**
 
+### New features
+
+- Settings › Playback › Maximum Quality. On Auto, Lagoon checks the connection to a server away from home before playing and asks for a smaller version when the original would keep pausing; at home nothing changes. Or choose a fixed maximum.
+- When playback keeps pausing to load, the player offers a lower quality that carries on from the same moment.
+
 ### Improvements
 
 - Signing in on iPhone and iPad is easier to follow: the fields sit together in one card like the system's own sign-in, the screen is centred, and Sign In stands out.

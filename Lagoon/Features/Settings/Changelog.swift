@@ -52,6 +52,10 @@ nonisolated enum Changelog {
             released: "October 2026",
             headline: "A clearer sign-in on iPhone and iPad, and subtitles chosen by System Setting stay in your language.",
             sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "Settings › Playback › Maximum Quality. On Auto, Lagoon checks the connection to a server away from home before playing and asks for a smaller version when the original would keep pausing; at home nothing changes. Or choose a fixed maximum.",
+                    "When playback keeps pausing to load, the player offers a lower quality that carries on from the same moment.",
+                ]),
                 ChangelogSection(category: .improvements, changes: [
                     "Signing in on iPhone and iPad is easier to follow: the fields sit together in one card like the system's own sign-in, the screen is centred, and Sign In stands out.",
                     "On iPad, the sign-in fields and buttons keep a comfortable width instead of stretching across the screen.",
