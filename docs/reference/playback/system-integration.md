@@ -61,6 +61,10 @@ state are removed on teardown. The plist declares
   background needs.
 - A successor engine started by autoplay in the background inherits the
   suspension.
+- PiP stopping, or the AirPlay route dropping, while the app is still in the
+  background suspends video the same way (`pictureRouteDidChange`). Before
+  HEL-261 the check ran only on entering the background, so video kept
+  decoding with nothing showing it.
 - tvOS still pauses on background via `scenePhase`; it has no lock screen.
 - `-debug.regressionNoAutomaticPiP YES` disables automatic PiP so the
   simulator (which cannot lock) reaches audio-only mode through Home.

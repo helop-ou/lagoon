@@ -41,7 +41,11 @@ Lagoon/Shared/Networking/APIDiagnostics.swift  request/decode failure classifica
   thread.
 - `setAmbientFields` publishes the playback attempt's identity and facts, so
   every incident before the attempt ends carries the same codec and delivery
-  tags, whether the engine or the controller reports it.
+  tags, whether the engine or the controller reports it. On iOS it also
+  carries the display state (`appState`, `pictureInPicture`, `airPlay`,
+  `videoSuspended`), republished whenever the app changes state, PiP starts or
+  stops, or the route changes, so a background session fault says what showed
+  the picture.
 - `report` validates fields, checks the suppressor, snapshots history and
   hands the incident to the sink, which serialises and writes on its own
   utility queue. Nothing else runs on a playback path.
