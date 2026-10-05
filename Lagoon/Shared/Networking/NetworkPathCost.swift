@@ -48,7 +48,15 @@ nonisolated enum MeteredPathPolicy {
 nonisolated final class NetworkPathObserver: Sendable {
     static let shared = NetworkPathObserver()
 
-    private let cost = OSAllocatedUnfairLock<NetworkPathCost>(initialState: .unrestricted)
+    private struct State {
+        var cost = NetworkPathCost.unrestricted
+        /// Which interfaces the path runs over, to notice a different
+        /// network rather than a flag flipping.
+        var signature = ""
+        var generation = 0
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
     #if canImport(Network)
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "ee.helop.lagoon.networkpath")
@@ -58,11 +66,18 @@ nonisolated final class NetworkPathObserver: Sendable {
     func start() {
         #if canImport(Network)
         monitor.pathUpdateHandler = { [weak self] path in
-            self?.cost.withLock {
-                $0 = NetworkPathCost(
+            let signature = "\(path.status)|" + path.availableInterfaces
+                .map { "\($0.type):\($0.name)" }
+                .joined(separator: ",")
+            self?.state.withLock {
+                $0.cost = NetworkPathCost(
                     isExpensive: path.isExpensive,
                     isConstrained: path.isConstrained
                 )
+                if $0.signature != signature {
+                    $0.signature = signature
+                    $0.generation += 1
+                }
             }
         }
         monitor.start(queue: queue)
@@ -72,11 +87,17 @@ nonisolated final class NetworkPathObserver: Sendable {
     /// `.unrestricted` until the monitor reports, so a cold-launch first
     /// negotiation over cellular may miss the cap once.
     var current: NetworkPathCost {
-        cost.withLock { $0 }
+        state.withLock { $0.cost }
+    }
+
+    /// Advances when the device moves to another network, so a connection
+    /// measured on the last one is not trusted on this one.
+    var generation: Int {
+        state.withLock { $0.generation }
     }
 
     /// Testing seam; the monitor overwrites this on its next update.
     func override(_ cost: NetworkPathCost) {
-        self.cost.withLock { $0 = cost }
+        state.withLock { $0.cost = cost }
     }
 }

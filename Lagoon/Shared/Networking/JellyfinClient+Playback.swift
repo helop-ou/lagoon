@@ -65,20 +65,35 @@ extension JellyfinClient {
         let isHearingImpaired: Bool
     }
 
+    /// `System/Endpoint`: whether the server sees this device on its own
+    /// network.
+    nonisolated struct EndpointInfo: Decodable, Sendable {
+        let isLocal: Bool?
+        let isInNetwork: Bool?
+    }
+
     /// Negotiates a stream. `.negotiated` lets the server pick freely; lower
     /// rungs withdraw permissions after a failure, forcing a remux, then a
-    /// re-encode.
+    /// re-encode. `maxBitrate` overrides the connection's ceiling, for a
+    /// viewer who asked for a lower quality mid-title.
     func playbackInfo(
         itemId: String,
-        delivery: PlaybackDelivery = .negotiated
+        delivery: PlaybackDelivery = .negotiated,
+        maxBitrate: Int? = nil
     ) async throws -> PlaybackInfoResponse {
         let userId = try requireUserId()
+        let ceiling: Int?
+        if let maxBitrate {
+            ceiling = maxBitrate
+        } else {
+            ceiling = await connectionBitrateCeiling()
+        }
         #if DEBUG && targetEnvironment(simulator)
         let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
             ? DeviceProfile.simulatorRegression
-            : DeviceProfile.lagoon(for: delivery)
+            : DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling)
         #else
-        let profile = DeviceProfile.lagoon(for: delivery)
+        let profile = DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling)
         #endif
         return try await post(
             "Items/\(itemId)/PlaybackInfo",
@@ -89,6 +104,55 @@ extension JellyfinClient {
                 maxStreamingBitrate: profile.maxStreamingBitrate,
                 delivery: delivery
             )
+        )
+    }
+
+    /// The ceiling Settings → Playback → Maximum Quality asks for. Auto
+    /// measures a remote server once per network and half hour. Not on a
+    /// metered path, whose own, lower cap applies anyway.
+    func connectionBitrateCeiling(setting: MaximumQuality = .current) async -> Int? {
+        guard setting == .auto else {
+            return PlaybackQualityLimit.maxBitrate(setting: setting, connection: nil)
+        }
+        #if os(iOS)
+        if MeteredPathPolicy.applies(
+            cost: NetworkPathObserver.shared.current,
+            allowFullQuality: UserDefaults.standard.bool(forKey: DeviceProfile.meteredOverrideKey)
+        ) { return nil }
+        #endif
+        guard let serverURL else { return nil }
+        let measurement = await ConnectionMeasurementCache.shared.measurement(for: serverURL.absoluteString) {
+            await self.measureConnection()
+        }
+        return PlaybackQualityLimit.maxBitrate(setting: setting, connection: measurement)
+    }
+
+    /// Nil when either request fails: today's ceiling stands rather than
+    /// a guess.
+    func measureConnection() async -> ConnectionMeasurement? {
+        guard let endpoint: EndpointInfo = try? await get("System/Endpoint", probe: true) else { return nil }
+        if endpoint.isInNetwork == true || endpoint.isLocal == true { return .inNetwork }
+        var measured: Int?
+        for step in ConnectionBitrateProbe.steps {
+            guard let rate = await measureDownloadBitrate(bytes: step.bytes) else { break }
+            measured = rate
+            guard rate >= step.continueAbove else { break }
+        }
+        return measured.map { .remote(bitsPerSecond: $0) }
+    }
+
+    /// Times one `Playback/BitrateTest` download, in bit/s. Without the
+    /// task's metrics the whole request is timed, latency included.
+    private func measureDownloadBitrate(bytes: Int) async -> Int? {
+        let started = ProcessInfo.processInfo.systemUptime
+        guard let transfer = try? await timedTransfer(
+            ["Playback", "BitrateTest"],
+            query: [URLQueryItem(name: "size", value: String(bytes))],
+            timeout: ConnectionBitrateProbe.timeout
+        ) else { return nil }
+        return ConnectionBitrateProbe.bitsPerSecond(
+            bytes: transfer.bytes,
+            seconds: transfer.seconds ?? ProcessInfo.processInfo.systemUptime - started
         )
     }
 

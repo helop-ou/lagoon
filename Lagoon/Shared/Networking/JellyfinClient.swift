@@ -381,6 +381,30 @@ final class JellyfinClient {
         ), maximumBytes: maximumBytes)
     }
 
+    /// A GET for measuring the link, never reported: its body's size and the
+    /// time from the first response byte to the last, so the server's
+    /// response latency does not read as a slow link. Nil time when the
+    /// system kept no metrics.
+    func timedTransfer(
+        _ pathComponents: [String],
+        query: [URLQueryItem] = [],
+        timeout: TimeInterval
+    ) async throws -> (bytes: Int, seconds: TimeInterval?) {
+        let prepared = request(
+            for: try url(pathComponents: pathComponents, query: query),
+            method: "GET",
+            timeout: timeout,
+            probe: true
+        )
+        let metrics = TransferMetricsCollector()
+        let (data, response) = try await session.data(for: prepared.request, delegate: metrics)
+        if let identity = prepared.session, identity != sessionIdentity { throw CancellationError() }
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw JellyfinError.server(status: (response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return (data.count, metrics.transferSeconds)
+    }
+
     func post<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         try await send(request(for: url(path: path, query: query), method: "POST"))
     }

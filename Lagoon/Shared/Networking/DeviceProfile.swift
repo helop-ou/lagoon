@@ -285,10 +285,24 @@ nonisolated enum DeviceProfile {
     static var lagoon: Profile { profile(for: .current) }
 
     /// The profile for one ladder rung. Only the transcode rung differs.
-    /// The metered cap applies last so it also bounds the transcode rung.
-    static func lagoon(for delivery: PlaybackDelivery) -> Profile {
+    /// The connection and metered caps apply last so they also bound the
+    /// transcode rung.
+    static func lagoon(for delivery: PlaybackDelivery, maxBitrate: Int? = nil) -> Profile {
         let forRung = delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
-        return cappedForMeteredPath(forRung)
+        return cappedForMeteredPath(cappedToBitrate(forRung, maxBitrate))
+    }
+
+    /// The connection's ceiling (`PlaybackQualityLimit`). Both figures come
+    /// down: the server checks the static one before offering the original
+    /// file. Resolution is left to the server, which scales a transcode to
+    /// its bitrate; a bound here would also refuse a small 4K file the link
+    /// could carry.
+    static func cappedToBitrate(_ profile: Profile, _ maxBitrate: Int?) -> Profile {
+        guard let maxBitrate, maxBitrate > 0 else { return profile }
+        var capped = profile
+        capped.maxStreamingBitrate = min(profile.maxStreamingBitrate, maxBitrate)
+        capped.maxStaticBitrate = min(profile.maxStaticBitrate, maxBitrate)
+        return capped
     }
 
     /// Bounds a profile on a metered path; untouched otherwise. iOS only:

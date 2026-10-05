@@ -176,6 +176,10 @@ struct SeriesDetailView: View {
             // so it cannot run the task itself.
             await syncPlay.refreshAvailability()
         }
+        .task(id: item.id) {
+            // Measured while the page is read, so Play rarely waits on it.
+            _ = await session.client.connectionBitrateCeiling()
+        }
         .onChange(of: serverSync.generation) { _, _ in
             Task {
                 await viewModel.reloadUserData(client: session.client, seriesId: item.id)
