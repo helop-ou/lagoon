@@ -84,6 +84,80 @@ struct PlaybackQualityLimitTests {
         #expect(first.continueAbove > PlaybackQualityLimit.minimumBitrate)
     }
 
+    /// A stub server: `System/Endpoint` answers `inNetwork`, BitrateTest
+    /// serves the bytes asked for, PlaybackInfo answers with no sources.
+    private static func stubServer(host: String, inNetwork: Bool) {
+        StubURLProtocol.register(host: host) { request in
+            let path = request.url?.path ?? ""
+            if path.hasSuffix("/System/Endpoint") {
+                return (200, [:], Data(#"{"IsLocal":false,"IsInNetwork":\#(inNetwork)}"#.utf8))
+            }
+            if path.hasSuffix("/Playback/BitrateTest") {
+                let size = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first { $0.name == "size" }?.value.flatMap(Int.init) ?? 0
+                return (200, [:], Data(count: size))
+            }
+            return (200, [:], Data(#"{"MediaSources":[]}"#.utf8))
+        }
+    }
+
+    private static func sentMaxStreamingBitrate(host: String) throws -> Int? {
+        let request = try #require(StubURLProtocol.requests(host: host).last { $0.url?.path.hasSuffix("/PlaybackInfo") == true })
+        let body = try #require(request.httpBody ?? request.httpBodyStream.map { stream in
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 4_096)
+            while stream.hasBytesAvailable {
+                let read = stream.read(&buffer, maxLength: buffer.count)
+                guard read > 0 else { break }
+                data.append(buffer, count: read)
+            }
+            return data
+        })
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        return json["MaxStreamingBitrate"] as? Int
+    }
+
+    @Test @MainActor func aServerOnThisNetworkIsNeverProbed() async throws {
+        let host = "quality-local.test"
+        Self.stubServer(host: host, inNetwork: true)
+        defer { StubURLProtocol.unregister(host: host) }
+        let client = StubURLProtocol.makeJellyfinClient(host: host, deviceId: "quality-tests")
+        #expect(await client.measureConnection() == .inNetwork)
+        #expect(!StubURLProtocol.requests(host: host).contains { $0.url?.path.hasSuffix("BitrateTest") == true })
+    }
+
+    @Test @MainActor func aRemoteServerIsProbedSmallThenLarge() async throws {
+        let host = "quality-remote.test"
+        Self.stubServer(host: host, inNetwork: false)
+        defer { StubURLProtocol.unregister(host: host) }
+        let client = StubURLProtocol.makeJellyfinClient(host: host, deviceId: "quality-tests")
+        let measurement = await client.measureConnection()
+        guard case .remote(let bitsPerSecond) = measurement else {
+            Issue.record("Expected a remote measurement, got \(String(describing: measurement))")
+            return
+        }
+        #expect(bitsPerSecond > 0)
+        let sizes = StubURLProtocol.requests(host: host)
+            .filter { $0.url?.path.hasSuffix("BitrateTest") == true }
+            .compactMap { URLComponents(url: $0.url!, resolvingAgainstBaseURL: false)?.queryItems?.first?.value }
+        // A stub answers instantly, so the probe always takes the large step.
+        #expect(sizes == ["1000000", "8000000"])
+    }
+
+    @Test @MainActor func anAcceptedLowerQualityReachesTheServer() async throws {
+        let host = "quality-cap.test"
+        Self.stubServer(host: host, inNetwork: true)
+        defer { StubURLProtocol.unregister(host: host) }
+        let client = StubURLProtocol.makeJellyfinClient(host: host, deviceId: "quality-tests")
+        _ = try? await client.playbackInfo(itemId: "film", maxBitrate: 8_400_000)
+        #expect(try Self.sentMaxStreamingBitrate(host: host) == 8_400_000)
+        // Without one, a server on this network keeps the full envelope.
+        _ = try? await client.playbackInfo(itemId: "film")
+        #expect(try Self.sentMaxStreamingBitrate(host: host) == DeviceProfile.lagoon.maxStreamingBitrate)
+    }
+
     @Test @MainActor func aMeasurementIsReusedUntilItExpiresOrTheNetworkChanges() async {
         let cache = ConnectionMeasurementCache()
         var probes = 0
