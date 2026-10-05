@@ -16,6 +16,22 @@ struct PlaybackQualityLimitTests {
         #expect(profile.maxStaticBitrate == 14_000_000)
     }
 
+    /// A bitrate alone gets a 4K source re-encoded at 4K, so a low cap
+    /// brings the picture down with it. A high one leaves a 4K file the link
+    /// can carry alone.
+    @Test func aLowCapBoundsTheResolutionAndAHighOneDoesNot() {
+        func ceiling(_ bitrate: Int) -> String? {
+            DeviceProfile.cappedToBitrate(DeviceProfile.everything, bitrate)
+                .codecProfiles.first { $0.codec == "hevc" }?
+                .conditions.first { $0.property == "Width" }?.value
+        }
+        #expect(ceiling(2_000_000) == "1280")
+        #expect(ceiling(14_000_000) == "1920")
+        let original = DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }?
+            .conditions.first { $0.property == "Width" }?.value
+        #expect(ceiling(35_000_000) == original)
+    }
+
     @Test func autoLeavesAServerOnThisNetworkAtFullQuality() {
         #expect(PlaybackQualityLimit.maxBitrate(setting: .auto, connection: .inNetwork) == nil)
         // An unanswered probe keeps today's ceiling rather than guessing.

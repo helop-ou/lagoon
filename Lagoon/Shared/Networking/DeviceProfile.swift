@@ -294,15 +294,31 @@ nonisolated enum DeviceProfile {
 
     /// The connection's ceiling (`PlaybackQualityLimit`). Both figures come
     /// down: the server checks the static one before offering the original
-    /// file. Resolution is left to the server, which scales a transcode to
-    /// its bitrate; a bound here would also refuse a small 4K file the link
-    /// could carry.
+    /// file. Resolution comes down in steps too, because a bitrate alone
+    /// gets a 4K source re-encoded at 4K (see the metered cap). Above
+    /// `realtimeTranscodeBitrateCeiling` it is left alone, so a remote 4K
+    /// file the link can carry still direct-plays.
     static func cappedToBitrate(_ profile: Profile, _ maxBitrate: Int?) -> Profile {
         guard let maxBitrate, maxBitrate > 0 else { return profile }
         var capped = profile
         capped.maxStreamingBitrate = min(profile.maxStreamingBitrate, maxBitrate)
         capped.maxStaticBitrate = min(profile.maxStaticBitrate, maxBitrate)
+        if let size = resolutionCeiling(forBitrate: maxBitrate) {
+            capped.codecProfiles = profile.codecProfiles.map {
+                boundedTo($0, width: size.width, height: size.height)
+            }
+        }
         return capped
+    }
+
+    /// The largest picture worth encoding at `bitrate`; nil above the
+    /// realtime transcode ceiling.
+    static func resolutionCeiling(forBitrate bitrate: Int) -> (width: Int, height: Int)? {
+        if bitrate < MeteredPathPolicy.maxBitrate + 1_000_000 {
+            return (MeteredPathPolicy.maxWidth, MeteredPathPolicy.maxHeight)
+        }
+        if bitrate < realtimeTranscodeBitrateCeiling { return (1920, 1080) }
+        return nil
     }
 
     /// Bounds a profile on a metered path; untouched otherwise. iOS only:
