@@ -115,6 +115,31 @@ struct PlaybackIncidentMonitorTests {
         #expect(failed.fields["delivery"] == .string("remux"))
     }
 
+    /// HEL-261: a session fault in the background could not say whether
+    /// picture in picture or AirPlay still showed the picture. The engine's
+    /// own reports inherit the display state too.
+    @Test func incidentsSayWhatShowedThePictureWhileTheAppWasAway() throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        let monitor = PlaybackIncidentMonitor(hub: hub)
+        monitor.beginAttempt(delivery: .negotiated, method: .directPlay, source: try Self.source(), cached: true, disc: false, resumeSeconds: 0)
+        monitor.setDisplayState(background: true, pictureInPicture: true, airPlay: false, videoSuspended: false)
+        _ = hub.report(.playbackRendererRecovery, level: .warning, fields: ["recovery": .string("decodeSessionRebuilt")])
+        let engineReport = try #require(sink.incidents.first)
+        #expect(engineReport.fields["appState"] == .string("background"))
+        #expect(engineReport.fields["pictureInPicture"] == .bool(true))
+        #expect(engineReport.fields["airPlay"] == .bool(false))
+        #expect(engineReport.fields["videoSuspended"] == .bool(false))
+
+        // Picture in picture stopped in the background: video suspended.
+        monitor.setDisplayState(background: true, pictureInPicture: false, airPlay: false, videoSuspended: true)
+        monitor.engineFailed(Self.failure(), delivery: .negotiated, next: nil, engine: nil)
+        let failed = try #require(sink.incidents.last)
+        #expect(failed.code == .playbackFailed)
+        #expect(failed.fields["pictureInPicture"] == .bool(false))
+        #expect(failed.fields["videoSuspended"] == .bool(true))
+    }
+
     @Test func aFallbackAbandonedByTheViewerSaysSo() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })

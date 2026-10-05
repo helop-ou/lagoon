@@ -27,6 +27,16 @@ struct PlayerSystemIntegrationTests {
         ))
     }
 
+    /// HEL-261: picture in picture stopping while the app is away leaves
+    /// nothing to show video, so it is suspended as backgrounding would.
+    @Test func videoIsSuspendedOnlyWhenNothingShowsIt() {
+        #expect(PlaybackController.videoIsUnseen(inBackground: true, pictureInPicture: false, airPlay: false))
+        #expect(!PlaybackController.videoIsUnseen(inBackground: true, pictureInPicture: true, airPlay: false))
+        #expect(!PlaybackController.videoIsUnseen(inBackground: true, pictureInPicture: false, airPlay: true))
+        // On screen, picture in picture stopping changes nothing.
+        #expect(!PlaybackController.videoIsUnseen(inBackground: false, pictureInPicture: false, airPlay: false))
+    }
+
     @Test func appleLanguagesAreOrderedDeduplicatedAndConvertedForJellyfin() {
         #expect(SubtitlePreferencesStore.deduplicated([
             "et-EE", "en-US", "et", "EN_GB",
