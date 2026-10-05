@@ -51,7 +51,8 @@ final class SubtitleDownloadUITests: XCTestCase {
 
         openSubtitles(in: app)
         select(app.buttons["player.track.subtitle-3"], in: app)
-        expect(error) { $0.exists && $0.label.contains("8 MB") }
+        // A sidecar loads in the engine, which words the size refusal itself.
+        expect(error) { $0.exists && $0.label.contains("too large") }
         attachScreenshot(of: app, named: "subtitle-compressed-oversize-rejected")
         closePanel(in: app)
         XCTAssertEqual(caption.label, "Recovered captions")
